@@ -1,0 +1,77 @@
+# ── Environment & Secrets ──────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Credentials & Keys ────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+google_service_account*.json
+CREDENTIALS_REFERENCE.md
+
+# ── Databases ─────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Legacy data / CSV dumps ───────────────────────────────────
+*.csv
+*.dump
+*.sql
+legacy_posts.*
+original_candidates/
+original_jobs/
+intake/
+unified_bridge_data.xlsx
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+*.log
+
+# ── Node / Next.js ────────────────────────────────────────────
+node_modules/
+web_frontend/node_modules/
+web_frontend/.next/
+web_frontend/out/
+.next/
+
+# ── IDE & OS ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ── Screenshots & images (RPA output) ─────────────────────────
+screenshots/
+images/
+
+# ── Logs ──────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Obsidian docs (local only) ────────────────────────────────
+obsidian_docs/
+
+# ── Sheets state (local cache) ────────────────────────────────
+sheets_state.json
+
+# ── Misc ──────────────────────────────────────────────────────
+*.bak
+*.tmp
+debug_*.html
+night_shift_test.log

@@ -1,0 +1,28 @@
+[Unit]
+Description=BRIDGE Frontend (Next.js)
+After=network.target
+Wants=bridge-api.service
+
+[Service]
+Type=simple
+User=bridge
+Group=bridge
+WorkingDirectory=/opt/bridge/frontend
+EnvironmentFile=/opt/bridge/frontend/.env.local
+ExecStart=/usr/bin/node /opt/bridge/frontend/.next/standalone/server.js
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/bridge/logs/frontend.log
+StandardError=append:/opt/bridge/logs/frontend-error.log
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/bridge/frontend /opt/bridge/logs
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-02-21T14:19:13+00:00",
+  "source_db": "Q:\\Claudework\\bridge base\\master.db",
+  "target": "여기에_프로젝트_URL_입력",
+  "tables": {
+    "employers": {
+      "count": 148,
+      "fill_rate": {
+        "company_name": 100.0,
+        "email": 100.0,
+        "phone": 100.0,
+        "city": 60.1
+      }
+    },
+    "candidates": {
+      "count": 3057,
+      "fill_rate": {
+        "email": 89.1,
+        "phone_primary": 62.1,
+        "visa_types": 23.7,
+        "experience_years": 25.4,
+        "salary_desired_min": 50.3,
+        "certifications": 65.0,
+        "preferred_locations": 49.2
+      }
+    },
+    "jobs": {
+      "count": 1066,
+      "fill_rate": {
+        "title": 100.0,
+        "city": 88.3,
+        "hours_per_day": 91.8,
+        "salary_min": 99.1,
+        "teaching_age_groups": 99.5,
+        "housing_provided": 41.7,
+        "benefits": 98.1
+      }
+    },
+    "applications": {
+      "count": 0,
+      "note": "Empty — no historical data"
+    }
+  },
+  "insights": {
+    "hot_jobs": 139,
+    "part_time_jobs": 11,
+    "visa_distribution": {
+      "F-4": 57,
+      "E-2": 538,
+      "D-10": 59,
+      "D-6": 1,
+      "F-6": 42,
+      "F-2": 20,
+      "ARC": 8,
+      "F-5": 1,
+      "E-1": 1
+    },
+    "top_nationalities": {
+      "미국": 1259,
+      "남아공": 762,
+      "영국": 478,
+      "캐나다": 241,
+      "교포미국": 83,
+      "호주": 71,
+      "아일랜드": 43,
+      "뉴질랜드": 33,
+      "한국": 25,
+      "교포캐나다": 13
+    },
+    "top_job_cities": {
+      "Seoul": 255,
+      "Unknown": 125,
+      "Busan": 77,
+      "Seongnam": 51,
+      "Incheon": 46,
+      "Suwon": 36,
+      "Yongin": 35,
+      "Daegu": 31,
+      "Goyang": 30,
+      "Jeju": 23
+    },
+    "candidates_with_visa": 723,
+    "candidates_placed": 0,
+    "housing_offered_jobs": 444
+  },
+  "warnings": [
+    "333 candidates have no email — web-form outreach unavailable",
+    "1159 candidates have no normalised phone number"
+  ]
+}

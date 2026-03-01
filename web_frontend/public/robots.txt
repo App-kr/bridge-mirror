@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /jobs
+Allow: /apply
+Allow: /inquiry
+Allow: /community
+
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://bridgejob.co.kr/sitemap.xml

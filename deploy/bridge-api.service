@@ -1,0 +1,30 @@
+[Unit]
+Description=BRIDGE API Server (FastAPI/Uvicorn)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bridge
+Group=bridge
+WorkingDirectory=/opt/bridge/backend
+EnvironmentFile=/opt/bridge/backend/.env
+ExecStart=/opt/bridge/backend/venv/bin/uvicorn api_server:app \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --workers 2 \
+  --log-level info
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/bridge/logs/api.log
+StandardError=append:/opt/bridge/logs/api-error.log
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/bridge/data /opt/bridge/logs /opt/bridge/backend
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
