@@ -1,18 +1,40 @@
 # Admin System — 관리자 시스템
 
-## Web Admin Pages (6개)
+## Web Admin Pages (9개)
 
 | 경로 | 기능 | 인증 |
 |------|------|------|
-| `/admin` | Ad Posts 대시보드 + 6-tab 네비 | runtime admin key |
-| `/admin/posts` | 커뮤니티 CRUD, 보드 필터, pin/delete | runtime admin key |
+| `/admin` | Dashboard — 통합 통계 카드 6개 + 월별 차트(BarChart) + 채널별 파이차트 + 최근 활동 + 빠른 액션 | runtime admin key |
+| `/admin/inbox` | 통합 수신함 — 소스탭, 상태필터, 검색, 벌크 처리, Gmail 동기화 | runtime admin key |
+| `/admin/inbox/[id]` | 수신함 상세 — 정보, 상태변경, 메모, 담당자배정, mailto 액션 | runtime admin key |
+| `/admin/ad-posts` | Ad Posts 관리 | runtime admin key |
+| `/admin/posts` | 커뮤니티 CRUD, 보드 필터, pin/delete, 검색, 수정 | runtime admin key |
 | `/admin/interviews` | 인터뷰 스케줄, Google Meet, 이메일 | runtime admin key |
 | `/admin/applications` | 지원자+고용주 제출물, 상태 워크플로우 | runtime admin key |
 | `/admin/payments` | 결제 기록 (Stripe placeholder) | runtime admin key |
 | `/admin/candidates` | AG Grid 스프레드시트 | runtime admin key |
 
-- 모든 페이지: AdminNav 공통 컴포넌트, 런타임 admin key 입력 방식
+- 모든 페이지: AdminNav 공통 컴포넌트 (8탭), useAdminAuth 훅, AdminAuth 인증 UI
 - nginx: `/admin` 경로 IP 제한 (127.0.0.1 + deploy IP)
+
+## 통합 수신함 시스템 (2026-03 추가)
+
+### 백엔드 모듈
+- `inbox_api.py` — FastAPI APIRouter, 8개 엔드포인트
+  - GET /api/admin/inbox (필터+페이지네이션), GET /inbox/{id}, PATCH status/notes/assign, POST bulk
+  - GET /api/admin/stats, /stats/monthly, /stats/by-source
+  - 보안: _sanitize_search(), _validate_date(), _rate_ok() 적용
+- `gmail_collector.py` — Gmail API OAuth2, 자동 분류/파싱, 중복 방지
+  - POST /api/admin/gmail/sync, GET /api/admin/gmail/status
+
+### DB 스키마 확장
+- candidates/client_inquiries에 8개 컬럼: source, inbox_status, gmail_message_id, raw_email_body, parsed_data, notes, assigned_to, last_activity
+- 마이그레이션: `migrations/db_migration_inbox.py`
+
+### 프론트엔드
+- recharts 사용 (dynamic import, SSR 비활성화)
+- 대시보드: 6개 통계 카드 + BarChart(월별) + PieChart(채널별)
+- 수신함: 소스탭(5), 상태필터(7), 검색, 체크박스 벌크, Gmail 동기화 버튼
 
 ## Desktop Admin App
 - **파일**: `admin_app/bridge_admin.py` (Python tkinter)
@@ -32,6 +54,11 @@
 ## Application Status Workflow
 ```
 new → reviewing → interview_scheduled → hired / rejected
+```
+
+## Inbox Status Workflow
+```
+new → reviewed → contacted → interview → hired / rejected
 ```
 
 ## Mobile/원격 접근 시

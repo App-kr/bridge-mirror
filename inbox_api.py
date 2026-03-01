@@ -97,10 +97,14 @@ def _get_supabase():
     if _svc_client is None:
         url = os.getenv("SUPABASE_URL", "")
         key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        if not url or not key:
+        if not url or not key or not url.startswith("http"):
             return None
-        from supabase import create_client
-        _svc_client = create_client(url, key)
+        try:
+            from supabase import create_client
+            _svc_client = create_client(url, key)
+        except Exception as e:
+            _log.warning("Supabase 초기화 실패: %s", e)
+            return None
     return _svc_client
 
 
