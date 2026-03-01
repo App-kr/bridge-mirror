@@ -3,10 +3,13 @@
 - api_server.py에서 import하여 라우터 등록
 - 기존 파일 수정 최소화: api_server.py에 2줄 추가만 필요
 """
+import hashlib
 import json
 import os
+import re
 import sqlite3
 import logging
+import time as _time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -45,6 +48,44 @@ def _get_conn() -> sqlite3.Connection:
 
 def ok(data=None, message: str = "ok"):
     return {"success": True, "message": message, "data": data}
+
+
+# ── 보안 헬퍼 ────────────────────────────────────────────────────────────────
+_RATE_LIMIT: dict[str, list[float]] = {}
+
+
+def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 30) -> bool:
+    """5분 안에 최대 30건 (벌크 기준)."""
+    now = _time.time()
+    ts = _RATE_LIMIT.get(ip_hash, [])
+    ts = [t for t in ts if now - t < window]
+    if len(ts) >= max_posts:
+        return False
+    ts.append(now)
+    _RATE_LIMIT[ip_hash] = ts
+    return True
+
+
+def _sanitize_search(raw: str) -> str:
+    """Supabase .or_() 필터에 안전한 검색어로 변환.
+    특수문자를 제거하여 필터 조작 방지."""
+    # 알파벳, 숫자, 한글, 공백만 허용
+    return re.sub(r"[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\s@.\-]", "", raw).strip()[:100]
+
+
+def _validate_date(date_str: str) -> bool:
+    """YYYY-MM-DD 형식 검증."""
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+def _get_ip_hash(request: Request) -> str:
+    """클라이언트 IP 해시."""
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown")
+    return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
 
 # ── Supabase 클라이언트 (lazy import) ─────────────────────────────────────────
@@ -122,10 +163,16 @@ async def admin_inbox(
             if status and status != "all":
                 cq = cq.eq("inbox_status", status)
             if search:
-                cq = cq.or_(f"full_name.ilike.%{search}%,email.ilike.%{search}%,nationality.ilike.%{search}%")
+                safe_q = _sanitize_search(search)
+                if safe_q:
+                    cq = cq.or_(f"full_name.ilike.%{safe_q}%,email.ilike.%{safe_q}%,nationality.ilike.%{safe_q}%")
             if date_from:
+                if not _validate_date(date_from):
+                    raise HTTPException(400, "date_from 형식이 올바르지 않습니다 (YYYY-MM-DD)")
                 cq = cq.gte("created_at", date_from)
             if date_to:
+                if not _validate_date(date_to):
+                    raise HTTPException(400, "date_to 형식이 올바르지 않습니다 (YYYY-MM-DD)")
                 cq = cq.lte("created_at", date_to + "T23:59:59")
 
             if sort == "oldest":
@@ -164,7 +211,9 @@ async def admin_inbox(
                     count="exact"
                 )
                 if search:
-                    iq = iq.or_(f"school_name.ilike.%{search}%,contact_name.ilike.%{search}%,email.ilike.%{search}%")
+                    safe_q = _sanitize_search(search)
+                    if safe_q:
+                        iq = iq.or_(f"school_name.ilike.%{safe_q}%,contact_name.ilike.%{safe_q}%,email.ilike.%{safe_q}%")
                 if date_from:
                     iq = iq.gte("created_at", date_from)
                 if date_to:
@@ -380,6 +429,12 @@ async def admin_inbox_assign(item_id: str, body: AssignUpdate, request: Request)
 async def admin_inbox_bulk(body: BulkAction, request: Request):
     """일괄 상태 변경 / 담당자 배정."""
     _check_admin(request)
+
+    if not _rate_ok(_get_ip_hash(request)):
+        raise HTTPException(429, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+
+    if body.action not in ("status", "assign"):
+        raise HTTPException(400, "Invalid action. Valid: status, assign")
 
     if body.action == "status" and body.value not in VALID_STATUSES:
         raise HTTPException(400, f"Invalid status: {body.value}")
