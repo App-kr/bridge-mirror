@@ -1728,6 +1728,10 @@ async def admin_list_files(entity_type: str, entity_id: str, request: Request):
         return ok(data=[])
 
 
+# ── 통합 수신함 라우터 등록 ────────────────────────────────────────────────────
+from inbox_api import router as inbox_router
+app.include_router(inbox_router)
+
 # ── Static Files Mount (개발 환경용) ──────────────────────────────────────────
 if not _IS_PROD:
     app.mount("/uploads", StaticFiles(directory=str(_UPLOAD_BASE)), name="uploads")
