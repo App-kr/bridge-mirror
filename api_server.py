@@ -757,6 +757,20 @@ def _check_admin(request: Request):
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
 
+# ── [TEMP] 1회용 DB 업로드 — 배포 후 제거 예정 ────────────────────────────────
+@app.post("/api/admin/upload-db", tags=["admin"])
+async def upload_db(request: Request, file: UploadFile = FastFile(...)):
+    """master.db 업로드 (1회용, 배포 후 제거)."""
+    _check_admin(request)
+    import shutil
+    dest = Path("/data/master.db")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    size_mb = dest.stat().st_size / (1024 * 1024)
+    return ok(data={"path": str(dest), "size_mb": round(size_mb, 2)}, message="DB uploaded successfully")
+
+
 @app.get("/api/admin/dashboard", tags=["admin"])
 async def admin_dashboard(request: Request):
     """관리자 대시보드 — 전체 통계 + 최근 활동."""
