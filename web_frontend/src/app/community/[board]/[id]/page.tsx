@@ -59,14 +59,22 @@ export default function PostDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-      {/* Warning banner */}
-      <div className="bg-[#f5f5f7] rounded-xl px-5 py-4 text-sm text-[#6e6e73] mb-8 flex items-start gap-2">
-        <span className="shrink-0">⚠️</span>
-        <span>
-          {config.slug === 'support_kr' || config.slug === 'visa'
-            ? '정보가 변경될 수 있으니 직접 확인 후 진행하세요.'
-            : 'Information may change. Please verify details directly before proceeding.'}
-        </span>
+      {/* Disclaimer notice */}
+      <div style={{
+        background: '#FFF9C4',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        fontSize: '13px',
+        color: '#5D4037',
+        lineHeight: '1.6',
+      }}>
+        <p style={{ marginBottom: '6px' }}>
+          ⚠️ All information is subject to change without notice according to institutional policies. Please contact the relevant institution directly to verify the latest information before proceeding.
+        </p>
+        <p style={{ margin: 0 }}>
+          ⚠️ 모든 정보는 예고 없이 해당 기관의 정책에 따라 변경될 수 있습니다. 진행 전 반드시 해당 기관에 직접 연락하여 최신 정보를 확인하시기 바랍니다.
+        </p>
       </div>
 
       {/* Title */}
