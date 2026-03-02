@@ -14,11 +14,12 @@
 3. **f-string SQL 금지** → `?` 파라미터 바인딩만
 4. **하드코딩 키 금지** → `os.getenv()` + `.env`
 5. **기존 완성 페이지 재구현 금지** — 버그 패치 또는 기능 추가만 허용
-6. **보호 파일 (직접 수정 금지)**:
-   - `web_frontend/src/app/globals.css` — CSS 추가 필요 시 `custom.css` 별도 파일로
-   - `web_frontend/src/app/layout.tsx`
-   - `web_frontend/tailwind.config.ts`
-   - `security_vault.py`
+6. **절대 보호 파일 (수정 금지)**:
+   - `globals.css`, `layout.tsx`, `tailwind.config.*` → 직접 수정 금지
+   - CSS 추가 필요 시 `custom.css` 새 파일로만
+   - `security_vault.py` → 수정 금지
+7. **모든 프론트 작업 후 `npm run build` 필수 확인**
+   - 빌드 실패 시 즉시 `git checkout`으로 복원, 다른 작업 진행 금지
 
 ---
 
