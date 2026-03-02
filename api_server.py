@@ -776,13 +776,17 @@ async def key_check(request: Request):
 async def upload_db(request: Request, file: UploadFile = FastFile(...)):
     """master.db 업로드 (1회용, 배포 후 제거)."""
     _check_admin(request)
-    import shutil
-    dest = Path("/data/master.db")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    size_mb = dest.stat().st_size / (1024 * 1024)
-    return ok(data={"path": str(dest), "size_mb": round(size_mb, 2)}, message="DB uploaded successfully")
+    import shutil, traceback
+    try:
+        dest = Path("/data/master.db")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        contents = await file.read()
+        with open(dest, "wb") as f:
+            f.write(contents)
+        size_mb = dest.stat().st_size / (1024 * 1024)
+        return ok(data={"path": str(dest), "size_mb": round(size_mb, 2)}, message="DB uploaded successfully")
+    except Exception as e:
+        return err(f"Upload failed: {type(e).__name__}: {e}\n{traceback.format_exc()}", status_code=500)
 
 
 @app.get("/api/admin/dashboard", tags=["admin"])
