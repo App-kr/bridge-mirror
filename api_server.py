@@ -201,10 +201,22 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
     Adds X-PII-Scrubbed: true header for audit tracing.
     Zero-overhead for non-JSON responses (static files, health checks).
     """
+    _SEC_HEADERS = {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-XSS-Protection": "1; mode=block",
+    }
+
+    def _add_sec_headers(self, response):
+        for k, v in self._SEC_HEADERS.items():
+            response.headers[k] = v
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         ct = response.headers.get("content-type", "")
         if "application/json" not in ct:
+            self._add_sec_headers(response)
             return response
 
         # 관리자 인증된 /api/admin/ 요청은 PII 마스킹 통과 (원본 데이터 반환)
@@ -212,6 +224,7 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         if (request.url.path.startswith("/api/admin/")
                 and _ak
                 and request.headers.get("x-admin-key", "") == _ak):
+            self._add_sec_headers(response)
             return response
 
         # Accumulate response body
@@ -230,6 +243,8 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         headers = dict(response.headers)
         headers["content-length"] = str(len(clean_body))
         headers["x-pii-scrubbed"] = "true"
+        for k, v in self._SEC_HEADERS.items():
+            headers[k] = v
 
         return Response(
             content=clean_body,
@@ -244,19 +259,24 @@ SUPABASE_URL      = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")   # 공개 API용
 SUPABASE_SVC_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "") # 서버사이드 삽입용
 
-# CORS 허용 출처
-ALLOWED_ORIGINS = [
-    "https://bridgejob.co.kr",
-    "https://www.bridgejob.co.kr",
-    "http://localhost:3000",   # 개발용
-    "http://localhost:3001",   # 개발용
-    "http://localhost:3002",   # 개발용
-    "http://localhost:8080",   # 개발용
-]
+# CORS 허용 출처 (CORS_ORIGINS 환경변수로 오버라이드 가능)
+_cors_env = os.getenv("CORS_ORIGINS", "")
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else [
+        "https://bridgejob.co.kr",
+        "https://www.bridgejob.co.kr",
+        "http://localhost:3000",   # 개발용
+        "http://localhost:3001",   # 개발용
+        "http://localhost:3002",   # 개발용
+        "http://localhost:8080",   # 개발용
+    ]
+)
 
 # ── 앱 초기화 ─────────────────────────────────────────────────────────────────
 # 프로덕션에서는 API 문서 비활성화 (BRIDGE_ENV=production 설정 시)
-_IS_PROD = os.getenv("BRIDGE_ENV", "").lower() in ("production", "prod")
+_IS_PROD = os.getenv("BRIDGE_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
 
 app = FastAPI(
     title="BRIDGE Recruitment API",
@@ -715,7 +735,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Admin: ad_posts 대시보드 ──────────────────────────────────────────────────
-_ADMIN_DB_PATH = Path(os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db")))
+_ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db"))))
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 
 if not _ADMIN_KEY:

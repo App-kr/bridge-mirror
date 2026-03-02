@@ -10,3 +10,4 @@ supabase>=2.0.0
 email-validator>=2.0.0
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0
+gunicorn>=22.0.0
