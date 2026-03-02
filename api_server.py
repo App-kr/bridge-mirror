@@ -728,6 +728,10 @@ async def inquiry(request: Request, body: ClientInquiry):
 async def global_exception_handler(request: Request, exc: Exception):
     import logging as _logging
     _logging.getLogger("bridge.api").error("Unhandled exception: %s", exc, exc_info=True)
+    # [TEMP] 디버그: upload-db 에러 상세 노출
+    if "upload-db" in str(request.url):
+        import traceback
+        return JSONResponse(status_code=500, content={"success": False, "message": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()})
     return JSONResponse(
         status_code=500,
         content={"success": False, "message": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."},
