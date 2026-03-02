@@ -1,43 +1,15 @@
 /**
- * BRIDGE Service Worker
- * - 오프라인 fallback 제공
- * - 정적 에셋 캐싱 (admin 대시보드 쉘)
+ * BRIDGE Service Worker — Self-unregister
+ * 캐시 문제 해결을 위해 모든 캐시를 삭제하고 자기 자신을 해제합니다.
+ * 안정화 후 실제 SW로 교체 가능.
  */
-
-const CACHE  = 'bridge-v1';
-const STATIC = [
-  '/',
-  '/admin',
-  '/jobs',
-];
-
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(STATIC))
-  );
-  self.skipWaiting();
-});
-
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', (e) => {
-  // API 요청은 캐시 안 함 (항상 최신 데이터)
-  if (e.request.url.includes('/api/')) return;
-
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, clone));
-        return res;
-      })
-      .catch(() => caches.match(e.request))
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.registration.unregister())
+      .then(() => self.clients.matchAll())
+      .then((clients) => clients.forEach((c) => c.navigate(c.url)))
   );
 });

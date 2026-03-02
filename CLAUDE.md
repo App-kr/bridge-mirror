@@ -76,3 +76,17 @@ python -m py_compile X.py  # 백엔드
 - 작업 전 git diff, 작업 후 git commit (conventional commits)
 - 묻지 말고 실행: 대규모 작업 시 자율적으로 진행
 - 연락 메일: bridgejobkr@gmail.com
+
+---
+
+## 작업 완료 기준 (절대 규칙)
+
+- "완료"라고 보고하기 전에 반드시 본인이 직접 curl/fetch로 테스트
+- 사용자에게 "확인해주세요", "Ctrl+Shift+R 눌러주세요" 등 테스트를 떠넘기지 않음
+- 프론트엔드 변경 시: curl로 HTML 응답에 기대 내용이 포함되어 있는지 확인
+- API 변경 시: curl로 응답 코드 + 데이터 정상 확인
+- CSS 변경 시: npm run build 성공 + 페이지 렌더링 확인
+- 게시물 관련: 각 게시판 curl로 게시물 수 확인
+- 빌드: npm run build 또는 py_compile 성공 확인
+- 테스트 실패 시 → 원인 파악 → 수정 → 재테스트 → 통과 후에만 "완료"
+- 사용자에게 보고하는 시점 = 모든 테스트 통과 완료 시점
