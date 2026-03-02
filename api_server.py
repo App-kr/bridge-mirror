@@ -1,5 +1,5 @@
 """
-BRIDGE API Server — FastAPI 초안
+BRIDGE API Server
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 
@@ -1728,7 +1728,7 @@ async def admin_list_files(entity_type: str, entity_id: str, request: Request):
         return ok(data=[])
 
 
-# ── 통합 수신함 + Gmail 라우터 등록 ─────────────────────────────────────────────
+# ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
 from inbox_api import router as inbox_router
 from gmail_collector import router as gmail_router
 app.include_router(inbox_router)

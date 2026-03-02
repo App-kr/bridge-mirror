@@ -45,7 +45,14 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && bash scripts/backup.sh community_complete 2>&1)",
       "Bash(echo Backend: DOWN:*)",
       "Skill(keybindings-help)",
-      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx next build 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx next build 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && PYTHONIOENCODING=utf-8 python migrations/db_migration_inbox.py 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add migrations/db_migration_inbox.py inbox_api.py api_server.py master.db && git commit -m \"$\\(cat <<'EOF'\nfeat: add unified inbox API endpoints and stats\n\n- DB migration: inbox columns on candidates + client_inquiries\n- New module inbox_api.py with 8 endpoints:\n  GET/PATCH inbox, bulk actions, stats, monthly, by-source\n- api_server.py: router registration only \\(2 lines added\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add migrations/db_migration_inbox.py inbox_api.py api_server.py && git commit -m \"$\\(cat <<'EOF'\nfeat: add unified inbox API endpoints and stats\n\n- DB migration: inbox columns on candidates + client_inquiries\n- New module inbox_api.py with 8 endpoints:\n  GET/PATCH inbox, bulk actions, stats, monthly, by-source\n- api_server.py: router registration only \\(2 lines added\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add gmail_collector.py api_server.py && git commit -m \"$\\(cat <<'EOF'\nfeat: add Gmail collector with auto-classification\n\n- gmail_collector.py: email classification, parsing, dedup\n- Pattern matching: google_form, auto-format, direct email, inquiry\n- Auto-sync loop \\(GMAIL_SYNC_ENABLED=false by default\\)\n- POST /api/admin/gmail/sync + GET /api/admin/gmail/status\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/components/admin/AdminNav.tsx web_frontend/src/app/admin/inbox/ && git commit -m \"$\\(cat <<'EOF'\nfeat: add unified inbox UI with filters and detail view\n\n- /admin/inbox: list with source/status filters, search, bulk actions\n- /admin/inbox/[id]: detail view with status, notes, assign, mailto\n- AdminNav: added Inbox tab \\(8 columns\\)\n- Gmail sync button on inbox page\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/admin/page.tsx web_frontend/package.json web_frontend/package-lock.json && git commit -m \"$\\(cat <<'EOF'\nfeat: add dashboard stats cards and charts\n\n- 6 unified stats cards \\(applications, new, emails, inquiries, jobs, community\\)\n- Monthly bar chart \\(recharts\\) - last 6 months trend\n- Source pie chart - channel distribution\n- Existing dashboard content preserved below charts\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" 2>&1)",
+      "Bash(echo === Test 1: POST community with SQLi payload ===:*)"
     ]
   }
 }
