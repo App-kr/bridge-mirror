@@ -757,6 +757,20 @@ def _check_admin(request: Request):
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
 
+# ── [TEMP] 키 디버그 — 배포 후 제거 예정 ─────────────────────────────────────
+@app.get("/api/admin/key-check", tags=["admin"])
+async def key_check(request: Request):
+    """키 앞 4자리 확인용 (1회용)."""
+    sent = request.headers.get("x-admin-key", "(none)")
+    return ok(data={
+        "server_key_prefix": _ADMIN_KEY[:4] if _ADMIN_KEY else "(empty)",
+        "server_key_len": len(_ADMIN_KEY),
+        "sent_key_prefix": sent[:4] if sent != "(none)" else "(none)",
+        "sent_key_len": len(sent) if sent != "(none)" else 0,
+        "match": sent == _ADMIN_KEY,
+    })
+
+
 # ── [TEMP] 1회용 DB 업로드 — 배포 후 제거 예정 ────────────────────────────────
 @app.post("/api/admin/upload-db", tags=["admin"])
 async def upload_db(request: Request, file: UploadFile = FastFile(...)):
