@@ -70,6 +70,10 @@ obsidian_docs/
 # ── Sheets state (local cache) ────────────────────────────────
 sheets_state.json
 
+# ── Backups (local only) ─────────────────────────────────────
+backups/
+bridge-overnight/
+
 # ── Misc ──────────────────────────────────────────────────────
 *.bak
 *.tmp
