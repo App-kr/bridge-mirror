@@ -1,14 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Job, Employer, PublicJob, PublicCandidate } from '@/types'
 
-const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
-if (!supabaseUrl || !supabaseAnon) {
-  throw new Error('Missing Supabase environment variables. Check .env.local')
-}
+const _hasEnv = !!(supabaseUrl && supabaseAnon)
 
-export const supabase = createClient(supabaseUrl, supabaseAnon)
+export const supabase: SupabaseClient | null = _hasEnv
+  ? createClient(supabaseUrl, supabaseAnon)
+  : null
 
 // ── Query helpers ─────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ export async function getOpenJobs(options?: {
   limit?:  number
   offset?: number
 }): Promise<Job[]> {
+  if (!supabase) return []
   const { city, isHot, limit = 50, offset = 0 } = options ?? {}
 
   let query = supabase
@@ -43,6 +44,7 @@ export async function getOpenJobs(options?: {
 }
 
 export async function getJob(id: string): Promise<Job | null> {
+  if (!supabase) return null
   const { data, error } = await supabase
     .from('jobs')
     .select(
@@ -64,6 +66,7 @@ export async function getJob(id: string): Promise<Job | null> {
 }
 
 export async function getEmployer(id: string): Promise<Employer | null> {
+  if (!supabase) return null
   const { data, error } = await supabase
     .from('employers')
     .select('id, company_name, company_type, city, location_full, is_active')
@@ -87,6 +90,7 @@ export async function getPublicJobs(options?: {
   limit?:  number
   offset?: number
 }): Promise<PublicJob[]> {
+  if (!supabase) return []
   const { city, isHot, limit = 50, offset = 0 } = options ?? {}
 
   let query = supabase
@@ -113,6 +117,7 @@ export async function getPublicCandidates(options?: {
   limit?:       number
   offset?:      number
 }): Promise<PublicCandidate[]> {
+  if (!supabase) return []
   const { nationality, limit = 50, offset = 0 } = options ?? {}
 
   let query = supabase
