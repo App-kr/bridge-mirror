@@ -728,10 +728,6 @@ async def inquiry(request: Request, body: ClientInquiry):
 async def global_exception_handler(request: Request, exc: Exception):
     import logging as _logging
     _logging.getLogger("bridge.api").error("Unhandled exception: %s", exc, exc_info=True)
-    # [TEMP] 디버그: upload-db 에러 상세 노출
-    if "upload-db" in str(request.url):
-        import traceback
-        return JSONResponse(status_code=500, content={"success": False, "message": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()})
     return JSONResponse(
         status_code=500,
         content={"success": False, "message": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."},
@@ -759,38 +755,6 @@ def _check_admin(request: Request):
         return
     if request.headers.get("x-admin-key", "") != _ADMIN_KEY:
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
-
-
-# ── [TEMP] 키 디버그 — 배포 후 제거 예정 ─────────────────────────────────────
-@app.get("/api/admin/key-check", tags=["admin"])
-async def key_check(request: Request):
-    """키 앞 4자리 확인용 (1회용)."""
-    sent = request.headers.get("x-admin-key", "(none)")
-    return ok(data={
-        "server_key_prefix": _ADMIN_KEY[:4] if _ADMIN_KEY else "(empty)",
-        "server_key_len": len(_ADMIN_KEY),
-        "sent_key_prefix": sent[:4] if sent != "(none)" else "(none)",
-        "sent_key_len": len(sent) if sent != "(none)" else 0,
-        "match": sent == _ADMIN_KEY,
-    })
-
-
-# ── [TEMP] 1회용 DB 업로드 — 배포 후 제거 예정 ────────────────────────────────
-@app.post("/api/admin/upload-db", tags=["admin"])
-async def upload_db(request: Request, file: UploadFile = FastFile(...)):
-    """master.db 업로드 (1회용, 배포 후 제거)."""
-    _check_admin(request)
-    import traceback
-    try:
-        dest = _ADMIN_DB_PATH  # DB_PATH 환경변수 or 소스 디렉토리 fallback
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        contents = await file.read()
-        with open(dest, "wb") as f:
-            f.write(contents)
-        size_mb = dest.stat().st_size / (1024 * 1024)
-        return ok(data={"path": str(dest), "size_mb": round(size_mb, 2)}, message="DB uploaded successfully")
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "message": f"Upload failed: {type(e).__name__}: {e}"})
 
 
 @app.get("/api/admin/dashboard", tags=["admin"])
