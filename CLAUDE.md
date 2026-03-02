@@ -14,6 +14,11 @@
 3. **f-string SQL 금지** → `?` 파라미터 바인딩만
 4. **하드코딩 키 금지** → `os.getenv()` + `.env`
 5. **기존 완성 페이지 재구현 금지** — 버그 패치 또는 기능 추가만 허용
+6. **보호 파일 (직접 수정 금지)**:
+   - `web_frontend/src/app/globals.css` — CSS 추가 필요 시 `custom.css` 별도 파일로
+   - `web_frontend/src/app/layout.tsx`
+   - `web_frontend/tailwind.config.ts`
+   - `security_vault.py`
 
 ---
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import Link from 'next/link'
 import './globals.css'
+import './custom.css'
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext'],

@@ -60,20 +60,12 @@ export default function PostDetailPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
       {/* Disclaimer notice */}
-      <div style={{
-        background: '#FFF9C4',
-        borderRadius: '8px',
-        padding: '12px 16px',
-        marginBottom: '16px',
-        fontSize: '13px',
-        color: '#5D4037',
-        lineHeight: '1.6',
-      }}>
+      <div className="disclaimer-notice">
         <p style={{ marginBottom: '6px' }}>
-          ⚠️ All information is subject to change without notice according to institutional policies. Please contact the relevant institution directly to verify the latest information before proceeding.
+          All information is subject to change without notice according to institutional policies. Please contact the relevant institution directly to verify the latest information before proceeding.
         </p>
         <p style={{ margin: 0 }}>
-          ⚠️ 모든 정보는 예고 없이 해당 기관의 정책에 따라 변경될 수 있습니다. 진행 전 반드시 해당 기관에 직접 연락하여 최신 정보를 확인하시기 바랍니다.
+          모든 정보는 예고 없이 해당 기관의 정책에 따라 변경될 수 있습니다. 진행 전 반드시 해당 기관에 직접 연락하여 최신 정보를 확인하시기 바랍니다.
         </p>
       </div>
 
