@@ -70,7 +70,10 @@ div[data-testid="metric-container"] { background:#111827; border:1px solid #1e3a
 
 # ── 인증 ─────────────────────────────────────────────────────────────────────
 def authenticate() -> bool:
-    admin_pwd = os.environ.get("ADMIN_PASSWORD", "bridge2026").strip()
+    admin_pwd = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not admin_pwd:
+        st.error("ADMIN_PASSWORD 환경변수가 설정되지 않았습니다.")
+        return False
     if st.session_state.get("auth_ok"):
         return True
     st.markdown("""
