@@ -694,6 +694,104 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          6. SETTLING IN KOREA — Internet services + Social links
+          ═══════════════════════════════════════════════════════════════════ */}
+      <section className="bg-black py-16 sm:py-20 border-t border-white/[0.06]">
+        <div className="max-w-[980px] mx-auto px-5 sm:px-8">
+
+          {/* Internet Services */}
+          <motion.div
+            className="text-center mb-14"
+            variants={fadeInUp}
+            initial="hidden"
+            whileInView="visible"
+            viewport={defaultViewport}
+          >
+            <p className="text-[#2997ff] text-sm font-semibold uppercase tracking-[0.2em] mb-3">Settling In</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-3">
+              Internet &amp; Mobile in Korea
+            </h2>
+            <p className="text-[#86868b] text-sm max-w-lg mx-auto">
+              We help you set up internet and mobile service from day one. Korea has the world&apos;s fastest internet — here are the top providers.
+            </p>
+          </motion.div>
+
+          <motion.div
+            className="grid grid-cols-3 gap-4 sm:gap-6 max-w-lg mx-auto mb-16"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={defaultViewport}
+          >
+            {/* KT */}
+            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
+              <div className="w-12 h-12 rounded-xl bg-[#e4002b]/10 flex items-center justify-center">
+                <span className="text-lg font-black text-[#e4002b]">KT</span>
+              </div>
+              <span className="text-xs font-semibold text-[#a1a1a6]">olleh</span>
+            </motion.div>
+
+            {/* SKT */}
+            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
+              <div className="w-12 h-12 rounded-xl bg-[#e4002b]/10 flex items-center justify-center">
+                <span className="text-sm font-black text-[#e4002b]">SK</span>
+              </div>
+              <span className="text-xs font-semibold text-[#a1a1a6]">T world</span>
+            </motion.div>
+
+            {/* LG U+ */}
+            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
+              <div className="w-12 h-12 rounded-xl bg-[#e6007e]/10 flex items-center justify-center">
+                <span className="text-sm font-black text-[#e6007e]">U+</span>
+              </div>
+              <span className="text-xs font-semibold text-[#a1a1a6]">LG Uplus</span>
+            </motion.div>
+          </motion.div>
+
+          {/* Social Media */}
+          <motion.div
+            className="text-center"
+            variants={fadeInUp}
+            initial="hidden"
+            whileInView="visible"
+            viewport={defaultViewport}
+          >
+            <p className="text-[#86868b] text-sm mb-5">Follow us &amp; join the community</p>
+            <div className="flex items-center justify-center gap-5">
+              {/* YouTube */}
+              <a href="https://youtube.com" target="_blank" rel="noopener noreferrer"
+                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#ff0000]/20 hover:border-[#ff0000]/30 transition-all group">
+                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#ff0000] transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+              </a>
+              {/* Facebook */}
+              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer"
+                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#1877f2]/20 hover:border-[#1877f2]/30 transition-all group">
+                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#1877f2] transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+              </a>
+              {/* Threads */}
+              <a href="https://threads.net" target="_blank" rel="noopener noreferrer"
+                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.15] hover:border-white/[0.25] transition-all group">
+                <svg className="w-5 h-5 text-[#636366] group-hover:text-white transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.59 12c.025 3.083.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.96-.065-1.182.408-2.26 1.332-3.031.88-.735 2.088-1.18 3.59-1.323.98-.094 1.975-.059 2.96.104.026-.82-.065-1.555-.267-2.186-.277-.865-.775-1.452-1.478-1.744-.758-.315-1.72-.327-2.86-.037l-.536-1.953c1.54-.39 2.946-.357 4.07.096 1.07.431 1.856 1.268 2.28 2.421.294.8.44 1.74.44 2.818l.002.348c.986.56 1.77 1.334 2.262 2.36.722 1.507.842 4.065-1.16 6.028-1.79 1.756-4.016 2.548-7.21 2.572zm2.032-8.081c-.94-.176-1.89-.218-2.828-.126-1.14.109-2.025.44-2.633.983-.55.49-.78 1.087-.648 1.684.166.752.86 1.336 1.885 1.59.423.104.88.154 1.347.154.609 0 1.235-.09 1.765-.266.89-.294 1.547-.834 1.96-1.604.37-.687.564-1.544.59-2.55a8.658 8.658 0 0 0-1.438.135z"/>
+                </svg>
+              </a>
+              {/* Reddit */}
+              <a href="https://reddit.com" target="_blank" rel="noopener noreferrer"
+                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#ff4500]/20 hover:border-[#ff4500]/30 transition-all group">
+                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#ff4500] transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+                </svg>
+              </a>
+            </div>
+          </motion.div>
+        </div>
+      </section>
     </div>
   )
 }
