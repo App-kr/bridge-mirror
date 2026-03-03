@@ -4,23 +4,25 @@ import fs from 'fs'
 
 let _db: Database | null = null
 
+function findDb(): string {
+  const candidates = [
+    path.join(process.cwd(), 'master.db'),
+    path.join(process.cwd(), '..', 'master.db'),
+    path.resolve('master.db'),
+    path.resolve('..', 'master.db'),
+  ]
+
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p } catch { /* skip */ }
+  }
+
+  throw new Error(`master.db not found. cwd=${process.cwd()}, tried: ${candidates.join(', ')}`)
+}
+
 export async function getDb(): Promise<Database> {
   if (_db) return _db
 
-  const candidates = [
-    path.resolve(process.cwd(), 'master.db'),
-    path.resolve(process.cwd(), '..', 'master.db'),
-  ]
-
-  let dbPath = ''
-  for (const p of candidates) {
-    if (fs.existsSync(p)) { dbPath = p; break }
-  }
-
-  if (!dbPath) {
-    throw new Error(`master.db not found. Tried: ${candidates.join(', ')}`)
-  }
-
+  const dbPath = findDb()
   const SQL = await initSqlJs()
   const buffer = fs.readFileSync(dbPath)
   _db = new SQL.Database(buffer)
@@ -35,8 +37,7 @@ export async function query(sql: string, params: (string | number | null)[] = []
 
   const results: Record<string, unknown>[] = []
   while (stmt.step()) {
-    const row = stmt.getAsObject()
-    results.push(row as Record<string, unknown>)
+    results.push(stmt.getAsObject() as Record<string, unknown>)
   }
   stmt.free()
   return results
