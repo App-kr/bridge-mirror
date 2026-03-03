@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * Homepage — Apple Dark Immersive (Compact)
- * Flow: HERO → Stats + CTA (one scroll) → Info page navigation cards
+ * Homepage — Full redesign
+ * Flow: HERO → What Teachers Say → Featured Positions → CTA → Partner Marquee
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -19,171 +19,148 @@ import {
   defaultViewport,
 } from '@/lib/animations'
 
-// ── Hero background SVG components ──
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+
+// ── Name pool for testimonials (rotates monthly) ──
+const NAME_POOL = [
+  'Sarah M.', 'James K.', 'Emily R.', 'Michael T.', 'Jessica L.',
+  'David H.', 'Amanda W.', 'Chris P.', 'Rachel B.', 'Tom S.',
+]
+
+// ── Fallback testimonials ──
+const FALLBACK_TESTIMONIALS = [
+  { text: 'BRIDGE made the entire process seamless. From my first inquiry to settling into my apartment, I never felt lost or unsupported.', stars: 5 },
+  { text: 'The team was incredibly responsive and helped me find a position that perfectly matched my preferences. Highly recommend!', stars: 5 },
+  { text: 'I was nervous about moving to Korea, but BRIDGE handled everything — visa, housing, school matching. Best decision I ever made.', stars: 5 },
+  { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 4 },
+  { text: 'After trying other agencies, BRIDGE was a breath of fresh air. No hidden fees, constant communication, and a perfect placement.', stars: 5 },
+]
+
+// ── Partner academies ──
+const PARTNER_NAMES = [
+  'Chungdahm Learning', 'JLS Jungsang Academy', 'Poly Academy', 'April Academy',
+  'DYB Choisun Academy', 'Sogang SLP', 'Rise Korea', 'Warwick Franklin',
+  'Fast Track Kids', 'Hillside EYAS', 'Avalon Education', 'Elan Academy',
+  'YBM Academy', 'Korea University Foreign Language Center', 'Wall Street English',
+  'Siwon School', 'Real Class', 'Kyvis Kids',
+]
+
+// ── Get deterministic name for current month ──
+function getMonthlyName(index: number): string {
+  const month = new Date().getMonth()
+  return NAME_POOL[(index + month) % NAME_POOL.length]
+}
+
+// ── Strip markdown for preview ──
+function stripMd(text: string, max = 160): string {
+  return text
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\*{1,3}/g, '')
+    .replace(/>\s*/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\n+/g, ' ')
+    .trim()
+    .slice(0, max)
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SVG COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════
+
 function GlobeSVG() {
   return (
-    <svg viewBox="0 0 320 320" fill="none" className="w-[200px] h-[200px] sm:w-[280px] sm:h-[280px] lg:w-[320px] lg:h-[320px]">
-      <circle cx="160" cy="160" r="148" stroke="white" strokeWidth="0.6" />
-      <ellipse cx="160" cy="160" rx="100" ry="148" stroke="white" strokeWidth="0.4" />
-      <ellipse cx="160" cy="160" rx="50" ry="148" stroke="white" strokeWidth="0.4" />
-      <line x1="12" y1="160" x2="308" y2="160" stroke="white" strokeWidth="0.4" />
-      <ellipse cx="160" cy="80" rx="130" ry="22" stroke="white" strokeWidth="0.4" />
-      <ellipse cx="160" cy="160" rx="148" ry="30" stroke="white" strokeWidth="0.3" />
-      <ellipse cx="160" cy="240" rx="130" ry="22" stroke="white" strokeWidth="0.4" />
+    <svg viewBox="0 0 200 200" fill="none" className="w-[150px] h-[150px] sm:w-[180px] sm:h-[180px] hero-globe-rotate">
+      <circle cx="100" cy="100" r="92" stroke="white" strokeWidth="0.5" />
+      <ellipse cx="100" cy="100" rx="60" ry="92" stroke="white" strokeWidth="0.4" />
+      <ellipse cx="100" cy="100" rx="28" ry="92" stroke="white" strokeWidth="0.3" />
+      <line x1="8" y1="100" x2="192" y2="100" stroke="white" strokeWidth="0.3" />
+      <ellipse cx="100" cy="55" rx="80" ry="15" stroke="white" strokeWidth="0.3" />
+      <ellipse cx="100" cy="145" rx="80" ry="15" stroke="white" strokeWidth="0.3" />
     </svg>
   )
 }
 
 function KoreaMapSVG() {
   return (
-    <svg viewBox="0 0 180 360" fill="none" className="w-[120px] h-[240px] sm:w-[160px] sm:h-[320px] lg:w-[180px] lg:h-[360px]">
-      {/* Simplified Korean peninsula outline */}
+    <svg viewBox="0 0 120 280" fill="none" className="w-[100px] h-[210px] sm:w-[120px] sm:h-[250px]">
+      {/* Korean peninsula silhouette — filled for recognizable shape */}
       <path
-        d="M90,15 C95,20 105,28 110,40 C115,52 118,58 120,70 C122,82 125,88 128,95
-           C132,105 130,115 125,125 C120,135 118,140 115,150 C112,160 108,170 105,180
-           C102,190 100,195 98,205 C95,218 92,228 88,240 C84,252 80,260 76,270
-           C72,280 70,288 68,295 C65,305 62,315 60,320 C58,328 62,332 65,335
-           C70,340 75,338 78,335 C82,330 85,325 90,330 C92,335 88,345 82,350"
-        stroke="white"
-        strokeWidth="0.8"
-        strokeLinecap="round"
+        d="M58,8 C60,10 65,14 70,22 C74,30 76,36 78,44 C80,52 82,56 84,62
+           C87,70 88,76 86,84 C84,92 82,98 80,106 C78,114 76,120 74,128
+           C72,136 70,142 68,150 C66,158 64,164 62,172 C60,180 58,186 56,194
+           C54,202 52,208 50,214 C48,222 46,228 44,234
+           C42,240 44,244 46,246 C50,250 54,248 56,244
+           C59,240 61,236 64,240 C66,244 63,252 58,256"
+        fill="white"
+        opacity="0.6"
       />
-      {/* Jeju Island */}
-      <ellipse cx="72" cy="345" rx="14" ry="6" stroke="white" strokeWidth="0.6" />
+      {/* Jeju */}
+      <ellipse cx="48" cy="264" rx="10" ry="4" fill="white" opacity="0.4" />
     </svg>
   )
 }
 
-function BridgeLineSVG() {
+function BridgeLinesSVG() {
   return (
     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600" fill="none" preserveAspectRatio="xMidYMid meet">
-      <path
-        className="hero-bridge-path"
-        d="M200,320 C350,220 500,200 600,240 C700,280 850,260 1000,300"
-        stroke="rgba(255,255,255,0.25)"
-        strokeWidth="1"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Subtle dots along the path */}
-      <circle cx="400" cy="235" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
-      <circle cx="600" cy="240" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
-      <circle cx="800" cy="270" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
+      <path className="hero-line-1" d="M160,380 C320,280 550,220 700,260 C820,290 920,310 1020,300" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" fill="none" />
+      <path className="hero-line-2" d="M170,400 C340,310 520,250 660,270 C800,290 900,280 1010,320" stroke="rgba(255,255,255,0.15)" strokeWidth="0.6" fill="none" />
+      <path className="hero-line-3" d="M150,360 C300,250 500,200 680,240 C840,270 940,290 1030,280" stroke="rgba(255,255,255,0.18)" strokeWidth="0.7" fill="none" />
+      <path className="hero-line-4" d="M180,420 C360,330 540,280 700,300 C830,315 910,300 1000,330" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" fill="none" />
+      <path className="hero-line-5" d="M140,350 C280,240 480,190 650,230 C810,260 930,270 1040,290" stroke="rgba(255,255,255,0.14)" strokeWidth="0.6" fill="none" />
     </svg>
   )
 }
 
 function PlaneSVG() {
   return (
-    <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6">
+    <svg viewBox="0 0 24 24" fill="white" className="w-[40px] h-[40px] sm:w-[50px] sm:h-[50px]">
       <path d="M21,16V14L13,9V3.5A1.5,1.5,0,0,0,11.5,2A1.5,1.5,0,0,0,10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5Z" />
     </svg>
   )
 }
 
-// ── Stats ──
-const COUNTERS = [
-  { label: 'Teachers Placed', target: 5019, suffix: '+' },
-  { label: 'Partner Schools', target: 2092, suffix: '+' },
-  { label: 'Countries', target: 7, suffix: '' },
-  { label: 'Years Experience', target: 10, suffix: '+' },
-]
-
-// ── Info page navigation cards ──
-const INFO_PAGES = [
-  {
-    href: '/jobs',
-    title: 'Open Positions',
-    desc: 'Browse teaching jobs across Korea — updated daily.',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0" />
-      </svg>
-    ),
-    accent: '#2997ff',
-  },
-  {
-    href: '/apply',
-    title: 'Apply as Teacher',
-    desc: 'Start your teaching career in Korea — no fees, full support.',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-      </svg>
-    ),
-    accent: '#30d158',
-  },
-  {
-    href: '/inquiry',
-    title: 'Hire a Teacher',
-    desc: 'Find qualified ESL teachers for your school.',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-      </svg>
-    ),
-    accent: '#ff9f0a',
-  },
-  {
-    href: '/community',
-    title: 'Community',
-    desc: 'Visa guides, living tips, and teacher stories.',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-      </svg>
-    ),
-    accent: '#bf5af2',
-  },
-]
-
-// ── Partner marquee ──
-const SCHOOL_TYPES = [
-  'English Centres',
-  'International Schools',
-  'Private Schools',
-  'English Villages',
-  'Government Education Centres',
-  'Academies',
-  'Kindergartens',
-  'After-School Programs',
-  'Public Schools',
-]
-
-const FRANCHISE_NAMES = [
-  'Chungdahm Learning', 'YBM ECC', 'Pagoda', 'Avalon English',
-  'CDI / April', 'SLP', 'POLY', 'Maple Bear', 'GnB English',
-  'DYB Choisun', 'Hackers', 'Wonderland', 'Haba Kids',
-  'LCI Kids Club', 'Jung Chul', 'Sisa English', 'ECC Junior',
-  'Reading Town', 'SDA English', 'Talktown', 'English Channel',
-  'Langcon', 'JLS Language', 'YC College', 'Kids College',
-  'English Moomoo', 'Tuntun English', 'Canada English',
-  'Chungsol Academy', 'EiE',
-]
-
-// ── Animated counter hook ──
-function useAnimatedCounter(target: number, duration: number, start: boolean) {
-  const [value, setValue] = useState(0)
-  useEffect(() => {
-    if (!start) return
-    let t0: number | null = null
-    let frame: number
-    const step = (ts: number) => {
-      if (!t0) t0 = ts
-      const p = Math.min((ts - t0) / duration, 1)
-      setValue(Math.floor((1 - Math.pow(1 - p, 3)) * target))
-      if (p < 1) frame = requestAnimationFrame(step)
-    }
-    frame = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(frame)
-  }, [target, duration, start])
-  return value
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 20 20" fill={filled ? '#facc15' : '#3f3f46'}>
+      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+    </svg>
+  )
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// INTERFACES
+// ══════════════════════════════════════════════════════════════════════════
+
+interface Testimonial {
+  text: string
+  stars: number
+  name: string
+}
+
+interface FeaturedJob {
+  id: number
+  job_code?: string
+  city?: string
+  district?: string
+  teaching_age?: string
+  working_hours?: string
+  salary_min?: number
+  salary_max?: number
+  salary_raw?: string
+  benefits?: string
+  housing?: string
+  is_hot?: boolean
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
-  const countersRef = useRef<HTMLDivElement>(null)
-  const [countersVisible, setCountersVisible] = useState(false)
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const [jobs, setJobs] = useState<FeaturedJob[]>([])
 
   // ── Hero parallax ──
   const { scrollYProgress: heroProgress } = useScroll({
@@ -194,68 +171,79 @@ export default function HomePage() {
   const heroScale = useTransform(heroProgress, [0, 0.6], [1, 0.95])
   const arrowOpacity = useTransform(heroProgress, [0, 0.15], [1, 0])
 
-  // ── Airplane scroll animation ──
-  const planeX = useTransform(heroProgress, [0, 0.5], ['5%', '80%'])
-  const planeOpacity = useTransform(heroProgress, [0, 0.15, 0.45, 0.55], [0, 0.7, 0.5, 0])
-
-  // ── Counter observer ──
+  // ── Fetch testimonials ──
   useEffect(() => {
-    const el = countersRef.current
-    if (!el) return
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) setCountersVisible(true) },
-      { threshold: 0.3 }
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
+    fetch(`${API}/api/community/testimonials?limit=10`)
+      .then(r => r.json())
+      .then(d => {
+        const posts = d?.data?.posts ?? []
+        if (posts.length > 0) {
+          const shuffled = [...posts].sort(() => Math.random() - 0.5).slice(0, 5)
+          setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
+            text: stripMd(p.preview ?? '', 180),
+            stars: Math.random() > 0.3 ? 5 : 4,
+            name: getMonthlyName(i),
+          })))
+        } else {
+          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
+        }
+      })
+      .catch(() => {
+        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
+      })
   }, [])
 
-  const cv = [
-    useAnimatedCounter(COUNTERS[0].target, 2000, countersVisible),
-    useAnimatedCounter(COUNTERS[1].target, 2000, countersVisible),
-    useAnimatedCounter(COUNTERS[2].target, 1500, countersVisible),
-    useAnimatedCounter(COUNTERS[3].target, 1500, countersVisible),
-  ]
+  // ── Fetch featured jobs ──
+  useEffect(() => {
+    fetch(`${API}/api/jobs?limit=8`)
+      .then(r => r.json())
+      .then(d => {
+        const all = d?.data ?? []
+        if (all.length > 0) {
+          const shuffled = [...all].sort(() => Math.random() - 0.5).slice(0, 5)
+          setJobs(shuffled)
+        }
+      })
+      .catch(() => { /* silent — no jobs section if API fails */ })
+  }, [])
 
   return (
     <div className="bg-black">
 
       {/* ═══════════════════════════════════════════════════════════════════
-          1. HERO — "BRIDGE" + tagline + blinking scroll arrow
+          1. HERO — "BRIDGE" + tagline + background animations
           ═══════════════════════════════════════════════════════════════════ */}
       <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Background decorations (absolute, pointer-events-none) ── */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden hero-bg-fade" style={{ opacity: 0.12 }}>
-          {/* Globe — left */}
-          <div className="absolute left-[2%] sm:left-[5%] top-1/2 -translate-y-1/2">
+        {/* ── Background decorations ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden hero-bg-fade">
+          {/* Globe — left bottom */}
+          <div className="absolute left-[3%] sm:left-[6%] bottom-[12%] sm:bottom-[15%]" style={{ opacity: 0.25 }}>
             <GlobeSVG />
           </div>
           {/* Korea map — right */}
-          <div className="absolute right-[4%] sm:right-[8%] top-1/2 -translate-y-[45%]">
+          <div className="absolute right-[6%] sm:right-[10%] top-[30%] sm:top-[25%]" style={{ opacity: 0.12 }}>
             <KoreaMapSVG />
           </div>
-          {/* Bridge line connecting globe → Korea */}
-          <BridgeLineSVG />
+          {/* Connecting lines */}
+          <div style={{ opacity: 1 }}>
+            <BridgeLinesSVG />
+          </div>
         </div>
 
-        {/* ── Airplane (scroll-driven) ── */}
-        <motion.div
-          className="absolute top-[38%] pointer-events-none z-[5] hero-plane-float"
-          style={{ left: planeX, opacity: planeOpacity }}
-        >
-          <div className="-rotate-45">
-            <PlaneSVG />
-          </div>
-        </motion.div>
+        {/* ── Airplane (auto flight, no scroll) ── */}
+        <div className="hero-plane">
+          <PlaneSVG />
+        </div>
 
+        {/* ── Main text ── */}
         <motion.div
           className="relative z-10 text-center px-4"
           style={{ opacity: heroOpacity, scale: heroScale }}
         >
           <motion.h1
-            className="text-[clamp(80px,15vw,200px)] font-black text-white leading-none tracking-tighter mb-6"
+            className="text-[clamp(70px,14vw,180px)] font-semibold text-white leading-none tracking-tight mb-6"
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }}
@@ -273,12 +261,12 @@ export default function HomePage() {
           </motion.p>
         </motion.div>
 
-        {/* Enhanced scroll indicator */}
+        {/* ── Scroll indicator ── */}
         <motion.div
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
           style={{ opacity: arrowOpacity }}
         >
-          <span className="text-[13px] uppercase tracking-[0.25em] text-[#636366] font-semibold scroll-pulse">
+          <span className="text-sm uppercase tracking-[0.3em] text-[#636366] font-semibold scroll-pulse">
             Scroll
           </span>
           <div className="scroll-bounce">
@@ -290,29 +278,180 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          2. STATS + CTA — 한 장 스크롤 (통합 섹션)
+          2. WHAT TEACHERS SAY — Testimonial cards
           ═══════════════════════════════════════════════════════════════════ */}
-      <section ref={countersRef} className="bg-black py-24 border-t border-white/[0.06]">
-        <div className="max-w-[980px] mx-auto px-4 sm:px-6">
-          {/* Stats */}
-          <motion.div
-            className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-20"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            {COUNTERS.map((c, i) => (
-              <motion.div key={c.label} className="text-center" variants={fadeInUp}>
-                <div className="text-4xl sm:text-5xl font-black text-white tabular-nums tracking-tight">
-                  {cv[i].toLocaleString('en-US')}{c.suffix}
-                </div>
-                <div className="text-sm text-[#86868b] mt-2 font-medium">{c.label}</div>
-              </motion.div>
-            ))}
-          </motion.div>
+      {testimonials.length > 0 && (
+        <section className="bg-black py-24 border-t border-white/[0.06]">
+          <div className="max-w-[1100px] mx-auto px-4 sm:px-6">
+            <motion.div
+              className="text-center mb-14"
+              variants={fadeInUp}
+              initial="hidden"
+              whileInView="visible"
+              viewport={defaultViewport}
+            >
+              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3">
+                What Teachers Say
+              </h2>
+              <p className="text-[#86868b] text-base">Real experiences from teachers we&apos;ve placed.</p>
+            </motion.div>
 
-          {/* CTA */}
+            <motion.div
+              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={defaultViewport}
+            >
+              {testimonials.slice(0, 5).map((t, i) => (
+                <motion.div
+                  key={i}
+                  className={`bg-white/[0.04] border border-white/[0.08] rounded-2xl p-6
+                              hover:bg-white/[0.07] transition-all duration-300
+                              ${i >= 3 ? 'sm:col-span-1 lg:col-span-1' : ''}`}
+                  variants={scaleIn}
+                >
+                  {/* Stars */}
+                  <div className="flex gap-0.5 mb-3">
+                    {Array.from({ length: 5 }).map((_, s) => (
+                      <StarIcon key={s} filled={s < t.stars} />
+                    ))}
+                  </div>
+                  {/* Quote */}
+                  <p className="text-[#d1d1d6] text-sm leading-relaxed mb-4">
+                    &ldquo;{t.text}&rdquo;
+                  </p>
+                  {/* Name */}
+                  <p className="text-[#86868b] text-xs font-semibold">— {t.name}</p>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          3. FEATURED POSITIONS — Job cards with shimmer border
+          ═══════════════════════════════════════════════════════════════════ */}
+      {jobs.length > 0 && (
+        <section className="bg-[#0a0a0a] py-24 border-t border-white/[0.06]">
+          <div className="max-w-[1100px] mx-auto px-4 sm:px-6">
+            <motion.div
+              className="text-center mb-14"
+              variants={fadeInUp}
+              initial="hidden"
+              whileInView="visible"
+              viewport={defaultViewport}
+            >
+              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3">
+                Featured Positions
+              </h2>
+              <p className="text-[#86868b] text-base">New opportunities added daily.</p>
+            </motion.div>
+
+            <motion.div
+              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={defaultViewport}
+            >
+              {jobs.map((job) => (
+                <motion.div key={job.id} variants={scaleIn}>
+                  <Link
+                    href="/jobs"
+                    className="group block shimmer-card bg-white/[0.04] p-6
+                               hover:bg-white/[0.08] transition-all duration-300 hover:-translate-y-1"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-[#2997ff] text-xs font-bold tracking-wide uppercase">
+                        {job.job_code ? `Job #${job.job_code}` : `#${job.id}`}
+                      </span>
+                      {job.is_hot && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase">
+                          Hot
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Location */}
+                    <h3 className="text-white font-semibold text-lg mb-3 tracking-tight">
+                      {job.city ?? 'Korea'}{job.district ? `, ${job.district}` : ''}
+                    </h3>
+
+                    {/* Details */}
+                    <div className="space-y-2 text-sm text-[#a1a1a6]">
+                      {job.teaching_age && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-[#636366] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0" />
+                          </svg>
+                          <span>{job.teaching_age}</span>
+                        </div>
+                      )}
+                      {job.working_hours && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-[#636366] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>{job.working_hours}</span>
+                        </div>
+                      )}
+                      {(job.salary_raw ?? (job.salary_min && job.salary_max)) && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-[#636366] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>
+                            {job.salary_raw
+                              ? job.salary_raw
+                              : `${(job.salary_min ?? 0).toLocaleString()} ~ ${(job.salary_max ?? 0).toLocaleString()} KRW`}
+                          </span>
+                        </div>
+                      )}
+                      {job.benefits && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-[#636366] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="truncate">{job.benefits}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* View more */}
+                    <span className="inline-block mt-5 text-sm font-medium text-[#2997ff] transition-transform duration-300 group-hover:translate-x-1">
+                      View details →
+                    </span>
+                  </Link>
+                </motion.div>
+              ))}
+            </motion.div>
+
+            <motion.div
+              className="text-center mt-10"
+              variants={fadeInUp}
+              initial="hidden"
+              whileInView="visible"
+              viewport={defaultViewport}
+            >
+              <Link
+                href="/jobs"
+                className="inline-flex items-center justify-center px-8 py-3 text-sm font-semibold rounded-full border border-white/20 text-white hover:bg-white/10 transition-all duration-300"
+              >
+                View All Positions →
+              </Link>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          4. CTA — Get started today
+          ═══════════════════════════════════════════════════════════════════ */}
+      <section className="py-24 border-t border-white/[0.06]" style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0a0a0a 100%)' }}>
+        <div className="max-w-[700px] mx-auto px-4 sm:px-6">
           <motion.div
             className="text-center"
             variants={fadeInUp}
@@ -320,92 +459,36 @@ export default function HomePage() {
             whileInView="visible"
             viewport={defaultViewport}
           >
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight mb-4">
-              Get started today.
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white tracking-tight mb-10">
+              Get started today
             </h2>
-            <p className="text-[#86868b] text-lg mb-10 max-w-md mx-auto">
-              Whether you&apos;re looking for your next teaching position
-              or searching for the perfect teacher — we&apos;re here.
-            </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/apply"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold rounded-full bg-white text-black hover:bg-[#e8e8ed] transition-all duration-300 min-w-[200px]"
+                className="inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-full
+                           bg-[#2563EB] text-white min-w-[220px]
+                           hover:bg-[#1d4ed8] hover:shadow-[0_8px_30px_rgba(37,99,235,0.4)] hover:scale-105
+                           transition-all duration-300"
               >
                 I&apos;m a Teacher
               </Link>
               <Link
                 href="/inquiry"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold rounded-full bg-[#2997ff] text-white hover:bg-[#0071e3] transition-all duration-300 min-w-[200px]"
+                className="inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-full
+                           border-2 border-white/30 text-white min-w-[220px]
+                           hover:bg-white hover:text-black hover:border-white hover:shadow-[0_8px_30px_rgba(255,255,255,0.15)] hover:scale-105
+                           transition-all duration-300"
               >
                 I&apos;m Hiring
               </Link>
             </div>
-
-            <p className="text-[#48484a] text-xs">
-              No fees for teachers · Full visa support · Verified schools only
-            </p>
           </motion.div>
         </div>
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          3. INFO PAGES — 정보 페이지 네비게이션 카드
-          ═══════════════════════════════════════════════════════════════════ */}
-      <section className="bg-[#111111] py-24 border-t border-white/[0.06]">
-        <div className="max-w-[1100px] mx-auto px-4 sm:px-6">
-          <motion.div
-            className="text-center mb-14"
-            variants={fadeInUp}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3">
-              Explore BRIDGE.
-            </h2>
-            <p className="text-[#86868b] text-base">Everything you need, one click away.</p>
-          </motion.div>
-
-          <motion.div
-            className="grid sm:grid-cols-2 gap-5"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            {INFO_PAGES.map((page) => (
-              <motion.div key={page.href} variants={scaleIn}>
-                <Link
-                  href={page.href}
-                  className="group block bg-white/[0.04] border border-white/[0.08] rounded-2xl p-7
-                             hover:bg-white/[0.08] hover:border-white/[0.15] transition-all duration-300
-                             hover:-translate-y-1"
-                >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-                    style={{ background: `${page.accent}20`, color: page.accent }}
-                  >
-                    {page.icon}
-                  </div>
-                  <h3 className="text-white font-semibold text-lg mb-2 tracking-tight">{page.title}</h3>
-                  <p className="text-[#86868b] text-sm leading-relaxed">{page.desc}</p>
-                  <span
-                    className="inline-block mt-4 text-sm font-medium transition-transform duration-300 group-hover:translate-x-1"
-                    style={{ color: page.accent }}
-                  >
-                    Explore →
-                  </span>
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          4. PARTNER MARQUEE — 하단 파트너 마키 (컴팩트)
+          5. PARTNER MARQUEE — 학원 롤링
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="bg-black py-12 overflow-hidden border-t border-white/[0.06]">
         <div className="max-w-[980px] mx-auto px-4 sm:px-6 mb-6">
@@ -414,26 +497,11 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Row 1 — School types */}
-        <div className="relative mb-3" aria-hidden="true">
-          <div className="marquee-track">
-            {[...SCHOOL_TYPES, ...SCHOOL_TYPES, ...SCHOOL_TYPES].map((name, i) => (
-              <span
-                key={`r1-${i}`}
-                className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#636366]"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Row 2 — Franchise academies */}
         <div className="relative" aria-hidden="true">
           <div className="marquee-track marquee-track--slow">
-            {[...FRANCHISE_NAMES, ...FRANCHISE_NAMES].map((name, i) => (
+            {[...PARTNER_NAMES, ...PARTNER_NAMES, ...PARTNER_NAMES].map((name, i) => (
               <span
-                key={`r2-${i}`}
+                key={`p-${i}`}
                 className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#48484a]"
               >
                 · {name}

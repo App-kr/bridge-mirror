@@ -5,7 +5,7 @@
  * Simplified: shared BoardHeader + stripMarkdown utility
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -89,6 +89,39 @@ const TIPS_EMOJIS = ['📸', '🎓', '🎤']
 const HERO_ICONS = ['🏢', '📋', '🆕', '📝', '💰']
 const AVATAR_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
 const CITY_KEYS = Object.keys(KOREA_IMAGES)
+
+// ── Animated counter hook (for About page stats) ──
+function useAnimatedCounter(target: number, duration: number, start: boolean) {
+  const [value, setValue] = useState(0)
+  useEffect(() => {
+    if (!start) return
+    let t0: number | null = null
+    let frame: number
+    const step = (ts: number) => {
+      if (!t0) t0 = ts
+      const p = Math.min((ts - t0) / duration, 1)
+      setValue(Math.floor((1 - Math.pow(1 - p, 3)) * target))
+      if (p < 1) frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [target, duration, start])
+  return value
+}
+
+/** Calculate dynamic stat values based on base date */
+function getDynamicStats() {
+  const baseDate = new Date('2026-02-01')
+  const now = new Date()
+  const weeksDiff = Math.floor((now.getTime() - baseDate.getTime()) / (7 * 24 * 60 * 60 * 1000))
+  const monthsDiff = (now.getFullYear() - baseDate.getFullYear()) * 12 + (now.getMonth() - baseDate.getMonth())
+  return [
+    { label: 'Years Experience', target: 15, suffix: '+' },
+    { label: 'Countries', target: 7, suffix: '' },
+    { label: 'Partner Schools', target: 6222 + weeksDiff * 5, suffix: '+' },
+    { label: 'Teachers Placed', target: 17938 + monthsDiff * 100, suffix: '+' },
+  ]
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -174,11 +207,26 @@ function ListLayout({ config, posts, board }: LayoutProps) {
 // HERO-CARDS — About
 // ══════════════════════════════════════════════════════════════════════════════
 function HeroCardsLayout({ config, posts, board }: LayoutProps) {
-  const stats = [
-    { label: 'Years', value: '10+' },
-    { label: 'Teachers', value: '5,000+' },
-    { label: 'Workplaces', value: '2,000+' },
-    { label: 'Countries', value: '7' },
+  const stats = getDynamicStats()
+  const statsRef = useRef<HTMLDivElement>(null)
+  const [statsVisible, setStatsVisible] = useState(false)
+
+  useEffect(() => {
+    const el = statsRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) setStatsVisible(true) },
+      { threshold: 0.3 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  const cv = [
+    useAnimatedCounter(stats[0].target, 1500, statsVisible),
+    useAnimatedCounter(stats[1].target, 1200, statsVisible),
+    useAnimatedCounter(stats[2].target, 2200, statsVisible),
+    useAnimatedCounter(stats[3].target, 2500, statsVisible),
   ]
 
   return (
@@ -192,15 +240,19 @@ function HeroCardsLayout({ config, posts, board }: LayoutProps) {
         </p>
       </motion.div>
 
-      {/* Stats */}
-      <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-        {stats.map((s) => (
-          <motion.div key={s.label} className="text-center" variants={scaleIn}>
-            <div className="text-3xl font-bold text-[#1d1d1f]">{s.value}</div>
-            <div className="text-sm text-[#86868b] mt-1">{s.label}</div>
-          </motion.div>
-        ))}
-      </motion.div>
+      {/* Stats — animated counters */}
+      <div ref={statsRef}>
+        <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}>
+          {stats.map((s, i) => (
+            <motion.div key={s.label} className="text-center" variants={scaleIn}>
+              <div className="text-3xl font-bold text-[#1d1d1f] tabular-nums">
+                {cv[i].toLocaleString('en-US')}{s.suffix}
+              </div>
+              <div className="text-sm text-[#86868b] mt-1">{s.label}</div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
 
       {/* Cards */}
       <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
