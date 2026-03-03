@@ -113,18 +113,11 @@ interface Testimonial {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 
-// ── Diagonal bridge geometry — 7 curves left-bottom → right-top ──
-// All curves share endpoints: (0,700) → (1400,100)
-// Control-point Y varies to create fan-shaped spread
-const BRIDGE_CURVES: { cy: number; sw: number; op: number }[] = [
-  { cy: -100, sw: 1.5, op: 0.05 },   // outermost convex
-  { cy:   50, sw: 2.0, op: 0.07 },
-  { cy:  200, sw: 3.0, op: 0.10 },
-  { cy:  400, sw: 4.5, op: 0.15 },   // center — thickest
-  { cy:  600, sw: 3.0, op: 0.10 },
-  { cy:  750, sw: 2.0, op: 0.07 },
-  { cy:  900, sw: 1.5, op: 0.05 },   // outermost concave
-]
+// ── Suspension bridge geometry ──
+// Main cable: parabolic arc  |  Deck: horizontal line at y=680
+// Vertical hangers connect cable to deck at regular intervals
+const CABLE_Y = (x: number) => 680 - 380 * (1 - ((x - 700) / 700) ** 2) // parabola peak at center
+const HANGER_XS = Array.from({ length: 21 }, (_, i) => i * 70)           // every 70px across 1400
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
@@ -200,7 +193,7 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Diagonal bridge — 7 fan-shaped curves ── */}
+        {/* ── Suspension bridge silhouette ── */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
             viewBox="0 0 1400 800"
@@ -209,49 +202,75 @@ export default function HomePage() {
             fill="none"
           >
             <defs>
+              <linearGradient id="cableGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="white" stopOpacity="0" />
+                <stop offset="30%" stopColor="white" stopOpacity="0.15" />
+                <stop offset="50%" stopColor="white" stopOpacity="0.25" />
+                <stop offset="70%" stopColor="white" stopOpacity="0.15" />
+                <stop offset="100%" stopColor="white" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="deckGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="white" stopOpacity="0" />
+                <stop offset="20%" stopColor="white" stopOpacity="0.08" />
+                <stop offset="50%" stopColor="white" stopOpacity="0.12" />
+                <stop offset="80%" stopColor="white" stopOpacity="0.08" />
+                <stop offset="100%" stopColor="white" stopOpacity="0" />
+              </linearGradient>
               <filter id="glow">
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              <radialGradient id="endGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.12" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </radialGradient>
             </defs>
 
-            {/* 7 curves — all converge at (0,700) and (1400,100) */}
-            {BRIDGE_CURVES.map((c, i) => (
-              <path
-                key={i}
-                d={`M 0 700 Q 700 ${c.cy}, 1400 100`}
+            {/* Main cable — parabolic arc */}
+            <path
+              d={`M 0 680 Q 700 ${680 - 380}, 1400 680`}
+              stroke="url(#cableGrad)"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeDasharray="2200"
+              strokeDashoffset={showBridge ? 0 : 2200}
+              filter="url(#glow)"
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
+            />
+
+            {/* Deck line */}
+            <line
+              x1="0" y1="680" x2="1400" y2="680"
+              stroke="url(#deckGrad)"
+              strokeWidth={1}
+              strokeDasharray="1400"
+              strokeDashoffset={showBridge ? 0 : 1400}
+              style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s' }}
+            />
+
+            {/* Vertical hangers — cable to deck */}
+            {HANGER_XS.map((x, i) => {
+              const cy = CABLE_Y(x)
+              if (cy >= 678) return null // skip edges where cable meets deck
+              return (
+                <line
+                  key={i}
+                  x1={x} y1={cy} x2={x} y2={680}
+                  stroke="white"
+                  strokeWidth={0.5}
+                  opacity={showBridge ? 0.06 + 0.04 * (1 - Math.abs(x - 700) / 700) : 0}
+                  style={{ transition: `opacity 0.8s ease ${0.8 + i * 0.05}s` }}
+                />
+              )
+            })}
+
+            {/* Tower pillars at 1/4 and 3/4 */}
+            {[350, 1050].map((tx) => (
+              <line
+                key={tx}
+                x1={tx} y1={CABLE_Y(tx)} x2={tx} y2={750}
                 stroke="white"
-                strokeWidth={c.sw}
-                strokeLinecap="round"
-                opacity={showBridge ? c.op : 0}
-                strokeDasharray="2500"
-                strokeDashoffset={showBridge ? 0 : 2500}
-                filter={i === 3 ? 'url(#glow)' : undefined}
-                style={{
-                  transition: `stroke-dashoffset 2.2s cubic-bezier(0.16, 1, 0.3, 1) ${0.15 + i * 0.12}s, opacity 0.6s ease ${0.1 + i * 0.12}s`,
-                }}
+                strokeWidth={1.5}
+                opacity={showBridge ? 0.1 : 0}
+                style={{ transition: 'opacity 1.2s ease 0.4s' }}
               />
             ))}
-
-            {/* Convergence glow — left endpoint */}
-            <circle
-              cx="0" cy="700" r="60"
-              fill="url(#endGlow)"
-              opacity={showBridge ? 0.08 : 0}
-              style={{ transition: 'opacity 1.5s ease 0.3s' }}
-            />
-
-            {/* Convergence glow — right endpoint */}
-            <circle
-              cx="1400" cy="100" r="60"
-              fill="url(#endGlow)"
-              opacity={showBridge ? 0.08 : 0}
-              style={{ transition: 'opacity 1.5s ease 0.3s' }}
-            />
           </svg>
         </div>
 
