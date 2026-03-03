@@ -13,6 +13,7 @@ CREDENTIALS_REFERENCE.md
 
 # ── Databases ─────────────────────────────────────────────────
 *.db
+!master.db
 *.db-shm
 *.db-wal
 *.sqlite
