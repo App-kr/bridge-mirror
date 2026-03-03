@@ -114,10 +114,10 @@ interface Testimonial {
 // ══════════════════════════════════════════════════════════════════════════
 
 // ── Suspension bridge geometry ──
-// Main cable: parabolic arc  |  Deck: horizontal line at y=680
-// Vertical hangers connect cable to deck at regular intervals
-const CABLE_Y = (x: number) => 680 - 380 * (1 - ((x - 700) / 700) ** 2) // parabola peak at center
-const HANGER_XS = Array.from({ length: 21 }, (_, i) => i * 70)           // every 70px across 1400
+// Main cable: M 0 520 Q 700 180, 1400 520
+// Left tower:  M 420 520 L 420 280
+// Right tower: M 980 520 L 980 280
+// Stay cables from tower tops to cable anchor points
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
@@ -193,7 +193,7 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Suspension bridge silhouette ── */}
+        {/* ── Suspension bridge ── */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
             viewBox="0 0 1400 800"
@@ -202,163 +202,75 @@ export default function HomePage() {
             fill="none"
           >
             <defs>
-              <linearGradient id="cableGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="white" stopOpacity="0" />
-                <stop offset="30%" stopColor="white" stopOpacity="0.15" />
-                <stop offset="50%" stopColor="white" stopOpacity="0.25" />
-                <stop offset="70%" stopColor="white" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </linearGradient>
-              <linearGradient id="deckGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="white" stopOpacity="0" />
-                <stop offset="20%" stopColor="white" stopOpacity="0.08" />
-                <stop offset="50%" stopColor="white" stopOpacity="0.12" />
-                <stop offset="80%" stopColor="white" stopOpacity="0.08" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </linearGradient>
-              <filter id="glow">
-                <feGaussianBlur stdDeviation="3" result="blur" />
+              <filter id="cableGlow">
+                <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
             </defs>
 
-            {/* Main cable — parabolic arc */}
+            {/* Main cable — parabolic arc, left→right draw */}
             <path
-              d={`M 0 680 Q 700 ${680 - 380}, 1400 680`}
-              stroke="url(#cableGrad)"
+              d="M 0 520 Q 700 180, 1400 520"
+              stroke="white"
               strokeWidth={2.5}
               strokeLinecap="round"
+              opacity={showBridge ? 0.2 : 0}
               strokeDasharray="2200"
               strokeDashoffset={showBridge ? 0 : 2200}
-              filter="url(#glow)"
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
+              filter="url(#cableGlow)"
+              style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0s, opacity 0.5s ease 0s' }}
             />
 
-            {/* Deck line */}
+            {/* Left tower — bottom→top draw */}
             <line
-              x1="0" y1="680" x2="1400" y2="680"
-              stroke="url(#deckGrad)"
-              strokeWidth={1}
-              strokeDasharray="1400"
-              strokeDashoffset={showBridge ? 0 : 1400}
-              style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s' }}
-            />
-
-            {/* Vertical hangers — cable to deck */}
-            {HANGER_XS.map((x, i) => {
-              const cy = CABLE_Y(x)
-              if (cy >= 678) return null // skip edges where cable meets deck
-              return (
-                <line
-                  key={i}
-                  x1={x} y1={cy} x2={x} y2={680}
-                  stroke="white"
-                  strokeWidth={0.5}
-                  opacity={showBridge ? 0.06 + 0.04 * (1 - Math.abs(x - 700) / 700) : 0}
-                  style={{ transition: `opacity 0.8s ease ${0.8 + i * 0.05}s` }}
-                />
-              )
-            })}
-
-            {/* Tower pillars at 1/4 and 3/4 */}
-            {[350, 1050].map((tx) => (
-              <line
-                key={tx}
-                x1={tx} y1={CABLE_Y(tx)} x2={tx} y2={750}
-                stroke="white"
-                strokeWidth={1.5}
-                opacity={showBridge ? 0.1 : 0}
-                style={{ transition: 'opacity 1.2s ease 0.4s' }}
-              />
-            ))}
-          </svg>
-        </div>
-
-        {/* ── Starlink-style fan curves overlay ── */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-          <svg
-            viewBox="0 0 1400 800"
-            style={{ position: 'absolute', width: '100%', height: '100%' }}
-            preserveAspectRatio="xMidYMid slice"
-            fill="none"
-          >
-            <defs>
-              <filter id="starGlow">
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-
-            {/* Line 1 — widest arc, topmost */}
-            <path
-              d="M 0 750 Q 700 200, 1400 750"
-              stroke="white"
-              strokeWidth={1.5}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.04 : 0}
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0s, opacity 0.6s ease 0s' }}
-            />
-
-            {/* Line 2 */}
-            <path
-              d="M 0 760 Q 700 300, 1400 760"
-              stroke="white"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.06 : 0}
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.3s, opacity 0.6s ease 0.3s' }}
-            />
-
-            {/* Line 3 — main curve (glow base) */}
-            <path
-              d="M 0 770 Q 700 380, 1400 770"
-              stroke="white"
-              strokeWidth={6}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.08 : 0}
-              filter="url(#starGlow)"
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.6s, opacity 0.8s ease 0.6s' }}
-            />
-            {/* Line 3 — main curve (crisp) */}
-            <path
-              d="M 0 770 Q 700 380, 1400 770"
+              x1={420} y1={520} x2={420} y2={280}
               stroke="white"
               strokeWidth={2.5}
               strokeLinecap="round"
-              opacity={showBridge ? 0.12 : 0}
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.6s, opacity 0.6s ease 0.6s' }}
+              opacity={showBridge ? 0.2 : 0}
+              strokeDasharray="240"
+              strokeDashoffset={showBridge ? 0 : -240}
+              style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.8s, opacity 0.4s ease 0.8s' }}
             />
 
-            {/* Line 4 */}
-            <path
-              d="M 0 780 Q 700 440, 1400 780"
+            {/* Right tower — bottom→top draw */}
+            <line
+              x1={980} y1={520} x2={980} y2={280}
               stroke="white"
-              strokeWidth={1.8}
+              strokeWidth={2.5}
               strokeLinecap="round"
-              opacity={showBridge ? 0.06 : 0}
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.9s, opacity 0.6s ease 0.9s' }}
+              opacity={showBridge ? 0.2 : 0}
+              strokeDasharray="240"
+              strokeDashoffset={showBridge ? 0 : -240}
+              style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1) 1s, opacity 0.4s ease 1s' }}
             />
 
-            {/* Line 5 — lowest arc */}
-            <path
-              d="M 0 790 Q 700 500, 1400 790"
-              stroke="white"
-              strokeWidth={1.2}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.03 : 0}
-              strokeDasharray="2000"
-              strokeDashoffset={showBridge ? 0 : 2000}
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 1.2s, opacity 0.6s ease 1.2s' }}
+            {/* Stay cables — left tower top to cable */}
+            <line x1={420} y1={280} x2={280} y2={410}
+              stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              opacity={showBridge ? 0.08 : 0}
+              strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
+              style={{ transition: 'stroke-dashoffset 1s ease 2s, opacity 0.4s ease 2s' }}
+            />
+            <line x1={420} y1={280} x2={200} y2={465}
+              stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              opacity={showBridge ? 0.08 : 0}
+              strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
+              style={{ transition: 'stroke-dashoffset 1s ease 2.2s, opacity 0.4s ease 2.2s' }}
+            />
+
+            {/* Stay cables — right tower top to cable */}
+            <line x1={980} y1={280} x2={1120} y2={410}
+              stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              opacity={showBridge ? 0.08 : 0}
+              strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
+              style={{ transition: 'stroke-dashoffset 1s ease 2.4s, opacity 0.4s ease 2.4s' }}
+            />
+            <line x1={980} y1={280} x2={1200} y2={465}
+              stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              opacity={showBridge ? 0.08 : 0}
+              strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
+              style={{ transition: 'stroke-dashoffset 1s ease 2.6s, opacity 0.4s ease 2.6s' }}
             />
           </svg>
         </div>
