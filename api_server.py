@@ -624,75 +624,80 @@ async def apply(request: Request, body: CandidateApply):
     토큰 없음: dedup_key 복합키로 기존 레코드 탐색 → UPSERT
     """
     try:
-        sb = get_svc_client()
         now_iso = datetime.now(timezone.utc).isoformat()
 
         payload = body.model_dump(exclude_none=True)
-        token_in = payload.pop("apply_token", None)   # 모델에서 제거 후 별도 처리
+        token_in = payload.pop("apply_token", None)
 
         # PII 암호화
         for field in _CANDIDATE_ENCRYPT:
             if field in payload and payload[field]:
                 payload[field] = _encrypt_if_needed(str(payload[field]))
 
-        # dedup key
-        dk = _dedup_key(body.full_name, body.dob, body.nationality)
-        payload["dedup_key"] = dk
         payload["updated_at"] = now_iso
 
-        existing_id: Optional[str] = None
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            existing_id: Optional[str] = None
 
-        # ── 경로 A: JWT 토큰으로 기존 레코드 찾기 ───────────────────────────
-        if token_in:
-            cid = _verify_candidate_token(token_in)
-            if cid:
-                existing_id = cid
+            # ── 경로 A: JWT 토큰으로 기존 레코드 찾기
+            if token_in:
+                cid = _verify_candidate_token(token_in)
+                if cid:
+                    existing_id = cid
 
-        # ── 경로 B: 복합 키로 기존 레코드 탐색 (토큰 없거나 검증 실패) ───────
-        if not existing_id:
-            res = (
-                sb.table("candidates")
-                .select("id")
-                .eq("dedup_key", dk)
-                .eq("is_deleted", False)
-                .limit(1)
-                .execute()
+            # ── 경로 B: email로 기존 레코드 탐색
+            if not existing_id and body.email:
+                row = conn.execute(
+                    "SELECT candidate_id FROM candidates WHERE email = ? LIMIT 1",
+                    (payload.get("email", body.email),),
+                ).fetchone()
+                if row:
+                    existing_id = row["candidate_id"]
+
+            # ── UPDATE (2차 누적)
+            if existing_id:
+                sets = ", ".join(f"{k} = ?" for k in payload if k != "candidate_id")
+                vals = [v for k, v in payload.items() if k != "candidate_id"]
+                vals.append(existing_id)
+                conn.execute(f"UPDATE candidates SET {sets} WHERE candidate_id = ?", vals)
+                conn.commit()
+                tok = _make_candidate_token(existing_id)
+                return ok(
+                    data={"id": existing_id, "apply_token": tok, "mode": "updated"},
+                    message="지원 정보가 업데이트되었습니다."
+                )
+
+            # ── INSERT (1차 신규)
+            import uuid
+            new_id = f"cnd_{uuid.uuid4().hex[:12]}"
+            payload["candidate_id"] = new_id
+            payload["source"]     = payload.get("source") or "web_form"
+            payload["status"]     = "Active"
+            payload["created_at"] = now_iso
+
+            cols = ", ".join(payload.keys())
+            placeholders = ", ".join("?" * len(payload))
+            conn.execute(
+                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
+                list(payload.values()),
             )
-            if res.data:
-                existing_id = res.data[0]["id"]
+            conn.commit()
 
-        # ── UPDATE (2차 누적) ───────────────────────────────────────────────
-        if existing_id:
-            # None 값은 이미 제외(exclude_none)됐으므로 기존 값 덮어쓰지 않음
-            sb.table("candidates").update(payload).eq("id", existing_id).execute()
-            # 기존 토큰 반환 (없으면 새로 발급)
-            tok = _make_candidate_token(existing_id)
+            token_out = _make_candidate_token(new_id)
+
+            # 확인 이메일 발송 (실패해도 접수는 완료)
+            if _EMAIL_OK and body.email:
+                send_applicant_confirmation(body.email, body.full_name)
+
             return ok(
-                data={"id": existing_id, "apply_token": tok, "mode": "updated"},
-                message="지원 정보가 업데이트되었습니다."
+                data={"id": new_id, "apply_token": token_out, "mode": "created"},
+                message="지원이 접수되었습니다. 담당자가 검토 후 연락드리겠습니다."
             )
-
-        # ── INSERT (1차 신규) ────────────────────────────────────────────────
-        payload["source"]     = payload.get("source") or "web_form"
-        payload["status"]     = "Active"
-        payload["is_deleted"] = False
-        payload["created_at"] = now_iso
-
-        result = sb.table("candidates").insert(payload).execute()
-        if not result.data:
-            err("저장 실패. 잠시 후 다시 시도하세요.", 500)
-
-        new_id = result.data[0].get("id")
-        token_out = _make_candidate_token(str(new_id))
-
-        # 확인 이메일 발송 (실패해도 접수는 완료)
-        if _EMAIL_OK and body.email:
-            send_applicant_confirmation(body.email, body.full_name)
-
-        return ok(
-            data={"id": new_id, "apply_token": token_out, "mode": "created"},
-            message="지원이 접수되었습니다. 담당자가 검토 후 연락드리겠습니다."
-        )
+        finally:
+            conn.close()
 
     except HTTPException:
         raise
@@ -715,8 +720,6 @@ async def inquiry(request: Request, body: ClientInquiry):
     _INQUIRY_ENCRYPT = {"phone", "email", "contact_name", "business_registration"}
 
     try:
-        sb = get_svc_client()
-
         payload = body.model_dump(exclude_none=True)
         # 연락처 PII 암호화 (storage 전 마지막 레이어)
         for field in _INQUIRY_ENCRYPT:
@@ -724,24 +727,31 @@ async def inquiry(request: Request, body: ClientInquiry):
                 payload[field] = _encrypt_if_needed(str(payload[field]))
 
         payload["source"]       = "web_form"
-        payload["status"]       = "pending"
+        payload["inbox_status"] = "new"
         payload["submitted_at"] = datetime.now(timezone.utc).isoformat()
-        payload["created_at"]   = datetime.now(timezone.utc).isoformat()
-        payload["updated_at"]   = datetime.now(timezone.utc).isoformat()
 
-        result = sb.table("client_inquiries").insert(payload).execute()
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            cols = ", ".join(payload.keys())
+            placeholders = ", ".join("?" * len(payload))
+            cur = conn.execute(
+                f"INSERT INTO client_inquiries ({cols}) VALUES ({placeholders})",
+                list(payload.values()),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
 
-        if not result.data:
-            err("저장 실패. 잠시 후 다시 시도하세요.", 500)
+            # 확인 이메일 발송 (실패해도 접수는 완료)
+            if _EMAIL_OK and body.email:
+                send_employer_confirmation(body.email, body.school_name, body.contact_name or "")
 
-        # 확인 이메일 발송 (실패해도 접수는 완료)
-        if _EMAIL_OK and body.email:
-            send_employer_confirmation(body.email, body.school_name, body.contact_name or "")
-
-        return ok(
-            data={"id": result.data[0].get("id")},
-            message="문의가 접수되었습니다. 빠른 시일 내에 연락드리겠습니다."
-        )
+            return ok(
+                data={"id": new_id},
+                message="문의가 접수되었습니다. 빠른 시일 내에 연락드리겠습니다."
+            )
+        finally:
+            conn.close()
 
     except HTTPException:
         raise
@@ -847,38 +857,44 @@ async def admin_dashboard(request: Request):
     finally:
         conn.close()
 
-    # ── Supabase 통계 (candidates, jobs, payments) ─────────────────────────
+    # ── SQLite 통계 (candidates, jobs, client_inquiries) ────────────────────
+    conn2 = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn2.execute("PRAGMA busy_timeout = 5000")
+    conn2.row_factory = sqlite3.Row
     try:
-        sb = get_svc_client()
         # 지원자 수
-        cands = sb.table("candidates").select("id", count="exact").eq(
-            "is_deleted", False
-        ).execute()
-        stats["candidates"] = cands.count if cands.count is not None else len(cands.data or [])
+        r = conn2.execute("SELECT COUNT(*) AS n FROM candidates").fetchone()
+        stats["candidates"] = r["n"] if r else 0
 
-        # 대기 중 (pending/Active)
-        pending = sb.table("candidates").select("id", count="exact").eq(
-            "is_deleted", False
-        ).eq("status", "Active").execute()
-        stats["candidates_active"] = pending.count if pending.count is not None else len(pending.data or [])
+        # Active 지원자
+        r = conn2.execute(
+            "SELECT COUNT(*) AS n FROM candidates WHERE status='Active'"
+        ).fetchone()
+        stats["candidates_active"] = r["n"] if r else 0
 
-        # 결제 통계
+        # Jobs 수
         try:
-            pays = sb.table("payments").select("id,amount,status").execute()
-            pay_data = pays.data or []
-            stats["payments_total"] = len(pay_data)
-            stats["payments_confirmed"] = sum(1 for p in pay_data if p.get("status") == "confirmed")
-            stats["revenue"] = sum(p.get("amount", 0) or 0 for p in pay_data if p.get("status") == "confirmed")
+            r = conn2.execute(
+                "SELECT COUNT(*) AS n FROM jobs WHERE status='open'"
+            ).fetchone()
+            stats["jobs_open"] = r["n"] if r else 0
         except Exception:
-            stats["payments_total"] = 0
-            stats["payments_confirmed"] = 0
-            stats["revenue"] = 0
+            stats["jobs_open"] = 0
 
-    except Exception:
-        stats.setdefault("candidates", 0)
-        stats.setdefault("candidates_active", 0)
-        stats.setdefault("payments_total", 0)
-        stats.setdefault("revenue", 0)
+        # 채용의뢰 수
+        try:
+            r = conn2.execute(
+                "SELECT COUNT(*) AS n FROM client_inquiries"
+            ).fetchone()
+            stats["inquiries"] = r["n"] if r else 0
+        except Exception:
+            stats["inquiries"] = 0
+
+        stats["payments_total"] = 0
+        stats["payments_confirmed"] = 0
+        stats["revenue"] = 0
+    finally:
+        conn2.close()
 
     # 최근 활동을 시간순 정렬
     recent_activity.sort(
@@ -1001,46 +1017,58 @@ async def admin_candidates(
     offset:      int = 0,
 ):
     """
-    지원자 전체 목록 (관리자용 — PII 복호화 포함)
+    지원자 전체 목록 (관리자용) — SQLite master.db 직접 조회
     보호: X-Admin-Key 필수
     """
     _check_admin(request)
     try:
-        sb = get_svc_client()
-        query = (
-            sb.table("candidates")
-            .select(
-                "id,full_name,email,nationality,ancestry,dob,gender,"
-                "current_location,e_visa,mobile_phone,kakaotalk,"
-                "certification,employment,area_prefs,target_age,"
-                "housing,reference,criminal_record,passport,"
-                "photo_url,thumb_url,"
-                "admin_notes,status,is_deleted,dedup_key,created_at,updated_at"
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            where = ["1=1"]
+            params: list = []
+            if search:
+                where.append("full_name LIKE ?")
+                params.append(f"%{search}%")
+            if nationality:
+                where.append("nationality = ?")
+                params.append(nationality)
+            if visa:
+                where.append("e_visa LIKE ?")
+                params.append(f"%{visa}%")
+
+            where_sql = " AND ".join(where)
+
+            total_row = conn.execute(
+                f"SELECT COUNT(*) FROM candidates WHERE {where_sql}", params
+            ).fetchone()
+            total = total_row[0] if total_row else 0
+
+            rows_raw = conn.execute(
+                f"""SELECT * FROM candidates
+                    WHERE {where_sql}
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?""",
+                params + [limit, offset],
+            ).fetchall()
+
+            candidates = []
+            for r in rows_raw:
+                d = dict(r)
+                d["id"] = d.pop("candidate_id", d.get("id"))
+                d.setdefault("admin_notes", d.get("notes", ""))
+                d.setdefault("photo_url", None)
+                d.setdefault("thumb_url", None)
+                d.setdefault("target_age", d.get("target", ""))
+                candidates.append(d)
+
+            return ok(
+                data={"total": total, "candidates": candidates},
+                message=f"{len(candidates)}명 조회",
             )
-            .eq("is_deleted", False)
-            .order("created_at", desc=True)
-            .range(offset, offset + limit - 1)
-        )
-        if search:
-            query = query.ilike("full_name", f"%{search}%")
-        if nationality:
-            query = query.eq("nationality", nationality)
-        if visa:
-            query = query.ilike("e_visa", f"%{visa}%")
-
-        result = query.execute()
-        rows = [_decrypt_row(dict(r)) for r in result.data]
-
-        total_res = (
-            sb.table("candidates")
-            .select("id", count="exact")
-            .eq("is_deleted", False)
-            .execute()
-        )
-        return ok(
-            data={"total": total_res.count or len(rows), "candidates": rows},
-            message=f"{len(rows)}명 조회",
-        )
+        finally:
+            conn.close()
     except HTTPException:
         raise
     except Exception as e:
@@ -1055,23 +1083,29 @@ async def admin_update_candidate(
     request:      Request,
     body:         dict,
 ):
-    """인라인 편집: admin_notes, reference, status만 허용 (PII 아님)."""
+    """인라인 편집: notes, reference, status만 허용."""
     _check_admin(request)
-    EDITABLE = {"admin_notes", "reference", "status"}
+    # admin_notes → notes 매핑
+    if "admin_notes" in body:
+        body["notes"] = body.pop("admin_notes")
+    EDITABLE = {"notes", "reference", "status"}
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
-        raise HTTPException(400, "수정 가능한 필드 없음 (admin_notes, reference, status)")
+        raise HTTPException(400, "수정 가능한 필드 없음 (notes, reference, status)")
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
-        sb = get_svc_client()
-        res = (
-            sb.table("candidates")
-            .update(update)
-            .eq("id", candidate_id)
-            .eq("is_deleted", False)
-            .execute()
-        )
-        return ok(data=res.data[0] if res.data else None, message="수정 완료")
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            sets = ", ".join(f"{k} = ?" for k in update)
+            vals = list(update.values()) + [candidate_id]
+            conn.execute(
+                f"UPDATE candidates SET {sets} WHERE candidate_id = ?", vals
+            )
+            conn.commit()
+            return ok(message="수정 완료")
+        finally:
+            conn.close()
     except Exception as e:
         import logging as _log_upd
         _log_upd.getLogger("bridge.api").error("admin_update 실패: %s", e, exc_info=True)
@@ -1080,17 +1114,20 @@ async def admin_update_candidate(
 
 @app.delete("/api/admin/candidates/{candidate_id}", tags=["admin"])
 async def admin_delete_candidate(candidate_id: str, request: Request):
-    """Soft Delete — is_deleted=True 로 설정 (물리 삭제 금지)."""
+    """Soft Delete — status='Deleted' 설정 (물리 삭제 금지)."""
     _check_admin(request)
     try:
-        sb = get_svc_client()
-        res = (
-            sb.table("candidates")
-            .update({"is_deleted": True, "updated_at": datetime.now(timezone.utc).isoformat()})
-            .eq("id", candidate_id)
-            .execute()
-        )
-        return ok(message="삭제 처리 완료 (soft delete)")
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            conn.execute(
+                "UPDATE candidates SET status = 'Deleted', updated_at = ? WHERE candidate_id = ?",
+                (datetime.now(timezone.utc).isoformat(), candidate_id),
+            )
+            conn.commit()
+            return ok(message="삭제 처리 완료 (soft delete)")
+        finally:
+            conn.close()
     except Exception as e:
         import logging as _log_del
         _log_del.getLogger("bridge.api").error("admin_delete 실패: %s", e, exc_info=True)
@@ -1335,41 +1372,47 @@ async def admin_search_posts(
 
 @app.get("/api/admin/applications", tags=["admin"])
 async def admin_list_applications(request: Request):
-    """구직자 + 구인자 접수 통합 목록."""
+    """구직자 + 구인자 접수 통합 목록 — SQLite."""
     _check_admin(request)
     try:
-        sb = get_svc_client()
-        apps: list[dict] = []
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            apps: list[dict] = []
 
-        # 구직자 (candidates)
-        cands = sb.table("candidates").select(
-            "id,full_name,email,status,created_at,updated_at,is_deleted"
-        ).eq("is_deleted", False).order("created_at", desc=True).limit(200).execute()
-        for c in (cands.data or []):
-            apps.append({
-                "id": c["id"], "type": "candidate",
-                "name": c.get("full_name") or "", "email": c.get("email") or "",
-                "status": c.get("status") or "Active",
-                "created_at": c.get("created_at") or "",
-                "updated_at": c.get("updated_at"),
-            })
+            # 구직자 (candidates)
+            cands = conn.execute(
+                "SELECT candidate_id, full_name, email, status, created_at, updated_at "
+                "FROM candidates ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+            for c in cands:
+                apps.append({
+                    "id": c["candidate_id"], "type": "candidate",
+                    "name": c["full_name"] or "", "email": c["email"] or "",
+                    "status": c["status"] or "Active",
+                    "created_at": c["created_at"] or "",
+                    "updated_at": c["updated_at"],
+                })
 
-        # 구인자 (client_inquiries)
-        inqs = sb.table("client_inquiries").select(
-            "id,school_name,contact_name,email,status,created_at,updated_at"
-        ).order("created_at", desc=True).limit(200).execute()
-        for i in (inqs.data or []):
-            apps.append({
-                "id": i["id"], "type": "employer",
-                "name": i.get("contact_name") or "", "email": i.get("email") or "",
-                "school_name": i.get("school_name") or "",
-                "status": i.get("status") or "pending",
-                "created_at": i.get("created_at") or "",
-                "updated_at": i.get("updated_at"),
-            })
+            # 구인자 (client_inquiries)
+            inqs = conn.execute(
+                "SELECT id, school_name, contact_name, email, inbox_status, submitted_at "
+                "FROM client_inquiries ORDER BY submitted_at DESC LIMIT 200"
+            ).fetchall()
+            for i in inqs:
+                apps.append({
+                    "id": str(i["id"]), "type": "employer",
+                    "name": i["contact_name"] or "", "email": i["email"] or "",
+                    "school_name": i["school_name"] or "",
+                    "status": i["inbox_status"] or "pending",
+                    "created_at": i["submitted_at"] or "",
+                })
 
-        apps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-        return ok(data=apps)
+            apps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            return ok(data=apps)
+        finally:
+            conn.close()
 
     except HTTPException:
         raise
@@ -1386,16 +1429,27 @@ class StatusUpdate(BaseModel):
 
 @app.patch("/api/admin/applications/{app_id}", tags=["admin"])
 async def admin_update_application(app_id: str, body: StatusUpdate, request: Request):
-    """접수 상태 변경."""
+    """접수 상태 변경 — SQLite."""
     _check_admin(request)
     try:
-        sb = get_svc_client()
-        now_iso = datetime.now(timezone.utc).isoformat()
-        table = "candidates" if body.type == "candidate" else "client_inquiries"
-        sb.table(table).update({
-            "status": body.status, "updated_at": now_iso
-        }).eq("id", app_id).execute()
-        return ok(message=f"{app_id} → {body.status}")
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if body.type == "candidate":
+                conn.execute(
+                    "UPDATE candidates SET status = ?, updated_at = ? WHERE candidate_id = ?",
+                    (body.status, now_iso, app_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE client_inquiries SET inbox_status = ?, last_activity = ? WHERE id = ?",
+                    (body.status, now_iso, int(app_id)),
+                )
+            conn.commit()
+            return ok(message=f"{app_id} → {body.status}")
+        finally:
+            conn.close()
 
     except HTTPException:
         raise
@@ -1409,21 +1463,30 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
 
 @app.get("/api/admin/payments", tags=["admin"])
 async def admin_list_payments(request: Request):
-    """결제 기록 목록."""
+    """결제 기록 목록 — SQLite (테이블 없으면 빈 배열)."""
     _check_admin(request)
     try:
-        sb = get_svc_client()
-        result = sb.table("payments").select("*").order(
-            "created_at", desc=True
-        ).limit(200).execute()
-        return ok(data=result.data or [])
-
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            # payments 테이블 존재 여부 확인
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='payments'"
+            ).fetchone()
+            if not exists:
+                return ok(data=[])
+            rows = conn.execute(
+                "SELECT * FROM payments ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+            return ok(data=[dict(r) for r in rows])
+        finally:
+            conn.close()
     except HTTPException:
         raise
     except Exception as e:
         import logging as _log_pay
         _log_pay.getLogger("bridge.api").error("admin_payments 실패: %s", e, exc_info=True)
-        # payments 테이블이 없을 수 있음 — 빈 배열 반환
         return ok(data=[])
 
 
@@ -1793,3 +1856,4 @@ if __name__ == "__main__":
     print("BRIDGE API Server 시작 중...")
     print("  문서: http://localhost:8000/docs")
     uvicorn.run("api_server:app", host="0.0.0.0", port=8000, reload=True)
+

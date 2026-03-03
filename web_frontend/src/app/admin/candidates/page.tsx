@@ -32,31 +32,38 @@ ModuleRegistry.registerModules([
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 interface Candidate {
-  id:               string
-  full_name:        string | null
-  email:            string | null
-  nationality:      string | null
-  ancestry:         string | null
-  dob:              string | null
-  gender:           string | null
-  current_location: string | null
-  e_visa:           string | null
-  mobile_phone:     string | null
-  kakaotalk:        string | null
-  certification:    string | null
-  employment:       string | null
-  area_prefs:       string | null
-  target_age:       string | null
-  housing:          string | null
-  reference:        string | null
-  criminal_record:  string | null
-  passport:         string | null
-  photo_url:        string | null
-  thumb_url:        string | null
-  admin_notes:      string | null
-  status:           string | null
-  created_at:       string | null
-  updated_at:       string | null
+  id:                string
+  status:            string | null
+  photo_url:         string | null
+  thumb_url:         string | null
+  full_name:         string | null
+  email:             string | null
+  nationality:       string | null
+  ancestry:          string | null
+  gender:            string | null
+  dob:               string | null
+  current_location:  string | null
+  e_visa:            string | null
+  mobile_phone:      string | null
+  kakaotalk:         string | null
+  start_date:        string | null
+  target:            string | null
+  area_prefs:        string | null
+  experience:        string | null
+  employment:        string | null
+  certification:     string | null
+  desired_salary:    string | null
+  current_salary:    string | null
+  job_prefs:         string | null
+  reference:         string | null
+  arc_holders:       string | null
+  housing:           string | null
+  criminal_record:   string | null
+  passport:          string | null
+  source:            string | null
+  admin_notes:       string | null
+  created_at:        string | null
+  updated_at:        string | null
 }
 
 const STATUS_VALUES = ['Active', 'Placed', 'Hold', 'Closed', 'Duplicate']
@@ -78,15 +85,15 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
   }
 
   return [
-    { ...base, field: 'id', headerName: 'ID', width: 72, pinned: 'left',
-      valueFormatter: (p) => String(p.value ?? '').slice(0, 8) + '…' },
+    { ...base, field: 'id', headerName: 'ID', width: 120, pinned: 'left',
+      valueFormatter: (p) => String(p.value ?? '').slice(0, 14) },
     { ...editable, field: 'status', headerName: '상태', width: 100, pinned: 'left',
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: STATUS_VALUES },
       cellStyle: (p: { value: string }) => {
         const color: Record<string, string> = {
           Active: '#22c55e', Placed: '#3b82f6', Hold: '#eab308',
-          Closed: '#6b7280', Duplicate: '#ef4444',
+          Closed: '#6b7280', Duplicate: '#ef4444', Inactive: '#94a3b8',
         }
         return { color: color[p.value] ?? '#94a3b8', fontWeight: 600, borderLeft: '2px solid #3b82f6' }
       },
@@ -104,32 +111,36 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
         return `<img src="${src}" alt="photo" style="width:24px;height:24px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="window.__bridgePhotoModal__('${fullSrc}')" />`
       },
     },
-    { ...base, field: 'full_name', headerName: '이름', width: 130 },
-    { ...base, field: 'email', headerName: '메일', width: 200 },
-    { ...base, field: 'nationality', headerName: '국적', width: 110 },
+    { ...base, field: 'full_name', headerName: '이름', width: 140 },
+    { ...base, field: 'email', headerName: '이메일', width: 200 },
+    { ...base, field: 'nationality', headerName: '국적', width: 100 },
     { ...base, field: 'ancestry', headerName: '혈통', width: 90 },
     { ...base, field: 'gender', headerName: '성별', width: 70 },
-    { ...base, field: 'dob', headerName: '생년월일', width: 110,
-      valueFormatter: (p) => (p.value ?? '').slice(0, 10) },
-    { ...base, field: 'current_location', headerName: '현재위치', width: 140 },
-    { ...base, field: 'e_visa', headerName: '비자', width: 120 },
-    { ...base, field: 'mobile_phone', headerName: '전화', width: 140 },
-    { ...base, field: 'kakaotalk', headerName: '카톡', width: 120 },
-    { ...base, field: 'passport', headerName: '여권', width: 130 },
-    { ...base, field: 'certification', headerName: '자격', width: 160 },
-    { ...base, field: 'employment', headerName: '학위/경력', width: 180 },
-    { ...base, field: 'criminal_record', headerName: '범죄경력', width: 130,
-      cellStyle: (p: { value: string }) => p.value ? { color: '#fbbf24' } : null },
-    { ...base, field: 'target_age', headerName: '선호연령', width: 120 },
-    { ...base, field: 'area_prefs', headerName: '선호지역', width: 150 },
-    { ...base, field: 'housing', headerName: '숙소', width: 90 },
-    { ...editable, field: 'reference', headerName: '레퍼런스', width: 200,
+    { ...base, field: 'dob', headerName: '생년월일', width: 100 },
+    { ...base, field: 'current_location', headerName: '현재위치', width: 100 },
+    { ...base, field: 'e_visa', headerName: '비자', width: 100 },
+    { ...base, field: 'mobile_phone', headerName: '전화', width: 130 },
+    { ...base, field: 'kakaotalk', headerName: '카카오톡', width: 110 },
+    { ...base, field: 'start_date', headerName: '시작가능일', width: 100 },
+    { ...base, field: 'target', headerName: '희망지역', width: 100,
+      valueGetter: (p) => [p.data?.target, p.data?.area_prefs].filter(Boolean).join(' / ') },
+    { ...base, field: 'experience', headerName: '경력', width: 80 },
+    { ...base, field: 'employment', headerName: '고용형태', width: 100 },
+    { ...base, field: 'certification', headerName: '자격증', width: 140 },
+    { ...base, field: 'desired_salary', headerName: '희망급여', width: 100 },
+    { ...base, field: 'current_salary', headerName: '현재급여', width: 100 },
+    { ...base, field: 'job_prefs', headerName: '직무선호', width: 120 },
+    { ...editable, field: 'reference', headerName: '레퍼런스', width: 180,
       headerComponentParams: { template: '<span title="더블클릭 편집 가능">✏ 레퍼런스</span>' } },
-    { ...editable, field: 'admin_notes', headerName: '관리자 메모', width: 240,
-      headerComponentParams: { template: '<span title="더블클릭 편집 가능">✏ 관리자 메모</span>' } },
-    { ...base, field: 'created_at', headerName: '등록일', width: 130,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-    { ...base, field: 'updated_at', headerName: '수정일', width: 130,
+    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 90 },
+    { ...base, field: 'housing', headerName: '숙소', width: 80 },
+    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 100,
+      cellStyle: (p: { value: string }) => p.value ? { color: '#fbbf24' } : null },
+    { ...base, field: 'passport', headerName: '여권', width: 110 },
+    { ...base, field: 'source', headerName: '지원경로', width: 100 },
+    { ...editable, field: 'admin_notes', headerName: '메모', width: 220,
+      headerComponentParams: { template: '<span title="더블클릭 편집 가능">✏ 메모</span>' } },
+    { ...base, field: 'created_at', headerName: '타임스탬프', width: 130,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
   ]
 }
