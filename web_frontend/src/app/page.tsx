@@ -31,25 +31,30 @@ const FALLBACK_TESTIMONIALS = [
   { text: 'BRIDGE made the entire process seamless. From my first inquiry to settling into my apartment, I never felt lost or unsupported.', stars: 5 },
   { text: 'The team was incredibly responsive and helped me find a position that perfectly matched my preferences. Highly recommend!', stars: 5 },
   { text: 'I was nervous about moving to Korea, but BRIDGE handled everything — visa, housing, school matching. Best decision I ever made.', stars: 5 },
-  { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 4 },
+  { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 5 },
 ]
 
 // ── Partner lists (schools vs academies) ──
 const SCHOOL_NAMES = [
-  'GEPIK', 'SMOE', 'Gyeonggi English Village', 'Paju English Village',
-  'Gangwon English Camp', 'British Council Korea', 'Busan Foreign School',
-  'Jeju International School', 'Korea International School',
+  'Seoul Foreign School', 'Korea International School', 'Elementary School',
+  'Gyeonggi English Village', 'Paju English Village', 'Middle School',
+  'Busan Global Village', 'Saint Paul Preparatory', 'High School',
+  'Gangwon English Camp', 'Gyeonggi Global School', 'University',
+  'British Council Korea', 'MICA International Scholars',
+  'Hyundai International School', 'POSCO Education Foundation',
 ]
 const ACADEMY_NAMES = [
-  'Chungdahm Learning', 'YBM', 'Poly', 'April', 'DYB Choisun',
-  'Avalon Education', 'Rise Korea', 'Sogang SLP', 'JLS Jungsang',
-  'Warwick Franklin', 'Fast Track Kids', 'Hillside EYAS',
+  'CREVERSE', 'YBM ECC', 'YBM PSA', 'Poly Inspiration', 'April Institute',
+  'DYB Choisun', 'Avalon English', 'Altiora', 'Rise Korea', 'Sogang SLP',
+  'EDISEN', 'JLS', 'Worwick Franklin', 'PEAI', 'FasTracKids',
+  'Hillside IYA Skola', 'Habit9', 'KNS',
 ]
 
-// ── Get deterministic name for current month ──
-function getMonthlyName(index: number): string {
-  const month = new Date().getMonth()
-  return NAME_POOL[(index + month) % NAME_POOL.length]
+// ── Get deterministic name — rotates weekly ──
+function getWeeklyName(index: number): string {
+  const now = new Date()
+  const week = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
+  return NAME_POOL[(index + week) % NAME_POOL.length]
 }
 
 // ── Strip markdown for preview ──
@@ -105,15 +110,15 @@ interface FeaturedJob {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 
-// ── Bridge line definitions ──
+// ── Bridge line definitions — arch bridge: bottom-left → logo center → bottom-right ──
 const BRIDGE_LINES = [
-  { d: 'M 0 700 Q 350 150, 700 250 Q 1050 350, 1400 100', w: 2,    o: 0.06, delay: 0    },
-  { d: 'M 0 700 Q 350 250, 700 300 Q 1050 350, 1400 100', w: 2.5,  o: 0.08, delay: 0.2  },
-  { d: 'M 0 700 Q 350 350, 700 350 Q 1050 350, 1400 100', w: 2,    o: 0.06, delay: 0.4  },
-  { d: 'M 0 700 Q 350 400, 700 400 Q 1050 400, 1400 100', w: 4.5,  o: 0.14, delay: 0.6  },
-  { d: 'M 0 700 Q 350 450, 700 450 Q 1050 400, 1400 100', w: 2,    o: 0.06, delay: 0.8  },
-  { d: 'M 0 700 Q 350 550, 700 500 Q 1050 400, 1400 100', w: 2.5,  o: 0.08, delay: 1.0  },
-  { d: 'M 0 700 Q 350 650, 700 550 Q 1050 400, 1400 100', w: 1.5,  o: 0.04, delay: 1.2  },
+  { d: 'M 0 720 Q 700 180, 1400 720',  w: 1,   o: 0.04, delay: 0    },
+  { d: 'M 0 700 Q 700 220, 1400 700',  w: 1.5, o: 0.06, delay: 0.12 },
+  { d: 'M 0 680 Q 700 260, 1400 680',  w: 2,   o: 0.08, delay: 0.24 },
+  { d: 'M 0 660 Q 700 300, 1400 660',  w: 3,   o: 0.12, delay: 0.36 },
+  { d: 'M 0 640 Q 700 340, 1400 640',  w: 2,   o: 0.08, delay: 0.48 },
+  { d: 'M 0 620 Q 700 360, 1400 620',  w: 1.5, o: 0.06, delay: 0.60 },
+  { d: 'M 0 600 Q 700 380, 1400 600',  w: 1,   o: 0.04, delay: 0.72 },
 ]
 
 export default function HomePage() {
@@ -144,18 +149,24 @@ export default function HomePage() {
       .then(d => {
         const posts = d?.data?.posts ?? []
         if (posts.length > 0) {
-          const shuffled = [...posts].sort(() => Math.random() - 0.5).slice(0, 4)
+          const week = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 86400000))
+          const seeded = [...posts].sort((a, b) => {
+            const ha = ((JSON.stringify(a).length * 31 + week) % 1000) / 1000
+            const hb = ((JSON.stringify(b).length * 31 + week) % 1000) / 1000
+            return ha - hb
+          })
+          const shuffled = seeded.slice(0, 4)
           setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
             text: stripMd(p.preview ?? '', 140),
-            stars: Math.random() > 0.3 ? 5 : 4,
-            name: getMonthlyName(i),
+            stars: 5,
+            name: getWeeklyName(i),
           })))
         } else {
-          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
+          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getWeeklyName(i) })))
         }
       })
       .catch(() => {
-        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
+        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getWeeklyName(i) })))
       })
   }, [])
 
@@ -179,7 +190,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════════════════════
           1. HERO — "BRIDGE" + tagline + background animations
           ═══════════════════════════════════════════════════════════════════ */}
-      <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
+      <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
         {/* ── Bridge lines background ── */}
@@ -205,9 +216,9 @@ export default function HomePage() {
                 }}
               />
             ))}
-            {/* Glow at convergence points */}
-            <circle cx="0" cy="700" r="25" fill="white" opacity="0.06" />
-            <circle cx="1400" cy="100" r="25" fill="white" opacity="0.06" />
+            {/* Glow at bridge feet */}
+            <circle cx="0" cy="700" r="30" fill="white" opacity="0.05" />
+            <circle cx="1400" cy="700" r="30" fill="white" opacity="0.05" />
           </svg>
         </div>
 
@@ -445,11 +456,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════════════════════
           4. CTA — Start Your Journey
           ═══════════════════════════════════════════════════════════════════ */}
-      <section className="relative py-28 sm:py-32 border-t border-white/[0.06] overflow-hidden">
-        {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#0f172a] to-[#1e3a5f]" />
-        {/* Subtle radial glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(41,151,255,0.08)_0%,transparent_70%)]" />
+      <section className="relative py-28 sm:py-32 border-t border-white/[0.06] overflow-hidden bg-black">
 
         <div className="relative z-10 max-w-[700px] mx-auto px-5 sm:px-8">
           <motion.div

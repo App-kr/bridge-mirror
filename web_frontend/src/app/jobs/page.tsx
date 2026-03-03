@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
 import ApplyPanel from '@/components/ApplyPanel'
-import { getPublicJobs } from '@/lib/supabase'
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 import { fadeInUp, staggerContainer, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 
@@ -66,8 +66,16 @@ export default function JobsPage() {
     }
 
     setLoading(true)
-    getPublicJobs({ limit: 500 })
-      .then((jobs) => { setAllJobs(jobs); setError(null) })
+    fetch(`${API}/api/jobs?limit=500`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success && Array.isArray(j.data)) {
+          setAllJobs(j.data)
+          setError(null)
+        } else {
+          setError('Failed to load positions. Please try again.')
+        }
+      })
       .catch(() => setError('Failed to load positions. Please try again.'))
       .finally(() => setLoading(false))
   }, [])

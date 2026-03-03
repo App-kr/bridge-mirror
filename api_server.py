@@ -482,6 +482,45 @@ async def root():
     }
 
 
+def _job_row_to_public(row: dict) -> dict:
+    """SQLite jobs row → PublicJob 형태로 매핑 (민감 필드 제외)"""
+    teaching_age_raw = row.get("teaching_age") or ""
+    # "Kindy - Elem" 같은 텍스트를 age group 배열로 변환
+    age_map = {
+        "kindy": "kindergarten", "kindergarten": "kindergarten",
+        "elem": "elementary", "elementary": "elementary",
+        "pre_k": "pre_k", "pre-k": "pre_k", "prek": "pre_k",
+        "middle": "middle", "high": "high", "adult": "adult",
+    }
+    age_groups = []
+    for token in re.split(r"[,/\-&·\s]+", teaching_age_raw.lower()):
+        token = token.strip()
+        if token in age_map and age_map[token] not in age_groups:
+            age_groups.append(age_map[token])
+
+    benefits_raw = row.get("benefits") or ""
+    benefits_list = [b.strip() for b in benefits_raw.split(",") if b.strip()] if benefits_raw else []
+
+    return {
+        "location":                row.get("city") or row.get("location"),
+        "job_id":                  row.get("job_code", ""),
+        "starting_date":           row.get("start_date"),
+        "teaching_age":            age_groups or None,
+        "class_size":              row.get("class_size"),
+        "working_hours":           row.get("working_hours"),
+        "monthly_salary":          row.get("salary_raw"),
+        "teaching_hours_per_week": row.get("teach_hrs_week"),
+        "vacation":                row.get("vacation"),
+        "native_teacher_count":    row.get("native_count"),
+        "housing":                 row.get("housing"),
+        "preferences":             None,
+        "employee_benefits":       benefits_list or None,
+        "is_hot":                  bool(row.get("is_hot", 0)),
+        "employment_type":         "part_time" if row.get("is_part_time") else "full_time",
+        "hours_per_day":           row.get("daily_hours"),
+    }
+
+
 @app.get("/api/jobs", tags=["jobs"])
 async def list_jobs(
     request:   Request,
@@ -491,7 +530,7 @@ async def list_jobs(
     offset:    int = 0,
 ):
     """
-    공개 구인 목록 조회 (status='open' 만 반환, RLS 적용)
+    공개 구인 목록 조회 (SQLite, status='open' 만 반환)
     - city: 도시 필터 (서울, 인천, 수원 등)
     - is_hot: HOT 포지션만 (true/false)
     - limit / offset: 페이지네이션
@@ -499,74 +538,63 @@ async def list_jobs(
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         raise HTTPException(429, "Too many requests. Please slow down.")
     try:
-        sb = get_anon_client()
-        query = (
-            sb.table("jobs")
-            .select(
-                "id,job_code,seq,city,district,location,"
-                "start_date,teaching_age,working_hours,"
-                "salary_min,salary_max,salary_raw,"
-                "housing,benefits,vacation,"
-                "is_hot,is_part_time,status"
-            )
-            .eq("status", "open")
-            .order("is_hot", desc=True)
-            .order("created_at", desc=True)
-            .range(offset, offset + limit - 1)
-        )
-        if city:
-            city = city.strip()[:50]
-            query = query.ilike("city", f"%{city}%")
-        if is_hot is not None:
-            query = query.eq("is_hot", is_hot)
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            where = ["status = ?", "is_deleted = 0"]
+            params: list[Any] = ["open"]
 
-        result = query.execute()
-        return ok(data=result.data, message=f"{len(result.data)}건 조회")
+            if city:
+                city = city.strip()[:50]
+                where.append("(city LIKE ? OR location LIKE ?)")
+                params.extend([f"%{city}%", f"%{city}%"])
+            if is_hot is not None:
+                where.append("is_hot = ?")
+                params.append(1 if is_hot else 0)
+
+            sql = (
+                "SELECT * FROM jobs WHERE " + " AND ".join(where)
+                + " ORDER BY is_hot DESC, created_at DESC"
+                + " LIMIT ? OFFSET ?"
+            )
+            params.extend([limit, offset])
+
+            rows = conn.execute(sql, params).fetchall()
+            data = [_job_row_to_public(dict(r)) for r in rows]
+            return ok(data=data, message=f"{len(data)}건 조회")
+        finally:
+            conn.close()
 
     except Exception as e:
-        import logging as _log_jobs
-        _log_jobs.getLogger("bridge.api").error("list_jobs 실패: %s", e, exc_info=True)
+        logging.getLogger("bridge.api").error("list_jobs 실패: %s", e, exc_info=True)
         err("구인 목록을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
-
-
-# 공개 job 상세 조회에서 반환할 안전한 컬럼 목록
-# school_name, contact_name, phone, email, employer_id 등 민감 필드 명시적 제외
-_SAFE_JOB_FIELDS = (
-    "id,job_code,seq,city,district,location,"
-    "employment_type,start_date,teaching_age_groups,"
-    "class_size,working_hours,hours_per_day,hours_per_week,"
-    "salary_min,salary_max,salary_raw,"
-    "housing_provided,housing_detail,"
-    "vacation_days,visa_sponsorship,"
-    "benefits,native_count,"
-    "is_hot,status,published_at"
-)
 
 
 @app.get("/api/jobs/{job_id}", tags=["jobs"])
 async def get_job(job_id: str, request: Request):
-    """포지션 상세 조회 — 민감 필드(구인처 연락처/주소 등) 제외"""
+    """포지션 상세 조회 — 민감 필드(구인처 연락처/주소 등) 제외, SQLite"""
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         raise HTTPException(429, "Too many requests. Please slow down.")
     try:
-        sb = get_anon_client()
-        result = (
-            sb.table("jobs")
-            .select(_SAFE_JOB_FIELDS)   # select("*") 대신 명시적 안전 컬럼만
-            .eq("id", job_id)
-            .eq("status", "open")
-            .single()
-            .execute()
-        )
-        if not result.data:
-            err("포지션을 찾을 수 없습니다.", 404)
-        return ok(data=result.data)
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT * FROM jobs WHERE id = ? AND status = ? AND is_deleted = 0",
+                [job_id, "open"],
+            ).fetchone()
+            if not row:
+                err("포지션을 찾을 수 없습니다.", 404)
+            return ok(data=_job_row_to_public(dict(row)))
+        finally:
+            conn.close()
 
     except HTTPException:
         raise
     except Exception as e:
-        import logging as _log_job
-        _log_job.getLogger("bridge.api").error("get_job 실패: %s", e, exc_info=True)
+        logging.getLogger("bridge.api").error("get_job 실패: %s", e, exc_info=True)
         err("포지션 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
