@@ -274,6 +274,95 @@ export default function HomePage() {
           </svg>
         </div>
 
+        {/* ── Starlink-style fan curves overlay ── */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+          <svg
+            viewBox="0 0 1400 800"
+            style={{ position: 'absolute', width: '100%', height: '100%' }}
+            preserveAspectRatio="xMidYMid slice"
+            fill="none"
+          >
+            <defs>
+              <filter id="starGlow">
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
+            </defs>
+
+            {/* Line 1 — widest arc, topmost */}
+            <path
+              d="M 0 750 Q 700 200, 1400 750"
+              stroke="white"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.04 : 0}
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0s, opacity 0.6s ease 0s' }}
+            />
+
+            {/* Line 2 */}
+            <path
+              d="M 0 760 Q 700 300, 1400 760"
+              stroke="white"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.06 : 0}
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.3s, opacity 0.6s ease 0.3s' }}
+            />
+
+            {/* Line 3 — main curve (glow base) */}
+            <path
+              d="M 0 770 Q 700 380, 1400 770"
+              stroke="white"
+              strokeWidth={6}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.08 : 0}
+              filter="url(#starGlow)"
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.6s, opacity 0.8s ease 0.6s' }}
+            />
+            {/* Line 3 — main curve (crisp) */}
+            <path
+              d="M 0 770 Q 700 380, 1400 770"
+              stroke="white"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.12 : 0}
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.6s, opacity 0.6s ease 0.6s' }}
+            />
+
+            {/* Line 4 */}
+            <path
+              d="M 0 780 Q 700 440, 1400 780"
+              stroke="white"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.06 : 0}
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.9s, opacity 0.6s ease 0.9s' }}
+            />
+
+            {/* Line 5 — lowest arc */}
+            <path
+              d="M 0 790 Q 700 500, 1400 790"
+              stroke="white"
+              strokeWidth={1.2}
+              strokeLinecap="round"
+              opacity={showBridge ? 0.03 : 0}
+              strokeDasharray="2000"
+              strokeDashoffset={showBridge ? 0 : 2000}
+              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 1.2s, opacity 0.6s ease 1.2s' }}
+            />
+          </svg>
+        </div>
+
         {/* ── Main text ── */}
         <motion.div
           className="relative z-10 text-center px-4"
