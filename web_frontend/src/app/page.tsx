@@ -18,7 +18,7 @@ import {
   scaleIn,
   defaultViewport,
 } from '@/lib/animations'
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = ''
 
 // ── Name pool for testimonials (rotates monthly) ──
 const NAME_POOL = [

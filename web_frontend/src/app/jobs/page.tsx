@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
 import ApplyPanel from '@/components/ApplyPanel'
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = ''
 import { fadeInUp, staggerContainer, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 

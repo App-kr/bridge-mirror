@@ -6,7 +6,7 @@ import Link from 'next/link'
 import MarkdownBody from '@/components/MarkdownBody'
 import { getBoardConfig } from '@/lib/boards'
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = ''
 
 interface Post {
   id: number

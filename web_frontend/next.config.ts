@@ -16,7 +16,7 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // Next.js hydration 필요
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https://*.supabase.co",
+      "img-src 'self' data: https://*.supabase.co https://images.unsplash.com",
       "font-src 'self'",
       "connect-src 'self' https://*.supabase.co https://bridgejob.co.kr",
       "frame-ancestors 'none'",

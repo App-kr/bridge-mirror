@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.47.0",
     "ag-grid-community": "^35.1.0",
     "ag-grid-react": "^35.1.0",
+    "better-sqlite3": "^12.6.2",
     "framer-motion": "^12.34.3",
     "next": "^15.1.0",
     "react": "^19.0.0",
@@ -20,6 +21,7 @@
     "recharts": "^3.7.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
