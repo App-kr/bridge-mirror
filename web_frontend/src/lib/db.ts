@@ -1,28 +1,20 @@
-import initSqlJs, { type Database } from 'sql.js'
 import path from 'path'
 import fs from 'fs'
 
-let _db: Database | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: any = null
 
-function findDb(): string {
-  const candidates = [
-    path.join(process.cwd(), 'master.db'),
-    path.join(process.cwd(), '..', 'master.db'),
-    path.resolve('master.db'),
-    path.resolve('..', 'master.db'),
-  ]
-
-  for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p } catch { /* skip */ }
-  }
-
-  throw new Error(`master.db not found. cwd=${process.cwd()}, tried: ${candidates.join(', ')}`)
-}
-
-export async function getDb(): Promise<Database> {
+export async function getDb() {
   if (_db) return _db
 
-  const dbPath = findDb()
+  const dbPath = path.join(process.cwd(), 'master.db')
+  if (!fs.existsSync(dbPath)) {
+    throw new Error(`master.db not found at ${dbPath}`)
+  }
+
+  // Dynamic require to avoid Next.js module system conflicts
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const initSqlJs = require('sql.js')
   const SQL = await initSqlJs()
   const buffer = fs.readFileSync(dbPath)
   _db = new SQL.Database(buffer)
