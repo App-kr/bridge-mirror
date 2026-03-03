@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query, queryOne } from '@/lib/db'
+import { getBoardPosts } from '@/lib/db'
 
 const VALID_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr', 'tips', 'testimonials']
 
@@ -17,22 +17,11 @@ export async function GET(
     const limit = Math.min(Number(searchParams.get('limit') ?? 30), 100)
     const offset = Number(searchParams.get('offset') ?? 0)
 
-    const countRow = await queryOne(
-      'SELECT COUNT(*) as cnt FROM community_posts WHERE board = ? AND is_deleted = 0',
-      [board],
-    )
-    const total = Number(countRow?.cnt ?? 0)
+    const allPosts = getBoardPosts(board)
+    const total = allPosts.length
+    const paged = allPosts.slice(offset, offset + limit)
 
-    const rows = await query(
-      `SELECT id, title, body, author_hash, pinned, views, created_at
-       FROM community_posts
-       WHERE board = ? AND is_deleted = 0
-       ORDER BY pinned DESC, created_at DESC
-       LIMIT ${limit} OFFSET ${offset}`,
-      [board],
-    )
-
-    const posts = rows.map((r) => ({
+    const posts = paged.map((r) => ({
       id:          r.id,
       title:       r.title,
       author_hash: r.author_hash,

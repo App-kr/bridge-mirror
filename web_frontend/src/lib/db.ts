@@ -1,42 +1,18 @@
-import path from 'path'
 import fs from 'fs'
+import path from 'path'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _db: any = null
+const DATA_DIR = path.join(process.cwd(), 'data')
 
-export async function getDb() {
-  if (_db) return _db
-
-  const dbPath = path.join(process.cwd(), 'master.db')
-  if (!fs.existsSync(dbPath)) {
-    throw new Error(`master.db not found at ${dbPath}`)
-  }
-
-  // Dynamic require to avoid Next.js module system conflicts
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const initSqlJs = require('sql.js')
-  const SQL = await initSqlJs()
-  const buffer = fs.readFileSync(dbPath)
-  _db = new SQL.Database(buffer)
-  return _db
+function readJson(filename: string): Record<string, unknown>[] {
+  const filePath = path.join(DATA_DIR, filename)
+  if (!fs.existsSync(filePath)) return []
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
 }
 
-/** Run SELECT query and return rows as objects */
-export async function query(sql: string, params: (string | number | null)[] = []): Promise<Record<string, unknown>[]> {
-  const db = await getDb()
-  const stmt = db.prepare(sql)
-  if (params.length > 0) stmt.bind(params)
-
-  const results: Record<string, unknown>[] = []
-  while (stmt.step()) {
-    results.push(stmt.getAsObject() as Record<string, unknown>)
-  }
-  stmt.free()
-  return results
+export function getJobs(): Record<string, unknown>[] {
+  return readJson('jobs.json')
 }
 
-/** Run SELECT query and return first row */
-export async function queryOne(sql: string, params: (string | number | null)[] = []): Promise<Record<string, unknown> | null> {
-  const rows = await query(sql, params)
-  return rows[0] ?? null
+export function getBoardPosts(board: string): Record<string, unknown>[] {
+  return readJson(`board-${board}.json`)
 }

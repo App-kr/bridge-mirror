@@ -26,12 +26,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ['sql.js'],
-  outputFileTracingIncludes: {
-    '/api/jobs':                        ['./master.db'],
-    '/api/community/[board]':           ['./master.db'],
-    '/api/community/[board]/[id]':      ['./master.db'],
-  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { getJobs } from '@/lib/db'
 
 function parseAgeGroups(raw: string | null): string[] | null {
   if (!raw) return null
@@ -42,27 +42,24 @@ function rowToPublic(row: Record<string, unknown>) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
-    const city = searchParams.get('city')?.trim().slice(0, 50)
+    const city = searchParams.get('city')?.trim().toLowerCase()
     const isHot = searchParams.get('is_hot')
     const limit = Math.min(Number(searchParams.get('limit') ?? 50), 1000)
     const offset = Number(searchParams.get('offset') ?? 0)
 
-    const where = ["status = 'open'", 'is_deleted = 0']
-    const params: (string | number)[] = []
+    let rows = getJobs()
 
     if (city) {
-      where.push('(city LIKE ? OR location LIKE ?)')
-      params.push(`%${city}%`, `%${city}%`)
+      rows = rows.filter(r =>
+        String(r.city ?? '').toLowerCase().includes(city) ||
+        String(r.location ?? '').toLowerCase().includes(city)
+      )
     }
-    if (isHot !== null && isHot !== undefined) {
-      where.push('is_hot = ?')
-      params.push(isHot === 'true' ? 1 : 0)
-    }
+    if (isHot === 'true') rows = rows.filter(r => Boolean(r.is_hot))
+    if (isHot === 'false') rows = rows.filter(r => !r.is_hot)
 
-    const sql = `SELECT * FROM jobs WHERE ${where.join(' AND ')} ORDER BY is_hot DESC, created_at DESC LIMIT ${limit} OFFSET ${offset}`
-
-    const rows = await query(sql, params)
-    const data = rows.map(rowToPublic)
+    const paged = rows.slice(offset, offset + limit)
+    const data = paged.map(rowToPublic)
 
     return NextResponse.json({ success: true, message: `${data.length}건 조회`, data })
   } catch (e) {
