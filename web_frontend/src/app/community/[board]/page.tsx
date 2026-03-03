@@ -109,12 +109,12 @@ function useAnimatedCounter(target: number, duration: number, start: boolean) {
   return value
 }
 
-/** Calculate dynamic stat values based on base date */
+/** Calculate dynamic stat values based on base date 2026-03-03 */
 function getDynamicStats() {
-  const baseDate = new Date('2026-02-01')
+  const baseDate = new Date('2026-03-03')
   const now = new Date()
-  const weeksDiff = Math.floor((now.getTime() - baseDate.getTime()) / (7 * 24 * 60 * 60 * 1000))
-  const monthsDiff = (now.getFullYear() - baseDate.getFullYear()) * 12 + (now.getMonth() - baseDate.getMonth())
+  const weeksDiff = Math.max(0, Math.floor((now.getTime() - baseDate.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+  const monthsDiff = Math.max(0, (now.getFullYear() - baseDate.getFullYear()) * 12 + (now.getMonth() - baseDate.getMonth()))
   return [
     { label: 'Years Experience', target: 15, suffix: '+' },
     { label: 'Countries', target: 7, suffix: '' },
@@ -122,6 +122,30 @@ function getDynamicStats() {
     { label: 'Teachers Placed', target: 17938 + monthsDiff * 100, suffix: '+' },
   ]
 }
+
+// ── Why BRIDGE cards ──
+const WHY_BRIDGE = [
+  {
+    icon: '👥',
+    title: 'Candidate Pool',
+    desc: '소개 전 기본적인 학위, 교육배경 등을 확인합니다.',
+  },
+  {
+    icon: '🎯',
+    title: 'Matching',
+    desc: '충분히 좋은 공고를 가진 기관과는 당일 매치도 가능하며 철저한 필터링으로 빠른 매칭을 선사합니다.',
+  },
+  {
+    icon: '🏆',
+    title: 'Expertise',
+    desc: '각 리크루터가 최소 10년 이상 경력의 전문가로서, 다양한 변화에 빠른 대응이 가능합니다.',
+  },
+  {
+    icon: '💬',
+    title: 'Communication',
+    desc: '채용 전후 사후관리에 고용주와 피고용인 모두 지속 관리합니다.',
+  },
+]
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
@@ -204,9 +228,9 @@ function ListLayout({ config, posts, board }: LayoutProps) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// HERO-CARDS — About
+// HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ config, posts, board }: LayoutProps) {
+function HeroCardsLayout({ posts, board }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -229,45 +253,179 @@ function HeroCardsLayout({ config, posts, board }: LayoutProps) {
     useAnimatedCounter(stats[3].target, 2500, statsVisible),
   ]
 
+  // Filter out FAQ posts (moved to Support)
+  const aboutPosts = posts.filter(p => !p.title.toLowerCase().includes('faq'))
+
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      {/* Hero */}
-      <motion.div className="text-center mb-16" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-        <h1 className="text-6xl font-black text-[#1d1d1f] mb-4">BRIDGE</h1>
-        <p className="text-lg text-[#6e6e73] max-w-xl mx-auto leading-relaxed">
-          대한민국 원어민 영어강사 채용 전문 에이전시.
-          학교와 강사를 연결하는 가장 신뢰할 수 있는 파트너.
-        </p>
-      </motion.div>
-
-      {/* Stats — animated counters */}
-      <div ref={statsRef}>
-        <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-          {stats.map((s, i) => (
-            <motion.div key={s.label} className="text-center" variants={scaleIn}>
-              <div className="text-3xl font-bold text-[#1d1d1f] tabular-nums">
-                {cv[i].toLocaleString('en-US')}{s.suffix}
-              </div>
-              <div className="text-sm text-[#86868b] mt-1">{s.label}</div>
-            </motion.div>
-          ))}
+    <div>
+      {/* ── Section A: Hero ── */}
+      <section className="bg-[#f5f5f7] py-20 sm:py-28">
+        <motion.div
+          className="max-w-[980px] mx-auto px-5 sm:px-8 text-center"
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-[#1d1d1f] tracking-tight leading-[1.05] mb-5">
+            About BRIDGE
+          </h1>
+          <p className="text-lg sm:text-xl text-[#6e6e73] max-w-[600px] mx-auto leading-relaxed">
+            Korea&apos;s trusted ESL recruitment agency.
+            <br />
+            Connecting schools and teachers since 2011.
+          </p>
         </motion.div>
-      </div>
+      </section>
 
-      {/* Cards */}
-      <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-        <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-6">Information</h2>
-      </motion.div>
-      <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-        {posts.map((p, i) => (
-          <motion.div key={p.id} variants={scaleIn}>
-            <Link href={`/community/${board}/${p.id}`} className="card group flex items-center gap-4 !rounded-2xl">
-              <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
-              <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">{p.title}</span>
-            </Link>
+      {/* ── Section B: Company Intro ── */}
+      <section className="py-20 sm:py-28">
+        <div className="max-w-[680px] mx-auto px-5 sm:px-8">
+          <motion.div
+            variants={fadeInUp}
+            initial="hidden"
+            whileInView="visible"
+            viewport={defaultViewport}
+          >
+            <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-6">Who We Are</p>
           </motion.div>
-        ))}
-      </motion.div>
+
+          <div className="space-y-6">
+            <motion.p
+              className="text-[17px] sm:text-[19px] text-[#1d1d1f] leading-[1.7] font-normal"
+              variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
+            >
+              BRIDGE는 수많은 경험을 가진 리크루터들이 함께 모여 설립한 전문 채용 에이전시입니다.
+            </motion.p>
+            <motion.p
+              className="text-[17px] sm:text-[19px] text-[#424245] leading-[1.7]"
+              variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
+            >
+              정부기관, 영어마을, 교육센터, 어학원, 유치원, 국제학교, 일반학교, 기업체 등 다양한 교육기관에 맞춤형 인재를 소개합니다.
+            </motion.p>
+            <motion.p
+              className="text-[17px] sm:text-[19px] text-[#424245] leading-[1.7]"
+              variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
+            >
+              서류부터 실무 배치까지, 채용의 전 과정을 전문적으로 지원합니다.
+            </motion.p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section C: Why BRIDGE — 4 cards ── */}
+      <section className="bg-[#f5f5f7] py-20 sm:py-28">
+        <div className="max-w-[980px] mx-auto px-5 sm:px-8">
+          <motion.div
+            className="text-center mb-14"
+            variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
+          >
+            <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-3">Our Strengths</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f] tracking-tight">Why BRIDGE?</h2>
+          </motion.div>
+
+          <motion.div
+            className="grid sm:grid-cols-2 gap-5"
+            variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
+          >
+            {WHY_BRIDGE.map((card) => (
+              <motion.div
+                key={card.title}
+                className="bg-white rounded-2xl p-7 sm:p-8
+                           border border-transparent
+                           hover:scale-[1.03] hover:border-[#0071e3]/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]
+                           transition-all duration-300 ease-out cursor-default"
+                variants={scaleIn}
+              >
+                <span className="text-3xl block mb-4">{card.icon}</span>
+                <h3 className="text-lg font-semibold text-[#1d1d1f] mb-2">{card.title}</h3>
+                <p className="text-sm text-[#6e6e73] leading-relaxed">{card.desc}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── Section D: Stats — animated counters ── */}
+      <section className="py-20 sm:py-28" ref={statsRef}>
+        <div className="max-w-[980px] mx-auto px-5 sm:px-8">
+          <motion.div
+            className="grid grid-cols-2 md:grid-cols-4 gap-8"
+            variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
+          >
+            {stats.map((s, i) => (
+              <motion.div key={s.label} className="text-center" variants={scaleIn}>
+                <div className="text-4xl sm:text-5xl font-bold text-[#1d1d1f] tabular-nums tracking-tight">
+                  {cv[i].toLocaleString('en-US')}{s.suffix}
+                </div>
+                <div className="text-sm text-[#86868b] mt-2 font-medium">{s.label}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── Posts grid ── */}
+      {aboutPosts.length > 0 && (
+        <section className="bg-[#f5f5f7] py-20 sm:py-28">
+          <div className="max-w-[980px] mx-auto px-5 sm:px-8">
+            <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
+              <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-6">Information</p>
+            </motion.div>
+            <motion.div
+              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"
+              variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
+            >
+              {aboutPosts.map((p, i) => (
+                <motion.div key={p.id} variants={scaleIn}>
+                  <Link
+                    href={`/community/${board}/${p.id}`}
+                    className="group flex items-center gap-4 bg-white rounded-2xl p-5
+                               border border-transparent hover:border-[#0071e3]/20
+                               hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]
+                               transition-all duration-200"
+                  >
+                    <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
+                    <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">
+                      {p.title}
+                    </span>
+                  </Link>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Contact + Registration ── */}
+      <section className="py-20 sm:py-28">
+        <div className="max-w-[680px] mx-auto px-5 sm:px-8 text-center">
+          <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
+            <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-3">Contact</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#1d1d1f] tracking-tight mb-4">
+              Get in Touch
+            </h2>
+            <p className="text-[15px] text-[#6e6e73] leading-relaxed mb-8">
+              채용 상담이나 서비스에 대한 문의는 아래 채널을 이용해 주세요.
+            </p>
+            <a
+              href="mailto:bridgejobkr@gmail.com"
+              className="inline-flex items-center gap-2 text-[#0071e3] text-base font-semibold hover:underline"
+            >
+              bridgejobkr@gmail.com
+            </a>
+          </motion.div>
+
+          {/* Registration info — small, subtle */}
+          <motion.div
+            className="mt-16 pt-8 border-t border-[#e5e5e5]"
+            variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
+          >
+            <p className="text-xs text-[#86868b] leading-relaxed">
+              BRIDGE Recruitment · 사업자등록번호 000-00-00000
+            </p>
+          </motion.div>
+        </div>
+      </section>
     </div>
   )
 }

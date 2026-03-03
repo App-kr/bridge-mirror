@@ -74,15 +74,7 @@ export default function PostDetailPage() {
         {post.title}
       </h1>
 
-      <div className="flex items-center gap-3 text-xs text-[#86868b] mb-8">
-        <span>#{post.author_hash}</span>
-        <span>·</span>
-        <span>{new Date(post.created_at).toLocaleDateString('en-US', {
-          year: 'numeric', month: 'short', day: 'numeric'
-        })}</span>
-        <span>·</span>
-        <span>{post.views} views</span>
-      </div>
+      <div className="mb-8" />
 
       {/* Body */}
       <div className="post-body" style={{ fontSize: '15px', lineHeight: '1.9' }}>
@@ -115,11 +107,6 @@ export default function PostDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Attachment notice */}
-      <div className="mt-8 text-sm text-[#86868b] bg-[#f5f5f7] rounded-xl px-5 py-4">
-        📎 첨부파일 및 추가 자료가 필요하시면 문의해 주세요.
-      </div>
 
       {/* Back link */}
       <Link href={`/community/${board}`}
