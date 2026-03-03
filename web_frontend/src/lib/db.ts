@@ -1,17 +1,15 @@
-import Database from 'better-sqlite3'
+import initSqlJs, { type Database } from 'sql.js'
 import path from 'path'
 import fs from 'fs'
 
-let _db: Database.Database | null = null
+let _db: Database | null = null
 
-export function getDb(): Database.Database {
+export async function getDb(): Promise<Database> {
   if (_db) return _db
 
-  // Try multiple paths for local dev and Vercel
   const candidates = [
-    path.resolve(process.cwd(), 'master.db'),           // repo root is cwd
-    path.resolve(process.cwd(), '..', 'master.db'),     // web_frontend is cwd
-    path.resolve(__dirname, '..', '..', '..', '..', 'master.db'),
+    path.resolve(process.cwd(), 'master.db'),
+    path.resolve(process.cwd(), '..', 'master.db'),
   ]
 
   let dbPath = ''
@@ -23,7 +21,29 @@ export function getDb(): Database.Database {
     throw new Error(`master.db not found. Tried: ${candidates.join(', ')}`)
   }
 
-  _db = new Database(dbPath, { readonly: true })
-  _db.pragma('busy_timeout = 5000')
+  const SQL = await initSqlJs()
+  const buffer = fs.readFileSync(dbPath)
+  _db = new SQL.Database(buffer)
   return _db
+}
+
+/** Run SELECT query and return rows as objects */
+export async function query(sql: string, params: (string | number | null)[] = []): Promise<Record<string, unknown>[]> {
+  const db = await getDb()
+  const stmt = db.prepare(sql)
+  if (params.length > 0) stmt.bind(params)
+
+  const results: Record<string, unknown>[] = []
+  while (stmt.step()) {
+    const row = stmt.getAsObject()
+    results.push(row as Record<string, unknown>)
+  }
+  stmt.free()
+  return results
+}
+
+/** Run SELECT query and return first row */
+export async function queryOne(sql: string, params: (string | number | null)[] = []): Promise<Record<string, unknown> | null> {
+  const rows = await query(sql, params)
+  return rows[0] ?? null
 }
