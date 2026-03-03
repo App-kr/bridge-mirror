@@ -1,5 +1,117 @@
 /* ── Custom additions (globals.css 수정 금지 — 추가 스타일은 이 파일에) ── */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. NAVBAR ENHANCEMENTS — layout.tsx 수정 없이 CSS 오버라이드
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 네비바 높이/패딩 증가 (h-11=44px → 60px) */
+.nav-glass > div {
+  height: 60px !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* BRIDGE 로고: 슬림 볼드 + 넓은 자간 */
+.nav-glass a[href="/"] {
+  font-weight: 600 !important;
+  letter-spacing: 0.12em !important;
+  font-size: 21px !important;
+}
+
+/* 네비 링크: 폰트 크기 증가 */
+.nav-link {
+  font-size: 13px !important;
+  padding: 8px 14px !important;
+}
+
+/* ── Apply 버튼: 브랜드 블루 그라데이션 ── */
+a.nav-cta[href="/apply"] {
+  background: linear-gradient(135deg, #0071e3 0%, #34a3ff 100%) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  padding: 8px 20px !important;
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.25);
+  transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+}
+a.nav-cta[href="/apply"]:hover {
+  background: linear-gradient(135deg, #005bb5 0%, #2997ff 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(0, 113, 227, 0.4) !important;
+  transform: scale(1.05) translateY(-1px);
+}
+
+/* ── 원어민채용의뢰 버튼: 아웃라인 스타일 ── */
+a.nav-cta[href="/inquiry"] {
+  background: transparent !important;
+  color: #1d1d1f !important;
+  box-shadow: inset 0 0 0 1.5px #d1d1d6 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  padding: 8px 20px !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+}
+a.nav-cta[href="/inquiry"]:hover {
+  background: #1d1d1f !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1.5px #1d1d1f !important;
+  transform: scale(1.05) translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. HERO BACKGROUND ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 다리/선 그려지는 애니메이션 */
+@keyframes drawBridge {
+  0% { stroke-dashoffset: 600; }
+  100% { stroke-dashoffset: 0; }
+}
+.hero-bridge-path {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: drawBridge 3s cubic-bezier(0.4, 0, 0.2, 1) 1.5s forwards;
+}
+
+/* 배경 요소 서서히 나타남 */
+@keyframes fadeInSlow {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.hero-bg-fade {
+  opacity: 0;
+  animation: fadeInSlow 2s ease-out 0.5s forwards;
+}
+
+/* 비행기 float 효과 */
+@keyframes planeFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.hero-plane-float {
+  animation: planeFloat 3s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. SCROLL INDICATOR ENHANCEMENTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+@keyframes scrollPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.scroll-pulse {
+  animation: scrollPulse 2s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(12px); }
+  60% { transform: translateY(6px); }
+}
+.scroll-bounce {
+  animation: scrollBounce 2s ease infinite;
+}
+
 /* ── Post body readability ── */
 .post-body h2 {
   font-size: 1.35em;

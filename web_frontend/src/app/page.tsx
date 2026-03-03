@@ -19,6 +19,68 @@ import {
   defaultViewport,
 } from '@/lib/animations'
 
+// ── Hero background SVG components ──
+function GlobeSVG() {
+  return (
+    <svg viewBox="0 0 320 320" fill="none" className="w-[200px] h-[200px] sm:w-[280px] sm:h-[280px] lg:w-[320px] lg:h-[320px]">
+      <circle cx="160" cy="160" r="148" stroke="white" strokeWidth="0.6" />
+      <ellipse cx="160" cy="160" rx="100" ry="148" stroke="white" strokeWidth="0.4" />
+      <ellipse cx="160" cy="160" rx="50" ry="148" stroke="white" strokeWidth="0.4" />
+      <line x1="12" y1="160" x2="308" y2="160" stroke="white" strokeWidth="0.4" />
+      <ellipse cx="160" cy="80" rx="130" ry="22" stroke="white" strokeWidth="0.4" />
+      <ellipse cx="160" cy="160" rx="148" ry="30" stroke="white" strokeWidth="0.3" />
+      <ellipse cx="160" cy="240" rx="130" ry="22" stroke="white" strokeWidth="0.4" />
+    </svg>
+  )
+}
+
+function KoreaMapSVG() {
+  return (
+    <svg viewBox="0 0 180 360" fill="none" className="w-[120px] h-[240px] sm:w-[160px] sm:h-[320px] lg:w-[180px] lg:h-[360px]">
+      {/* Simplified Korean peninsula outline */}
+      <path
+        d="M90,15 C95,20 105,28 110,40 C115,52 118,58 120,70 C122,82 125,88 128,95
+           C132,105 130,115 125,125 C120,135 118,140 115,150 C112,160 108,170 105,180
+           C102,190 100,195 98,205 C95,218 92,228 88,240 C84,252 80,260 76,270
+           C72,280 70,288 68,295 C65,305 62,315 60,320 C58,328 62,332 65,335
+           C70,340 75,338 78,335 C82,330 85,325 90,330 C92,335 88,345 82,350"
+        stroke="white"
+        strokeWidth="0.8"
+        strokeLinecap="round"
+      />
+      {/* Jeju Island */}
+      <ellipse cx="72" cy="345" rx="14" ry="6" stroke="white" strokeWidth="0.6" />
+    </svg>
+  )
+}
+
+function BridgeLineSVG() {
+  return (
+    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600" fill="none" preserveAspectRatio="xMidYMid meet">
+      <path
+        className="hero-bridge-path"
+        d="M200,320 C350,220 500,200 600,240 C700,280 850,260 1000,300"
+        stroke="rgba(255,255,255,0.25)"
+        strokeWidth="1"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* Subtle dots along the path */}
+      <circle cx="400" cy="235" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
+      <circle cx="600" cy="240" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
+      <circle cx="800" cy="270" r="2" fill="rgba(255,255,255,0.15)" className="hero-bg-fade" />
+    </svg>
+  )
+}
+
+function PlaneSVG() {
+  return (
+    <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6">
+      <path d="M21,16V14L13,9V3.5A1.5,1.5,0,0,0,11.5,2A1.5,1.5,0,0,0,10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5Z" />
+    </svg>
+  )
+}
+
 // ── Stats ──
 const COUNTERS = [
   { label: 'Teachers Placed', target: 5019, suffix: '+' },
@@ -130,7 +192,11 @@ export default function HomePage() {
   })
   const heroOpacity = useTransform(heroProgress, [0, 0.6], [1, 0])
   const heroScale = useTransform(heroProgress, [0, 0.6], [1, 0.95])
-  const arrowOpacity = useTransform(heroProgress, [0, 0.1], [1, 0])
+  const arrowOpacity = useTransform(heroProgress, [0, 0.15], [1, 0])
+
+  // ── Airplane scroll animation ──
+  const planeX = useTransform(heroProgress, [0, 0.5], ['5%', '80%'])
+  const planeOpacity = useTransform(heroProgress, [0, 0.15, 0.45, 0.55], [0, 0.7, 0.5, 0])
 
   // ── Counter observer ──
   useEffect(() => {
@@ -160,6 +226,30 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
+        {/* ── Background decorations (absolute, pointer-events-none) ── */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden hero-bg-fade" style={{ opacity: 0.12 }}>
+          {/* Globe — left */}
+          <div className="absolute left-[2%] sm:left-[5%] top-1/2 -translate-y-1/2">
+            <GlobeSVG />
+          </div>
+          {/* Korea map — right */}
+          <div className="absolute right-[4%] sm:right-[8%] top-1/2 -translate-y-[45%]">
+            <KoreaMapSVG />
+          </div>
+          {/* Bridge line connecting globe → Korea */}
+          <BridgeLineSVG />
+        </div>
+
+        {/* ── Airplane (scroll-driven) ── */}
+        <motion.div
+          className="absolute top-[38%] pointer-events-none z-[5] hero-plane-float"
+          style={{ left: planeX, opacity: planeOpacity }}
+        >
+          <div className="-rotate-45">
+            <PlaneSVG />
+          </div>
+        </motion.div>
+
         <motion.div
           className="relative z-10 text-center px-4"
           style={{ opacity: heroOpacity, scale: heroScale }}
@@ -183,20 +273,19 @@ export default function HomePage() {
           </motion.p>
         </motion.div>
 
-        {/* Blinking scroll indicator */}
+        {/* Enhanced scroll indicator */}
         <motion.div
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+          className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
           style={{ opacity: arrowOpacity }}
         >
-          <span className="text-[11px] uppercase tracking-[0.2em] text-[#48484a] font-medium">Scroll</span>
-          <motion.div
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <svg className="w-5 h-5 text-[#48484a]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          <span className="text-[13px] uppercase tracking-[0.25em] text-[#636366] font-semibold scroll-pulse">
+            Scroll
+          </span>
+          <div className="scroll-bounce">
+            <svg className="w-6 h-6 text-[#636366]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
-          </motion.div>
+          </div>
         </motion.div>
       </section>
 
