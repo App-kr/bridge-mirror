@@ -42,7 +42,7 @@ except ImportError:
 
 # ── FastAPI / Supabase 임포트 ────────────────────────────────────────────────
 try:
-    from fastapi import FastAPI, HTTPException, Request, status, UploadFile, File as FastFile
+    from fastapi import FastAPI, HTTPException, Request, Query, status, UploadFile, File as FastFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.staticfiles import StaticFiles
     from starlette.middleware.base import BaseHTTPMiddleware
@@ -285,6 +285,13 @@ app = FastAPI(
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
 )
+
+# 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
+try:
+    from security_middleware import SecurityMiddleware
+    app.add_middleware(SecurityMiddleware)
+except ImportError:
+    pass  # 선택적: 파일 없으면 무시
 
 # PII 마스킹 미들웨어 — CORS보다 먼저 등록해야 응답 전체를 커버
 app.add_middleware(PIIMaskingMiddleware)
@@ -1007,17 +1014,22 @@ def _decrypt_row(row: dict) -> dict:
     return row
 
 
+_ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
+_PAST_STATUSES = {"placed", "rejected", "withdrawn", "Inactive", "Closed", "Deleted"}
+
+
 @app.get("/api/admin/candidates", tags=["admin"])
 async def admin_candidates(
     request:     Request,
     search:      Optional[str] = None,
     nationality: Optional[str] = None,
     visa:        Optional[str] = None,
+    status_filter: Optional[str] = Query(None, alias="status"),
     limit:       int = 500,
     offset:      int = 0,
 ):
     """
-    지원자 전체 목록 (관리자용) — SQLite master.db 직접 조회
+    지원자 목록 — SQLite. status=active|past|<specific> 필터 지원.
     보호: X-Admin-Key 필수
     """
     _check_admin(request)
@@ -1029,14 +1041,26 @@ async def admin_candidates(
             where = ["1=1"]
             params: list = []
             if search:
-                where.append("full_name LIKE ?")
-                params.append(f"%{search}%")
+                where.append("(full_name LIKE ? OR email LIKE ?)")
+                params.extend([f"%{search}%", f"%{search}%"])
             if nationality:
                 where.append("nationality = ?")
                 params.append(nationality)
             if visa:
                 where.append("e_visa LIKE ?")
                 params.append(f"%{visa}%")
+            if status_filter:
+                if status_filter == "active":
+                    placeholders = ",".join("?" * len(_ACTIVE_STATUSES))
+                    where.append(f"status IN ({placeholders})")
+                    params.extend(_ACTIVE_STATUSES)
+                elif status_filter == "past":
+                    placeholders = ",".join("?" * len(_PAST_STATUSES))
+                    where.append(f"status IN ({placeholders})")
+                    params.extend(_PAST_STATUSES)
+                else:
+                    where.append("status = ?")
+                    params.append(status_filter)
 
             where_sql = " AND ".join(where)
 
@@ -1132,6 +1156,190 @@ async def admin_delete_candidate(candidate_id: str, request: Request):
         import logging as _log_del
         _log_del.getLogger("bridge.api").error("admin_delete 실패: %s", e, exc_info=True)
         err("삭제에 실패했습니다.", 500)
+
+
+@app.put("/api/admin/candidates/{candidate_id}", tags=["admin"])
+async def admin_full_update_candidate(candidate_id: str, request: Request, body: dict):
+    """지원자 모든 컬럼 수정 (관리자 전용)."""
+    _check_admin(request)
+    # candidate_id, created_at는 수정 불가
+    body.pop("candidate_id", None)
+    body.pop("id", None)
+    body.pop("created_at", None)
+    if not body:
+        raise HTTPException(400, "수정할 데이터 없음")
+    body["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            sets = ", ".join(f"{k} = ?" for k in body)
+            vals = list(body.values()) + [candidate_id]
+            conn.execute(f"UPDATE candidates SET {sets} WHERE candidate_id = ?", vals)
+            conn.commit()
+            return ok(message="수정 완료")
+        finally:
+            conn.close()
+    except Exception as e:
+        import logging as _log_ful
+        _log_ful.getLogger("bridge.api").error("admin_full_update 실패: %s", e, exc_info=True)
+        err("수정에 실패했습니다.", 500)
+
+
+class BulkStatusBody(BaseModel):
+    ids: list[str]
+    status: str = Field(..., min_length=1, max_length=50)
+
+
+@app.put("/api/admin/candidates/bulk-status", tags=["admin"])
+async def admin_bulk_status(request: Request, body: BulkStatusBody):
+    """여러 지원자 상태 일괄 변경."""
+    _check_admin(request)
+    if not body.ids:
+        raise HTTPException(400, "대상 ID 목록 필요")
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            placeholders = ",".join("?" * len(body.ids))
+            conn.execute(
+                f"UPDATE candidates SET status = ?, updated_at = ? WHERE candidate_id IN ({placeholders})",
+                [body.status, now_iso] + body.ids,
+            )
+            conn.commit()
+            return ok(message=f"{len(body.ids)}명 상태 → {body.status}")
+        finally:
+            conn.close()
+    except Exception as e:
+        import logging as _log_bulk
+        _log_bulk.getLogger("bridge.api").error("bulk_status 실패: %s", e, exc_info=True)
+        err("일괄 상태 변경에 실패했습니다.", 500)
+
+
+# ── Admin: Inquiries (채용의뢰) 관리 ────────────────────────────────────────
+
+@app.get("/api/admin/inquiries", tags=["admin"])
+async def admin_list_inquiries(request: Request, limit: int = 200, offset: int = 0):
+    """채용의뢰 목록 — client_inquiries 테이블."""
+    _check_admin(request)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0]
+            rows = conn.execute(
+                "SELECT * FROM client_inquiries ORDER BY submitted_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+            return ok(data={"total": total, "inquiries": [dict(r) for r in rows]})
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging as _log_inq
+        _log_inq.getLogger("bridge.api").error("admin_inquiries 실패: %s", e, exc_info=True)
+        err("채용의뢰 목록을 불러올 수 없습니다.", 500)
+
+
+@app.put("/api/admin/inquiries/{inquiry_id}", tags=["admin"])
+async def admin_update_inquiry(inquiry_id: int, request: Request, body: dict):
+    """채용의뢰 상태/메모 수정."""
+    _check_admin(request)
+    EDITABLE = {"inbox_status", "notes", "assigned_to"}
+    update = {k: v for k, v in body.items() if k in EDITABLE}
+    if not update:
+        raise HTTPException(400, "수정 가능한 필드: inbox_status, notes, assigned_to")
+    update["last_activity"] = datetime.now(timezone.utc).isoformat()
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            sets = ", ".join(f"{k} = ?" for k in update)
+            vals = list(update.values()) + [inquiry_id]
+            conn.execute(f"UPDATE client_inquiries SET {sets} WHERE id = ?", vals)
+            conn.commit()
+            return ok(message="수정 완료")
+        finally:
+            conn.close()
+    except Exception as e:
+        import logging as _log_upd
+        _log_upd.getLogger("bridge.api").error("admin_update_inquiry 실패: %s", e, exc_info=True)
+        err("수정에 실패했습니다.", 500)
+
+
+# ── Admin: Email Templates & Guide Links ────────────────────────────────────
+
+@app.get("/api/admin/email-templates", tags=["admin"])
+async def admin_list_email_templates(request: Request):
+    """이메일 템플릿 목록."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT * FROM email_templates ORDER BY template_key").fetchall()
+        return ok(data=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.put("/api/admin/email-templates/{template_key}", tags=["admin"])
+async def admin_update_email_template(template_key: str, request: Request, body: dict):
+    """이메일 템플릿 수정/생성."""
+    _check_admin(request)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        conn.execute(
+            """INSERT INTO email_templates (template_key, subject, body_html, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(template_key) DO UPDATE SET
+                 subject = excluded.subject,
+                 body_html = excluded.body_html,
+                 updated_at = excluded.updated_at""",
+            (template_key, body.get("subject", ""), body.get("body_html", ""), now_iso),
+        )
+        conn.commit()
+        return ok(message=f"템플릿 '{template_key}' 저장 완료")
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/guide-links", tags=["admin"])
+async def admin_list_guide_links(request: Request):
+    """가이드 링크 목록."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT * FROM guide_links ORDER BY link_key").fetchall()
+        return ok(data=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.put("/api/admin/guide-links/{link_key}", tags=["admin"])
+async def admin_update_guide_link(link_key: str, request: Request, body: dict):
+    """가이드 링크 수정/생성."""
+    _check_admin(request)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        conn.execute(
+            """INSERT INTO guide_links (link_key, url, label, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(link_key) DO UPDATE SET
+                 url = excluded.url,
+                 label = excluded.label,
+                 updated_at = excluded.updated_at""",
+            (link_key, body.get("url", ""), body.get("label", ""), now_iso),
+        )
+        conn.commit()
+        return ok(message=f"링크 '{link_key}' 저장 완료")
+    finally:
+        conn.close()
 
 
 # ── Community Board API ──────────────────────────────────────────────────────
