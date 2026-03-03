@@ -10,7 +10,7 @@ import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const PAYMENT_STATUS = ['pending', 'confirmed', 'refunded', 'cancelled'] as const
 

@@ -29,7 +29,7 @@ ModuleRegistry.registerModules([
   TextFilterModule,
 ])
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 interface Candidate {
   id:               string
@@ -96,7 +96,7 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
       cellRenderer: (p: { value: string | null; data: { photo_url?: string | null } }) => {
         if (!p.value) return ''
         const apiBase = typeof window !== 'undefined'
-          ? (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000') : ''
+          ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000') : ''
         const src = p.value.startsWith('http') ? p.value : `${apiBase}${p.value}`
         const fullSrc = p.data.photo_url
           ? (p.data.photo_url.startsWith('http') ? p.data.photo_url : `${apiBase}${p.data.photo_url}`)

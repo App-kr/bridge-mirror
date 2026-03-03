@@ -17,7 +17,11 @@ export async function GET(
     const limit = Math.min(Number(searchParams.get('limit') ?? 30), 100)
     const offset = Number(searchParams.get('offset') ?? 0)
 
-    const allPosts = getBoardPosts(board)
+    const category = searchParams.get('category') ?? null
+    let allPosts = getBoardPosts(board)
+    if (category) {
+      allPosts = allPosts.filter((p) => String(p.category ?? '') === category)
+    }
     const total = allPosts.length
     const paged = allPosts.slice(offset, offset + limit)
 
@@ -28,7 +32,9 @@ export async function GET(
       pinned:      r.pinned,
       views:       r.views,
       created_at:  r.created_at,
+      category:    r.category ?? null,
       preview:     String(r.body ?? '').slice(0, 300),
+      body:        category ? String(r.body ?? '') : undefined,
     }))
 
     return NextResponse.json({ success: true, message: 'ok', data: { total, posts } })

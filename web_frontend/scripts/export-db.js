@@ -41,7 +41,7 @@ async function main() {
   for (const board of BOARDS) {
     const posts = []
     const stmt = db.prepare(
-      `SELECT id, title, body, author_hash, pinned, views, created_at
+      `SELECT id, title, body, author_hash, pinned, views, created_at, category
        FROM community_posts WHERE board = ? AND is_deleted = 0
        ORDER BY pinned DESC, created_at DESC`
     )

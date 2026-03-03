@@ -22,7 +22,7 @@ const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: 
 const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 interface DashboardStats {
   candidates?: number
