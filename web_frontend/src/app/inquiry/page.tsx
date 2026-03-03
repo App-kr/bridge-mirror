@@ -391,7 +391,7 @@ export default function InquiryPage() {
           <div className="text-left space-y-4 mt-8 p-6 bg-gray-50 rounded-2xl border">
             <p className="text-sm font-semibold text-gray-700">첨부 파일 업로드 (선택)</p>
             <p className="text-xs text-gray-500">사업자등록증, 학원사진 등 관련 서류를 첨부할 수 있습니다.</p>
-            <FileUpload label="파일 첨부 (PDF, 이미지)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            <FileUpload label="파일 첨부 (PDF, Word, 이미지)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,image/jpeg,.jpg,.jpeg,image/png,.png"
               fileType="attachment" entityType="inquiry" entityId={inquiryId} />
           </div>
         )}

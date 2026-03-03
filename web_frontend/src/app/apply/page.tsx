@@ -434,18 +434,30 @@ export default function ApplyPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const [uploadResults, setUploadResults] = useState<{ name: string; ok: boolean; error?: string }[]>([])
+
   async function uploadQueuedFiles(cid: string) {
+    const results: { name: string; ok: boolean; error?: string }[] = []
     for (const item of queuedFiles) {
       try {
         let file = item.file
         if (file.type.startsWith('image/')) file = await resizeImage(file)
         const fd = new FormData()
         fd.append('file', file)
-        await fetch(`${API}/api/upload/candidate/${cid}?file_type=${item.type}`, {
+        const res = await fetch(`${API}/api/upload/candidate/${cid}?file_type=${item.type}`, {
           method: 'POST', body: fd,
         })
-      } catch { /* non-blocking */ }
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({ detail: 'Upload failed' }))
+          results.push({ name: item.file.name, ok: false, error: json.detail ?? 'Upload failed' })
+        } else {
+          results.push({ name: item.file.name, ok: true })
+        }
+      } catch (e) {
+        results.push({ name: item.file.name, ok: false, error: e instanceof Error ? e.message : 'Upload failed' })
+      }
     }
+    setUploadResults(results)
   }
 
   async function handleSubmit() {
@@ -505,6 +517,19 @@ export default function ApplyPage() {
             : 'Thank you for applying. Our team will review your profile and contact you shortly.'}
         </p>
 
+        {uploadResults.length > 0 && (
+          <div className="text-left mt-6 p-4 bg-gray-50 rounded-xl border space-y-1">
+            <p className="text-sm font-semibold text-gray-700 mb-2">File Upload Results</p>
+            {uploadResults.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className={r.ok ? 'text-green-600' : 'text-red-500'}>{r.ok ? 'Uploaded' : 'Failed'}</span>
+                <span className="text-gray-600 truncate">{r.name}</span>
+                {r.error && <span className="text-red-400">({r.error})</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
         {candidateId && (
           <div className="text-left space-y-4 mt-8 p-6 bg-gray-50 rounded-2xl border">
             <p className="text-sm font-semibold text-gray-700">Upload Additional Documents (Optional)</p>
@@ -512,11 +537,11 @@ export default function ApplyPage() {
             <div className="space-y-3">
               <FileUpload label="Photo (passport-style)" accept="image/*" fileType="photo"
                 entityType="candidate" entityId={candidateId} />
-              <FileUpload label="CV / Resume (PDF)" accept=".pdf,.doc,.docx" fileType="cv"
+              <FileUpload label="CV / Resume (PDF, Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" fileType="cv"
                 entityType="candidate" entityId={candidateId} />
-              <FileUpload label="Cover Letter (PDF)" accept=".pdf,.doc,.docx" fileType="cover_letter"
+              <FileUpload label="Cover Letter (PDF, Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" fileType="cover_letter"
                 entityType="candidate" entityId={candidateId} />
-              <FileUpload label="Certificates" accept=".pdf,.jpg,.jpeg,.png" fileType="certificate"
+              <FileUpload label="Certificates" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" fileType="certificate"
                 entityType="candidate" entityId={candidateId} />
               <FileUpload label="Video Introduction" accept=".mp4,.mov,.webm" fileType="video"
                 entityType="candidate" entityId={candidateId} />
@@ -577,7 +602,7 @@ export default function ApplyPage() {
                   type="file"
                   className="hidden"
                   multiple
-                  accept="image/jpeg,image/png,image/webp,.pdf,.doc,.docx,.mp4,.mov,.webm"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,video/mp4,.mp4,video/quicktime,.mov,video/webm,.webm"
                   onChange={(e) => {
                     if (!e.target.files?.length) return
                     const remaining = MAX_FILES - queuedFiles.length

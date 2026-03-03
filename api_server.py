@@ -23,9 +23,11 @@ import os
 import re
 import sys
 import json
+import time
 import uuid
 import sqlite3
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Any
@@ -2393,6 +2395,78 @@ async def admin_list_files(entity_type: str, entity_id: str, request: Request):
     except Exception as e:
         _log_upload.error("admin_list_files failed: %s", e)
         return ok(data=[])
+
+
+# ── Audit Log & Security Report ──────────────────────────────────────────────
+
+_AUDIT_DIR = Path(os.getenv("AUDIT_DIR", str(Path(__file__).resolve().parent / "audit")))
+_security_warn_store: dict[str, list[float]] = defaultdict(list)
+
+@app.get("/api/admin/audit-log", tags=["admin"])
+async def admin_audit_log(request: Request, date: str = "", limit: int = 100):
+    """감사 로그 조회 (관리자 전용)."""
+    _check_admin(request)
+    if limit < 1 or limit > 1000:
+        limit = 100
+    target_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    log_path = _AUDIT_DIR / f"audit_{target_date}.jsonl"
+    if not log_path.exists():
+        return ok(data=[], message=f"No audit log for {target_date}")
+    entries = []
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
+    except Exception:
+        return err("Failed to read audit log", 500)
+    return ok(data=entries[-limit:], message=f"{len(entries[-limit:])} entries from {target_date}")
+
+
+@app.post("/api/security/report", tags=["security"])
+async def security_report(request: Request):
+    """프론트엔드 보안 이벤트 수신."""
+    ip = _ip_hash(request)
+    if not _rate_ok(ip, window=60, max_posts=20):
+        raise HTTPException(429, "Too many security reports.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+
+    event_type = str(body.get("type", ""))[:20]
+    detail = str(body.get("detail", ""))[:500]
+    url = str(body.get("url", ""))[:500]
+
+    if event_type not in ("xss", "sqli", "bot", "devtools", "tampering"):
+        raise HTTPException(400, "Invalid event type")
+
+    # Log to security_events.jsonl
+    _AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    event_path = _AUDIT_DIR / "security_events.jsonl"
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "ip": ip,
+        "type": event_type,
+        "detail": detail,
+        "url": url,
+        "user_agent": (request.headers.get("user-agent") or "")[:200],
+    }
+    try:
+        with open(event_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+    # Track warning threshold: 10+ events in 5 min
+    now = time.time()
+    _security_warn_store[ip] = [t for t in _security_warn_store[ip] if now - t < 300]
+    _security_warn_store[ip].append(now)
+    is_warned = len(_security_warn_store[ip]) >= 10
+
+    return ok(message="Event recorded", data={"warned": is_warned})
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────

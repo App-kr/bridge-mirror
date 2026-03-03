@@ -5,10 +5,14 @@
  * Next.js `template.tsx` re-mounts on navigation (unlike layout.tsx).
  */
 
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import MegaMenu from '@/components/MegaMenu'
+import { initSecurityGuard } from '@/utils/securityGuard'
 
 export default function Template({ children }: { children: React.ReactNode }) {
+  useEffect(() => { initSecurityGuard() }, [])
+
   return (
     <>
       <MegaMenu />
