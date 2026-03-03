@@ -18,8 +18,6 @@ import {
   scaleIn,
   defaultViewport,
 } from '@/lib/animations'
-import HeroBackground from '@/components/HeroBackground'
-
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
 // ── Name pool for testimonials (rotates monthly) ──
@@ -36,12 +34,15 @@ const FALLBACK_TESTIMONIALS = [
   { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 4 },
 ]
 
-// ── Partner list (updated) ──
-const PARTNER_NAMES = [
-  'Chungdahm Learning', 'GEPIK', 'SMOE', 'Gyeonggi English Village',
-  'Paju English Village', 'Gangwon English Camp', 'British Council Korea',
-  'YBM Academy', 'Poly Academy', 'April Academy', 'DYB Choisun Academy',
-  'Avalon Education', 'Rise Korea', 'Sogang SLP', 'JLS Jungsang Academy',
+// ── Partner lists (schools vs academies) ──
+const SCHOOL_NAMES = [
+  'GEPIK', 'SMOE', 'Gyeonggi English Village', 'Paju English Village',
+  'Gangwon English Camp', 'British Council Korea', 'Busan Foreign School',
+  'Jeju International School', 'Korea International School',
+]
+const ACADEMY_NAMES = [
+  'Chungdahm Learning', 'YBM', 'Poly', 'April', 'DYB Choisun',
+  'Avalon Education', 'Rise Korea', 'Sogang SLP', 'JLS Jungsang',
   'Warwick Franklin', 'Fast Track Kids', 'Hillside EYAS',
 ]
 
@@ -104,10 +105,28 @@ interface FeaturedJob {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 
+// ── Bridge line definitions ──
+const BRIDGE_LINES = [
+  { d: 'M 0 700 Q 350 150, 700 250 Q 1050 350, 1400 100', w: 2,    o: 0.06, delay: 0    },
+  { d: 'M 0 700 Q 350 250, 700 300 Q 1050 350, 1400 100', w: 2.5,  o: 0.08, delay: 0.2  },
+  { d: 'M 0 700 Q 350 350, 700 350 Q 1050 350, 1400 100', w: 2,    o: 0.06, delay: 0.4  },
+  { d: 'M 0 700 Q 350 400, 700 400 Q 1050 400, 1400 100', w: 4.5,  o: 0.14, delay: 0.6  },
+  { d: 'M 0 700 Q 350 450, 700 450 Q 1050 400, 1400 100', w: 2,    o: 0.06, delay: 0.8  },
+  { d: 'M 0 700 Q 350 550, 700 500 Q 1050 400, 1400 100', w: 2.5,  o: 0.08, delay: 1.0  },
+  { d: 'M 0 700 Q 350 650, 700 550 Q 1050 400, 1400 100', w: 1.5,  o: 0.04, delay: 1.2  },
+]
+
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [jobs, setJobs] = useState<FeaturedJob[]>([])
+  const [showBridge, setShowBridge] = useState(false)
+
+  // ── Trigger bridge drawing animation ──
+  useEffect(() => {
+    const t = setTimeout(() => setShowBridge(true), 300)
+    return () => clearTimeout(t)
+  }, [])
 
   // ── Hero parallax ──
   const { scrollYProgress: heroProgress } = useScroll({
@@ -163,8 +182,34 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-screen min-h-[600px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Background — HeroBackground component ── */}
-        <HeroBackground />
+        {/* ── Bridge lines background ── */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+          <svg
+            viewBox="0 0 1400 800"
+            style={{ position: 'absolute', width: '100%', height: '100%' }}
+            preserveAspectRatio="xMidYMid slice"
+            fill="none"
+          >
+            {BRIDGE_LINES.map((line, i) => (
+              <path
+                key={i}
+                d={line.d}
+                stroke="white"
+                strokeWidth={line.w}
+                opacity={line.o}
+                strokeLinecap="round"
+                strokeDasharray="2000"
+                strokeDashoffset={showBridge ? 0 : 2000}
+                style={{
+                  transition: `stroke-dashoffset 3s cubic-bezier(0.4, 0, 0.2, 1) ${line.delay}s`,
+                }}
+              />
+            ))}
+            {/* Glow at convergence points */}
+            <circle cx="0" cy="700" r="25" fill="white" opacity="0.06" />
+            <circle cx="1400" cy="100" r="25" fill="white" opacity="0.06" />
+          </svg>
+        </div>
 
         {/* ── Main text ── */}
         <motion.div
@@ -447,25 +492,50 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          5. PARTNER MARQUEE
+          5. PARTNER MARQUEE — 학교/캠프 + 학원 2줄
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="bg-black py-14 overflow-hidden border-t border-white/[0.06]">
-        <div className="max-w-[980px] mx-auto px-5 sm:px-8 mb-8">
+        <div className="max-w-[980px] mx-auto px-5 sm:px-8 mb-6">
           <p className="text-[11px] font-semibold text-[#48484a] uppercase tracking-[0.2em] text-center">
             Trusted by schools &amp; organizations across Korea
           </p>
         </div>
 
-        <div className="relative" aria-hidden="true">
-          <div className="marquee-track marquee-track--slow">
-            {[...PARTNER_NAMES, ...PARTNER_NAMES, ...PARTNER_NAMES].map((name, i) => (
-              <span
-                key={`p-${i}`}
-                className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
-              >
-                {name}
-              </span>
-            ))}
+        {/* Row 1 — Schools / English Camps / International Schools */}
+        <div className="mb-2">
+          <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
+            Schools &amp; Camps
+          </p>
+          <div className="relative" aria-hidden="true">
+            <div className="marquee-track marquee-track--slow">
+              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
+                <span
+                  key={`s-${i}`}
+                  className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2 — Academies / 학원 */}
+        <div>
+          <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
+            Academies
+          </p>
+          <div className="relative" aria-hidden="true">
+            <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
+              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
+                <span
+                  key={`a-${i}`}
+                  className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </section>
