@@ -59,58 +59,7 @@ a.nav-cta[href="/inquiry"]:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   2. HERO BACKGROUND ANIMATIONS
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* 지구본 회전 */
-@keyframes globeRotate {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-.hero-globe-rotate {
-  animation: globeRotate 60s linear infinite;
-}
-
-/* 다리/선 그려지는 애니메이션 (5개 선용) */
-@keyframes drawLine {
-  0%   { stroke-dashoffset: 800; }
-  100% { stroke-dashoffset: 0; }
-}
-.hero-line-1 { stroke-dasharray: 800; stroke-dashoffset: 800; animation: drawLine 2.5s ease-out 1.0s forwards; }
-.hero-line-2 { stroke-dasharray: 800; stroke-dashoffset: 800; animation: drawLine 2.8s ease-out 1.4s forwards; }
-.hero-line-3 { stroke-dasharray: 800; stroke-dashoffset: 800; animation: drawLine 3.0s ease-out 1.8s forwards; }
-.hero-line-4 { stroke-dasharray: 800; stroke-dashoffset: 800; animation: drawLine 3.3s ease-out 2.2s forwards; }
-.hero-line-5 { stroke-dasharray: 800; stroke-dashoffset: 800; animation: drawLine 3.5s ease-out 2.6s forwards; }
-
-/* 배경 요소 서서히 나타남 */
-@keyframes fadeInSlow {
-  0%   { opacity: 0; }
-  100% { opacity: 1; }
-}
-.hero-bg-fade {
-  opacity: 0;
-  animation: fadeInSlow 2s ease-out 0.5s forwards;
-}
-
-/* 비행기 곡선 비행 (자동 반복) */
-@keyframes planeFly {
-  0%   { left: 8%; top: 60%; opacity: 0; transform: rotate(-20deg); }
-  10%  { opacity: 0.35; }
-  50%  { left: 50%; top: 38%; opacity: 0.4; transform: rotate(-30deg); }
-  85%  { left: 78%; top: 45%; opacity: 0.3; transform: rotate(-25deg); }
-  95%  { opacity: 0; }
-  100% { left: 85%; top: 48%; opacity: 0; transform: rotate(-25deg); }
-}
-.hero-plane {
-  position: absolute;
-  pointer-events: none;
-  z-index: 5;
-  animation: planeFly 6s cubic-bezier(0.4, 0, 0.2, 1) 2s infinite;
-  opacity: 0;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   3. SCROLL INDICATOR
+   2. SCROLL INDICATOR
    ═══════════════════════════════════════════════════════════════════════════ */
 @keyframes scrollPulse {
   0%, 100% { opacity: 0.4; }
@@ -130,6 +79,20 @@ a.nav-cta[href="/inquiry"]:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   3. TESTIMONIAL GLASSMORPHISM CARDS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.testimonial-glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.testimonial-glass:hover {
+  border-color: rgba(41, 151, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(41, 151, 255, 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    4. SHIMMER BORDER (Featured Positions 카드)
    ═══════════════════════════════════════════════════════════════════════════ */
 @keyframes shimmerBorder {
@@ -141,7 +104,7 @@ a.nav-cta[href="/inquiry"]:hover {
   border-radius: 16px;
   overflow: hidden;
 }
-.shimmer-card::before {
+.shimmer-card:hover::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -149,12 +112,12 @@ a.nav-cta[href="/inquiry"]:hover {
   padding: 1px;
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.04) 0%,
-    rgba(255,255,255,0.15) 50%,
-    rgba(255,255,255,0.04) 100%
+    rgba(41,151,255,0.04) 0%,
+    rgba(41,151,255,0.18) 50%,
+    rgba(41,151,255,0.04) 100%
   );
   background-size: 200% 100%;
-  animation: shimmerBorder 4s linear infinite;
+  animation: shimmerBorder 3s linear infinite;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -162,7 +125,17 @@ a.nav-cta[href="/inquiry"]:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   5. POST BODY READABILITY (기존 유지)
+   5. CTA BUTTON HOVER (scale + glow)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cta-btn-primary:hover {
+  transform: scale(1.05) translateY(-1px);
+}
+.cta-btn-outline:hover {
+  transform: scale(1.05) translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. POST BODY READABILITY (기존 유지)
    ═══════════════════════════════════════════════════════════════════════════ */
 .post-body h2 {
   font-size: 1.35em;
