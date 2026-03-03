@@ -757,6 +757,13 @@ def _check_admin(request: Request):
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
 
+# [TEMP] key-check — 진단 후 즉시 제거
+@app.get("/api/admin/key-check", tags=["admin"])
+async def key_check(request: Request):
+    sent = request.headers.get("x-admin-key", "")
+    return ok(data={"svr": _ADMIN_KEY[:6] + "..." + _ADMIN_KEY[-4:] if len(_ADMIN_KEY) > 10 else f"len={len(_ADMIN_KEY)}", "sent": sent[:6] + "..." + sent[-4:] if len(sent) > 10 else f"len={len(sent)}", "match": sent == _ADMIN_KEY})
+
+
 @app.get("/api/admin/dashboard", tags=["admin"])
 async def admin_dashboard(request: Request):
     """관리자 대시보드 — 전체 통계 + 최근 활동."""
