@@ -10,7 +10,9 @@
 import { useEffect, useState } from 'react'
 import type { PublicJob } from '@/types'
 
-const API       = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { API_URL } from '@/lib/api'
+
+const API       = API_URL
 const TOKEN_KEY = 'bridge_apply_token'
 
 // ── Options ───────────────────────────────────────────────────────────────────

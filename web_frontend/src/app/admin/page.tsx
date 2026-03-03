@@ -10,6 +10,7 @@ import dynamic from 'next/dynamic'
 import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import { API_URL } from '@/lib/api'
 
 // recharts dynamic import (SSR 비활성화)
 const BarChart = dynamic(() => import('recharts').then(m => m.BarChart), { ssr: false })
@@ -22,7 +23,8 @@ const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: 
 const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+const API = API_URL
 
 interface DashboardStats {
   candidates?: number

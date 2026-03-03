@@ -11,7 +11,9 @@
 import { useState, useRef } from 'react'
 import { resizeImage } from '@/lib/image-resize'
 
-const API       = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { API_URL } from '@/lib/api'
+
+const API       = API_URL
 const TOKEN_KEY = 'bridge_apply_token'
 
 // ── Options (Google Form 1:1 매핑) ──────────────────────────────────────────

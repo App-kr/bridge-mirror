@@ -1015,7 +1015,7 @@ def _decrypt_row(row: dict) -> dict:
 
 
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
-_PAST_STATUSES = {"placed", "rejected", "withdrawn", "Inactive", "Closed", "Deleted"}
+_PAST_STATUSES = {"placed", "rejected", "withdrawn", "inactive", "Inactive", "Closed", "Deleted"}
 
 
 @app.get("/api/admin/candidates", tags=["admin"])
@@ -1107,15 +1107,24 @@ async def admin_update_candidate(
     request:      Request,
     body:         dict,
 ):
-    """인라인 편집: notes, reference, status만 허용."""
+    """인라인 편집: 관리 가능 필드."""
     _check_admin(request)
     # admin_notes → notes 매핑
     if "admin_notes" in body:
         body["notes"] = body.pop("admin_notes")
-    EDITABLE = {"notes", "reference", "status"}
+    EDITABLE = {
+        "notes", "reference", "status", "assigned_to",
+        "contract_offered", "contract_progress",
+        "email_contract", "email_immigration", "email_overseas",
+        "email_transition", "email_arrival",
+        "placed_company", "placed_salary", "start_month",
+        "housing_detail", "referral_fee", "process_date", "past_placement",
+        "recruiter_memo", "preferences", "dislikes",
+        "residence_type", "start_detail", "target_level", "housing_type",
+    }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
-        raise HTTPException(400, "수정 가능한 필드 없음 (notes, reference, status)")
+        raise HTTPException(400, "수정 가능한 필드 없음")
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -1215,6 +1224,26 @@ async def admin_bulk_status(request: Request, body: BulkStatusBody):
         import logging as _log_bulk
         _log_bulk.getLogger("bridge.api").error("bulk_status 실패: %s", e, exc_info=True)
         err("일괄 상태 변경에 실패했습니다.", 500)
+
+
+@app.get("/api/admin/candidates/{candidate_id}/profile", tags=["admin"])
+async def admin_candidate_profile(candidate_id: str, request: Request):
+    """후보자 프로필 카드 HTML 미리보기 (PII 제외)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM candidates WHERE candidate_id = ?", (candidate_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="후보자를 찾을 수 없습니다.")
+        c = dict(row)
+        c["id"] = c.get("candidate_id", c.get("id", ""))
+        card_html = _build_profile_card(c)
+        return ok(data={"html": card_html, "candidate_id": candidate_id})
+    finally:
+        conn.close()
 
 
 # ── Admin: Inquiries (채용의뢰) 관리 ────────────────────────────────────────
@@ -1338,6 +1367,325 @@ async def admin_update_guide_link(link_key: str, request: Request, body: dict):
         )
         conn.commit()
         return ok(message=f"링크 '{link_key}' 저장 완료")
+    finally:
+        conn.close()
+
+
+# ── Email Sending API ────────────────────────────────────────────────────────
+import smtplib
+import ssl as _ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+_SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+_SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+_SMTP_USER = os.getenv("SMTP_USER", os.getenv("GMAIL_USER", ""))
+_SMTP_PASS = os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", ""))
+_log_email = logging.getLogger("bridge.email_send")
+
+# template_key → candidates 컬럼 매핑
+_TEMPLATE_COL_MAP = {
+    "contract_offer":       "email_contract",
+    "immigration_guide":    "email_immigration",
+    "overseas_visa_prep":   "email_overseas",
+    "job_transition_guide": "email_transition",
+    "arrival_guide":        "email_arrival",
+}
+
+
+def _smtp_send(to_email: str, subject: str, html_body: str) -> bool:
+    """Gmail SMTP로 이메일 발송. 실패 시 False."""
+    if not _SMTP_USER or not _SMTP_PASS or _SMTP_PASS == "your_app_password":
+        _log_email.warning("SMTP 미설정 — 발송 스킵 (to=%s)", to_email)
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"BRIDGE Recruitment <{_SMTP_USER}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        ctx = _ssl.create_default_context()
+        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as srv:
+            srv.ehlo()
+            srv.starttls(context=ctx)
+            srv.ehlo()
+            srv.login(_SMTP_USER, _SMTP_PASS)
+            srv.sendmail(_SMTP_USER, to_email, msg.as_string())
+
+        _log_email.info("이메일 발송 성공: %s → %s", subject[:40], to_email)
+        return True
+    except Exception as e:
+        _log_email.error("이메일 발송 실패 (to=%s): %s", to_email, e, exc_info=True)
+        return False
+
+
+def _load_guide_links(conn: sqlite3.Connection) -> dict:
+    """guide_links 테이블에서 link_key→url 딕셔너리 로드."""
+    try:
+        rows = conn.execute("SELECT link_key, url FROM guide_links").fetchall()
+        return {r[0]: r[1] for r in rows}
+    except Exception:
+        return {}
+
+
+def _substitute_vars(html: str, candidate: dict, guide_links: dict) -> str:
+    """{{변수}} 치환: candidate 필드 + guide_links + 날짜."""
+    # candidate 필드 치환
+    field_map = {
+        "name": candidate.get("full_name") or candidate.get("first_name", ""),
+        "email": candidate.get("email", ""),
+        "company": candidate.get("placed_company", ""),
+        "location": candidate.get("city") or candidate.get("location", ""),
+        "salary": candidate.get("placed_salary") or candidate.get("desired_salary", ""),
+        "start_date": candidate.get("start_month") or candidate.get("start_detail", ""),
+        "housing": candidate.get("housing_type") or candidate.get("housing_detail", ""),
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "recruiter_name": candidate.get("assigned_to", "BRIDGE"),
+    }
+    for key, val in field_map.items():
+        html = html.replace("{{" + key + "}}", str(val or ""))
+
+    # guide_links 치환: {{link_xxx}} → guide_links[xxx] URL
+    for link_key, url in guide_links.items():
+        html = html.replace("{{link_" + link_key + "}}", url)
+
+    # 미치환 {{link_xxx}} 제거 (# 링크로 대체)
+    html = re.sub(r"\{\{link_\w+\}\}", "#", html)
+    # 미치환 {{xxx}} 제거
+    html = re.sub(r"\{\{\w+\}\}", "", html)
+
+    return html
+
+
+def _build_profile_card(c: dict) -> str:
+    """PII 제외 후보자 프로필 카드 HTML 생성."""
+    cid = c.get("id", "")
+    nationality = c.get("nationality", "—")
+    visa = c.get("visa_type", "—")
+    age = c.get("age", "—")
+    education = c.get("education_level", "—")
+    teaching_exp = c.get("teaching_experience", "—")
+    korea_exp = c.get("korea_experience", "—")
+    location = c.get("city", "—")
+    available = c.get("start_month") or c.get("available_from", "—")
+    photo = c.get("photo_url", "")
+
+    photo_html = ""
+    if photo:
+        photo_html = f'<img src="{photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover" alt="photo"/>'
+
+    return f"""<div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:12px 0;display:flex;gap:16px;align-items:flex-start">
+  {photo_html}
+  <div style="flex:1;font-size:14px">
+    <p style="font-weight:bold;font-size:15px;margin:0 0 8px">ID #{cid} · {nationality}</p>
+    <table style="font-size:13px;border-collapse:collapse;width:100%">
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Visa</td><td>{visa}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Age</td><td>{age}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Education</td><td>{education}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Teaching Exp.</td><td>{teaching_exp}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Korea Exp.</td><td>{korea_exp}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Location</td><td>{location}</td></tr>
+      <tr><td style="color:#6b7280;padding:2px 12px 2px 0">Available</td><td>{available}</td></tr>
+    </table>
+  </div>
+</div>"""
+
+
+class SendEmailBody(BaseModel):
+    template_key: str
+    custom_subject: Optional[str] = None
+    custom_body: Optional[str] = None
+
+
+@app.post("/api/admin/candidates/{candidate_id}/send-email", tags=["admin"])
+async def admin_send_email(candidate_id: int, request: Request, body: SendEmailBody):
+    """후보자에게 이메일 템플릿 발송. template_key에 따라 해당 email_* 컬럼 업데이트."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        # 후보자 조회
+        row = conn.execute("SELECT * FROM candidates WHERE id = ?", (candidate_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="후보자를 찾을 수 없습니다.")
+        c = dict(row)
+
+        # 이메일 주소 복호화
+        to_email = c.get("email", "")
+        if to_email and is_encrypted(to_email):
+            to_email = decrypt_field(to_email)
+        if not to_email or "@" not in to_email:
+            raise HTTPException(status_code=400, detail="유효한 이메일 주소가 없습니다.")
+
+        # 이름 복호화 (변수 치환용)
+        for f in ("full_name", "first_name", "last_name", "phone"):
+            val = c.get(f, "")
+            if val and is_encrypted(val):
+                c[f] = decrypt_field(val)
+
+        # 커스텀 내용 또는 템플릿 로드
+        if body.custom_subject and body.custom_body:
+            subject = body.custom_subject
+            html = body.custom_body
+        else:
+            tpl = conn.execute(
+                "SELECT subject, body_html FROM email_templates WHERE template_key = ?",
+                (body.template_key,)
+            ).fetchone()
+            if not tpl:
+                raise HTTPException(status_code=404, detail=f"템플릿 '{body.template_key}'을 찾을 수 없습니다.")
+            subject = body.custom_subject or tpl["subject"]
+            html = body.custom_body or tpl["body_html"]
+
+        # 변수 치환
+        guide_links = _load_guide_links(conn)
+        html = _substitute_vars(html, c, guide_links)
+        subject = _substitute_vars(subject, c, guide_links)
+
+        # 발송
+        sent = _smtp_send(to_email, subject, html)
+        if not sent:
+            raise HTTPException(status_code=500, detail="이메일 발송에 실패했습니다. SMTP 설정을 확인하세요.")
+
+        # 발송 기록: 해당 email_* 컬럼 업데이트
+        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        col = _TEMPLATE_COL_MAP.get(body.template_key)
+        if col:
+            conn.execute(f"UPDATE candidates SET {col} = ? WHERE id = ?", (now_iso, candidate_id))
+            conn.commit()
+
+        return ok(message=f"이메일 발송 완료 → {to_email}", data={"sent_to": to_email, "template": body.template_key})
+    finally:
+        conn.close()
+
+
+class BulkSendBody(BaseModel):
+    candidate_ids: list[int]
+    template_key: str
+
+
+@app.post("/api/admin/candidates/bulk-send", tags=["admin"])
+async def admin_bulk_send(request: Request, body: BulkSendBody):
+    """다수 후보자에게 일괄 이메일 발송 (1초 간격)."""
+    _check_admin(request)
+    import asyncio
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        # 템플릿 로드
+        tpl = conn.execute(
+            "SELECT subject, body_html FROM email_templates WHERE template_key = ?",
+            (body.template_key,)
+        ).fetchone()
+        if not tpl:
+            raise HTTPException(status_code=404, detail=f"템플릿 '{body.template_key}'을 찾을 수 없습니다.")
+
+        guide_links = _load_guide_links(conn)
+        results = []
+
+        for cid in body.candidate_ids:
+            row = conn.execute("SELECT * FROM candidates WHERE id = ?", (cid,)).fetchone()
+            if not row:
+                results.append({"id": cid, "status": "not_found"})
+                continue
+            c = dict(row)
+
+            # 이메일 복호화
+            to_email = c.get("email", "")
+            if to_email and is_encrypted(to_email):
+                to_email = decrypt_field(to_email)
+            if not to_email or "@" not in to_email:
+                results.append({"id": cid, "status": "no_email"})
+                continue
+
+            # 이름 복호화
+            for f in ("full_name", "first_name", "last_name", "phone"):
+                val = c.get(f, "")
+                if val and is_encrypted(val):
+                    c[f] = decrypt_field(val)
+
+            # 치환 + 발송
+            subject = _substitute_vars(tpl["subject"], c, guide_links)
+            html = _substitute_vars(tpl["body_html"], c, guide_links)
+            sent = _smtp_send(to_email, subject, html)
+
+            if sent:
+                now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                col = _TEMPLATE_COL_MAP.get(body.template_key)
+                if col:
+                    conn.execute(f"UPDATE candidates SET {col} = ? WHERE id = ?", (now_iso, cid))
+                results.append({"id": cid, "status": "sent"})
+            else:
+                results.append({"id": cid, "status": "failed"})
+
+            # 1초 간격 (스팸 방지)
+            await asyncio.sleep(1)
+
+        conn.commit()
+        sent_count = sum(1 for r in results if r["status"] == "sent")
+        return ok(
+            message=f"일괄 발송 완료: {sent_count}/{len(body.candidate_ids)}건 성공",
+            data={"results": results}
+        )
+    finally:
+        conn.close()
+
+
+class SendProfilesBody(BaseModel):
+    candidate_ids: list[int]
+    to_email: str
+    school_name: Optional[str] = None
+
+
+@app.post("/api/admin/candidates/send-profiles", tags=["admin"])
+async def admin_send_profiles(request: Request, body: SendProfilesBody):
+    """학교에 후보자 프로필 카드 발송 (PII 제외)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        # candidate_profile 템플릿 로드
+        tpl = conn.execute(
+            "SELECT subject, body_html FROM email_templates WHERE template_key = 'candidate_profile'"
+        ).fetchone()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="candidate_profile 템플릿이 없습니다.")
+
+        # 프로필 카드 생성
+        cards_html = ""
+        for cid in body.candidate_ids:
+            row = conn.execute("SELECT * FROM candidates WHERE id = ?", (cid,)).fetchone()
+            if not row:
+                continue
+            c = dict(row)
+            # PII 필드는 프로필 카드에 포함하지 않음 (이름, 이메일, 전화번호 제외)
+            cards_html += _build_profile_card(c)
+
+        if not cards_html:
+            raise HTTPException(status_code=400, detail="유효한 후보자가 없습니다.")
+
+        # 템플릿에 프로필 카드 삽입
+        guide_links = _load_guide_links(conn)
+        html = tpl["body_html"].replace("{{profile_cards}}", cards_html)
+        subject = tpl["subject"]
+
+        # 학교명이 있으면 제목에 추가
+        if body.school_name:
+            subject = f"{subject} - {body.school_name}"
+
+        # 미치환 변수 정리
+        html = re.sub(r"\{\{\w+\}\}", "", html)
+
+        sent = _smtp_send(body.to_email, subject, html)
+        if not sent:
+            raise HTTPException(status_code=500, detail="이메일 발송에 실패했습니다.")
+
+        return ok(
+            message=f"프로필 발송 완료 → {body.to_email} ({len(body.candidate_ids)}명)",
+            data={"sent_to": body.to_email, "candidate_count": len(body.candidate_ids)}
+        )
     finally:
         conn.close()
 

@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MarkdownBody from './MarkdownBody'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { API_URL } from '@/lib/api'
+
+const API = API_URL
 
 interface Props {
   board: string

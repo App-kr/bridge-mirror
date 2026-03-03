@@ -18,6 +18,7 @@ import {
   scaleIn,
   defaultViewport,
 } from '@/lib/animations'
+import type { PublicJob, AgeGroup } from '@/types'
 const API = ''
 
 // ── Name pool for testimonials (rotates monthly) ──
@@ -35,19 +36,18 @@ const FALLBACK_TESTIMONIALS = [
 ]
 
 // ── Partner lists (schools vs academies) ──
-const SCHOOL_NAMES = [
-  'Seoul Foreign School', 'Korea International School', 'Elementary School',
-  'Gyeonggi English Village', 'Paju English Village', 'Middle School',
-  'Busan Global Village', 'Saint Paul Preparatory', 'High School',
-  'Gangwon English Camp', 'Gyeonggi Global School', 'University',
-  'British Council Korea', 'MICA International Scholars',
-  'Hyundai International School', 'POSCO Education Foundation',
-]
 const ACADEMY_NAMES = [
-  'CREVERSE', 'YBM ECC', 'YBM PSA', 'Poly Inspiration', 'April Institute',
-  'DYB Choisun', 'Avalon English', 'Altiora', 'Rise Korea', 'Sogang SLP',
-  'EDISEN', 'JLS', 'Worwick Franklin', 'PEAI', 'FasTracKids',
-  'Hillside IYA Skola', 'Habit9', 'KNS',
+  'Chungdahm Learning', 'JLS Jungsang', 'Poly', 'April', 'DYB Choisun',
+  'Sogang SLP', 'Rise Korea', 'Warwick Franklin', 'Fast Track Kids',
+  'Hillside IYASkola', 'Avalon', 'Elan', 'YBM', 'Wall Street English',
+  'Siwon School', 'Real Class', 'Kyvis Kids',
+]
+const SCHOOL_NAMES = [
+  'Korea University Foreign Language Center', 'Seoul International School',
+  'Yongsan International School', 'Busan Foreign School',
+  'Daegu International School', 'Jeju International School',
+  'EPIK', 'GEPIK', 'SMOE', 'Gyeonggi English Village',
+  'Paju English Village', 'Gangwon English Camp', 'British Council Korea',
 ]
 
 // ── Get deterministic name — rotates weekly ──
@@ -67,6 +67,23 @@ function stripMd(text: string, max = 140): string {
     .replace(/\n+/g, ' ')
     .trim()
     .slice(0, max)
+}
+
+// ── Seed-based hash for deterministic weekly shuffle ──
+function seedHash(s: string, seed: number): number {
+  let h = seed
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+// ── Format teaching age groups to short labels ──
+const AGE_LABELS: Record<AgeGroup, string> = {
+  pre_k: 'Pre-K', kindergarten: 'Kindy', elementary: 'Elem',
+  middle: 'Middle', high: 'High', adult: 'Adult',
+}
+function formatTeachingAge(ages: AgeGroup[] | null): string {
+  if (!ages || ages.length === 0) return ''
+  return ages.map(a => AGE_LABELS[a] ?? a).join(' · ')
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -91,35 +108,28 @@ interface Testimonial {
   name: string
 }
 
-interface FeaturedJob {
-  id: number
-  job_code?: string
-  city?: string
-  district?: string
-  teaching_age?: string
-  working_hours?: string
-  salary_min?: number
-  salary_max?: number
-  salary_raw?: string
-  benefits?: string
-  housing?: string
-  is_hot?: boolean
-}
 
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 
-// ── Suspension bridge geometry ──
-// Main cable: parabolic arc  |  Deck: horizontal line at y=680
-// Vertical hangers connect cable to deck at regular intervals
-const CABLE_Y = (x: number) => 680 - 380 * (1 - ((x - 700) / 700) ** 2) // parabola peak at center
-const HANGER_XS = Array.from({ length: 21 }, (_, i) => i * 70)           // every 70px across 1400
+// ── Diagonal bridge geometry — 7 curves left-bottom → right-top ──
+// All curves share endpoints: (0,700) → (1400,100)
+// Control-point Y varies to create fan-shaped spread
+const BRIDGE_CURVES: { cy: number; sw: number; op: number }[] = [
+  { cy: -100, sw: 1.5, op: 0.05 },   // outermost convex
+  { cy:   50, sw: 2.0, op: 0.07 },
+  { cy:  200, sw: 3.0, op: 0.10 },
+  { cy:  400, sw: 4.5, op: 0.15 },   // center — thickest
+  { cy:  600, sw: 3.0, op: 0.10 },
+  { cy:  750, sw: 2.0, op: 0.07 },
+  { cy:  900, sw: 1.5, op: 0.05 },   // outermost concave
+]
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
-  const [jobs, setJobs] = useState<FeaturedJob[]>([])
+  const [jobs, setJobs] = useState<PublicJob[]>([])
   const [showBridge, setShowBridge] = useState(false)
 
   // ── Trigger bridge drawing animation ──
@@ -165,15 +175,17 @@ export default function HomePage() {
       })
   }, [])
 
-  // ── Fetch featured jobs ──
+  // ── Fetch featured jobs (weekly-seeded shuffle) ──
   useEffect(() => {
-    fetch(`${API}/api/jobs?limit=8`)
+    fetch(`${API}/api/jobs?limit=20`)
       .then(r => r.json())
       .then(d => {
-        const all = d?.data ?? []
+        const all: PublicJob[] = d?.data ?? []
         if (all.length > 0) {
-          const shuffled = [...all].sort(() => Math.random() - 0.5).slice(0, 4)
-          setJobs(shuffled)
+          const now = new Date()
+          const week = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 86400000))
+          const seeded = [...all].sort((a, b) => seedHash(a.job_id, week) - seedHash(b.job_id, week))
+          setJobs(seeded.slice(0, 4))
         }
       })
       .catch(() => { /* silent — no jobs section if API fails */ })
@@ -188,7 +200,7 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Suspension bridge silhouette ── */}
+        {/* ── Diagonal bridge — 7 fan-shaped curves ── */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
             viewBox="0 0 1400 800"
@@ -197,75 +209,49 @@ export default function HomePage() {
             fill="none"
           >
             <defs>
-              <linearGradient id="cableGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="white" stopOpacity="0" />
-                <stop offset="30%" stopColor="white" stopOpacity="0.15" />
-                <stop offset="50%" stopColor="white" stopOpacity="0.25" />
-                <stop offset="70%" stopColor="white" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </linearGradient>
-              <linearGradient id="deckGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="white" stopOpacity="0" />
-                <stop offset="20%" stopColor="white" stopOpacity="0.08" />
-                <stop offset="50%" stopColor="white" stopOpacity="0.12" />
-                <stop offset="80%" stopColor="white" stopOpacity="0.08" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </linearGradient>
               <filter id="glow">
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
+              <radialGradient id="endGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="white" stopOpacity="0.12" />
+                <stop offset="100%" stopColor="white" stopOpacity="0" />
+              </radialGradient>
             </defs>
 
-            {/* Main cable — parabolic arc */}
-            <path
-              d={`M 0 680 Q 700 ${680 - 380}, 1400 680`}
-              stroke="url(#cableGrad)"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeDasharray="2200"
-              strokeDashoffset={showBridge ? 0 : 2200}
-              filter="url(#glow)"
-              style={{ transition: 'stroke-dashoffset 2.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
-            />
-
-            {/* Deck line */}
-            <line
-              x1="0" y1="680" x2="1400" y2="680"
-              stroke="url(#deckGrad)"
-              strokeWidth={1}
-              strokeDasharray="1400"
-              strokeDashoffset={showBridge ? 0 : 1400}
-              style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s' }}
-            />
-
-            {/* Vertical hangers — cable to deck */}
-            {HANGER_XS.map((x, i) => {
-              const cy = CABLE_Y(x)
-              if (cy >= 678) return null // skip edges where cable meets deck
-              return (
-                <line
-                  key={i}
-                  x1={x} y1={cy} x2={x} y2={680}
-                  stroke="white"
-                  strokeWidth={0.5}
-                  opacity={showBridge ? 0.06 + 0.04 * (1 - Math.abs(x - 700) / 700) : 0}
-                  style={{ transition: `opacity 0.8s ease ${0.8 + i * 0.05}s` }}
-                />
-              )
-            })}
-
-            {/* Tower pillars at 1/4 and 3/4 */}
-            {[350, 1050].map((tx) => (
-              <line
-                key={tx}
-                x1={tx} y1={CABLE_Y(tx)} x2={tx} y2={750}
+            {/* 7 curves — all converge at (0,700) and (1400,100) */}
+            {BRIDGE_CURVES.map((c, i) => (
+              <path
+                key={i}
+                d={`M 0 700 Q 700 ${c.cy}, 1400 100`}
                 stroke="white"
-                strokeWidth={1.5}
-                opacity={showBridge ? 0.1 : 0}
-                style={{ transition: 'opacity 1.2s ease 0.4s' }}
+                strokeWidth={c.sw}
+                strokeLinecap="round"
+                opacity={showBridge ? c.op : 0}
+                strokeDasharray="2500"
+                strokeDashoffset={showBridge ? 0 : 2500}
+                filter={i === 3 ? 'url(#glow)' : undefined}
+                style={{
+                  transition: `stroke-dashoffset 2.2s cubic-bezier(0.16, 1, 0.3, 1) ${0.15 + i * 0.12}s, opacity 0.6s ease ${0.1 + i * 0.12}s`,
+                }}
               />
             ))}
+
+            {/* Convergence glow — left endpoint */}
+            <circle
+              cx="0" cy="700" r="60"
+              fill="url(#endGlow)"
+              opacity={showBridge ? 0.08 : 0}
+              style={{ transition: 'opacity 1.5s ease 0.3s' }}
+            />
+
+            {/* Convergence glow — right endpoint */}
+            <circle
+              cx="1400" cy="100" r="60"
+              fill="url(#endGlow)"
+              opacity={showBridge ? 0.08 : 0}
+              style={{ transition: 'opacity 1.5s ease 0.3s' }}
+            />
           </svg>
         </div>
 
@@ -412,66 +398,68 @@ export default function HomePage() {
               viewport={defaultViewport}
             >
               {jobs.slice(0, 4).map((job) => (
-                <motion.div key={job.id} variants={scaleIn}>
+                <motion.div key={job.job_id} variants={scaleIn}>
                   <Link
                     href="/jobs"
-                    className="group block shimmer-card bg-white/[0.03] border border-white/[0.08] p-6
-                               hover:bg-white/[0.07] transition-all duration-300 hover:-translate-y-1
-                               hover:shadow-[0_8px_32px_rgba(41,151,255,0.08)]"
+                    className="group block shimmer-card bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6
+                               hover:bg-white/[0.07] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]
+                               hover:shadow-[0_8px_32px_rgba(41,151,255,0.12)]"
                   >
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-[#2997ff] text-xs font-bold tracking-wide uppercase">
-                        {job.job_code ? `#${job.job_code}` : `#${job.id}`}
+                    {/* Location + Job ID header */}
+                    <div className="mb-5">
+                      <h3 className="text-white font-semibold text-base tracking-tight leading-snug">
+                        {job.location ?? 'Korea'}
+                      </h3>
+                      <span className="text-[#2997ff] text-xs font-bold tracking-wide">
+                        {job.job_id}
                       </span>
                       {job.is_hot && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase">
+                        <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase align-middle">
                           Hot
                         </span>
                       )}
                     </div>
 
-                    {/* Location */}
-                    <h3 className="text-white font-semibold text-base mb-4 tracking-tight leading-snug">
-                      {job.city ?? 'Korea'}{job.district ? `, ${job.district}` : ''}
-                    </h3>
-
-                    {/* Details — compact labels */}
-                    <div className="space-y-2.5 text-[13px] text-[#a1a1a6]">
-                      {job.teaching_age && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#636366] text-[11px] font-semibold uppercase w-12 shrink-0">Age</span>
-                          <span>{job.teaching_age}</span>
+                    {/* Detail rows */}
+                    <div className="space-y-2 text-[13px]">
+                      {job.starting_date && (
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Starting Date</span>
+                          <span className="text-[#a1a1a6] text-right truncate">{job.starting_date}</span>
+                        </div>
+                      )}
+                      {job.teaching_age && job.teaching_age.length > 0 && (
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Teaching Age</span>
+                          <span className="text-[#a1a1a6] text-right">{formatTeachingAge(job.teaching_age)}</span>
                         </div>
                       )}
                       {job.working_hours && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#636366] text-[11px] font-semibold uppercase w-12 shrink-0">Hours</span>
-                          <span>{job.working_hours}</span>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Working Hours</span>
+                          <span className="text-[#a1a1a6] text-right">{job.working_hours}</span>
                         </div>
                       )}
-                      {(job.salary_raw ?? (job.salary_min && job.salary_max)) && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#636366] text-[11px] font-semibold uppercase w-12 shrink-0">Salary</span>
-                          <span>
-                            {job.salary_raw
-                              ? job.salary_raw
-                              : `${(job.salary_min ?? 0).toLocaleString()} ~ ${(job.salary_max ?? 0).toLocaleString()} KRW`}
-                          </span>
+                      {job.monthly_salary && (
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Monthly Salary</span>
+                          <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary}</span>
                         </div>
                       )}
-                      {job.benefits && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#636366] text-[11px] font-semibold uppercase w-12 shrink-0">Perks</span>
-                          <span className="truncate">{job.benefits}</span>
+                      {job.housing && (
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Housing</span>
+                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* View more */}
-                    <span className="inline-block mt-5 text-xs font-semibold text-[#2997ff] transition-transform duration-300 group-hover:translate-x-1">
-                      View details &rarr;
-                    </span>
+                    {/* View details link */}
+                    <div className="mt-5 pt-4 border-t border-white/[0.06] text-right">
+                      <span className="inline-block text-xs font-semibold text-[#2997ff] transition-transform duration-300 group-hover:translate-x-1">
+                        View details &rarr;
+                      </span>
+                    </div>
                   </Link>
                 </motion.div>
               ))}
@@ -541,6 +529,11 @@ export default function HomePage() {
                 I&apos;m Hiring
               </Link>
             </div>
+
+            {/* Contact info */}
+            <p className="mt-10 text-[#636366] text-sm">
+              bridgejobkr@gmail.com
+            </p>
           </motion.div>
         </div>
       </section>
@@ -555,16 +548,16 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Row 1 — Schools / English Camps / International Schools */}
+        {/* Row 1 — Academies */}
         <div className="mb-2">
           <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
-            Schools &amp; Camps
+            Academies
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--slow">
-              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
+              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
                 <span
-                  key={`s-${i}`}
+                  key={`a-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
                 >
                   {name}
@@ -574,16 +567,16 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Row 2 — Academies / 학원 */}
+        {/* Row 2 — Schools & Organizations */}
         <div>
           <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
-            Academies
+            Schools &amp; Organizations
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
-              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
+              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
                 <span
-                  key={`a-${i}`}
+                  key={`s-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
                 >
                   {name}

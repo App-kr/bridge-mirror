@@ -14,7 +14,7 @@
 /* BRIDGE 로고: 슬림 + 자간 제거(붙어있게) */
 .nav-glass a[href="/"] {
   font-weight: 600 !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: 0 !important;
   font-size: 21px !important;
 }
 
@@ -211,4 +211,163 @@ a.nav-cta[href="/inquiry"]:hover {
   font-size: 13px;
   color: #5D4037;
   line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6b. POST META HIDING (사용자 페이지에서만)
+   — #bridge_admin 저자, 작성일, 조회수 숨김.
+   — admin 경로에서는 표시.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.post-meta,
+.post-author,
+.post-views,
+.author-info,
+.view-count {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. MEGA MENU — Desktop Dropdown + Mobile Hamburger
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Desktop dropdown panel ── */
+.mega-panel {
+  position: fixed;
+  top: 58px;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  background: rgba(29, 29, 31, 0.97);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  animation: megaSlide 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+@keyframes megaSlide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mega-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 20px;
+  border-radius: 10px;
+  transition: background 150ms;
+  min-width: 140px;
+}
+.mega-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Mobile hamburger button ── */
+.mobile-hamburger {
+  display: none;
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 10000;
+  width: 36px;
+  height: 36px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  padding: 0;
+}
+@media (max-width: 767px) {
+  .mobile-hamburger { display: flex; }
+  .nav-glass a.nav-cta { display: none !important; }
+}
+
+.hb-line {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: #1d1d1f;
+  border-radius: 1px;
+  transition: all 200ms ease;
+}
+.hb-x1 { transform: translateY(7px) rotate(45deg); }
+.hb-hidden { opacity: 0; transform: scaleX(0); }
+.hb-x2 { transform: translateY(-7px) rotate(-45deg); }
+
+/* ── Mobile overlay ── */
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.4);
+  animation: mobileOverlayIn 200ms ease;
+}
+@keyframes mobileOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Mobile drawer ── */
+.mobile-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  width: 280px;
+  height: 100dvh;
+  background: white;
+  padding: 72px 24px 24px;
+  overflow-y: auto;
+  animation: drawerIn 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+}
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+.mobile-nav-link {
+  display: block;
+  padding: 14px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #1d1d1f;
+  border-bottom: 1px solid #f5f5f7;
+  transition: color 150ms;
+}
+.mobile-nav-link:hover,
+.mobile-nav-link:active { color: #0071e3; }
+.mobile-nav-link.active { color: #2563EB; font-weight: 600; }
+
+.mobile-cta-primary {
+  display: block;
+  text-align: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: #2563EB;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background 200ms;
+}
+.mobile-cta-primary:hover { background: #1d4ed8; }
+
+.mobile-cta-outline {
+  display: block;
+  text-align: center;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid #d1d1d6;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 200ms;
+}
+.mobile-cta-outline:hover {
+  background: #1d1d1f;
+  color: white;
+  border-color: #1d1d1f;
 }

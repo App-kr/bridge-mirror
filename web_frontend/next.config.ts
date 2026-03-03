@@ -15,10 +15,10 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // Next.js hydration 필요
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
       "img-src 'self' data: https://*.supabase.co https://images.unsplash.com",
-      "font-src 'self'",
-      "connect-src 'self' https://*.supabase.co https://bridgejob.co.kr",
+      "font-src 'self' https://cdn.jsdelivr.net",
+      "connect-src 'self' https://*.supabase.co https://bridgejob.co.kr https://*.vercel.app",
       "frame-ancestors 'none'",
     ].join('; '),
   },

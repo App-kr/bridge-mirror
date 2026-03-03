@@ -25,17 +25,22 @@ interface Post {
   id: number
   title: string
   preview: string
+  body?: string
   author_hash: string
   pinned: number
   views: number
   created_at: string
+  category?: string | null
 }
+
+interface FaqItem { q: string; a: string }
 
 interface LayoutProps {
   config: BoardConfig
   posts: Post[]
   total: number
   board: string
+  faqItems?: FaqItem[]
 }
 
 /** Strip markdown syntax for preview text */
@@ -48,6 +53,21 @@ function accentHex(color: string) {
   if (color.includes('emerald')) return '#34d399'
   if (color.includes('orange')) return '#f97316'
   return '#0071e3'
+}
+
+/** Parse FAQ markdown body into Q/A pairs */
+function parseFaqBody(body: string): FaqItem[] {
+  const items: FaqItem[] = []
+  const blocks = body.split(/###\s+Q\d+\.?\s*/i).filter(Boolean)
+  for (const block of blocks) {
+    const lines = block.trim().split('\n')
+    const q = lines[0]?.replace(/^#+\s*/, '').trim()
+    if (!q) continue
+    const rest = lines.slice(1).join('\n')
+    const a = rest.replace(/^\s*\*?\*?A\.?\*?\*?\s*/m, '').trim()
+    if (a) items.push({ q, a })
+  }
+  return items
 }
 
 // ── Shared Board Header ──
@@ -68,6 +88,49 @@ function BoardHeader({ config }: { config: BoardConfig }) {
     </motion.div>
   )
 }
+
+// ── Hardcoded FAQ Data ──
+const TEACHER_FAQ: FaqItem[] = [
+  {
+    q: 'Do I need teaching experience to apply?',
+    a: 'No. While experience is preferred, BRIDGE will match you with positions that fit your experience level.\n\n경력이 없어도 지원할 수 있나요? 네. 경력이 있으면 유리하지만, 경력 없이도 지원 가능합니다.',
+  },
+  {
+    q: 'Which nationalities are eligible for E-2 visas?',
+    a: "Citizens of USA, Canada, UK, Ireland, Australia, New Zealand, and South Africa. Must hold a bachelor's degree.\n\nE-2 비자 대상 국적은 미국, 캐나다, 영국, 아일랜드, 호주, 뉴질랜드, 남아공. 4년제 학위 필요.",
+  },
+  {
+    q: 'How long does the process take?',
+    a: 'Outside Korea: 6-10 weeks. Already in Korea with valid visa: 2-4 weeks.\n\n해외 거주자 6~10주, 국내 거주자(비자 보유) 2~4주.',
+  },
+  {
+    q: 'Is housing provided?',
+    a: 'Most positions include furnished housing or a housing allowance, though not mandatory.\n\n의무는 아니지만 대부분 숙소 제공 또는 주거수당 포함.',
+  },
+  {
+    q: 'Can I choose which city I work in?',
+    a: 'Yes. State your preference, BRIDGE will prioritize. Being flexible increases options.\n\n네. 희망 지역 우선 매칭. 유연할수록 선택지 넓어짐.',
+  },
+]
+
+const EMPLOYER_FAQ: FaqItem[] = [
+  {
+    q: '채용 의뢰 비용이 있나요?',
+    a: '미등록 기관 등 특수 상황에 상담비 발생 가능. 채용수수료는 채용 과정에서 발생.',
+  },
+  {
+    q: '후보자를 직접 선택할 수 있나요?',
+    a: '물론. BRIDGE가 추천하지만 최종 결정은 교육기관에서 인터뷰를 통해 직접.',
+  },
+  {
+    q: '성사된 강사가 조기 퇴사하면?',
+    a: '고용주 측 문제 없음에도 1개월 내 퇴사 시 환불 가능. 보증 조건은 계약서 명시.',
+  },
+  {
+    q: '비자 서류는 누가 준비?',
+    a: '강사 해외 서류는 BRIDGE 안내, 고용주 한국 서류도 함께 안내.',
+  },
+]
 
 // ── Constants ──
 const KOREA_IMAGES: Record<string, string> = {
@@ -157,13 +220,29 @@ export default function BoardPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [faqItems, setFaqItems] = useState<FaqItem[]>([])
 
   useEffect(() => {
     if (!config) return
+    // Fetch main posts
     fetch(`${API}/api/community/${board}?limit=50`)
       .then((r) => r.json())
       .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
       .finally(() => setLoading(false))
+
+    // Fetch FAQ for support boards
+    const faqCat = board === 'support' ? 'faq-teacher' : board === 'support_kr' ? 'faq-employer' : null
+    if (faqCat) {
+      fetch(`${API}/api/community/${board}?category=${faqCat}`)
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.success && j.data.posts.length > 0) {
+            const body = j.data.posts[0].body ?? ''
+            setFaqItems(parseFaqBody(body))
+          }
+        })
+        .catch(() => {})
+    }
   }, [board, config])
 
   if (!config) {
@@ -185,7 +264,7 @@ export default function BoardPage() {
     )
   }
 
-  const props: LayoutProps = { config, posts, total, board }
+  const props: LayoutProps = { config, posts, total, board, faqItems }
 
   switch (config.layout) {
     case 'list':         return <ListLayout {...props} />
@@ -202,28 +281,138 @@ export default function BoardPage() {
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
 function ListLayout({ config, posts, board }: LayoutProps) {
+  // Filter out FAQ-tagged posts from the main list
+  const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
+
+  // FAQ color themes + hardcoded data
+  const faqConfig = board === 'support'
+    ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: 'Teacher FAQ', badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: TEACHER_FAQ }
+    : board === 'support_kr'
+    ? { bg: 'bg-[#0a1f12]', accent: '#22c55e', label: '자주 묻는 질문', badgeBg: 'bg-green-500/20', badgeText: 'text-green-300', items: EMPLOYER_FAQ }
+    : null
+
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} />
-      {posts.length === 0 ? (
-        <p className="text-[#86868b] text-center py-16">No posts yet.</p>
-      ) : (
-        <motion.div variants={staggerContainer} initial="hidden" animate="visible">
-          {posts.map((p) => (
-            <motion.div key={p.id} variants={fadeInUp}>
-              <Link
-                href={`/community/${board}/${p.id}`}
-                className="board-list-item group"
-                style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
-              >
-                <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
-                <span className="arrow">→</span>
-              </Link>
+    <div>
+      {/* ── FAQ Accordion Section ── */}
+      {faqConfig && faqConfig.items.length > 0 && (
+        <section className={`${faqConfig.bg} py-16 sm:py-20`}>
+          <div className="max-w-3xl mx-auto px-4 sm:px-6">
+            <motion.div
+              className="text-center mb-10"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${faqConfig.badgeBg} ${faqConfig.badgeText} mb-4`}>
+                FAQ
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                {faqConfig.label}
+              </h2>
             </motion.div>
-          ))}
+
+            <motion.div
+              className="space-y-3"
+              variants={staggerContainer} initial="hidden" animate="visible"
+            >
+              {faqConfig.items.map((item, i) => (
+                <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent} />
+              ))}
+            </motion.div>
+
+            {/* 업무지원 하단 문의 안내 */}
+            {board === 'support_kr' && (
+              <motion.div
+                className="mt-10 text-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                <p className="text-white/50 text-sm mb-3">기타 궁금한 사항은 문의하기 페이지를 통해 연락 주세요.</p>
+                <a href="/inquiry"
+                  className="inline-block px-5 py-2.5 bg-[#22c55e] text-white text-sm font-medium rounded-full hover:bg-[#16a34a] transition-colors">
+                  문의하기
+                </a>
+              </motion.div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Regular Post List ── */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+        <BoardHeader config={config} />
+        {regularPosts.length === 0 ? (
+          <p className="text-[#86868b] text-center py-16">No posts yet.</p>
+        ) : (
+          <motion.div variants={staggerContainer} initial="hidden" animate="visible">
+            {regularPosts.map((p) => (
+              <motion.div key={p.id} variants={fadeInUp}>
+                <Link
+                  href={`/community/${board}/${p.id}`}
+                  className="board-list-item group"
+                  style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
+                >
+                  <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
+                  <span className="arrow">→</span>
+                </Link>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── FAQ Accordion Item ──
+function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: number; accent: string }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <motion.div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: 'rgba(255,255,255,0.05)',
+        border: `1px solid rgba(255,255,255,0.08)`,
+        borderLeft: `3px solid ${accent}`,
+      }}
+      variants={fadeInUp}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
+    >
+      <button
+        type="button"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left group"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span
+          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
+          style={{ background: accent }}
+        >
+          {index + 1}
+        </span>
+        <span className="text-[15px] font-medium text-white/90 flex-1 group-hover:text-white transition-colors">
+          {item.q}
+        </span>
+        <span
+          className="text-lg shrink-0 transition-transform duration-300"
+          style={{ color: accent, transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}
+        >
+          +
+        </span>
+      </button>
+      {open && (
+        <motion.div
+          className="px-5 pb-4 pl-[52px]"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          transition={{ duration: 0.3 }}
+        >
+          <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line">{item.a}</p>
         </motion.div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -270,9 +459,7 @@ function HeroCardsLayout({ posts, board }: LayoutProps) {
             About BRIDGE
           </h1>
           <p className="text-lg sm:text-xl text-[#6e6e73] max-w-[600px] mx-auto leading-relaxed">
-            Korea&apos;s trusted ESL recruitment agency.
-            <br />
-            Connecting schools and teachers since 2011.
+            Connecting the world to Korea&apos;s classrooms.
           </p>
         </motion.div>
       </section>

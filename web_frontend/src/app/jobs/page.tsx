@@ -14,7 +14,7 @@ import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
 import ApplyPanel from '@/components/ApplyPanel'
 const API = ''
-import { fadeInUp, staggerContainer, defaultViewport } from '@/lib/animations'
+import { fadeInUp, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 
 // ── Category tabs ──
@@ -281,24 +281,18 @@ export default function JobsPage() {
           </div>
         )}
 
-        {/* Job grid — stagger entrance */}
+        {/* Job grid — instant render (no stagger for 500+ items) */}
         {!loading && filtered.length > 0 && (
-          <motion.div
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-4"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.1 }}
-          >
-            {filtered.map((job) => (
-              <motion.div key={job.job_id} variants={fadeInUp}>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((job, i) => (
+              <div key={`${job.job_id}-${i}`}>
                 <JobCard
                   job={job}
                   onQuickApply={() => setPanelJob(job)}
                 />
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         )}
 
         {/* Apply CTA */}
