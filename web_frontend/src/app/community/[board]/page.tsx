@@ -138,11 +138,11 @@ const EMPLOYER_FAQ: FaqItem[] = [
 
 // ── Constants ──
 const KOREA_IMAGES: Record<string, string> = {
-  Seoul: 'https://images.unsplash.com/photo-1546874177-9e664107314e?w=480&h=320&fit=crop',
-  Gyeonggi: 'https://images.unsplash.com/photo-1535189043414-47a3c49a0bed?w=480&h=320&fit=crop',
-  Incheon: 'https://images.unsplash.com/photo-1506816561089-5cc37b3aa9b0?w=480&h=320&fit=crop',
-  Busan: 'https://images.unsplash.com/photo-1538574027501-286b64ee38f8?w=480&h=320&fit=crop',
-  Daegu: 'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=480&h=320&fit=crop',
+  Seoul: 'https://images.unsplash.com/photo-1541694764078-df09dec4f9c8?w=480&h=320&fit=crop',
+  Gyeonggi: 'https://images.unsplash.com/photo-1653570550805-7a12b0220bc0?w=480&h=320&fit=crop',
+  Incheon: 'https://images.unsplash.com/photo-1758384077516-64239756fd4b?w=480&h=320&fit=crop',
+  Busan: 'https://images.unsplash.com/photo-1701595964277-712b453dd66b?w=480&h=320&fit=crop',
+  Daegu: 'https://images.unsplash.com/photo-1617617563086-d56b49fac93b?w=480&h=320&fit=crop',
 }
 const KOREA_MAP_LINKS: Record<string, string> = {
   Seoul: 'https://maps.google.com/?q=Seoul,Korea',
