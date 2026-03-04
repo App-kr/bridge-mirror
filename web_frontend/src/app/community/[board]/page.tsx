@@ -137,12 +137,17 @@ const EMPLOYER_FAQ: FaqItem[] = [
 ]
 
 // ── Constants ──
-const KOREA_IMAGES: Record<string, string> = {
-  Seoul: 'https://images.unsplash.com/photo-1541694764078-df09dec4f9c8?w=480&h=320&fit=crop',
-  Gyeonggi: 'https://images.unsplash.com/photo-1653570550805-7a12b0220bc0?w=480&h=320&fit=crop',
-  Incheon: 'https://images.unsplash.com/photo-1758384077516-64239756fd4b?w=480&h=320&fit=crop',
-  Busan: 'https://images.unsplash.com/photo-1701595964277-712b453dd66b?w=480&h=320&fit=crop',
-  Daegu: 'https://images.unsplash.com/photo-1617617563086-d56b49fac93b?w=480&h=320&fit=crop',
+const POST_IMAGES: Record<string, string> = {
+  Seoul:      'https://images.unsplash.com/photo-1541694764078-df09dec4f9c8?w=480&h=320&fit=crop',
+  Gyeonggi:   'https://images.unsplash.com/photo-1584527810790-01a904be796b?w=480&h=320&fit=crop',
+  Incheon:    'https://images.unsplash.com/photo-1610870596605-d293eaf5a1ad?w=480&h=320&fit=crop',
+  Busan:      'https://images.unsplash.com/photo-1592158072350-aa83a6d9dd50?w=480&h=320&fit=crop',
+  Daegu:      'https://images.unsplash.com/photo-1741042174069-65868336324a?w=480&h=320&fit=crop',
+  Daejeon:    'https://images.unsplash.com/photo-1687722157890-9f58d5cd26d4?w=480&h=320&fit=crop',
+  Jeju:       'https://images.unsplash.com/photo-1730898652585-bda492ae1b41?w=480&h=320&fit=crop',
+  Food:       'https://images.unsplash.com/photo-1532347231146-80afc9e3df2b?w=480&h=320&fit=crop',
+  Healthcare: 'https://images.unsplash.com/photo-1516841273335-e39b37888115?w=480&h=320&fit=crop',
+  Banking:    'https://images.unsplash.com/photo-1750262701487-4ca222c89ef4?w=480&h=320&fit=crop',
 }
 const KOREA_MAP_LINKS: Record<string, string> = {
   Seoul: 'https://maps.google.com/?q=Seoul,Korea',
@@ -150,12 +155,32 @@ const KOREA_MAP_LINKS: Record<string, string> = {
   Incheon: 'https://maps.google.com/?q=Incheon,Korea',
   Busan: 'https://maps.google.com/?q=Busan,Korea',
   Daegu: 'https://maps.google.com/?q=Daegu,Korea',
+  Daejeon: 'https://maps.google.com/?q=Daejeon,Korea',
+  Jeju: 'https://maps.google.com/?q=Jeju,Korea',
 }
+
+/** Match post title to image key */
+function getPostImageKey(title: string): string {
+  const t = title.toLowerCase()
+  if (t.includes('seoul') || t.includes('서울')) return 'Seoul'
+  if (t.includes('gyeonggi') || t.includes('경기')) return 'Gyeonggi'
+  if (t.includes('incheon') || t.includes('인천')) return 'Incheon'
+  if (t.includes('busan') || t.includes('부산')) return 'Busan'
+  if (t.includes('daegu') || t.includes('대구')) return 'Daegu'
+  if (t.includes('daejeon') || t.includes('대전')) return 'Daejeon'
+  if (t.includes('jeju') || t.includes('제주')) return 'Jeju'
+  if (t.includes('food') || t.includes('음식')) return 'Food'
+  if (t.includes('health') || t.includes('의료')) return 'Healthcare'
+  if (t.includes('bank') || t.includes('금융') || t.includes('money')) return 'Banking'
+  if (t.includes('phone') || t.includes('internet') || t.includes('통신')) return 'Seoul'
+  const keys = Object.keys(POST_IMAGES)
+  return keys[0]
+}
+
 const TIPS_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
 const TIPS_EMOJIS = ['📸', '🎓', '🎤']
 const HERO_ICONS = ['🏢', '📋', '🆕', '📝', '💰']
 const AVATAR_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
-const CITY_KEYS = Object.keys(KOREA_IMAGES)
 
 // ── Animated counter hook (for About page stats) ──
 function useAnimatedCounter(target: number, duration: number, start: boolean) {
@@ -735,20 +760,20 @@ function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
       <BoardHeader config={config} board={board} />
       <div className="space-y-5">
         {posts.map((p, i) => {
-          const city = CITY_KEYS[i % CITY_KEYS.length]
+          const imgKey = getPostImageKey(p.title)
           const variant = i % 2 === 0 ? slideInLeft : slideInRight
 
           return (
             <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
               <Link href={`/community/${board}/${p.id}`} className="korea-card group">
                 <div className="w-60 h-44 shrink-0 overflow-hidden">
-                  <img src={KOREA_IMAGES[city]} alt={p.title} className="korea-img w-full h-full object-cover" />
+                  <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 p-5 flex flex-col justify-center">
                   <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
                   <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
-                  {KOREA_MAP_LINKS[city] && (
-                    <a href={KOREA_MAP_LINKS[city]} target="_blank" rel="noopener noreferrer"
+                  {KOREA_MAP_LINKS[imgKey] && (
+                    <a href={KOREA_MAP_LINKS[imgKey]} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-[#0071e3] hover:underline mt-1"
                       onClick={(e) => e.stopPropagation()}>
                       <span>📍</span> View on Map
