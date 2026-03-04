@@ -50,6 +50,7 @@ export default function InquiriesPage() {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [saveMsg, setSaveMsg] = useState('')
+  const [registeringId, setRegisteringId] = useState<number | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -92,6 +93,29 @@ export default function InquiriesPage() {
       setSaveMsg('저장 실패: ' + (e instanceof Error ? e.message : ''))
     }
   }, [adminKey])
+
+  const handleRegisterJob = useCallback(async (inquiryId: number) => {
+    if (!confirm('이 채용의뢰를 Job Board에 등록하시겠습니까?')) return
+    setRegisteringId(inquiryId)
+    try {
+      const res = await fetch(`${API}/api/admin/jobs/create-from-inquiry/${inquiryId}`, {
+        method: 'POST',
+        headers: { 'x-admin-key': adminKey },
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setSaveMsg(`등록 실패: ${json.detail ?? json.message ?? res.statusText}`)
+      } else {
+        setSaveMsg(`${json.data?.job_code ?? 'Job'} 등록 완료`)
+        fetchData()
+      }
+      setTimeout(() => setSaveMsg(''), 4000)
+    } catch {
+      setSaveMsg('네트워크 오류')
+    } finally {
+      setRegisteringId(null)
+    }
+  }, [adminKey, fetchData])
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
@@ -143,6 +167,8 @@ export default function InquiriesPage() {
                 expanded={expanded === inq.id}
                 onToggle={() => setExpanded(expanded === inq.id ? null : inq.id)}
                 onUpdate={handleUpdate}
+                onRegisterJob={handleRegisterJob}
+                registeringId={registeringId}
               />
             ))}
             {!loading && rows.length === 0 && (
@@ -155,11 +181,13 @@ export default function InquiriesPage() {
   )
 }
 
-function TableRow({ inq, expanded, onToggle, onUpdate }: {
+function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, registeringId }: {
   inq: Inquiry
   expanded: boolean
   onToggle: () => void
   onUpdate: (id: number, field: string, value: string) => void
+  onRegisterJob: (id: number) => void
+  registeringId: number | null
 }) {
   const statusColor: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-700',
@@ -215,6 +243,24 @@ function TableRow({ inq, expanded, onToggle, onUpdate }: {
                 <p className="text-gray-700 mt-1 whitespace-pre-wrap">{inq.memo}</p>
               </div>
             )}
+            {/* 직업 등록 버튼 */}
+            <div className="mb-3">
+              {(inq.notes ?? '').includes('JOB_REGISTERED') ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
+                  ✓ 등록됨 — {(inq.notes ?? '').match(/JOB_REGISTERED:(\S+)/)?.[1] ?? ''}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onRegisterJob(inq.id) }}
+                  disabled={registeringId === inq.id}
+                  className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {registeringId === inq.id ? '등록 중...' : '직업 등록'}
+                </button>
+              )}
+            </div>
+
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <label className="text-xs font-medium text-gray-500 mb-1 block">관리자 메모</label>

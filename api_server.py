@@ -2584,6 +2584,93 @@ async def admin_toggle_job_hot(job_id: int, request: Request):
         conn.close()
 
 
+# ── Auto Backup Helper ─────────────────────────────────────────────────────────
+
+_db_change_count = 0
+_DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
+
+def _maybe_auto_backup():
+    """DB 변경 누적 카운트 → 10건마다 master.db.auto_backup 생성."""
+    global _db_change_count
+    _db_change_count += 1
+    if _db_change_count % _DB_BACKUP_INTERVAL != 0:
+        return
+    try:
+        import shutil
+        src = _ADMIN_DB_PATH
+        dst = src.with_suffix(".db.auto_backup")
+        shutil.copy2(str(src), str(dst))
+        logging.getLogger("bridge.api").info("AUTO_BACKUP: master.db → %s (after %d changes)", dst.name, _db_change_count)
+    except Exception as e:
+        logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
+
+
+# ── Admin: Create Job from Inquiry ─────────────────────────────────────────────
+
+@app.post("/api/admin/jobs/create-from-inquiry/{inquiry_id}", tags=["admin"])
+async def admin_create_job_from_inquiry(inquiry_id: int, request: Request):
+    """채용의뢰를 기반으로 새 job 레코드 생성 (PII 분리)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        inq = conn.execute("SELECT * FROM client_inquiries WHERE id = ?", (inquiry_id,)).fetchone()
+        if not inq:
+            raise HTTPException(404, "Inquiry not found")
+
+        # 재등록 방지: notes에 'JOB_REGISTERED' 마커 확인
+        notes = inq["notes"] or ""
+        if "JOB_REGISTERED" in notes:
+            raise HTTPException(409, "이미 등록된 채용의뢰입니다.")
+
+        # 새 job_code 생성 (max seq + 1)
+        max_row = conn.execute("SELECT MAX(id) FROM jobs").fetchone()
+        new_id = (max_row[0] or 0) + 1
+        job_code = f"Job.{new_id + 1000}"
+
+        # 급여 파싱
+        salary_raw = inq["salary_raw"] or ""
+        salary_nums = re.findall(r"[\d,.]+", salary_raw.replace(",", ""))
+        salary_min = float(salary_nums[0]) if salary_nums else None
+        salary_max = float(salary_nums[-1]) if len(salary_nums) > 1 else salary_min
+
+        # 근무시간 → daily_hours 파싱
+        wh = inq["working_hours"] or inq["schedule"] or ""
+        daily_hours = None
+        time_match = re.search(r"(\d{1,2}):?(\d{2})\s*[~\-]\s*(\d{1,2}):?(\d{2})", wh)
+        if time_match:
+            h1 = int(time_match.group(1)) + int(time_match.group(2)) / 60
+            h2 = int(time_match.group(3)) + int(time_match.group(4)) / 60
+            daily_hours = round(h2 - h1, 2) if h2 > h1 else None
+
+        # city 추출 (location에서 첫 단어)
+        loc = inq["location"] or ""
+        city = loc.split(",")[0].split(" ")[0].strip() if loc else ""
+
+        conn.execute(
+            """INSERT INTO jobs (job_code, seq, location, city, start_date, teaching_age,
+               working_hours, daily_hours, salary_min, salary_max, salary_raw,
+               vacation, housing, benefits, status, is_hot, is_deleted, created_at)
+               VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 0, 0, ?)""",
+            (
+                job_code, loc, city, inq["start_date"], inq["teaching_age"],
+                wh, daily_hours, salary_min, salary_max, salary_raw,
+                inq["vacation"], inq["housing_detail"] or inq["housing_type"],
+                inq["benefits"], datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+        # inquiry에 등록 마커 추가
+        new_notes = f"{notes}\nJOB_REGISTERED:{job_code}".strip()
+        conn.execute("UPDATE client_inquiries SET notes = ? WHERE id = ?", (new_notes, inquiry_id))
+        conn.commit()
+        _maybe_auto_backup()
+        return ok(message=f"Job {job_code} 생성 완료", data={"job_code": job_code})
+    finally:
+        conn.close()
+
+
 # ── Admin: Boards 관리 ─────────────────────────────────────────────────────────
 
 def _ensure_boards_table():

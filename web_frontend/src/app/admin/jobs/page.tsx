@@ -225,9 +225,18 @@ export default function AdminJobsPage() {
               {pageJobs.map((job) => {
                 const ages = (job.teaching_age ?? []).map((g) => AGE_LABEL[g as AgeGroup] ?? g).join(', ')
                 const isOpen = (job.status ?? 'open') === 'open'
+                let infoCount = 0
+                if (job.starting_date) infoCount++
+                if (job.working_hours) infoCount++
+                if (job.monthly_salary) infoCount++
+                if (job.teaching_age && job.teaching_age.length > 0) infoCount++
+                const lowInfo = infoCount < 3
                 return (
                   <tr key={job.job_id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${!isOpen ? 'opacity-50' : ''}`}>
-                    <td className="py-3 px-3 font-bold text-blue-600">{job.job_id}</td>
+                    <td className="py-3 px-3 font-bold text-blue-600">
+                      {job.job_id}
+                      {lowInfo && <span className="ml-1 text-[10px] text-amber-600 font-normal" title="정보 부족 — Job Board에 미표시">⚠</span>}
+                    </td>
                     <td className="py-3 px-3 text-gray-700">{job.location ?? '-'}</td>
                     <td className="py-3 px-3 text-gray-700">{ages || '-'}</td>
                     <td className="py-3 px-3 text-gray-600">{job.starting_date ?? '-'}</td>

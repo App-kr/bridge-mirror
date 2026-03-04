@@ -175,6 +175,12 @@ export interface PublicJob {
   /** Benefits array.  e.g. ["Visa sponsorship","Severance pay","Pension"] */
   employee_benefits:        string[] | null
 
+  /** Raw teaching age display string e.g. "Kindy - Elem" */
+  teaching_age_raw:         string | null
+
+  /** Extracted conditions/notes from start_date e.g. ["F visa only"] */
+  notes:                    string[] | null
+
   // ── UI helpers (non-sensitive) ──
   is_hot:                   boolean
   employment_type:          EmploymentType
