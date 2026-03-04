@@ -56,6 +56,33 @@ except ImportError:
     print("[ERROR] fastapi 없음: pip install fastapi uvicorn email-validator")
     sys.exit(1)
 
+# ── SafeJSONResponse: 모든 admin 응답에 사용 ────────────────────────────────
+
+class SafeJSONResponse(Response):
+    """JSON 직렬화 시 브라우저 JSON.parse 호환성을 100% 보장하는 Response."""
+    media_type = "application/json"
+
+    def __init__(self, content, status_code=200, **kwargs):
+        body = json.dumps(
+            self._sanitize(content),
+            ensure_ascii=False,
+            default=str,
+        )
+        super().__init__(content=body, status_code=status_code, media_type=self.media_type, **kwargs)
+
+    @classmethod
+    def _sanitize(cls, obj):
+        if isinstance(obj, str):
+            obj = obj.replace('\x00', '')
+            obj = ''.join(c for c in obj if ord(c) >= 32 or c in '\n\r\t')
+            obj = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', obj)
+            return obj
+        elif isinstance(obj, dict):
+            return {k: cls._sanitize(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [cls._sanitize(v) for v in obj]
+        return obj
+
 try:
     from PIL import Image as PILImage
     _PILLOW_OK = True
@@ -290,6 +317,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
+    default_response_class=SafeJSONResponse,
 )
 
 # 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
@@ -816,7 +844,7 @@ async def inquiry(request: Request, body: ClientInquiry):
 async def global_exception_handler(request: Request, exc: Exception):
     import logging as _logging
     _logging.getLogger("bridge.api").error("Unhandled exception: %s", exc, exc_info=True)
-    return JSONResponse(
+    return SafeJSONResponse(
         status_code=500,
         content={"success": False, "message": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."},
     )
@@ -1195,24 +1223,17 @@ async def admin_candidates(
                     d[k] = _sanitize_str(v)
                 candidates.append(d)
 
-            import json as _json_cand
             payload = ok(
                 data={"total": total, "candidates": candidates},
                 message=f"{len(candidates)}명 조회",
             )
-            # ensure_ascii=True → 모든 비ASCII를 \uXXXX로 이스케이프 (브라우저 호환성 100%)
-            safe_json = _json_cand.dumps(payload, ensure_ascii=True, default=str)
-            return Response(
-                content=safe_json,
-                media_type="application/json",
-            )
+            return SafeJSONResponse(content=payload)
         finally:
             conn.close()
     except HTTPException:
         raise
     except Exception as e:
-        import logging as _log_cand
-        _log_cand.getLogger("bridge.api").error("admin_candidates 조회 실패: %s", e, exc_info=True)
+        logging.getLogger("bridge.api").error("admin_candidates 조회 실패: %s", e, exc_info=True)
         err("지원자 목록을 불러올 수 없습니다.", 500)
 
 

@@ -81,3 +81,13 @@ bridge-overnight/
 *.tmp
 debug_*.html
 night_shift_test.log
+
+# PyInstaller build artifacts
+bridge_agent/build_temp/
+bridge_agent/dist/
+*.pkg
+*.spec
+bridge_agent/build_temp/
+bridge_agent/dist/
+bridge_agent/*.spec
+bridge_agent/*.ico

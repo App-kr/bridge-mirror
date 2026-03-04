@@ -148,6 +148,8 @@ const POST_IMAGES: Record<string, string> = {
   Food:       'https://images.unsplash.com/photo-1532347231146-80afc9e3df2b?w=480&h=320&fit=crop',
   Healthcare: 'https://images.unsplash.com/photo-1516841273335-e39b37888115?w=480&h=320&fit=crop',
   Banking:    'https://images.unsplash.com/photo-1750262701487-4ca222c89ef4?w=480&h=320&fit=crop',
+  Transport:  'https://images.unsplash.com/photo-1588043213440-fd9c881853e9?w=480&h=320&fit=crop',
+  Phone:      'https://images.unsplash.com/photo-1731616103660-eb50daa4696d?w=480&h=320&fit=crop',
 }
 const KOREA_MAP_LINKS: Record<string, string> = {
   Seoul: 'https://maps.google.com/?q=Seoul,Korea',
@@ -159,22 +161,22 @@ const KOREA_MAP_LINKS: Record<string, string> = {
   Jeju: 'https://maps.google.com/?q=Jeju,Korea',
 }
 
-/** Match post title to image key */
+/** Match post title to image key — check specific keywords before generic ones */
 function getPostImageKey(title: string): string {
   const t = title.toLowerCase()
-  if (t.includes('seoul') || t.includes('서울')) return 'Seoul'
+  if (t.includes('transport') || t.includes('getting around') || t.includes('교통')) return 'Transport'
+  if (t.includes('phone') || t.includes('internet') || t.includes('통신') || t.includes('digital')) return 'Phone'
+  if (t.includes('food') || t.includes('음식')) return 'Food'
+  if (t.includes('health') || t.includes('의료')) return 'Healthcare'
+  if (t.includes('bank') || t.includes('금융') || t.includes('money')) return 'Banking'
   if (t.includes('gyeonggi') || t.includes('경기')) return 'Gyeonggi'
   if (t.includes('incheon') || t.includes('인천')) return 'Incheon'
   if (t.includes('busan') || t.includes('부산')) return 'Busan'
   if (t.includes('daegu') || t.includes('대구')) return 'Daegu'
   if (t.includes('daejeon') || t.includes('대전')) return 'Daejeon'
   if (t.includes('jeju') || t.includes('제주')) return 'Jeju'
-  if (t.includes('food') || t.includes('음식')) return 'Food'
-  if (t.includes('health') || t.includes('의료')) return 'Healthcare'
-  if (t.includes('bank') || t.includes('금융') || t.includes('money')) return 'Banking'
-  if (t.includes('phone') || t.includes('internet') || t.includes('통신')) return 'Seoul'
-  const keys = Object.keys(POST_IMAGES)
-  return keys[0]
+  if (t.includes('seoul') || t.includes('서울')) return 'Seoul'
+  return 'Seoul'
 }
 
 const TIPS_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
