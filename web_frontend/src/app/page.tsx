@@ -41,20 +41,20 @@ const ACADEMY_NAMES = [
   'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
   'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
   'JLS Jungsang', 'Real Class', 'Siwon School',
+  'Korea University Foreign Language Center',
 ]
 const SCHOOL_NAMES = [
   'Busan International Foreign School', 'Dalton School',
-  'Korea University Foreign Language Center', 'Busan Foreign School',
-  'Taejon Christian International School', 'Dulwich College Seoul',
-  'Gyeonggi English Village', 'Chadwick International',
-  'Korea International School', 'Gangwon English Camp',
-  'Yongsan International School of Seoul', 'Dwight School Seoul',
+  'Taejon Christian International School', 'Busan Foreign School',
+  'Gyeonggi English Village', 'Dulwich College Seoul',
+  'Korea International School', 'Chadwick International',
+  'Gangwon English Camp', 'Dwight School Seoul',
+  'Yongsan International School of Seoul', 'Saint Paul Academy',
   'Paju English Village', 'Seoul Scholars International',
-  'North London Collegiate School', 'Saint Paul Academy',
-  'Daegu International School', 'Seoul Foreign School',
-  'Gyeonggi International School', 'British Council Korea',
-  'Mountain Cherry Academy', 'Jeju International School',
-  'Seoul International School',
+  'North London Collegiate School', 'Seoul Foreign School',
+  'Daegu International School', 'British Council Korea',
+  'Gyeonggi International School', 'Jeju International School',
+  'Mountain Cherry Academy', 'Seoul International School',
 ]
 
 // ── Get deterministic name — rotates monthly ──
@@ -533,13 +533,13 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Row 2 — Our Partner Academies */}
+        {/* Row 2 — Our Partner */}
         <div>
           <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
-            Our Partner Academies
+            Our Partner
           </p>
           <div className="relative" aria-hidden="true">
-            <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
+            <div className="marquee-track marquee-track--slow">
               {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
                 <span
                   key={`a-${i}`}

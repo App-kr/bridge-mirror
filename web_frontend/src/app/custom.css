@@ -371,3 +371,10 @@ a.nav-cta[href="/inquiry"]:hover {
   color: white;
   border-color: #1d1d1f;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8. PARTNER MARQUEE — slower speed override
+   ═══════════════════════════════════════════════════════════════════════════ */
+.marquee-track--slow {
+  animation-duration: 90s;
+}
