@@ -4,14 +4,11 @@
  * MegaMenu — Apple-style dropdown + mobile hamburger.
  * layout.tsx 수정 불가이므로 DOM 이벤트로 기존 .nav-link에 hover 연동.
  * 검정 배경, 흰 텍스트, 200ms 슬라이드다운.
- *
- * Admin 모드: sessionStorage에 bridge_admin_key가 있으면
- * nav-link 클릭을 /admin/posts?board=... 로 리다이렉트 + Admin 뱃지 표시.
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 /* ── 드롭다운 데이터 ── */
 interface SubItem { href: string; label: string; labelKr?: string }
@@ -53,17 +50,6 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
 }
 
-/* ── Admin 모드: nav-link → /admin/posts?board= 매핑 ── */
-const ADMIN_NAV_MAP: Record<string, string> = {
-  '/community/about': '/admin/posts?board=about',
-  '/community/korea': '/admin/posts?board=korea',
-  '/community/visa': '/admin/posts?board=visa',
-  '/community/support': '/admin/posts?board=support',
-  '/community/support_kr': '/admin/posts?board=support_kr',
-  '/community/tips': '/admin/posts?board=tips',
-  '/community/information': '/admin/posts?board=information',
-}
-
 const MOBILE_LINKS = [
   { href: '/community/about', label: 'About us' },
   { href: '/community/korea', label: 'Korea' },
@@ -78,17 +64,9 @@ const MOBILE_LINKS = [
 export default function MegaMenu() {
   const [active, setActive] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [isAdminAuthed, setIsAdminAuthed] = useState(false)
   const pathname = usePathname()
-  const router = useRouter()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isAdminPage = pathname?.startsWith('/admin')
-
-  // Admin 인증 감지
-  useEffect(() => {
-    const key = sessionStorage.getItem('bridge_admin_key')
-    setIsAdminAuthed(!!key)
-  }, [pathname])
 
   // 네비게이션 시 닫기
   useEffect(() => {
@@ -116,54 +94,9 @@ export default function MegaMenu() {
     return () => { infoLink.remove() }
   }, [pathname, isAdminPage])
 
-  // Admin 모드: nav-link 클릭 인터셉트 → /admin/posts?board= 로 리다이렉트
-  useEffect(() => {
-    if (isAdminPage || !isAdminAuthed) return
+  // Admin 모드 nav 리다이렉트: 보안상 제거 (직접 /admin 접근만 허용)
 
-    const links = document.querySelectorAll<HTMLAnchorElement>('.nav-link')
-    const handlers: Array<{ el: HTMLAnchorElement; fn: (e: Event) => void }> = []
-
-    links.forEach((el) => {
-      const p = el.pathname
-      const adminTarget = ADMIN_NAV_MAP[p]
-      if (!adminTarget) return
-
-      const fn = (e: Event) => {
-        e.preventDefault()
-        e.stopPropagation()
-        router.push(adminTarget)
-      }
-      el.addEventListener('click', fn, true)
-      handlers.push({ el, fn })
-    })
-
-    return () => {
-      handlers.forEach(({ el, fn }) => el.removeEventListener('click', fn, true))
-    }
-  }, [pathname, isAdminPage, isAdminAuthed, router])
-
-  // Admin 뱃지 DOM inject
-  useEffect(() => {
-    if (isAdminPage || !isAdminAuthed) return
-
-    const nav = document.querySelector('.nav-glass')
-    if (!nav) return
-
-    const existing = nav.querySelector('#bridge-admin-badge')
-    if (existing) return
-
-    const badge = document.createElement('span')
-    badge.id = 'bridge-admin-badge'
-    badge.textContent = 'Admin'
-    badge.style.cssText = 'background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:9999px;margin-left:8px;letter-spacing:0.5px;position:absolute;right:16px;top:50%;transform:translateY(-50%);z-index:50;'
-    const wrapper = nav.querySelector('nav') ?? nav.querySelector('div')
-    if (wrapper) {
-      ;(wrapper as HTMLElement).style.position = 'relative'
-      wrapper.appendChild(badge)
-    }
-
-    return () => { badge.remove() }
-  }, [pathname, isAdminPage, isAdminAuthed])
+  // Admin 뱃지: 보안상 네비바에 노출하지 않음 (직접 /admin 접근만 허용)
 
   // .nav-link 에 hover 리스너 부착 (일반 모드 전용)
   useEffect(() => {
@@ -210,7 +143,7 @@ export default function MegaMenu() {
   return (
     <>
       {/* ── Desktop Dropdown Panel ── */}
-      {items && !isAdminAuthed && (
+      {items && (
         <div
           className="mega-panel"
           onMouseEnter={panelEnter}
@@ -251,17 +184,8 @@ export default function MegaMenu() {
         <>
           <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />
           <nav className="mobile-drawer">
-            {isAdminAuthed && (
-              <Link
-                href="/admin"
-                className={`mobile-nav-link font-bold text-red-600${pathname === '/admin' ? ' active' : ''}`}
-                onClick={() => setMobileOpen(false)}
-              >
-                Admin Dashboard
-              </Link>
-            )}
             {MOBILE_LINKS.map((l) => {
-              const href = isAdminAuthed && ADMIN_NAV_MAP[l.href] ? ADMIN_NAV_MAP[l.href] : l.href
+              const href = l.href
               return (
                 <Link
                   key={l.href}
