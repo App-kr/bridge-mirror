@@ -3,6 +3,7 @@
 const NAV_ITEMS = [
   { href: '/admin',              label: 'Dashboard',    icon: '📊' },
   { href: '/admin/inbox',        label: 'Inbox',        icon: '📧' },
+  { href: '/admin/jobs',          label: 'Jobs',         icon: '💼' },
   { href: '/admin/candidates',   label: 'Candidates',   icon: '👥' },
   { href: '/admin/inquiries',    label: 'Inquiries',    icon: '📩' },
   { href: '/admin/applications', label: 'Applications', icon: '📋' },

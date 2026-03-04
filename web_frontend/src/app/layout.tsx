@@ -39,11 +39,7 @@ const navLinks = [
   { href: '/jobs',                  label: 'Job Board' },
   { href: '/community/support',    label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
-]
-
-const communityDropdown = [
-  { href: '/community/testimonials', label: 'Testimonials', emoji: '💬' },
-  { href: '/community/tips',        label: 'Tips',         emoji: '💡' },
+  { href: '/community',            label: 'Community' },
 ]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -74,20 +70,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {link.label}
                 </Link>
               ))}
-              {/* Community with hover dropdown */}
-              <div className="nav-dropdown-wrap">
-                <Link href="/community" className="nav-link">
-                  Community
-                </Link>
-                <div className="nav-dropdown">
-                  {communityDropdown.map((item) => (
-                    <Link key={item.href} href={item.href} className="nav-dropdown-item">
-                      <span className="nav-dropdown-emoji">{item.emoji}</span>
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
             </div>
 
             <div className="flex items-center gap-2 ml-3">

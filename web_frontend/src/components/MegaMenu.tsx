@@ -35,18 +35,17 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
   '/community/support': [
     { href: '/community/support', label: 'FAQ (Teachers)', labelKr: '강사용 FAQ' },
+    { href: '/community/information', label: 'Information', labelKr: '팀·서비스 안내' },
     { href: '/inquiry', label: 'Contact Us', labelKr: '문의하기' },
-    { href: '/community/tips', label: 'Community', labelKr: '커뮤니티' },
   ],
   '/community/support_kr': [
     { href: '/community/support_kr', label: 'FAQ (기관용)', labelKr: '채용 FAQ' },
     { href: '/community/support_kr?tag=resources', label: '업무자료', labelKr: '채용 관련 자료' },
     { href: '/community/support_kr?tag=forms', label: '서식/양식', labelKr: '업무 서식' },
   ],
-  '/community/tips': [
-    { href: '/community/tips?tag=interview', label: 'Interview Tips', labelKr: '면접 팁' },
-    { href: '/community/tips?tag=teaching', label: 'Teaching Tips', labelKr: '교육 팁' },
-    { href: '/community/tips?tag=life', label: 'Life Tips', labelKr: '생활 팁' },
+  '/community': [
+    { href: '/community/testimonials', label: 'Testimonials', labelKr: '후기' },
+    { href: '/community/tips', label: 'Tips', labelKr: '교사 팁' },
   ],
 }
 
@@ -57,8 +56,7 @@ const MOBILE_LINKS = [
   { href: '/jobs', label: 'Job Board' },
   { href: '/community/support', label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
-  { href: '/community/tips', label: 'Tips' },
-  { href: '/community/information', label: 'Information' },
+  { href: '/community', label: 'Community' },
 ]
 
 export default function MegaMenu() {
@@ -73,30 +71,6 @@ export default function MegaMenu() {
     setMobileOpen(false)
     setActive(null)
   }, [pathname])
-
-  // layout.tsx 수정 금지 → "Information" 링크를 DOM에 동적 삽입
-  useEffect(() => {
-    if (isAdminPage) return
-    const nav = document.querySelector('.nav-glass nav, .nav-glass div[class*="flex"]')
-    if (!nav) return
-    const existing = nav.querySelector('a[href="/community/information"]')
-    if (existing) return
-
-    const tipsLink = nav.querySelector('a[href="/community/tips"]')
-    if (!tipsLink) return
-
-    const infoLink = document.createElement('a')
-    infoLink.href = '/community/information'
-    infoLink.className = tipsLink.className // nav-link 스타일 복사
-    infoLink.textContent = 'Information'
-    tipsLink.insertAdjacentElement('afterend', infoLink)
-
-    return () => { infoLink.remove() }
-  }, [pathname, isAdminPage])
-
-  // Admin 모드 nav 리다이렉트: 보안상 제거 (직접 /admin 접근만 허용)
-
-  // Admin 뱃지: 보안상 네비바에 노출하지 않음 (직접 /admin 접근만 허용)
 
   // .nav-link 에 hover 리스너 부착 (일반 모드 전용)
   useEffect(() => {

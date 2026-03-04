@@ -1,14 +1,15 @@
 'use client'
 
 /**
- * /jobs — Job Board (redesigned)
+ * /jobs — Job Board
  *
- * - Hero section (preserved design)
+ * - Hero section (preserved)
  * - Search + region/type filters
- * - HOT listings carousel
+ * - Auto-HOT: vacation >= 20 days OR hours <= 8h
+ * - HOT interleaving: 3 regular → 1 HOT
  * - Card grid: 3 / 2 / 1 columns
  * - Job detail modal
- * - Quick Apply panel
+ * - Pagination: 18 per page
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
@@ -16,11 +17,11 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
 import JobDetailModal from '@/components/JobDetailModal'
-import ApplyPanel from '@/components/ApplyPanel'
 import { fadeInUp, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 
 const API = ''
+const PER_PAGE = 18
 
 // ── Filters ──
 const REGIONS = [
@@ -54,6 +55,35 @@ const SORT_OPTIONS = [
 
 const MAJOR_CITIES = ['Seoul', 'Gyeonggi', 'Incheon', 'Busan', 'Daegu', 'Daejeon', 'Gwangju']
 
+// ── HOT detection ──
+function isAutoHot(job: PublicJob): boolean {
+  const vac = job.vacation ?? ''
+  const wkMatch = vac.match(/(\d+)\s*weeks?/i)
+  if (wkMatch && parseInt(wkMatch[1], 10) * 5 >= 20) return true
+  const nums = vac.match(/\d+/g)
+  if (nums && Math.max(...nums.map(Number)) >= 20) return true
+  if (job.hours_per_day != null && job.hours_per_day <= 8) return true
+  return false
+}
+
+// ── HOT interleaving: 3 regular → 1 HOT ──
+function interleaveHot(regular: PublicJob[], hot: PublicJob[]): PublicJob[] {
+  const result: PublicJob[] = []
+  let ri = 0, hi = 0
+  while (ri < regular.length) {
+    for (let i = 0; i < 3 && ri < regular.length; i++) {
+      result.push(regular[ri++])
+    }
+    if (hi < hot.length) {
+      result.push(hot[hi++])
+    }
+  }
+  while (hi < hot.length) {
+    result.push(hot[hi++])
+  }
+  return result
+}
+
 function salaryNum(job: PublicJob): number {
   const m = (job.monthly_salary ?? '').replace(/,/g, '').match(/\d+/)
   return m ? parseInt(m[0], 10) : 0
@@ -63,8 +93,8 @@ export default function JobsPage() {
   const [allJobs, setAllJobs] = useState<PublicJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [panelJob, setPanelJob] = useState<PublicJob | null>(null)
   const [detailJob, setDetailJob] = useState<PublicJob | null>(null)
+  const [page, setPage] = useState(1)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -72,6 +102,13 @@ export default function JobsPage() {
   const [jobType, setJobType] = useState('all')
   const [hotOnly, setHotOnly] = useState(false)
   const [sortBy, setSortBy] = useState('hot')
+
+  // HOT lookup set
+  const hotSet = useMemo(() => {
+    const s = new Set<string>()
+    allJobs.forEach((j) => { if (isAutoHot(j)) s.add(j.job_id) })
+    return s
+  }, [allJobs])
 
   // Load jobs + URL params
   useEffect(() => {
@@ -102,13 +139,13 @@ export default function JobsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Filtering
+  // Filtering + sorting
   const filtered = useMemo<PublicJob[]>(() => {
     let jobs = allJobs
 
-    if (hotOnly) jobs = jobs.filter((j) => j.is_hot)
+    if (hotOnly) jobs = jobs.filter((j) => hotSet.has(j.job_id))
 
-    // Region filter
+    // Region
     if (region !== 'all') {
       if (region === '__other__') {
         jobs = jobs.filter((j) => {
@@ -122,7 +159,7 @@ export default function JobsPage() {
       }
     }
 
-    // Job type filter
+    // Job type
     if (jobType !== 'all') {
       if (jobType === 'part_time') {
         jobs = jobs.filter((j) => j.employment_type === 'part_time')
@@ -145,28 +182,43 @@ export default function JobsPage() {
     // Sort
     if (sortBy === 'salary') jobs = [...jobs].sort((a, b) => salaryNum(b) - salaryNum(a))
     else if (sortBy === 'hours') jobs = [...jobs].sort((a, b) => (a.hours_per_day ?? 99) - (b.hours_per_day ?? 99))
-    else if (sortBy === 'latest') jobs = [...jobs] // already ordered by created_at DESC from API
+    else if (sortBy === 'latest') jobs = [...jobs]
     else jobs = [...jobs].sort((a, b) => {
-      if (b.is_hot !== a.is_hot) return Number(b.is_hot) - Number(a.is_hot)
+      const aHot = hotSet.has(a.job_id) ? 1 : 0
+      const bHot = hotSet.has(b.job_id) ? 1 : 0
+      if (bHot !== aHot) return bHot - aHot
       return (a.hours_per_day ?? 99) - (b.hours_per_day ?? 99)
     })
 
     return jobs
-  }, [allJobs, hotOnly, region, jobType, search, sortBy])
+  }, [allJobs, hotOnly, region, jobType, search, sortBy, hotSet])
 
-  const hotJobs = useMemo(() => allJobs.filter((j) => j.is_hot).slice(0, 6), [allJobs])
+  // Interleave HOT into regular list
+  const interleaved = useMemo(() => {
+    const regular = filtered.filter((j) => !hotSet.has(j.job_id))
+    const hot = filtered.filter((j) => hotSet.has(j.job_id))
+    return interleaveHot(regular, hot)
+  }, [filtered, hotSet])
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(interleaved.length / PER_PAGE))
+  const pageJobs = useMemo(() => {
+    const start = (page - 1) * PER_PAGE
+    return interleaved.slice(start, start + PER_PAGE)
+  }, [interleaved, page])
+
+  // Reset page on filter change
+  useEffect(() => { setPage(1) }, [search, region, jobType, hotOnly, sortBy])
 
   const hasFilters = region !== 'all' || jobType !== 'all' || hotOnly || search.trim()
   const clearFilters = useCallback(() => {
     setRegion('all'); setJobType('all'); setHotOnly(false); setSearch('')
   }, [])
 
-  const handleApplyFromDetail = useCallback(() => {
-    if (detailJob) {
-      setPanelJob(detailJob)
-      setDetailJob(null)
-    }
-  }, [detailJob])
+  const goPage = useCallback((p: number) => {
+    setPage(p)
+    window.scrollTo({ top: 400, behavior: 'smooth' })
+  }, [])
 
   return (
     <>
@@ -227,29 +279,8 @@ export default function JobsPage() {
       {/* ── Main content ── */}
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
 
-        {/* ── HOT Listings Section ── */}
-        {!loading && hotJobs.length > 0 && !hasFilters && (
-          <section className="mb-10">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg font-bold text-gray-900">Featured Positions</span>
-              <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">HOT</span>
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {hotJobs.map((job, i) => (
-                <JobCard
-                  key={`hot-${job.job_id}-${i}`}
-                  job={job}
-                  onDetail={() => setDetailJob(job)}
-                  onQuickApply={() => setPanelJob(job)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
         {/* ── Filter Bar ── */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          {/* Region */}
           <select
             value={region}
             onChange={(e) => setRegion(e.target.value)}
@@ -261,7 +292,6 @@ export default function JobsPage() {
             ))}
           </select>
 
-          {/* Job Type */}
           <select
             value={jobType}
             onChange={(e) => setJobType(e.target.value)}
@@ -273,7 +303,6 @@ export default function JobsPage() {
             ))}
           </select>
 
-          {/* HOT toggle */}
           <button
             type="button"
             onClick={() => setHotOnly((v) => !v)}
@@ -283,10 +312,9 @@ export default function JobsPage() {
                 : 'bg-[#f5f5f7] text-[#424245] hover:bg-red-50 hover:text-red-600'
             }`}
           >
-            HOT
+            🔥 HOT
           </button>
 
-          {/* Sort */}
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -299,15 +327,15 @@ export default function JobsPage() {
           </select>
         </div>
 
-        {/* Results count */}
+        {/* Page info */}
         <div className="flex items-center justify-between mb-6">
           <div className="text-sm text-[#86868b]">
             {loading ? (
               <span className="animate-pulse">Loading positions...</span>
             ) : (
               <span>
-                <span className="text-[#1d1d1f] font-semibold">{filtered.length}</span>
-                {' '}of {allJobs.length} positions
+                Page <span className="text-[#1d1d1f] font-semibold">{page}</span> of {totalPages}
+                {' '}<span className="text-xs">({interleaved.length} positions)</span>
               </span>
             )}
           </div>
@@ -323,11 +351,10 @@ export default function JobsPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-                <div className="skeleton h-4 w-1/3" />
-                <div className="skeleton h-5 w-3/4" />
+                <div className="skeleton h-5 w-1/3" />
+                <div className="skeleton h-4 w-3/4" />
                 <div className="skeleton h-4 w-1/2" />
                 <div className="skeleton h-4 w-2/3" />
-                <div className="skeleton h-10 w-full mt-2" />
               </div>
             ))}
           </div>
@@ -340,7 +367,7 @@ export default function JobsPage() {
           </div>
         )}
 
-        {!loading && !error && filtered.length === 0 && (
+        {!loading && !error && interleaved.length === 0 && (
           <div className="text-center py-20 space-y-3">
             <p className="text-[#86868b] text-lg">No positions match your filters.</p>
             {hasFilters && (
@@ -351,22 +378,73 @@ export default function JobsPage() {
           </div>
         )}
 
-        {/* Job grid */}
-        {!loading && filtered.length > 0 && (
+        {/* ── Job Grid ── */}
+        {!loading && pageJobs.length > 0 && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((job, i) => (
+            {pageJobs.map((job, i) => (
               <JobCard
                 key={`${job.job_id}-${i}`}
                 job={job}
-                onDetail={() => setDetailJob(job)}
-                onQuickApply={() => setPanelJob(job)}
+                isHot={hotSet.has(job.job_id)}
+                onClick={() => setDetailJob(job)}
               />
             ))}
           </div>
         )}
 
+        {/* ── Pagination ── */}
+        {!loading && totalPages > 1 && (
+          <nav className="flex items-center justify-center gap-1 mt-10">
+            <button
+              type="button"
+              onClick={() => goPage(page - 1)}
+              disabled={page <= 1}
+              className="px-3 py-2 text-sm rounded-lg disabled:opacity-30 disabled:cursor-not-allowed
+                         text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              ← Prev
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...')
+                acc.push(p)
+                return acc
+              }, [])
+              .map((item, idx) =>
+                item === '...' ? (
+                  <span key={`dot-${idx}`} className="px-2 text-gray-400 text-sm">...</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => goPage(item as number)}
+                    className={`w-9 h-9 text-sm rounded-lg font-medium transition-colors ${
+                      page === item
+                        ? 'bg-[#1d1d1f] text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+
+            <button
+              type="button"
+              onClick={() => goPage(page + 1)}
+              disabled={page >= totalPages}
+              className="px-3 py-2 text-sm rounded-lg disabled:opacity-30 disabled:cursor-not-allowed
+                         text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              Next →
+            </button>
+          </nav>
+        )}
+
         {/* Apply CTA */}
-        {!loading && filtered.length > 0 && (
+        {!loading && interleaved.length > 0 && (
           <motion.div
             className="text-center mt-12 mb-4"
             variants={fadeInUp}
@@ -387,12 +465,9 @@ export default function JobsPage() {
       {/* Job detail modal */}
       <JobDetailModal
         job={detailJob}
+        isHot={detailJob ? hotSet.has(detailJob.job_id) : false}
         onClose={() => setDetailJob(null)}
-        onApply={handleApplyFromDetail}
       />
-
-      {/* Quick Apply slide panel */}
-      <ApplyPanel job={panelJob} onClose={() => setPanelJob(null)} />
     </>
   )
 }

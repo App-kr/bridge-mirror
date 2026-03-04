@@ -59,57 +59,6 @@ a.nav-cta[href="/inquiry"]:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   1b. NAV DROPDOWN — Community hover menu (CSS-only)
-   ═══════════════════════════════════════════════════════════════════════════ */
-.nav-dropdown-wrap {
-  position: relative;
-}
-.nav-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  min-width: 170px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  padding: 6px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(4px);
-  transition: all 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
-  pointer-events: none;
-}
-.nav-dropdown-wrap:hover .nav-dropdown {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-.nav-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #1d1d1f;
-  transition: background 150ms;
-  white-space: nowrap;
-}
-.nav-dropdown-item:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: #0071e3;
-}
-.nav-dropdown-emoji {
-  font-size: 16px;
-  line-height: 1;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    2. SCROLL INDICATOR
    ═══════════════════════════════════════════════════════════════════════════ */
 @keyframes scrollPulse {
