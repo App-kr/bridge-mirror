@@ -59,6 +59,10 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("bridge_tg")
+# Reduce noise
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext.ExtBot").setLevel(logging.WARNING)
 
 config = Config()
 vault = KeyVault(VAULT_PATH)
@@ -494,7 +498,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":

@@ -102,7 +102,24 @@
       "Bash(echo ===:*)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/jobs/page.tsx && git commit -m \"$\\(cat <<'EOF'\nfix\\(jobs\\): 페이지네이션 마지막 페이지 번호 숨김\n\n마지막 페이지로 직접 점프 불가 — 일일이 » 클릭해야 도달.\n저급여 직업이 뒤에 있으므로 마지막 페이지 노출 방지.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/jobs/page.tsx && git commit -m \"$\\(cat <<'EOF'\nstyle\\(jobs\\): 환영 문구 그라데이션 + CTA 문구 변경\n\n- 부제: gradient text \\(gray → blue\\) 반짝 느낌\n- 문구: \"Welcome — we love teachers who are passionate about what they do.\"\n- CTA: \"Apply now! We match you with the best fit.\"\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
-      "Bash(cygpath:*)"
+      "Bash(cygpath:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add api_server.py web_frontend/src/app/admin/candidates/page.tsx && git commit -m \"$\\(cat <<'EOF'\nfix: candidates admin - JSON sanitize, all tab, DB column order, initials avatar\n\n- Add _sanitize_str\\(\\) to strip control chars from candidate text fields\n- Return JSONResponse with ensure_ascii=False and default=str for safe serialization\n- Add status=all support \\(no filter\\) with limit=9999 default\n- Add '전체' tab \\(default\\), '활성 지원자', '지난 지원자' tabs\n- Reorder columns to match DB schema order \\(76 columns\\)\n- Add initials avatar \\(colored circle\\) when no photo_url\n- Add JSON.parse error handling in frontend fetch\n- Add Active/Inactive to status color map\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add \"web_frontend/src/app/community/[board]/page.tsx\" && git commit -m \"$\\(cat <<'EOF'\nfix\\(community\\): Life in Korea 이미지 실제 한국 사진으로 교체\n\n기존 이미지가 후지산\\(일본\\), 산토리니\\(그리스\\), 오사카\\(일본\\) 등\n한국과 무관한 사진이었음. 실제 한국 랜드마크로 전면 교체:\n\n- Seoul: N서울타워 야경 스카이라인\n- Gyeonggi: 북촌 한옥마을\n- Incheon: 한국 도시 야경\n- Busan: 감천문화마을\n- Daegu: 한국 네온 거리 \\(기존 유지\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && ADMIN_KEY=\"7a2db33e163f3e46eec3f01bffeafabe2a03eeb9e133b11ac89d8f23e28a616a\" && curl -s \"http://localhost:8000/api/admin/candidates?limit=5\" -H \"x-admin-key: $ADMIN_KEY\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add api_server.py CLAUDE.md .env .memory/deployment.md && git commit -m \"$\\(cat <<'EOF'\nfix: bulletproof JSON serialization for candidates API\n\n- Enhanced _sanitize_str: remove C0/C1 control chars, surrogates, BOM\n- Switch to ensure_ascii=True + Response for 100% browser compatibility\n- Protect ADMIN_API_KEY/PASSWORD in CLAUDE.md \\(FROZEN, never modify\\)\n- Add FROZEN comments in .env around ADMIN_API_KEY\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add api_server.py CLAUDE.md .memory/deployment.md && git commit -m \"$\\(cat <<'EOF'\nfix: bulletproof JSON serialization for candidates API\n\n- Enhanced _sanitize_str: remove C0/C1 control chars, surrogates, BOM\n- Switch to ensure_ascii=True + Response for 100% browser compatibility\n- Protect ADMIN_API_KEY/PASSWORD in CLAUDE.md \\(FROZEN, never modify\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(sleep 4:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && gh release list --limit 3 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add api_server.py && git commit -m \"$\\(cat <<'EOF'\nfix: restore _sanitize_data function removed by mistake\n\nThe ok\\(\\) helper calls _sanitize_data\\(\\) on all response data,\nbut the function definition was accidentally removed during\nthe sanitize enhancement. Restored it.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\" && cd \"Q:/Claudework/bridge base\" && gh auth status 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add CLAUDE.md && git commit -m \"$\\(cat <<'EOF'\ndocs: ABSOLUTE FREEZE rule for ADMIN_API_KEY/PASSWORD in CLAUDE.md\n\nNever modify these env values under any circumstances.\nFix key transmission logic only, never change the keys themselves.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(echo:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git filter-branch --force --index-filter 'git rm -r --cached --ignore-unmatch bridge_agent/build_temp/' --prune-empty -- origin/main..HEAD 2>&1)",
+      "Bash(git add:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git reset HEAD candidates_test.json render_candidates.json audit/ .claude/settings.local.json 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git for-each-ref --format='%\\(refname\\)' refs/original/ | while read ref; do git update-ref -d \"$ref\"; done 2>&1)"
     ]
   }
 }
