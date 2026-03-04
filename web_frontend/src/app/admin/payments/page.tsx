@@ -37,7 +37,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function AdminPaymentsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   const [payments, setPayments] = useState<Payment[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -80,7 +80,7 @@ export default function AdminPaymentsPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const filtered = statusFilter === 'all' ? payments : payments.filter((p) => p.status === statusFilter)
   const totalAmount = payments.filter((p) => p.status === 'confirmed').reduce((s, p) => s + (p.amount || 0), 0)

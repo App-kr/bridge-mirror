@@ -66,7 +66,7 @@ function StatusBadge({ status }: { status: AdPost['status'] }) {
 }
 
 export default function AdminAdPostsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   const [data,      setData]      = useState<ApiData | null>(null)
   const [loading,   setLoading]   = useState(false)
@@ -94,7 +94,7 @@ export default function AdminAdPostsPage() {
     if (authed) fetchData()
   }, [authed, fetchData])
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   if (loading) {
     return (

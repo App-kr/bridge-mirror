@@ -21,7 +21,7 @@ interface GuideLink {
 }
 
 export default function GuideLinksPage() {
-  const { adminKey, authed, login } = useAdminAuth()
+  const { adminKey, authed, login, waking } = useAdminAuth()
 
   const [links, setLinks] = useState<GuideLink[]>([])
   const [loading, setLoading] = useState(false)
@@ -77,7 +77,7 @@ export default function GuideLinksPage() {
     setNewLabel('')
   }, [newKey, newUrl, newLabel, handleSave])
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="max-w-[1000px] mx-auto px-4 py-6">

@@ -32,7 +32,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
 const DEFAULT_KEYS = Object.keys(TEMPLATE_LABELS)
 
 export default function EmailTemplatesPage() {
-  const { adminKey, authed, login } = useAdminAuth()
+  const { adminKey, authed, login, waking } = useAdminAuth()
 
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(false)
@@ -108,7 +108,7 @@ export default function EmailTemplatesPage() {
     }
   }, [adminKey, fetchData])
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const existingKeys = new Set(templates.map((t) => t.template_key))
   const missingKeys = DEFAULT_KEYS.filter((k) => !existingKeys.has(k))

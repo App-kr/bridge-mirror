@@ -41,7 +41,7 @@ interface Inquiry {
 const STATUS_OPTIONS = ['pending', 'processing', 'completed']
 
 export default function InquiriesPage() {
-  const { adminKey, authed, login } = useAdminAuth()
+  const { adminKey, authed, login, waking } = useAdminAuth()
 
   const [rows, setRows] = useState<Inquiry[]>([])
   const [total, setTotal] = useState(0)
@@ -92,7 +92,7 @@ export default function InquiriesPage() {
     }
   }, [adminKey])
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">

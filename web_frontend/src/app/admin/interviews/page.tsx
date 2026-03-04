@@ -38,7 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function AdminInterviewsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [loading, setLoading] = useState(false)
@@ -118,7 +118,7 @@ export default function AdminInterviewsPage() {
     } catch { /* ignore */ }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">

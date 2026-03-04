@@ -77,7 +77,7 @@ interface ActivityItem {
 const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
 export default function AdminDashboardPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, waking, login, adminFetch } = useAdminAuth()
 
   const [stats, setStats] = useState<DashboardStats>({})
   const [inboxStats, setInboxStats] = useState<InboxStats>({})
@@ -86,18 +86,21 @@ export default function AdminDashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [wakeMsg, setWakeMsg] = useState(false)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setWakeMsg(false)
     try {
-      const h = headers()
+      const onWaking = () => setWakeMsg(true)
       const [dashRes, statsRes, monthlyRes, sourceRes] = await Promise.all([
-        fetch(`${API}/api/admin/dashboard`, { headers: h }),
-        fetch(`${API}/api/admin/stats`, { headers: h }),
-        fetch(`${API}/api/admin/stats/monthly`, { headers: h }),
-        fetch(`${API}/api/admin/stats/by-source`, { headers: h }),
+        adminFetch(`${API}/api/admin/dashboard`, undefined, onWaking),
+        adminFetch(`${API}/api/admin/stats`, undefined, onWaking),
+        adminFetch(`${API}/api/admin/stats/monthly`, undefined, onWaking),
+        adminFetch(`${API}/api/admin/stats/by-source`, undefined, onWaking),
       ])
+      setWakeMsg(false)
 
       if (dashRes.status === 403) { setError('관리자 키가 올바르지 않습니다.'); return }
 
@@ -116,14 +119,15 @@ export default function AdminDashboardPage() {
       setError(e instanceof Error ? e.message : '대시보드 로드 실패')
     } finally {
       setLoading(false)
+      setWakeMsg(false)
     }
-  }, [headers])
+  }, [adminFetch])
 
   useEffect(() => {
     if (authed) fetchAll()
   }, [authed, fetchAll])
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const thisMonthDelta = (inboxStats.this_month_candidates ?? 0)
   const lastMonthDelta = (inboxStats.last_month_candidates ?? 0)
@@ -155,7 +159,9 @@ export default function AdminDashboardPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-32 text-gray-400 animate-pulse">대시보드 로딩 중…</div>
+        <div className="text-center py-32 text-gray-400 animate-pulse">
+          {wakeMsg ? '서버 깨우는 중... 잠시만 기다려주세요' : '대시보드 로딩 중…'}
+        </div>
       ) : error ? (
         <div className="text-center py-32 space-y-4">
           <p className="text-red-500">{error}</p>

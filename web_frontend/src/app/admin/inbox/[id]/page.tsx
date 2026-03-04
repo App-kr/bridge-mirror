@@ -27,7 +27,7 @@ const STATUS_OPTIONS = [
 export default function InboxDetailPage() {
   const params = useParams()
   const itemId = params?.id as string
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [detail, setDetail] = useState<Record<string, any> | null>(null)
@@ -115,7 +115,7 @@ export default function InboxDetailPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const d = detail || {}
   const email = (d.email as string) || ''

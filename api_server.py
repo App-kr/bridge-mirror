@@ -815,6 +815,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ── Admin: ad_posts 대시보드 ──────────────────────────────────────────────────
 _ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db"))))
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
+_ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
 
 if not _ADMIN_KEY:
     import logging as _log_adm
@@ -833,6 +834,24 @@ def _check_admin(request: Request):
         return
     if request.headers.get("x-admin-key", "") != _ADMIN_KEY:
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
+
+
+@app.post("/api/admin/login", tags=["admin"])
+async def admin_login(request: Request):
+    """비밀번호 검증 → ADMIN_API_KEY 반환."""
+    ip = _ip_hash(request)
+    if not _rate_ok(ip, window=300, max_posts=10):
+        raise HTTPException(429, "Too many login attempts.")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    pw = str(body.get("password", ""))
+    if not _ADMIN_PW or not _ADMIN_KEY:
+        raise HTTPException(503, "관리자 인증이 설정되지 않았습니다.")
+    if pw != _ADMIN_PW:
+        raise HTTPException(403, "비밀번호가 올바르지 않습니다.")
+    return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
 
 
 @app.get("/api/admin/dashboard", tags=["admin"])

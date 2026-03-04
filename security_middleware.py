@@ -484,9 +484,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                     headers={"X-Request-ID": req_id},
                 )
 
-        # 5. HMAC 서명 검증 (관리자/보안 엔드포인트)
+        # 5. HMAC 서명 검증 (관리자/보안 엔드포인트, 로그인 제외)
+        HMAC_EXEMPT = {"/api/admin/login"}
         for signed_path in SIGNED_PATHS:
-            if path.startswith(signed_path) and method != "GET":
+            if path.startswith(signed_path) and method != "GET" and path not in HMAC_EXEMPT:
                 if not verify_hmac(request, body):
                     audit.log("INVALID_SIGNATURE", {
                         "ip": client_ip, "path": path

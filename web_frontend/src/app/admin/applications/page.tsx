@@ -38,7 +38,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function AdminApplicationsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   const [applications, setApplications] = useState<Application[]>([])
   const [tab, setTab] = useState<'all' | 'candidate' | 'employer'>('all')
@@ -81,7 +81,7 @@ export default function AdminApplicationsPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const filtered = tab === 'all' ? applications : applications.filter((a) => a.type === tab)
 

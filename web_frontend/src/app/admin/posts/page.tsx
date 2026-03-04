@@ -44,7 +44,7 @@ function getInitialBoard(): string {
 }
 
 export default function AdminPostsPage() {
-  const { authed, login, headers, signedFetch } = useAdminAuth()
+  const { authed, login, headers, signedFetch, waking } = useAdminAuth()
 
   const [posts, setPosts] = useState<Post[]>([])
   const [board, setBoard] = useState<string>(getInitialBoard)
@@ -256,7 +256,7 @@ export default function AdminPostsPage() {
     fetchPosts()
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">

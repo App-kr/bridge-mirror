@@ -30,7 +30,7 @@ const positionLabel = (p: string) => {
 }
 
 export default function AdminBannersPage() {
-  const { authed, login, headers, signedFetch } = useAdminAuth()
+  const { authed, login, headers, signedFetch, waking } = useAdminAuth()
 
   const [banners, setBanners] = useState<Banner[]>([])
   const [loading, setLoading] = useState(false)
@@ -151,7 +151,7 @@ export default function AdminBannersPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">

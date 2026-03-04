@@ -26,7 +26,7 @@ interface Board {
 const DISPLAY_MODES = ['list', 'card', 'gallery'] as const
 
 export default function AdminBoardsPage() {
-  const { authed, login, headers, signedFetch } = useAdminAuth()
+  const { authed, login, headers, signedFetch, waking } = useAdminAuth()
 
   const [boards, setBoards] = useState<Board[]>([])
   const [loading, setLoading] = useState(false)
@@ -143,7 +143,7 @@ export default function AdminBoardsPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">

@@ -434,7 +434,7 @@ function ProfileSendModal({
 
 /* ── 메인 페이지 ── */
 export default function CandidatesPage() {
-  const { adminKey, authed, login } = useAdminAuth()
+  const { adminKey, authed, login, waking } = useAdminAuth()
 
   const [rows, setRows] = useState<Record<string, string | null>[]>([])
   const [total, setTotal] = useState(0)
@@ -588,7 +588,7 @@ export default function CandidatesPage() {
 
   const colDefs = buildColumns(handleSave)
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="flex flex-col h-screen -mt-6 -mx-4">

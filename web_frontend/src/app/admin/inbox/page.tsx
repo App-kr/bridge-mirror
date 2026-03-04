@@ -65,7 +65,7 @@ const STATUS_BADGES: Record<string, string> = {
 }
 
 export default function AdminInboxPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, waking } = useAdminAuth()
 
   const [items, setItems] = useState<InboxItem[]>([])
   const [total, setTotal] = useState(0)
@@ -181,7 +181,7 @@ export default function AdminInboxPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} error={error} />
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">
