@@ -98,7 +98,11 @@
       "Bash(echo nothing to commit:*)",
       "Bash(node:*)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card premium redesign\" 2>&1)",
-      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card final polish\" 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card final polish\" 2>&1)",
+      "Bash(echo ===:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/jobs/page.tsx && git commit -m \"$\\(cat <<'EOF'\nfix\\(jobs\\): 페이지네이션 마지막 페이지 번호 숨김\n\n마지막 페이지로 직접 점프 불가 — 일일이 » 클릭해야 도달.\n저급여 직업이 뒤에 있으므로 마지막 페이지 노출 방지.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/jobs/page.tsx && git commit -m \"$\\(cat <<'EOF'\nstyle\\(jobs\\): 환영 문구 그라데이션 + CTA 문구 변경\n\n- 부제: gradient text \\(gray → blue\\) 반짝 느낌\n- 문구: \"Welcome — we love teachers who are passionate about what they do.\"\n- CTA: \"Apply now! We match you with the best fit.\"\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cygpath:*)"
     ]
   }
 }

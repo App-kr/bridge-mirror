@@ -1092,6 +1092,16 @@ def _decrypt_row(row: dict) -> dict:
     return row
 
 
+def _sanitize_str(v):
+    """Remove control characters that break JSON parsing."""
+    if not isinstance(v, str):
+        return v
+    import re as _re_san
+    v = v.replace('\x00', '')
+    v = _re_san.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', v)
+    return v
+
+
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
 _PAST_STATUSES = {"placed", "rejected", "withdrawn", "inactive", "Inactive", "Closed", "Deleted"}
 
@@ -1103,7 +1113,7 @@ async def admin_candidates(
     nationality: Optional[str] = None,
     visa:        Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
-    limit:       int = 500,
+    limit:       int = 9999,
     offset:      int = 0,
 ):
     """
@@ -1127,7 +1137,7 @@ async def admin_candidates(
             if visa:
                 where.append("e_visa LIKE ?")
                 params.append(f"%{visa}%")
-            if status_filter:
+            if status_filter and status_filter != "all":
                 if status_filter == "active":
                     placeholders = ",".join("?" * len(_ACTIVE_STATUSES))
                     where.append(f"status IN ({placeholders})")
@@ -1163,11 +1173,19 @@ async def admin_candidates(
                 d.setdefault("photo_url", None)
                 d.setdefault("thumb_url", None)
                 d.setdefault("target_age", d.get("target", ""))
+                for k, v in d.items():
+                    d[k] = _sanitize_str(v)
                 candidates.append(d)
 
-            return ok(
+            import json as _json_cand
+            payload = ok(
                 data={"total": total, "candidates": candidates},
                 message=f"{len(candidates)}명 조회",
+            )
+            return JSONResponse(
+                content=_json_cand.loads(
+                    _json_cand.dumps(payload, ensure_ascii=False, default=str)
+                )
             )
         finally:
             conn.close()

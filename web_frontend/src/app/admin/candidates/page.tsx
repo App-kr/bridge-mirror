@@ -53,7 +53,7 @@ const TEMPLATE_MAP: Record<string, { key: string; label: string }> = {
   email_arrival:     { key: 'arrival_guide',        label: '입국 안내' },
 }
 
-type TabType = 'active' | 'past'
+type TabType = 'active' | 'past' | 'all'
 
 /* ── 이메일 발송 셀 렌더러 ── */
 function EmailCellRenderer(props: ICellRendererParams & { colDef: { field?: string } }) {
@@ -203,7 +203,7 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
   })
 
   return [
-    /* ── 기본 정보 (2-2 순서) ── */
+    /* ── ID + 상태 + 사진 (고정) ── */
     { ...base, field: 'id', headerName: 'ID', width: 110, pinned: 'left',
       headerCheckboxSelection: true, checkboxSelection: true,
       valueFormatter: (p) => String(p.value ?? '').slice(0, 14) },
@@ -214,6 +214,7 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
         const c: Record<string, string> = {
           new: '#22c55e', reviewing: '#eab308', interviewing: '#3b82f6', offered: '#8b5cf6',
           placed: '#0ea5e9', rejected: '#ef4444', withdrawn: '#94a3b8', inactive: '#6b7280',
+          Active: '#22c55e', Inactive: '#6b7280',
         }
         return { color: c[p.value] ?? '#94a3b8', fontWeight: '600', borderLeft: '2px solid #3b82f6' }
       },
@@ -221,65 +222,65 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     { ...base, field: 'thumb_url', headerName: '사진', width: 50, filter: false, sortable: false,
       cellRenderer: (p: ICellRendererParams) => {
         const src = p.value
-        if (!src) return ''
+        if (!src) {
+          const name = (p.data?.full_name ?? '?') as string
+          const initial = name.charAt(0).toUpperCase()
+          const colors = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316']
+          const ci = name.charCodeAt(0) % colors.length
+          return `<div style="width:22px;height:22px;border-radius:50%;background:${colors[ci]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;line-height:1">${initial}</div>`
+        }
         const full = p.data?.photo_url ?? src
         const url = src.startsWith('http') ? src : `${API}${src}`
         const fullUrl = full.startsWith('http') ? full : `${API}${full}`
         return `<img src="${url}" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="window.__bridgePhotoModal__('${fullUrl}')" />`
       },
     },
-    { ...base, field: 'full_name', headerName: '이름', width: 130 },
+
+    /* ── 기본 정보 (DB 순서) ── */
     { ...base, field: 'email', headerName: '이메일', width: 180 },
+    { ...base, field: 'full_name', headerName: '이름', width: 130 },
     { ...base, field: 'nationality', headerName: '국적', width: 90 },
     { ...base, field: 'ancestry', headerName: '혈통', width: 80 },
-    { ...base, field: 'gender', headerName: '성별', width: 60 },
     { ...base, field: 'dob', headerName: '생년월일', width: 95 },
+    { ...base, field: 'gender', headerName: '성별', width: 60 },
     { ...base, field: 'current_location', headerName: '현재위치', width: 90 },
+    { ...base, field: 'start_date', headerName: '시작가능일', width: 95 },
+    { ...base, field: 'target', headerName: '대상', width: 80 },
+    { ...base, field: 'area_prefs', headerName: '희망지역', width: 90 },
+    { ...base, field: 'experience', headerName: '경력', width: 75 },
+    { ...base, field: 'employment', headerName: '고용형태', width: 80 },
+    { ...base, field: 'current_salary', headerName: '현재급여', width: 90 },
+    { ...base, field: 'desired_salary', headerName: '희망급여', width: 90 },
+    { ...base, field: 'certification', headerName: '자격증', width: 120 },
     { ...base, field: 'e_visa', headerName: '비자', width: 90 },
     { ...base, field: 'mobile_phone', headerName: '전화', width: 120 },
     { ...base, field: 'kakaotalk', headerName: '카카오톡', width: 100 },
-    { ...base, field: 'start_date', headerName: '시작가능일', width: 95 },
-    { ...base, field: 'area_prefs', headerName: '희망지역', width: 90 },
-    { ...base, field: 'experience', headerName: '경력', width: 75 },
-    { ...base, field: 'education_level', headerName: '학위', width: 80 },
-    { ...base, field: 'major', headerName: '전공', width: 90 },
-    { ...base, field: 'certification', headerName: '자격증', width: 120 },
-    { ...base, field: 'desired_salary', headerName: '희망급여', width: 90 },
-    { ...base, field: 'current_salary', headerName: '현재급여', width: 90 },
-    { ...base, field: 'interview_time', headerName: '인터뷰시간', width: 100 },
-    { ...base, field: 'employment', headerName: '고용형태', width: 80 },
+    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 80 },
+    { ...base, field: 'passport', headerName: '여권', width: 80 },
+    { ...base, field: 'housing', headerName: '숙소', width: 70 },
+    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 80 },
     { ...base, field: 'job_prefs', headerName: '직무선호', width: 100 },
     { ...editable, field: 'reference', headerName: '레퍼런스', width: 140 },
-    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 80 },
-    { ...base, field: 'health_info', headerName: '건강정보', width: 90 },
-    { ...base, field: 'personal_consideration', headerName: '개인고려', width: 90 },
-    { ...base, field: 'piercings', headerName: '피어싱', width: 70 },
-    { ...base, field: 'dependents', headerName: '부양가족', width: 80 },
-    { ...base, field: 'pets', headerName: '반려동물', width: 80 },
-    { ...base, field: 'married', headerName: '결혼여부', width: 80 },
-    { ...base, field: 'housing', headerName: '숙소', width: 70 },
-    { ...base, field: 'religion', headerName: '종교', width: 70 },
-    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 80 },
-    { ...base, field: 'korean_criminal_record', headerName: '한국범죄기록', width: 100 },
-    { ...base, field: 'consent', headerName: '동의', width: 60 },
-    { ...base, field: 'fact_check', headerName: '사실확인', width: 80 },
+    { ...base, field: 'documents', headerName: '서류', width: 80 },
+
+    /* ── 관리 필드 (DB 순서) ── */
+    { ...base, field: 'created_at', headerName: '등록일', width: 100,
+      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
+    { ...base, field: 'updated_at', headerName: '수정일', width: 100,
+      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
     { ...base, field: 'source', headerName: '지원경로', width: 90 },
-    { ...base, field: 'created_at', headerName: '타임스탬프', width: 100,
+    { ...base, field: 'inbox_status', headerName: '수신상태', width: 80 },
+    { ...editable, field: 'admin_notes', headerName: '메모', width: 200 },
+    { ...editable, field: 'assigned_to', headerName: '담당자', width: 100,
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: { values: ['', ...STAFF_NAMES] },
+    },
+    { ...base, field: 'last_activity', headerName: '최근활동', width: 100,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
 
-    /* ── 관리 컬럼 (2-3) ── */
-    dropdown('residence_type', '거주구분', RESIDENCE_OPTIONS, 90),
-    { ...base, field: 'target_level', headerName: '교육대상', width: 130,
-      cellRenderer: TargetLevelRenderer },
-    dropdown('start_detail', '시작상세', START_DETAIL_OPTIONS, 120),
-    dropdown('housing_type', '주거형태', HOUSING_TYPE_OPTIONS, 130),
-    { ...editable, field: 'recruiter_memo', headerName: '리크루터메모', width: 160 },
-    { ...editable, field: 'preferences', headerName: '희망사항', width: 140 },
-    { ...editable, field: 'dislikes', headerName: '기피사항', width: 140 },
+    /* ── 계약/이메일 ── */
     dropdown('contract_offered', '계약제안', YN_OPTIONS, 80),
     dropdown('contract_progress', '진행여부', YN_OPTIONS, 80),
-
-    /* ── 이메일 발송 (2-5) ── */
     emailSendCol('email_contract', '메일1(계약)'),
     emailSendCol('email_immigration', '메일2(출입국)'),
     emailSendCol('email_overseas', '메일3(영사)'),
@@ -294,13 +295,30 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     { ...editable, field: 'referral_fee', headerName: '소개비용', width: 90 },
     { ...editable, field: 'process_date', headerName: '처리일자', width: 90 },
     { ...editable, field: 'past_placement', headerName: '과거채용', width: 100 },
+    { ...editable, field: 'recruiter_memo', headerName: '리크루터메모', width: 160 },
+    { ...editable, field: 'preferences', headerName: '희망사항', width: 140 },
+    { ...editable, field: 'dislikes', headerName: '기피사항', width: 140 },
+    dropdown('residence_type', '거주구분', RESIDENCE_OPTIONS, 90),
+    dropdown('start_detail', '시작상세', START_DETAIL_OPTIONS, 120),
+    { ...base, field: 'target_level', headerName: '교육대상', width: 130,
+      cellRenderer: TargetLevelRenderer },
+    dropdown('housing_type', '주거형태', HOUSING_TYPE_OPTIONS, 130),
 
-    /* ── 내부 메모 ── */
-    { ...editable, field: 'admin_notes', headerName: '메모', width: 200 },
-    { ...editable, field: 'assigned_to', headerName: '담당자', width: 100,
-      cellEditor: 'agSelectCellEditor',
-      cellEditorParams: { values: ['', ...STAFF_NAMES] },
-    },
+    /* ── 추가 정보 ── */
+    { ...base, field: 'education_level', headerName: '학위', width: 80 },
+    { ...base, field: 'major', headerName: '전공', width: 90 },
+    { ...base, field: 'interview_time', headerName: '인터뷰시간', width: 100 },
+    { ...base, field: 'health_info', headerName: '건강정보', width: 90 },
+    { ...base, field: 'personal_consideration', headerName: '개인고려', width: 90 },
+    { ...base, field: 'piercings', headerName: '피어싱', width: 70 },
+    { ...base, field: 'dependents', headerName: '부양가족', width: 80 },
+    { ...base, field: 'pets', headerName: '반려동물', width: 80 },
+    { ...base, field: 'married', headerName: '결혼여부', width: 80 },
+    { ...base, field: 'religion', headerName: '종교', width: 70 },
+    { ...base, field: 'korean_criminal_record', headerName: '한국범죄기록', width: 100 },
+    { ...base, field: 'consent', headerName: '동의', width: 60 },
+    { ...base, field: 'fact_check', headerName: '사실확인', width: 80 },
+    { ...base, field: 'target_age', headerName: '교육연령', width: 80 },
   ]
 }
 
@@ -447,7 +465,7 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState('')
   const [saveMsg, setSaveMsg] = useState('')
   const [photoModal, setPhotoModal] = useState<string | null>(null)
-  const [tab, setTab] = useState<TabType>('active')
+  const [tab, setTab] = useState<TabType>('all')
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkEmail, setBulkEmail] = useState('')
   const [profileModal, setProfileModal] = useState(false)
@@ -481,11 +499,18 @@ export default function CandidatesPage() {
       const res = await fetch(`${API}/api/admin/candidates?${params}`, {
         headers: { 'x-admin-key': adminKey },
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: { success?: boolean; data?: { candidates: Record<string, string | null>[]; total: number }; detail?: string; message?: string }
+      try {
+        json = JSON.parse(text)
+      } catch {
+        setError(`JSON 파싱 에러 (응답 길이: ${text.length})`)
+        return
+      }
       if (res.status === 403) { setError('관리자 키가 올바르지 않습니다.'); return }
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
-      setRows(json.data.candidates)
-      setTotal(json.data.total)
+      setRows(json.data?.candidates ?? [])
+      setTotal(json.data?.total ?? 0)
     } catch (e) {
       setError(e instanceof Error ? e.message : '데이터 로드 실패')
     } finally {
@@ -612,6 +637,13 @@ export default function CandidatesPage() {
         <div className="flex bg-gray-100 rounded-lg p-0.5 ml-2">
           <button type="button"
             className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              tab === 'all' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('all')}>
+            전체
+          </button>
+          <button type="button"
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
               tab === 'active' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setTab('active')}>
@@ -645,14 +677,14 @@ export default function CandidatesPage() {
         <select className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
           value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
           <option value="">상태 선택</option>
-          {(tab === 'active' ? PAST_STATUSES : ACTIVE_STATUSES).map((s) => (
+          {[...ACTIVE_STATUSES, ...PAST_STATUSES].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
         <button type="button"
           className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40"
           onClick={handleBulkStatus} disabled={!bulkStatus}>
-          {tab === 'active' ? '지난으로 이동' : '활성으로 이동'}
+          {tab === 'active' ? '지난으로 이동' : tab === 'past' ? '활성으로 이동' : '상태 변경'}
         </button>
 
         <span className="text-gray-300">|</span>
