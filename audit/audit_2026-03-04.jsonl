@@ -106,3 +106,8 @@
 {"ts": "2026-03-04T06:32:58.290938+00:00", "event": "REQUEST", "severity": "INFO", "id": "db7d4a01-adbe-4219-84e9-b58bcb32b104", "ip": "127.0.0.1", "method": "GET", "path": "/api/jobs", "status": 200, "duration_ms": 124, "req_id": "c4cde3a2"}
 {"ts": "2026-03-04T07:35:10.841518+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "3d40722a-cd46-4435-bb87-4edb7be6ac63", "ip": "127.0.0.1", "path": "/api/admin/login"}
 {"ts": "2026-03-04T07:35:52.781990+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "642364c8-9e82-4f63-ac3e-1402f7c3e65a", "ip": "127.0.0.1", "path": "/api/admin/login"}
+{"ts": "2026-03-04T08:05:25.745428+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "6cc9bde2-054b-44b1-a483-686c2109aac8", "ip": "127.0.0.1", "path": "/api/admin/login"}
+{"ts": "2026-03-04T08:06:59.241179+00:00", "event": "REQUEST", "severity": "INFO", "id": "de769aa4-ae00-4264-a515-95aac1b93904", "ip": "127.0.0.1", "method": "GET", "path": "/", "status": 200, "duration_ms": 10, "req_id": "0b954804"}
+{"ts": "2026-03-04T08:13:05.355866+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "143c19be-e881-424b-bf5d-da86e3800e65", "ip": "127.0.0.1", "path": "/api/admin/login/"}
+{"ts": "2026-03-04T08:13:05.645313+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "7836c9a7-df8a-4f95-bae5-f43be707a52b", "ip": "127.0.0.1", "path": "/api/admin/login"}
+{"ts": "2026-03-04T08:13:56.931913+00:00", "event": "INVALID_SIGNATURE", "severity": "CRITICAL", "id": "fc9cdcfc-a0d9-4bff-b5d8-3b6c5a2f37cd", "ip": "127.0.0.1", "path": "/api/admin/login"}
