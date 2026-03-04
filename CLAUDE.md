@@ -1,5 +1,15 @@
 # BRIDGE — Claude Code 지침
 
+## 최우선 규칙: 자동백업
+- 모든 작업 시작 전 반드시: `git add -A && git commit -m "pre-work backup: [작업명]"`
+- 파일 수정 전 해당 파일 `.bak` 복사본 생성
+- 대규모 수정 시 브랜치 생성 후 작업
+- 작업 완료 후 반드시: `git add -A && git commit -m "[작업내용]" && git push`
+- Q드라이브의 모든 파일은 항시 복구 가능해야 함
+- 세션 종료/컨텍스트 클리어 전 반드시 커밋+푸시
+- 자동백업 스크립트: `Q:/bridge-overnight/auto-backup.ps1`
+- 복구 스크립트: `Q:/bridge-overnight/restore.ps1`
+
 ## 프로젝트
 - **bridgejob.co.kr** — ESL 교사 채용 플랫폼
 - **스택**: FastAPI + Next.js 15 + Supabase + SQLite(master.db)
