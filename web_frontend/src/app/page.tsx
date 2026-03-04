@@ -37,17 +37,19 @@ const FALLBACK_TESTIMONIALS = [
 
 // ── Partner lists (schools vs academies) ──
 const ACADEMY_NAMES = [
-  'Chungdahm Learning', 'JLS Jungsang', 'Poly', 'April', 'DYB Choisun',
-  'Sogang SLP', 'Rise Korea', 'Warwick Franklin', 'Fast Track Kids',
-  'Hillside IYASkola', 'Avalon', 'YBM', 'Wall Street English',
-  'Siwon School', 'Real Class',
+  'Chungdahm Learning', 'YBM', 'Warwick Franklin', 'Poly',
+  'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
+  'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
+  'JLS Jungsang', 'Real Class', 'Siwon School',
 ]
 const SCHOOL_NAMES = [
-  'Korea University Foreign Language Center', 'Seoul International School',
-  'Yongsan International School', 'Busan Foreign School',
-  'Daegu International School', 'Jeju International School',
-  'EPIK', 'GEPIK', 'SMOE', 'Gyeonggi English Village',
-  'Paju English Village', 'Gangwon English Camp', 'British Council Korea',
+  'Korea University Foreign Language Center', 'EPIK',
+  'Yongsan International School', 'SMOE',
+  'Seoul International School', 'GEPIK',
+  'Daegu International School', 'Gyeonggi English Village',
+  'Busan Foreign School', 'Paju English Village',
+  'Jeju International School', 'Gangwon English Camp',
+  'British Council Korea',
 ]
 
 // ── Get deterministic name — rotates monthly ──

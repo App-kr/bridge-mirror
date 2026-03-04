@@ -1,7 +1,7 @@
 {
   "127.0.0.1": {
-    "count": 1,
-    "reason": "command_injection",
+    "count": 2,
+    "reason": "sql_injection",
     "until": ""
   }
 }

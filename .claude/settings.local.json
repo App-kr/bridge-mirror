@@ -81,7 +81,8 @@
       "Bash(cmd.exe:*)",
       "WebFetch(domain:seoul.craigslist.org)",
       "Bash(ssh:*)",
-      "Bash(WMIC PROCESS WHERE \"ProcessId=19612\" GET Name,CommandLine 2>/dev/null || powershell -Command \"Get-Process -Id 19612 | Select-Object Name,Path\" 2>/dev/null)"
+      "Bash(WMIC PROCESS WHERE \"ProcessId=19612\" GET Name,CommandLine 2>/dev/null || powershell -Command \"Get-Process -Id 19612 | Select-Object Name,Path\" 2>/dev/null)",
+      "Bash(test:*)"
     ]
   }
 }
