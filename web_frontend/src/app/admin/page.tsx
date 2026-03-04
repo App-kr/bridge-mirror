@@ -102,7 +102,19 @@ export default function AdminDashboardPage() {
       ])
       setWakeMsg(false)
 
-      if (dashRes.status === 403) { setError('관리자 키가 올바르지 않습니다.'); return }
+      if (dashRes.status === 403) {
+        const errBody = await dashRes.json().catch(() => ({}))
+        if (errBody.error?.includes?.('Access denied')) {
+          setError('일시적으로 차단되었습니다. 자동 재시도 중...')
+          const k = sessionStorage.getItem('bridge_admin_key') || ''
+          await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
+          setTimeout(() => window.location.reload(), 3000)
+          return
+        }
+        setError('관리자 키가 올바르지 않습니다. 다시 로그인해주세요.')
+        sessionStorage.removeItem('bridge_admin_key')
+        return
+      }
 
       const [dashJson, statsJson, monthlyJson, sourceJson] = await Promise.all([
         dashRes.json(), statsRes.json(), monthlyRes.json(), sourceRes.json(),
