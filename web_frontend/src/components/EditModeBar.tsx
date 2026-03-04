@@ -3,23 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-/**
- * EditModeBar — 관리자 로그인 시 페이지 상단에 노란 바 표시
- * 쿠키 'bridge_admin' 존재 시 편집 모드 활성화
- */
 export function useEditMode(): boolean {
   const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
-    // 쿠키에서 bridge_admin 확인
-    const hasCookie = document.cookie.split(';').some((c) =>
-      c.trim().startsWith('bridge_admin=')
-    )
-    // URL 파라미터 ?edit=true 확인
-    const params = new URLSearchParams(window.location.search)
-    const hasParam = params.get('edit') === 'true'
-
-    setEditMode(hasCookie || hasParam)
+    setEditMode(document.cookie.includes('bridge_edit_mode=true'))
   }, [])
 
   return editMode
@@ -30,38 +18,75 @@ export default function EditModeBar() {
 
   if (!editMode) return null
 
+  const exit = () => {
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    window.location.reload()
+  }
+
   return (
-    <div className="fixed top-0 left-0 right-0 z-[9999] bg-[#FFC107] text-[#1d1d1f] text-xs font-medium py-1.5 px-4 flex items-center justify-between shadow-sm">
-      <div className="flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-[#1d1d1f] animate-pulse" />
-        <span>관리자 모드</span>
-      </div>
-      <Link
-        href="/admin"
-        className="text-[#1d1d1f] hover:underline font-semibold"
-      >
-        Admin Panel →
-      </Link>
+    <div style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 9999,
+      background: 'linear-gradient(90deg, #fef3c7, #fde68a)',
+      borderBottom: '2px solid #f59e0b',
+      padding: '10px 24px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      fontSize: '14px',
+      fontWeight: 500,
+      color: '#92400e',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    }}>
+      <span>🔧 관리자 모드 — 게시물 제목 옆 ✏️ 를 클릭하여 편집</span>
+      <button onClick={exit} type="button" style={{
+        background: '#fff',
+        border: '1px solid #d1d5db',
+        borderRadius: '6px',
+        padding: '6px 16px',
+        cursor: 'pointer',
+        fontSize: '13px',
+        fontWeight: 600,
+        color: '#374151',
+      }}>
+        편집 종료
+      </button>
     </div>
   )
 }
 
-/** 게시물 수정 버튼 — 편집 모드일 때만 표시 */
-export function EditButton({ postId, board }: { postId: number; board?: string }) {
+export function EditButton({ postId, board }: { postId: number | string; board?: string }) {
   const editMode = useEditMode()
   if (!editMode) return null
 
   return (
-    <Link
-      href={`/admin?tab=community&edit=${postId}${board ? `&board=${board}` : ''}`}
-      className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#FFC107] text-[#1d1d1f] text-xs font-medium rounded-full hover:bg-[#FFB300] transition-colors"
+    <button
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        window.open(`/admin/posts?edit=${postId}${board ? `&board=${board}` : ''}`, '_blank')
+      }}
+      type="button"
+      style={{
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: '16px',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        marginLeft: '8px',
+        opacity: 0.7,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7' }}
+      title="편집"
     >
-      ✏️ 수정
-    </Link>
+      ✏️
+    </button>
   )
 }
 
-/** 새 게시물 버튼 — 편집 모드일 때만 표시 */
 export function NewPostButton({ board }: { board: string }) {
   const editMode = useEditMode()
   if (!editMode) return null

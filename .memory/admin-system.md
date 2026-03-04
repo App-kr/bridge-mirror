@@ -61,6 +61,16 @@ new → reviewing → interview_scheduled → hired / rejected
 new → reviewed → contacted → interview → hired / rejected
 ```
 
+## Craigslist 자동 광고 RPA
+- **스크립트**: `tools/craigslist_auto_rpa.py`
+- **실행 배치**: `scripts/run_rpa.bat` (`--headless --limit 10`)
+- **Windows 작업 스케줄러**: `BridgeCraigslistRPA` — 6시간 간격 (03:00, 09:00, 15:00, 21:00)
+- **Headless 모드**: 화면 없이 백그라운드 실행. CAPTCHA 발생 시 해당 건 스킵.
+- **DB**: `ad_posts` 테이블에 draft/posted/error 상태 기록
+- **로그**: `logs/rpa_error.log` (JSON 구조화), `logs/scheduler.log` (실행 로그)
+- **보안**: PII 자동 치환 (redact_pii) + 최종 검증 (security_check)
+- **주의**: PC 켜져 있어야 함 (잠금 상태 OK). 스케줄러 미등록 시 자동 실행 안 됨.
+
 ## Mobile/원격 접근 시
 - Admin API 키로 인증 (`X-Admin-Key` header)
 - VPN 또는 SSH 터널 경유 권장

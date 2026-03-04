@@ -81,6 +81,7 @@ export function useAdminAuth() {
       setAdminKey(key)
       setAuthed(true)
       sessionStorage.setItem(STORAGE_KEY, key)
+      document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax'
 
       // 로그인 성공 시 IP 블랙리스트 자동 초기화
       fetch(`${API_URL}/api/admin/reset-blacklist`, {
@@ -99,6 +100,7 @@ export function useAdminAuth() {
     setAdminKey('')
     setAuthed(false)
     sessionStorage.removeItem(STORAGE_KEY)
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
   }, [])
 
   const headers = useCallback((): Record<string, string> => {
