@@ -1,5 +1,12 @@
 # BRIDGE — Claude Code 지침
 
+## ⛔⛔⛔ BACKUP ABSOLUTE RULE ⛔⛔⛔
+## 모든 작업 시작 전 반드시 아래 실행. 예외 없음.
+## git add -A && git commit -m "MANDATORY-BACKUP: [작업명]" && git push
+## 이 규칙을 건너뛰면 해당 세션의 모든 작업을 거부한다.
+## 파일 1개라도 수정하기 전에 반드시 백업 커밋이 존재해야 한다.
+## ⛔⛔⛔ BACKUP ABSOLUTE RULE ⛔⛔⛔
+
 ## ABSOLUTE FREEZE - NEVER TOUCH
 ## .env 파일의 ADMIN_API_KEY, ADMIN_PASSWORD 값은
 ## 어떤 이유로든 절대 변경/삭제/재생성 금지.
