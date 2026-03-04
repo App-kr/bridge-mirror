@@ -864,6 +864,22 @@ async def admin_login(request: Request):
     return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
 
 
+@app.post("/api/admin/reset-blacklist", tags=["admin"])
+async def admin_reset_blacklist(request: Request):
+    """IP 블랙리스트 초기화 (관리자 전용)."""
+    _check_admin(request)
+    bl_path = Path(os.getenv("AUDIT_DIR", str(Path(__file__).resolve().parent / "audit"))) / "ip_blacklist.json"
+    bl_path.write_text("{}", encoding="utf-8")
+    # 메모리 블랙리스트도 초기화
+    try:
+        from security_middleware import ip_blacklist
+        ip_blacklist._list.clear()
+        ip_blacklist._save()
+    except Exception:
+        pass
+    return ok(message="IP 블랙리스트 초기화 완료")
+
+
 @app.get("/api/admin/dashboard", tags=["admin"])
 async def admin_dashboard(request: Request):
     """관리자 대시보드 — 전체 통계 + 최근 활동."""

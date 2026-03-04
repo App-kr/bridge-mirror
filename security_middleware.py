@@ -103,7 +103,7 @@ ATTACK_PATTERNS = {
         re.IGNORECASE
     ),
     "command_injection": re.compile(
-        r"(;|\||&|`|\$\(|>\s*/|<\s*/proc|/etc/passwd|/etc/shadow|"
+        r"(\|\||&&|`|\$\(|>\s*/|<\s*/proc|/etc/passwd|/etc/shadow|"
         r"nc\s+-|netcat|wget\s+http|curl\s+http|bash\s+-[ic])",
         re.IGNORECASE
     ),
@@ -116,8 +116,7 @@ ATTACK_PATTERNS = {
         re.IGNORECASE
     ),
     "ssrf": re.compile(
-        r"(localhost|127\.0\.0\.|0\.0\.0\.0|169\.254\.|"
-        r"metadata\.google|169\.254\.169\.254|"
+        r"(169\.254\.|metadata\.google|169\.254\.169\.254|"
         r"file:\/\/|gopher:\/\/|dict:\/\/)",
         re.IGNORECASE
     ),
@@ -433,6 +432,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         method = request.method
         req_id = str(uuid.uuid4())[:8]
 
+        # 0. 헬스체크/로그인은 미들웨어 검사 건너뛰기
+        BYPASS_PATHS = {"/", "/health", "/api/admin/login", "/api/admin/reset-blacklist"}
+        if path in BYPASS_PATHS:
+            response = await call_next(request)
+            return response
+
         # 1. IP 블랙리스트 차단
         if ip_blacklist.is_blocked(client_ip):
             audit.log("BLOCKED_IP", {"ip": client_ip, "path": path}, "WARNING")
@@ -460,12 +465,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             except Exception:
                 body = b""
 
-        # 4. 공격 패턴 탐지
+        # 4. 공격 패턴 탐지 (쿼리스트링 + body만 — UA/Referer는 오탐 방지로 제외)
         check_targets = [
             str(request.url.query),
             body.decode("utf-8", errors="replace"),
-            request.headers.get("User-Agent", ""),
-            request.headers.get("Referer", ""),
         ]
         for target in check_targets:
             attack_type = detect_attack(target)

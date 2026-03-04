@@ -1,38 +1,58 @@
 'use client'
 
 /**
- * /jobs — Job Board with hero, category tabs, redesigned cards
+ * /jobs — Job Board (redesigned)
  *
- * Security: reads `public_jobs` VIEW (anon key, no PII)
- * UX: client-side filtering (instant), Quick Apply panel (no redirect)
- * Motion: stagger card entrance, skeleton wave loading
+ * - Hero section (preserved design)
+ * - Search + region/type filters
+ * - HOT listings carousel
+ * - Card grid: 3 / 2 / 1 columns
+ * - Job detail modal
+ * - Quick Apply panel
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
+import JobDetailModal from '@/components/JobDetailModal'
 import ApplyPanel from '@/components/ApplyPanel'
-const API = ''
 import { fadeInUp, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 
-// ── Category tabs ──
-const CATEGORIES = [
-  { label: 'All', value: 'all' },
+const API = ''
+
+// ── Filters ──
+const REGIONS = [
+  { label: 'All Regions', value: 'all' },
   { label: 'Seoul', value: 'Seoul' },
   { label: 'Gyeonggi', value: 'Gyeonggi' },
-  { label: 'Busan', value: 'Busan' },
   { label: 'Incheon', value: 'Incheon' },
+  { label: 'Busan', value: 'Busan' },
+  { label: 'Daegu', value: 'Daegu' },
+  { label: 'Daejeon', value: 'Daejeon' },
+  { label: 'Gwangju', value: 'Gwangju' },
+  { label: 'Other', value: '__other__' },
+]
+
+const JOB_TYPES = [
+  { label: 'All Types', value: 'all' },
   { label: 'Kindergarten', value: 'kindergarten' },
   { label: 'Elementary', value: 'elementary' },
+  { label: 'Middle School', value: 'middle' },
+  { label: 'High School', value: 'high' },
+  { label: 'Adult', value: 'adult' },
+  { label: 'Part-time', value: 'part_time' },
 ]
 
 const SORT_OPTIONS = [
   { label: 'HOT first', value: 'hot' },
-  { label: 'Salary high', value: 'salary' },
+  { label: 'Salary (high)', value: 'salary' },
   { label: 'Fewest hours', value: 'hours' },
+  { label: 'Latest', value: 'latest' },
 ]
+
+const MAJOR_CITIES = ['Seoul', 'Gyeonggi', 'Incheon', 'Busan', 'Daegu', 'Daejeon', 'Gwangju']
 
 function salaryNum(job: PublicJob): number {
   const m = (job.monthly_salary ?? '').replace(/,/g, '').match(/\d+/)
@@ -44,86 +64,113 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [panelJob, setPanelJob] = useState<PublicJob | null>(null)
+  const [detailJob, setDetailJob] = useState<PublicJob | null>(null)
 
   // Filters
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('all')
+  const [region, setRegion] = useState('all')
+  const [jobType, setJobType] = useState('all')
   const [hotOnly, setHotOnly] = useState(false)
   const [sortBy, setSortBy] = useState('hot')
 
-  // ── Load + URL params ──
+  // Load jobs + URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const c = params.get('city')
     const a = params.get('age') as AgeGroup | null
     if (c) {
-      const match = CATEGORIES.find((cat) => cat.value.toLowerCase() === c.toLowerCase())
-      if (match) setCategory(match.value)
+      const match = REGIONS.find((r) => r.value.toLowerCase() === c.toLowerCase())
+      if (match) setRegion(match.value)
     }
     if (a) {
-      const match = CATEGORIES.find((cat) => cat.value === a)
-      if (match) setCategory(match.value)
+      const match = JOB_TYPES.find((t) => t.value === a)
+      if (match) setJobType(match.value)
     }
 
     setLoading(true)
-    fetch(`${API}/api/jobs?limit=500`)
+    fetch(`${API}/api/jobs?limit=2000`)
       .then((r) => r.json())
       .then((j) => {
         if (j.success && Array.isArray(j.data)) {
           setAllJobs(j.data)
           setError(null)
         } else {
-          setError('Failed to load positions. Please try again.')
+          setError('Failed to load positions.')
         }
       })
-      .catch(() => setError('Failed to load positions. Please try again.'))
+      .catch(() => setError('Failed to load positions.'))
       .finally(() => setLoading(false))
   }, [])
 
-  // ── Filtering ──
+  // Filtering
   const filtered = useMemo<PublicJob[]>(() => {
     let jobs = allJobs
 
     if (hotOnly) jobs = jobs.filter((j) => j.is_hot)
 
-    // Category can be a city or an age group
-    if (category !== 'all') {
-      const isAge = ['kindergarten', 'elementary', 'pre_k', 'middle', 'high'].includes(category)
-      if (isAge) {
-        jobs = jobs.filter((j) => (j.teaching_age ?? []).includes(category as AgeGroup))
+    // Region filter
+    if (region !== 'all') {
+      if (region === '__other__') {
+        jobs = jobs.filter((j) => {
+          const loc = (j.location ?? '').toLowerCase()
+          return !MAJOR_CITIES.some((c) => loc.includes(c.toLowerCase()))
+        })
       } else {
         jobs = jobs.filter((j) =>
-          (j.location ?? '').toLowerCase().includes(category.toLowerCase())
+          (j.location ?? '').toLowerCase().includes(region.toLowerCase())
         )
       }
     }
 
+    // Job type filter
+    if (jobType !== 'all') {
+      if (jobType === 'part_time') {
+        jobs = jobs.filter((j) => j.employment_type === 'part_time')
+      } else {
+        jobs = jobs.filter((j) => (j.teaching_age ?? []).includes(jobType as AgeGroup))
+      }
+    }
+
+    // Search
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       jobs = jobs.filter((j) =>
         (j.location ?? '').toLowerCase().includes(q) ||
         (j.job_id ?? '').toLowerCase().includes(q) ||
-        (j.preferences ?? '').toLowerCase().includes(q) ||
+        (j.monthly_salary ?? '').toLowerCase().includes(q) ||
         (j.teaching_age ?? []).some((g) => g.toLowerCase().includes(q))
       )
     }
 
+    // Sort
     if (sortBy === 'salary') jobs = [...jobs].sort((a, b) => salaryNum(b) - salaryNum(a))
     else if (sortBy === 'hours') jobs = [...jobs].sort((a, b) => (a.hours_per_day ?? 99) - (b.hours_per_day ?? 99))
+    else if (sortBy === 'latest') jobs = [...jobs] // already ordered by created_at DESC from API
     else jobs = [...jobs].sort((a, b) => {
       if (b.is_hot !== a.is_hot) return Number(b.is_hot) - Number(a.is_hot)
       return (a.hours_per_day ?? 99) - (b.hours_per_day ?? 99)
     })
 
     return jobs
-  }, [allJobs, hotOnly, category, search, sortBy])
+  }, [allJobs, hotOnly, region, jobType, search, sortBy])
 
-  const hasFilters = category !== 'all' || hotOnly || search.trim()
-  const clearFilters = () => { setCategory('all'); setHotOnly(false); setSearch('') }
+  const hotJobs = useMemo(() => allJobs.filter((j) => j.is_hot).slice(0, 6), [allJobs])
+
+  const hasFilters = region !== 'all' || jobType !== 'all' || hotOnly || search.trim()
+  const clearFilters = useCallback(() => {
+    setRegion('all'); setJobType('all'); setHotOnly(false); setSearch('')
+  }, [])
+
+  const handleApplyFromDetail = useCallback(() => {
+    if (detailJob) {
+      setPanelJob(detailJob)
+      setDetailJob(null)
+    }
+  }, [detailJob])
 
   return (
     <>
-      {/* ── Hero ── */}
+      {/* ── Hero (preserved) ── */}
       <motion.section
         className="bg-[#1d1d1f] text-white py-16 sm:py-20"
         initial={{ opacity: 0 }}
@@ -145,8 +192,7 @@ export default function JobsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            Verified ESL teaching jobs across Korea.
-            Updated daily.
+            Verified ESL teaching jobs across Korea. Updated daily.
           </motion.p>
 
           {/* Search bar */}
@@ -171,7 +217,7 @@ export default function JobsPage() {
                 onClick={() => setSearch('')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
               >
-                ✕
+                &times;
               </button>
             )}
           </motion.div>
@@ -179,36 +225,65 @@ export default function JobsPage() {
       </motion.section>
 
       {/* ── Main content ── */}
-      <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
 
-        {/* Category tabs */}
-        <div className="flex items-center gap-2 flex-wrap mb-6">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              type="button"
-              onClick={() => setCategory(cat.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                category === cat.value
-                  ? 'bg-[#1d1d1f] text-white'
-                  : 'bg-[#f5f5f7] text-[#424245] hover:bg-[#e8e8ed]'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+        {/* ── HOT Listings Section ── */}
+        {!loading && hotJobs.length > 0 && !hasFilters && (
+          <section className="mb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg font-bold text-gray-900">Featured Positions</span>
+              <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">HOT</span>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {hotJobs.map((job, i) => (
+                <JobCard
+                  key={`hot-${job.job_id}-${i}`}
+                  job={job}
+                  onDetail={() => setDetailJob(job)}
+                  onQuickApply={() => setPanelJob(job)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Filter Bar ── */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {/* Region */}
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            className="bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full
+                       px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer"
+          >
+            {REGIONS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+
+          {/* Job Type */}
+          <select
+            value={jobType}
+            onChange={(e) => setJobType(e.target.value)}
+            className="bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full
+                       px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer"
+          >
+            {JOB_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
 
           {/* HOT toggle */}
           <button
             type="button"
             onClick={() => setHotOnly((v) => !v)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ml-1 ${
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
               hotOnly
                 ? 'bg-red-600 text-white'
                 : 'bg-[#f5f5f7] text-[#424245] hover:bg-red-50 hover:text-red-600'
             }`}
           >
-            🔥 HOT
+            HOT
           </button>
 
           {/* Sort */}
@@ -216,8 +291,7 @@ export default function JobsPage() {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             className="ml-auto bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full
-                       px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#0071e3] cursor-pointer
-                       border-0"
+                       px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -225,7 +299,7 @@ export default function JobsPage() {
           </select>
         </div>
 
-        {/* Results count + clear */}
+        {/* Results count */}
         <div className="flex items-center justify-between mb-6">
           <div className="text-sm text-[#86868b]">
             {loading ? (
@@ -238,21 +312,17 @@ export default function JobsPage() {
             )}
           </div>
           {hasFilters && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-xs text-[#0071e3] hover:underline"
-            >
+            <button type="button" onClick={clearFilters} className="text-xs text-blue-600 hover:underline">
               Clear filters
             </button>
           )}
         </div>
 
-        {/* Skeleton loading with wave effect */}
+        {/* Skeleton */}
         {loading && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="rounded-2xl p-5 space-y-3">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
                 <div className="skeleton h-4 w-1/3" />
                 <div className="skeleton h-5 w-3/4" />
                 <div className="skeleton h-4 w-1/2" />
@@ -274,23 +344,23 @@ export default function JobsPage() {
           <div className="text-center py-20 space-y-3">
             <p className="text-[#86868b] text-lg">No positions match your filters.</p>
             {hasFilters && (
-              <button type="button" onClick={clearFilters} className="text-sm text-[#0071e3] hover:underline">
-                Clear all filters →
+              <button type="button" onClick={clearFilters} className="text-sm text-blue-600 hover:underline">
+                Clear all filters
               </button>
             )}
           </div>
         )}
 
-        {/* Job grid — instant render (no stagger for 500+ items) */}
+        {/* Job grid */}
         {!loading && filtered.length > 0 && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((job, i) => (
-              <div key={`${job.job_id}-${i}`}>
-                <JobCard
-                  job={job}
-                  onQuickApply={() => setPanelJob(job)}
-                />
-              </div>
+              <JobCard
+                key={`${job.job_id}-${i}`}
+                job={job}
+                onDetail={() => setDetailJob(job)}
+                onQuickApply={() => setPanelJob(job)}
+              />
             ))}
           </div>
         )}
@@ -305,7 +375,7 @@ export default function JobsPage() {
             viewport={defaultViewport}
           >
             <Link href="/apply" className="btn-primary text-base px-8 py-3">
-              Apply to All Positions →
+              Apply to All Positions
             </Link>
             <p className="text-xs text-[#86868b] mt-3">
               One application covers all open positions. We match you with the best fit.
@@ -313,6 +383,13 @@ export default function JobsPage() {
           </motion.div>
         )}
       </div>
+
+      {/* Job detail modal */}
+      <JobDetailModal
+        job={detailJob}
+        onClose={() => setDetailJob(null)}
+        onApply={handleApplyFromDetail}
+      />
 
       {/* Quick Apply slide panel */}
       <ApplyPanel job={panelJob} onClose={() => setPanelJob(null)} />
