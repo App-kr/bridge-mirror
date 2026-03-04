@@ -2,7 +2,7 @@
 
 /**
  * Homepage — Emergency Quality Overhaul
- * Flow: HERO → Hear from Our Teachers → Featured Positions → CTA → Partner Marquee
+ * Flow: HERO → Hear from Our Teachers → Featured Positions → Partner Marquee → CTA
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -50,12 +50,19 @@ const SCHOOL_NAMES = [
   'Paju English Village', 'Gangwon English Camp', 'British Council Korea',
 ]
 
-// ── Get deterministic name — rotates weekly ──
-function getWeeklyName(index: number): string {
-  const now = new Date()
-  const week = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))
-  return NAME_POOL[(index + week) % NAME_POOL.length]
+// ── Get deterministic name — rotates monthly ──
+function getMonthlyName(index: number): string {
+  const month = new Date().getMonth()
+  return NAME_POOL[(index + month) % NAME_POOL.length]
 }
+
+// ── Fallback featured jobs (when API fails) ──
+const FALLBACK_JOBS: PublicJob[] = [
+  { job_id: 'BR-2401', location: 'Seoul', teaching_age: ['elementary'] as AgeGroup[], working_hours: 'Mon-Fri 9-6', monthly_salary: '2.5M KRW', housing: 'Housing + Severance', is_hot: false, starting_date: 'ASAP' } as PublicJob,
+  { job_id: 'BR-2402', location: 'Busan', teaching_age: ['middle'] as AgeGroup[], working_hours: 'Mon-Fri 10-7', monthly_salary: '2.8M KRW', housing: 'Housing + Flight', is_hot: true, starting_date: 'ASAP' } as PublicJob,
+  { job_id: 'BR-2403', location: 'Incheon', teaching_age: ['pre_k', 'kindergarten'] as AgeGroup[], working_hours: 'Mon-Fri 9-5', monthly_salary: '2.3M KRW', housing: 'Housing + Insurance', is_hot: false, starting_date: 'ASAP' } as PublicJob,
+  { job_id: 'BR-2404', location: 'Daegu', teaching_age: ['elementary', 'middle'] as AgeGroup[], working_hours: 'Mon-Fri 10-6', monthly_salary: '2.6M KRW', housing: 'Housing + Bonus', is_hot: false, starting_date: 'ASAP' } as PublicJob,
+]
 
 // ── Strip markdown for preview ──
 function stripMd(text: string, max = 140): string {
@@ -147,24 +154,24 @@ export default function HomePage() {
       .then(d => {
         const posts = d?.data?.posts ?? []
         if (posts.length > 0) {
-          const week = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 86400000))
+          const month = new Date().getMonth()
           const seeded = [...posts].sort((a, b) => {
-            const ha = ((JSON.stringify(a).length * 31 + week) % 1000) / 1000
-            const hb = ((JSON.stringify(b).length * 31 + week) % 1000) / 1000
+            const ha = ((JSON.stringify(a).length * 31 + month) % 1000) / 1000
+            const hb = ((JSON.stringify(b).length * 31 + month) % 1000) / 1000
             return ha - hb
           })
           const shuffled = seeded.slice(0, 4)
           setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
             text: stripMd(p.preview ?? '', 140),
             stars: 5,
-            name: getWeeklyName(i),
+            name: getMonthlyName(i),
           })))
         } else {
-          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getWeeklyName(i) })))
+          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
         }
       })
       .catch(() => {
-        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getWeeklyName(i) })))
+        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
       })
   }, [])
 
@@ -181,7 +188,7 @@ export default function HomePage() {
           setJobs(seeded.slice(0, 4))
         }
       })
-      .catch(() => { /* silent — no jobs section if API fails */ })
+      .catch(() => { setJobs(FALLBACK_JOBS) })
   }, [])
 
   return (
@@ -379,12 +386,9 @@ export default function HomePage() {
             >
               <Link
                 href="/community/testimonials"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-[#2997ff] hover:text-[#6cb6ff] transition-colors duration-200"
+                className="text-sm font-medium text-white/50 hover:text-white/100 underline underline-offset-4 transition-all duration-300"
               >
-                더 보러가기
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
+                See more reviews &rarr;
               </Link>
             </motion.div>
           </div>
@@ -421,54 +425,48 @@ export default function HomePage() {
                 <motion.div key={job.job_id} variants={scaleIn}>
                   <Link
                     href="/jobs"
-                    className="group block shimmer-card bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6
-                               hover:bg-white/[0.07] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]
+                    className="group block shimmer-card bg-[#141414] border border-white/[0.06] rounded-xl p-6
+                               hover:bg-[#1a1a1a] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]
                                hover:shadow-[0_8px_32px_rgba(41,151,255,0.12)]"
                   >
-                    {/* Location + Job ID header */}
+                    {/* Location pill + Job ID */}
                     <div className="mb-5">
-                      <h3 className="text-white font-semibold text-base tracking-tight leading-snug">
+                      <span className="inline-block text-[11px] font-semibold px-3 py-1 rounded-full bg-white/[0.08] text-[#a1a1a6] mb-2">
                         {job.location ?? 'Korea'}
-                      </h3>
-                      <span className="text-[#2997ff] text-xs font-bold tracking-wide">
-                        {job.job_id}
                       </span>
                       {job.is_hot && (
                         <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase align-middle">
                           Hot
                         </span>
                       )}
+                      <p className="text-[#2997ff] text-xs font-bold tracking-wide mt-1">
+                        Job #{job.job_id}
+                      </p>
                     </div>
 
                     {/* Detail rows */}
                     <div className="space-y-2 text-[13px]">
-                      {job.starting_date && (
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Starting Date</span>
-                          <span className="text-[#a1a1a6] text-right truncate">{job.starting_date}</span>
-                        </div>
-                      )}
                       {job.teaching_age && job.teaching_age.length > 0 && (
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Teaching Age</span>
+                          <span className="text-[#636366] font-medium shrink-0">Student Age</span>
                           <span className="text-[#a1a1a6] text-right">{formatTeachingAge(job.teaching_age)}</span>
                         </div>
                       )}
                       {job.working_hours && (
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Working Hours</span>
+                          <span className="text-[#636366] font-medium shrink-0">Hours</span>
                           <span className="text-[#a1a1a6] text-right">{job.working_hours}</span>
                         </div>
                       )}
                       {job.monthly_salary && (
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Monthly Salary</span>
+                          <span className="text-[#636366] font-medium shrink-0">Salary</span>
                           <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary}</span>
                         </div>
                       )}
                       {job.housing && (
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Housing</span>
+                          <span className="text-[#636366] font-medium shrink-0">Benefits</span>
                           <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing}</span>
                         </div>
                       )}
@@ -498,10 +496,7 @@ export default function HomePage() {
                            border border-white/[0.15] text-white
                            hover:bg-white/[0.08] hover:border-white/[0.25] transition-all duration-300"
               >
-                전체 채용 보기
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
+                View all positions &rarr;
               </Link>
             </motion.div>
           </div>
@@ -509,10 +504,55 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
-          4. CTA — Start Your Journey
+          4. PARTNER MARQUEE — Academies + Schools 2줄
           ═══════════════════════════════════════════════════════════════════ */}
-      <section className="relative py-28 sm:py-32 border-t border-white/[0.06] overflow-hidden bg-black">
+      <section className="bg-[#111111] py-14 overflow-hidden border-t border-white/[0.06]">
+        {/* Row 1 — Academies */}
+        <div className="mb-4">
+          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+            Our Partner Academies
+          </p>
+          <div className="relative" aria-hidden="true">
+            <div className="marquee-track marquee-track--slow">
+              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
+                <span
+                  key={`a-${i}`}
+                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
 
+        {/* Row 2 — Schools & Institutions */}
+        <div>
+          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+            Schools &amp; Institutions
+          </p>
+          <div className="relative" aria-hidden="true">
+            <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
+              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
+                <span
+                  key={`s-${i}`}
+                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          5. CTA — Start Your Journey
+          ═══════════════════════════════════════════════════════════════════ */}
+      <section
+        className="relative py-20 sm:py-[80px] border-t border-white/[0.06] overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
+      >
         <div className="relative z-10 max-w-[700px] mx-auto px-5 sm:px-8">
           <motion.div
             className="text-center"
@@ -521,29 +561,28 @@ export default function HomePage() {
             whileInView="visible"
             viewport={defaultViewport}
           >
-            <p className="text-[#2997ff] text-sm font-semibold uppercase tracking-[0.2em] mb-4">Get Started</p>
-            <h2 className="text-4xl sm:text-5xl md:text-[56px] font-bold text-white tracking-tight leading-[1.1] mb-5">
+            <h2 className="text-4xl sm:text-5xl md:text-[56px] font-semibold text-white tracking-tight leading-[1.1] mb-5">
               Start Your Journey
             </h2>
-            <p className="text-[#a1a1a6] text-base sm:text-lg leading-relaxed mb-12 max-w-[480px] mx-auto">
-              Whether you&apos;re looking to teach in Korea or find the perfect teacher, BRIDGE connects you.
+            <p className="text-white/60 text-base sm:text-lg leading-relaxed mb-12 max-w-[480px] mx-auto">
+              Whether you&apos;re a teacher or an employer, we&apos;ll find the perfect match.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/apply"
-                className="cta-btn-primary inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-full
+                className="cta-btn-primary inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-lg
                            bg-[#2563EB] text-white min-w-[220px]
-                           hover:bg-[#1d4ed8] hover:shadow-[0_8px_30px_rgba(37,99,235,0.45)]
+                           hover:brightness-[1.15] hover:scale-[1.03] hover:shadow-[0_8px_30px_rgba(37,99,235,0.45)]
                            active:scale-[0.98] transition-all duration-300"
               >
                 I&apos;m a Teacher
               </Link>
               <Link
                 href="/inquiry"
-                className="cta-btn-outline inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-full
-                           border-2 border-white/25 text-white min-w-[220px]
-                           hover:bg-white hover:text-black hover:border-white hover:shadow-[0_8px_30px_rgba(255,255,255,0.12)]
+                className="cta-btn-outline inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-lg
+                           border border-white text-white min-w-[220px]
+                           hover:bg-white/10 hover:scale-[1.03]
                            active:scale-[0.98] transition-all duration-300"
               >
                 I&apos;m Hiring
@@ -551,156 +590,9 @@ export default function HomePage() {
             </div>
 
             {/* Contact info */}
-            <p className="mt-10 text-[#636366] text-sm">
+            <p className="mt-10 text-white/30 text-sm">
               bridgejobkr@gmail.com
             </p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          5. PARTNER MARQUEE — 학교/캠프 + 학원 2줄
-          ═══════════════════════════════════════════════════════════════════ */}
-      <section className="bg-black py-14 overflow-hidden border-t border-white/[0.06]">
-        <div className="max-w-[980px] mx-auto px-5 sm:px-8 mb-6">
-          <p className="text-[11px] font-semibold text-[#48484a] uppercase tracking-[0.2em] text-center">
-            Trusted by schools &amp; organizations across Korea
-          </p>
-        </div>
-
-        {/* Row 1 — Academies */}
-        <div className="mb-2">
-          <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
-            Academies
-          </p>
-          <div className="relative" aria-hidden="true">
-            <div className="marquee-track marquee-track--slow">
-              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
-                <span
-                  key={`a-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2 — Schools & Organizations */}
-        <div>
-          <p className="text-[10px] font-semibold text-[#636366] uppercase tracking-[0.15em] text-center mb-3">
-            Schools &amp; Organizations
-          </p>
-          <div className="relative" aria-hidden="true">
-            <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
-              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
-                <span
-                  key={`s-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-base sm:text-lg font-semibold select-none whitespace-nowrap text-[#3a3a3c]"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          6. SETTLING IN KOREA — Internet services + Social links
-          ═══════════════════════════════════════════════════════════════════ */}
-      <section className="bg-black py-16 sm:py-20 border-t border-white/[0.06]">
-        <div className="max-w-[980px] mx-auto px-5 sm:px-8">
-
-          {/* Internet Services */}
-          <motion.div
-            className="text-center mb-14"
-            variants={fadeInUp}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            <p className="text-[#2997ff] text-sm font-semibold uppercase tracking-[0.2em] mb-3">Settling In</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-3">
-              Internet &amp; Mobile in Korea
-            </h2>
-            <p className="text-[#86868b] text-sm max-w-lg mx-auto">
-              We help you set up internet and mobile service from day one. Korea has the world&apos;s fastest internet — here are the top providers.
-            </p>
-          </motion.div>
-
-          <motion.div
-            className="grid grid-cols-3 gap-4 sm:gap-6 max-w-lg mx-auto mb-16"
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            {/* KT */}
-            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
-              <div className="w-12 h-12 rounded-xl bg-[#e4002b]/10 flex items-center justify-center">
-                <span className="text-lg font-black text-[#e4002b]">KT</span>
-              </div>
-              <span className="text-xs font-semibold text-[#a1a1a6]">olleh</span>
-            </motion.div>
-
-            {/* SKT */}
-            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
-              <div className="w-12 h-12 rounded-xl bg-[#e4002b]/10 flex items-center justify-center">
-                <span className="text-sm font-black text-[#e4002b]">SK</span>
-              </div>
-              <span className="text-xs font-semibold text-[#a1a1a6]">T world</span>
-            </motion.div>
-
-            {/* LG U+ */}
-            <motion.div variants={fadeInUp} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors">
-              <div className="w-12 h-12 rounded-xl bg-[#e6007e]/10 flex items-center justify-center">
-                <span className="text-sm font-black text-[#e6007e]">U+</span>
-              </div>
-              <span className="text-xs font-semibold text-[#a1a1a6]">LG Uplus</span>
-            </motion.div>
-          </motion.div>
-
-          {/* Social Media */}
-          <motion.div
-            className="text-center"
-            variants={fadeInUp}
-            initial="hidden"
-            whileInView="visible"
-            viewport={defaultViewport}
-          >
-            <p className="text-[#86868b] text-sm mb-5">Follow us &amp; join the community</p>
-            <div className="flex items-center justify-center gap-5">
-              {/* YouTube */}
-              <a href="https://youtube.com" target="_blank" rel="noopener noreferrer"
-                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#ff0000]/20 hover:border-[#ff0000]/30 transition-all group">
-                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#ff0000] transition-colors" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-              </a>
-              {/* Facebook */}
-              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer"
-                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#1877f2]/20 hover:border-[#1877f2]/30 transition-all group">
-                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#1877f2] transition-colors" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-              </a>
-              {/* Threads */}
-              <a href="https://threads.net" target="_blank" rel="noopener noreferrer"
-                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.15] hover:border-white/[0.25] transition-all group">
-                <svg className="w-5 h-5 text-[#636366] group-hover:text-white transition-colors" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.59 12c.025 3.083.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.96-.065-1.182.408-2.26 1.332-3.031.88-.735 2.088-1.18 3.59-1.323.98-.094 1.975-.059 2.96.104.026-.82-.065-1.555-.267-2.186-.277-.865-.775-1.452-1.478-1.744-.758-.315-1.72-.327-2.86-.037l-.536-1.953c1.54-.39 2.946-.357 4.07.096 1.07.431 1.856 1.268 2.28 2.421.294.8.44 1.74.44 2.818l.002.348c.986.56 1.77 1.334 2.262 2.36.722 1.507.842 4.065-1.16 6.028-1.79 1.756-4.016 2.548-7.21 2.572zm2.032-8.081c-.94-.176-1.89-.218-2.828-.126-1.14.109-2.025.44-2.633.983-.55.49-.78 1.087-.648 1.684.166.752.86 1.336 1.885 1.59.423.104.88.154 1.347.154.609 0 1.235-.09 1.765-.266.89-.294 1.547-.834 1.96-1.604.37-.687.564-1.544.59-2.55a8.658 8.658 0 0 0-1.438.135z"/>
-                </svg>
-              </a>
-              {/* Reddit */}
-              <a href="https://reddit.com" target="_blank" rel="noopener noreferrer"
-                className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-[#ff4500]/20 hover:border-[#ff4500]/30 transition-all group">
-                <svg className="w-5 h-5 text-[#636366] group-hover:text-[#ff4500] transition-colors" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
-                </svg>
-              </a>
-            </div>
           </motion.div>
         </div>
       </section>
