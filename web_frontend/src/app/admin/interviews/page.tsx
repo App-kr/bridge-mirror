@@ -152,8 +152,11 @@ export default function AdminInterviewsPage() {
     candidate_name: '', candidate_email: '',
     employer_name: '', employer_email: '',
     interview_date: '', interview_time: '',
-    meet_link: '', notes: '',
+    meet_link: '', notes: '', duration_minutes: '60',
+    candidate_phone: '', employer_phone: '',
   })
+  const [candidates, setCandidates] = useState<{ id: number; name: string; email: string }[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
 
   const fetchInterviews = useCallback(async () => {
     setLoading(true)
@@ -200,7 +203,8 @@ export default function AdminInterviewsPage() {
       setActionMsg(`Interview #${json.data?.id} created!`)
       setShowForm(false)
       setForm({ candidate_name: '', candidate_email: '', employer_name: '', employer_email: '',
-        interview_date: '', interview_time: '', meet_link: '', notes: '' })
+        interview_date: '', interview_time: '', meet_link: '', notes: '', duration_minutes: '60',
+        candidate_phone: '', employer_phone: '' })
       fetchInterviews()
     } catch (e) {
       setActionMsg(`Error: ${e instanceof Error ? e.message : 'Failed'}`)
@@ -260,44 +264,98 @@ export default function AdminInterviewsPage() {
       {showForm && (
         <div className="card space-y-4">
           <h2 className="font-bold text-gray-900">Schedule New Interview</h2>
+
+          {/* Candidate search */}
+          <div>
+            <label className="text-xs font-medium text-gray-500">후보자 *</label>
+            <input className="input mt-1" placeholder="이름 또는 이메일 검색..."
+              value={searchTerm}
+              onChange={async (e) => {
+                setSearchTerm(e.target.value)
+                if (e.target.value.length >= 2) {
+                  try {
+                    const r = await fetch(`${API}/api/admin/candidates?search=${encodeURIComponent(e.target.value)}&limit=5`, { headers: headers() })
+                    const j = await r.json()
+                    if (j.success) setCandidates((j.data || []).map((c: Record<string, unknown>) => ({ id: c.id, name: c.name || c.first_name || '', email: c.email || '' })))
+                  } catch { setCandidates([]) }
+                } else setCandidates([])
+              }} />
+            {candidates.length > 0 && (
+              <div className="border border-gray-200 rounded-lg mt-1 bg-white shadow-sm max-h-40 overflow-auto">
+                {candidates.map(c => (
+                  <button key={c.id} type="button" className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
+                    onClick={() => {
+                      setForm({ ...form, candidate_name: c.name, candidate_email: c.email })
+                      setSearchTerm(c.name)
+                      setCandidates([])
+                    }}>
+                    {c.name} <span className="text-gray-400">({c.email})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { key: 'candidate_name', label: 'Candidate Name', ph: 'e.g. Sarah Johnson' },
-              { key: 'candidate_email', label: 'Candidate Email', ph: 'e.g. sarah@example.com' },
-              { key: 'employer_name', label: 'Employer Name', ph: 'e.g. ABC Academy' },
-              { key: 'employer_email', label: 'Employer Email', ph: 'e.g. admin@abc.com' },
-              { key: 'interview_date', label: 'Date (YYYY-MM-DD) *', ph: '2026-03-15' },
-              { key: 'interview_time', label: 'Time (HH:MM KST) *', ph: '14:00' },
+              { key: 'candidate_name', label: 'Candidate Name *', ph: 'e.g. Sarah Johnson' },
+              { key: 'candidate_email', label: 'Candidate Email *', ph: 'e.g. sarah@example.com' },
+              { key: 'employer_name', label: 'Employer Name *', ph: 'e.g. ABC Academy' },
+              { key: 'employer_email', label: 'Employer Email *', ph: 'e.g. admin@abc.com' },
+              { key: 'interview_date', label: 'Date *', ph: '2026-03-15' },
+              { key: 'interview_time', label: 'Time (KST) *', ph: '14:00' },
+              { key: 'candidate_phone', label: 'Candidate Phone', ph: '010-1234-5678' },
+              { key: 'employer_phone', label: 'Employer Phone', ph: '02-1234-5678' },
             ].map(({ key, label, ph }) => (
               <div key={key}>
                 <label className="text-xs font-medium text-gray-500">{label}</label>
                 <input className="input mt-1" placeholder={ph}
+                  type={key === 'interview_date' ? 'date' : key === 'interview_time' ? 'time' : 'text'}
                   value={(form as Record<string, unknown>)[key] as string}
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
               </div>
             ))}
           </div>
+
+          {/* Duration */}
+          <div>
+            <label className="text-xs font-medium text-gray-500">면접 시간</label>
+            <div className="flex gap-2 mt-1">
+              {['30', '45', '60'].map(d => (
+                <button key={d} type="button"
+                  className={`px-4 py-2 rounded-lg text-sm border transition-colors ${form.duration_minutes === d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => setForm({ ...form, duration_minutes: d })}>
+                  {d}분
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Meet link */}
           <div>
             <label className="text-xs font-medium text-gray-500">Google Meet Link *</label>
             <input className="input mt-1" placeholder="https://meet.google.com/xxx-xxxx-xxx"
               value={form.meet_link} onChange={(e) => setForm({ ...form, meet_link: e.target.value })} />
             <div className="mt-2 flex items-center gap-3 text-xs">
-              <span className="text-amber-600">* Meet 설정에서 &apos;회의 액세스 유형&apos;을 &apos;열기&apos;로 설정해주세요</span>
+              <span className="text-amber-600">* 회의 액세스 유형: &apos;열기&apos; 자동 설정됨</span>
               <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer"
                 className="text-blue-600 hover:underline font-medium">+ New Meet Room</a>
             </div>
           </div>
+
+          {/* Notes */}
           <div>
-            <label className="text-xs font-medium text-gray-500">Notes</label>
-            <input className="input mt-1" placeholder="Optional notes..."
+            <label className="text-xs font-medium text-gray-500">메모</label>
+            <textarea className="input mt-1" rows={2} placeholder="Optional notes..."
               value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
+
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">Cancel</button>
+              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">취소</button>
             <button type="button" onClick={handleCreate}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              Schedule Interview
+              저장
             </button>
           </div>
         </div>
@@ -349,32 +407,18 @@ export default function AdminInterviewsPage() {
                   {iv.notes && <p className="text-xs text-gray-400 mt-1">{iv.notes}</p>}
 
                   {/* Email send buttons */}
-                  {iv.status === 'scheduled' && (
-                    <div className="flex items-center gap-2 mt-3">
-                      {iv.email_sent_employer === 1 ? (
-                        <span className="text-[11px] text-green-600 flex items-center gap-1">
-                          ✓ School sent{iv.email_sent_employer_at ? ` (${iv.email_sent_employer_at.slice(0, 16)})` : ''}
-                        </span>
-                      ) : (
-                        <button type="button"
-                          onClick={() => setEmailModal({ id: iv.id, target: 'employer' })}
-                          className="text-[11px] px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50">
-                          Send to School
-                        </button>
-                      )}
-                      {iv.email_sent_candidate === 1 ? (
-                        <span className="text-[11px] text-green-600 flex items-center gap-1">
-                          ✓ Candidate sent{iv.email_sent_candidate_at ? ` (${iv.email_sent_candidate_at.slice(0, 16)})` : ''}
-                        </span>
-                      ) : (
-                        <button type="button"
-                          onClick={() => setEmailModal({ id: iv.id, target: 'candidate' })}
-                          className="text-[11px] px-2 py-1 rounded border border-teal-200 text-teal-600 hover:bg-teal-50">
-                          Send to Candidate
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button type="button"
+                      onClick={() => setEmailModal({ id: iv.id, target: 'employer' })}
+                      className={`text-[11px] px-2 py-1 rounded border ${iv.email_sent_employer === 1 ? 'border-green-200 text-green-600 hover:bg-green-50' : 'border-indigo-200 text-indigo-600 hover:bg-indigo-50'}`}>
+                      {iv.email_sent_employer === 1 ? '✓ 학교 발송됨 (재발송)' : '📧 학교 발송'}
+                    </button>
+                    <button type="button"
+                      onClick={() => setEmailModal({ id: iv.id, target: 'candidate' })}
+                      className={`text-[11px] px-2 py-1 rounded border ${iv.email_sent_candidate === 1 ? 'border-green-200 text-green-600 hover:bg-green-50' : 'border-teal-200 text-teal-600 hover:bg-teal-50'}`}>
+                      {iv.email_sent_candidate === 1 ? '✓ 후보자 발송됨 (재발송)' : '📧 후보자 발송'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1 shrink-0">

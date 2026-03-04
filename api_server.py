@@ -2099,13 +2099,13 @@ async def admin_list_applications(request: Request):
                     "updated_at": c["updated_at"],
                 })
 
-            # 구인자 (client_inquiries)
+            # 구인자 (client_inquiries) — 전체 로드
             inqs = conn.execute(
                 "SELECT id, school_name, contact_name, email, phone, location, "
-                "start_date, vacancies, teaching_age, working_hours, salary_raw, "
+                "start_date, vacancies, teaching_age, schedule, working_hours, salary_raw, "
                 "housing_type, housing_detail, travel_support, benefits, vacation, "
-                "memo, notes, assigned_to, inbox_status, submitted_at "
-                "FROM client_inquiries ORDER BY submitted_at DESC LIMIT 200"
+                "sick_leave, meal, memo, notes, assigned_to, inbox_status, submitted_at "
+                "FROM client_inquiries ORDER BY submitted_at DESC"
             ).fetchall()
             for i in inqs:
                 apps.append({
@@ -2117,6 +2117,7 @@ async def admin_list_applications(request: Request):
                     "start_date": i["start_date"],
                     "vacancies": i["vacancies"],
                     "teaching_age": i["teaching_age"],
+                    "schedule": i["schedule"],
                     "working_hours": i["working_hours"],
                     "salary_raw": i["salary_raw"],
                     "housing_type": i["housing_type"],
@@ -2124,6 +2125,8 @@ async def admin_list_applications(request: Request):
                     "travel_support": i["travel_support"],
                     "benefits": i["benefits"],
                     "vacation": i["vacation"],
+                    "sick_leave": i["sick_leave"],
+                    "meal": i["meal"],
                     "memo": i["memo"],
                     "notes": i["notes"],
                     "assigned_to": i["assigned_to"],
@@ -2453,8 +2456,33 @@ def _render_interview_email(interview: dict, target: str):
     meet_link = interview.get("meet_link") or ""
     to_email = interview.get("candidate_email") if target == "candidate" else interview.get("employer_email")
 
-    subject = row["subject"].replace("{candidate_first_name}", first_name).replace("{scheduled_at}", scheduled_at).replace("{meet_link}", meet_link)
-    html = row["body_html"].replace("{candidate_first_name}", first_name).replace("{scheduled_at}", scheduled_at).replace("{meet_link}", meet_link)
+    employer_name = interview.get("employer_name") or ""
+
+    replacements = {
+        "{candidate_first_name}": first_name,
+        "{candidate_name}": candidate_name,
+        "{scheduled_at}": scheduled_at,
+        "{meet_link}": meet_link,
+        "{employer_name}": employer_name,
+    }
+
+    subject = row["subject"]
+    html = row["body_html"]
+    for k, v in replacements.items():
+        subject = subject.replace(k, v)
+        html = html.replace(k, v)
+
+    # PII 격리 체크
+    candidate_email = interview.get("candidate_email") or ""
+    employer_email = interview.get("employer_email") or ""
+    if target == "employer":
+        # 고용주 메일에 후보자 이메일/전화 포함 시 차단
+        if candidate_email and candidate_email in html:
+            raise HTTPException(400, "PII violation: candidate email found in employer template")
+    elif target == "candidate":
+        # 후보자 메일에 고용주 이메일/전화 포함 시 차단
+        if employer_email and employer_email in html:
+            raise HTTPException(400, "PII violation: employer email found in candidate template")
 
     return subject, html, to_email
 
@@ -2502,10 +2530,13 @@ async def admin_send_interview_email(interview_id: int, body: InterviewSendEmail
         if not sent:
             conn.close()
             return err("이메일 발송 실패 (SMTP 설정 확인)", 500)
-        col_sent = f"email_sent_{body.target}"
-        col_at = f"email_sent_{body.target}_at"
+        sent_cols = {
+            "employer": ("email_sent_employer", "school_email_sent", "school_email_sent_at"),
+            "candidate": ("email_sent_candidate", "candidate_email_sent", "candidate_email_sent_at"),
+        }
+        old_col, new_col, new_at_col = sent_cols.get(body.target, ("email_sent_candidate", "candidate_email_sent", "candidate_email_sent_at"))
         conn.execute(
-            f"UPDATE interviews SET {col_sent}=1, {col_at}=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            f"UPDATE interviews SET {old_col}=1, {new_col}=1, {new_at_col}=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (interview_id,),
         )
         conn.commit()
