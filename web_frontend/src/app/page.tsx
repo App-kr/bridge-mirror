@@ -43,14 +43,18 @@ const ACADEMY_NAMES = [
   'JLS Jungsang', 'Real Class', 'Siwon School',
 ]
 const SCHOOL_NAMES = [
-  'Busan International Foreign School', 'Dulwich College Seoul',
-  'Taejon Christian International School', 'Chadwick International',
-  'Korea International School', 'Dalton School',
+  'Busan International Foreign School', 'Dalton School',
+  'Korea University Foreign Language Center', 'Busan Foreign School',
+  'Taejon Christian International School', 'Dulwich College Seoul',
+  'Gyeonggi English Village', 'Chadwick International',
+  'Korea International School', 'Gangwon English Camp',
   'Yongsan International School of Seoul', 'Dwight School Seoul',
-  'Gyeonggi International School', 'Seoul Scholars International',
+  'Paju English Village', 'Seoul Scholars International',
   'North London Collegiate School', 'Saint Paul Academy',
-  'Mountain Cherry Academy', 'Busan Foreign School',
-  'Seoul Foreign School',
+  'Daegu International School', 'Seoul Foreign School',
+  'Gyeonggi International School', 'British Council Korea',
+  'Mountain Cherry Academy', 'Jeju International School',
+  'Seoul International School',
 ]
 
 // ── Get deterministic name — rotates monthly ──
