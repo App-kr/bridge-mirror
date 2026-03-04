@@ -130,18 +130,32 @@ export function useAdminAuth() {
     )
   }, [adminKey])
 
-  /** 일반 GET fetch + Render wake-up */
+  /** 일반 GET fetch + Render wake-up + 블랙리스트 403 자동 복구 */
   const adminFetch = useCallback(async (
     url: string,
     options?: RequestInit,
     onWaking?: (attempt: number) => void,
   ): Promise<Response> => {
     const h = { 'Content-Type': 'application/json', ...(adminKey ? { 'x-admin-key': adminKey } : {}) }
-    return fetchWithWake(
+    const res = await fetchWithWake(
       url,
       { ...options, headers: { ...h, ...(options?.headers as Record<string, string> ?? {}) } },
       onWaking,
     )
+    if (res.status === 403 && adminKey) {
+      const body = await res.clone().json().catch(() => ({}))
+      if (body.error && (body.error.includes('Access denied') || body.error.includes('access denied'))) {
+        await fetch(`${API_URL}/api/admin/reset-blacklist`, {
+          method: 'POST', headers: { 'x-admin-key': adminKey },
+        }).catch(() => {})
+        return fetchWithWake(
+          url,
+          { ...options, headers: { ...h, ...(options?.headers as Record<string, string> ?? {}) } },
+          onWaking,
+        )
+      }
+    }
+    return res
   }, [adminKey])
 
   return { adminKey, authed, waking, login, logout, headers, signedFetch, adminFetch }

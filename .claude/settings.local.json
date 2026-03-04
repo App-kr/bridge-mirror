@@ -122,7 +122,9 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && git for-each-ref --format='%\\(refname\\)' refs/original/ | while read ref; do git update-ref -d \"$ref\"; done 2>&1)",
       "Bash(echo === Applications sample ===:*)",
       "Bash(find:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(schtasks //create //tn \"BridgeCraigslistRPA\" //tr \"\\\\\"Q:\\\\\\\\Claudework\\\\\\\\bridge base\\\\\\\\scripts\\\\\\\\run_rpa.bat\\\\\"\" //sc hourly //mo 6 //st 09:00 //f 2>&1 | iconv -f cp949 -t utf-8 2>/dev/null)",
+      "Bash(MSYS_NO_PATHCONV=1 schtasks:*)"
     ]
   }
 }

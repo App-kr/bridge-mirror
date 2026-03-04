@@ -133,8 +133,8 @@ def detect_attack(text: str) -> Optional[str]:
 # IP 블랙리스트 (메모리 + 파일 영속)
 # ═══════════════════════════════════════════════════════════════
 BLACKLIST_FILE = AUDIT_DIR / "ip_blacklist.json"
-IP_TTL_MINUTES = 30
-ATTACK_THRESHOLD = 3  # 3회 공격 시 자동 차단
+IP_TTL_MINUTES = 5
+ATTACK_THRESHOLD = 30
 
 class IPBlacklist:
     def __init__(self):
@@ -214,7 +214,7 @@ class RateLimiter:
 
     RULES = {
         # (endpoint_prefix, max_requests, window_seconds)
-        "/api/admin":    (120, 60),
+        "/api/admin":    (300, 60),
         "/api/security": (10,  60),
         "/api/apply":    (5,   300),
         "/api/inquiry":  (5,   300),
