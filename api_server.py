@@ -263,21 +263,21 @@ SUPABASE_URL      = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")   # 공개 API용
 SUPABASE_SVC_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "") # 서버사이드 삽입용
 
-# CORS 허용 출처 (CORS_ORIGINS 환경변수로 오버라이드 가능)
+# CORS 허용 출처 — 기본 도메인 + 환경변수 추가분 병합
+_CORE_ORIGINS = [
+    "https://bridgejob.co.kr",
+    "https://www.bridgejob.co.kr",
+    "https://bridge-chi-lime.vercel.app",
+]
+_DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:8080",
+]
 _cors_env = os.getenv("CORS_ORIGINS", "")
-ALLOWED_ORIGINS = (
-    [o.strip() for o in _cors_env.split(",") if o.strip()]
-    if _cors_env
-    else [
-        "https://bridgejob.co.kr",
-        "https://www.bridgejob.co.kr",
-        "https://bridge-chi-lime.vercel.app",
-        "http://localhost:3000",   # 개발용
-        "http://localhost:3001",   # 개발용
-        "http://localhost:3002",   # 개발용
-        "http://localhost:8080",   # 개발용
-    ]
-)
+_extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+ALLOWED_ORIGINS = list(dict.fromkeys(_CORE_ORIGINS + _extra + _DEV_ORIGINS))
 
 # ── 앱 초기화 ─────────────────────────────────────────────────────────────────
 # 프로덕션에서는 API 문서 비활성화 (BRIDGE_ENV=production 설정 시)
