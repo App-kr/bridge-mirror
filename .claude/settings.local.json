@@ -92,7 +92,10 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: review data check\" 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/page.tsx web_frontend/src/app/custom.css && git commit -m \"$\\(cat <<'EOF'\nfix: move Korea Univ FLC to academies, rename to Our Partner, slow marquee\n\n- Korea University Foreign Language Center → ACADEMY_NAMES로 이동\n- \"Our Partner Academies\" → \"Our Partner\"\n- 양쪽 마키 같은 방향\\(reverse 제거\\)\n- 속도 55s → 90s로 감속\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/page.tsx web_frontend/src/app/custom.css && git commit -m \"$\\(cat <<'EOF'\nfeat: add 9 academies + speed up bottom marquee row\n\nCrecerse, LinguaEdu, Simson Edu, LexKim English, MiEdu,\nTwinkle Language, SDA, Wiz Island, Kids College 추가\n아래줄\\(Our Partner\\) 90s → 60s로 가속\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
-      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/custom.css && git commit -m \"$\\(cat <<'EOF'\nfix: faster marquee — top 55s, bottom 28s\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/custom.css && git commit -m \"$\\(cat <<'EOF'\nfix: faster marquee — top 55s, bottom 28s\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && rm -rf .next && npm run build 2>&1)",
+      "WebFetch(domain:support.google.com)",
+      "Bash(echo nothing to commit:*)"
     ]
   }
 }
