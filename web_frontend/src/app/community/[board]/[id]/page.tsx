@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import MarkdownBody from '@/components/MarkdownBody'
 import { getBoardConfig } from '@/lib/boards'
+import EditModeBar, { EditButton } from '@/components/EditModeBar'
 
 const API = ''
 
@@ -58,6 +59,8 @@ export default function PostDetailPage() {
   })()
 
   return (
+    <>
+    <EditModeBar />
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
       {/* Disclaimer notice */}
       <div className="disclaimer-notice">
@@ -69,10 +72,13 @@ export default function PostDetailPage() {
         </p>
       </div>
 
-      {/* Title */}
-      <h1 className="text-[28px] sm:text-[36px] font-bold text-[#1d1d1f] leading-tight mb-3">
-        {post.title}
-      </h1>
+      {/* Title + Edit Button */}
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <h1 className="text-[28px] sm:text-[36px] font-bold text-[#1d1d1f] leading-tight">
+          {post.title}
+        </h1>
+        <EditButton postId={post.id} board={board} />
+      </div>
 
       <div className="mb-8" />
 
@@ -114,5 +120,6 @@ export default function PostDetailPage() {
         ← Back to {config.label}
       </Link>
     </div>
+    </>
   )
 }

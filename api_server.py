@@ -240,7 +240,7 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         try:
             data = json.loads(raw_body)
             clean = _scrub_obj(data)
-            clean_body = json.dumps(clean, ensure_ascii=False).encode("utf-8")
+            clean_body = json.dumps(clean, ensure_ascii=False, default=str).encode("utf-8")
         except (json.JSONDecodeError, Exception):
             clean_body = raw_body   # pass through if not parseable JSON
 
@@ -476,7 +476,7 @@ class ClientInquiry(BaseModel):
 
 # ── 공통 응답 ─────────────────────────────────────────────────────────────────
 def ok(data=None, message: str = "ok"):
-    return {"success": True, "message": message, "data": data}
+    return {"success": True, "message": message, "data": _sanitize_data(data)}
 
 
 def err(message: str, code: int = 400):
@@ -1093,13 +1093,24 @@ def _decrypt_row(row: dict) -> dict:
 
 
 def _sanitize_str(v):
-    """Remove control characters that break JSON parsing."""
+    """Remove control characters and fix invalid escape sequences that break JSON parsing."""
     if not isinstance(v, str):
         return v
-    import re as _re_san
     v = v.replace('\x00', '')
-    v = _re_san.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', v)
+    v = re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', v)
+    v = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', v)
     return v
+
+
+def _sanitize_data(obj):
+    """Recursively sanitize all string values in nested dicts/lists for safe JSON serialization."""
+    if isinstance(obj, str):
+        return _sanitize_str(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_data(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_data(item) for item in obj]
+    return obj
 
 
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
