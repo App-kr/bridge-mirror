@@ -1,15 +1,14 @@
 'use client'
 
 /**
- * /admin/applications — 접수 관리
- * 구직자 + 구인자 접수 통합 목록 (확장 가능 테이블)
+ * /admin/applications — 구인자 접수 관리
+ * 구인자(employer) 접수 목록 전용 (구직자는 /admin/candidates)
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import { STAFF_NAMES } from '@/lib/team'
 
 import { API_URL } from '@/lib/api'
 
@@ -17,15 +16,14 @@ const API = API_URL
 
 const STATUS_FLOW = ['pending', 'reviewing', 'verified', 'matched', 'placed', 'rejected'] as const
 
-interface Application {
+interface EmployerApp {
   id: string
-  type: 'candidate' | 'employer'
+  type: 'employer'
   name: string
   email: string
   status: string
   created_at: string
   updated_at?: string
-  // employer fields
   school_name?: string
   phone?: string | null
   location?: string | null
@@ -42,12 +40,6 @@ interface Application {
   memo?: string | null
   notes?: string | null
   assigned_to?: string | null
-  // candidate fields
-  nationality?: string | null
-  target?: string | null
-  target_age?: string | null
-  desired_salary?: string | null
-  experience?: string | null
 }
 
 const statusColors: Record<string, string> = {
@@ -65,8 +57,7 @@ const statusColors: Record<string, string> = {
 export default function AdminApplicationsPage() {
   const { authed, login, headers, waking } = useAdminAuth()
 
-  const [applications, setApplications] = useState<Application[]>([])
-  const [tab, setTab] = useState<'candidate' | 'employer'>('candidate')
+  const [employers, setEmployers] = useState<EmployerApp[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
@@ -92,7 +83,8 @@ export default function AdminApplicationsPage() {
       }
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
-      setApplications(json.data ?? [])
+      const all = json.data ?? []
+      setEmployers(all.filter((a: EmployerApp) => a.type === 'employer'))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -104,11 +96,11 @@ export default function AdminApplicationsPage() {
     if (authed) fetchApplications()
   }, [authed, fetchApplications])
 
-  const updateStatus = async (id: string, type: string, newStatus: string) => {
+  const updateStatus = async (id: string, newStatus: string) => {
     try {
       const res = await fetch(`${API}/api/admin/applications/${id}`, {
         method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ status: newStatus, type }),
+        body: JSON.stringify({ status: newStatus, type: 'employer' }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -122,37 +114,19 @@ export default function AdminApplicationsPage() {
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  const filtered = applications.filter((a) => a.type === tab)
-
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">
       <AdminNav active="/admin/applications" />
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">접수 관리</h1>
-          <p className="text-xs text-gray-500">구직자 · 구인자 접수 관리</p>
+          <h1 className="text-lg font-bold text-gray-900">구인자 접수 관리</h1>
+          <p className="text-xs text-gray-500">{employers.length}건의 구인 접수</p>
         </div>
         <div className="flex items-center gap-3">
           {actionMsg && <span className="text-xs text-green-600 font-medium">{actionMsg}</span>}
           <button type="button" onClick={fetchApplications} className="text-sm text-blue-600 hover:underline">↻ 새로고침</button>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4">
-        {(['candidate', 'employer'] as const).map((t) => (
-          <button key={t} type="button" onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              tab === t
-                ? (t === 'candidate' ? 'bg-blue-600 text-white' : 'bg-orange-500 text-white')
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}>
-            {t === 'candidate'
-              ? `구직자 (${applications.filter(a => a.type === 'candidate').length})`
-              : `구인자 (${applications.filter(a => a.type === 'employer').length})`}
-          </button>
-        ))}
       </div>
 
       {error && (
@@ -161,34 +135,32 @@ export default function AdminApplicationsPage() {
 
       {loading ? (
         <div className="text-center py-16 text-gray-400 animate-pulse">로딩 중...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">접수 내역이 없습니다.</div>
+      ) : employers.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">구인 접수 내역이 없습니다.</div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
               <tr>
-                <th className="px-3 py-2 text-left w-16">유형</th>
-                <th className="px-3 py-2 text-left">업체명/이름</th>
+                <th className="px-3 py-2 text-left">업체명</th>
+                <th className="px-3 py-2 text-left">담당자</th>
                 <th className="px-3 py-2 text-left">연락처</th>
                 <th className="px-3 py-2 text-left">위치</th>
-                <th className="px-3 py-2 text-left">급여/상태</th>
+                <th className="px-3 py-2 text-left">급여</th>
                 <th className="px-3 py-2 text-left">접수일</th>
                 <th className="px-3 py-2 text-left">상태</th>
                 <th className="px-3 py-2 text-left w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((app) => {
-                const rowKey = `${app.type}-${app.id}`
-                const isExpanded = expanded === rowKey
+              {employers.map((app) => {
+                const isExpanded = expanded === app.id
                 return (
-                  <AppRow
-                    key={rowKey}
+                  <EmployerRow
+                    key={app.id}
                     app={app}
-                    rowKey={rowKey}
                     expanded={isExpanded}
-                    onToggle={() => setExpanded(isExpanded ? null : rowKey)}
+                    onToggle={() => setExpanded(isExpanded ? null : app.id)}
                     onStatusChange={updateStatus}
                   />
                 )
@@ -201,39 +173,27 @@ export default function AdminApplicationsPage() {
   )
 }
 
-function AppRow({ app, rowKey, expanded, onToggle, onStatusChange }: {
-  app: Application
-  rowKey: string
+function EmployerRow({ app, expanded, onToggle, onStatusChange }: {
+  app: EmployerApp
   expanded: boolean
   onToggle: () => void
-  onStatusChange: (id: string, type: string, status: string) => void
+  onStatusChange: (id: string, status: string) => void
 }) {
-  const isEmployer = app.type === 'employer'
-
   return (
     <>
       <tr className="hover:bg-gray-50 cursor-pointer" onClick={onToggle}>
         <td className="px-3 py-2">
-          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            isEmployer ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'
-          }`}>
-            {isEmployer ? '구인' : '구직'}
-          </span>
+          <span className="font-medium text-gray-900">{app.school_name || app.name}</span>
         </td>
-        <td className="px-3 py-2">
-          <span className="font-medium text-gray-900">{isEmployer ? (app.school_name || app.name) : app.name}</span>
-          {isEmployer && app.name && app.school_name && (
-            <span className="text-xs text-gray-400 ml-1">({app.name})</span>
-          )}
+        <td className="px-3 py-2 text-xs text-gray-600">
+          {app.school_name && app.name ? app.name : '—'}
         </td>
         <td className="px-3 py-2 text-xs text-gray-500">
           <div>{app.email || '—'}</div>
           {app.phone && <div className="text-gray-400">{app.phone}</div>}
         </td>
         <td className="px-3 py-2 text-xs">{app.location || '—'}</td>
-        <td className="px-3 py-2 text-xs">
-          {isEmployer ? (app.salary_raw || '—') : (app.desired_salary || '—')}
-        </td>
+        <td className="px-3 py-2 text-xs">{app.salary_raw || '—'}</td>
         <td className="px-3 py-2 text-xs text-gray-500">
           {app.created_at ? new Date(app.created_at).toLocaleDateString('ko-KR') : '—'}
         </td>
@@ -242,7 +202,7 @@ function AppRow({ app, rowKey, expanded, onToggle, onStatusChange }: {
             className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
             value={app.status}
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onStatusChange(app.id, app.type, e.target.value)}
+            onChange={(e) => onStatusChange(app.id, e.target.value)}
           >
             {STATUS_FLOW.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -256,68 +216,40 @@ function AppRow({ app, rowKey, expanded, onToggle, onStatusChange }: {
       {expanded && (
         <tr>
           <td colSpan={8} className="px-4 py-4 bg-gray-50">
-            {isEmployer ? (
-              <EmployerDetail app={app} />
-            ) : (
-              <CandidateDetail app={app} />
-            )}
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
+                <InfoItem label="시작일" value={app.start_date} />
+                <InfoItem label="교육대상" value={app.teaching_age} />
+                <InfoItem label="근무시간" value={app.working_hours} />
+                <InfoItem label="포지션 수" value={app.vacancies} />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
+                <InfoItem label="급여" value={app.salary_raw} />
+                <InfoItem label="숙소" value={[app.housing_type, app.housing_detail].filter(Boolean).join(' · ') || null} />
+                <InfoItem label="복리후생" value={app.benefits} />
+                <InfoItem label="교통비" value={app.travel_support} />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
+                <InfoItem label="휴가" value={app.vacation} />
+                <InfoItem label="담당자" value={app.assigned_to} />
+              </div>
+              {app.memo && (
+                <div className="mb-3 text-xs">
+                  <span className="font-medium text-gray-500">메모:</span>
+                  <p className="text-gray-700 mt-1 whitespace-pre-wrap">{app.memo}</p>
+                </div>
+              )}
+              {app.notes && (
+                <div className="text-xs">
+                  <span className="font-medium text-gray-500">관리자 메모:</span>
+                  <p className="text-gray-700 mt-1 whitespace-pre-wrap">{app.notes}</p>
+                </div>
+              )}
+            </div>
           </td>
         </tr>
       )}
     </>
-  )
-}
-
-function EmployerDetail({ app }: { app: Application }) {
-  return (
-    <div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
-        <InfoItem label="시작일" value={app.start_date} />
-        <InfoItem label="교육대상" value={app.teaching_age} />
-        <InfoItem label="근무시간" value={app.working_hours} />
-        <InfoItem label="포지션 수" value={app.vacancies} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
-        <InfoItem label="급여" value={app.salary_raw} />
-        <InfoItem label="숙소" value={[app.housing_type, app.housing_detail].filter(Boolean).join(' · ') || null} />
-        <InfoItem label="복리후생" value={app.benefits} />
-        <InfoItem label="교통비" value={app.travel_support} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
-        <InfoItem label="휴가" value={app.vacation} />
-        <InfoItem label="담당자" value={app.assigned_to} />
-      </div>
-      {app.memo && (
-        <div className="mb-3 text-xs">
-          <span className="font-medium text-gray-500">메모:</span>
-          <p className="text-gray-700 mt-1 whitespace-pre-wrap">{app.memo}</p>
-        </div>
-      )}
-      {app.notes && (
-        <div className="text-xs">
-          <span className="font-medium text-gray-500">관리자 메모:</span>
-          <p className="text-gray-700 mt-1 whitespace-pre-wrap">{app.notes}</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function CandidateDetail({ app }: { app: Application }) {
-  return (
-    <div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
-        <InfoItem label="국적" value={app.nationality} />
-        <InfoItem label="연락처" value={app.phone} />
-        <InfoItem label="위치" value={app.location} />
-        <InfoItem label="희망급여" value={app.desired_salary} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-        <InfoItem label="교육대상" value={app.target_age || app.target} />
-        <InfoItem label="경력" value={app.experience} />
-        <InfoItem label="시작가능일" value={app.start_date} />
-      </div>
-    </div>
   )
 }
 

@@ -4,75 +4,64 @@ import { useEffect } from "react"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const blackout = () => { document.body.style.filter = "brightness(0)" }
+    const restore = () => { document.body.style.filter = "" }
+
+    const onKey = (e: KeyboardEvent) => {
       if (
         e.key === "PrintScreen" ||
-        (e.metaKey && e.shiftKey && (e.key === "3" || e.key === "4" || e.key === "5")) ||
-        e.key === "F12" ||
-        (e.ctrlKey && e.shiftKey && e.key === "I")
+        (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(e.key)) ||
+        (e.ctrlKey && e.key === "p")
       ) {
         e.preventDefault()
-        document.body.style.filter = "brightness(0)"
-        setTimeout(() => { document.body.style.filter = "" }, 3000)
+        blackout()
+        setTimeout(restore, 3000)
       }
     }
 
-    const handleBlur = () => {
-      document.body.style.filter = "brightness(0)"
+    const onBlur = () => blackout()
+    const onFocus = () => restore()
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") blackout()
+      else setTimeout(restore, 1000)
     }
 
-    const handleFocus = () => {
-      document.body.style.filter = ""
-    }
+    const onContext = (e: MouseEvent) => e.preventDefault()
+    const onCopy = (e: ClipboardEvent) => e.preventDefault()
 
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault()
-    }
-
-    const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault()
-    }
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        document.body.style.filter = "brightness(0)"
-      } else {
-        setTimeout(() => { document.body.style.filter = "" }, 1000)
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown)
-    document.addEventListener("keyup", handleKeyDown)
-    window.addEventListener("blur", handleBlur)
-    window.addEventListener("focus", handleFocus)
-    document.addEventListener("contextmenu", handleContextMenu)
-    document.addEventListener("copy", handleCopy)
-    document.addEventListener("visibilitychange", handleVisibility)
-
-    const style = document.createElement("style")
-    style.textContent = `
+    const printCSS = document.createElement("style")
+    printCSS.id = "admin-print-block"
+    printCSS.textContent = `
       @media print {
         body * { display: none !important; }
         body::after {
           content: 'CONFIDENTIAL - Printing is not allowed';
-          display: block;
-          font-size: 48px;
-          text-align: center;
-          padding-top: 200px;
+          display: block; font-size: 48px; text-align: center; padding-top: 200px;
         }
       }
     `
-    document.head.appendChild(style)
+    document.head.appendChild(printCSS)
+
+    document.addEventListener("keydown", onKey)
+    document.addEventListener("keyup", onKey)
+    window.addEventListener("blur", onBlur)
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVisibility)
+    document.addEventListener("contextmenu", onContext)
+    document.addEventListener("copy", onCopy)
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown)
-      document.removeEventListener("keyup", handleKeyDown)
-      window.removeEventListener("blur", handleBlur)
-      window.removeEventListener("focus", handleFocus)
-      document.removeEventListener("contextmenu", handleContextMenu)
-      document.removeEventListener("copy", handleCopy)
-      document.removeEventListener("visibilitychange", handleVisibility)
-      document.head.removeChild(style)
+      document.removeEventListener("keydown", onKey)
+      document.removeEventListener("keyup", onKey)
+      window.removeEventListener("blur", onBlur)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVisibility)
+      document.removeEventListener("contextmenu", onContext)
+      document.removeEventListener("copy", onCopy)
+      const el = document.getElementById("admin-print-block")
+      if (el) document.head.removeChild(el)
+      restore()
     }
   }, [])
 
