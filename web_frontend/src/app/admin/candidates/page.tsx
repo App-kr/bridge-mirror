@@ -20,6 +20,7 @@ import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
+import { STAFF_NAMES } from '@/lib/team'
 
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-balham.css'
@@ -296,7 +297,10 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
 
     /* ── 내부 메모 ── */
     { ...editable, field: 'admin_notes', headerName: '메모', width: 200 },
-    { ...editable, field: 'assigned_to', headerName: '담당자', width: 90 },
+    { ...editable, field: 'assigned_to', headerName: '담당자', width: 100,
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: { values: ['', ...STAFF_NAMES] },
+    },
   ]
 }
 

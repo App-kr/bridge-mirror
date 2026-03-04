@@ -12,6 +12,7 @@ import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 import { API_URL } from '@/lib/api'
+import { STAFF_NAMES } from '@/lib/team'
 
 const API = API_URL
 
@@ -245,10 +246,12 @@ export default function InboxDetailPage() {
               <div className="card">
                 <h2 className="font-bold text-gray-900 mb-3">담당자 배정</h2>
                 <div className="flex gap-2">
-                  <input value={assignTo}
+                  <select value={assignTo}
                     onChange={e => setAssignTo(e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    placeholder="담당자 이름" />
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">— 선택 —</option>
+                    {STAFF_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
                   <button type="button" onClick={handleAssign}
                     className="px-4 py-2 rounded-lg bg-[#1d1d1f] text-white text-sm font-medium hover:bg-[#424245] transition-colors">
                     배정

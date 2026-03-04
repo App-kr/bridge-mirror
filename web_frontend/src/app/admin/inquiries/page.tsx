@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import { STAFF_NAMES } from '@/lib/team'
 
 import { API_URL } from '@/lib/api'
 
@@ -230,16 +231,18 @@ function TableRow({ inq, expanded, onToggle, onUpdate }: {
               </div>
               <div className="w-40">
                 <label className="text-xs font-medium text-gray-500 mb-1 block">담당자 배정</label>
-                <input
+                <select
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs"
                   defaultValue={inq.assigned_to ?? ''}
-                  placeholder="담당자명"
-                  onBlur={(e) => {
+                  onChange={(e) => {
                     if (e.target.value !== (inq.assigned_to ?? '')) {
                       onUpdate(inq.id, 'assigned_to', e.target.value)
                     }
                   }}
-                />
+                >
+                  <option value="">— 선택 —</option>
+                  {STAFF_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
             </div>
           </td>
