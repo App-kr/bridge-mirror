@@ -270,8 +270,10 @@ export default function JobsPage() {
                 <p style={{ margin: 0, fontSize: 16, fontWeight: 400, color: '#9ca3af' }}>
                   {(interleaved.length + 4000).toLocaleString()} Jobs Available
                 </p>
-                <p style={{ margin: '4px 0 0', fontSize: 14, color: '#6b7280', fontStyle: 'italic' }}>
-                  We always welcome passionate teachers who are truly dedicated to teaching.
+                <p style={{ margin: '4px 0 0', fontSize: 14, fontStyle: 'italic' }}>
+                  <span style={{ background: 'linear-gradient(90deg, #6b7280, #2563EB)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    Welcome — we love teachers who are passionate about what they do.
+                  </span>
                 </p>
               </>
             )}
@@ -386,7 +388,7 @@ export default function JobsPage() {
         {!loading && interleaved.length > 0 && (
           <motion.div className="text-center mt-12 mb-4" variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
             <Link href="/apply" className="btn-primary text-base px-8 py-3">Apply to All Positions</Link>
-            <p className="text-xs text-[#86868b] mt-3">One application covers all open positions. We match you with the best fit.</p>
+            <p className="text-xs text-[#86868b] mt-3">Apply now! We match you with the best fit.</p>
           </motion.div>
         )}
       </div>
