@@ -1387,18 +1387,36 @@ async def admin_candidate_profile(candidate_id: str, request: Request):
 # ── Admin: Inquiries (채용의뢰) 관리 ────────────────────────────────────────
 
 @app.get("/api/admin/inquiries", tags=["admin"])
-async def admin_list_inquiries(request: Request, limit: int = 200, offset: int = 0):
-    """채용의뢰 목록 — client_inquiries 테이블."""
+async def admin_list_inquiries(
+    request: Request,
+    limit: int = 1000,
+    offset: int = 0,
+    q: str = "",
+    source: str = "",
+):
+    """채용의뢰 목록 — client_inquiries 테이블. q=검색어, source=소스필터."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.row_factory = sqlite3.Row
         try:
-            total = conn.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0]
+            where_clauses = []
+            params: list = []
+            if q:
+                where_clauses.append(
+                    "(school_name LIKE ? OR contact_name LIKE ? OR email LIKE ? OR phone LIKE ? OR memo LIKE ? OR location LIKE ?)"
+                )
+                like = f"%{q}%"
+                params.extend([like] * 6)
+            if source:
+                where_clauses.append("source_file = ?")
+                params.append(source)
+            where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            total = conn.execute(f"SELECT COUNT(*) FROM client_inquiries{where_sql}", params).fetchone()[0]
             rows = conn.execute(
-                "SELECT * FROM client_inquiries ORDER BY submitted_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                f"SELECT * FROM client_inquiries{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+                params + [limit, offset],
             ).fetchall()
             return ok(data={"total": total, "inquiries": [dict(r) for r in rows]})
         finally:
