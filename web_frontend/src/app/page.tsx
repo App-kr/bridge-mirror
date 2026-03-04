@@ -41,7 +41,9 @@ const ACADEMY_NAMES = [
   'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
   'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
   'JLS Jungsang', 'Real Class', 'Siwon School',
-  'Korea University Foreign Language Center',
+  'Korea University Foreign Language Center', 'Crecerse',
+  'LinguaEdu', 'Simson Edu', 'LexKim English', 'MiEdu',
+  'Twinkle Language', 'SDA', 'Wiz Island', 'Kids College',
 ]
 const SCHOOL_NAMES = [
   'Busan International Foreign School', 'Dalton School',
@@ -539,7 +541,7 @@ export default function HomePage() {
             Our Partner
           </p>
           <div className="relative" aria-hidden="true">
-            <div className="marquee-track marquee-track--slow">
+            <div className="marquee-track marquee-track--mid">
               {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
                 <span
                   key={`a-${i}`}

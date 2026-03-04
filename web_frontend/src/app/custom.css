@@ -378,3 +378,6 @@ a.nav-cta[href="/inquiry"]:hover {
 .marquee-track--slow {
   animation-duration: 90s;
 }
+.marquee-track--mid {
+  animation-duration: 60s;
+}
