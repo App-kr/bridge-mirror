@@ -1,5 +1,13 @@
 # BRIDGE — Claude Code 지침
 
+## ABSOLUTE FREEZE - NEVER TOUCH
+## .env 파일의 ADMIN_API_KEY, ADMIN_PASSWORD 값은
+## 어떤 이유로든 절대 변경/삭제/재생성 금지.
+## 이 값을 건드리면 admin 전체가 망가짐.
+## 키 관련 에러 발생 시: 키를 바꾸지 말고 전달 로직만 수정.
+## Render 환경변수의 값과 .env의 값이 반드시 동일해야 함.
+## ABSOLUTE FREEZE - NEVER TOUCH
+
 ## 코드 품질 절대 규칙 (모든 작업에 적용)
 
 ### 작업 완료 전 필수 검증
