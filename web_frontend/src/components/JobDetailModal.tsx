@@ -100,8 +100,8 @@ export default function JobDetailModal({
               Open
             </span>
             {isHot && (
-              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
-                Hot
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
+                &#x1F525; Hot
               </span>
             )}
           </div>
@@ -120,38 +120,44 @@ export default function JobDetailModal({
           <DetailRow label="Native Tchr" value={job.native_teacher_count} />
           <DetailRow label="Housing" value={job.housing} />
           <DetailRow label="Class Size" value={job.class_size} />
+          <DetailRow label="Preference" value={job.preferences} />
         </div>
 
-        {/* Notes */}
+        {/* Additional Info (notes) */}
         {notes.length > 0 && (
           <>
             <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '20px 0' }} />
-            <div className="space-y-1">
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#374151', margin: '0 0 8px' }}>Additional Info</p>
+            <div style={{
+              fontSize: 14,
+              color: '#92400e',
+              background: '#fffbeb',
+              padding: '12px 16px',
+              borderRadius: 8,
+            }}>
               {notes.map((n, i) => (
-                <p
-                  key={i}
-                  style={{
-                    fontSize: 14,
-                    color: '#92400e',
-                    background: '#fffbeb',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    margin: 0,
-                    marginBottom: i < notes.length - 1 ? 4 : 0,
-                  }}
-                >
-                  {n}
+                <p key={i} style={{ margin: 0, marginBottom: i < notes.length - 1 ? 6 : 0, lineHeight: 1.6 }}>
+                  &middot; {n}
                 </p>
               ))}
             </div>
           </>
         )}
 
-        {/* Benefits */}
+        {/* Benefits checklist */}
         {benefits.length > 0 && (
-          <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, marginTop: 16 }}>
-            {benefits.join(' \u00B7 ')}
-          </p>
+          <>
+            <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '20px 0' }} />
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#374151', margin: '0 0 8px' }}>Benefits</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 0 }}>
+              {benefits.map((b, i) => (
+                <p key={i} style={{ fontSize: 14, color: '#374151', lineHeight: 2, margin: 0 }}>
+                  <span style={{ color: '#16a34a', marginRight: 6 }}>&#x2713;</span>
+                  {b}
+                </p>
+              ))}
+            </div>
+          </>
         )}
 
         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '20px 0' }} />

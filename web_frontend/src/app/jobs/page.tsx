@@ -91,6 +91,29 @@ function hasEnoughInfo(job: PublicJob): boolean {
   return c >= 3
 }
 
+// ── Salary parser for sorting (returns millions, negative = low priority) ──
+function parseSalaryMillions(salary: string | null): number {
+  if (!salary) return -2
+  const s = salary.toLowerCase()
+  // Hourly rate → back
+  if (s.includes('/hour') || s.includes('per hour') || s.includes('시간')) return -1
+  // Extract numbers followed by 'm' (millions): "2,40m" "2.60m" "3.00m"
+  const mParts = s.match(/(\d[.,]?\d*)\s*m/gi)
+  if (mParts && mParts.length > 0) {
+    const vals = mParts.map(p => parseFloat(p.replace(/m/i, '').replace(',', '.')))
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+    if (avg > 0 && avg <= 1.5) return -3 // ≤1.5m → very back
+    return avg
+  }
+  // Large plain numbers (2,400,000 etc)
+  const plain = s.replace(/,/g, '').match(/(\d{6,})/)
+  if (plain) {
+    const m = parseInt(plain[1], 10) / 1000000
+    if (m > 0 && m <= 1.5) return -3
+    return m
+  }
+  return -2
+}
 
 export default function JobsPage() {
   const [allJobs, setAllJobs] = useState<PublicJob[]>([])
@@ -157,10 +180,12 @@ export default function JobsPage() {
     return jobs
   }, [allJobs, hotOnly, ageFilter, search, hotSet])
 
-  // HOT interleave
+  // Sort by salary desc, then HOT interleave
   const interleaved = useMemo(() => {
-    const regular = filtered.filter((j) => !hotSet.has(j.job_id))
-    const hot = filtered.filter((j) => hotSet.has(j.job_id))
+    const bySalary = (a: PublicJob, b: PublicJob) =>
+      parseSalaryMillions(b.monthly_salary) - parseSalaryMillions(a.monthly_salary)
+    const regular = filtered.filter((j) => !hotSet.has(j.job_id)).sort(bySalary)
+    const hot = filtered.filter((j) => hotSet.has(j.job_id)).sort(bySalary)
     return interleaveHot(regular, hot)
   }, [filtered, hotSet])
 
@@ -241,14 +266,14 @@ export default function JobsPage() {
             {loading ? (
               <p style={{ fontSize: 16, color: '#9ca3af' }}>Loading positions...</p>
             ) : (
-              <p style={{ margin: 0 }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: '#111827' }}>
-                  {(interleaved.length + 4000).toLocaleString()}
-                </span>
-                <span style={{ fontSize: 16, fontWeight: 400, color: '#9ca3af', marginLeft: 8 }}>
-                  Jobs Available
-                </span>
-              </p>
+              <>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 400, color: '#9ca3af' }}>
+                  {(interleaved.length + 4000).toLocaleString()} Jobs Available
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: 14, color: '#6b7280', fontStyle: 'italic' }}>
+                  We always welcome passionate teachers who are truly dedicated to teaching.
+                </p>
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">

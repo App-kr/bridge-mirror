@@ -28,7 +28,7 @@ export default function JobCard({
         padding: 32,
         boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
         transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        borderLeft: isHot ? '3px solid #ea580c' : '3px solid transparent',
+        borderLeft: isHot ? '5px solid #ea580c' : '5px solid transparent',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = '0 10px 40px rgba(0,0,0,0.12)'
@@ -46,8 +46,8 @@ export default function JobCard({
             Open
           </span>
           {isHot && (
-            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
-              Hot
+            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
+              &#x1F525; Hot
             </span>
           )}
         </div>
@@ -57,7 +57,7 @@ export default function JobCard({
       </div>
 
       {/* City */}
-      <h3 style={{ fontSize: 28, fontWeight: 600, color: '#111827', marginTop: 16, lineHeight: 1.2 }}>
+      <h3 style={{ fontSize: 20, fontWeight: 600, color: '#111827', marginTop: 16, lineHeight: 1.2 }}>
         {job.location || 'Korea'}
       </h3>
 
