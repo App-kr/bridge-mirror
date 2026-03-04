@@ -14,7 +14,7 @@ import { API_URL } from '@/lib/api'
 
 const API = API_URL
 
-const BOARDS = ['all', 'visa', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials'] as const
+const BOARDS = ['all', 'visa', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials', 'information'] as const
 
 interface Post {
   id: number
@@ -31,7 +31,8 @@ interface Post {
 const boardLabel = (b: string) => {
   const map: Record<string, string> = {
     visa: 'Visa', support: 'Support(EN)', support_kr: '업무지원(KR)',
-    about: 'About', korea: 'Korea', tips: 'Tips', testimonials: 'Testimonials'
+    about: 'About', korea: 'Korea', tips: 'Tips', testimonials: 'Testimonials',
+    information: 'Information'
   }
   return map[b] ?? b
 }
@@ -43,7 +44,7 @@ function getInitialBoard(): string {
 }
 
 export default function AdminPostsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, signedFetch } = useAdminAuth()
 
   const [posts, setPosts] = useState<Post[]>([])
   const [board, setBoard] = useState<string>(getInitialBoard)
@@ -114,8 +115,8 @@ export default function AdminPostsPage() {
   const handleDelete = async (postBoard: string, postId: number) => {
     if (!confirm(`Delete post #${postId}?`)) return
     try {
-      const res = await fetch(`${API}/api/community/${postBoard}/${postId}`, {
-        method: 'DELETE', headers: headers(),
+      const res = await signedFetch(`${API}/api/community/${postBoard}/${postId}`, {
+        method: 'DELETE',
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -130,9 +131,10 @@ export default function AdminPostsPage() {
     if (!newTitle.trim() || !newBody.trim()) { setActionMsg('제목과 본문을 입력하세요.'); return }
     setPosting(true)
     try {
-      const res = await fetch(`${API}/api/community/${newBoard}`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ title: newTitle.trim(), body: newBody.trim() }),
+      const bodyStr = JSON.stringify({ title: newTitle.trim(), body: newBody.trim() })
+      const res = await signedFetch(`${API}/api/community/${newBoard}`, {
+        method: 'POST',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Failed')
@@ -148,9 +150,10 @@ export default function AdminPostsPage() {
 
   const handlePin = async (postBoard: string, postId: number, currentPin: number) => {
     try {
-      const res = await fetch(`${API}/api/admin/community/posts/${postId}/pin`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ pinned: currentPin === 1 ? 0 : 1 }),
+      const bodyStr = JSON.stringify({ pinned: currentPin === 1 ? 0 : 1 })
+      const res = await signedFetch(`${API}/api/admin/community/posts/${postId}/pin`, {
+        method: 'PATCH',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -185,9 +188,10 @@ export default function AdminPostsPage() {
     if (!editTitle.trim()) { setActionMsg('제목을 입력하세요.'); return }
     setSaving(true)
     try {
-      const res = await fetch(`${API}/api/admin/community/${editBoard}/${editId}`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ title: editTitle.trim(), body: editBody.trim() }),
+      const bodyStr = JSON.stringify({ title: editTitle.trim(), body: editBody.trim() })
+      const res = await signedFetch(`${API}/api/admin/community/${editBoard}/${editId}`, {
+        method: 'PATCH',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -223,9 +227,10 @@ export default function AdminPostsPage() {
     for (const key of selected) {
       const postId = parseInt(key.split('-').pop() || '0')
       if (postId) {
-        await fetch(`${API}/api/admin/community/posts/${postId}/pin`, {
-          method: 'PATCH', headers: headers(),
-          body: JSON.stringify({ pinned: pin }),
+        const pinBody = JSON.stringify({ pinned: pin })
+        await signedFetch(`${API}/api/admin/community/posts/${postId}/pin`, {
+          method: 'PATCH',
+          body: pinBody,
         })
       }
     }
@@ -241,8 +246,8 @@ export default function AdminPostsPage() {
       const postId = parseInt(parts.pop() || '0')
       const postBoard = parts.join('-')
       if (postId && postBoard) {
-        await fetch(`${API}/api/community/${postBoard}/${postId}`, {
-          method: 'DELETE', headers: headers(),
+        await signedFetch(`${API}/api/community/${postBoard}/${postId}`, {
+          method: 'DELETE',
         })
       }
     }

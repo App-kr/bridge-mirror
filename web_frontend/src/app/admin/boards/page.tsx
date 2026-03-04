@@ -26,7 +26,7 @@ interface Board {
 const DISPLAY_MODES = ['list', 'card', 'gallery'] as const
 
 export default function AdminBoardsPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, signedFetch } = useAdminAuth()
 
   const [boards, setBoards] = useState<Board[]>([])
   const [loading, setLoading] = useState(false)
@@ -75,9 +75,10 @@ export default function AdminBoardsPage() {
     if (!/^[a-z0-9_]+$/.test(newId)) { setActionMsg('ID는 영소문자, 숫자, _ 만 가능합니다.'); return }
     setCreating(true)
     try {
-      const res = await fetch(`${API}/api/admin/boards`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ id: newId.trim(), label: newLabel.trim(), label_kr: newLabelKr.trim() || null, display_mode: newMode }),
+      const bodyStr = JSON.stringify({ id: newId.trim(), label: newLabel.trim(), label_kr: newLabelKr.trim() || null, display_mode: newMode })
+      const res = await signedFetch(`${API}/api/admin/boards`, {
+        method: 'POST',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -103,14 +104,15 @@ export default function AdminBoardsPage() {
     if (!editLabel.trim()) { setActionMsg('표시명을 입력하세요.'); return }
     setSaving(true)
     try {
-      const res = await fetch(`${API}/api/admin/boards/${editId}`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({
-          label: editLabel.trim(),
-          label_kr: editLabelKr.trim() || null,
-          display_mode: editMode,
-          sort_order: editOrder,
-        }),
+      const bodyStr = JSON.stringify({
+        label: editLabel.trim(),
+        label_kr: editLabelKr.trim() || null,
+        display_mode: editMode,
+        sort_order: editOrder,
+      })
+      const res = await signedFetch(`${API}/api/admin/boards/${editId}`, {
+        method: 'PUT',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -127,9 +129,10 @@ export default function AdminBoardsPage() {
   const toggleHidden = async (b: Board) => {
     try {
       const newHidden = b.is_hidden === 1 ? 0 : 1
-      const res = await fetch(`${API}/api/admin/boards/${b.id}`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({ is_hidden: newHidden }),
+      const bodyStr = JSON.stringify({ is_hidden: newHidden })
+      const res = await signedFetch(`${API}/api/admin/boards/${b.id}`, {
+        method: 'PUT',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')

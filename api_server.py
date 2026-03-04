@@ -1,5 +1,5 @@
 """
-BRIDGE API Server  v2026.03.04
+BRIDGE API Server
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 

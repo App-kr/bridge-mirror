@@ -30,7 +30,7 @@ const positionLabel = (p: string) => {
 }
 
 export default function AdminBannersPage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, login, headers, signedFetch } = useAdminAuth()
 
   const [banners, setBanners] = useState<Banner[]>([])
   const [loading, setLoading] = useState(false)
@@ -78,14 +78,15 @@ export default function AdminBannersPage() {
     if (!newImageUrl.trim()) { setActionMsg('이미지 URL을 입력하세요.'); return }
     setCreating(true)
     try {
-      const res = await fetch(`${API}/api/admin/banners`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({
-          image_url: newImageUrl.trim(),
-          link_url: newLinkUrl.trim() || null,
-          position: newPosition,
-          sort_order: newOrder,
-        }),
+      const bodyStr = JSON.stringify({
+        image_url: newImageUrl.trim(),
+        link_url: newLinkUrl.trim() || null,
+        position: newPosition,
+        sort_order: newOrder,
+      })
+      const res = await signedFetch(`${API}/api/admin/banners`, {
+        method: 'POST',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -111,14 +112,15 @@ export default function AdminBannersPage() {
     if (!editImageUrl.trim()) { setActionMsg('이미지 URL을 입력하세요.'); return }
     setSaving(true)
     try {
-      const res = await fetch(`${API}/api/admin/banners/${editId}`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({
-          image_url: editImageUrl.trim(),
-          link_url: editLinkUrl.trim() || null,
-          position: editPosition,
-          sort_order: editOrder,
-        }),
+      const bodyStr = JSON.stringify({
+        image_url: editImageUrl.trim(),
+        link_url: editLinkUrl.trim() || null,
+        position: editPosition,
+        sort_order: editOrder,
+      })
+      const res = await signedFetch(`${API}/api/admin/banners/${editId}`, {
+        method: 'PUT',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
@@ -135,9 +137,10 @@ export default function AdminBannersPage() {
   const toggleActive = async (b: Banner) => {
     try {
       const newActive = b.is_active === 1 ? 0 : 1
-      const res = await fetch(`${API}/api/admin/banners/${b.id}`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({ is_active: newActive }),
+      const bodyStr = JSON.stringify({ is_active: newActive })
+      const res = await signedFetch(`${API}/api/admin/banners/${b.id}`, {
+        method: 'PUT',
+        body: bodyStr,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
