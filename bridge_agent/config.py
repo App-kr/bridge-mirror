@@ -1,14 +1,33 @@
 """Configuration management for BRIDGE Agent."""
 
 import json
+import sys
+import os
 from pathlib import Path
 from typing import Optional
 
 
+def _get_app_dir() -> Path:
+    """Get application directory — works for both script and PyInstaller .exe."""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller .exe
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def _get_data_dir() -> Path:
+    """Get data directory — uses %APPDATA%/BRIDGEAgent for portability."""
+    app_data = os.environ.get("APPDATA")
+    if app_data:
+        return Path(app_data) / "BRIDGEAgent"
+    # Fallback: next to executable/script
+    return _get_app_dir() / "data"
+
+
 # Default paths
-APP_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = APP_DIR.parent  # Q:/Claudework/bridge base/
-DATA_DIR = APP_DIR / "data"
+APP_DIR = _get_app_dir()
+PROJECT_ROOT = APP_DIR.parent  # Q:/Claudework/bridge base/ (dev mode)
+DATA_DIR = _get_data_dir()
 DB_PATH = DATA_DIR / "conversations.db"
 VAULT_PATH = DATA_DIR / "keys.vault"
 
@@ -16,11 +35,23 @@ VAULT_PATH = DATA_DIR / "keys.vault"
 SKILLS_DIR = APP_DIR / "skills"
 MEMORY_DIR = APP_DIR / "memory"
 
-# Source dirs for copying
+# Source dirs for copying (dev mode — from project root)
 SOURCE_SKILLS_DIR = PROJECT_ROOT / ".claude" / "skills"
 SOURCE_MEMORY_DIR = PROJECT_ROOT / ".memory"
 SOURCE_AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
 CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
+
+# If running as .exe, check for bundled resources
+if getattr(sys, 'frozen', False):
+    _bundle_dir = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else APP_DIR
+    if (_bundle_dir / "skills").exists():
+        SOURCE_SKILLS_DIR = _bundle_dir / "skills"
+        SKILLS_DIR = _bundle_dir / "skills"
+    if (_bundle_dir / "memory").exists():
+        SOURCE_MEMORY_DIR = _bundle_dir / "memory"
+        MEMORY_DIR = _bundle_dir / "memory"
+    if (_bundle_dir / "CLAUDE.md").exists():
+        CLAUDE_MD_PATH = _bundle_dir / "CLAUDE.md"
 
 # Defaults
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -30,11 +61,10 @@ MAX_CONVERSATION_TOKENS = 100_000
 
 
 class Config:
-    """Runtime configuration loaded from DB or defaults."""
-
-    _path = DATA_DIR / "config.json"
+    """Runtime configuration loaded from JSON file."""
 
     def __init__(self):
+        self._path = DATA_DIR / "config.json"
         self._data: dict = {}
         self._load()
 
