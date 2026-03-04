@@ -116,7 +116,7 @@ export default function JobDetailModal({
         {benefits.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
             {benefits.map((b, i) => (
-              <span key={i} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full">{b}</span>
+              <span key={i} className="text-[15px] font-medium text-black bg-[#e5e7eb] border border-[#d1d5db] px-[14px] py-[6px] rounded-full">{b}</span>
             ))}
           </div>
         )}

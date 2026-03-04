@@ -33,7 +33,7 @@ export default function JobCard({
           <span className="text-[11px] font-bold bg-emerald-500 text-white px-2.5 py-[3px] rounded-full">OPEN</span>
           {isHot && <span className="text-[11px] font-bold bg-orange-500 text-white px-2.5 py-[3px] rounded-full">HOT</span>}
         </div>
-        <span className="text-[17px] font-extrabold text-[#1d1d1f] tracking-tight">{job.job_id}</span>
+        <span className="text-[28px] font-normal text-[#333] tracking-tight">{job.job_id}</span>
       </div>
 
       {/* City */}

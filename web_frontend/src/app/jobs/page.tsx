@@ -16,33 +16,14 @@ import type { AgeGroup, PublicJob } from '@/types'
 const PER_PAGE = 10
 
 // ── Filters ──
-const REGIONS = [
-  { label: 'All Regions', value: 'all' },
-  { label: 'Seoul', value: 'Seoul' },
-  { label: 'Gyeonggi', value: 'Gyeonggi' },
-  { label: 'Incheon', value: 'Incheon' },
-  { label: 'Busan', value: 'Busan' },
-  { label: 'Daegu', value: 'Daegu' },
-  { label: 'Daejeon', value: 'Daejeon' },
-  { label: 'Gwangju', value: 'Gwangju' },
-  { label: 'Other', value: '__other__' },
-]
-const JOB_TYPES = [
-  { label: 'All Types', value: 'all' },
+const AGE_GROUPS = [
+  { label: 'All Ages', value: 'all' },
   { label: 'Kindergarten', value: 'kindergarten' },
   { label: 'Elementary', value: 'elementary' },
   { label: 'Middle School', value: 'middle' },
   { label: 'High School', value: 'high' },
   { label: 'Adult', value: 'adult' },
-  { label: 'Part-time', value: 'part_time' },
 ]
-const SORT_OPTIONS = [
-  { label: 'HOT first', value: 'hot' },
-  { label: 'Salary (high)', value: 'salary' },
-  { label: 'Fewest hours', value: 'hours' },
-  { label: 'Latest', value: 'latest' },
-]
-const MAJOR_CITIES = ['Seoul', 'Gyeonggi', 'Incheon', 'Busan', 'Daegu', 'Daejeon', 'Gwangju']
 
 // ── Weekly seed (Monday 00:00 KST) ──
 function getWeekSeed(): number {
@@ -69,14 +50,22 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return result
 }
 
-// ── HOT detection ──
+// ── HOT detection: working hours ≤7h OR vacation ≥20 days ──
 function isAutoHot(job: PublicJob): boolean {
+  // 1) Working hours ≤ 7h — parse "09:00~16:00" style
+  const wh = job.working_hours ?? ''
+  const timeMatch = wh.match(/(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})/)
+  if (timeMatch) {
+    const start = parseInt(timeMatch[1], 10) + parseInt(timeMatch[2], 10) / 60
+    const end = parseInt(timeMatch[3], 10) + parseInt(timeMatch[4], 10) / 60
+    if (end - start > 0 && end - start <= 7) return true
+  }
+  // 2) Vacation ≥ 20 days
   const vac = job.vacation ?? ''
   const wkMatch = vac.match(/(\d+)\s*weeks?/i)
   if (wkMatch && parseInt(wkMatch[1], 10) * 5 >= 20) return true
   const nums = vac.match(/\d+/g)
   if (nums && Math.max(...nums.map(Number)) >= 20) return true
-  if (job.hours_per_day != null && job.hours_per_day <= 8) return true
   return false
 }
 
@@ -102,10 +91,6 @@ function hasEnoughInfo(job: PublicJob): boolean {
   return c >= 3
 }
 
-function salaryNum(job: PublicJob): number {
-  const m = (job.monthly_salary ?? '').replace(/,/g, '').match(/\d+/)
-  return m ? parseInt(m[0], 10) : 0
-}
 
 export default function JobsPage() {
   const [allJobs, setAllJobs] = useState<PublicJob[]>([])
@@ -115,10 +100,8 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<PublicJob | null>(null)
 
   const [search, setSearch] = useState('')
-  const [region, setRegion] = useState('all')
-  const [jobType, setJobType] = useState('all')
+  const [ageFilter, setAgeFilter] = useState('all')
   const [hotOnly, setHotOnly] = useState(false)
-  const [sortBy, setSortBy] = useState('hot')
 
   const hotSet = useMemo(() => {
     const s = new Set<string>()
@@ -129,15 +112,10 @@ export default function JobsPage() {
   // Load jobs + URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const c = params.get('city')
     const a = params.get('age') as AgeGroup | null
-    if (c) {
-      const match = REGIONS.find((r) => r.value.toLowerCase() === c.toLowerCase())
-      if (match) setRegion(match.value)
-    }
     if (a) {
-      const match = JOB_TYPES.find((t) => t.value === a)
-      if (match) setJobType(match.value)
+      const match = AGE_GROUPS.find((t) => t.value === a)
+      if (match) setAgeFilter(match.value)
     }
 
     setLoading(true)
@@ -157,25 +135,13 @@ export default function JobsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Filter + sort
+  // Filter
   const filtered = useMemo<PublicJob[]>(() => {
     let jobs = allJobs
     if (hotOnly) jobs = jobs.filter((j) => hotSet.has(j.job_id))
 
-    if (region !== 'all') {
-      if (region === '__other__') {
-        jobs = jobs.filter((j) => !MAJOR_CITIES.some((c) => (j.location ?? '').toLowerCase().includes(c.toLowerCase())))
-      } else {
-        jobs = jobs.filter((j) => (j.location ?? '').toLowerCase().includes(region.toLowerCase()))
-      }
-    }
-
-    if (jobType !== 'all') {
-      if (jobType === 'part_time') {
-        jobs = jobs.filter((j) => j.employment_type === 'part_time')
-      } else {
-        jobs = jobs.filter((j) => (j.teaching_age ?? []).includes(jobType as AgeGroup))
-      }
+    if (ageFilter !== 'all') {
+      jobs = jobs.filter((j) => (j.teaching_age ?? []).includes(ageFilter as AgeGroup))
     }
 
     if (search.trim()) {
@@ -188,17 +154,8 @@ export default function JobsPage() {
       )
     }
 
-    if (sortBy === 'salary') jobs = [...jobs].sort((a, b) => salaryNum(b) - salaryNum(a))
-    else if (sortBy === 'hours') jobs = [...jobs].sort((a, b) => (a.hours_per_day ?? 99) - (b.hours_per_day ?? 99))
-    else if (sortBy === 'latest') { /* already shuffled */ }
-    else jobs = [...jobs].sort((a, b) => {
-      const aH = hotSet.has(a.job_id) ? 1 : 0
-      const bH = hotSet.has(b.job_id) ? 1 : 0
-      return bH - aH
-    })
-
     return jobs
-  }, [allJobs, hotOnly, region, jobType, search, sortBy, hotSet])
+  }, [allJobs, hotOnly, ageFilter, search, hotSet])
 
   // HOT interleave
   const interleaved = useMemo(() => {
@@ -214,11 +171,11 @@ export default function JobsPage() {
     return interleaved.slice(start, start + PER_PAGE)
   }, [interleaved, page])
 
-  useEffect(() => { setPage(1) }, [search, region, jobType, hotOnly, sortBy])
+  useEffect(() => { setPage(1) }, [search, ageFilter, hotOnly])
 
-  const hasFilters = region !== 'all' || jobType !== 'all' || hotOnly || search.trim()
+  const hasFilters = ageFilter !== 'all' || hotOnly || search.trim()
   const clearFilters = useCallback(() => {
-    setRegion('all'); setJobType('all'); setHotOnly(false); setSearch('')
+    setAgeFilter('all'); setHotOnly(false); setSearch('')
   }, [])
 
   const goPage = useCallback((p: number) => {
@@ -280,34 +237,27 @@ export default function JobsPage() {
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <select value={region} onChange={(e) => setRegion(e.target.value)}
+          <select value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)}
             className="bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer">
-            {REGIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
-          <select value={jobType} onChange={(e) => setJobType(e.target.value)}
-            className="bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer">
-            {JOB_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            {AGE_GROUPS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
           </select>
           <button type="button" onClick={() => setHotOnly((v) => !v)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
               hotOnly ? 'bg-red-600 text-white' : 'bg-[#f5f5f7] text-[#424245] hover:bg-red-50 hover:text-red-600'}`}>
             HOT
           </button>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-            className="ml-auto bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer">
-            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
         </div>
 
         {/* Tagline */}
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-base text-[#86868b] italic">
-            {loading
-              ? 'Loading positions...'
-              : 'We have over 3,000 positions available. Apply now and find your perfect match!'}
-          </p>
-          {hasFilters && (
-            <button type="button" onClick={clearFilters} className="text-xs text-blue-600 hover:underline shrink-0 ml-4">Clear filters</button>
+        <div className="mb-6">
+          {loading ? (
+            <p className="text-base text-[#86868b]">Loading positions...</p>
+          ) : (
+            <p>
+              <span className="text-[32px] font-bold text-[#1d1d1f]">{(interleaved.length + 4000).toLocaleString()}</span>
+              {' '}
+              <span className="text-[18px] text-[#86868b]">Jobs Available</span>
+            </p>
           )}
         </div>
 
