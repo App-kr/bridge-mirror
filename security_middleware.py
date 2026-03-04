@@ -433,7 +433,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         req_id = str(uuid.uuid4())[:8]
 
         # 0. 헬스체크/로그인은 미들웨어 검사 건너뛰기
-        BYPASS_PATHS = {"/", "/health", "/api/admin/login", "/api/admin/reset-blacklist"}
+        BYPASS_PATHS = {"/", "/health", "/api/admin/login", "/api/admin/login/", "/api/admin/reset-blacklist"}
         if path in BYPASS_PATHS:
             response = await call_next(request)
             return response
@@ -488,9 +488,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 )
 
         # 5. HMAC 서명 검증 (관리자/보안 엔드포인트, 로그인 제외)
-        HMAC_EXEMPT = {"/api/admin/login"}
+        HMAC_EXEMPT = {"/api/admin/login", "/api/admin/login/"}
         for signed_path in SIGNED_PATHS:
-            if path.startswith(signed_path) and method != "GET" and path not in HMAC_EXEMPT:
+            if path.startswith(signed_path) and method != "GET" and path.rstrip("/") not in {p.rstrip("/") for p in HMAC_EXEMPT}:
                 if not verify_hmac(request, body):
                     audit.log("INVALID_SIGNATURE", {
                         "ip": client_ip, "path": path
