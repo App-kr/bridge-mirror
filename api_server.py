@@ -2075,13 +2075,23 @@ async def admin_list_applications(request: Request):
 
             # 구직자 (candidates)
             cands = conn.execute(
-                "SELECT candidate_id, full_name, email, status, created_at, updated_at "
+                "SELECT candidate_id, full_name, email, nationality, mobile_phone, "
+                "current_location, target, target_age, desired_salary, experience, "
+                "start_date, status, created_at, updated_at "
                 "FROM candidates ORDER BY created_at DESC LIMIT 200"
             ).fetchall()
             for c in cands:
                 apps.append({
                     "id": c["candidate_id"], "type": "candidate",
                     "name": c["full_name"] or "", "email": c["email"] or "",
+                    "nationality": c["nationality"],
+                    "phone": c["mobile_phone"],
+                    "location": c["current_location"],
+                    "target": c["target"],
+                    "target_age": c["target_age"],
+                    "desired_salary": c["desired_salary"],
+                    "experience": c["experience"],
+                    "start_date": c["start_date"],
                     "status": c["status"] or "Active",
                     "created_at": c["created_at"] or "",
                     "updated_at": c["updated_at"],
@@ -2089,7 +2099,10 @@ async def admin_list_applications(request: Request):
 
             # 구인자 (client_inquiries)
             inqs = conn.execute(
-                "SELECT id, school_name, contact_name, email, inbox_status, submitted_at "
+                "SELECT id, school_name, contact_name, email, phone, location, "
+                "start_date, vacancies, teaching_age, working_hours, salary_raw, "
+                "housing_type, housing_detail, travel_support, benefits, vacation, "
+                "memo, notes, assigned_to, inbox_status, submitted_at "
                 "FROM client_inquiries ORDER BY submitted_at DESC LIMIT 200"
             ).fetchall()
             for i in inqs:
@@ -2097,6 +2110,21 @@ async def admin_list_applications(request: Request):
                     "id": str(i["id"]), "type": "employer",
                     "name": i["contact_name"] or "", "email": i["email"] or "",
                     "school_name": i["school_name"] or "",
+                    "phone": i["phone"],
+                    "location": i["location"],
+                    "start_date": i["start_date"],
+                    "vacancies": i["vacancies"],
+                    "teaching_age": i["teaching_age"],
+                    "working_hours": i["working_hours"],
+                    "salary_raw": i["salary_raw"],
+                    "housing_type": i["housing_type"],
+                    "housing_detail": i["housing_detail"],
+                    "travel_support": i["travel_support"],
+                    "benefits": i["benefits"],
+                    "vacation": i["vacation"],
+                    "memo": i["memo"],
+                    "notes": i["notes"],
+                    "assigned_to": i["assigned_to"],
                     "status": i["inbox_status"] or "pending",
                     "created_at": i["submitted_at"] or "",
                 })
