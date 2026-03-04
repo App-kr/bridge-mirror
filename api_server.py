@@ -1,5 +1,5 @@
 """
-BRIDGE API Server
+BRIDGE API Server  v2026.03.04
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 
@@ -268,6 +268,7 @@ _CORE_ORIGINS = [
     "https://bridgejob.co.kr",
     "https://www.bridgejob.co.kr",
     "https://bridge-chi-lime.vercel.app",
+    "https://bridge-n7hk.onrender.com",
 ]
 _DEV_ORIGINS = [
     "http://localhost:3000",
