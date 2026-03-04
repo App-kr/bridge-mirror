@@ -18,7 +18,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
       "img-src 'self' data: https://*.supabase.co https://images.unsplash.com",
       "font-src 'self' https://cdn.jsdelivr.net",
-      "connect-src 'self' https://*.supabase.co https://bridgejob.co.kr https://*.vercel.app",
+      "connect-src 'self' https://*.supabase.co https://bridgejob.co.kr https://*.vercel.app https://bridge-n7hk.onrender.com",
       "frame-ancestors 'none'",
     ].join('; '),
   },
