@@ -18,6 +18,7 @@ import {
   slideInRight,
   defaultViewport,
 } from '@/lib/animations'
+import EditModeBar, { NewPostButton } from '@/components/EditModeBar'
 
 const API = ''
 
@@ -71,14 +72,17 @@ function parseFaqBody(body: string): FaqItem[] {
 }
 
 // ── Shared Board Header ──
-function BoardHeader({ config }: { config: BoardConfig }) {
+function BoardHeader({ config, board }: { config: BoardConfig; board?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <h1 className="text-3xl font-bold text-[#1d1d1f] mb-2">{config.label}</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-3xl font-bold text-[#1d1d1f]">{config.label}</h1>
+        {board && <NewPostButton board={board} />}
+      </div>
       <p className="text-[#86868b] text-sm mb-8">{config.description}</p>
       {config.notice && (
         <div className="bg-[#f5f5f7] rounded-xl px-5 py-4 text-sm text-[#6e6e73] -mt-4 mb-8">
@@ -134,10 +138,10 @@ const EMPLOYER_FAQ: FaqItem[] = [
 
 // ── Constants ──
 const KOREA_IMAGES: Record<string, string> = {
-  Seoul: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=480&h=320&fit=crop',
-  Gyeonggi: 'https://images.unsplash.com/photo-1578637387939-43c525550085?w=480&h=320&fit=crop',
-  Incheon: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=480&h=320&fit=crop',
-  Busan: 'https://images.unsplash.com/photo-1590559899731-a382839e5549?w=480&h=320&fit=crop',
+  Seoul: 'https://images.unsplash.com/photo-1546874177-9e664107314e?w=480&h=320&fit=crop',
+  Gyeonggi: 'https://images.unsplash.com/photo-1535189043414-47a3c49a0bed?w=480&h=320&fit=crop',
+  Incheon: 'https://images.unsplash.com/photo-1506816561089-5cc37b3aa9b0?w=480&h=320&fit=crop',
+  Busan: 'https://images.unsplash.com/photo-1538574027501-286b64ee38f8?w=480&h=320&fit=crop',
   Daegu: 'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=480&h=320&fit=crop',
 }
 const KOREA_MAP_LINKS: Record<string, string> = {
@@ -266,15 +270,24 @@ export default function BoardPage() {
 
   const props: LayoutProps = { config, posts, total, board, faqItems }
 
-  switch (config.layout) {
-    case 'list':         return <ListLayout {...props} />
-    case 'hero-cards':   return <HeroCardsLayout {...props} />
-    case 'card-grid':    return <CardGridLayout {...props} />
-    case 'photo-cards':  return <PhotoCardsLayout {...props} />
-    case 'testimonial':
-    case 'testimonials': return <TestimonialLayout {...props} />
-    default:             return <ListLayout {...props} />
-  }
+  const Layout = (() => {
+    switch (config.layout) {
+      case 'list':         return ListLayout
+      case 'hero-cards':   return HeroCardsLayout
+      case 'card-grid':    return CardGridLayout
+      case 'photo-cards':  return PhotoCardsLayout
+      case 'testimonial':
+      case 'testimonials': return TestimonialLayout
+      default:             return ListLayout
+    }
+  })()
+
+  return (
+    <>
+      <EditModeBar />
+      <Layout {...props} />
+    </>
+  )
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -341,7 +354,7 @@ function ListLayout({ config, posts, board }: LayoutProps) {
 
       {/* ── Regular Post List ── */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <BoardHeader config={config} />
+        <BoardHeader config={config} board={board} />
         {regularPosts.length === 0 ? (
           <p className="text-[#86868b] text-center py-16">No posts yet.</p>
         ) : (
@@ -695,7 +708,7 @@ function HeroCardsLayout({ posts, board }: LayoutProps) {
 function CardGridLayout({ config, posts, board }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} />
+      <BoardHeader config={config} board={board} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => (
           <motion.div key={p.id} variants={fadeInUp}>
@@ -719,7 +732,7 @@ function CardGridLayout({ config, posts, board }: LayoutProps) {
 function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} />
+      <BoardHeader config={config} board={board} />
       <div className="space-y-5">
         {posts.map((p, i) => {
           const city = CITY_KEYS[i % CITY_KEYS.length]
@@ -757,7 +770,7 @@ function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
 function TestimonialLayout({ config, posts, board }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} />
+      <BoardHeader config={config} board={board} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => {
           const name = p.title.split('—')[0]?.trim() ?? p.title
