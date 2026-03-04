@@ -39,8 +39,8 @@ const FALLBACK_TESTIMONIALS = [
 const ACADEMY_NAMES = [
   'Chungdahm Learning', 'JLS Jungsang', 'Poly', 'April', 'DYB Choisun',
   'Sogang SLP', 'Rise Korea', 'Warwick Franklin', 'Fast Track Kids',
-  'Hillside IYASkola', 'Avalon', 'Elan', 'YBM', 'Wall Street English',
-  'Siwon School', 'Real Class', 'Kyvis Kids',
+  'Hillside IYASkola', 'Avalon', 'YBM', 'Wall Street English',
+  'Siwon School', 'Real Class',
 ]
 const SCHOOL_NAMES = [
   'Korea University Foreign Language Center', 'Seoul International School',
@@ -215,7 +215,7 @@ export default function HomePage() {
               </filter>
             </defs>
 
-            {/* Main cable — parabolic arc, left→right draw */}
+            {/* Main cable — parabolic arc, draws first (0s→0.8s) */}
             <path
               d="M 0 520 Q 700 180, 1400 520"
               stroke="white"
@@ -225,10 +225,10 @@ export default function HomePage() {
               strokeDasharray="2200"
               strokeDashoffset={showBridge ? 0 : 2200}
               filter="url(#cableGlow)"
-              style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0s, opacity 0.5s ease 0s' }}
+              style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0s, opacity 0.3s ease 0s' }}
             />
 
-            {/* Left tower — bottom→top draw */}
+            {/* Left tower — appears with cables at 0.6s */}
             <line
               x1={420} y1={520} x2={420} y2={280}
               stroke="white"
@@ -237,10 +237,10 @@ export default function HomePage() {
               opacity={showBridge ? 0.2 : 0}
               strokeDasharray="240"
               strokeDashoffset={showBridge ? 0 : -240}
-              style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.8s, opacity 0.4s ease 0.8s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s, opacity 0.3s ease 0.6s' }}
             />
 
-            {/* Right tower — bottom→top draw */}
+            {/* Right tower — same timing as left */}
             <line
               x1={980} y1={520} x2={980} y2={280}
               stroke="white"
@@ -249,35 +249,35 @@ export default function HomePage() {
               opacity={showBridge ? 0.2 : 0}
               strokeDasharray="240"
               strokeDashoffset={showBridge ? 0 : -240}
-              style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1) 1s, opacity 0.4s ease 1s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s, opacity 0.3s ease 0.6s' }}
             />
 
-            {/* Stay cables — left tower top to cable */}
+            {/* Stay cables — all appear simultaneously at 0.6s */}
             <line x1={420} y1={280} x2={280} y2={410}
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
               opacity={showBridge ? 0.08 : 0}
               strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
-              style={{ transition: 'stroke-dashoffset 1s ease 2s, opacity 0.4s ease 2s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
             />
             <line x1={420} y1={280} x2={200} y2={465}
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
               opacity={showBridge ? 0.08 : 0}
               strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
-              style={{ transition: 'stroke-dashoffset 1s ease 2.2s, opacity 0.4s ease 2.2s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
             />
 
-            {/* Stay cables — right tower top to cable */}
+            {/* Stay cables — right side, same 0.6s delay */}
             <line x1={980} y1={280} x2={1120} y2={410}
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
               opacity={showBridge ? 0.08 : 0}
               strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
-              style={{ transition: 'stroke-dashoffset 1s ease 2.4s, opacity 0.4s ease 2.4s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
             />
             <line x1={980} y1={280} x2={1200} y2={465}
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
               opacity={showBridge ? 0.08 : 0}
               strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
-              style={{ transition: 'stroke-dashoffset 1s ease 2.6s, opacity 0.4s ease 2.6s' }}
+              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
             />
           </svg>
         </div>
@@ -507,16 +507,16 @@ export default function HomePage() {
           4. PARTNER MARQUEE — Academies + Schools 2줄
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="bg-[#111111] py-14 overflow-hidden border-t border-white/[0.06]">
-        {/* Row 1 — Academies */}
+        {/* Row 1 — Schools & Institutions */}
         <div className="mb-4">
           <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
-            Our Partner Academies
+            Schools &amp; Institutions
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--slow">
-              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
+              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
                 <span
-                  key={`a-${i}`}
+                  key={`s-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
                 >
                   {name}
@@ -526,16 +526,16 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Row 2 — Schools & Institutions */}
+        {/* Row 2 — Our Partner Academies */}
         <div>
           <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
-            Schools &amp; Institutions
+            Our Partner Academies
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--slow" style={{ animationDirection: 'reverse' }}>
-              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
+              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
                 <span
-                  key={`s-${i}`}
+                  key={`a-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
                 >
                   {name}
