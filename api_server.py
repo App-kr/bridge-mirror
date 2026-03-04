@@ -1723,7 +1723,7 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
 
 
 # ── Community Board API ──────────────────────────────────────────────────────
-_BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials"}
+_BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials", "information"}
 _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]
 
 import hashlib, time as _time

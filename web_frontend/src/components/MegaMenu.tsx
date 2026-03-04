@@ -16,8 +16,12 @@ interface SubItem { href: string; label: string; labelKr?: string }
 const DROPDOWNS: Record<string, SubItem[]> = {
   '/community/about': [
     { href: '/community/about', label: 'About BRIDGE', labelKr: '회사 소개' },
-    { href: '/community/about#partners', label: 'Partners', labelKr: '파트너 학원' },
     { href: '/community/about#process', label: 'How It Works', labelKr: '채용 프로세스' },
+  ],
+  '/community/information': [
+    { href: '/community/information', label: 'Team', labelKr: '팀 소개' },
+    { href: '/community/information#services', label: 'Services', labelKr: '서비스 안내' },
+    { href: '/community/information#agency', label: 'About Agency', labelKr: '소개소 안내' },
   ],
   '/community/korea': [
     { href: '/community/korea', label: 'Living in Korea', labelKr: '한국 생활' },
@@ -54,6 +58,7 @@ const MOBILE_LINKS = [
   { href: '/community/support', label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
   { href: '/community/tips', label: 'Tips' },
+  { href: '/community/information', label: 'Information' },
 ]
 
 export default function MegaMenu() {
@@ -68,6 +73,26 @@ export default function MegaMenu() {
     setMobileOpen(false)
     setActive(null)
   }, [pathname])
+
+  // layout.tsx 수정 금지 → "Information" 링크를 DOM에 동적 삽입
+  useEffect(() => {
+    if (isAdmin) return
+    const nav = document.querySelector('.nav-glass nav, .nav-glass div[class*="flex"]')
+    if (!nav) return
+    const existing = nav.querySelector('a[href="/community/information"]')
+    if (existing) return
+
+    const tipsLink = nav.querySelector('a[href="/community/tips"]')
+    if (!tipsLink) return
+
+    const infoLink = document.createElement('a')
+    infoLink.href = '/community/information'
+    infoLink.className = tipsLink.className // nav-link 스타일 복사
+    infoLink.textContent = 'Information'
+    tipsLink.insertAdjacentElement('afterend', infoLink)
+
+    return () => { infoLink.remove() }
+  }, [pathname, isAdmin])
 
   // .nav-link 에 hover 리스너 부착
   useEffect(() => {
