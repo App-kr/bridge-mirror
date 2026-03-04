@@ -6,7 +6,7 @@ services:
     plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn api_server:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120 --max-requests 1000 --max-requests-jitter 50"
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: ENV
@@ -14,7 +14,7 @@ services:
       - key: DB_PATH
         value: /data/master.db
       - key: CORS_ORIGINS
-        value: https://bridgejob.co.kr,https://www.bridgejob.co.kr
+        value: https://bridgejob.co.kr,https://www.bridgejob.co.kr,https://bridge-chi-lime.vercel.app
       - key: ADMIN_API_KEY
         sync: false
       - key: ADMIN_PASSWORD
