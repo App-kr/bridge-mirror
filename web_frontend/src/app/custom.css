@@ -376,8 +376,8 @@ a.nav-cta[href="/inquiry"]:hover {
    8. PARTNER MARQUEE — slower speed override
    ═══════════════════════════════════════════════════════════════════════════ */
 .marquee-track--slow {
-  animation-duration: 90s;
+  animation-duration: 75s;
 }
 .marquee-track--mid {
-  animation-duration: 60s;
+  animation-duration: 40s;
 }
