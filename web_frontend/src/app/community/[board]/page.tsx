@@ -328,10 +328,10 @@ function ListLayout({ config, posts, board }: LayoutProps) {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
               >
-                <p className="text-white/50 text-sm mb-3">기타 궁금한 사항은 문의하기 페이지를 통해 연락 주세요.</p>
-                <a href="/inquiry"
-                  className="inline-block px-5 py-2.5 bg-[#22c55e] text-white text-sm font-medium rounded-full hover:bg-[#16a34a] transition-colors">
-                  문의하기
+                <p className="text-white/50 text-sm mb-3">기타 궁금한 사항은 카카오톡 채널로 문의해주세요.</p>
+                <a href="http://pf.kakao.com/_tBxhxkK/chat" target="_blank" rel="noopener noreferrer"
+                  className="inline-block px-5 py-2.5 bg-[#FEE500] text-[#191919] text-sm font-medium rounded-full hover:bg-[#F5DC00] transition-colors">
+                  카카오톡 문의하기
                 </a>
               </motion.div>
             )}
