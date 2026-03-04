@@ -558,7 +558,6 @@ def _job_row_to_public(row: dict) -> dict:
         "is_hot":                  bool(row.get("is_hot", 0)),
         "employment_type":         "part_time" if row.get("is_part_time") else "full_time",
         "hours_per_day":           row.get("daily_hours"),
-        "status":                  row.get("status", "open"),
     }
 
 
@@ -567,7 +566,6 @@ async def list_jobs(
     request:   Request,
     city:      Optional[str] = None,
     is_hot:    Optional[bool] = None,
-    include_closed: Optional[bool] = None,
     limit:     int = 50,
     offset:    int = 0,
 ):
@@ -575,7 +573,6 @@ async def list_jobs(
     공개 구인 목록 조회 (SQLite, status='open' 만 반환)
     - city: 도시 필터 (서울, 인천, 수원 등)
     - is_hot: HOT 포지션만 (true/false)
-    - include_closed: true면 closed 포함 (admin용)
     - limit / offset: 페이지네이션
     """
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
@@ -585,15 +582,8 @@ async def list_jobs(
         conn.execute("PRAGMA busy_timeout=5000")
         conn.row_factory = sqlite3.Row
         try:
-            where = ["is_deleted = 0"]
-            params: list[Any] = []
-
-            # include_closed requires admin key
-            if include_closed and _ADMIN_KEY and request.headers.get("x-admin-key", "") == _ADMIN_KEY:
-                pass  # no status filter
-            else:
-                where.append("status = ?")
-                params.append("open")
+            where = ["status = ?", "is_deleted = 0"]
+            params: list[Any] = ["open"]
 
             if city:
                 city = city.strip()[:50]
@@ -2527,45 +2517,6 @@ async def security_report(request: Request):
     is_warned = len(_security_warn_store[ip]) >= 10
 
     return ok(message="Event recorded", data={"warned": is_warned})
-
-
-# ── Admin: Job Status ──────────────────────────────────────────────────────────
-
-class JobStatusUpdate(BaseModel):
-    status: str = Field(..., pattern=r'^(open|closed)$')
-
-@app.put("/api/admin/jobs/{job_id}/status", tags=["admin"])
-async def admin_update_job_status(job_id: int, body: JobStatusUpdate, request: Request):
-    """채용공고 Open/Close 상태 변경 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM jobs WHERE id=? AND is_deleted=0", (job_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Job not found")
-        conn.execute("UPDATE jobs SET status=? WHERE id=?", (body.status, job_id))
-        conn.commit()
-        return ok(message=f"Job #{job_id} status → {body.status}")
-    finally:
-        conn.close()
-
-@app.put("/api/admin/jobs/{job_id}/hot", tags=["admin"])
-async def admin_toggle_job_hot(job_id: int, request: Request):
-    """채용공고 HOT 토글 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        row = conn.execute("SELECT id, is_hot FROM jobs WHERE id=? AND is_deleted=0", (job_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, "Job not found")
-        new_hot = 0 if row[1] else 1
-        conn.execute("UPDATE jobs SET is_hot=? WHERE id=?", (new_hot, job_id))
-        conn.commit()
-        return ok(message=f"Job #{job_id} hot → {bool(new_hot)}")
-    finally:
-        conn.close()
 
 
 # ── Admin: Boards 관리 ─────────────────────────────────────────────────────────

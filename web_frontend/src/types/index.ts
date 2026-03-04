@@ -179,6 +179,7 @@ export interface PublicJob {
   is_hot:                   boolean
   employment_type:          EmploymentType
   hours_per_day:            number | null
+  status?:                  string
 }
 
 /**
