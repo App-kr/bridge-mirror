@@ -125,7 +125,8 @@
       "Bash(export:*)",
       "Bash(schtasks //create //tn \"BridgeCraigslistRPA\" //tr \"\\\\\"Q:\\\\\\\\Claudework\\\\\\\\bridge base\\\\\\\\scripts\\\\\\\\run_rpa.bat\\\\\"\" //sc hourly //mo 6 //st 09:00 //f 2>&1 | iconv -f cp949 -t utf-8 2>/dev/null)",
       "Bash(MSYS_NO_PATHCONV=1 schtasks:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git push origin main 2>&1 || git push --set-upstream origin main 2>&1)"
     ]
   }
 }

@@ -66,7 +66,7 @@ export default function AdminApplicationsPage() {
   const { authed, login, headers, waking } = useAdminAuth()
 
   const [applications, setApplications] = useState<Application[]>([])
-  const [tab, setTab] = useState<'all' | 'candidate' | 'employer'>('all')
+  const [tab, setTab] = useState<'candidate' | 'employer'>('candidate')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
@@ -122,7 +122,7 @@ export default function AdminApplicationsPage() {
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  const filtered = tab === 'all' ? applications : applications.filter((a) => a.type === tab)
+  const filtered = applications.filter((a) => a.type === tab)
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">
@@ -131,7 +131,7 @@ export default function AdminApplicationsPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-bold text-gray-900">접수 관리</h1>
-          <p className="text-xs text-gray-500">구직자 + 구인자 통합 목록</p>
+          <p className="text-xs text-gray-500">구직자 · 구인자 접수 관리</p>
         </div>
         <div className="flex items-center gap-3">
           {actionMsg && <span className="text-xs text-green-600 font-medium">{actionMsg}</span>}
@@ -141,14 +141,16 @@ export default function AdminApplicationsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4">
-        {(['all', 'candidate', 'employer'] as const).map((t) => (
+        {(['candidate', 'employer'] as const).map((t) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              tab === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              tab === t
+                ? (t === 'candidate' ? 'bg-blue-600 text-white' : 'bg-orange-500 text-white')
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}>
-            {t === 'all' ? `전체 (${applications.length})` :
-             t === 'candidate' ? `구직자 (${applications.filter(a => a.type === 'candidate').length})` :
-             `구인자 (${applications.filter(a => a.type === 'employer').length})`}
+            {t === 'candidate'
+              ? `구직자 (${applications.filter(a => a.type === 'candidate').length})`
+              : `구인자 (${applications.filter(a => a.type === 'employer').length})`}
           </button>
         ))}
       </div>

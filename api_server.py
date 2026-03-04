@@ -62,25 +62,27 @@ class SafeJSONResponse(Response):
     """JSON 직렬화 시 브라우저 JSON.parse 호환성을 100% 보장하는 Response."""
     media_type = "application/json"
 
-    def __init__(self, content, status_code=200, **kwargs):
+    def __init__(self, content=None, status_code=200, headers=None, **kwargs):
         body = json.dumps(
-            self._sanitize(content),
+            self._deep_sanitize(content),
             ensure_ascii=False,
             default=str,
         )
-        super().__init__(content=body, status_code=status_code, media_type=self.media_type, **kwargs)
+        super().__init__(content=body, status_code=status_code, media_type=self.media_type, headers=headers)
 
     @classmethod
-    def _sanitize(cls, obj):
+    def _deep_sanitize(cls, obj):
         if isinstance(obj, str):
             obj = obj.replace('\x00', '')
             obj = ''.join(c for c in obj if ord(c) >= 32 or c in '\n\r\t')
             obj = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', obj)
             return obj
         elif isinstance(obj, dict):
-            return {k: cls._sanitize(v) for k, v in obj.items()}
+            return {cls._deep_sanitize(k): cls._deep_sanitize(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):
-            return [cls._sanitize(v) for v in obj]
+            return [cls._deep_sanitize(v) for v in obj]
+        elif isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
         return obj
 
 try:
