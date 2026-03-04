@@ -161,7 +161,13 @@ class IPBlacklist:
         entry = self._list.get(ip)
         if not entry:
             return False
-        until = datetime.fromisoformat(entry["until"])
+        until_str = entry.get("until", "")
+        if not until_str:
+            return False
+        try:
+            until = datetime.fromisoformat(until_str)
+        except (ValueError, TypeError):
+            return False
         if datetime.now(timezone.utc) > until:
             del self._list[ip]
             self._save()
@@ -200,7 +206,12 @@ ip_blacklist = IPBlacklist()
 class RateLimiter:
     def __init__(self):
         self._windows: dict[str, list[float]] = defaultdict(list)
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     RULES = {
         # (endpoint_prefix, max_requests, window_seconds)
@@ -223,7 +234,7 @@ class RateLimiter:
         max_req, window = self._get_rule(path)
         key = f"{ip}:{path.split('/')[1] if '/' in path else path}"
         now = time.time()
-        async with self._lock:
+        async with self._get_lock():
             timestamps = self._windows[key]
             self._windows[key] = [t for t in timestamps if now - t < window]
             if len(self._windows[key]) >= max_req:
