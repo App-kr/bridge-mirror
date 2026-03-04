@@ -97,7 +97,8 @@
       "WebFetch(domain:support.google.com)",
       "Bash(echo nothing to commit:*)",
       "Bash(node:*)",
-      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card premium redesign\" 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card premium redesign\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"pre-work backup: job card final polish\" 2>&1)"
     ]
   }
 }
