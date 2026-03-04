@@ -32,6 +32,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Any
 import hashlib
+import asyncio
+import threading
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
@@ -269,6 +271,7 @@ ALLOWED_ORIGINS = (
     else [
         "https://bridgejob.co.kr",
         "https://www.bridgejob.co.kr",
+        "https://bridge-chi-lime.vercel.app",
         "http://localhost:3000",   # 개발용
         "http://localhost:3001",   # 개발용
         "http://localhost:3002",   # 개발용
@@ -489,6 +492,33 @@ async def root():
         "time":    datetime.now(timezone.utc).isoformat(),
         "docs":    "/docs",
     }
+
+
+@app.get("/health", tags=["health"])
+async def health_check():
+    """Render / 외부 모니터링용 헬스체크"""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+# ── Render 슬립 방지 — 10분마다 self-ping ──────────────────────────────────────
+_RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "")
+
+def _keep_alive_loop():
+    """백그라운드 스레드: 10분마다 /health self-ping"""
+    import urllib.request
+    url = f"{_RENDER_URL}/health" if _RENDER_URL else ""
+    if not url:
+        return
+    while True:
+        time.sleep(600)  # 10분
+        try:
+            urllib.request.urlopen(url, timeout=10)
+        except Exception:
+            pass
+
+if _RENDER_URL:
+    _t = threading.Thread(target=_keep_alive_loop, daemon=True)
+    _t.start()
 
 
 def _job_row_to_public(row: dict) -> dict:

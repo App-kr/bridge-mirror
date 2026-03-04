@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!web_frontend/.env.production
 
 # ── Credentials & Keys ────────────────────────────────────────
 *.pem
