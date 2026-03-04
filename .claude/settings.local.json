@@ -119,7 +119,9 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && git filter-branch --force --index-filter 'git rm -r --cached --ignore-unmatch bridge_agent/build_temp/' --prune-empty -- origin/main..HEAD 2>&1)",
       "Bash(git add:*)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git reset HEAD candidates_test.json render_candidates.json audit/ .claude/settings.local.json 2>&1)",
-      "Bash(cd \"Q:/Claudework/bridge base\" && git for-each-ref --format='%\\(refname\\)' refs/original/ | while read ref; do git update-ref -d \"$ref\"; done 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base\" && git for-each-ref --format='%\\(refname\\)' refs/original/ | while read ref; do git update-ref -d \"$ref\"; done 2>&1)",
+      "Bash(echo === Applications sample ===:*)",
+      "Bash(find:*)"
     ]
   }
 }

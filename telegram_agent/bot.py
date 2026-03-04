@@ -149,6 +149,7 @@ async def _send_long(update: Update, text: str):
 # ── Commands ──────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"/start from {update.effective_chat.id}")
     if not _check_auth(update.effective_chat.id):
         await update.message.reply_text("Unauthorized.")
         return
@@ -339,6 +340,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
+    logger.info(f"TEXT from {update.effective_chat.id}: {text[:50]}")
     await update.message.reply_chat_action(ChatAction.TYPING)
 
     try:
@@ -480,6 +482,12 @@ def main():
 
     app = Application.builder().token(token).post_init(post_init).build()
 
+    # Error handler
+    async def error_handler(update, context):
+        logger.error(f"Exception: {context.error}")
+
+    app.add_error_handler(error_handler)
+
     # Commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
@@ -498,7 +506,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
 
 
 if __name__ == "__main__":
