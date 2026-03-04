@@ -2,17 +2,15 @@
 
 /**
  * /admin — Dashboard (종합 현황)
- * 통합 통계 + 차트 + 기존 통계 카드 + 빠른 액션 + 최근 활동 피드
+ * Apple 2026 미니멀: 최근 게시물 테이블 → 통계 카드 → 차트 → 노출 비중
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
 
-// recharts dynamic import (SSR 비활성화)
 const BarChart = dynamic(() => import('recharts').then(m => m.BarChart), { ssr: false })
 const Bar = dynamic(() => import('recharts').then(m => m.Bar), { ssr: false })
 const XAxis = dynamic(() => import('recharts').then(m => m.XAxis), { ssr: false })
@@ -22,7 +20,6 @@ const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.Respons
 const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: false })
 const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
-
 
 const API = API_URL
 
@@ -75,6 +72,37 @@ interface ActivityItem {
 }
 
 const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
+
+const EXPOSURE_DATA = [
+  { channel: 'Google', pct: 42 },
+  { channel: 'Naver', pct: 28 },
+  { channel: 'Reddit', pct: 14 },
+  { channel: 'Direct', pct: 9 },
+  { channel: 'Craigslist', pct: 7 },
+]
+
+const boardLabel = (b: string) => {
+  const map: Record<string, string> = {
+    visa: 'Visa', support: 'Support(EN)', support_kr: '업무지원',
+    about: 'About', korea: 'Korea', tips: 'Tips',
+    testimonials: 'Testimonials', information: 'Information',
+  }
+  return map[b] ?? b
+}
+
+const boardColor = (b: string) => {
+  const map: Record<string, string> = {
+    visa: 'bg-emerald-50 text-emerald-700',
+    support: 'bg-blue-50 text-blue-700',
+    support_kr: 'bg-orange-50 text-orange-700',
+    about: 'bg-violet-50 text-violet-700',
+    korea: 'bg-rose-50 text-rose-700',
+    tips: 'bg-amber-50 text-amber-700',
+    testimonials: 'bg-cyan-50 text-cyan-700',
+    information: 'bg-gray-100 text-gray-700',
+  }
+  return map[b] ?? 'bg-gray-100 text-gray-600'
+}
 
 export default function AdminDashboardPage() {
   const { authed, waking, login, adminFetch } = useAdminAuth()
@@ -141,96 +169,130 @@ export default function AdminDashboardPage() {
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  const thisMonthDelta = (inboxStats.this_month_candidates ?? 0)
-  const lastMonthDelta = (inboxStats.last_month_candidates ?? 0)
+  const thisMonthDelta = inboxStats.this_month_candidates ?? 0
+  const lastMonthDelta = inboxStats.last_month_candidates ?? 0
   const deltaSign = thisMonthDelta > lastMonthDelta ? '+' : ''
   const deltaValue = thisMonthDelta - lastMonthDelta
 
-  const inboxCards = [
-    { label: '총 지원', value: inboxStats.total_candidates ?? 0, sub: `이번달 +${thisMonthDelta}`, icon: '📋', color: 'text-blue-600' },
-    { label: '신규 미처리', value: inboxStats.new_candidates ?? 0, sub: '', icon: '🟢', color: 'text-green-600' },
-    { label: '이번달 이메일', value: thisMonthDelta, sub: `전월 대비 ${deltaSign}${deltaValue}`, icon: '📧', color: 'text-violet-600' },
-    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, sub: `이번달 +${inboxStats.this_month_inquiries ?? 0}`, icon: '🏫', color: 'text-orange-600' },
-    { label: '활성 구인', value: inboxStats.active_jobs ?? 0, sub: '', icon: '💼', color: 'text-emerald-600' },
-    { label: '커뮤니티', value: inboxStats.community_posts ?? 0, sub: '', icon: '📝', color: 'text-gray-600' },
+  const statCards = [
+    { label: '총 지원', value: inboxStats.total_candidates ?? 0, sub: `이번달 +${thisMonthDelta}` },
+    { label: '신규 미처리', value: inboxStats.new_candidates ?? 0, sub: '' },
+    { label: '이번달 유입', value: thisMonthDelta, sub: `전월 대비 ${deltaSign}${deltaValue}` },
+    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, sub: `이번달 +${inboxStats.this_month_inquiries ?? 0}` },
+    { label: '활성 구인', value: inboxStats.active_jobs ?? 0, sub: '' },
+    { label: '커뮤니티', value: inboxStats.community_posts ?? 0, sub: '' },
   ]
+
+  const recentPosts = activity.filter(a => a.type === 'post').slice(0, 10)
 
   return (
     <div className="space-y-8">
-      <AdminNav active="/admin" />
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-0.5">bridgejob.co.kr 운영 현황</p>
+          <h1 className="text-2xl font-bold text-[#1d1d1f]">Dashboard</h1>
+          <p className="text-[#86868b] text-sm mt-0.5">bridgejob.co.kr 운영 현황</p>
         </div>
-        <button type="button" onClick={fetchAll} className="text-sm text-blue-600 hover:underline">
-          ↻ 새로고침
+        <button type="button" onClick={fetchAll} className="text-sm text-[#0071e3] hover:underline">
+          새로고침
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center py-32 text-gray-400 animate-pulse">
-          {wakeMsg ? '서버 깨우는 중... 잠시만 기다려주세요' : '대시보드 로딩 중…'}
+        <div className="text-center py-32 text-[#86868b] animate-pulse">
+          {wakeMsg ? '서버 깨우는 중... 잠시만 기다려주세요' : '대시보드 로딩 중...'}
         </div>
       ) : error ? (
         <div className="text-center py-32 space-y-4">
           <p className="text-red-500">{error}</p>
-          <button type="button" className="btn-primary" onClick={fetchAll}>재시도</button>
+          <button type="button" className="px-5 py-2 rounded-full bg-[#0071e3] text-white text-sm font-medium hover:bg-[#0077ED]" onClick={fetchAll}>재시도</button>
         </div>
       ) : (
         <>
-          {/* ── 통합 통계 카드 6개 ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {inboxCards.map((c) => (
-              <div key={c.label} className="card text-center">
-                <div className="text-2xl mb-1">{c.icon}</div>
-                <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
-                <div className="text-xs text-gray-500 mt-1">{c.label}</div>
-                {c.sub && <div className="text-[10px] text-gray-400 mt-0.5">{c.sub}</div>}
+          {/* ── 최근 게시물 테이블 ────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#f0f0f2]">
+              <h2 className="text-[15px] font-semibold text-[#1d1d1f]">최근 게시물</h2>
+            </div>
+            {recentPosts.length === 0 ? (
+              <div className="px-5 py-10 text-center text-[#86868b] text-sm">최근 게시물이 없습니다.</div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
+                    <th className="text-left px-5 py-2.5">날짜</th>
+                    <th className="text-left px-5 py-2.5">게시판</th>
+                    <th className="text-left px-5 py-2.5">제목</th>
+                    <th className="text-right px-5 py-2.5">액션</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentPosts.map((post, idx) => (
+                    <tr key={`${post.id}-${idx}`} className="border-t border-[#f5f5f7] hover:bg-[#fafafa] transition-colors">
+                      <td className="px-5 py-3 text-[13px] text-[#86868b] whitespace-nowrap">
+                        {post.created_at ? new Date(post.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-medium ${boardColor(post.board ?? '')}`}>
+                          {boardLabel(post.board ?? '')}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-[13px] text-[#1d1d1f] font-medium truncate max-w-[300px]">
+                        {post.title}
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <a href={`/admin/posts?board=${post.board}&edit=${post.id}`}
+                          className="text-[12px] text-[#0071e3] hover:underline mr-3">편집</a>
+                        <a href={`/community/${post.board}`}
+                          className="text-[12px] text-[#86868b] hover:text-[#1d1d1f]">보기</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* ── 통계 카드 6개 (미니멀) ────────────────────────── */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {statCards.map((c) => (
+              <div key={c.label} className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
+                <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">{c.value}</div>
+                <div className="text-[12px] text-[#86868b] mt-1 font-medium">{c.label}</div>
+                {c.sub && <div className="text-[10px] text-[#aeaeb2] mt-0.5">{c.sub}</div>}
               </div>
             ))}
           </div>
 
-          {/* ── 차트 2개 ───────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 월별 접수 추이 */}
-            <div className="card">
-              <h2 className="font-bold text-gray-900 mb-4">월별 접수 추이</h2>
+          {/* ── 차트 2개 ─────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">월별 접수 추이</h2>
               {monthly.length > 0 ? (
                 <div style={{ width: '100%', height: 220 }}>
                   <ResponsiveContainer>
                     <BarChart data={monthly}>
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
                       <Tooltip />
-                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="접수" />
+                      <Bar dataKey="count" fill="#0071e3" radius={[6, 6, 0, 0]} name="접수" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <p className="text-gray-400 text-sm py-8 text-center">데이터 없음</p>
+                <p className="text-[#86868b] text-sm py-8 text-center">데이터 없음</p>
               )}
             </div>
 
-            {/* 채널별 비율 */}
-            <div className="card">
-              <h2 className="font-bold text-gray-900 mb-4">채널별 비율</h2>
+            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">채널별 비율</h2>
               {sources.length > 0 ? (
                 <div className="flex items-center gap-4">
-                  <div style={{ width: 180, height: 180 }}>
+                  <div style={{ width: 170, height: 170 }}>
                     <ResponsiveContainer>
                       <PieChart>
-                        <Pie
-                          data={sources}
-                          dataKey="count"
-                          nameKey="label"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          innerRadius={40}
-                        >
+                        <Pie data={sources} dataKey="count" nameKey="label"
+                          cx="50%" cy="50%" outerRadius={75} innerRadius={40}>
                           {sources.map((_, idx) => (
                             <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
                           ))}
@@ -242,93 +304,46 @@ export default function AdminDashboardPage() {
                   <div className="space-y-2 text-sm">
                     {sources.map((s, idx) => (
                       <div key={s.source} className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full shrink-0"
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                        <span className="text-gray-600">{s.label}</span>
-                        <span className="font-medium text-gray-900">{s.count}</span>
+                        <span className="text-[#424245] text-[13px]">{s.label}</span>
+                        <span className="font-semibold text-[#1d1d1f] text-[13px]">{s.count}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-400 text-sm py-8 text-center">데이터 없음</p>
+                <p className="text-[#86868b] text-sm py-8 text-center">데이터 없음</p>
               )}
             </div>
           </div>
 
-          {/* ── 빠른 액션 ──────────────────────────────────────────────────── */}
-          <div className="flex gap-3 flex-wrap">
-            <a href="/admin/inbox"
-              className="px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-              📧 수신함 열기
-            </a>
-            <a href="/admin/interviews"
-              className="px-4 py-2 rounded-full bg-[#1d1d1f] text-white text-sm font-medium hover:bg-[#424245] transition-colors">
-              + 인터뷰 예약
-            </a>
-            <a href="/admin/posts"
-              className="px-4 py-2 rounded-full bg-[#1d1d1f] text-white text-sm font-medium hover:bg-[#424245] transition-colors">
-              + 게시글 작성
-            </a>
-            <a href="/admin/candidates"
-              className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
-              지원자 보기
-            </a>
-            <a href="/admin/ad-posts"
-              className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
-              Ad Posts
-            </a>
-          </div>
-
-          {/* ── 기존 하단: 최근 활동 + 현황 요약 ────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 card">
-              <h2 className="font-bold text-gray-900 mb-4">최근 활동</h2>
-              {activity.length === 0 ? (
-                <p className="text-gray-400 text-sm py-8 text-center">최근 활동이 없습니다.</p>
-              ) : (
-                <div className="space-y-3">
-                  {activity.map((item, idx) => (
-                    <div key={`${item.type}-${item.id}-${idx}`}
-                      className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                      <span className="text-lg shrink-0">
-                        {item.type === 'post' ? '📝' : '🎥'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        {item.type === 'post' ? (
-                          <>
-                            <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
-                            <p className="text-xs text-gray-400">
-                              {item.board} · {item.created_at ? new Date(item.created_at).toLocaleDateString('ko-KR') : '—'}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-sm font-medium text-gray-900">
-                              인터뷰: {item.candidate_name || 'N/A'}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {item.interview_date} {item.interview_time}
-                              {item.status && ` · ${item.status}`}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+          {/* ── 노출 비중 (placeholder) ──────────────────────── */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+            <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">노출 비중</h2>
+            <div className="space-y-3">
+              {EXPOSURE_DATA.map((d) => (
+                <div key={d.channel} className="flex items-center gap-3">
+                  <span className="text-[13px] text-[#424245] w-20 shrink-0">{d.channel}</span>
+                  <div className="flex-1 h-[6px] bg-[#f5f5f7] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#0071e3] rounded-full transition-all duration-500"
+                      style={{ width: `${d.pct}%` }} />
+                  </div>
+                  <span className="text-[12px] font-medium text-[#86868b] w-10 text-right tabular-nums">{d.pct}%</span>
                 </div>
-              )}
+              ))}
             </div>
+          </div>
 
-            <div className="card">
-              <h2 className="font-bold text-gray-900 mb-4">현황 요약</h2>
-              <div className="space-y-4">
-                <SummaryRow label="Ad Posts" value={stats.ad_posts ?? 0} color="bg-blue-500" />
-                <SummaryRow label="결제 전체" value={stats.payments_total ?? 0} color="bg-gray-400" />
-                <SummaryRow label="결제 확인" value={stats.payments_confirmed ?? 0} color="bg-green-500" />
-                <SummaryRow label="인터뷰 예정" value={stats.interviews_scheduled ?? 0} color="bg-violet-500" />
-                <SummaryRow label="게시글" value={stats.posts ?? 0} color="bg-orange-500" />
-              </div>
+          {/* ── 현황 요약 ────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+            <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">현황 요약</h2>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <SummaryItem label="Ad Posts" value={stats.ad_posts ?? 0} />
+              <SummaryItem label="결제 전체" value={stats.payments_total ?? 0} />
+              <SummaryItem label="결제 확인" value={stats.payments_confirmed ?? 0} />
+              <SummaryItem label="인터뷰 예정" value={stats.interviews_scheduled ?? 0} />
+              <SummaryItem label="게시글" value={stats.posts ?? 0} />
             </div>
           </div>
         </>
@@ -337,18 +352,11 @@ export default function AdminDashboardPage() {
   )
 }
 
-function SummaryRow({ label, value, color }: { label: string; value: number; color: string }) {
-  const max = Math.max(value, 1)
-  const width = Math.min((value / max) * 100, 100)
+function SummaryItem({ label, value }: { label: string; value: number }) {
   return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-600">{label}</span>
-        <span className="font-medium text-gray-900">{value}</span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${width}%` }} />
-      </div>
+    <div className="text-center py-2">
+      <div className="text-xl font-bold text-[#1d1d1f] tabular-nums">{value}</div>
+      <div className="text-[11px] text-[#86868b] mt-0.5">{label}</div>
     </div>
   )
 }

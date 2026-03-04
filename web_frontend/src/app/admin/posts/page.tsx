@@ -6,9 +6,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import MarkdownBody from '@/components/MarkdownBody'
 
 import { API_URL } from '@/lib/api'
 
@@ -59,6 +59,7 @@ export default function AdminPostsPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newBody, setNewBody] = useState('')
   const [posting, setPosting] = useState(false)
+  const [newTab, setNewTab] = useState<'write' | 'preview'>('write')
 
   // Edit state
   const [editId, setEditId] = useState<number | null>(null)
@@ -66,6 +67,7 @@ export default function AdminPostsPage() {
   const [editBody, setEditBody] = useState('')
   const [editBoard, setEditBoard] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editTab, setEditTab] = useState<'write' | 'preview'>('write')
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -272,8 +274,6 @@ export default function AdminPostsPage() {
 
   return (
     <div className="space-y-6">
-      <AdminNav active="/admin/posts" />
-
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">게시판 관리</h1>
@@ -327,11 +327,28 @@ export default function AdminPostsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">본문 (Markdown 지원)</label>
-            <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
-              className="w-full h-48 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="## 제목&#10;&#10;본문 내용을 입력하세요..." maxLength={10000} />
-            <div className="text-right text-xs text-gray-400 mt-1">{newBody.length}/10,000</div>
+            <div className="flex items-center gap-1 mb-2">
+              <button type="button" onClick={() => setNewTab('write')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  newTab === 'write' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>작성</button>
+              <button type="button" onClick={() => setNewTab('preview')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  newTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>미리보기</button>
+            </div>
+            {newTab === 'write' ? (
+              <>
+                <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
+                  className="w-full h-48 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  placeholder="## 제목&#10;&#10;본문 내용을 입력하세요..." maxLength={10000} />
+                <div className="text-right text-xs text-gray-400 mt-1">{newBody.length}/10,000</div>
+              </>
+            ) : (
+              <div className="w-full min-h-[192px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
+                {newBody.trim() ? <MarkdownBody text={newBody} /> : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
+              </div>
+            )}
           </div>
           <div className="flex justify-end">
             <button type="button" onClick={handleCreate} disabled={posting}
@@ -454,10 +471,25 @@ export default function AdminPostsPage() {
                         maxLength={200} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">본문</label>
-                      <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                        className="w-full h-40 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        maxLength={10000} />
+                      <div className="flex items-center gap-1 mb-2">
+                        <button type="button" onClick={() => setEditTab('write')}
+                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                            editTab === 'write' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}>작성</button>
+                        <button type="button" onClick={() => setEditTab('preview')}
+                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                            editTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}>미리보기</button>
+                      </div>
+                      {editTab === 'write' ? (
+                        <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
+                          className="w-full h-40 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                          maxLength={10000} />
+                      ) : (
+                        <div className="w-full min-h-[160px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
+                          {editBody.trim() ? <MarkdownBody text={editBody} /> : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button type="button" onClick={() => setEditId(null)}
