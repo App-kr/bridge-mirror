@@ -235,40 +235,60 @@ export default function JobsPage() {
       {/* ── Main ── */}
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
 
-        {/* Filter Bar */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <select value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)}
-            className="bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer">
-            {AGE_GROUPS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-          </select>
-          <button type="button" onClick={() => setHotOnly((v) => !v)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-              hotOnly ? 'bg-red-600 text-white' : 'bg-[#f5f5f7] text-[#424245] hover:bg-red-50 hover:text-red-600'}`}>
-            HOT
-          </button>
-        </div>
-
-        {/* Tagline */}
-        <div className="mb-6">
-          {loading ? (
-            <p className="text-base text-[#86868b]">Loading positions...</p>
-          ) : (
-            <p>
-              <span className="text-[32px] font-bold text-[#1d1d1f]">{(interleaved.length + 4000).toLocaleString()}</span>
-              {' '}
-              <span className="text-[18px] text-[#86868b]">Jobs Available</span>
-            </p>
-          )}
+        {/* Tagline + Filters */}
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+          <div>
+            {loading ? (
+              <p style={{ fontSize: 16, color: '#9ca3af' }}>Loading positions...</p>
+            ) : (
+              <p style={{ margin: 0 }}>
+                <span style={{ fontSize: 36, fontWeight: 700, color: '#111827' }}>
+                  {(interleaved.length + 4000).toLocaleString()}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 400, color: '#9ca3af', marginLeft: 8 }}>
+                  Jobs Available
+                </span>
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)}
+              className="cursor-pointer focus:outline-none"
+              style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 14,
+                color: '#374151',
+                background: '#fff',
+              }}>
+              {AGE_GROUPS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+            <button type="button" onClick={() => setHotOnly((v) => !v)}
+              className="cursor-pointer"
+              style={{
+                border: hotOnly ? '1px solid #ea580c' : '1px solid #e5e7eb',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                color: hotOnly ? '#ea580c' : '#374151',
+                background: '#fff',
+                transition: 'all 0.15s',
+              }}>
+              HOT
+            </button>
+          </div>
         </div>
 
         {/* Skeleton */}
         {loading && (
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid md:grid-cols-2 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-7 space-y-4 h-[280px]">
-                <div className="skeleton h-5 w-1/3" />
-                <div className="skeleton h-6 w-3/4" />
-                <div className="skeleton h-4 w-1/2" />
+              <div key={i} className="bg-white space-y-4 h-[280px]" style={{ borderRadius: 12, padding: 32, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                <div className="skeleton h-4 w-1/4" />
+                <div className="skeleton h-7 w-1/2" />
+                <div className="skeleton h-4 w-1/3" />
                 <div className="skeleton h-4 w-2/3 mt-auto" />
               </div>
             ))}
@@ -293,7 +313,7 @@ export default function JobsPage() {
 
         {/* ── Job Grid: 2 columns desktop, 1 mobile ── */}
         {!loading && pageJobs.length > 0 && (
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid md:grid-cols-2 gap-6">
             {pageJobs.map((job, i) => (
               <JobCard
                 key={`${job.job_id}-${i}`}

@@ -22,54 +22,78 @@ export default function JobCard({
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-[#e5e7eb] p-7 flex flex-col transition-all duration-200
-        hover:shadow-lg hover:-translate-y-[3px] cursor-default
-        ${isHot ? 'border-l-4 border-l-orange-400' : ''}`}
-      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+      className="bg-white flex flex-col cursor-default"
+      style={{
+        borderRadius: 12,
+        padding: 32,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        borderLeft: isHot ? '3px solid #ea580c' : '3px solid transparent',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 10px 40px rgba(0,0,0,0.12)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
     >
-      {/* Badges + Job ID */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-bold bg-emerald-500 text-white px-2.5 py-[3px] rounded-full">OPEN</span>
-          {isHot && <span className="text-[11px] font-bold bg-orange-500 text-white px-2.5 py-[3px] rounded-full">HOT</span>}
+      {/* Status + Job ID */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', color: '#16a34a', textTransform: 'uppercase' }}>
+            Open
+          </span>
+          {isHot && (
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
+              Hot
+            </span>
+          )}
         </div>
-        <span className="text-[28px] font-normal text-[#333] tracking-tight">{job.job_id}</span>
+        <span style={{ fontSize: 22, fontWeight: 300, color: '#9ca3af', letterSpacing: '-0.02em' }}>
+          {job.job_id}
+        </span>
       </div>
 
       {/* City */}
-      <h3 className="text-2xl font-bold text-[#1d1d1f] leading-tight">{job.location || 'Korea'}</h3>
+      <h3 style={{ fontSize: 28, fontWeight: 600, color: '#111827', marginTop: 16, lineHeight: 1.2 }}>
+        {job.location || 'Korea'}
+      </h3>
 
-      {/* Job title / age */}
+      {/* Age / title */}
       {ageLabel && (
-        <p className="text-lg text-[#6e6e73] mt-1">{ageLabel} Teacher</p>
+        <p style={{ fontSize: 16, fontWeight: 400, color: '#6b7280', marginTop: 4 }}>
+          {ageLabel} Teacher
+        </p>
       )}
 
-      {/* Info rows */}
-      <div className="mt-auto pt-5 space-y-2">
+      {/* Info */}
+      <div className="mt-auto" style={{ paddingTop: 20 }}>
         {job.working_hours && (
-          <p className="text-base text-[#424245]">
-            <span className="mr-2">&#x23F0;</span>{job.working_hours}
-          </p>
+          <p style={{ fontSize: 15, color: '#374151', lineHeight: 2 }}>{job.working_hours}</p>
         )}
         {job.starting_date && (
-          <p className="text-base text-[#424245]">
-            <span className="mr-2">&#x1F4C5;</span>{job.starting_date}
-          </p>
+          <p style={{ fontSize: 15, color: '#374151', lineHeight: 2 }}>{job.starting_date}</p>
         )}
         {job.monthly_salary && (
-          <p className="text-base font-semibold text-[#1d1d1f]">
-            <span className="mr-2">&#x1F4B0;</span>{job.monthly_salary}
-          </p>
+          <p style={{ fontSize: 17, fontWeight: 600, color: '#111827', lineHeight: 2 }}>{job.monthly_salary}</p>
         )}
       </div>
 
-      {/* Details button */}
+      {/* Separator */}
+      <div style={{ borderTop: '1px dashed #e5e7eb', margin: '20px 0 16px' }} />
+
+      {/* Details link */}
       <button
         type="button"
         onClick={onDetails}
-        className="mt-5 w-full py-2.5 rounded-xl border border-[#e5e7eb] text-sm font-semibold text-[#0071e3] hover:bg-[#f5f5f7] transition-colors"
+        className="bg-transparent border-0 cursor-pointer text-center"
+        style={{ fontSize: 14, color: '#2563EB', fontWeight: 500 }}
+        onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline' }}
+        onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none' }}
       >
-        Details
+        Details &rarr;
       </button>
     </div>
   )
