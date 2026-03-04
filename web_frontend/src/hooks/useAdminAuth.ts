@@ -81,6 +81,13 @@ export function useAdminAuth() {
       setAdminKey(key)
       setAuthed(true)
       sessionStorage.setItem(STORAGE_KEY, key)
+
+      // 로그인 성공 시 IP 블랙리스트 자동 초기화
+      fetch(`${API_URL}/api/admin/reset-blacklist`, {
+        method: 'POST',
+        headers: { 'x-admin-key': key },
+      }).catch(() => {})
+
       return null // 성공
     } catch (e) {
       setWaking(false)

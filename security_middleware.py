@@ -214,7 +214,7 @@ class RateLimiter:
 
     RULES = {
         # (endpoint_prefix, max_requests, window_seconds)
-        "/api/admin":    (20,  60),
+        "/api/admin":    (120, 60),
         "/api/security": (10,  60),
         "/api/apply":    (5,   300),
         "/api/inquiry":  (5,   300),
@@ -436,6 +436,15 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         BYPASS_PATHS = {"/", "/health", "/api/admin/login", "/api/admin/login/", "/api/admin/reset-blacklist"}
         if path in BYPASS_PATHS:
             response = await call_next(request)
+            return response
+
+        # 0-1. 유효한 admin key가 있으면 블랙리스트/rate limit 바이패스
+        _admin_key = os.getenv("ADMIN_API_KEY", "")
+        if _admin_key and request.headers.get("x-admin-key", "") == _admin_key:
+            response = await call_next(request)
+            for k, v in SECURITY_HEADERS.items():
+                response.headers[k] = v
+            response.headers["X-Request-ID"] = req_id
             return response
 
         # 1. IP 블랙리스트 차단
