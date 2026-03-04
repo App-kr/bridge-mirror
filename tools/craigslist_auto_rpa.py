@@ -30,8 +30,20 @@ from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+# ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
+BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent.parent)))
+DB_PATH  = Path(os.getenv("BRIDGE_DB_PATH", str(BASE_DIR / "data" / "master.db")))
+
+# DB fallback: data/master.db 없으면 루트의 master.db (기존 Windows 구조 호환)
+if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
+    DB_PATH = BASE_DIR / "master.db"
+
+SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
+SS_DIR.mkdir(parents=True, exist_ok=True)
+AD_IMAGE = BASE_DIR / "images" / "B.jpg"
+
 # ── 구조화 에러 로그 (rpa_error.log) ─────────────────────────────────────────
-_LOG_DIR = Path("Q:/Claudework/bridge base/logs")
+_LOG_DIR = BASE_DIR / "logs"
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _err_logger = logging.getLogger("rpa_errors")
@@ -62,7 +74,15 @@ def _log_event(level: str, job_code: str, stage: str, message: str, extra: dict 
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path("Q:/Claudework/bridge base/.env"), override=True)
+    # .env 탐색: BASE_DIR/.env → BASE_DIR/backend/.env → 스크립트 옆 .env
+    for _env_candidate in [
+        BASE_DIR / ".env",
+        BASE_DIR / "backend" / ".env",
+        Path(__file__).resolve().parent / ".env",
+    ]:
+        if _env_candidate.exists():
+            load_dotenv(_env_candidate, override=True)
+            break
 except ImportError:
     pass
 
@@ -79,13 +99,7 @@ except ImportError:
     print("[ERROR] pip install selenium webdriver-manager")
     sys.exit(1)
 
-# ── 설정 ─────────────────────────────────────────────────────────────────────
-BASE_DIR    = Path("Q:/Claudework/bridge base")
-DB_PATH     = BASE_DIR / "master.db"
-SS_DIR      = BASE_DIR / "screenshots" / "craigslist"
-SS_DIR.mkdir(parents=True, exist_ok=True)
-AD_IMAGE    = BASE_DIR / "images" / "B.jpg"   # 첨부 이미지 (B.jpg 실제 파일)
-
+# ── Craigslist 설정 ──────────────────────────────────────────────────────────
 CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
 CL_PASSWORD = os.getenv("CRAIGSLIST_PASSWORD", "")
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
@@ -654,7 +668,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             print("카테고리: education 선택")
 
             # 현재 페이지 HTML 저장 (디버그 — 카테고리 선택 실패 시 원인 파악용)
-            cat_debug = BASE_DIR / "debug_category_page.html"
+            cat_debug = _LOG_DIR / "debug_category_page.html"
             try:
                 cat_debug.write_text(driver.page_source, encoding="utf-8")
                 print(f"    [DEBUG] 카테고리 페이지 소스 저장: {cat_debug}")
@@ -742,7 +756,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             _delay(1, 2)
             # 첫 진입 시 HTML 소스 저장 (디버그용)
             if _step_count.get(step, 0) == 1:
-                debug_path = BASE_DIR / "debug_edit_page.html"
+                debug_path = _LOG_DIR / "debug_edit_page.html"
                 debug_path.write_text(driver.page_source, encoding="utf-8")
                 print(f"    [DEBUG] 페이지 소스 저장: {debug_path}")
 
@@ -922,7 +936,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                     print(f"    [WARN] 이미지 업로드 실패: {img_err} — 계속 진행")
             else:
                 print(f"    [WARN] 이미지 파일 없음: {AD_IMAGE}")
-                print(f"    확인: Q:/Claudework/bridge base/images/B.png 가 존재해야 합니다")
+                print(f"    확인: {AD_IMAGE} 가 존재해야 합니다")
             _advance(driver, step)
 
         elif step == "preview":
@@ -1163,7 +1177,7 @@ def main():
                         print(result[:2000])
 
                     # HTML 저장
-                    dbg = BASE_DIR / "debug_category_page.html"
+                    dbg = _LOG_DIR / "debug_category_page.html"
                     dbg.write_text(driver.page_source, encoding="utf-8")
                     print(f"\n[DIAGNOSE] 전체 HTML 저장: {dbg}")
                     print("[DIAGNOSE] 위 value 값 확인 후 코드의 '102' 를 실제 값으로 수정하세요")
@@ -1256,7 +1270,7 @@ def main():
                     # cl_post() 가 None 반환 = 카테고리 선택 실패로 인한 의도적 중단
                     mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
                     print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
-                    print(f"     Q:/Claudework/bridge base/debug_category_page.html 에서")
+                    print(f"     {_LOG_DIR / 'debug_category_page.html'} 에서")
                     print(f"     education 라디오의 실제 value 확인 후 코드 수정 필요")
                     _log_event("error", jcode, "category_abort",
                                "cl_post returned None — education category not selected")

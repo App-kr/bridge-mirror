@@ -32,8 +32,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Any
 import hashlib
-import asyncio
-import threading
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
@@ -263,21 +261,20 @@ SUPABASE_URL      = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")   # 공개 API용
 SUPABASE_SVC_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "") # 서버사이드 삽입용
 
-# CORS 허용 출처 — 기본 도메인 + 환경변수 추가분 병합
-_CORE_ORIGINS = [
-    "https://bridgejob.co.kr",
-    "https://www.bridgejob.co.kr",
-    "https://bridge-chi-lime.vercel.app",
-]
-_DEV_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "http://localhost:8080",
-]
+# CORS 허용 출처 (CORS_ORIGINS 환경변수로 오버라이드 가능)
 _cors_env = os.getenv("CORS_ORIGINS", "")
-_extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
-ALLOWED_ORIGINS = list(dict.fromkeys(_CORE_ORIGINS + _extra + _DEV_ORIGINS))
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else [
+        "https://bridgejob.co.kr",
+        "https://www.bridgejob.co.kr",
+        "http://localhost:3000",   # 개발용
+        "http://localhost:3001",   # 개발용
+        "http://localhost:3002",   # 개발용
+        "http://localhost:8080",   # 개발용
+    ]
+)
 
 # ── 앱 초기화 ─────────────────────────────────────────────────────────────────
 # 프로덕션에서는 API 문서 비활성화 (BRIDGE_ENV=production 설정 시)
@@ -492,33 +489,6 @@ async def root():
         "time":    datetime.now(timezone.utc).isoformat(),
         "docs":    "/docs",
     }
-
-
-@app.get("/health", tags=["health"])
-async def health_check():
-    """Render / 외부 모니터링용 헬스체크"""
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
-
-
-# ── Render 슬립 방지 — 10분마다 self-ping ──────────────────────────────────────
-_RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "")
-
-def _keep_alive_loop():
-    """백그라운드 스레드: 10분마다 /health self-ping"""
-    import urllib.request
-    url = f"{_RENDER_URL}/health" if _RENDER_URL else ""
-    if not url:
-        return
-    while True:
-        time.sleep(600)  # 10분
-        try:
-            urllib.request.urlopen(url, timeout=10)
-        except Exception:
-            pass
-
-if _RENDER_URL:
-    _t = threading.Thread(target=_keep_alive_loop, daemon=True)
-    _t.start()
 
 
 def _job_row_to_public(row: dict) -> dict:
@@ -1723,7 +1693,7 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
 
 
 # ── Community Board API ──────────────────────────────────────────────────────
-_BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials", "information"}
+_BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials"}
 _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]
 
 import hashlib, time as _time
@@ -2497,309 +2467,6 @@ async def security_report(request: Request):
     is_warned = len(_security_warn_store[ip]) >= 10
 
     return ok(message="Event recorded", data={"warned": is_warned})
-
-
-# ── Admin: Boards 관리 ─────────────────────────────────────────────────────────
-
-def _ensure_boards_table():
-    """boards 테이블 생성 (없으면)."""
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS boards (
-            id TEXT PRIMARY KEY,
-            label TEXT NOT NULL,
-            label_kr TEXT,
-            display_mode TEXT DEFAULT 'list',
-            sort_order INTEGER DEFAULT 0,
-            is_hidden INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-_ensure_boards_table()
-
-
-class BoardCreate(BaseModel):
-    id: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-z0-9_]+$')
-    label: str = Field(..., min_length=1, max_length=100)
-    label_kr: Optional[str] = Field(None, max_length=100)
-    display_mode: str = Field('list', pattern=r'^(list|card|gallery)$')
-
-
-class BoardUpdate(BaseModel):
-    label: Optional[str] = Field(None, min_length=1, max_length=100)
-    label_kr: Optional[str] = Field(None, max_length=100)
-    display_mode: Optional[str] = Field(None, pattern=r'^(list|card|gallery)$')
-    sort_order: Optional[int] = None
-    is_hidden: Optional[int] = Field(None, ge=0, le=1)
-
-
-@app.get("/api/admin/boards", tags=["admin"])
-async def admin_list_boards(request: Request):
-    """게시판 목록 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT * FROM boards ORDER BY sort_order, id"
-        ).fetchall()
-        return ok(data={"boards": [dict(r) for r in rows]})
-    finally:
-        conn.close()
-
-
-@app.post("/api/admin/boards", status_code=201, tags=["admin"])
-async def admin_create_board(body: BoardCreate, request: Request):
-    """게시판 추가 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        existing = conn.execute("SELECT id FROM boards WHERE id=?", (body.id,)).fetchone()
-        if existing:
-            raise HTTPException(409, f"Board '{body.id}' already exists")
-        conn.execute(
-            "INSERT INTO boards (id, label, label_kr, display_mode) VALUES (?,?,?,?)",
-            (body.id, body.label, body.label_kr, body.display_mode),
-        )
-        conn.commit()
-        return ok(data={"id": body.id}, message="Board created")
-    finally:
-        conn.close()
-
-
-@app.put("/api/admin/boards/{board_id}", tags=["admin"])
-async def admin_update_board(board_id: str, body: BoardUpdate, request: Request):
-    """게시판 설정 변경 (관리자)."""
-    _check_admin(request)
-    updates: list[str] = []
-    params: list = []
-    if body.label is not None:
-        updates.append("label=?"); params.append(body.label)
-    if body.label_kr is not None:
-        updates.append("label_kr=?"); params.append(body.label_kr)
-    if body.display_mode is not None:
-        updates.append("display_mode=?"); params.append(body.display_mode)
-    if body.sort_order is not None:
-        updates.append("sort_order=?"); params.append(body.sort_order)
-    if body.is_hidden is not None:
-        updates.append("is_hidden=?"); params.append(body.is_hidden)
-    if not updates:
-        raise HTTPException(400, "수정할 항목이 없습니다.")
-    params.append(board_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM boards WHERE id=?", (board_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Board not found")
-        conn.execute(f"UPDATE boards SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Board '{board_id}' updated")
-    finally:
-        conn.close()
-
-
-@app.delete("/api/admin/boards/{board_id}", tags=["admin"])
-async def admin_delete_board(board_id: str, request: Request):
-    """게시판 숨김 (soft delete: is_hidden=1)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM boards WHERE id=?", (board_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Board not found")
-        conn.execute("UPDATE boards SET is_hidden=1 WHERE id=?", (board_id,))
-        conn.commit()
-        return ok(message=f"Board '{board_id}' hidden")
-    finally:
-        conn.close()
-
-
-# ── Admin: Banners 관리 ───────────────────────────────────────────────────────
-
-def _ensure_banners_table():
-    """banners 테이블 생성 (없으면)."""
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS banners (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            image_url TEXT NOT NULL,
-            link_url TEXT,
-            position TEXT DEFAULT 'main_top',
-            is_active INTEGER DEFAULT 1,
-            sort_order INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-_ensure_banners_table()
-
-
-class BannerCreate(BaseModel):
-    image_url: str = Field(..., min_length=1, max_length=500)
-    link_url: Optional[str] = Field(None, max_length=500)
-    position: str = Field('main_top', pattern=r'^(main_top|board_top|sidebar)$')
-    is_active: int = Field(1, ge=0, le=1)
-    sort_order: int = Field(0)
-
-
-class BannerUpdate(BaseModel):
-    image_url: Optional[str] = Field(None, min_length=1, max_length=500)
-    link_url: Optional[str] = Field(None, max_length=500)
-    position: Optional[str] = Field(None, pattern=r'^(main_top|board_top|sidebar)$')
-    is_active: Optional[int] = Field(None, ge=0, le=1)
-    sort_order: Optional[int] = None
-
-
-@app.get("/api/admin/banners", tags=["admin"])
-async def admin_list_banners(request: Request):
-    """배너 목록 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT * FROM banners ORDER BY sort_order, id"
-        ).fetchall()
-        return ok(data={"banners": [dict(r) for r in rows]})
-    finally:
-        conn.close()
-
-
-@app.post("/api/admin/banners", status_code=201, tags=["admin"])
-async def admin_create_banner(body: BannerCreate, request: Request):
-    """배너 추가 (관리자)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        cur = conn.execute(
-            "INSERT INTO banners (image_url, link_url, position, is_active, sort_order) VALUES (?,?,?,?,?)",
-            (body.image_url, body.link_url, body.position, body.is_active, body.sort_order),
-        )
-        new_id = cur.lastrowid
-        conn.commit()
-        return ok(data={"id": new_id}, message="Banner created")
-    finally:
-        conn.close()
-
-
-@app.put("/api/admin/banners/{banner_id}", tags=["admin"])
-async def admin_update_banner(banner_id: int, body: BannerUpdate, request: Request):
-    """배너 수정 (관리자)."""
-    _check_admin(request)
-    updates: list[str] = []
-    params: list = []
-    if body.image_url is not None:
-        updates.append("image_url=?"); params.append(body.image_url)
-    if body.link_url is not None:
-        updates.append("link_url=?"); params.append(body.link_url)
-    if body.position is not None:
-        updates.append("position=?"); params.append(body.position)
-    if body.is_active is not None:
-        updates.append("is_active=?"); params.append(body.is_active)
-    if body.sort_order is not None:
-        updates.append("sort_order=?"); params.append(body.sort_order)
-    if not updates:
-        raise HTTPException(400, "수정할 항목이 없습니다.")
-    params.append(banner_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM banners WHERE id=?", (banner_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Banner not found")
-        conn.execute(f"UPDATE banners SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Banner #{banner_id} updated")
-    finally:
-        conn.close()
-
-
-@app.delete("/api/admin/banners/{banner_id}", tags=["admin"])
-async def admin_delete_banner(banner_id: int, request: Request):
-    """배너 비활성화 (soft delete: is_active=0)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM banners WHERE id=?", (banner_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Banner not found")
-        conn.execute("UPDATE banners SET is_active=0 WHERE id=?", (banner_id,))
-        conn.commit()
-        return ok(message=f"Banner #{banner_id} deactivated")
-    finally:
-        conn.close()
-
-
-# ── Admin: Posts PUT/DELETE alias ─────────────────────────────────────────────
-
-class PostUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=2, max_length=200)
-    body:  Optional[str] = Field(None, min_length=10, max_length=10000)
-    board: Optional[str] = None
-
-
-@app.put("/api/admin/posts/{post_id}", tags=["admin"])
-async def admin_put_post(post_id: int, body: PostUpdate, request: Request):
-    """게시글 수정 — PUT alias (관리자)."""
-    _check_admin(request)
-    _tag_re = re.compile(r'<[^>]+>')
-    updates: list[str] = []
-    params: list = []
-    if body.title is not None:
-        updates.append("title=?"); params.append(_tag_re.sub('', body.title.strip()))
-    if body.body is not None:
-        updates.append("body=?"); params.append(_tag_re.sub('', body.body.strip()))
-    if body.board is not None:
-        updates.append("board=?"); params.append(body.board)
-    if not updates:
-        raise HTTPException(400, "수정할 항목이 없습니다.")
-    params.append(post_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM community_posts WHERE id=? AND is_deleted=0", (post_id,)
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Post not found")
-        conn.execute(f"UPDATE community_posts SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Post #{post_id} updated")
-    finally:
-        conn.close()
-
-
-@app.delete("/api/admin/posts/{post_id}", tags=["admin"])
-async def admin_delete_post(post_id: int, request: Request):
-    """게시글 삭제 — soft delete (관리자, 게시판 무관)."""
-    _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM community_posts WHERE id=? AND is_deleted=0", (post_id,)
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Post not found")
-        conn.execute("UPDATE community_posts SET is_deleted=1 WHERE id=?", (post_id,))
-        conn.commit()
-        return ok(message=f"Post #{post_id} deleted")
-    finally:
-        conn.close()
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────

@@ -36,11 +36,17 @@ const boardLabel = (b: string) => {
   return map[b] ?? b
 }
 
+function getInitialBoard(): string {
+  if (typeof window === 'undefined') return 'all'
+  const params = new URLSearchParams(window.location.search)
+  return params.get('board') ?? 'all'
+}
+
 export default function AdminPostsPage() {
   const { authed, login, headers } = useAdminAuth()
 
   const [posts, setPosts] = useState<Post[]>([])
-  const [board, setBoard] = useState<string>('all')
+  const [board, setBoard] = useState<string>(getInitialBoard)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -398,7 +404,7 @@ export default function AdminPostsPage() {
                       <span className="font-semibold text-gray-900 truncate">{p.title}</span>
                     </div>
                     <p className="text-xs text-gray-400">
-                      #{p.author_hash} · {new Date(p.created_at).toLocaleDateString()} · {p.views} views
+                      #{p.author_hash} · {new Date(p.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })} · 👁 {p.views}
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">

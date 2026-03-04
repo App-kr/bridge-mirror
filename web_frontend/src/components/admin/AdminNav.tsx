@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { href: '/admin/applications', label: 'Applications', icon: '📋' },
   { href: '/admin/interviews',   label: 'Interviews',   icon: '🎥' },
   { href: '/admin/posts',        label: 'Posts',        icon: '📝' },
+  { href: '/admin/boards',       label: 'Boards',      icon: '📋' },
+  { href: '/admin/banners',      label: 'Banners',     icon: '🖼️' },
   { href: '/admin/ad-posts',     label: 'Ad Posts',     icon: '📢' },
   { href: '/admin/payments',     label: 'Payments',     icon: '💳' },
   { href: '/admin/email-templates', label: 'Templates', icon: '✉️' },
@@ -20,7 +22,7 @@ interface AdminNavProps {
 
 export default function AdminNav({ active }: AdminNavProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-11 gap-3 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-13 gap-3 mb-6">
       {NAV_ITEMS.map((nav) => (
         <a
           key={nav.href}
