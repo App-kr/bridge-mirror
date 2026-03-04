@@ -1093,24 +1093,20 @@ def _decrypt_row(row: dict) -> dict:
 
 
 def _sanitize_str(v):
-    """Remove control characters and fix invalid escape sequences that break JSON parsing."""
+    """Remove all characters that can break JSON parsing in any browser/runtime."""
     if not isinstance(v, str):
         return v
+    # 1. Null bytes
     v = v.replace('\x00', '')
+    # 2. All C0 control chars except \t \n \r (which json.dumps handles)
     v = re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', v)
-    v = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', v)
+    # 3. C1 control chars (U+0080–U+009F) — break some parsers
+    v = re.sub(r'[\x80-\x9f]', '', v)
+    # 4. Unicode surrogates (U+D800–U+DFFF) — invalid in JSON
+    v = re.sub(r'[\ud800-\udfff]', '', v)
+    # 5. BOM and other zero-width chars
+    v = v.replace('\ufeff', '').replace('\ufffe', '')
     return v
-
-
-def _sanitize_data(obj):
-    """Recursively sanitize all string values in nested dicts/lists for safe JSON serialization."""
-    if isinstance(obj, str):
-        return _sanitize_str(obj)
-    if isinstance(obj, dict):
-        return {k: _sanitize_data(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_sanitize_data(item) for item in obj]
-    return obj
 
 
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
@@ -1193,10 +1189,11 @@ async def admin_candidates(
                 data={"total": total, "candidates": candidates},
                 message=f"{len(candidates)}명 조회",
             )
-            return JSONResponse(
-                content=_json_cand.loads(
-                    _json_cand.dumps(payload, ensure_ascii=False, default=str)
-                )
+            # ensure_ascii=True → 모든 비ASCII를 \uXXXX로 이스케이프 (브라우저 호환성 100%)
+            safe_json = _json_cand.dumps(payload, ensure_ascii=True, default=str)
+            return Response(
+                content=safe_json,
+                media_type="application/json",
             )
         finally:
             conn.close()

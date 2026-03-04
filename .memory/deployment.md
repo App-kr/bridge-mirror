@@ -7,7 +7,8 @@
 |------|------|------|
 | `BRIDGE_FIELD_KEY` | AES-256-GCM 암호화 키 | 변경 시 기존 데이터 복호화 불가 |
 | `JWT_SECRET` | JWT 서명 | BRIDGE_FIELD_KEY와 다른 값 |
-| `ADMIN_API_KEY` | Admin API 인증 | prod 미설정 시 503 |
+| `ADMIN_API_KEY` | Admin API 인증 | **FROZEN — 절대 변경 금지** |
+| `ADMIN_PASSWORD` | Admin 로그인 비밀번호 | **FROZEN — 절대 변경 금지** |
 | `SUPABASE_URL` | Supabase 프로젝트 URL | |
 | `SUPABASE_ANON_KEY` | Supabase anon key | |
 | `SUPABASE_SERVICE_KEY` | Supabase service key | 서버만 |
