@@ -1109,6 +1109,17 @@ def _sanitize_str(v):
     return v
 
 
+def _sanitize_data(obj):
+    """Recursively sanitize all string values in nested dicts/lists."""
+    if isinstance(obj, str):
+        return _sanitize_str(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_data(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_data(item) for item in obj]
+    return obj
+
+
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
 _PAST_STATUSES = {"placed", "rejected", "withdrawn", "inactive", "Inactive", "Closed", "Deleted"}
 
