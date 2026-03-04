@@ -12,16 +12,6 @@ const HUB_CARDS = [
     iconBg: 'bg-sky-100',
   },
   {
-    slug: 'support',
-    emoji: '📄',
-    title: 'FAQ',
-    titleKr: 'FAQ · 자주 묻는 질문',
-    description: 'Arrival checklist, visa change, housing guide, and essential information for teachers.',
-    gradient: 'from-blue-50 to-indigo-50',
-    hoverBorder: 'hover:border-blue-300',
-    iconBg: 'bg-blue-100',
-  },
-  {
     slug: 'tips',
     emoji: '💡',
     title: 'Tips',
@@ -46,8 +36,8 @@ export default function CommunityPage() {
         </p>
       </div>
 
-      {/* 3 Hub Cards */}
-      <div className="grid gap-6 sm:grid-cols-3">
+      {/* Hub Cards */}
+      <div className="grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto">
         {HUB_CARDS.map((card) => (
           <Link
             key={card.slug}
