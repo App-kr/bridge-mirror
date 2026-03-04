@@ -38,8 +38,7 @@ export async function GET(
     }))
 
     return NextResponse.json({ success: true, message: 'ok', data: { total, posts } })
-  } catch (e) {
-    console.error('API /api/community error:', e)
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to load posts' }, { status: 500 })
   }
 }

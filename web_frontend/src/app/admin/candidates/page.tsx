@@ -462,10 +462,9 @@ export default function CandidatesPage() {
   }, [adminKey])
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__bridgePhotoModal__ = (url: string) => setPhotoModal(url)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return () => { delete (window as any).__bridgePhotoModal__ }
+    const w = window as Window & { __bridgePhotoModal__?: (url: string) => void }
+    w.__bridgePhotoModal__ = (url: string) => setPhotoModal(url)
+    return () => { delete w.__bridgePhotoModal__ }
   }, [])
 
   const fetchData = useCallback(async (q: string = '', statusFilter: TabType = tab) => {

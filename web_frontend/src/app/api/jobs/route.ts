@@ -62,8 +62,7 @@ export async function GET(request: NextRequest) {
     const data = paged.map(rowToPublic)
 
     return NextResponse.json({ success: true, message: `${data.length}건 조회`, data })
-  } catch (e) {
-    console.error('API /api/jobs error:', e)
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to load jobs' }, { status: 500 })
   }
 }

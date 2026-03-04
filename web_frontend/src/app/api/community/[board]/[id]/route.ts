@@ -26,8 +26,7 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, message: 'ok', data: post })
-  } catch (e) {
-    console.error('API /api/community/[board]/[id] error:', e)
+  } catch {
     return NextResponse.json({ success: false, message: 'Failed to load post' }, { status: 500 })
   }
 }
