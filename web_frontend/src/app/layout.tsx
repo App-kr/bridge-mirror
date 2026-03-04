@@ -39,7 +39,7 @@ const navLinks = [
   { href: '/jobs',                  label: 'Job Board' },
   { href: '/community/support',    label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
-  { href: '/community/tips',       label: 'Tips' },
+  { href: '/community',            label: 'Community' },
 ]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

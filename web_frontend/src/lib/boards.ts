@@ -146,4 +146,7 @@ export function isValidBoard(slug: string): boolean {
 }
 
 // 네비게이션 표시 순서
-export const NAV_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr', 'tips'] as const
+export const NAV_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr'] as const
+
+// Community 허브에 표시할 보드
+export const COMMUNITY_HUB_BOARDS = ['testimonials', 'support', 'tips'] as const

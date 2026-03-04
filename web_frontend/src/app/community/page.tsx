@@ -1,85 +1,82 @@
 import Link from 'next/link'
-import { BOARDS, type BoardConfig } from '@/lib/boards'
 
-/* ── 카테고리별 분류 ── */
-const CATEGORIES: { title: string; titleKr: string; boards: string[] }[] = [
+const HUB_CARDS = [
   {
-    title: 'About & Living',
-    titleKr: '소개 · 생활',
-    boards: ['about', 'korea'],
+    slug: 'testimonials',
+    emoji: '💬',
+    title: 'Testimonials',
+    titleKr: '후기',
+    description: 'Real stories from teachers who found their career through BRIDGE.',
+    gradient: 'from-sky-50 to-blue-50',
+    hoverBorder: 'hover:border-sky-300',
+    iconBg: 'bg-sky-100',
   },
   {
-    title: 'Visa & Support',
-    titleKr: '비자 · 업무지원',
-    boards: ['visa', 'support', 'support_kr'],
+    slug: 'support',
+    emoji: '📄',
+    title: 'FAQ',
+    titleKr: 'FAQ · 자주 묻는 질문',
+    description: 'Arrival checklist, visa change, housing guide, and essential information for teachers.',
+    gradient: 'from-blue-50 to-indigo-50',
+    hoverBorder: 'hover:border-blue-300',
+    iconBg: 'bg-blue-100',
   },
   {
-    title: 'Tips & Stories',
-    titleKr: '팁 · 후기',
-    boards: ['tips', 'testimonials'],
+    slug: 'tips',
+    emoji: '💡',
+    title: 'Tips',
+    titleKr: '교사 팁',
+    description: 'Photo tips, TEFL certification, interview advice, and professional development.',
+    gradient: 'from-amber-50 to-orange-50',
+    hoverBorder: 'hover:border-amber-300',
+    iconBg: 'bg-amber-100',
   },
 ]
 
-const BOARD_MAP = Object.fromEntries(BOARDS.map((b) => [b.slug, b]))
-
 export default function CommunityPage() {
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-
-      <div className="text-center mb-14">
-        <h1 className="text-4xl font-bold text-[#1d1d1f] mb-3">Community</h1>
-        <p className="text-[#86868b] max-w-md mx-auto">
-          Resources, guides, and stories for teachers and schools.
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+      {/* Header */}
+      <div className="text-center mb-16">
+        <h1 className="text-4xl sm:text-5xl font-bold text-[#1d1d1f] tracking-tight mb-4">
+          Community
+        </h1>
+        <p className="text-lg text-[#86868b] max-w-lg mx-auto">
+          Stories, answers, and tips from our teaching community.
         </p>
       </div>
 
-      {/* ── 카테고리별 섹션 ── */}
-      <div className="space-y-12">
-        {CATEGORIES.map((cat) => (
-          <section key={cat.title}>
-            <div className="flex items-baseline gap-3 mb-5">
-              <h2 className="text-lg font-bold text-[#1d1d1f]">{cat.title}</h2>
-              <span className="text-xs text-[#86868b]">{cat.titleKr}</span>
+      {/* 3 Hub Cards */}
+      <div className="grid gap-6 sm:grid-cols-3">
+        {HUB_CARDS.map((card) => (
+          <Link
+            key={card.slug}
+            href={`/community/${card.slug}`}
+            className={`group relative flex flex-col items-center text-center rounded-3xl border border-gray-200 ${card.hoverBorder} bg-gradient-to-b ${card.gradient} p-8 sm:p-10 transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}
+          >
+            {/* Icon */}
+            <div className={`${card.iconBg} w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110`}>
+              <span className="text-3xl">{card.emoji}</span>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {cat.boards.map((slug) => {
-                const b = BOARD_MAP[slug]
-                if (!b) return null
-                return <BoardCard key={slug} board={b} />
-              })}
-            </div>
-          </section>
+
+            {/* Title */}
+            <h2 className="text-xl font-bold text-[#1d1d1f] mb-1 group-hover:text-[#0071e3] transition-colors">
+              {card.title}
+            </h2>
+            <span className="text-xs text-[#86868b] mb-4">{card.titleKr}</span>
+
+            {/* Description */}
+            <p className="text-sm text-[#6e6e73] leading-relaxed flex-1 mb-6">
+              {card.description}
+            </p>
+
+            {/* CTA */}
+            <span className="text-sm font-medium text-[#0071e3] group-hover:underline">
+              Browse →
+            </span>
+          </Link>
         ))}
       </div>
-
     </div>
-  )
-}
-
-function BoardCard({ board }: { board: BoardConfig }) {
-  return (
-    <Link
-      href={`/community/${board.slug}`}
-      className="card group !rounded-2xl flex flex-col"
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-3xl">{board.emoji}</span>
-        <div>
-          <h3 className="text-[17px] font-bold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">
-            {board.label}
-          </h3>
-          <span className="text-xs text-[#86868b]">{board.descriptionKr}</span>
-        </div>
-      </div>
-      <p className="text-sm text-[#6e6e73] line-clamp-2 mb-4 flex-1">
-        {board.description}
-      </p>
-      <div className="flex items-center justify-between">
-        <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${board.badgeClass}`}>
-          {board.labelNav}
-        </span>
-        <span className="text-sm font-medium text-[#0071e3]">Browse →</span>
-      </div>
-    </Link>
   )
 }
