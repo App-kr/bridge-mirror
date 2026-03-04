@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
@@ -197,7 +196,6 @@ export default function AdminInboxPage() {
 
   return (
     <div className="space-y-6">
-      <AdminNav active="/admin/inbox" />
 
       {/* Header */}
       <div className="flex items-center justify-between">

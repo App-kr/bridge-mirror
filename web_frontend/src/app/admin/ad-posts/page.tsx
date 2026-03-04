@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
@@ -111,7 +110,6 @@ export default function AdminAdPostsPage() {
   if (loading) {
     return (
       <div>
-        <AdminNav active="/admin/ad-posts" />
         <div className="text-center py-32 text-gray-400 animate-pulse">데이터 로딩 중…</div>
       </div>
     )
@@ -120,7 +118,6 @@ export default function AdminAdPostsPage() {
   if (error) {
     return (
       <div>
-        <AdminNav active="/admin/ad-posts" />
         <div className="text-center py-32 space-y-4">
           <p className="text-red-500">{error}</p>
           <button type="button" className="btn-primary" onClick={fetchData}>재시도</button>
@@ -136,7 +133,6 @@ export default function AdminAdPostsPage() {
 
   return (
     <div className="space-y-8">
-      <AdminNav active="/admin/ad-posts" />
 
       <div className="flex items-center justify-between">
         <div>

@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -216,7 +215,6 @@ export default function EmailTemplatesPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6">
-      <AdminNav active="/admin/email-templates" />
 
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">

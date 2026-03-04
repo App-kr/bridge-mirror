@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
@@ -193,7 +192,6 @@ export default function AdminApplicationsPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">
-      <AdminNav active="/admin/applications" />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">

@@ -7,7 +7,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
@@ -136,7 +135,6 @@ export default function InboxDetailPage() {
 
   return (
     <div className="space-y-6">
-      <AdminNav active="/admin/inbox" />
 
       {/* Back link */}
       <a href="/admin/inbox" className="text-sm text-blue-600 hover:underline">← 수신함으로 돌아가기</a>

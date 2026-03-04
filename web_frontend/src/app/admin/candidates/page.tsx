@@ -16,7 +16,6 @@ import {
   SelectEditorModule,
   TextFilterModule,
 } from 'ag-grid-community'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -633,7 +632,6 @@ export default function CandidatesPage() {
   return (
     <div className="flex flex-col h-screen -mt-6 -mx-4">
       <div className="px-4 pt-4 shrink-0">
-        <AdminNav active="/admin/candidates" />
       </div>
 
       {/* Header */}

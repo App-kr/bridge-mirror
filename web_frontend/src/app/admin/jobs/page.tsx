@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -155,7 +154,6 @@ export default function AdminJobsPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
-      <AdminNav active="/admin/jobs" />
 
       <div className="flex items-center justify-between mb-6">
         <div>

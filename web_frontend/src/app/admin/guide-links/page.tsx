@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -93,7 +92,6 @@ export default function GuideLinksPage() {
 
   return (
     <div className="max-w-[1000px] mx-auto px-4 py-6">
-      <AdminNav active="/admin/guide-links" />
 
       <div className="flex items-center justify-between mb-4">
         <div>

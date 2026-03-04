@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { STAFF_NAMES } from '@/lib/team'
@@ -183,7 +182,6 @@ export default function InquiriesPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">
-      <AdminNav active="/admin/inquiries" />
 
       {/* 헤더 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">

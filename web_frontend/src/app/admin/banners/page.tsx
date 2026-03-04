@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminNav from '@/components/admin/AdminNav'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -58,7 +57,6 @@ export default function AdminBannersPage() {
     setError(null)
     try {
       const res = await fetch(`${API}/api/admin/banners`, { headers: headers() })
-      const json = await res.json()
       if (res.status === 403) {
         const errBody = await res.json().catch(() => ({}))
         if (errBody.error?.includes?.('Access denied')) {
@@ -72,6 +70,7 @@ export default function AdminBannersPage() {
         sessionStorage.removeItem('bridge_admin_key')
         return
       }
+      const json = await res.json()
       if (json.success && json.data?.banners) {
         setBanners(json.data.banners)
       }
@@ -167,7 +166,6 @@ export default function AdminBannersPage() {
 
   return (
     <div className="space-y-6">
-      <AdminNav active="/admin/banners" />
 
       <div className="flex items-center justify-between">
         <div>
