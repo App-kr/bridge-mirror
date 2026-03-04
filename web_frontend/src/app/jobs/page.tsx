@@ -358,7 +358,7 @@ export default function JobsPage() {
               &laquo;
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .filter((p) => p === 1 || Math.abs(p - page) <= 2)
               .reduce<(number | string)[]>((acc, p, idx, arr) => {
                 if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...')
                 acc.push(p)
