@@ -2,7 +2,7 @@
 
 /**
  * /admin/interviews — Interview Scheduling & Management
- * Google Meet 인터뷰 스케줄링, 이메일 자동 발송, 상태 관리
+ * Google Meet 인터뷰 스케줄링, 이메일 미리보기/발송, 상태 관리
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -27,7 +27,15 @@ interface Interview {
   notes: string
   email_sent_candidate: number
   email_sent_employer: number
+  email_sent_candidate_at: string | null
+  email_sent_employer_at: string | null
   created_at: string
+}
+
+interface EmailPreview {
+  subject: string
+  body_html: string
+  to_email: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,6 +43,99 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-green-50 text-green-700 border-green-200',
   cancelled: 'bg-gray-50 text-gray-500 border-gray-200',
   no_show: 'bg-red-50 text-red-600 border-red-200',
+}
+
+function EmailPreviewModal({
+  interviewId, target, hdrs, onClose, onSent,
+}: {
+  interviewId: number
+  target: 'candidate' | 'employer'
+  hdrs: () => Record<string, string>
+  onClose: () => void
+  onSent: () => void
+}) {
+  const [preview, setPreview] = useState<EmailPreview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${API}/api/admin/interviews/${interviewId}/preview-email?target=${target}`, { headers: hdrs() })
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) setPreview(json.data)
+        else setError(json.message || 'Failed to load preview')
+      })
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed'))
+      .finally(() => setLoading(false))
+  }, [interviewId, target, hdrs])
+
+  const handleSend = async () => {
+    setSending(true)
+    setError(null)
+    try {
+      const res = await fetch(`${API}/api/admin/interviews/${interviewId}/send-email`, {
+        method: 'POST', headers: hdrs(), body: JSON.stringify({ target }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.detail ?? json.message ?? 'Failed')
+      onSent()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed')
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-gray-900">
+              Email Preview — {target === 'candidate' ? 'Candidate' : 'School'}
+            </h3>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          </div>
+          {preview && (
+            <div className="mt-2 text-sm text-gray-500 space-y-1">
+              <p><span className="font-medium text-gray-600">To:</span> {preview.to_email}</p>
+              <p><span className="font-medium text-gray-600">Subject:</span> {preview.subject}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 overflow-auto p-1 bg-gray-50">
+          {loading ? (
+            <div className="text-center py-16 text-gray-400 animate-pulse">Loading preview...</div>
+          ) : error && !preview ? (
+            <div className="text-center py-16 text-red-500">{error}</div>
+          ) : preview ? (
+            <iframe
+              srcDoc={preview.body_html}
+              className="w-full border-0 bg-white rounded"
+              style={{ minHeight: '400px' }}
+              title="Email Preview"
+              sandbox="allow-same-origin"
+            />
+          ) : null}
+        </div>
+        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+          {error && preview && <p className="text-sm text-red-500">{error}</p>}
+          {!error && <span />}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
+              Cancel
+            </button>
+            <button type="button" onClick={handleSend} disabled={sending || !preview}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              {sending ? 'Sending...' : 'Confirm & Send'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function AdminInterviewsPage() {
@@ -45,12 +146,13 @@ export default function AdminInterviewsPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [emailModal, setEmailModal] = useState<{ id: number; target: 'candidate' | 'employer' } | null>(null)
 
   const [form, setForm] = useState({
     candidate_name: '', candidate_email: '',
     employer_name: '', employer_email: '',
     interview_date: '', interview_time: '',
-    meet_link: '', notes: '', send_email: true,
+    meet_link: '', notes: '',
   })
 
   const fetchInterviews = useCallback(async () => {
@@ -83,14 +185,10 @@ export default function AdminInterviewsPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail ?? 'Failed')
-      const emailInfo = json.data?.email_sent ?? {}
-      let msg = `Interview #${json.data?.id} created!`
-      if (emailInfo.candidate) msg += ' (Candidate email sent)'
-      if (emailInfo.employer) msg += ' (Employer email sent)'
-      setActionMsg(msg)
+      setActionMsg(`Interview #${json.data?.id} created!`)
       setShowForm(false)
       setForm({ candidate_name: '', candidate_email: '', employer_name: '', employer_email: '',
-        interview_date: '', interview_time: '', meet_link: '', notes: '', send_email: true })
+        interview_date: '', interview_time: '', meet_link: '', notes: '' })
       fetchInterviews()
     } catch (e) {
       setActionMsg(`Error: ${e instanceof Error ? e.message : 'Failed'}`)
@@ -171,25 +269,23 @@ export default function AdminInterviewsPage() {
             <label className="text-xs font-medium text-gray-500">Google Meet Link *</label>
             <input className="input mt-1" placeholder="https://meet.google.com/xxx-xxxx-xxx"
               value={form.meet_link} onChange={(e) => setForm({ ...form, meet_link: e.target.value })} />
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <span className="text-amber-600">* Meet 설정에서 &apos;회의 액세스 유형&apos;을 &apos;열기&apos;로 설정해주세요</span>
+              <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer"
+                className="text-blue-600 hover:underline font-medium">+ New Meet Room</a>
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500">Notes</label>
             <input className="input mt-1" placeholder="Optional notes..."
               value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={form.send_email}
-                onChange={(e) => setForm({ ...form, send_email: e.target.checked })} />
-              Send invitation email automatically
-            </label>
-          </div>
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setShowForm(false)}
               className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">Cancel</button>
             <button type="button" onClick={handleCreate}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              Schedule & Send Email
+              Schedule Interview
             </button>
           </div>
         </div>
@@ -219,8 +315,6 @@ export default function AdminInterviewsPage() {
                     <span className="font-bold text-gray-900">
                       {iv.interview_date} {iv.interview_time}
                     </span>
-                    {iv.email_sent_candidate === 1 && <span className="text-[10px] text-green-600" title="Candidate email sent">📧C</span>}
-                    {iv.email_sent_employer === 1 && <span className="text-[10px] text-green-600" title="Employer email sent">📧E</span>}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
@@ -241,6 +335,34 @@ export default function AdminInterviewsPage() {
                     </a>
                   )}
                   {iv.notes && <p className="text-xs text-gray-400 mt-1">{iv.notes}</p>}
+
+                  {/* Email send buttons */}
+                  {iv.status === 'scheduled' && (
+                    <div className="flex items-center gap-2 mt-3">
+                      {iv.email_sent_employer === 1 ? (
+                        <span className="text-[11px] text-green-600 flex items-center gap-1">
+                          ✓ School sent{iv.email_sent_employer_at ? ` (${iv.email_sent_employer_at.slice(0, 16)})` : ''}
+                        </span>
+                      ) : (
+                        <button type="button"
+                          onClick={() => setEmailModal({ id: iv.id, target: 'employer' })}
+                          className="text-[11px] px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                          Send to School
+                        </button>
+                      )}
+                      {iv.email_sent_candidate === 1 ? (
+                        <span className="text-[11px] text-green-600 flex items-center gap-1">
+                          ✓ Candidate sent{iv.email_sent_candidate_at ? ` (${iv.email_sent_candidate_at.slice(0, 16)})` : ''}
+                        </span>
+                      ) : (
+                        <button type="button"
+                          onClick={() => setEmailModal({ id: iv.id, target: 'candidate' })}
+                          className="text-[11px] px-2 py-1 rounded border border-teal-200 text-teal-600 hover:bg-teal-50">
+                          Send to Candidate
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1 shrink-0">
@@ -269,6 +391,21 @@ export default function AdminInterviewsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Email Preview Modal */}
+      {emailModal && (
+        <EmailPreviewModal
+          interviewId={emailModal.id}
+          target={emailModal.target}
+          hdrs={headers}
+          onClose={() => setEmailModal(null)}
+          onSent={() => {
+            setEmailModal(null)
+            setActionMsg(`${emailModal.target} email sent!`)
+            fetchInterviews()
+          }}
+        />
       )}
     </div>
   )

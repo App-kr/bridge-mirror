@@ -121,7 +121,8 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && git reset HEAD candidates_test.json render_candidates.json audit/ .claude/settings.local.json 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base\" && git for-each-ref --format='%\\(refname\\)' refs/original/ | while read ref; do git update-ref -d \"$ref\"; done 2>&1)",
       "Bash(echo === Applications sample ===:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(export:*)"
     ]
   }
 }

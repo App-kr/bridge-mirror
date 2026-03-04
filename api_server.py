@@ -2238,6 +2238,138 @@ async def admin_update_payment(payment_id: str, body: PaymentStatusUpdate, reque
 
 # ── Admin: Interview Scheduling ──────────────────────────────────────────────
 
+
+def _ensure_interviews_schema():
+    """interviews 테이블에 이메일 발송 timestamp 컬럼 추가."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    for col in ("email_sent_candidate_at", "email_sent_employer_at"):
+        try:
+            conn.execute(f"ALTER TABLE interviews ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+
+
+_ensure_interviews_schema()
+
+
+def _ensure_interview_templates():
+    """interview_employer / interview_candidate 이메일 템플릿 시딩."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+
+    employer_subject = "인터뷰 일정 안내 — {scheduled_at}"
+    employer_html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
+<div style="text-align:center;padding:20px 0;border-bottom:2px solid #1d1d1f;">
+<h1 style="margin:0;font-size:24px;color:#1d1d1f;font-weight:700;">BRIDGE</h1>
+<p style="margin:4px 0 0;font-size:12px;color:#86868b;">ESL Teacher Recruitment Platform</p>
+</div>
+<div style="padding:30px 0;">
+<p>안녕하세요,</p>
+<p>BRIDGE를 통해 채용 후보자 <strong>{candidate_first_name}</strong>님과의 인터뷰가 예정되었습니다.</p>
+
+<div style="background:#f0fdf4;border:1px solid #86efac;padding:20px;margin:24px 0;border-radius:12px;text-align:center;">
+<p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#166534;">{scheduled_at}</p>
+<a href="{meet_link}" style="display:inline-block;background:#1d1d1f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:12px;">Google Meet 입장</a>
+<p style="margin:12px 0 0;font-size:12px;color:#6b7280;">링크: <a href="{meet_link}" style="color:#0071e3;">{meet_link}</a></p>
+</div>
+
+<div style="background:#f5f5f7;padding:20px;margin:24px 0;border-radius:12px;">
+<p style="margin:0 0 12px;font-weight:600;color:#1d1d1f;">BRIDGE 서비스 정책 안내</p>
+<ul style="margin:0;padding-left:20px;color:#424245;line-height:1.9;">
+<li>후보자 개인정보(성, 연락처, 이메일 등)는 BRIDGE 정책에 따라 비공개입니다.</li>
+<li>인터뷰 중 후보자에게 개인 연락처를 직접 요청하지 마세요.</li>
+<li>채용 진행은 반드시 BRIDGE를 통해 진행해 주세요.</li>
+<li>인터뷰 결과는 BRIDGE 담당자에게 회신해 주시면 됩니다.</li>
+</ul>
+</div>
+
+<div style="background:#fffbeb;border:1px solid #fde68a;padding:20px;margin:24px 0;border-radius:12px;">
+<p style="margin:0 0 12px;font-weight:600;color:#92400e;">인터뷰 가이드</p>
+<ul style="margin:0;padding-left:20px;color:#424245;line-height:1.9;">
+<li>Google Meet '회의 액세스 유형'을 <strong>'열기'</strong>로 설정해 주세요.</li>
+<li>예정 시간 2-3분 전에 입장해 주세요.</li>
+<li>카메라와 마이크를 미리 테스트해 주세요.</li>
+<li>조용하고 밝은 환경에서 진행해 주세요.</li>
+</ul>
+</div>
+
+<p>일정 변경이 필요하시면 <a href="mailto:bridgejobkr@gmail.com" style="color:#0071e3;">bridgejobkr@gmail.com</a>으로 연락해 주세요.</p>
+<p style="color:#6e6e73;margin-top:30px;">감사합니다.<br><strong>BRIDGE Team 드림</strong></p>
+</div>
+<div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;font-size:12px;color:#86868b;">
+<p>The BRIDGE Team &middot; <a href="https://bridgejob.co.kr" style="color:#0071e3;">bridgejob.co.kr</a></p>
+</div>
+</body></html>"""
+
+    candidate_subject = "Interview Scheduled — {scheduled_at}"
+    candidate_html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
+<div style="text-align:center;padding:20px 0;border-bottom:2px solid #1d1d1f;">
+<h1 style="margin:0;font-size:24px;color:#1d1d1f;font-weight:700;">BRIDGE</h1>
+<p style="margin:4px 0 0;font-size:12px;color:#86868b;">ESL Teacher Recruitment Platform</p>
+</div>
+<div style="padding:30px 0;">
+<p>Dear {candidate_first_name},</p>
+<p>Great news! Your interview has been scheduled through BRIDGE.</p>
+
+<div style="background:#f0fdf4;border:1px solid #86efac;padding:20px;margin:24px 0;border-radius:12px;text-align:center;">
+<p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#166534;">{scheduled_at}</p>
+<a href="{meet_link}" style="display:inline-block;background:#1d1d1f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:12px;">Join Google Meet</a>
+<p style="margin:12px 0 0;font-size:12px;color:#6b7280;">Link: <a href="{meet_link}" style="color:#0071e3;">{meet_link}</a></p>
+</div>
+
+<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:20px;margin:24px 0;border-radius:12px;">
+<p style="margin:0 0 12px;font-weight:600;color:#1e40af;">Privacy Protocol</p>
+<ul style="margin:0;padding-left:20px;color:#424245;line-height:1.9;">
+<li>The employer will only know your first name during the interview.</li>
+<li>Your personal contact information is protected by BRIDGE.</li>
+<li>Do not share your phone number, personal email, or address directly.</li>
+<li>All communication should go through BRIDGE.</li>
+</ul>
+</div>
+
+<div style="background:#f5f5f7;padding:20px;margin:24px 0;border-radius:12px;">
+<p style="margin:0 0 12px;font-weight:600;color:#1d1d1f;">Essential Guide</p>
+<ul style="margin:0;padding-left:20px;color:#424245;line-height:1.9;">
+<li>Test your camera and microphone beforehand</li>
+<li>Find a quiet, well-lit space</li>
+<li>Dress professionally (business casual or above)</li>
+<li>Have your resume and any documents ready</li>
+<li>Join the meeting 2-3 minutes early</li>
+</ul>
+</div>
+
+<p>If you need to reschedule, please email <a href="mailto:bridgejobkr@gmail.com" style="color:#0071e3;">bridgejobkr@gmail.com</a> as soon as possible.</p>
+<p style="color:#6e6e73;margin-top:30px;">Good luck!<br><strong>BRIDGE Team</strong></p>
+</div>
+<div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;font-size:12px;color:#86868b;">
+<p>The BRIDGE Team &middot; <a href="https://bridgejob.co.kr" style="color:#0071e3;">bridgejob.co.kr</a></p>
+</div>
+</body></html>"""
+
+    for key, subj, body in [
+        ("interview_employer", employer_subject, employer_html),
+        ("interview_candidate", candidate_subject, candidate_html),
+    ]:
+        conn.execute(
+            """INSERT INTO email_templates (template_key, subject, body_html, updated_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(template_key) DO NOTHING""",
+            (key, subj, body),
+        )
+    conn.commit()
+    conn.close()
+
+
+_ensure_interview_templates()
+
+
 class InterviewCreate(BaseModel):
     candidate_name:  str = Field("", max_length=200)
     candidate_email: str = Field("", max_length=200)
@@ -2247,7 +2379,6 @@ class InterviewCreate(BaseModel):
     interview_time:  str = Field(..., min_length=3, max_length=20)
     meet_link:       str = Field(..., min_length=5, max_length=500)
     notes:           str = Field("", max_length=2000)
-    send_email:      bool = True
 
 
 @app.get("/api/admin/interviews", tags=["admin"])
@@ -2272,54 +2403,113 @@ async def admin_list_interviews(request: Request, status: Optional[str] = None):
 
 @app.post("/api/admin/interviews", status_code=201, tags=["admin"])
 async def admin_create_interview(body: InterviewCreate, request: Request):
-    """인터뷰 생성 + 이메일 자동 발송."""
+    """인터뷰 생성 (이메일은 별도 엔드포인트로 발송)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
-    cur = conn.execute(
-        """INSERT INTO interviews
-           (candidate_name, candidate_email, employer_name, employer_email,
-            interview_date, interview_time, meet_link, notes)
-           VALUES (?,?,?,?,?,?,?,?)""",
-        (body.candidate_name, body.candidate_email,
-         body.employer_name, body.employer_email,
-         body.interview_date, body.interview_time,
-         body.meet_link, body.notes),
-    )
-    interview_id = cur.lastrowid
-    conn.commit()
-
-    # 이메일 자동 발송
-    email_results = {"candidate": False, "employer": False}
-    if body.send_email and _EMAIL_OK:
-        try:
-            from email_templates import send_interview_invitation, send_interview_invitation_employer
-            if body.candidate_email:
-                email_results["candidate"] = send_interview_invitation(
-                    body.candidate_email, body.candidate_name or "Candidate",
-                    body.interview_date, body.interview_time,
-                    body.meet_link, body.employer_name,
-                )
-                if email_results["candidate"]:
-                    conn.execute("UPDATE interviews SET email_sent_candidate=1 WHERE id=?", (interview_id,))
-            if body.employer_email:
-                email_results["employer"] = send_interview_invitation_employer(
-                    body.employer_email, body.employer_name or "담당자",
-                    body.interview_date, body.interview_time,
-                    body.meet_link, body.candidate_name,
-                )
-                if email_results["employer"]:
-                    conn.execute("UPDATE interviews SET email_sent_employer=1 WHERE id=?", (interview_id,))
-            conn.commit()
-        except Exception as e:
-            import logging as _log_iv
-            _log_iv.getLogger("bridge.api").error("인터뷰 이메일 발송 실패: %s", e, exc_info=True)
-
-    conn.close()
+    try:
+        cur = conn.execute(
+            """INSERT INTO interviews
+               (candidate_name, candidate_email, employer_name, employer_email,
+                interview_date, interview_time, meet_link, notes)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (body.candidate_name, body.candidate_email,
+             body.employer_name, body.employer_email,
+             body.interview_date, body.interview_time,
+             body.meet_link, body.notes),
+        )
+        interview_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
     return ok(
-        data={"id": interview_id, "email_sent": email_results},
+        data={"id": interview_id},
         message=f"Interview #{interview_id} created",
     )
+
+
+def _render_interview_email(interview: dict, target: str):
+    """인터뷰 이메일 렌더링. (subject, html, to_email) 반환."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        tpl_key = f"interview_{target}"
+        row = conn.execute(
+            "SELECT subject, body_html FROM email_templates WHERE template_key = ?",
+            (tpl_key,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, f"Template '{tpl_key}' not found")
+    finally:
+        conn.close()
+
+    candidate_name = interview.get("candidate_name") or ""
+    first_name = candidate_name.split(" ")[0] if candidate_name.strip() else (
+        "Candidate" if target == "candidate" else "후보자"
+    )
+    scheduled_at = f"{interview['interview_date']} {interview['interview_time']} KST"
+    meet_link = interview.get("meet_link") or ""
+    to_email = interview.get("candidate_email") if target == "candidate" else interview.get("employer_email")
+
+    subject = row["subject"].replace("{candidate_first_name}", first_name).replace("{scheduled_at}", scheduled_at).replace("{meet_link}", meet_link)
+    html = row["body_html"].replace("{candidate_first_name}", first_name).replace("{scheduled_at}", scheduled_at).replace("{meet_link}", meet_link)
+
+    return subject, html, to_email
+
+
+class InterviewSendEmail(BaseModel):
+    target: str = Field(..., pattern=r"^(candidate|employer)$")
+
+
+@app.get("/api/admin/interviews/{interview_id}/preview-email", tags=["admin"])
+async def admin_preview_interview_email(interview_id: int, target: str, request: Request):
+    """인터뷰 이메일 미리보기."""
+    _check_admin(request)
+    if target not in ("candidate", "employer"):
+        raise HTTPException(400, "target must be 'candidate' or 'employer'")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        iv = conn.execute("SELECT * FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
+    finally:
+        conn.close()
+    if not iv:
+        raise HTTPException(404, "Interview not found")
+    subject, html, to_email = _render_interview_email(dict(iv), target)
+    return ok(data={"subject": subject, "body_html": html, "to_email": to_email or ""})
+
+
+@app.post("/api/admin/interviews/{interview_id}/send-email", tags=["admin"])
+async def admin_send_interview_email(interview_id: int, body: InterviewSendEmail, request: Request):
+    """인터뷰 이메일 발송."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        iv = conn.execute("SELECT * FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
+        if not iv:
+            conn.close()
+            raise HTTPException(404, "Interview not found")
+        subject, html, to_email = _render_interview_email(dict(iv), body.target)
+        if not to_email:
+            conn.close()
+            raise HTTPException(400, f"No {body.target} email address on this interview")
+        sent = _smtp_send(to_email, subject, html)
+        if not sent:
+            conn.close()
+            return err("이메일 발송 실패 (SMTP 설정 확인)", 500)
+        col_sent = f"email_sent_{body.target}"
+        col_at = f"email_sent_{body.target}_at"
+        conn.execute(
+            f"UPDATE interviews SET {col_sent}=1, {col_at}=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (interview_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(data={"sent_to": to_email, "target": body.target}, message=f"{body.target} 이메일 발송 완료")
 
 
 class InterviewStatusUpdate(BaseModel):
