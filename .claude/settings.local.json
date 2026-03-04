@@ -95,7 +95,8 @@
       "Bash(cd \"Q:/Claudework/bridge base\" && git add web_frontend/src/app/custom.css && git commit -m \"$\\(cat <<'EOF'\nfix: faster marquee — top 55s, bottom 28s\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && rm -rf .next && npm run build 2>&1)",
       "WebFetch(domain:support.google.com)",
-      "Bash(echo nothing to commit:*)"
+      "Bash(echo nothing to commit:*)",
+      "Bash(node:*)"
     ]
   }
 }
