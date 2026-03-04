@@ -83,7 +83,8 @@
       "Bash(ssh:*)",
       "Bash(WMIC PROCESS WHERE \"ProcessId=19612\" GET Name,CommandLine 2>/dev/null || powershell -Command \"Get-Process -Id 19612 | Select-Object Name,Path\" 2>/dev/null)",
       "Bash(test:*)",
-      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"$\\(cat <<'EOF'\nfix: FAQ contact button → KakaoTalk channel link\n\nChange '문의하기' from /inquiry page to KakaoTalk channel chat\n\\(pf.kakao.com/_tBxhxkK/chat\\) with yellow KakaoTalk-style button.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base\" && git add -A && git commit -m \"$\\(cat <<'EOF'\nfix: FAQ contact button → KakaoTalk channel link\n\nChange '문의하기' from /inquiry page to KakaoTalk channel chat\n\\(pf.kakao.com/_tBxhxkK/chat\\) with yellow KakaoTalk-style button.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push 2>&1)",
+      "Bash(echo Nothing to commit:*)"
     ]
   }
 }
