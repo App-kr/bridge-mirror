@@ -1,18 +1,19 @@
 'use client'
 
 /**
- * /jobs — Job Board (final)
- * Weekly seeded shuffle · HOT interleaving · Card flip · Info filtering
+ * /jobs — Job Board
+ * Weekly seeded shuffle · HOT interleaving · Popup modal · Info filtering
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
+import JobDetailModal from '@/components/JobDetailModal'
 import { fadeInUp, defaultViewport } from '@/lib/animations'
 import type { AgeGroup, PublicJob } from '@/types'
 
-const PER_PAGE = 18
+const PER_PAGE = 10
 
 // ── Filters ──
 const REGIONS = [
@@ -111,6 +112,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const [selectedJob, setSelectedJob] = useState<PublicJob | null>(null)
 
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('all')
@@ -143,7 +145,6 @@ export default function JobsPage() {
       .then((r) => r.json())
       .then((j) => {
         if (j.success && Array.isArray(j.data)) {
-          // Filter info-insufficient + weekly shuffle
           const sufficient = (j.data as PublicJob[]).filter(hasEnoughInfo)
           const shuffled = seededShuffle(sufficient, getWeekSeed())
           setAllJobs(shuffled)
@@ -290,7 +291,7 @@ export default function JobsPage() {
           <button type="button" onClick={() => setHotOnly((v) => !v)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
               hotOnly ? 'bg-red-600 text-white' : 'bg-[#f5f5f7] text-[#424245] hover:bg-red-50 hover:text-red-600'}`}>
-            🔥 HOT
+            HOT
           </button>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
             className="ml-auto bg-[#f5f5f7] text-[#424245] text-sm font-medium rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 border-0 cursor-pointer">
@@ -298,31 +299,27 @@ export default function JobsPage() {
           </select>
         </div>
 
-        {/* Page info */}
+        {/* Tagline */}
         <div className="flex items-center justify-between mb-6">
-          <div className="text-sm text-[#86868b]">
-            {loading ? (
-              <span className="animate-pulse">Loading positions...</span>
-            ) : (
-              <span>
-                Page <span className="text-[#1d1d1f] font-semibold">{page}</span> of {totalPages}
-                {' '}<span className="text-xs">({interleaved.length} positions)</span>
-              </span>
-            )}
-          </div>
+          <p className="text-base text-[#86868b] italic">
+            {loading
+              ? 'Loading positions...'
+              : 'We have over 3,000 positions available. Apply now and find your perfect match!'}
+          </p>
           {hasFilters && (
-            <button type="button" onClick={clearFilters} className="text-xs text-blue-600 hover:underline">Clear filters</button>
+            <button type="button" onClick={clearFilters} className="text-xs text-blue-600 hover:underline shrink-0 ml-4">Clear filters</button>
           )}
         </div>
 
         {/* Skeleton */}
         {loading && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 h-[310px]">
+          <div className="grid md:grid-cols-2 gap-5">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-7 space-y-4 h-[280px]">
                 <div className="skeleton h-5 w-1/3" />
-                <div className="skeleton h-4 w-3/4" />
+                <div className="skeleton h-6 w-3/4" />
                 <div className="skeleton h-4 w-1/2" />
+                <div className="skeleton h-4 w-2/3 mt-auto" />
               </div>
             ))}
           </div>
@@ -344,11 +341,16 @@ export default function JobsPage() {
           </div>
         )}
 
-        {/* ── Job Grid ── */}
+        {/* ── Job Grid: 2 columns desktop, 1 mobile ── */}
         {!loading && pageJobs.length > 0 && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 gap-5">
             {pageJobs.map((job, i) => (
-              <JobCard key={`${job.job_id}-${i}`} job={job} isHot={hotSet.has(job.job_id)} />
+              <JobCard
+                key={`${job.job_id}-${i}`}
+                job={job}
+                isHot={hotSet.has(job.job_id)}
+                onDetails={() => setSelectedJob(job)}
+              />
             ))}
           </div>
         )}
@@ -358,7 +360,7 @@ export default function JobsPage() {
           <nav className="flex items-center justify-center gap-1 mt-10">
             <button type="button" onClick={() => goPage(page - 1)} disabled={page <= 1}
               className="px-3 py-2 text-sm rounded-lg disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 hover:bg-gray-100 transition-colors">
-              ← Prev
+              &laquo;
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
@@ -380,7 +382,7 @@ export default function JobsPage() {
               )}
             <button type="button" onClick={() => goPage(page + 1)} disabled={page >= totalPages}
               className="px-3 py-2 text-sm rounded-lg disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 hover:bg-gray-100 transition-colors">
-              Next →
+              &raquo;
             </button>
           </nav>
         )}
@@ -393,6 +395,15 @@ export default function JobsPage() {
           </motion.div>
         )}
       </div>
+
+      {/* ── Detail Modal ── */}
+      {selectedJob && (
+        <JobDetailModal
+          job={selectedJob}
+          isHot={hotSet.has(selectedJob.job_id)}
+          onClose={() => setSelectedJob(null)}
+        />
+      )}
     </>
   )
 }
