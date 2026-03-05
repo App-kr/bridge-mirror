@@ -40,7 +40,10 @@ if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
-AD_IMAGE = BASE_DIR / "images" / "B.jpg"
+# 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
+_IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
+_IMG_DIR.mkdir(parents=True, exist_ok=True)
+AD_IMAGE = _IMG_DIR / os.getenv("CRAIG_IMAGE_FILE", "B.jpg")
 
 # ── 구조화 에러 로그 (rpa_error.log) ─────────────────────────────────────────
 _LOG_DIR = BASE_DIR / "logs"
@@ -283,7 +286,12 @@ def _safe_benefits(raw: str) -> list[str]:
     items = [b.strip() for b in re.split(r"[,;\n]", raw) if b.strip()]
     clean = []
     for item in items:
-        if re.search(r'@|010[-\s]?\d|학원|어학원|\d{3}-\d{4}', item):
+        if re.search(
+            r'@|010[-\s]?\d|02[-\s]?\d{3,4}[-\s]?\d{4}'
+            r'|학원|어학원|유치원|센터|학교'
+            r'|\d{3}-\d{2}-\d{5}'
+            r'|[가-힣]{2,4}\s*(?:원장|팀장|부장|선생님|교감|교장)'
+            r'|\+\d{1,3}[-\s]?\d', item):
             continue
         if len(item) > 80:
             continue
@@ -1212,11 +1220,12 @@ def main():
         # ── [REDACTED] 강제 치환 ───────────────────────────────────────────
         body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
         if removed:
-            print(f"  [REDACT] {job['job_code']}: {len(removed)}개 PII 항목 자동 치환")
-            for item in removed:
-                print(f"    - {item}")
+            # 보안: PII 실제 값은 로그에 절대 기록하지 않음 — 카테고리+개수만 기록
+            redact_tags = [r.split("=")[0] for r in removed]
+            tag_summary = ", ".join(set(redact_tags))
+            print(f"  [REDACT] {job['job_code']}: {len(removed)}개 PII 항목 자동 치환 ({tag_summary})")
             _log_event("warn", job["job_code"], "redact",
-                       f"{len(removed)} PII items redacted", {"items": removed})
+                       f"{len(removed)} PII items redacted", {"tags": tag_summary})
             body = body_clean
 
         if args.dry_run:
