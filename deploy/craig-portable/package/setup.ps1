@@ -22,7 +22,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ── 1) 설치 경로 (사용자 선택) ────────────────────────────────
-Write-Host "[1/7] Install location" -ForegroundColor Yellow
+Write-Host "[1/8] Install location" -ForegroundColor Yellow
 Write-Host "  Default: D:\BridgeCraig" -ForegroundColor Gray
 Write-Host "  (C drive is NOT recommended for security)" -ForegroundColor DarkYellow
 $userPath = Read-Host "  Install path (Enter for default)"
@@ -43,7 +43,7 @@ foreach ($sub in @("logs", "screenshots", "data")) {
 
 # ── 2) Python 확인 ───────────────────────────────────────────
 Write-Host ""
-Write-Host "[2/7] Python check..." -ForegroundColor Yellow
+Write-Host "[2/8] Python check..." -ForegroundColor Yellow
 $pythonCmd = $null
 foreach ($cmd in @("python", "python3", "py")) {
     try {
@@ -66,14 +66,14 @@ if (-not $pythonCmd) {
 
 # ── 3) pip 패키지 설치 ───────────────────────────────────────
 Write-Host ""
-Write-Host "[3/7] Installing packages..." -ForegroundColor Yellow
+Write-Host "[3/8] Installing packages..." -ForegroundColor Yellow
 & $pythonCmd -m pip install --quiet --upgrade pip 2>$null
 & $pythonCmd -m pip install --quiet selenium webdriver-manager python-dotenv 2>&1 | Out-Null
 Write-Host "  [OK] selenium, webdriver-manager, python-dotenv" -ForegroundColor Green
 
 # ── 4) 파일 복사 ─────────────────────────────────────────────
 Write-Host ""
-Write-Host "[4/7] Copying files..." -ForegroundColor Yellow
+Write-Host "[4/8] Copying files..." -ForegroundColor Yellow
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -117,7 +117,7 @@ print(f'  Dropped PII tables: {dropped}')
 
 # ── 5) .env 설정 (보안 강화) ─────────────────────────────────
 Write-Host ""
-Write-Host "[5/7] Credentials setup..." -ForegroundColor Yellow
+Write-Host "[5/8] Credentials setup..." -ForegroundColor Yellow
 
 $envFile = "$InstallDir\.env"
 if (Test-Path $envFile) {
@@ -160,7 +160,7 @@ BRIDGE_DB_PATH=$InstallDir\data\master.db
 
 # ── 6) 실행 래퍼 + Task Scheduler ─────────────────────────────
 Write-Host ""
-Write-Host "[6/7] Registering scheduled task..." -ForegroundColor Yellow
+Write-Host "[6/8] Registering scheduled task..." -ForegroundColor Yellow
 
 # 래퍼 스크립트 생성
 $runnerPath = "$InstallDir\run_rpa.ps1"
@@ -201,9 +201,91 @@ $task | Set-ScheduledTask | Out-Null
 
 Write-Host "  [OK] BridgeCraigslistRPA — every 6 hours (03, 09, 15, 21)" -ForegroundColor Green
 
-# ── 7) 테스트 (dry-run) ──────────────────────────────────────
+# ── 7) 바탕화면 즉시실행 버튼 ──────────────────────────────────
 Write-Host ""
-Write-Host "[7/7] Security check + test..." -ForegroundColor Yellow
+Write-Host "[7/8] Creating desktop shortcut..." -ForegroundColor Yellow
+
+# 즉시실행 런처 스크립트 (진행 상황 표시, 완료 후 자동 닫힘)
+$launcherPath = "$InstallDir\launch_now.ps1"
+@"
+# BRIDGE Craigslist RPA — Manual Launch
+`$Host.UI.RawUI.WindowTitle = "BRIDGE Craig RPA"
+`$Host.UI.RawUI.BackgroundColor = "Black"
+Clear-Host
+
+Write-Host "" -ForegroundColor Cyan
+Write-Host "  ============================================" -ForegroundColor Cyan
+Write-Host "  BRIDGE Craigslist RPA — Running..." -ForegroundColor Cyan
+Write-Host "  ============================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Started: `$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
+Write-Host "  Mode: headless (background Chrome)" -ForegroundColor Gray
+Write-Host "  Limit: 10 posts per run" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  Close this window anytime to stop." -ForegroundColor DarkYellow
+Write-Host "  ============================================" -ForegroundColor Cyan
+Write-Host ""
+
+Set-Location "$InstallDir"
+
+`$startTime = Get-Date
+`$logFile = "$InstallDir\logs\scheduler.log"
+`$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+Add-Content -Path `$logFile -Value "[`$timestamp] RPA MANUAL START" -Encoding UTF8
+
+try {
+    & $pythonCmd craigslist_auto_rpa.py --headless --limit 10 2>&1
+    `$exitCode = `$LASTEXITCODE
+    `$elapsed = [math]::Round(((Get-Date) - `$startTime).TotalMinutes, 1)
+    `$endTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    Write-Host ""
+    if (`$exitCode -eq 0) {
+        Write-Host "  [DONE] Completed in `$elapsed min" -ForegroundColor Green
+        Add-Content -Path `$logFile -Value "[`$endTime] RPA MANUAL DONE (`$(`$elapsed)min)" -Encoding UTF8
+    } else {
+        Write-Host "  [WARN] Finished with exit code `$exitCode (`$elapsed min)" -ForegroundColor Yellow
+        Add-Content -Path `$logFile -Value "[`$endTime] RPA MANUAL WARN (exit=`$exitCode)" -Encoding UTF8
+    }
+} catch {
+    Write-Host "  [ERROR] `$_" -ForegroundColor Red
+    `$errTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path `$logFile -Value "[`$errTime] RPA MANUAL ERROR: `$_" -Encoding UTF8
+}
+
+Write-Host ""
+Write-Host "  This window will close in 10 seconds..." -ForegroundColor DarkGray
+Start-Sleep -Seconds 10
+"@ | Set-Content $launcherPath -Encoding UTF8
+
+# 바탕화면 바로가기 생성
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$shortcutPath = "$Desktop\BRIDGE Craig RPA.lnk"
+
+$ws = New-Object -ComObject WScript.Shell
+$sc = $ws.CreateShortcut($shortcutPath)
+$sc.TargetPath = "powershell.exe"
+$sc.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcherPath`""
+$sc.WorkingDirectory = $InstallDir
+$sc.Description = "BRIDGE Craigslist auto-posting (click to run now)"
+$sc.WindowStyle = 1  # Normal window
+$sc.Save()
+
+# 바로가기 ACL: 현재 사용자만
+$acl = Get-Acl $shortcutPath
+$acl.SetAccessRuleProtection($true, $false)
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
+    "FullControl", "Allow")
+$acl.AddAccessRule($rule)
+Set-Acl $shortcutPath $acl
+
+Write-Host "  [OK] Desktop shortcut: 'BRIDGE Craig RPA'" -ForegroundColor Green
+Write-Host "  Double-click to run immediately" -ForegroundColor Gray
+
+# ── 8) 테스트 (dry-run) ──────────────────────────────────────
+Write-Host ""
+Write-Host "[8/8] Security check + test..." -ForegroundColor Yellow
 
 # 보안 체크리스트
 $checks = @()
@@ -245,6 +327,7 @@ Write-Host "  SETUP COMPLETE" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Location  : $InstallDir" -ForegroundColor White
+Write-Host "  Desktop   : 'BRIDGE Craig RPA' (double-click to run now)" -ForegroundColor White
 Write-Host "  Schedule  : Every 6 hours (03, 09, 15, 21)" -ForegroundColor White
 Write-Host "  Logs      : $InstallDir\logs\scheduler.log" -ForegroundColor White
 Write-Host "  DB        : jobs + ad_posts only (PII removed)" -ForegroundColor White
