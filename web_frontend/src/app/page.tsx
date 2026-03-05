@@ -610,8 +610,8 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/apply"
-                className="cta-btn-primary inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-lg
-                           bg-[#2563EB] text-white min-w-[220px]
+                className="cta-btn-primary inline-flex items-center justify-center px-8 sm:px-10 py-4 text-base font-semibold rounded-lg
+                           bg-[#2563EB] text-white w-full sm:w-auto sm:min-w-[220px]
                            hover:brightness-[1.15] hover:scale-[1.03] hover:shadow-[0_8px_30px_rgba(37,99,235,0.45)]
                            active:scale-[0.98] transition-all duration-300"
               >
@@ -619,8 +619,8 @@ export default function HomePage() {
               </Link>
               <Link
                 href="/inquiry"
-                className="cta-btn-outline inline-flex items-center justify-center px-10 py-4 text-base font-semibold rounded-lg
-                           border border-white text-white min-w-[220px]
+                className="cta-btn-outline inline-flex items-center justify-center px-8 sm:px-10 py-4 text-base font-semibold rounded-lg
+                           border border-white text-white w-full sm:w-auto sm:min-w-[220px]
                            hover:bg-white/10 hover:scale-[1.03]
                            active:scale-[0.98] transition-all duration-300"
               >

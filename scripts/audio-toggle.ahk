@@ -5,293 +5,270 @@ Persistent
 global gOverlay := ""
 global gTrayIndicator := ""
 global gFootstepOn := false
-global gEqGui := ""
+global gLastAudioState := ""
 
-; ===== Audio Toggle: Ctrl+Shift+F9 =====
-^+F9:: {
-    result := RunWaitOne('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle.ps1"')
+; ===== Auto-detect headset every 3 seconds =====
+SetTimer(AutoDetect, 3000)
+
+AutoDetect() {
+    global gLastAudioState
+    result := RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Import-Module AudioDeviceCmdlets; $d = Get-AudioDevice -List; $c = Get-AudioDevice -Playback; $has = ($d | Where-Object { $_.Type -eq ''Playback'' -and $_.Name -like ''*Captain*'' }); if ($c.Name -like ''*Captain*'') { Write-Output ''ON_HEADSET'' } elseif ($has) { Write-Output ''AVAIL'' } else { Write-Output ''OFF'' }"')
     result := Trim(result)
-    if InStr(result, "HEADSET")
-        ShowOverlay("🎧", "Headset ON", "Captain 780LITE", "0x6C5CE7")
-    else
-        ShowOverlay("🔊", "Speaker ON", "Stand Mic + Speaker", "0xFFA502")
-}
 
-; ===== Footstep Boost Toggle: Ctrl+Shift+F10 =====
-^+F10:: {
-    global gFootstepOn
-    configFile := "C:\Program Files\EqualizerAPO\config\config.txt"
-    if gFootstepOn {
-        FileDelete(configFile)
-        FileAppend("Include: flat.txt", configFile)
-        gFootstepOn := false
-        ShowOverlay("👟", "Footstep OFF", "Normal Audio", "0x636e72")
-        HideTrayIndicator()
-    } else {
-        FileDelete(configFile)
-        FileAppend("Include: footstep-boost.txt", configFile)
-        gFootstepOn := true
-        ShowOverlay("🦶", "Footstep ON", "Bass + Step Enhanced", "0xFF6348")
-        ShowTrayIndicator()
+    if InStr(result, "AVAIL") and gLastAudioState != "headset" {
+        ; Headset just appeared - auto switch
+        RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle-to-headset.ps1"')
+        gLastAudioState := "headset"
+        ShowOverlay("🎧", "Headset ON", "Auto-detected", "0x6C5CE7")
+    } else if InStr(result, "OFF") and gLastAudioState != "speaker" {
+        ; Headset disappeared - auto switch to speaker
+        gLastAudioState := "speaker"
+        ; Already on speaker since device is gone, just show overlay on first detect
+        if gLastAudioState = "" {
+            return
+        }
+        ShowOverlay("🔊", "Speaker ON", "Headset disconnected", "0xFFA502")
+    } else if InStr(result, "ON_HEADSET") {
+        gLastAudioState := "headset"
     }
 }
 
-; ===== EQ Editor: Ctrl+Shift+F11 =====
+; ===== Ctrl+Shift+F9: Manual Audio Toggle =====
+^+F9:: {
+    result := RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle.ps1"')
+    result := Trim(result)
+    if InStr(result, "HEADSET") {
+        ShowOverlay("🎧", "Headset ON", "Captain 780LITE", "0x6C5CE7")
+    } else if InStr(result, "NO_HEADSET") {
+        ShowOverlay("❌", "No Headset", "Turn on headset first", "0xFF4757")
+    } else {
+        ShowOverlay("🔊", "Speaker ON", "Stand Mic + Speaker", "0xFFA502")
+    }
+}
+
+; ===== Ctrl+Shift+F10: Footstep Toggle =====
+^+F10:: {
+    global gFootstepOn
+    cf := "C:\Program Files\EqualizerAPO\config\config.txt"
+    if gFootstepOn {
+        try FileDelete(cf)
+        FileAppend("Include: flat.txt", cf)
+        gFootstepOn := false
+        ShowOverlay("👟", "Footstep OFF", "Normal Audio", "0x636e72")
+        HideTray()
+    } else {
+        try FileDelete(cf)
+        FileAppend("Include: footstep-boost.txt", cf)
+        gFootstepOn := true
+        ShowOverlay("🦶", "Footstep ON", "Bass Enhanced", "0xFF6348")
+        ShowTray()
+    }
+}
+
+; ===== Ctrl+Shift+F11: EQ Editor =====
 ^+F11:: {
-    OpenEQEditor()
+    OpenEQ()
 }
 
 ; ==================== EQ EDITOR ====================
-OpenEQEditor() {
-    global gEqGui
-
-    if gEqGui {
-        gEqGui.Destroy()
-        gEqGui := ""
+OpenEQ() {
+    global gFootstepOn
+    static eg := ""
+    if eg {
+        eg.Destroy()
+        eg := ""
     }
 
-    freqNames := ["25", "40", "63", "100", "160", "250", "400", "630", "1K", "1.6K", "2.5K", "4K", "6.3K", "10K", "16K"]
-    freqNums  := [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000]
+    fNames := ["25","40","63","100","160","250","400","630","1K","1.6K","2.5K","4K","6.3K","10K","16K"]
+    fNums := [25,40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000]
+    vals := LoadEQ()
 
-    ; Read current values
-    vals := ReadEQValues()
-    preampVal := vals.RemoveAt(vals.Length)
+    sw := 36
+    sh := 200
+    px := 44
+    py := 80
 
-    sliderW := 36
-    sliderH := 200
-    padLeft := 40
-    padTop := 90
-    gap := 4
-    totalSliders := 15
-    guiW := padLeft + totalSliders * (sliderW + gap) + 40
-    guiH := padTop + sliderH + 160
+    eg := Gui("+AlwaysOnTop -MaximizeBox", "🎛️ EQ Editor")
+    eg.BackColor := "16161e"
 
-    gEqGui := Gui("+AlwaysOnTop -MaximizeBox", "")
-    gEqGui.BackColor := "16161e"
-    gEqGui.MarginX := 0
-    gEqGui.MarginY := 0
+    eg.SetFont("s14 cFFFFFF Bold", "Segoe UI")
+    eg.Add("Text", "x20 y14 w200", "🎛️ EQ Editor")
+    eg.SetFont("s8 c555555", "Segoe UI")
+    eg.Add("Text", "x400 y20 w180 Right", "EqualizerAPO")
 
-    ; Header
-    gEqGui.SetFont("s16 c0xFFFFFF Bold", "Segoe UI")
-    gEqGui.Add("Text", "x20 y16 w300", "🎛️  EQ Editor")
+    eg.SetFont("s8 c444444", "Consolas")
+    eg.Add("Text", "x6 y" py " w34 Right", "+12")
+    eg.Add("Text", "x6 y" (py + sh // 2 - 6) " w34 Right", " 0")
+    eg.Add("Text", "x6 y" (py + sh - 12) " w34 Right", "-12")
 
-    gEqGui.SetFont("s9 c0x555555", "Segoe UI")
-    gEqGui.Add("Text", "x" (guiW - 200) " y22 w180 Right", "EqualizerAPO")
-
-    ; +12 / 0 / -12 guide labels
-    gEqGui.SetFont("s8 c0x444444", "Consolas")
-    guideX := 8
-    gEqGui.Add("Text", "x" guideX " y" padTop " w30 Right", "+12")
-    gEqGui.Add("Text", "x" guideX " y" (padTop + sliderH // 2 - 6) " w30 Right", "0")
-    gEqGui.Add("Text", "x" guideX " y" (padTop + sliderH - 12) " w30 Right", "-12")
-
-    ; Zero line
-    lineY := padTop + sliderH // 2
-    gEqGui.SetFont("s1 c0x2a2a3a", "Segoe UI")
-    gEqGui.Add("Text", "x" padLeft " y" lineY " w" (totalSliders * (sliderW + gap)) " h1 +0x1000")
-
-    ; Vertical sliders + labels
-    loop totalSliders {
+    loop 15 {
         i := A_Index
-        xPos := padLeft + (i - 1) * (sliderW + gap)
+        xp := px + (i - 1) * (sw + 4)
 
-        ; dB value label (top)
-        gEqGui.SetFont("s7 c0x888888", "Consolas")
-        gEqGui.Add("Text", "x" xPos " y" (padTop - 16) " w" sliderW " Center vValLabel" i, vals[i])
+        eg.SetFont("s7 c888888", "Consolas")
+        eg.Add("Text", "x" xp " y" (py - 16) " w" sw " Center vVL" i, String(vals[i]))
 
-        ; Vertical slider
-        gEqGui.Add("Slider", "x" xPos " y" padTop " w" sliderW " h" sliderH " Vertical Range-12-12 Invert NoTicks vEQ" i, Integer(vals[i]))
+        eg.Add("Slider", "x" xp " y" py " w" sw " h" sh " Vertical Range-12-12 Invert NoTicks vEQ" i, vals[i])
 
-        ; Freq label (bottom) - color coded
-        freqY := padTop + sliderH + 6
-        if i >= 2 and i <= 5
-            gEqGui.SetFont("s7 c0xFF6348 Bold", "Segoe UI")  ; Low = red
-        else if i >= 11 and i <= 13
-            gEqGui.SetFont("s7 c0xFFA502 Bold", "Segoe UI")  ; High = orange
-        else
-            gEqGui.SetFont("s7 c0x666666", "Segoe UI")
-
-        gEqGui.Add("Text", "x" xPos " y" freqY " w" sliderW " Center", freqNames[i])
-
-        ; Zone label
-        if i = 3 {
-            gEqGui.SetFont("s7 c0xFF6348", "Segoe UI")
-            gEqGui.Add("Text", "x" xPos " y" (freqY + 16) " w120 Center", "🔴 LOW 쿵쿵")
+        if (i >= 2 and i <= 5) {
+            eg.SetFont("s7 cFF6348 Bold", "Segoe UI")
+        } else if (i >= 11 and i <= 13) {
+            eg.SetFont("s7 cFFA502 Bold", "Segoe UI")
+        } else {
+            eg.SetFont("s7 c666666", "Segoe UI")
         }
-        if i = 11 {
-            gEqGui.SetFont("s7 c0xFFA502", "Segoe UI")
-            gEqGui.Add("Text", "x" xPos " y" (freqY + 16) " w120 Center", "🟠 HIGH 딱딱")
+        eg.Add("Text", "x" xp " y" (py + sh + 4) " w" sw " Center", fNames[i])
+    }
+
+    eg.SetFont("s7 cFF6348", "Segoe UI")
+    eg.Add("Text", "x" (px + 1 * 40) " y" (py + sh + 20) " w120", "🔴 LOW 쿵쿵")
+    eg.SetFont("s7 cFFA502", "Segoe UI")
+    eg.Add("Text", "x" (px + 10 * 40) " y" (py + sh + 20) " w120", "🟠 HIGH 딱딱")
+
+    pY := py + sh + 44
+    eg.SetFont("s9 c888888", "Segoe UI")
+    eg.Add("Text", "x" px " y" pY " w55", "Preamp")
+    eg.Add("Slider", "x" (px + 60) " y" (pY - 2) " w200 Range-12-6 ToolTip vPreamp", vals[16])
+    eg.SetFont("s9 cCCCCCC", "Consolas")
+    eg.Add("Text", "x" (px + 270) " y" pY " w50 vPL", String(vals[16]) " dB")
+
+    bY := pY + 38
+    eg.SetFont("s9 cFFFFFF", "Segoe UI")
+    b1 := eg.Add("Button", "x" px " y" bY " w105 h30", "🎮 FPS")
+    b2 := eg.Add("Button", "x" (px + 113) " y" bY " w105 h30", "💥 Bass")
+    b3 := eg.Add("Button", "x" (px + 226) " y" bY " w105 h30", "🎵 Balanced")
+    b4 := eg.Add("Button", "x" (px + 339) " y" bY " w105 h30", "⬜ Flat")
+
+    b1.OnEvent("Click", DoFPS)
+    b2.OnEvent("Click", DoBass)
+    b3.OnEvent("Click", DoBalanced)
+    b4.OnEvent("Click", DoFlat)
+
+    aY := bY + 42
+    eg.SetFont("s12 cFFFFFF Bold", "Segoe UI")
+    ab := eg.Add("Button", "x" (px + 150) " y" aY " w180 h38", "✅  APPLY")
+    ab.OnEvent("Click", DoApply)
+
+    gH := aY + 52
+    eg.Show("w600 h" gH)
+
+    DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -3)
+    DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5)
+    DoBalanced(*) => FillEQ(eg, [0,2,4,5,4,3,1,0,0,1,3,3,1,0,-1], -2)
+    DoFlat(*)     => FillEQ(eg, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 0)
+
+    DoApply(*) {
+        pr := eg["Preamp"].Value
+        parts := []
+        loop 15 {
+            v := eg["EQ" A_Index].Value
+            parts.Push(fNums[A_Index] " " v)
+            eg["VL" A_Index].Value := String(v)
         }
+        eg["PL"].Value := String(pr) " dB"
+
+        eqStr := ""
+        for idx, p in parts {
+            if idx > 1
+                eqStr .= "; "
+            eqStr .= p
+        }
+
+        txt := "# Footstep Amplifier`nPreamp: " pr " dB`nGraphicEQ: " eqStr "`n"
+        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+        try FileDelete(fp)
+        FileAppend(txt, fp)
+
+        if gFootstepOn {
+            mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+            try FileDelete(mc)
+            FileAppend("Include: footstep-boost.txt", mc)
+        }
+        ShowOverlay("✅", "EQ Applied", "Settings Saved", "0x2ed573")
     }
-
-    ; Preamp
-    preampY := padTop + sliderH + 50
-    gEqGui.SetFont("s9 c0x888888", "Segoe UI")
-    gEqGui.Add("Text", "x" padLeft " y" preampY " w60", "Preamp")
-    gEqGui.Add("Slider", "x" (padLeft + 65) " y" (preampY - 2) " w200 Range-12-6 ToolTip vPreamp", Integer(preampVal))
-    gEqGui.SetFont("s9 c0xCCCCCC", "Consolas")
-    gEqGui.Add("Text", "x" (padLeft + 275) " y" preampY " w50 vPreampLabel", preampVal " dB")
-
-    ; Buttons
-    btnY := preampY + 40
-    btnW := 110
-    btnH := 32
-
-    ; Presets
-    gEqGui.SetFont("s9 c0xFFFFFF", "Segoe UI")
-    b1 := gEqGui.Add("Button", "x" padLeft " y" btnY " w" btnW " h" btnH, "🎮 FPS")
-    b1.OnEvent("Click", (*) => SetPreset([-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -3))
-
-    b2 := gEqGui.Add("Button", "x" (padLeft + btnW + 8) " y" btnY " w" btnW " h" btnH, "💥 Bass")
-    b2.OnEvent("Click", (*) => SetPreset([3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5))
-
-    b3 := gEqGui.Add("Button", "x" (padLeft + (btnW + 8) * 2) " y" btnY " w" btnW " h" btnH, "🎵 Balanced")
-    b3.OnEvent("Click", (*) => SetPreset([0,2,4,5,4,3,1,0,0,1,3,3,1,0,-1], -2))
-
-    b4 := gEqGui.Add("Button", "x" (padLeft + (btnW + 8) * 3) " y" btnY " w" btnW " h" btnH, "⬜ Flat")
-    b4.OnEvent("Click", (*) => SetPreset([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 0))
-
-    ; Apply button
-    applyY := btnY + 44
-    gEqGui.SetFont("s11 c0xFFFFFF Bold", "Segoe UI")
-    applyBtn := gEqGui.Add("Button", "x" (guiW // 2 - 80) " y" applyY " w160 h38", "✅  APPLY")
-    applyBtn.OnEvent("Click", (*) => ApplyEQSettings())
-
-    guiH := applyY + 55
-    gEqGui.Show("w" guiW " h" guiH)
 }
 
-SetPreset(vals, preamp) {
-    global gEqGui
-    if !gEqGui
-        return
+FillEQ(g, v, pr) {
     loop 15 {
-        gEqGui["EQ" A_Index].Value := Integer(vals[A_Index])
-        gEqGui["ValLabel" A_Index].Value := vals[A_Index]
+        g["EQ" A_Index].Value := v[A_Index]
+        g["VL" A_Index].Value := String(v[A_Index])
     }
-    gEqGui["Preamp"].Value := Integer(preamp)
-    gEqGui["PreampLabel"].Value := preamp " dB"
+    g["Preamp"].Value := pr
+    g["PL"].Value := String(pr) " dB"
 }
 
-ApplyEQSettings() {
-    global gEqGui, gFootstepOn
-    if !gEqGui
-        return
-
-    freqNums := [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000]
-    preamp := gEqGui["Preamp"].Value
-    eqParts := []
-
-    loop 15 {
-        val := gEqGui["EQ" A_Index].Value
-        eqParts.Push(freqNums[A_Index] " " val)
-        gEqGui["ValLabel" A_Index].Value := val
-    }
-    gEqGui["PreampLabel"].Value := preamp " dB"
-
-    eqStr := ""
-    for i, part in eqParts {
-        if i > 1
-            eqStr .= "; "
-        eqStr .= part
-    }
-
-    content := "# Footstep Amplifier - custom`nPreamp: " preamp " dB`nGraphicEQ: " eqStr "`n"
-
-    configPath := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
-    try FileDelete(configPath)
-    FileAppend(content, configPath)
-
-    if gFootstepOn {
-        mainConfig := "C:\Program Files\EqualizerAPO\config\config.txt"
-        try FileDelete(mainConfig)
-        FileAppend("Include: footstep-boost.txt", mainConfig)
-    }
-
-    ShowOverlay("✅", "EQ Applied", "Settings Saved", "0x2ed573")
-}
-
-ReadEQValues() {
-    configPath := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+LoadEQ() {
+    fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
     vals := []
-    preamp := -3
-
+    pr := -3
     try {
-        content := FileRead(configPath)
-        for line in StrSplit(content, "`n") {
+        content := FileRead(fp)
+        loop Parse content, "`n" {
+            line := A_LoopField
             if InStr(line, "Preamp:") {
-                RegExMatch(line, "(-?\d+)", &m)
-                if m
-                    preamp := Integer(m[0])
+                if RegExMatch(line, "(-?\d+)", &m)
+                    pr := Integer(m[0])
             }
             if InStr(line, "GraphicEQ:") {
-                RegExMatch(line, "GraphicEQ:\s*(.*)", &eqMatch)
-                if eqMatch {
-                    for pair in StrSplit(eqMatch[1], ";") {
-                        pair := Trim(pair)
-                        if pair {
-                            parts := StrSplit(pair, " ")
-                            if parts.Length >= 2
-                                vals.Push(Integer(parts[2]))
+                if RegExMatch(line, "GraphicEQ:\s*(.*)", &em) {
+                    loop Parse em[1], ";" {
+                        pair := Trim(A_LoopField)
+                        if pair != "" {
+                            sp := StrSplit(pair, " ")
+                            if sp.Length >= 2
+                                vals.Push(Integer(sp[2]))
                         }
                     }
                 }
             }
         }
     }
-
     while vals.Length < 15
         vals.Push(0)
-    vals.Push(preamp)
+    vals.Push(pr)
     return vals
 }
 
 ; ==================== TRAY INDICATOR ====================
-ShowTrayIndicator() {
+ShowTray() {
     global gTrayIndicator
     if gTrayIndicator {
         gTrayIndicator.Destroy()
         gTrayIndicator := ""
     }
-
     gTrayIndicator := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x80000")
     gTrayIndicator.BackColor := "0a0a1a"
     WinSetTransparent(140, gTrayIndicator)
-
-    gTrayIndicator.SetFont("s18 c0xFF6348", "Segoe UI Emoji")
+    gTrayIndicator.SetFont("s18 cFF6348", "Segoe UI Emoji")
     gTrayIndicator.Add("Text", "x4 y2 w36 Center", "🦶")
-    gTrayIndicator.SetFont("s7 c0xFF6348", "Segoe UI")
+    gTrayIndicator.SetFont("s7 cFF6348", "Segoe UI")
     gTrayIndicator.Add("Text", "x0 y28 w44 Center", "BOOST")
-
-    posX := A_ScreenWidth - 56
-    posY := A_ScreenHeight - 86
-    gTrayIndicator.Show("x" posX " y" posY " w44 h42 NoActivate")
-    SetTimer(CheckDesktop, 1000)
+    gTrayIndicator.Show("x" (A_ScreenWidth - 56) " y" (A_ScreenHeight - 86) " w44 h42 NoActivate")
+    SetTimer(ChkDesk, 1000)
 }
 
-HideTrayIndicator() {
+HideTray() {
     global gTrayIndicator
     if gTrayIndicator {
         gTrayIndicator.Destroy()
         gTrayIndicator := ""
     }
-    SetTimer(CheckDesktop, 0)
+    SetTimer(ChkDesk, 0)
 }
 
-CheckDesktop() {
+ChkDesk() {
     global gTrayIndicator, gFootstepOn
     if !gFootstepOn or !gTrayIndicator
         return
-    activeClass := WinGetClass("A")
-    activeExe := ""
-    try activeExe := WinGetProcessName("A")
-
-    isDesktop := (activeClass = "Progman" or activeClass = "WorkerW" or activeClass = "Shell_TrayWnd" or activeClass = "CabinetWClass" or activeExe = "explorer.exe")
-
-    if isDesktop
+    ac := WinGetClass("A")
+    ae := ""
+    try ae := WinGetProcessName("A")
+    ok := (ac = "Progman" or ac = "WorkerW" or ac = "Shell_TrayWnd" or ac = "CabinetWClass" or ae = "explorer.exe")
+    if ok {
         try gTrayIndicator.Show("NoActivate")
-    else
+    } else {
         try gTrayIndicator.Hide()
+    }
 }
 
 ; ==================== OVERLAY ====================
@@ -301,29 +278,24 @@ ShowOverlay(emoji, title, subtitle, accentColor) {
         gOverlay.Destroy()
         gOverlay := ""
     }
-
-    guiW := 340
-    guiH := 200
+    gw := 340
+    gh := 200
     gOverlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20")
     gOverlay.BackColor := "1a1a2e"
     WinSetTransparent(220, gOverlay)
-
-    gOverlay.SetFont("s80 c0xFFFFFF", "Segoe UI Emoji")
-    gOverlay.Add("Text", "x0 y8 w" guiW " Center", emoji)
+    gOverlay.SetFont("s80 cFFFFFF", "Segoe UI Emoji")
+    gOverlay.Add("Text", "x0 y8 w" gw " Center", emoji)
     gOverlay.SetFont("s20 c" accentColor " Bold", "Segoe UI")
-    gOverlay.Add("Text", "x0 y110 w" guiW " Center", title)
-    gOverlay.SetFont("s11 c0xAAAAAA", "Segoe UI")
-    gOverlay.Add("Text", "x0 y145 w" guiW " Center", subtitle)
+    gOverlay.Add("Text", "x0 y110 w" gw " Center", title)
+    gOverlay.SetFont("s11 cAAAAAA", "Segoe UI")
+    gOverlay.Add("Text", "x0 y145 w" gw " Center", subtitle)
     gOverlay.SetFont("s2 c" accentColor, "Segoe UI")
     gOverlay.Add("Text", "x70 y175 w200 Center", "━━━━━━━━━━━━━━━━━━━━")
-
-    posX := (A_ScreenWidth - guiW) // 2
-    posY := (A_ScreenHeight - guiH) // 2
-    gOverlay.Show("x" posX " y" posY " w" guiW " h" guiH " NoActivate")
-    SetTimer(CloseOverlay, -2000)
+    gOverlay.Show("x" ((A_ScreenWidth - gw) // 2) " y" ((A_ScreenHeight - gh) // 2) " w" gw " h" gh " NoActivate")
+    SetTimer(CloseOL, -2000)
 }
 
-CloseOverlay() {
+CloseOL() {
     global gOverlay
     if gOverlay {
         gOverlay.Destroy()
@@ -331,8 +303,8 @@ CloseOverlay() {
     }
 }
 
-RunWaitOne(command) {
-    shell := ComObject("WScript.Shell")
-    exec := shell.Exec(command)
-    return exec.StdOut.ReadAll()
+RunCmd(command) {
+    sh := ComObject("WScript.Shell")
+    ex := sh.Exec(command)
+    return ex.StdOut.ReadAll()
 }

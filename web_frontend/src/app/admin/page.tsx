@@ -305,7 +305,8 @@ export default function AdminDashboardPage() {
               <div className="px-5 py-10 text-center text-[#86868b] text-sm">최근 게시물이 없습니다.</div>
             ) : (
               <>
-                <table className="w-full">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[500px]">
                   <thead>
                     <tr className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
                       <th className="text-left px-5 py-2.5">날짜</th>
@@ -360,6 +361,7 @@ export default function AdminDashboardPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
                 {hasMore && (
                   <div className="px-5 py-3 border-t border-[#f5f5f7] text-center">
                     <button type="button" onClick={() => setShowCount(prev => prev + 10)}
@@ -411,8 +413,8 @@ export default function AdminDashboardPage() {
             <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
               <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">채널별 비율</h2>
               {sources.length > 0 ? (
-                <div className="flex items-center gap-4">
-                  <div style={{ width: 170, height: 170 }}>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="shrink-0" style={{ width: 150, height: 150 }}>
                     <ResponsiveContainer>
                       <PieChart>
                         <Pie data={sources} dataKey="count" nameKey="label"

@@ -10,6 +10,7 @@
 
 import { useState, useRef } from 'react'
 import { resizeImage } from '@/lib/image-resize'
+import GuidePopup from '@/components/GuidePopup'
 
 import { API_URL } from '@/lib/api'
 
@@ -560,6 +561,18 @@ export default function ApplyPage() {
   // ── Form ────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
+      <GuidePopup
+        storageKey="bridge_apply_guide_seen"
+        title="Before You Start"
+        items={[
+          'Have your passport-style photo ready (JPG/PNG, max 5 MB).',
+          'Prepare your CV/resume and cover letter (PDF or DOC).',
+          'TEFL/TESOL or teaching license certificate, if you have one.',
+          'A short video introduction is recommended but optional (MP4, max 100 MB).',
+          'All fields marked with * are required. You can save progress anytime.',
+        ]}
+        cta="Start Application"
+      />
 
       <div className="space-y-2">
         <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50

@@ -10,6 +10,7 @@
  */
 
 import { useState, useRef } from 'react'
+import GuidePopup from '@/components/GuidePopup'
 
 import { API_URL } from '@/lib/api'
 
@@ -406,6 +407,17 @@ export default function InquiryPage() {
   // ── Page ────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
+      <GuidePopup
+        storageKey="bridge_inquiry_guide_seen"
+        title="구인신청 안내"
+        items={[
+          '사업자 등록증 사본을 이메일(bridgejobkr@gmail.com)로 보내주세요.',
+          '급여, 복지, 근무 조건을 미리 정리해 두시면 빠르게 진행됩니다.',
+          '서비스 수수료 결제 후 공고가 게시됩니다 (계좌이체 또는 PayPal).',
+          '* 표시 항목은 필수입니다. 정확한 정보를 입력해 주세요.',
+        ]}
+        cta="시작하기"
+      />
 
       <div className="space-y-2">
         <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50

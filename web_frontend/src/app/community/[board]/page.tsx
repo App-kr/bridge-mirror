@@ -449,7 +449,7 @@ function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: numbe
           animate={{ opacity: 1, height: 'auto' }}
           transition={{ duration: 0.3 }}
         >
-          <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line">{item.a}</p>
+          <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line break-words">{item.a}</p>
         </motion.div>
       )}
     </motion.div>
@@ -641,7 +641,7 @@ function HeroCardsLayout({ posts, board }: LayoutProps) {
 
           {/* Internet providers */}
           <motion.div
-            className="grid grid-cols-3 gap-4 max-w-[520px] mx-auto mb-16"
+            className="grid grid-cols-3 gap-2 sm:gap-4 max-w-[520px] mx-auto mb-16"
             variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
           >
             {[
@@ -767,11 +767,11 @@ function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
 
           return (
             <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-              <Link href={`/community/${board}/${p.id}`} className="korea-card group">
-                <div className="w-60 h-44 shrink-0 overflow-hidden">
+              <Link href={`/community/${board}/${p.id}`} className="korea-card group flex-col sm:flex-row">
+                <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
                   <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
                 </div>
-                <div className="flex-1 p-5 flex flex-col justify-center">
+                <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
                   <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
                   <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
                   {KOREA_MAP_LINKS[imgKey] && (
