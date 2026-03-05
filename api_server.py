@@ -3323,6 +3323,28 @@ async def upload_file(
     )
 
 
+@app.post("/api/admin/upload-image", tags=["admin"])
+async def admin_upload_editor_image(
+    request: Request,
+    file: UploadFile = FastFile(...),
+):
+    """에디터 이미지 업로드 (관리자 전용). 서버에 저장 후 URL 반환."""
+    _check_admin(request)
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
+        raise HTTPException(429, "Too many uploads.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file.")
+    ext = _validate_file(data, file.filename or "image.png", "community_image")
+    img_dir = _UPLOAD_BASE / "editor"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid.uuid4().hex[:12]}{ext}"
+    file_path = img_dir / fname
+    file_path.write_bytes(data)
+    file_url = f"/uploads/editor/{fname}"
+    return ok(data={"url": file_url}, message="Image uploaded")
+
+
 @app.get("/api/admin/files/{entity_type}/{entity_id}", tags=["admin"])
 async def admin_list_files(entity_type: str, entity_id: str, request: Request):
     """관리자: 엔티티의 업로드된 파일 목록."""

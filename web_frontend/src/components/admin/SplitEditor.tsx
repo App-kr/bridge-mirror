@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Eye, Bold, Italic, Heading1, Heading2, List,
-  Link2, Plus, X, Paperclip, ImageIcon,
+  Link2, Plus, X, Paperclip, ImageIcon, Loader2,
 } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import MarkdownBody from '@/components/MarkdownBody'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
+import { API_URL } from '@/lib/api'
 
 export type ContentType = 'markdown' | 'html'
 
@@ -198,8 +200,11 @@ export default function SplitEditor({
     e.target.value = ''
   }, [])
 
-  // Image insert handler
-  const handleImageInsert = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image insert handler — upload to server, insert URL (never base64)
+  const [imageUploading, setImageUploading] = useState(false)
+  const { adminKey } = useAdminAuth()
+
+  const handleImageInsert = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const maxSize = 5 * 1024 * 1024
@@ -208,18 +213,34 @@ export default function SplitEditor({
       e.target.value = ''
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const base64 = reader.result as string
-      if (contentType === 'html') {
-        insertAtCursor(`<img src="${base64}" alt="${file.name}" />`)
-      } else {
-        insertAtCursor(`![${file.name}](${base64})`)
-      }
-    }
-    reader.readAsDataURL(file)
     e.target.value = ''
-  }, [contentType, insertAtCursor])
+    setImageUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${API_URL}/api/admin/upload-image`, {
+        method: 'POST',
+        headers: { 'x-admin-key': adminKey },
+        body: form,
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        setError(json.detail || json.error || 'Upload failed')
+        return
+      }
+      const url = `${API_URL}${json.data.url}`
+      if (contentType === 'html') {
+        insertAtCursor(`<img src="${url}" alt="${file.name}" />`)
+      } else {
+        insertAtCursor(`![${file.name}](${url})`)
+      }
+    } catch {
+      setError('Image upload failed')
+    } finally {
+      setImageUploading(false)
+    }
+  }, [contentType, insertAtCursor, adminKey])
 
   // Inline link insert
   const handleInlineLinkInsert = useCallback(() => {
@@ -357,10 +378,11 @@ export default function SplitEditor({
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
+                  disabled={imageUploading}
                   title="Insert image"
-                  className="p-2 text-zinc-400 bg-zinc-800 border border-zinc-700 rounded hover:text-white hover:border-zinc-600 transition-colors"
+                  className="p-2 text-zinc-400 bg-zinc-800 border border-zinc-700 rounded hover:text-white hover:border-zinc-600 transition-colors disabled:opacity-50"
                 >
-                  <ImageIcon size={16} />
+                  {imageUploading ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
                 </button>
                 <div className="relative">
                   <button
