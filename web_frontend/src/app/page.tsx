@@ -229,7 +229,7 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Suspension bridge ── */}
+        {/* ── Suspension bridge — light sweep reveal ── */}
         <div className={showBridge ? 'bridge-active' : ''} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
             viewBox="0 0 1400 800"
@@ -242,20 +242,10 @@ export default function HomePage() {
                 <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              <filter id="glowDot">
-                <feGaussianBlur stdDeviation="12" result="blur" />
+              <filter id="sweepGlow">
+                <feGaussianBlur stdDeviation="8" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              {/* Light sweep gradient — bright spot travels L→R, infinite */}
-              <linearGradient id="sweepGrad" gradientUnits="userSpaceOnUse" x1="-700" y1="400" x2="0" y2="400">
-                <stop offset="0" stopColor="white" stopOpacity="0" />
-                <stop offset="0.35" stopColor="white" stopOpacity="0" />
-                <stop offset="0.5" stopColor="white" stopOpacity="0.7" />
-                <stop offset="0.65" stopColor="white" stopOpacity="0" />
-                <stop offset="1" stopColor="white" stopOpacity="0" />
-                <animate attributeName="x1" values="-700;1400" dur="6s" repeatCount="indefinite" begin="3s" />
-                <animate attributeName="x2" values="0;2100" dur="6s" repeatCount="indefinite" begin="3s" />
-              </linearGradient>
               {/* Taper mask — thick center, thin edges */}
               <mask id="taperMask">
                 <linearGradient id="taperGrad" x1="0" y1="0" x2="1" y2="0">
@@ -267,57 +257,62 @@ export default function HomePage() {
                 </linearGradient>
                 <rect x="0" y="0" width="1400" height="800" fill="url(#taperGrad)" />
               </mask>
+              {/* Post-draw subtle light sweep — infinite (7s cycle, starts 3s) */}
+              <linearGradient id="postSweep" gradientUnits="userSpaceOnUse" x1="-700" y1="400" x2="0" y2="400">
+                <stop offset="0" stopColor="white" stopOpacity="0" />
+                <stop offset="0.35" stopColor="white" stopOpacity="0" />
+                <stop offset="0.5" stopColor="white" stopOpacity="0.35" />
+                <stop offset="0.65" stopColor="white" stopOpacity="0" />
+                <stop offset="1" stopColor="white" stopOpacity="0" />
+                <animate attributeName="x1" values="-700;1400" dur="7s" repeatCount="indefinite" begin="3s" />
+                <animate attributeName="x2" values="0;2100" dur="7s" repeatCount="indefinite" begin="3s" />
+              </linearGradient>
             </defs>
 
-            {/* ── Towers (0s, 2s, ease-out) ── */}
+            {/* ── Main cable arc — breathing glow wrapper ── */}
+            <g className="bridge-arc-group">
+              {/* Thin base stroke (0.8px) */}
+              <path d="M 0 520 Q 700 180, 1400 520"
+                className="bridge-arc"
+                stroke="white" strokeWidth={0.8} strokeLinecap="round"
+                filter="url(#cableGlow)"
+              />
+              {/* Thick center overlay (2.5px, tapered) */}
+              <path d="M 0 520 Q 700 180, 1400 520"
+                className="bridge-arc"
+                stroke="white" strokeWidth={2.5} strokeLinecap="round"
+                mask="url(#taperMask)" filter="url(#cableGlow)"
+              />
+            </g>
+
+            {/* ── Glow sweep — bright spot traveling L→R during draw ── */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              className="bridge-sweep"
+              stroke="white" strokeWidth={6} strokeLinecap="round"
+              filter="url(#sweepGlow)"
+            />
+
+            {/* ── Towers ── */}
             <line x1={420} y1={520} x2={420} y2={280}
-              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
+              className="bridge-tower bridge-tower-l" stroke="white" strokeWidth={2} strokeLinecap="round" />
             <line x1={980} y1={520} x2={980} y2={280}
-              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
+              className="bridge-tower bridge-tower-r" stroke="white" strokeWidth={2} strokeLinecap="round" />
 
-            {/* ── Main cable — tapered ribbon, clip-path L→R reveal (0s, 2.5s) ── */}
-            {/* Thin base stroke (always visible after reveal) */}
-            <path d="M 0 520 Q 700 180, 1400 520"
-              className="bridge-cable-ribbon"
-              stroke="white" strokeWidth={0.8} strokeLinecap="round" opacity={0.35}
-              filter="url(#cableGlow)"
-            />
-            {/* Thick center overlay masked for taper */}
-            <path d="M 0 520 Q 700 180, 1400 520"
-              className="bridge-cable-ribbon"
-              stroke="white" strokeWidth={3} strokeLinecap="round" opacity={0.35}
-              mask="url(#taperMask)" filter="url(#cableGlow)"
-            />
-
-            {/* Glow dot — chases the cable draw direction */}
-            <circle r="8" fill="white" opacity="0" filter="url(#glowDot)">
-              <animateMotion dur="2.5s" fill="freeze" begin="0.05s"
-                calcMode="spline" keySplines="0.25 0.1 0.25 1"
-                path="M 0 520 Q 700 180, 1400 520" />
-              <animate attributeName="opacity"
-                values="0;0.6;0.6;0.3;0" keyTimes="0;0.04;0.8;0.95;1"
-                dur="2.5s" begin="0.05s" fill="freeze" />
-            </circle>
-
-            {/* Light sweep — infinite SpaceX atmospheric glow */}
-            <path d="M 0 520 Q 700 180, 1400 520"
-              stroke="url(#sweepGrad)" strokeWidth={5} strokeLinecap="round"
-              opacity={0.6} filter="url(#cableGlow)"
-            />
-
-            {/* ── Stay cables (0.8s+, stagger 0.06s, 1.2s each) ── */}
+            {/* ── Stay cables ── */}
             <line x1={420} y1={280} x2={280} y2={410}
-              className="bridge-stay bridge-stay-1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="180" style={{ '--d': '180' } as React.CSSProperties} />
+              className="bridge-stay bridge-stay-l" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
             <line x1={420} y1={280} x2={200} y2={465}
-              className="bridge-stay bridge-stay-2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="280" style={{ '--d': '280' } as React.CSSProperties} />
+              className="bridge-stay bridge-stay-l" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
             <line x1={980} y1={280} x2={1120} y2={410}
-              className="bridge-stay bridge-stay-3" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="180" style={{ '--d': '180' } as React.CSSProperties} />
+              className="bridge-stay bridge-stay-r" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
             <line x1={980} y1={280} x2={1200} y2={465}
-              className="bridge-stay bridge-stay-4" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="280" style={{ '--d': '280' } as React.CSSProperties} />
+              className="bridge-stay bridge-stay-r" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
+
+            {/* ── Post-draw infinite light sweep ── */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              stroke="url(#postSweep)" strokeWidth={4} strokeLinecap="round"
+              opacity={0.5} filter="url(#cableGlow)"
+            />
           </svg>
         </div>
 
@@ -328,18 +323,18 @@ export default function HomePage() {
         >
           <motion.h1
             className="text-[clamp(70px,14vw,180px)] font-semibold text-white leading-none tracking-tight mb-6"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1.5, ease: 'easeOut' }}
           >
             BRIDGE
           </motion.h1>
 
           <motion.p
             className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-medium tracking-tight"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1.5, delay: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1.5, ease: 'easeOut' }}
           >
             A career that changes your life.
           </motion.p>
