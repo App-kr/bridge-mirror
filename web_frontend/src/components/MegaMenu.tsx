@@ -7,7 +7,6 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -110,13 +109,51 @@ export default function MegaMenu() {
     timer.current = setTimeout(() => setActive(null), 150)
   }, [])
 
-  // Portal targets for logo icon and admin button
-  const [logoEl, setLogoEl] = useState<Element | null>(null)
-
+  // Bridge icon — 직접 DOM 주입 (createElementNS로 SVG 네임스페이스 보장)
   useEffect(() => {
     if (isAdminPage) return
-    const el = document.querySelector('nav.nav-glass a[href="/"]')
-    if (el) setLogoEl(el)
+    const logoLink = document.querySelector('nav.nav-glass a[href="/"]')
+    if (!logoLink || logoLink.querySelector('.bridge-icon-svg')) return
+
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('class', 'bridge-icon-svg')
+    svg.setAttribute('viewBox', '0 0 56 26')
+    svg.setAttribute('width', '46')
+    svg.setAttribute('height', '21')
+    svg.style.cssText = 'display:inline-block;vertical-align:middle;margin-left:5px;margin-bottom:2px'
+
+    svg.innerHTML = [
+      '<defs><filter id="blg" x="-50%" y="-50%" width="200%" height="200%">',
+      '<feGaussianBlur stdDeviation="2" result="b"/>',
+      '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>',
+      '</filter></defs>',
+      '<line x1="1" y1="23" x2="55" y2="23" stroke="#b0b0b0" stroke-width="0.5"/>',
+      `<path d="${DECK}" stroke="#1d1d1f" fill="none" stroke-width="1.2" stroke-linecap="round"/>`,
+      '<line x1="18" y1="23" x2="18" y2="3" stroke="#1d1d1f" stroke-width="1.5" stroke-linecap="round"/>',
+      '<line x1="38" y1="23" x2="38" y2="3" stroke="#1d1d1f" stroke-width="1.5" stroke-linecap="round"/>',
+      '<line x1="18" y1="3" x2="5" y2="20.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>',
+      '<line x1="18" y1="3" x2="9" y2="19.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>',
+      '<line x1="18" y1="3" x2="13" y2="17.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.55"/>',
+      '<line x1="18" y1="3" x2="23" y2="12.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>',
+      '<line x1="18" y1="3" x2="27" y2="11" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>',
+      '<line x1="38" y1="3" x2="29" y2="11" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>',
+      '<line x1="38" y1="3" x2="33" y2="12.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>',
+      '<line x1="38" y1="3" x2="43" y2="17.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.55"/>',
+      '<line x1="38" y1="3" x2="47" y2="19.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>',
+      '<line x1="38" y1="3" x2="51" y2="20.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>',
+      `<circle r="2" fill="#3b82f6" filter="url(#blg)">`,
+      `<animateMotion dur="2.5s" repeatCount="indefinite" path="${DECK}"/>`,
+      '<animate attributeName="opacity" values="0;0.7;1;1;0.7;0" dur="2.5s" repeatCount="indefinite"/>',
+      '</circle>',
+      `<circle r="1" fill="#60a5fa">`,
+      `<animateMotion dur="2.5s" begin="0.15s" repeatCount="indefinite" path="${DECK}"/>`,
+      '<animate attributeName="opacity" values="0;0.4;0.5;0.4;0" dur="2.5s" begin="0.15s" repeatCount="indefinite"/>',
+      '</circle>',
+    ].join('')
+
+    logoLink.appendChild(svg)
+    return () => { svg.remove() }
   }, [isAdminPage, pathname])
 
   // Desktop: Admin 버튼을 nav CTA 영역에 주입
@@ -147,48 +184,6 @@ export default function MegaMenu() {
 
   return (
     <>
-      {/* ── Bridge Icon Portal (into logo link) ── */}
-      {logoEl && createPortal(
-        <svg viewBox="0 0 56 26" width="46" height="21"
-          style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 5, marginBottom: 2 }}>
-          <defs>
-            <filter id="blg" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2" result="b" />
-              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-          </defs>
-          {/* Base line */}
-          <line x1="1" y1="23" x2="55" y2="23" stroke="#b0b0b0" strokeWidth="0.5" />
-          {/* Deck curve */}
-          <path d={DECK} stroke="#1d1d1f" fill="none" strokeWidth="1.2" strokeLinecap="round" />
-          {/* Towers */}
-          <line x1="18" y1="23" x2="18" y2="3" stroke="#1d1d1f" strokeWidth="1.5" strokeLinecap="round" />
-          <line x1="38" y1="23" x2="38" y2="3" stroke="#1d1d1f" strokeWidth="1.5" strokeLinecap="round" />
-          {/* Left cables */}
-          <line x1="18" y1="3" x2="5" y2="20.8" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.45" />
-          <line x1="18" y1="3" x2="9" y2="19.5" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.5" />
-          <line x1="18" y1="3" x2="13" y2="17.8" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.55" />
-          <line x1="18" y1="3" x2="23" y2="12.5" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.5" />
-          <line x1="18" y1="3" x2="27" y2="11" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.45" />
-          {/* Right cables */}
-          <line x1="38" y1="3" x2="29" y2="11" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.45" />
-          <line x1="38" y1="3" x2="33" y2="12.5" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.5" />
-          <line x1="38" y1="3" x2="43" y2="17.8" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.55" />
-          <line x1="38" y1="3" x2="47" y2="19.5" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.5" />
-          <line x1="38" y1="3" x2="51" y2="20.8" stroke="#1d1d1f" strokeWidth="0.4" opacity="0.45" />
-          {/* Shimmer light */}
-          <circle r="2" fill="#3b82f6" filter="url(#blg)">
-            <animateMotion dur="2.5s" repeatCount="indefinite" path={DECK} />
-            <animate attributeName="opacity" values="0;0.7;1;1;0.7;0" dur="2.5s" repeatCount="indefinite" />
-          </circle>
-          <circle r="1" fill="#60a5fa">
-            <animateMotion dur="2.5s" begin="0.15s" repeatCount="indefinite" path={DECK} />
-            <animate attributeName="opacity" values="0;0.4;0.5;0.4;0" dur="2.5s" begin="0.15s" repeatCount="indefinite" />
-          </circle>
-        </svg>,
-        logoEl
-      )}
-
       {/* ── Desktop Dropdown Panel ── */}
       {items && (
         <div
