@@ -5,11 +5,53 @@
  * Apple 2026 미니멀: 최근 게시물 테이블 → 통계 카드 → 차트 → 노출 비중 그래프
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
+
+// ── 숫자 카운트업 애니메이션 ──
+function CountUp({ value, duration = 1200 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0)
+  const prev = useRef(0)
+
+  useEffect(() => {
+    if (value === prev.current) return
+    const start = prev.current
+    const diff = value - start
+    const startTime = performance.now()
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // easeOutExpo — 슝~ 올라가는 느낌
+      const eased = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress)
+      setDisplay(Math.round(start + diff * eased))
+      if (progress < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+    prev.current = value
+  }, [value, duration])
+
+  return <>{display.toLocaleString()}</>
+}
+
+// ── 트렌드 인디케이터 (상승/하락) ──
+function TrendBadge({ value, label }: { value: number; label: string }) {
+  if (value === 0) return <span className="text-[10px] text-[#aeaeb2] mt-0.5 block">{label}</span>
+  const isUp = value > 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] mt-0.5 font-semibold ${
+      isUp ? 'text-emerald-500' : 'text-red-400'
+    }`}>
+      <span className={`inline-block ${isUp ? 'anim-trend-up' : 'anim-trend-down'}`}>
+        {isUp ? '↑' : '↓'}
+      </span>
+      {isUp ? '+' : ''}{value} {label}
+    </span>
+  )
+}
 
 const BarChart = dynamic(() => import('recharts').then(m => m.BarChart), { ssr: false })
 const Bar = dynamic(() => import('recharts').then(m => m.Bar), { ssr: false })
@@ -203,12 +245,12 @@ export default function AdminDashboardPage() {
   const deltaValue = thisMonthDelta - lastMonthDelta
 
   const statCards = [
-    { label: '총 지원', value: inboxStats.total_candidates ?? 0, sub: `이번달 +${thisMonthDelta}` },
-    { label: '신규 미처리', value: inboxStats.new_candidates ?? 0, sub: '' },
-    { label: '이번달 유입', value: thisMonthDelta, sub: `전월 대비 ${deltaSign}${deltaValue}` },
-    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, sub: `이번달 +${inboxStats.this_month_inquiries ?? 0}` },
-    { label: '활성 구인', value: inboxStats.active_jobs ?? 0, sub: '' },
-    { label: '커뮤니티', value: inboxStats.community_posts ?? 0, sub: '' },
+    { label: '총 지원', value: inboxStats.total_candidates ?? 0, trend: thisMonthDelta, trendLabel: '이번달' },
+    { label: '신규 미처리', value: inboxStats.new_candidates ?? 0, trend: 0, trendLabel: '' },
+    { label: '이번달 유입', value: thisMonthDelta, trend: deltaValue, trendLabel: '전월 대비' },
+    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, trend: inboxStats.this_month_inquiries ?? 0, trendLabel: '이번달' },
+    { label: '활성 구인', value: inboxStats.active_jobs ?? 0, trend: 0, trendLabel: '' },
+    { label: '커뮤니티', value: inboxStats.community_posts ?? 0, trend: 0, trendLabel: '' },
   ]
 
   const recentPosts = activity.filter(a => a.type === 'post')
@@ -330,13 +372,18 @@ export default function AdminDashboardPage() {
             )}
           </div>
 
-          {/* ── 통계 카드 6개 (미니멀) ────────────────────────── */}
+          {/* ── 통계 카드 6개 (애니메이션) ────────────────────── */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {statCards.map((c) => (
-              <div key={c.label} className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
-                <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">{c.value}</div>
+            {statCards.map((c, i) => (
+              <div key={c.label}
+                className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4 anim-card-in hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                style={{ animationDelay: `${i * 80}ms` }}>
+                <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">
+                  <CountUp value={c.value} />
+                </div>
                 <div className="text-[12px] text-[#86868b] mt-1 font-medium">{c.label}</div>
-                {c.sub && <div className="text-[10px] text-[#aeaeb2] mt-0.5">{c.sub}</div>}
+                {c.trend !== 0 && c.trendLabel && <TrendBadge value={c.trend} label={c.trendLabel} />}
+                {c.trend === 0 && c.trendLabel && <span className="text-[10px] text-[#aeaeb2] mt-0.5 block">{c.trendLabel}</span>}
               </div>
             ))}
           </div>
@@ -454,22 +501,21 @@ export default function AdminDashboardPage() {
 
               {/* 방문 요약 카드 */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
-                  <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">{analytics.total_visits}</div>
-                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">총 방문 ({analyticsDays}일)</div>
-                </div>
-                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
-                  <div className="text-2xl font-bold text-[#0071e3] tabular-nums">{analytics.today_visits}</div>
-                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">오늘 방문</div>
-                </div>
-                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
-                  <div className="text-2xl font-bold text-[#34c759] tabular-nums">{analytics.keywords.length}</div>
-                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">검색어 종류</div>
-                </div>
-                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
-                  <div className="text-2xl font-bold text-[#ff9f0a] tabular-nums">{analytics.channels.length}</div>
-                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">유입 채널</div>
-                </div>
+                {[
+                  { value: analytics.total_visits, color: '#1d1d1f', label: `총 방문 (${analyticsDays}일)`, emoji: '' },
+                  { value: analytics.today_visits, color: '#0071e3', label: '오늘 방문', emoji: analytics.today_visits > 0 ? '🔥' : '' },
+                  { value: analytics.keywords.length, color: '#34c759', label: '검색어 종류', emoji: '' },
+                  { value: analytics.channels.length, color: '#ff9f0a', label: '유입 채널', emoji: '' },
+                ].map((card, i) => (
+                  <div key={card.label}
+                    className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4 anim-card-in hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                    style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="text-2xl font-bold tabular-nums" style={{ color: card.color }}>
+                      <CountUp value={card.value} /> {card.emoji}
+                    </div>
+                    <div className="text-[12px] text-[#86868b] mt-1 font-medium">{card.label}</div>
+                  </div>
+                ))}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -482,12 +528,13 @@ export default function AdminDashboardPage() {
                         const totalCh = analytics.channels.reduce((s, c) => s + c.count, 0)
                         const pct = totalCh > 0 ? Math.round((ch.count / totalCh) * 100) : 0
                         return (
-                          <div key={ch.channel} className="flex items-center gap-3">
+                          <div key={ch.channel} className="flex items-center gap-3 anim-slide-in"
+                            style={{ animationDelay: `${idx * 60}ms` }}>
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: BAR_COLORS[idx % BAR_COLORS.length] }} />
                             <span className="text-[13px] text-[#424245] w-20 shrink-0 font-medium capitalize">{ch.channel}</span>
                             <div className="flex-1 h-[6px] bg-[#f5f5f7] rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all duration-500"
-                                style={{ width: `${pct}%`, backgroundColor: BAR_COLORS[idx % BAR_COLORS.length] }} />
+                              <div className="h-full rounded-full anim-bar-fill"
+                                style={{ '--bar-width': `${pct}%`, backgroundColor: BAR_COLORS[idx % BAR_COLORS.length], animationDelay: `${idx * 60 + 200}ms` } as React.CSSProperties} />
                             </div>
                             <span className="text-[12px] font-semibold text-[#1d1d1f] w-8 text-right tabular-nums">{pct}%</span>
                             <span className="text-[11px] text-[#86868b] w-10 text-right tabular-nums">{ch.count}</span>
@@ -509,8 +556,11 @@ export default function AdminDashboardPage() {
                   {analytics.keywords.length > 0 ? (
                     <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
                       {analytics.keywords.map((kw, idx) => (
-                        <div key={kw.keyword} className="flex items-center gap-3 py-1">
-                          <span className="text-[11px] text-[#86868b] w-5 text-right shrink-0 tabular-nums">{idx + 1}</span>
+                        <div key={kw.keyword} className="flex items-center gap-3 py-1 anim-slide-in"
+                          style={{ animationDelay: `${idx * 40}ms` }}>
+                          <span className="text-[11px] text-[#86868b] w-5 text-right shrink-0 tabular-nums font-bold">
+                            {idx < 3 ? ['🥇','🥈','🥉'][idx] : idx + 1}
+                          </span>
                           <span className="flex-1 text-[13px] text-[#1d1d1f] font-medium truncate">{kw.keyword}</span>
                           <span className="text-[12px] font-semibold text-[#0071e3] tabular-nums">{kw.count}회</span>
                         </div>

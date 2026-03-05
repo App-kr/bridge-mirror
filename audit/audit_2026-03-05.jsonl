@@ -8,3 +8,4 @@
 {"ts": "2026-03-05T00:55:47.000050+00:00", "event": "REQUEST", "severity": "WARNING", "id": "2bfb1c0a-3d3b-498f-a204-80b4635b60b5", "ip": "127.0.0.1", "method": "POST", "path": "/api/apply", "status": 500, "duration_ms": 4, "req_id": "ec6e124d"}
 {"ts": "2026-03-05T01:00:33.361151+00:00", "event": "REQUEST", "severity": "WARNING", "id": "b9dddd33-7a39-4881-aba7-23deba11476c", "ip": "127.0.0.1", "method": "POST", "path": "/api/apply", "status": 500, "duration_ms": 4, "req_id": "a02c579b"}
 {"ts": "2026-03-05T01:08:02.674522+00:00", "event": "REQUEST", "severity": "INFO", "id": "63c34cb0-00d7-453f-94c9-f0148ea661ec", "ip": "127.0.0.1", "method": "POST", "path": "/api/apply", "status": 201, "duration_ms": 87, "req_id": "ebaa1a40"}
+{"ts": "2026-03-05T01:09:38.525413+00:00", "event": "REQUEST", "severity": "INFO", "id": "bc3a46f5-ef27-4e19-a84f-dd1a01ec80e5", "ip": "127.0.0.1", "method": "POST", "path": "/api/apply", "status": 201, "duration_ms": 71, "req_id": "ff3c1d1e"}
