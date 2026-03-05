@@ -55,7 +55,7 @@
             SF.sandiego = true;
             SF.sandiego_chrome = true;
             SF.variant = 'sf';
-            SF.fpid = '5b401232-b69f-4657-808a-bd05ffeeb858';
+            SF.fpid = '2d1d7cc0-2859-40e9-b36d-a00d11805a66';
             SF.comm_billboard_route = '/software/product/$slug/';
             
             SF.Breakpoints = {
@@ -314,13 +314,11 @@
         <meta name="description" content="A system-wide equalizer for Windows 7 / 8 / 8.1 / 10 / 11">
         <meta name="keywords" content="Sound/Audio, Home Theater PC,  Open Source, Open Source Software, Development, Community, Source Code, Secure,  Downloads, Free Software">
 
-    <meta name="robots" content="noindex,follow">
-
 <noscript>
-    <meta http-equiv="refresh" content="5; url=https://downloads.sourceforge.net/project/equalizerapo/1.4.2/EqualizerAPO-x64-1.4.2.exe?ts=gAAAAABpqOFHeixSRRpNSDMnNWd6idBrQhnaOTIIsDqJ5i83-ESletmeQKIzJh6uFYjLDzGIKvvRIL1NHtrQB4ed6OLI7pHu5A%3D%3D&amp;use_mirror=twds&amp;r=">
+    <meta http-equiv="refresh" content="5; url=https://downloads.sourceforge.net/project/equalizerapo/1.4/EqualizerAPO64-1.4.exe?ts=gAAAAABpqOFh4iYgTXnZ-vwjuDdOfiuMuLVzn1Hf7NGiJgGegUwK1zQI1ANPIIFbcOdgBTH5Hl64UrUmi_DJ_Qe2mlJjRdv3Nw%3D%3D&amp;use_mirror=twds&amp;r=">
 </noscript>
 
-        <title>Download Equalizer APO</title>
+        <title>Download EqualizerAPO64-1.4.exe (Equalizer APO)</title>
         <link rel="icon" sizes="180x180" href="//a.fsdn.com/con/img/sandiego/logo-180x180.png" type="image/png">
 <link rel="icon" sizes="any" href="//a.fsdn.com/con/img/sandiego/svg/originals/sf-icon-orange-no_sf.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="//a.fsdn.com/con/img/sandiego/logo-180x180.png">
@@ -333,7 +331,7 @@
             /*global unescape, window, console, jQuery, $, net, SF, bizx  */
             if (!window.SF) {
                 window.SF = {};
-            }SF.EU_country_codes = ["GP","IO","EE","AX","AI","FI","HU","LV","NL","BM","YT","TC","BL","AT","MS","MT","GS","RE","RO","PT","PF","CZ","LT","SH","GL","NC","PM","HR","GI","KY","CW","MF","GG","ES","BE","CY","PL","IS","ME","IE","DK","AW","WF","GB","GF","IT","BG","LU","CH","NO","GR","SX","SK","LI","DE","SI","FR","PN","SE","MQ","JE","FK","TF","VG"];
+            }SF.EU_country_codes = ["EE","CY","IE","SE","CH","SK","GL","PM","VG","CZ","PF","PN","WF","DK","AT","LI","DE","RO","SH","AW","CW","LT","SX","GG","IS","RE","FI","MS","GB","AI","FK","MT","NO","LU","BM","HR","GF","LV","TF","AX","NC","GS","TC","IT","BL","ME","YT","BG","BE","IO","ES","PT","MQ","GP","KY","JE","GI","SI","GR","NL","HU","MF","FR","PL"];
             SF.unknown_country_codes = ["","A1","A2","O1"];
         </script>
         
@@ -345,7 +343,7 @@
     
 
 
-        <style>.f6cbe60d18f8ad5b5a3c2c3829fbf1eadcdf58d3f { display: none !important; }</style>
+        <style>.cb2e571b96e5dcdbcff6c02224b06202c43305b3b { display: none !important; }</style>
     <link rel="alternate" type="application/rss+xml" title="Equalizer APO&#8230;Recent Activity" href="/p/equalizerapo/activity/feed" />
     
 
@@ -393,7 +391,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
                 SF.Ads.slotsById['div-gpt-ad-1392148432591-0'] = thisSlot;
@@ -402,7 +400,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"320x50")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -412,7 +410,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"fluid")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -422,7 +420,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"fluid")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -432,7 +430,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"fluid")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -442,7 +440,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"fluid")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -452,7 +450,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"fluid")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -462,7 +460,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"300x250,300x600")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -472,7 +470,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"300x250")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -482,7 +480,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"300x250")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -492,7 +490,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"300x50,300x250,320x50,320x100")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -502,7 +500,7 @@
                                                         .addService(googletag.pubads())
                                                             .setTargeting('oss_tpc',["Home Theater PC","Multimedia","Sound/Audio"])
                                                             .setTargeting('shortname',"equalizerapo")
-                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/latest/download")
+                                                            .setTargeting('dc_ref',"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download")
                                                             .setTargeting('sz',"300x50,300x250,320x50,320x100")
                                                             .setTargeting('page_type',"pg_download");
                 gptadslots.push(thisSlot);
@@ -1120,15 +1118,15 @@
     
     
     
-    <a rel=nofollow class="social-media-icon twitter" href="https://x.com/share?url=https://sourceforge.net/projects/equalizerapo/files/latest/download&amp;text=Download%20Equalizer%20APO%20on%20SourceForge%20for%20free%21%20A%20system-wide%20equalizer%20for%20Windows%207%20/%208%20/%208.1%20/%2010%20/%2011" title="Share Equalizer APO on SourceForge on X">
+    <a rel=nofollow class="social-media-icon twitter" href="https://x.com/share?url=https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download&amp;text=Download%20Equalizer%20APO%20on%20SourceForge%20for%20free%21%20A%20system-wide%20equalizer%20for%20Windows%207%20/%208%20/%208.1%20/%2010%20/%2011" title="Share Equalizer APO on SourceForge on X">
 
 
 <svg  data-name="x-logo" viewBox="0 0 1200 1227" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z" fill="white"/></svg></a>
-    <a rel=nofollow class="social-media-icon facebook" href="https://www.facebook.com/sharer/sharer.php?u=https://sourceforge.net/projects/equalizerapo/files/latest/download&title=Equalizer%20APO%20on%20SourceForge" title="Share Equalizer APO on SourceForge on facebook">
+    <a rel=nofollow class="social-media-icon facebook" href="https://www.facebook.com/sharer/sharer.php?u=https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download&title=Equalizer%20APO%20on%20SourceForge" title="Share Equalizer APO on SourceForge on facebook">
 
 
 <svg  data-name="facebook" viewBox="0 0 1792 1792" xmlns="http://www.w3.org/2000/svg"><path d="M1343 12v264h-157q-86 0-116 36t-30 108v189h293l-39 296h-254v759h-306v-759h-255v-296h255v-218q0-186 104-288.5t277-102.5q147 0 228 12z"/></svg></a>
-    <a rel=nofollow class="social-media-icon linkedin" href="https://www.linkedin.com/shareArticle?mini=true&url=https://sourceforge.net/projects/equalizerapo/files/latest/download&title=Equalizer%20APO%20on%20SourceForge&source=SourceForge.net" title="Share Equalizer APO on SourceForge on LinkedIn">
+    <a rel=nofollow class="social-media-icon linkedin" href="https://www.linkedin.com/shareArticle?mini=true&url=https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download&title=Equalizer%20APO%20on%20SourceForge&source=SourceForge.net" title="Share Equalizer APO on SourceForge on LinkedIn">
 
 
 <svg  data-name="linkedin" viewBox="0 0 1792 1792" xmlns="http://www.w3.org/2000/svg"><path d="M477 625v991h-330v-991h330zm21-306q1 73-50.5 122t-135.5 49h-2q-82 0-132-49t-50-122q0-74 51.5-122.5t134.5-48.5 133 48.5 51 122.5zm1166 729v568h-329v-530q0-105-40.5-164.5t-126.5-59.5q-63 0-105.5 34.5t-63.5 85.5q-11 30-11 81v553h-329q2-399 2-647t-1-296l-1-48h329v144h-2q20-32 41-56t56.5-52 87-43.5 114.5-15.5q171 0 275 113.5t104 332.5z"/></svg></a>
@@ -1151,7 +1149,7 @@
         </div>
     </div>
 
-    <a class="button default mirror" id="btn-problems-downloading" data-release-url="https://downloads.sourceforge.net/project/equalizerapo/1.4.2/EqualizerAPO-x64-1.4.2.exe?ts=gAAAAABpqOFHeixSRRpNSDMnNWd6idBrQhnaOTIIsDqJ5i83-ESletmeQKIzJh6uFYjLDzGIKvvRIL1NHtrQB4ed6OLI7pHu5A%3D%3D&amp;use_mirror=twds&amp;r=" rel="nofollow" href="/settings/mirror_choices?projectname=equalizerapo&amp;filename=1.4.2/EqualizerAPO-x64-1.4.2.exe&amp;selected=twds">Problems Downloading?</a>
+    <a class="button default mirror" id="btn-problems-downloading" data-release-url="https://downloads.sourceforge.net/project/equalizerapo/1.4/EqualizerAPO64-1.4.exe?ts=gAAAAABpqOFh4iYgTXnZ-vwjuDdOfiuMuLVzn1Hf7NGiJgGegUwK1zQI1ANPIIFbcOdgBTH5Hl64UrUmi_DJ_Qe2mlJjRdv3Nw%3D%3D&amp;use_mirror=twds&amp;r=" rel="nofollow" href="/settings/mirror_choices?projectname=equalizerapo&amp;filename=1.4/EqualizerAPO64-1.4.exe&amp;selected=twds">Problems Downloading?</a>
                         
                     </div>
                 </div>
@@ -1160,7 +1158,7 @@
 
         <div class="file-info">
             <div class="file-name">
-                    EqualizerAPO-x64-1.4.2.exe
+                    EqualizerAPO64-1.4.exe
                 
             </div>
 
@@ -1225,31 +1223,31 @@
     
 
     <div class="nel standard can-trunc  "
-        data-id="6827">
+        data-id="3910">
 
         
 
 
-<span id="f99ce001-0a8b-4e9f-b06d-35917c8a779b"></span>
+<span id="d967d81f-7480-4669-baa4-53d301fd70f7"></span>
 <script>
     /* globals bizx */
-    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=30693&amp;c=6137&amp;z=27886&amp;cb=1db27a934a', "Secure Computing Platform", 'f99ce001-0a8b-4e9f-b06d-35917c8a779b');
+    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=25267&amp;c=4612&amp;z=22661&amp;cb=46e4c6ace6', "Mavenlink | Project Management Software", 'd967d81f-7480-4669-baa4-53d301fd70f7');
 </script>
 
 
         
-        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=30693__zoneid=27886__cb=1db27a934a__oadest=https%3A%2F%2Fkasm.com%2Findex.html%3Futm_campaign%3DSourceForge%26utm_source%3DSFClick%26utm_medium%3Dpaid" data-newtab="true" data-target="_blank" rel="nofollow">
-            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/6827" alt="Secure Computing Platform Icon">
+        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=25267__zoneid=22661__cb=46e4c6ace6__oadest=https%3A%2F%2Fwww.kantata.com%2Fproduct%3Futm_medium%3Dmarketplaces%26utm_content%3DVisit%2BWebsite%26utm_campaign%3DDefaultListing%26utm_source%3DSourceForge" data-newtab="true" data-target="_blank" rel="nofollow">
+            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/3910" alt="Mavenlink | Project Management Software Icon">
             
         </div>
         <div class="wrapper">
             <div class="heading">
                 <div class="heading-main">
                     
-                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=30693__zoneid=27886__cb=1db27a934a__oadest=https%3A%2F%2Fkasm.com%2Findex.html%3Futm_campaign%3DSourceForge%26utm_source%3DSFClick%26utm_medium%3Dpaid" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Secure Computing Platform">Secure Computing Platform</span>
+                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=25267__zoneid=22661__cb=46e4c6ace6__oadest=https%3A%2F%2Fwww.kantata.com%2Fproduct%3Futm_medium%3Dmarketplaces%26utm_content%3DVisit%2BWebsite%26utm_campaign%3DDefaultListing%26utm_source%3DSourceForge" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Mavenlink | Project Management Software">Mavenlink | Project Management Software</span>
 
                     
-                    <p class="teaser">Streaming isolated remote applications and desktops to the browser</p>
+                    <p class="teaser">Connecting People, Projects, and Profits</p>
                 </div>
             </div>
 
@@ -1261,7 +1259,7 @@
                     
                     <div class="description ">
                         <div class="description-inner">
-                            Building effective anti-phishing, anti-malware and ransomware defenses has never been easier. Kasm’s isolation technology insulates users by creating a "chasm" between the user's personal computer and web-borne threats.
+                            Mavenlink is an innovative online resource management and project management software built for professional services teams. Offering a better way to manage projects and resources, Mavenlink transforms businesses by combining project management, collaboration, time tracking, resource management, and project financials all in one place.
                         </div>
                     </div>
                 </div>
@@ -1282,10 +1280,10 @@
         
             
         
-        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=30693__zoneid=27886__cb=1db27a934a__oadest=https%3A%2F%2Fkasm.com%2Findex.html%3Futm_campaign%3DSourceForge%26utm_source%3DSFClick%26utm_medium%3Dpaid"
+        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=25267__zoneid=22661__cb=46e4c6ace6__oadest=https%3A%2F%2Fwww.kantata.com%2Fproduct%3Futm_medium%3Dmarketplaces%26utm_content%3DVisit%2BWebsite%26utm_campaign%3DDefaultListing%26utm_source%3DSourceForge"
                 
-                    data-zone="27881" data-slug="Kasm"
-                >Try it Now</div>
+                    data-zone="21265" data-slug="Kantata"
+                >Get Started Today</div>
         </div>
 
         
@@ -1303,31 +1301,31 @@
     
 
     <div class="nel standard can-trunc  "
-        data-id="19979">
+        data-id="7354">
 
         
 
 
-<span id="7a0138f0-b8e5-45f5-918d-5f8289cf3a4d"></span>
+<span id="5c989c31-37e9-4fa7-a261-1e692827bf7f"></span>
 <script>
     /* globals bizx */
-    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=31708&amp;c=6441&amp;z=28922&amp;cb=a8b3ef47e7', "Accounting Software Built for Owners, and Their Clients", '7a0138f0-b8e5-45f5-918d-5f8289cf3a4d');
+    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=31530&amp;c=6396&amp;z=28744&amp;cb=c88859f393', "Odoo Business Applications", '5c989c31-37e9-4fa7-a261-1e692827bf7f');
 </script>
 
 
         
-        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31708__zoneid=28922__cb=a8b3ef47e7__oadest=https%3A%2F%2Fwww.freshbooks.com%2F%3Fref%3D13311%26utm_source%3Dsourceforge%26utm_medium%3DMarketplace%26utm_campaign%3Dsourceforge" data-newtab="true" data-target="_blank" rel="nofollow">
-            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/19979" alt="Accounting Software Built for Owners, and Their Clients Icon">
+        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31530__zoneid=28744__cb=c88859f393__oadest=https%3A%2F%2Fwww.odoo.com%2Ftrial%3Futm_campaign%3Derp%26utm_medium%3Dcpc-review%26utm_source%3DSourceForge" data-newtab="true" data-target="_blank" rel="nofollow">
+            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/7354" alt="Odoo Business Applications Icon">
             
         </div>
         <div class="wrapper">
             <div class="heading">
                 <div class="heading-main">
                     
-                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31708__zoneid=28922__cb=a8b3ef47e7__oadest=https%3A%2F%2Fwww.freshbooks.com%2F%3Fref%3D13311%26utm_source%3Dsourceforge%26utm_medium%3DMarketplace%26utm_campaign%3Dsourceforge" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Accounting Software Built for Owners, and Their Clients">Accounting Software Built for Owners, and Their Clients</span>
+                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31530__zoneid=28744__cb=c88859f393__oadest=https%3A%2F%2Fwww.odoo.com%2Ftrial%3Futm_campaign%3Derp%26utm_medium%3Dcpc-review%26utm_source%3DSourceForge" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Odoo Business Applications">Odoo Business Applications</span>
 
                     
-                    <p class="teaser">Make invoicing and billing painless for your small business with FreshBooks.</p>
+                    <p class="teaser">Odoo is a software suite to better manage and run your company.</p>
                 </div>
             </div>
 
@@ -1339,7 +1337,7 @@
                     
                     <div class="description ">
                         <div class="description-inner">
-                            Balancing your books, client relationships, and business isn’t easy. FreshBooks gives you the info and time you need to focus on your big picture—your business, team, and clients.
+                            Odoo is a fully integrated, customizable, open-source software packed with hundreds of expertly designed business applications. Odoo’s intuitive database is able to meet a majority of business needs, such as: CRM, Sales, Project, Manufacturing, Inventory, and Accounting, just to name a few.
                         </div>
                     </div>
                 </div>
@@ -1360,10 +1358,10 @@
         
             
         
-        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31708__zoneid=28922__cb=a8b3ef47e7__oadest=https%3A%2F%2Fwww.freshbooks.com%2F%3Fref%3D13311%26utm_source%3Dsourceforge%26utm_medium%3DMarketplace%26utm_campaign%3Dsourceforge"
+        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=31530__zoneid=28744__cb=c88859f393__oadest=https%3A%2F%2Fwww.odoo.com%2Ftrial%3Futm_campaign%3Derp%26utm_medium%3Dcpc-review%26utm_source%3DSourceForge"
                 
-                    data-zone="28917" data-slug="FreshBooks"
-                >Learn More</div>
+                    data-zone="28739" data-slug="Odoo"
+                >Get Started</div>
         </div>
 
         
@@ -1416,15 +1414,93 @@
     
 
     <div class="nel standard can-trunc  nel-hidden"
+        data-id="15271">
+
+        
+
+
+<span id="e5a2f876-dfc2-4f82-a0f5-3d175ad1005a"></span>
+<script>
+    /* globals bizx */
+    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=56661&amp;c=11013&amp;z=53983&amp;cb=456f8bfc9e', "JS7 JobScheduler is an open source workload automation solution.", 'e5a2f876-dfc2-4f82-a0f5-3d175ad1005a');
+</script>
+
+
+        
+        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56661__zoneid=53983__cb=456f8bfc9e__oadest=https%3A%2F%2Fwww.sos-berlin.com%2Fen%2Ftry-out%3Futm_source%3Dsourceforge%26utm_medium%3Dreferral%26utm_campaign%3Dsourceforgelisting" data-newtab="true" data-target="_blank" rel="nofollow">
+            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/15271" alt="JS7 JobScheduler is an open source workload automation solution. Icon">
+            
+        </div>
+        <div class="wrapper">
+            <div class="heading">
+                <div class="heading-main">
+                    
+                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56661__zoneid=53983__cb=456f8bfc9e__oadest=https%3A%2F%2Fwww.sos-berlin.com%2Fen%2Ftry-out%3Futm_source%3Dsourceforge%26utm_medium%3Dreferral%26utm_campaign%3Dsourceforgelisting" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about JS7 JobScheduler is an open source workload automation solution.">JS7 JobScheduler is an open source workload automation solution.</span>
+
+                    
+                    <p class="teaser">JS7 offers cross-platform job execution, managed file transfer, complex no-code job dependencies and a real REST API.</p>
+                </div>
+            </div>
+
+            
+            
+
+            <div class="tiles">
+                <div class="tile">
+                    
+                    <div class="description ">
+                        <div class="description-inner">
+                            JS7 JobScheduler is an open source workload automation solution. It is used to run executable files, shell scripts etc. and database procedures.
+                        </div>
+                    </div>
+                </div>
+
+                
+            </div>
+
+        </div>
+
+        
+        <div class="download standard">
+            
+            
+
+            
+
+            
+        
+            
+        
+        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56661__zoneid=53983__cb=456f8bfc9e__oadest=https%3A%2F%2Fwww.sos-berlin.com%2Fen%2Ftry-out%3Futm_source%3Dsourceforge%26utm_medium%3Dreferral%26utm_campaign%3Dsourceforgelisting"
+                
+                    data-zone="53963" data-slug="JS7-JobScheduler"
+                >Learn More</div>
+        </div>
+
+        
+    </div>
+
+
+    
+        
+        
+        
+
+    
+    
+        
+    
+
+    <div class="nel standard can-trunc  "
         data-id="5546">
 
         
 
 
-<span id="5066acfe-e084-464f-9f1b-29cb4a80c059"></span>
+<span id="8bbb756d-df1f-4b2f-81e3-e57abb60a528"></span>
 <script>
     /* globals bizx */
-    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=27744&amp;c=5343&amp;z=25144&amp;cb=6ff609165c', "Remotely access and manage devices to provide on-demand IT support.", '5066acfe-e084-464f-9f1b-29cb4a80c059');
+    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=27744&amp;c=5343&amp;z=25144&amp;cb=6ff609165c', "Remotely access and manage devices to provide on-demand IT support.", '8bbb756d-df1f-4b2f-81e3-e57abb60a528');
 </script>
 
 
@@ -1486,84 +1562,6 @@
     
         
         
-        
-
-    
-    
-        
-    
-
-    <div class="nel standard can-trunc  "
-        data-id="15219">
-
-        
-
-
-<span id="6a656354-6ecd-4e5e-9783-8c58846f0851"></span>
-<script>
-    /* globals bizx */
-    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=56187&amp;c=10943&amp;z=53505&amp;cb=fdef2829a7', "Centralized Workload Automation and Job Scheduling", '6a656354-6ecd-4e5e-9783-8c58846f0851');
-</script>
-
-
-        
-        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56187__zoneid=53505__cb=fdef2829a7__oadest=https%3A%2F%2Factivebatch.advsyscon.com%2Flp%2Factivebatch%3Futm_source%3DSourceforge%26utm_medium%3Dlisting%26utm_content%3Dvisitwebsite%26utm_campaign%3DActiveBatch" data-newtab="true" data-target="_blank" rel="nofollow">
-            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/15219" alt="Centralized Workload Automation and Job Scheduling Icon">
-            
-        </div>
-        <div class="wrapper">
-            <div class="heading">
-                <div class="heading-main">
-                    
-                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56187__zoneid=53505__cb=fdef2829a7__oadest=https%3A%2F%2Factivebatch.advsyscon.com%2Flp%2Factivebatch%3Futm_source%3DSourceforge%26utm_medium%3Dlisting%26utm_content%3Dvisitwebsite%26utm_campaign%3DActiveBatch" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Centralized Workload Automation and Job Scheduling">Centralized Workload Automation and Job Scheduling</span>
-
-                    
-                    <p class="teaser">Orchestrate your entire tech stack with our no-code connectors and low-code REST API adapter</p>
-                </div>
-            </div>
-
-            
-            
-
-            <div class="tiles">
-                <div class="tile">
-                    
-                    <div class="description ">
-                        <div class="description-inner">
-                            Orchestrates any process from a single point of control. Build reliable, low-code workflows in half the time. Develop end-to-end business and IT processes faster with hundreds of drag-and-drop actions. Coordinate enterprise-wide MFT processes using dozens of prebuilt actions for common file operations.
-                        </div>
-                    </div>
-                </div>
-
-                
-            </div>
-
-        </div>
-
-        
-        <div class="download standard">
-            
-            
-
-            
-
-            
-        
-            
-        
-        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=56187__zoneid=53505__cb=fdef2829a7__oadest=https%3A%2F%2Factivebatch.advsyscon.com%2Flp%2Factivebatch%3Futm_source%3DSourceforge%26utm_medium%3Dlisting%26utm_content%3Dvisitwebsite%26utm_campaign%3DActiveBatch"
-                
-                    data-zone="53485" data-slug="ActiveBatch-Workload-Automation"
-                >Learn More</div>
-        </div>
-
-        
-    </div>
-
-
-    
-        
-        
             
 
 
@@ -1607,31 +1605,31 @@
     
 
     <div class="nel standard can-trunc  nel-hidden"
-        data-id="20377">
+        data-id="8675">
 
         
 
 
-<span id="885b287c-2f4a-4bb7-8bbe-886817b92c92"></span>
+<span id="5bbcf550-bbe1-4fba-8062-b67cea9e4523"></span>
 <script>
     /* globals bizx */
-    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=90523&amp;c=16396&amp;z=87931&amp;cb=62628f2043', "ShareCRM is an AI-powered enterprise CRM platform designed to connect data and teams across the entire customer lifecycle.", '885b287c-2f4a-4bb7-8bbe-886817b92c92');
+    bizx.cmp.trackingPixel('publisher', ['storage', 'measurement'], '/directory/tp3/?b=33891&amp;c=7125&amp;z=31163&amp;cb=6e90508cd1', "Run your private office with the ONLYOFFICE", '5bbcf550-bbe1-4fba-8062-b67cea9e4523');
 </script>
 
 
         
-        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=90523__zoneid=87931__cb=62628f2043__oadest=https%3A%2F%2Fwww.sharecrm.com%2F%3Futm_source%3Dsourceforge%26utm_medium%3Dlisting%26utm_campaign%3Db2b_review%26utm_content%3Dhomepage" data-newtab="true" data-target="_blank" rel="nofollow">
-            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/20377" alt="ShareCRM is an AI-powered enterprise CRM platform designed to connect data and teams across the entire customer lifecycle. Icon">
+        <div class="application-image thumbnail"  data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=33891__zoneid=31163__cb=6e90508cd1__oadest=https%3A%2F%2Fwww.onlyoffice.com%3Futm_source%3Dsourceforge%26utm_medium%3Dcpc%26utm_campaign%3Dsourceforge_2025%26utm_id%3D23051%26utm_content%3DVISIT-WEBSITE" data-newtab="true" data-target="_blank" rel="nofollow">
+            <img class="main-image" src="//a.fsdn.com/con/app/nel_img/8675" alt="Run your private office with the ONLYOFFICE Icon">
             
         </div>
         <div class="wrapper">
             <div class="heading">
                 <div class="heading-main">
                     
-                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=90523__zoneid=87931__cb=62628f2043__oadest=https%3A%2F%2Fwww.sharecrm.com%2F%3Futm_source%3Dsourceforge%26utm_medium%3Dlisting%26utm_campaign%3Db2b_review%26utm_content%3Dhomepage" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about ShareCRM is an AI-powered enterprise CRM platform designed to connect data and teams across the entire customer lifecycle.">ShareCRM is an AI-powered enterprise CRM platform designed to connect data and teams across the entire customer lifecycle.</span>
+                    <span data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=33891__zoneid=31163__cb=6e90508cd1__oadest=https%3A%2F%2Fwww.onlyoffice.com%3Futm_source%3Dsourceforge%26utm_medium%3Dcpc%26utm_campaign%3Dsourceforge_2025%26utm_id%3D23051%26utm_content%3DVISIT-WEBSITE" data-newtab="true" data-target="_blank" rel="nofollow" title="Find out more about Run your private office with the ONLYOFFICE">Run your private office with the ONLYOFFICE</span>
 
                     
-                    <p class="teaser">Trusted by 6000+ Large and Medium Enterprises</p>
+                    <p class="teaser">Secure office and productivity apps</p>
                 </div>
             </div>
 
@@ -1643,7 +1641,7 @@
                     
                     <div class="description ">
                         <div class="description-inner">
-                            ShareCRM is an AI-powered, customizable and affordable enterprise CRM solution to seamlessly integrate and empower every aspect of your business.
+                            A Comprehensive Alternative to Office 365 for Business
                         </div>
                     </div>
                 </div>
@@ -1664,9 +1662,9 @@
         
             
         
-        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=90523__zoneid=87931__cb=62628f2043__oadest=https%3A%2F%2Fwww.sharecrm.com%2F%3Futm_source%3Dsourceforge%26utm_medium%3Dlisting%26utm_campaign%3Db2b_review%26utm_content%3Dhomepage"
+        <div class="button green wide sfdl sfdl-lite" data-target="_blank" data-newtab="true" data-dest="https://sourceforge.net/software/link?oaparams=2__bannerid=33891__zoneid=31163__cb=6e90508cd1__oadest=https%3A%2F%2Fwww.onlyoffice.com%3Futm_source%3Dsourceforge%26utm_medium%3Dcpc%26utm_campaign%3Dsourceforge_2025%26utm_id%3D23051%26utm_content%3DVISIT-WEBSITE"
                 
-                    data-zone="87921" data-slug="ShareCRM"
+                    data-zone="31158" data-slug="ONLYOFFICE"
                 >Learn More</div>
         </div>
 
@@ -3431,7 +3429,7 @@ Thanks to all contributors.</a>
         <span class="show-for-sr">Company Size</span>
         
         
-<select id="employees-4063771" name="employees"  class="employees use-placeholder-color" >
+<select id="employees-8607543" name="employees"  class="employees use-placeholder-color" >
     
     <option value="">Company Size:  </option>
     
@@ -3540,7 +3538,7 @@ Thanks to all contributors.</a>
             </button>
         </div>
     </div>
-    <input type="hidden" name="_visit_cookie" value="5b401232-b69f-4657-808a-bd05ffeeb858"/>
+    <input type="hidden" name="_visit_cookie" value="2d1d7cc0-2859-40e9-b36d-a00d11805a66"/>
 </form>
 
 
@@ -3968,7 +3966,7 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
 
         
         function loadimg(params, dimension_prefix) {
-            params = Object.assign({"idsite":1,"rec":1,"rand":96728,"dimension2":"pg_dwnld","url":"https://sourceforge.net/projects/equalizerapo/files/latest/download","action_name":"Download Equalizer APO"}, params);
+            params = Object.assign({"idsite":1,"rec":1,"rand":81451,"dimension2":"pg_dwnld","url":"https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download","action_name":"Download EqualizerAPO64-1.4.exe (Equalizer APO)"}, params);
             for (var key in params) {
                 if (params.hasOwnProperty(key) && key.indexOf('dimension') === 0 && params[key] !== undefined) {
                     params[key] = (dimension_prefix||'') + params[key];
@@ -4033,7 +4031,7 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
             _ml = window._ml || {};
             
             _ml.eid = '771';
-            _ml.fp = '5b401232-b69f-4657-808a-bd05ffeeb858';  
+            _ml.fp = '2d1d7cc0-2859-40e9-b36d-a00d11805a66';  
             var s = document.getElementsByTagName('script')[0], cd = new Date(), mltag = document.createElement('script');
             mltag.type = 'text/javascript';
             mltag.async = true;
@@ -4064,17 +4062,17 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
             <form class="dropzone small-12" action="/api/instrumentation/gpt" id="blockthisForm" method="POST">
                 <div class="row small-12">
                     <div class="column description small-12">
-                        <input type="hidden" name="_visit_cookie" value="5b401232-b69f-4657-808a-bd05ffeeb858"/>
-                            <input type='hidden' name='timestamp' value='1772675399'/>
-                            <input type='hidden' name='spinner' value='Xy7JIbnRgv7BweFsxgMtFHT:LRfA'/>
-                            <p class='f6cbe60d18f8ad5b5a3c2c3829fbf1eadcdf58d3f'><label for='Xw4zDmicAERnCj8KAw5sOw4URwqQBbS9UYQ9m'>You seem to have CSS turned off.
-             Please don't fill out this field.</label><input id='Xw4zDmicAERnCj8KAw5sOw4URwqQBbS9UYQ9m' name='Xw43DmicAERnCjxsGw6Z7FUrDo3d2w5XDgcOTbw' type=
+                        <input type="hidden" name="_visit_cookie" value="2d1d7cc0-2859-40e9-b36d-a00d11805a66"/>
+                            <input type='hidden' name='timestamp' value='1772675425'/>
+                            <input type='hidden' name='spinner' value='Xe4paj8DqLSvbOFkP5x2t6Mx6t6o'/>
+                            <p class='cb2e571b96e5dcdbcff6c02224b06202c43305b3b'><label for='XfMOiNcOhwqXCkx0bw5czU0rCpW3CpsKRLxJqw7g'>You seem to have CSS turned off.
+             Please don't fill out this field.</label><input id='XfMOiNcOhwqXCkx0bw5czU0rCpW3CpsKRLxJqw7g' name='XfcOiNcOhwqXCkx0nw5AyHE3ClxbDlAvCpMKnw6Ua' type=
              'text'/></p>
-                            <p class='f6cbe60d18f8ad5b5a3c2c3829fbf1eadcdf58d3f'><label for='Xw4zDmicAERnCj8KBw5sOw4URwqQBbS9UYQ9m'>You seem to have CSS turned off.
-             Please don't fill out this field.</label><input id='Xw4zDmicAERnCj8KBw5sOw4URwqQBbS9UYQ9m' name='Xw43DmicAERnCjhsGw6Z7FUrDo3d2w5XDgcOTbw' type=
+                            <p class='cb2e571b96e5dcdbcff6c02224b06202c43305b3b'><label for='XfMOiNcOhwqXCkx0aw5czU0rCpW3CpsKRLxJqw7g'>You seem to have CSS turned off.
+             Please don't fill out this field.</label><input id='XfMOiNcOhwqXCkx0aw5czU0rCpW3CpsKRLxJqw7g' name='XfcOiNcOhwqXCkxwnw5AyHE3ClxbDlAvCpMKnw6Ua' type=
              'text'/></p>
                         Briefly describe the problem (required):
-                        <input name="Xw4DDli0dFxLDlsOABBE0XyvCvcObPRtBbcOC" type="text" required>
+                        <input name="XcMOuP8O8wqPCmERbwq9RNmHDqxbCp8Ktwo4KwrzDkw" type="text" required>
                     </div>
                 </div>
                 <div class="column small-12">
@@ -4111,9 +4109,9 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
                     </div>
                     <div class="column large-7 small-6">
                         <p>Ad destination/click URL:
-                        <input name="Xw4LDkSQHFwvDoMOFAhTDsEcew6thw5cXwrkuGg" type="url" required>
+                        <input name="XcsOpNsOmwqPCgXJewqlUVQTDrVjDr8KYw4cDVMOC" type="url" required>
                         </p>
-                        <textarea id="gpt-info" name="Xw4_DlikaFcOLw4kuUFzCkRnCssKgwq9XwqkUeXQ"></textarea>
+                        <textarea id="gpt-info" name="Xf8OuO8O7wqHDpiYhwp56KQTCnsO:w4U1wp7DilzDnQ"></textarea>
                         <input class="button" type="submit" id="btn-blockthis-submit" value="Submit Report">
                     </div>
                 </div>
@@ -4149,7 +4147,7 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
         bizx.cmp.embedScript("https://www.googletagmanager.com/gtag/js");
         gtag('js', new Date());
         gtag('set', {
-            'page_location': 'https://sourceforge.net/projects/equalizerapo/files/latest/download',
+            'page_location': 'https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download',
         });
     });
 </script>
@@ -4190,7 +4188,7 @@ if (!SF.adblock && SF.initial_breakpoints_visible.large) {
     $(function() {
         bizx.cmp.ifConsent({ purposes: 'all' , vendors: 'narrative'}, function() {
             var current_time = (new Date()).getTime();
-            let imageUrl = "https://io.narrative.io/?companyId=2440&id=first_party%3A5b401232-b69f-4657-808a-bd05ffeeb858&id=site_name%3Asourceforge.net&id=url%3A%2Fprojects%2Fequalizerapo%2Ffiles%2Flatest%2Fdownload&id=pagetitle%3ADownload+Equalizer+APO&id=vertical%3AOpen+Source+Software&id=product%3AEqualizer+APO&id=topics%3ASound%2FAudio%2CHome+Theater+PC&id=programming_language%3AC%2B%2B&id=action%3ADownloaded+Equalizer+APO&id=action%3ADownloaded+Sound%2FAudio+Software";
+            let imageUrl = "https://io.narrative.io/?companyId=2440&id=first_party%3A2d1d7cc0-2859-40e9-b36d-a00d11805a66&id=site_name%3Asourceforge.net&id=url%3A%2Fprojects%2Fequalizerapo%2Ffiles%2F1.4%2FEqualizerAPO64-1.4.exe%2Fdownload&id=pagetitle%3ADownload+EqualizerAPO64-1.4.exe+%28Equalizer+APO%29&id=vertical%3AOpen+Source+Software&id=product%3AEqualizer+APO&id=topics%3ASound%2FAudio%2CHome+Theater+PC&id=programming_language%3AC%2B%2B&id=action%3ADownloaded+Equalizer+APO&id=action%3ADownloaded+Sound%2FAudio+Software";
             imageUrl = imageUrl.replace(encodeURIComponent("$PAGE_TITLE"), document.title);  
 
             imageUrl = URL.parse(imageUrl);
