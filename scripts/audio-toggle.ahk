@@ -5,6 +5,43 @@ Persistent
 global gOverlay := ""
 global gTrayIndicator := ""
 global gFootstepOn := false
+global gEqGui := ""
+
+; ===== WM_NCHITTEST — drag EQ window by top bar =====
+OnMessage(0x84, EQ_HitTest)
+
+EQ_HitTest(wParam, lParam, msg, hwnd) {
+    global gEqGui
+    if !IsObject(gEqGui)
+        return
+    try guiHwnd := gEqGui.Hwnd
+    catch
+        return
+    isParent := (hwnd = guiHwnd)
+    isChild := false
+    if !isParent {
+        par := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+        isChild := (par = guiHwnd)
+    }
+    if !isParent and !isChild
+        return
+    sx := lParam & 0xFFFF
+    sy := (lParam >> 16) & 0xFFFF
+    if (sx > 32767)
+        sx -= 65536
+    if (sy > 32767)
+        sy -= 65536
+    try WinGetPos(&wx, &wy,,, guiHwnd)
+    catch
+        return
+    ry := sy - wy
+    rx := sx - wx
+    if (ry >= 0 and ry < 52 and rx < 598) {
+        if isParent
+            return 2
+        return -1
+    }
+}
 
 ; ===== Ctrl+Shift+F9: Audio Toggle =====
 ^+F9:: {
@@ -46,125 +83,159 @@ global gFootstepOn := false
     OpenEQ()
 }
 
-; ==================== EQ EDITOR (PUBG STYLE) ====================
+; ==================== EQ EDITOR ====================
 OpenEQ() {
-    global gFootstepOn
-    static eg := ""
-    if eg {
-        eg.Destroy()
-        eg := ""
+    global gEqGui, gFootstepOn
+    if gEqGui {
+        gEqGui.Destroy()
+        gEqGui := ""
     }
 
     fNames := ["25","40","63","100","160","250","400","630","1K","1.6K","2.5K","4K","6.3K","10K","16K"]
     fNums := [25,40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000]
     vals := LoadEQ()
 
-    sw := 38
-    sh := 220
-    px := 50
-    py := 105
-    guiW := 660
+    sw := 36
+    sh := 200
+    px := 46
+    py := 96
+    guiW := 640
 
-    eg := Gui("+AlwaysOnTop -MaximizeBox", "BATTLEGROUND AUDIO")
-    eg.BackColor := "1a1f0e"
+    eg := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    eg.BackColor := "1e2a14"
 
-    ; === HEADER: Military title bar ===
-    eg.SetFont("s7 c3d4a1a", "Consolas")
-    eg.Add("Text", "x0 y0 w" guiW " h28 +0x1000 Background2b3316")
-    eg.SetFont("s13 cF2A900 Bold", "Consolas")
-    eg.Add("Text", "x18 y4 w400", ">> SOUND TACTICAL EQ")
-    eg.SetFont("s8 c5a6b2a", "Consolas")
-    eg.Add("Text", "x" (guiW - 180) " y8 w170 Right", "[ EQUALIZE & DOMINATE ]")
+    ; ═══ TOP BAR (drag to move) ═══
+    eg.Add("Text", "x0 y0 w" guiW " h52 +0x1000 Background1a2210")
+    eg.SetFont("s20 cFFFFFF", "Segoe UI Emoji")
+    eg.Add("Text", "x16 y8 w40 BackgroundTrans", "🎯")
+    eg.SetFont("s13 cF0C040 Bold", "Segoe UI")
+    eg.Add("Text", "x52 y8 w300 BackgroundTrans", "TACTICAL AUDIO")
+    eg.SetFont("s8 c6a7a4a", "Segoe UI")
+    eg.Add("Text", "x52 y30 w300 BackgroundTrans", "Sound Enhancement System")
+    eg.SetFont("s14 c888888 Bold", "Segoe UI")
+    xBtn := eg.Add("Text", "x" (guiW - 42) " y10 w30 h30 Center BackgroundTrans", "✕")
+    xBtn.OnEvent("Click", CloseEQ)
 
-    ; === Subtitle ===
-    eg.SetFont("s8 c6b7d3a", "Consolas")
-    eg.Add("Text", "x18 y36 w300", "FREQUENCY CONTROL SYSTEM v2.0")
+    ; ═══ ZONE LABELS ═══
+    zY := 58
+    eg.SetFont("s8 cFF6B6B", "Consolas")
+    eg.Add("Text", "x" px " y" zY " w180 BackgroundTrans", "● BASS  25~250Hz")
+    eg.SetFont("s8 c88CC88", "Consolas")
+    eg.Add("Text", "x" (px + 192) " y" zY " w170 BackgroundTrans", "● MID  400~1.6KHz")
+    eg.SetFont("s8 cFFAA44", "Consolas")
+    eg.Add("Text", "x" (px + 384) " y" zY " w170 BackgroundTrans", "● HIGH  2.5K~16KHz")
 
-    ; === Zone header ===
-    eg.SetFont("s9 cD4442A Bold", "Consolas")
-    eg.Add("Text", "x" px " y56 w180", "!! FOOTSTEP ZONE")
-    eg.SetFont("s9 c8B8000 Bold", "Consolas")
-    eg.Add("Text", "x" (px + 200) " y56 w120", "-- NEUTRAL --")
-    eg.SetFont("s9 cD4842A Bold", "Consolas")
-    eg.Add("Text", "x" (px + 380) " y56 w180", "!! STEP DETAIL")
+    ; ═══ dB SCALE ═══
+    eg.SetFont("s7 c4a5a3a", "Consolas")
+    eg.Add("Text", "x2 y" (py - 2) " w40 Right BackgroundTrans", "+12")
+    eg.Add("Text", "x2 y" (py + sh // 2 - 6) " w40 Right BackgroundTrans", "  0")
+    eg.Add("Text", "x2 y" (py + sh - 12) " w40 Right BackgroundTrans", "-12")
+    eg.Add("Text", "x" px " y" (py + sh // 2) " w" (15 * (sw + 2)) " h1 +0x1000 Background3a4a2a")
 
-    ; === dB Guide ===
-    eg.SetFont("s8 c4a5a2a", "Consolas")
-    eg.Add("Text", "x4 y" py " w42 Right", "+12dB")
-    eg.Add("Text", "x4 y" (py + sh // 2 - 6) " w42 Right", "  0dB")
-    eg.Add("Text", "x4 y" (py + sh - 12) " w42 Right", "-12dB")
-
-    ; === Zero line (horizontal) ===
-    zeroY := py + sh // 2
-    eg.SetFont("s1 c2b3316", "Consolas")
-    eg.Add("Text", "x" px " y" zeroY " w" (15 * (sw + 2)) " h1 +0x1000 Background3d4a1a")
-
-    ; === Sliders ===
+    ; ═══ SLIDERS ═══
     loop 15 {
         i := A_Index
         xp := px + (i - 1) * (sw + 2)
-
-        ; dB value top
-        eg.SetFont("s7 cF2A900", "Consolas")
-        eg.Add("Text", "x" xp " y" (py - 16) " w" sw " Center vVL" i, String(vals[i]))
-
-        ; Slider
+        eg.SetFont("s7 cF0C040", "Consolas")
+        eg.Add("Text", "x" xp " y" (py - 16) " w" sw " Center BackgroundTrans vVL" i, String(vals[i]))
         eg.Add("Slider", "x" xp " y" py " w" sw " h" sh " Vertical Range-12-12 Invert NoTicks vEQ" i, vals[i])
-
-        ; Freq label bottom - color by zone
         if (i >= 2 and i <= 5) {
-            eg.SetFont("s7 cFF4444 Bold", "Consolas")
-        } else if (i >= 11 and i <= 13) {
-            eg.SetFont("s7 cFF8C00 Bold", "Consolas")
+            eg.SetFont("s6 cFF6B6B", "Consolas")
+        } else if (i >= 11) {
+            eg.SetFont("s6 cFFAA44", "Consolas")
         } else {
-            eg.SetFont("s7 c5a6b2a", "Consolas")
+            eg.SetFont("s6 c6a7a4a", "Consolas")
         }
-        eg.Add("Text", "x" xp " y" (py + sh + 4) " w" sw " Center", fNames[i])
+        eg.Add("Text", "x" xp " y" (py + sh + 4) " w" sw " Center BackgroundTrans", fNames[i])
     }
 
-    ; === Zone markers ===
-    markerY := py + sh + 22
-    eg.SetFont("s7 cFF4444", "Consolas")
-    eg.Add("Text", "x" (px + 1 * 40) " y" markerY " w150", "[BOOM] Low Freq")
-    eg.SetFont("s7 cFF8C00", "Consolas")
-    eg.Add("Text", "x" (px + 10 * 40) " y" markerY " w150", "[TAP] High Freq")
+    ; ═══ PREAMP ═══
+    pY := py + sh + 26
+    eg.SetFont("s9 cF0C040 Bold", "Segoe UI")
+    eg.Add("Text", "x16 y" pY " w80 BackgroundTrans", "⚡ VOL")
+    eg.Add("Slider", "x90 y" (pY - 2) " w320 Range-12-6 ToolTip vPreamp", vals[16])
+    eg.SetFont("s10 cFFFFFF Bold", "Consolas")
+    eg.Add("Text", "x420 y" pY " w60 BackgroundTrans vPL", String(vals[16]) " dB")
 
-    ; === Preamp ===
-    pY := markerY + 26
-    eg.SetFont("s1 c2b3316", "Consolas")
-    eg.Add("Text", "x18 y" (pY - 8) " w" (guiW - 36) " h1 +0x1000 Background3d4a1a")
+    ; ═══ PRESETS 2x2 ═══
+    bY := pY + 40
+    gap := 10
+    cW := (guiW - 32 - gap) // 2
+    cH := 56
+    x1 := 16
+    x2 := x1 + cW + gap
 
-    eg.SetFont("s9 cF2A900 Bold", "Consolas")
-    eg.Add("Text", "x" px " y" pY " w70", "PREAMP")
-    eg.Add("Slider", "x" (px + 75) " y" (pY - 2) " w220 Range-12-6 ToolTip vPreamp", vals[16])
-    eg.SetFont("s9 cF2A900", "Consolas")
-    eg.Add("Text", "x" (px + 305) " y" pY " w60 vPL", String(vals[16]) " dB")
+    ; FPS MODE
+    eg.Add("Text", "x" x1 " y" bY " w" cW " h" cH " +0x1000 Background3a1a1a")
+    eg.SetFont("s22", "Segoe UI Emoji")
+    eg.Add("Text", "x" (x1 + 12) " y" (bY + 8) " w40 BackgroundTrans", "🎮")
+    eg.SetFont("s12 cFF6B6B Bold", "Segoe UI")
+    eg.Add("Text", "x" (x1 + 52) " y" (bY + 6) " w200 BackgroundTrans", "FPS MODE")
+    eg.SetFont("s8 cBB8888", "Segoe UI")
+    eg.Add("Text", "x" (x1 + 52) " y" (bY + 30) " w200 BackgroundTrans", "Footstep & Gunshot")
+    b1c := eg.Add("Text", "x" x1 " y" bY " w" cW " h" cH " +0x1000 BackgroundTrans")
+    b1c.OnEvent("Click", DoFPS)
 
-    ; === Preset Buttons (PUBG loot style) ===
-    bY := pY + 38
-    eg.SetFont("s9 cFFFFFF Bold", "Consolas")
-    b1 := eg.Add("Button", "x" px " y" bY " w120 h32", ">> PUBG FPS")
-    b2 := eg.Add("Button", "x" (px + 128) " y" bY " w120 h32", ">> BASS DROP")
-    b3 := eg.Add("Button", "x" (px + 256) " y" bY " w120 h32", ">> BALANCED")
-    b4 := eg.Add("Button", "x" (px + 384) " y" bY " w120 h32", ">> FLAT RESET")
+    ; BASS DROP
+    eg.Add("Text", "x" x2 " y" bY " w" cW " h" cH " +0x1000 Background1a1a3a")
+    eg.SetFont("s22", "Segoe UI Emoji")
+    eg.Add("Text", "x" (x2 + 12) " y" (bY + 8) " w40 BackgroundTrans", "💥")
+    eg.SetFont("s12 c7777FF Bold", "Segoe UI")
+    eg.Add("Text", "x" (x2 + 52) " y" (bY + 6) " w200 BackgroundTrans", "BASS DROP")
+    eg.SetFont("s8 c8888BB", "Segoe UI")
+    eg.Add("Text", "x" (x2 + 52) " y" (bY + 30) " w200 BackgroundTrans", "Heavy Sub-Bass")
+    b2c := eg.Add("Text", "x" x2 " y" bY " w" cW " h" cH " +0x1000 BackgroundTrans")
+    b2c.OnEvent("Click", DoBass)
 
-    b1.OnEvent("Click", DoFPS)
-    b2.OnEvent("Click", DoBass)
-    b3.OnEvent("Click", DoBalanced)
-    b4.OnEvent("Click", DoFlat)
+    ; BALANCED
+    bY2 := bY + cH + gap
+    eg.Add("Text", "x" x1 " y" bY2 " w" cW " h" cH " +0x1000 Background1a3a1a")
+    eg.SetFont("s22", "Segoe UI Emoji")
+    eg.Add("Text", "x" (x1 + 12) " y" (bY2 + 8) " w40 BackgroundTrans", "🎵")
+    eg.SetFont("s12 c66CC66 Bold", "Segoe UI")
+    eg.Add("Text", "x" (x1 + 52) " y" (bY2 + 6) " w200 BackgroundTrans", "BALANCED")
+    eg.SetFont("s8 c88BB88", "Segoe UI")
+    eg.Add("Text", "x" (x1 + 52) " y" (bY2 + 30) " w200 BackgroundTrans", "All-Round Clean")
+    b3c := eg.Add("Text", "x" x1 " y" bY2 " w" cW " h" cH " +0x1000 BackgroundTrans")
+    b3c.OnEvent("Click", DoBalanced)
 
-    ; === DEPLOY Button ===
-    aY := bY + 46
-    eg.SetFont("s13 c1a1f0e Bold", "Consolas")
-    ab := eg.Add("Button", "x" (px + 140) " y" aY " w220 h42", "DEPLOY  >>")
-    ab.OnEvent("Click", DoApply)
+    ; FLAT RESET
+    eg.Add("Text", "x" x2 " y" bY2 " w" cW " h" cH " +0x1000 Background2a2a2a")
+    eg.SetFont("s22", "Segoe UI Emoji")
+    eg.Add("Text", "x" (x2 + 12) " y" (bY2 + 8) " w40 BackgroundTrans", "⬜")
+    eg.SetFont("s12 cAAAAAA Bold", "Segoe UI")
+    eg.Add("Text", "x" (x2 + 52) " y" (bY2 + 6) " w200 BackgroundTrans", "FLAT RESET")
+    eg.SetFont("s8 c999999", "Segoe UI")
+    eg.Add("Text", "x" (x2 + 52) " y" (bY2 + 30) " w200 BackgroundTrans", "No Effect")
+    b4c := eg.Add("Text", "x" x2 " y" bY2 " w" cW " h" cH " +0x1000 BackgroundTrans")
+    b4c.OnEvent("Click", DoFlat)
 
-    ; === Footer ===
-    fY := aY + 50
-    eg.SetFont("s7 c3d4a1a", "Consolas")
-    eg.Add("Text", "x18 y" fY " w" (guiW - 36) " Center", "WINNER WINNER CHICKEN DINNER")
+    ; ═══ ACTION BUTTONS ═══
+    aY := bY2 + cH + 14
+    btnW := (guiW - 32 - gap) // 2
 
-    eg.Show("w" guiW " h" (fY + 22))
+    ; 적용하기
+    eg.Add("Text", "x" x1 " y" aY " w" btnW " h48 +0x1000 Background3a6628")
+    eg.SetFont("s13 cFFFFFF Bold", "Segoe UI")
+    eg.Add("Text", "x" x1 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "적용하기")
+    abc := eg.Add("Text", "x" x1 " y" aY " w" btnW " h48 +0x1000 BackgroundTrans")
+    abc.OnEvent("Click", DoApply)
+
+    ; 초기화
+    eg.Add("Text", "x" x2 " y" aY " w" btnW " h48 +0x1000 Background2a2a2a")
+    eg.SetFont("s13 cAAAAAA Bold", "Segoe UI")
+    eg.Add("Text", "x" x2 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "초기화")
+    rst := eg.Add("Text", "x" x2 " y" aY " w" btnW " h48 +0x1000 BackgroundTrans")
+    rst.OnEvent("Click", DoFlat)
+
+    ; ═══ FOOTER ═══
+    fY := aY + 56
+    eg.SetFont("s7 c4a5a3a", "Segoe UI")
+    eg.Add("Text", "x16 y" fY " w" (guiW - 32) " Center BackgroundTrans", "TACTICAL AUDIO  //  PUBG EDITION")
+
+    totalH := fY + 22
+    gEqGui := eg
+    eg.Show("w" guiW " h" totalH)
 
     DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -3)
     DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5)
@@ -195,7 +266,15 @@ OpenEQ() {
             try FileDelete(mc)
             FileAppend("Include: footstep-boost.txt", mc)
         }
-        ShowOverlay("🎯", "DEPLOYED", "EQ Config Active", "0xF2A900")
+        ShowOverlay("🎯", "DEPLOYED", "EQ Applied", "0xF0C040")
+    }
+
+    CloseEQ(*) {
+        global gEqGui
+        if gEqGui {
+            gEqGui.Destroy()
+            gEqGui := ""
+        }
     }
 }
 

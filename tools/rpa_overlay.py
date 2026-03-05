@@ -1,9 +1,8 @@
 """
-BRIDGE RPA Overlay — Apple-inspired Desktop Notification
-=========================================================
-Canvas 직접 렌더링 (Windows 이모지 미사용).
-화면 정중앙. 2모니터 게임 방해 없음 (주 모니터만).
-보안: 개인정보 미표시.
+BRIDGE RPA Overlay — iOS Alert Style
+=====================================
+Apple HIG 기반. 보더 없는 플로팅 카드 + 드롭 섀도.
+애니메이션 V 체크마크. iOS 텍스트 액션 버튼.
 """
 
 import math
@@ -22,17 +21,15 @@ def wants_more() -> bool:
 
 class RPAOverlay:
 
-    WHITE = "#ffffff"
-    BG = "#f5f5f7"
+    BG = "#ffffff"
     TEXT1 = "#1d1d1f"
-    TEXT2 = "#6e6e73"
-    BLUE = "#0071e3"
-    BLUE_HOVER = "#0062c4"
+    TEXT2 = "#86868b"
+    BLUE = "#007aff"
     GREEN = "#34c759"
-    RED = "#ff3b30"
-    BORDER = "#d2d2d7"
-    CARD = "#ffffff"
-    HOVER_BG = "#e8e8ed"
+    SEP = "#e5e5ea"
+    HOVER = "#f2f2f7"
+    X_GRAY = "#c7c7cc"
+    _TRANS = "#010203"
 
     def __init__(self):
         self._root = None
@@ -62,221 +59,235 @@ class RPAOverlay:
             self._root = None
         self._ready.clear()
 
-    # ──────────────────────────────────────────────────────────────
-    # WORKING
-    # ──────────────────────────────────────────────────────────────
+    # ── WORKING ──────────────────────────────
     def _build_working(self):
-        root = self._make_root(520, 340)
-        card = self._make_card(root)
+        root, card = self._make_window(340, 250)
 
-        # macOS 닫기 (좌상단)
-        self._mac_close_btn(card, root)
+        bar = self._top_bar(card, root)
 
-        # 아이콘 (중앙)
-        icon = tk.Canvas(card, width=90, height=90,
-                         bg=self.CARD, highlightthickness=0)
-        icon.pack(pady=(16, 20))
-        self._draw_working_icon(icon, root)
+        spinner = tk.Canvas(card, width=44, height=44,
+                            bg=self.BG, highlightthickness=0)
+        spinner.pack(pady=(4, 10))
+        self._draw_spinner(spinner, root)
 
-        # 제목
-        tk.Label(card, text="크래이그 작업중",
-                 font=self._fn(28, "bold"), bg=self.CARD,
-                 fg=self.TEXT1).pack()
+        title = tk.Label(card, text="Craig 작업중",
+                         font=self._fn(18, "bold"),
+                         bg=self.BG, fg=self.TEXT1)
+        title.pack()
 
-        # 부제
-        tk.Label(card, text="인터넷 창을 건들지 마세요",
-                 font=self._fn(16), bg=self.CARD,
-                 fg=self.TEXT2).pack(pady=(8, 0))
+        sub = tk.Label(card, text="인터넷 창을 건들지 마세요",
+                       font=self._fn(12), bg=self.BG, fg=self.TEXT2)
+        sub.pack(pady=(4, 8))
 
-        # 하단 버튼
-        btn_area = tk.Frame(card, bg=self.CARD)
-        btn_area.pack(side="bottom", fill="x", pady=(24, 4))
+        # 게임 OK 라인
+        game_row = tk.Frame(card, bg=self.BG)
+        game_row.pack(pady=(0, 12))
+        gun = tk.Canvas(game_row, width=24, height=18,
+                        bg=self.BG, highlightthickness=0)
+        gun.pack(side="left", padx=(0, 4))
+        self._draw_gun(gun)
+        game_lbl = tk.Label(game_row, text="게임은 해도 됩니다!",
+                            font=self._fn(11), bg=self.BG, fg=self.GREEN)
+        game_lbl.pack(side="left")
 
-        self._big_pill(btn_area, "닫기", self.BG, self.TEXT1,
-                       lambda: root.destroy())
+        self._sep(card)
+        self._action(card, "닫기", "normal", lambda: root.destroy())
 
-        self._draggable(card, root)
+        self._drag(root, bar, spinner, title, sub, game_row, game_lbl)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
 
-    # ──────────────────────────────────────────────────────────────
-    # COMPLETE
-    # ──────────────────────────────────────────────────────────────
+    # ── COMPLETE ─────────────────────────────
     def _build_complete(self, count: int):
-        root = self._make_root(520, 400)
-        card = self._make_card(root)
+        root, card = self._make_window(340, 300)
 
-        self._mac_close_btn(card, root)
+        bar = self._top_bar(card, root)
 
-        # 아이콘
-        icon = tk.Canvas(card, width=90, height=90,
-                         bg=self.CARD, highlightthickness=0)
-        icon.pack(pady=(16, 20))
-        self._draw_check_icon(icon)
+        chk = tk.Canvas(card, width=60, height=50,
+                        bg=self.BG, highlightthickness=0)
+        chk.pack(pady=(4, 8))
+        self._draw_check_animated(chk, root)
 
-        # 제목
-        tk.Label(card, text=f"광고 {count}건 완료!",
-                 font=self._fn(28, "bold"), bg=self.CARD,
-                 fg=self.GREEN).pack()
+        title = tk.Label(card, text=f"광고 {count}건 완료",
+                         font=self._fn(18, "bold"),
+                         bg=self.BG, fg=self.TEXT1)
+        title.pack()
 
-        # 부제
-        tk.Label(card, text="개인정보 노출이 없도록\n한번 더 직접 확인해주세요",
-                 font=self._fn(16), bg=self.CARD, fg=self.TEXT2,
-                 justify="center").pack(pady=(10, 0))
+        sub = tk.Label(card, text="개인정보 노출이 없는지 확인해 주세요",
+                       font=self._fn(12), bg=self.BG, fg=self.TEXT2)
+        sub.pack(pady=(4, 16))
 
-        # 하단 버튼 (크게, 세로 배치)
-        btn_area = tk.Frame(card, bg=self.CARD)
-        btn_area.pack(side="bottom", fill="x", pady=(20, 4))
+        self._sep(card)
 
-        def _on_more():
+        def _more():
             _post_more_event.set()
             root.destroy()
 
-        self._big_pill(btn_area, "5개 더 올리기", self.BLUE, self.WHITE, _on_more)
-        self._big_pill(btn_area, "닫기", self.BG, self.TEXT1,
-                       lambda: root.destroy(), pady=(10, 0))
+        self._action(card, "5개 더 올리기", "bold", _more)
+        self._sep(card)
+        self._action(card, "닫기", "normal", lambda: root.destroy())
 
-        self._draggable(card, root)
-        root.after(60000, lambda: root.destroy() if root.winfo_exists() else None)
-
+        self._drag(root, bar, chk, title, sub)
+        root.after(60000,
+                   lambda: root.destroy() if root.winfo_exists() else None)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
 
-    # ──────────────────────────────────────────────────────────────
-    # Canvas 아이콘
-    # ──────────────────────────────────────────────────────────────
-    def _draw_working_icon(self, c: tk.Canvas, root: tk.Tk):
-        cx, cy, r = 45, 45, 38
+    # ── Drawing ──────────────────────────────
+    def _draw_spinner(self, c, root):
+        """Apple activity indicator (rotating bars)."""
+        cx, cy = 22, 22
+        r_in, r_out = 7, 15
+        n = 12
+        self._si = 0
 
-        c.create_oval(cx - r, cy - r, cx + r, cy + r,
-                      fill="#e8f4fd", outline="#b3d9f7", width=2)
-
-        # 모니터
-        c.create_rectangle(25, 24, 65, 52, fill=self.BLUE, outline="")
-        c.create_rectangle(28, 27, 62, 49, fill="#4da3ef", outline="")
-        c.create_line(31, 33, 46, 33, fill=self.WHITE, width=2)
-        c.create_line(31, 38, 52, 38, fill="#a8d4f5", width=2)
-        c.create_line(31, 43, 40, 43, fill="#a8d4f5", width=2)
-        c.create_line(45, 52, 45, 60, fill=self.BLUE, width=3)
-        c.create_line(35, 60, 55, 60, fill=self.BLUE, width=3)
-
-        # 펄스
-        self._pulse_step = 0
-
-        def _pulse():
+        def _tick():
             if not root.winfo_exists():
                 return
-            c.delete("pulse")
-            s = self._pulse_step % 40
-            scale = 1.0 + 0.12 * math.sin(s * math.pi / 20)
-            pr = r * scale
-            c.create_oval(cx - pr, cy - pr, cx + pr, cy + pr,
-                          outline=self.BLUE, width=2, dash=(5, 3), tags="pulse")
-            self._pulse_step += 1
-            root.after(80, _pulse)
+            c.delete("sp")
+            for i in range(n):
+                a = 2 * math.pi * i / n - math.pi / 2
+                x1 = cx + r_in * math.cos(a)
+                y1 = cy + r_in * math.sin(a)
+                x2 = cx + r_out * math.cos(a)
+                y2 = cy + r_out * math.sin(a)
+                d = (i - self._si) % n
+                g = 80 + int(d * 140 / n)
+                c.create_line(x1, y1, x2, y2,
+                              fill=f"#{g:02x}{g:02x}{g:02x}",
+                              width=2.5, capstyle="round", tags="sp")
+            self._si = (self._si + 1) % n
+            root.after(80, _tick)
 
-        _pulse()
+        _tick()
 
-    def _draw_check_icon(self, c: tk.Canvas):
-        cx, cy, r = 45, 45, 38
+    def _draw_check_animated(self, c, root):
+        """Animated V checkmark — two-stroke draw."""
+        p1 = (10, 22)
+        p2 = (24, 40)
+        p3 = (52, 8)
+        s1, s2 = 8, 10
 
-        c.create_oval(cx - r, cy - r, cx + r, cy + r,
-                      fill="#e8f8ed", outline="#a3e4b8", width=2)
-        c.create_oval(cx - 26, cy - 26, cx + 26, cy + 26,
-                      fill=self.GREEN, outline="")
-        c.create_line(31, 45, 40, 55, fill=self.WHITE, width=4.5,
-                      capstyle="round", joinstyle="round")
-        c.create_line(40, 55, 60, 33, fill=self.WHITE, width=4.5,
-                      capstyle="round", joinstyle="round")
+        def _anim(step=0):
+            if not root.winfo_exists():
+                return
+            if step <= s1:
+                t = step / s1
+                c.delete("v1")
+                c.create_line(p1[0], p1[1],
+                              p1[0] + (p2[0] - p1[0]) * t,
+                              p1[1] + (p2[1] - p1[1]) * t,
+                              fill=self.GREEN, width=4,
+                              capstyle="round", tags="v1")
+            elif step <= s1 + s2:
+                t = (step - s1) / s2
+                c.delete("v2")
+                c.create_line(p2[0], p2[1],
+                              p2[0] + (p3[0] - p2[0]) * t,
+                              p2[1] + (p3[1] - p2[1]) * t,
+                              fill=self.GREEN, width=4,
+                              capstyle="round", tags="v2")
+            else:
+                return
+            root.after(30, lambda: _anim(step + 1))
 
-    # ──────────────────────────────────────────────────────────────
-    # UI 헬퍼
-    # ──────────────────────────────────────────────────────────────
-    def _make_root(self, w, h):
+        root.after(300, _anim)
+
+    def _draw_gun(self, c):
+        """Small pistol icon."""
+        g = "#34c759"
+        # Barrel
+        c.create_rectangle(10, 4, 23, 8, fill=g, outline="")
+        # Body
+        c.create_rectangle(3, 4, 14, 12, fill=g, outline="")
+        # Handle
+        c.create_polygon(5, 12, 9, 12, 10, 17, 4, 17,
+                         fill=g, outline="")
+        # Trigger guard
+        c.create_line(9, 12, 12, 12, 12, 14, 9, 14,
+                      fill=g, width=1.5)
+
+    # ── UI Components ────────────────────────
+    def _top_bar(self, parent, root):
+        bar = tk.Frame(parent, bg=self.BG, height=28)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+
+        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
+                      bg=self.BG, fg=self.X_GRAY, cursor="hand2")
+        xb.pack(side="right", padx=(0, 6), pady=(4, 0))
+        xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
+        xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
+        xb.bind("<Button-1>", lambda e: root.destroy())
+        return bar
+
+    def _sep(self, parent):
+        tk.Frame(parent, bg=self.SEP, height=1).pack(fill="x")
+
+    def _action(self, parent, text, weight, cmd):
+        btn = tk.Label(parent, text=text,
+                       font=self._fn(15, weight),
+                       bg=self.BG, fg=self.BLUE,
+                       pady=12, cursor="hand2")
+        btn.pack(fill="x")
+        btn.bind("<Enter>", lambda e: btn.configure(bg=self.HOVER))
+        btn.bind("<Leave>", lambda e: btn.configure(bg=self.BG))
+        btn.bind("<Button-1>", lambda e: cmd())
+
+    # ── Window ───────────────────────────────
+    def _make_window(self, w, h):
+        """Clean white floating card."""
         root = tk.Tk()
         self._root = root
         root.overrideredirect(True)
         root.attributes("-topmost", True)
-        root.attributes("-alpha", 0.97)
-        root.configure(bg=self.BORDER)
+        root.attributes("-alpha", 0.0)
+        root.configure(bg=self.BG)
 
-        # 화면 정중앙
-        screen_w = root.winfo_screenwidth()
-        screen_h = root.winfo_screenheight()
-        x = (screen_w - w) // 2
-        y = (screen_h - h) // 2
-        root.geometry(f"{w}x{h}+{x}+{y}")
-        return root
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
 
-    def _make_card(self, root):
-        outer = tk.Frame(root, bg=self.BORDER, padx=1, pady=1)
-        outer.pack(fill="both", expand=True)
-        card = tk.Frame(outer, bg=self.CARD, padx=36, pady=28)
+        card = tk.Frame(root, bg=self.BG)
         card.pack(fill="both", expand=True)
-        return card
 
-    def _mac_close_btn(self, parent, root):
-        row = tk.Frame(parent, bg=self.CARD)
-        row.pack(fill="x")
+        # Fade in
+        def _fade(a=0.0):
+            if not root.winfo_exists():
+                return
+            if a < 0.98:
+                root.attributes("-alpha", a)
+                root.after(16, lambda: _fade(a + 0.07))
+            else:
+                root.attributes("-alpha", 0.98)
 
-        c = tk.Canvas(row, width=16, height=16,
-                      bg=self.CARD, highlightthickness=0, cursor="hand2")
-        c.pack(side="left")
-        c.create_oval(2, 2, 14, 14, fill=self.RED, outline="#e0352b")
-        x_items = []
-
-        def _enter(e):
-            x_items.append(c.create_line(5, 5, 11, 11, fill=self.WHITE, width=1.5))
-            x_items.append(c.create_line(11, 5, 5, 11, fill=self.WHITE, width=1.5))
-
-        def _leave(e):
-            for i in x_items:
-                c.delete(i)
-            x_items.clear()
-
-        c.bind("<Enter>", _enter)
-        c.bind("<Leave>", _leave)
-        c.bind("<Button-1>", lambda e: root.destroy())
-
-    def _big_pill(self, parent, text, bg, fg, cmd, pady=(0, 0)):
-        """큰 pill 버튼 (full-width)."""
-        wrap = tk.Frame(parent, bg=self.CARD)
-        wrap.pack(fill="x", padx=20, pady=pady)
-
-        btn = tk.Label(wrap, text=text, bg=bg, fg=fg,
-                       font=self._fn(16, "bold"),
-                       padx=20, pady=14, cursor="hand2")
-        btn.pack(fill="x")
-
-        hover_bg = self.BLUE_HOVER if bg == self.BLUE else self.HOVER_BG
-
-        btn.bind("<Button-1>", lambda e: cmd())
-        btn.bind("<Enter>", lambda e: btn.configure(bg=hover_bg))
-        btn.bind("<Leave>", lambda e: btn.configure(bg=bg))
+        root.after(10, _fade)
+        return root, card
 
     def _fn(self, size, weight="normal"):
-        for fam in ("SF Pro Display", "Segoe UI", "Malgun Gothic"):
-            try:
-                return tkfont.Font(family=fam, size=size, weight=weight)
-            except Exception:
-                continue
-        return tkfont.Font(size=size, weight=weight)
+        fam = "Pretendard"
+        if weight == "bold":
+            fam = "Pretendard Medium"
+        return tkfont.Font(family=fam, size=size, weight=weight)
 
-    def _draggable(self, widget, root):
-        def _s(e):
-            root._dx, root._dy = e.x, e.y
+    def _drag(self, root, *widgets):
+        def _press(e):
+            root._dx, root._dy = e.x_root, e.y_root
 
-        def _m(e):
-            root.geometry(f"+{root.winfo_x() + e.x - root._dx}+{root.winfo_y() + e.y - root._dy}")
+        def _move(e):
+            x = root.winfo_x() + e.x_root - root._dx
+            y = root.winfo_y() + e.y_root - root._dy
+            root._dx, root._dy = e.x_root, e.y_root
+            root.geometry(f"+{x}+{y}")
 
-        widget.bind("<ButtonPress-1>", _s)
-        widget.bind("<B1-Motion>", _m)
+        for w in widgets:
+            w.bind("<ButtonPress-1>", _press)
+            w.bind("<B1-Motion>", _move)
 
 
 _overlay = RPAOverlay()
