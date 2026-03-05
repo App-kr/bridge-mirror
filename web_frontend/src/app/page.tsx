@@ -230,7 +230,7 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
         {/* ── Suspension bridge ── */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        <div className={showBridge ? 'bridge-active' : ''} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
             viewBox="0 0 1400 800"
             style={{ position: 'absolute', width: '100%', height: '100%' }}
@@ -242,71 +242,82 @@ export default function HomePage() {
                 <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
+              <filter id="cableGlowStrong">
+                <feGaussianBlur stdDeviation="8" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
+              <clipPath id="tClip">
+                <rect x="0" y="0" width="1400" height="521" />
+              </clipPath>
+              {/* Light sweep gradient — bright spot travels left→right, infinite */}
+              <linearGradient id="sweepGrad" gradientUnits="userSpaceOnUse" x1="-700" y1="400" x2="0" y2="400">
+                <stop offset="0" stopColor="white" stopOpacity="0" />
+                <stop offset="0.35" stopColor="white" stopOpacity="0" />
+                <stop offset="0.5" stopColor="white" stopOpacity="0.7" />
+                <stop offset="0.65" stopColor="white" stopOpacity="0" />
+                <stop offset="1" stopColor="white" stopOpacity="0" />
+                <animate attributeName="x1" values="-700;1400" dur="6s" repeatCount="indefinite" begin="2s" />
+                <animate attributeName="x2" values="0;2100" dur="6s" repeatCount="indefinite" begin="2s" />
+              </linearGradient>
             </defs>
 
-            {/* Main cable — parabolic arc, draws first (0s→0.8s) */}
-            <path
-              d="M 0 520 Q 700 180, 1400 520"
-              stroke="white"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.2 : 0}
-              strokeDasharray="2200"
-              strokeDashoffset={showBridge ? 0 : 2200}
+            {/* ── Phase 1: Towers rise from bottom (0s ~ 0.8s) ── */}
+            <g clipPath="url(#tClip)">
+              <line x1={420} y1={520} x2={420} y2={280}
+                className="bridge-tower"
+                stroke="white" strokeWidth={2.5} strokeLinecap="round"
+              />
+            </g>
+            <g clipPath="url(#tClip)">
+              <line x1={980} y1={520} x2={980} y2={280}
+                className="bridge-tower bridge-tower-r"
+                stroke="white" strokeWidth={2.5} strokeLinecap="round"
+              />
+            </g>
+
+            {/* ── Phase 2: Main cable draw with glow (0.6s ~ 1.4s) ── */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              className="bridge-cable"
+              stroke="white" strokeWidth={2.5} strokeLinecap="round"
               filter="url(#cableGlow)"
-              style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0s, opacity 0.3s ease 0s' }}
+            />
+            {/* Glow sweep — bright dot chases cable draw, fades after */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              className="bridge-cable-glow"
+              stroke="white" strokeWidth={4} strokeLinecap="round"
+              filter="url(#cableGlowStrong)"
+            />
+            {/* Light sweep — SpaceX atmospheric glow, infinite after draw */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              stroke="url(#sweepGrad)" strokeWidth={4} strokeLinecap="round"
+              opacity={0.7}
+              filter="url(#cableGlowStrong)"
             />
 
-            {/* Left tower — appears with cables at 0.6s */}
-            <line
-              x1={420} y1={520} x2={420} y2={280}
-              stroke="white"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.2 : 0}
-              strokeDasharray="240"
-              strokeDashoffset={showBridge ? 0 : -240}
-              style={{ transition: 'stroke-dashoffset 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s, opacity 0.3s ease 0.6s' }}
-            />
-
-            {/* Right tower — same timing as left */}
-            <line
-              x1={980} y1={520} x2={980} y2={280}
-              stroke="white"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              opacity={showBridge ? 0.2 : 0}
-              strokeDasharray="240"
-              strokeDashoffset={showBridge ? 0 : -240}
-              style={{ transition: 'stroke-dashoffset 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s, opacity 0.3s ease 0.6s' }}
-            />
-
-            {/* Stay cables — all appear simultaneously at 0.6s */}
+            {/* ── Phase 3: Stay cables stagger spread (1.2s ~ 2.0s) ── */}
             <line x1={420} y1={280} x2={280} y2={410}
+              className="bridge-stay bridge-stay-1"
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              opacity={showBridge ? 0.08 : 0}
-              strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
-              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
+              strokeDasharray="180"
+              style={{ '--d': '180' } as React.CSSProperties}
             />
             <line x1={420} y1={280} x2={200} y2={465}
+              className="bridge-stay bridge-stay-2"
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              opacity={showBridge ? 0.08 : 0}
-              strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
-              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
+              strokeDasharray="280"
+              style={{ '--d': '280' } as React.CSSProperties}
             />
-
-            {/* Stay cables — right side, same 0.6s delay */}
             <line x1={980} y1={280} x2={1120} y2={410}
+              className="bridge-stay bridge-stay-3"
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              opacity={showBridge ? 0.08 : 0}
-              strokeDasharray="180" strokeDashoffset={showBridge ? 0 : 180}
-              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
+              strokeDasharray="180"
+              style={{ '--d': '180' } as React.CSSProperties}
             />
             <line x1={980} y1={280} x2={1200} y2={465}
+              className="bridge-stay bridge-stay-4"
               stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              opacity={showBridge ? 0.08 : 0}
-              strokeDasharray="280" strokeDashoffset={showBridge ? 0 : 280}
-              style={{ transition: 'stroke-dashoffset 0.5s ease 0.6s, opacity 0.3s ease 0.6s' }}
+              strokeDasharray="280"
+              style={{ '--d': '280' } as React.CSSProperties}
             />
           </svg>
         </div>
