@@ -5,7 +5,7 @@
  * Simplified: shared BoardHeader + stripMarkdown utility
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -18,7 +18,10 @@ import {
   slideInRight,
   defaultViewport,
 } from '@/lib/animations'
-import EditModeBar, { NewPostButton } from '@/components/EditModeBar'
+import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBar'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
+import SplitEditor from '@/components/admin/SplitEditor'
+import { API_URL } from '@/lib/api'
 
 const API = ''
 
@@ -42,6 +45,11 @@ interface LayoutProps {
   total: number
   board: string
   faqItems?: FaqItem[]
+  editMode?: boolean
+  onEdit?: (post: Post) => void
+  onDelete?: (postId: number) => void
+  onPin?: (postId: number, currentPin: number) => void
+  onNewPost?: () => void
 }
 
 /** Strip markdown syntax for preview text */
@@ -71,8 +79,38 @@ function parseFaqBody(body: string): FaqItem[] {
   return items
 }
 
+// ── Inline Admin Buttons (editMode only) ──
+function InlineAdminButtons({ post, onEdit, onDelete, onPin }: {
+  post: Post
+  onEdit: (post: Post) => void
+  onDelete: (postId: number) => void
+  onPin: (postId: number, currentPin: number) => void
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 ml-2"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+    >
+      <button type="button" onClick={() => onEdit(post)}
+        className="p-1 rounded text-sm hover:bg-blue-600/20 transition-colors" title="Edit">
+        ✏️
+      </button>
+      <button type="button" onClick={() => onDelete(post.id)}
+        className="p-1 rounded text-sm hover:bg-red-600/20 transition-colors" title="Delete">
+        🗑️
+      </button>
+      <button type="button" onClick={() => onPin(post.id, post.pinned)}
+        className="p-1 rounded text-sm hover:bg-yellow-600/20 transition-colors" title={post.pinned ? 'Unpin' : 'Pin'}>
+        {post.pinned ? '📌' : '📍'}
+      </button>
+    </span>
+  )
+}
+
 // ── Shared Board Header ──
-function BoardHeader({ config, board }: { config: BoardConfig; board?: string }) {
+function BoardHeader({ config, board, editMode, onNewPost }: {
+  config: BoardConfig; board?: string; editMode?: boolean; onNewPost?: () => void
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -81,7 +119,14 @@ function BoardHeader({ config, board }: { config: BoardConfig; board?: string })
     >
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold text-[#1d1d1f]">{config.label}</h1>
-        {board && <NewPostButton board={board} />}
+        {editMode && onNewPost ? (
+          <button type="button" onClick={onNewPost}
+            className="inline-flex items-center gap-1 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors">
+            + 새 게시물
+          </button>
+        ) : (
+          board && <NewPostButton board={board} />
+        )}
       </div>
       <p className="text-[#86868b] text-sm mb-8">{config.description}</p>
       {config.notice && (
@@ -247,21 +292,35 @@ const WHY_BRIDGE = [
 export default function BoardPage() {
   const { board } = useParams<{ board: string }>()
   const config = getBoardConfig(board)
+  const editMode = useEditMode()
+  const { signedFetch } = useAdminAuth()
 
   const [posts, setPosts] = useState<Post[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [faqItems, setFaqItems] = useState<FaqItem[]>([])
 
+  // SplitEditor state
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create')
+  const [editorPostId, setEditorPostId] = useState<number | undefined>()
+  const [editorTitle, setEditorTitle] = useState('')
+  const [editorBody, setEditorBody] = useState('')
+
+  const refreshPosts = useCallback(() => {
+    if (!config) return
+    fetch(`${API}/api/community/${board}?limit=50`)
+      .then((r) => r.json())
+      .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
+  }, [board, config])
+
   useEffect(() => {
     if (!config) return
-    // Fetch main posts
     fetch(`${API}/api/community/${board}?limit=50`)
       .then((r) => r.json())
       .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
       .finally(() => setLoading(false))
 
-    // Fetch FAQ for support boards
     const faqCat = board === 'support' ? 'faq-teacher' : board === 'support_kr' ? 'faq-employer' : null
     if (faqCat) {
       fetch(`${API}/api/community/${board}?category=${faqCat}`)
@@ -275,6 +334,61 @@ export default function BoardPage() {
         .catch(() => {})
     }
   }, [board, config])
+
+  // ── Admin handlers ──
+  const handleNewPost = useCallback(() => {
+    setEditorMode('create')
+    setEditorPostId(undefined)
+    setEditorTitle('')
+    setEditorBody('')
+    setEditorOpen(true)
+  }, [])
+
+  const handleEdit = useCallback(async (post: Post) => {
+    // Fetch full body from detail endpoint
+    try {
+      const res = await fetch(`${API}/api/community/${board}/${post.id}`)
+      const j = await res.json()
+      if (j.success) {
+        setEditorMode('edit')
+        setEditorPostId(post.id)
+        setEditorTitle(j.data.title ?? post.title)
+        setEditorBody(j.data.body ?? '')
+        setEditorOpen(true)
+      }
+    } catch {
+      setEditorMode('edit')
+      setEditorPostId(post.id)
+      setEditorTitle(post.title)
+      setEditorBody(post.preview ?? '')
+      setEditorOpen(true)
+    }
+  }, [board])
+
+  const handleDelete = useCallback(async (postId: number) => {
+    if (!confirm('이 게시물을 삭제하시겠습니까?')) return
+    try {
+      const res = await signedFetch(`${API_URL}/api/community/${board}/${postId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) refreshPosts()
+    } catch { /* noop */ }
+  }, [board, signedFetch, refreshPosts])
+
+  const handlePin = useCallback(async (postId: number, currentPin: number) => {
+    try {
+      const res = await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pinned: currentPin ? 0 : 1 }),
+      })
+      if (res.ok) refreshPosts()
+    } catch { /* noop */ }
+  }, [signedFetch, refreshPosts])
+
+  const handleEditorSave = useCallback(() => {
+    setEditorOpen(false)
+    refreshPosts()
+  }, [refreshPosts])
 
   if (!config) {
     return (
@@ -295,7 +409,14 @@ export default function BoardPage() {
     )
   }
 
-  const props: LayoutProps = { config, posts, total, board, faqItems }
+  const props: LayoutProps = {
+    config, posts, total, board, faqItems,
+    editMode,
+    onEdit: handleEdit,
+    onDelete: handleDelete,
+    onPin: handlePin,
+    onNewPost: handleNewPost,
+  }
 
   const Layout = (() => {
     switch (config.layout) {
@@ -313,6 +434,18 @@ export default function BoardPage() {
     <>
       <EditModeBar />
       <Layout {...props} />
+      {editorOpen && (
+        <SplitEditor
+          mode={editorMode}
+          board={board}
+          postId={editorPostId}
+          initialTitle={editorTitle}
+          initialBody={editorBody}
+          signedFetch={signedFetch}
+          onSave={handleEditorSave}
+          onClose={() => setEditorOpen(false)}
+        />
+      )}
     </>
   )
 }
@@ -320,7 +453,7 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board }: LayoutProps) {
+function ListLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
   // Filter out FAQ-tagged posts from the main list
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
 
@@ -381,7 +514,7 @@ function ListLayout({ config, posts, board }: LayoutProps) {
 
       {/* ── Regular Post List ── */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <BoardHeader config={config} board={board} />
+        <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
         {regularPosts.length === 0 ? (
           <p className="text-[#86868b] text-center py-16">No posts yet.</p>
         ) : (
@@ -393,7 +526,12 @@ function ListLayout({ config, posts, board }: LayoutProps) {
                   className="board-list-item group"
                   style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
                 >
-                  <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
+                  <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">
+                    {p.title}
+                    {editMode && onEdit && onDelete && onPin && (
+                      <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                    )}
+                  </span>
                   <span className="arrow">→</span>
                 </Link>
               </motion.div>
@@ -459,7 +597,7 @@ function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: numbe
 // ══════════════════════════════════════════════════════════════════════════════
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ posts, board }: LayoutProps) {
+function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -614,10 +752,21 @@ function HeroCardsLayout({ posts, board }: LayoutProps) {
                     <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
                     <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">
                       {p.title}
+                      {editMode && onEdit && onDelete && onPin && (
+                        <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                      )}
                     </span>
                   </Link>
                 </motion.div>
               ))}
+              {editMode && onNewPost && (
+                <motion.div variants={scaleIn}>
+                  <button type="button" onClick={onNewPost}
+                    className="flex items-center justify-center gap-2 w-full bg-zinc-100 rounded-2xl p-5 border-2 border-dashed border-zinc-300 text-zinc-500 hover:border-blue-400 hover:text-blue-600 transition-colors text-sm font-medium">
+                    + New Post
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
           </div>
         </section>
@@ -732,17 +881,22 @@ function HeroCardsLayout({ posts, board }: LayoutProps) {
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} board={board} />
+      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => (
           <motion.div key={p.id} variants={fadeInUp}>
             <Link href={`/community/${board}/${p.id}`} className="tips-card group block">
               <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
               <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
-              <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
+              <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">
+                {p.title}
+                {editMode && onEdit && onDelete && onPin && (
+                  <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                )}
+              </h3>
               <p className="text-sm text-[#6e6e73] line-clamp-3 mb-4">{stripMd(p.preview)}</p>
               <span className="text-sm font-medium text-[#0071e3]">Read more →</span>
             </Link>
@@ -756,10 +910,10 @@ function CardGridLayout({ config, posts, board }: LayoutProps) {
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} board={board} />
+      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <div className="space-y-5">
         {posts.map((p, i) => {
           const imgKey = getPostImageKey(p.title)
@@ -772,7 +926,12 @@ function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
                   <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
-                  <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
+                  <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">
+                    {p.title}
+                    {editMode && onEdit && onDelete && onPin && (
+                      <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                    )}
+                  </h3>
                   <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
                   {KOREA_MAP_LINKS[imgKey] && (
                     <a href={KOREA_MAP_LINKS[imgKey]} target="_blank" rel="noopener noreferrer"
@@ -794,10 +953,10 @@ function PhotoCardsLayout({ config, posts, board }: LayoutProps) {
 // ══════════════════════════════════════════════════════════════════════════════
 // TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════════════════
-function TestimonialLayout({ config, posts, board }: LayoutProps) {
+function TestimonialLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} board={board} />
+      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => {
           const name = p.title.split('—')[0]?.trim() ?? p.title
@@ -810,7 +969,12 @@ function TestimonialLayout({ config, posts, board }: LayoutProps) {
                     {name.charAt(0)}
                   </div>
                   <div>
-                    <div className="font-semibold text-[#1d1d1f] text-sm">{name}</div>
+                    <div className="font-semibold text-[#1d1d1f] text-sm">
+                      {name}
+                      {editMode && onEdit && onDelete && onPin && (
+                        <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                      )}
+                    </div>
                     <div className="text-xs text-[#86868b]">English Teacher · BRIDGE</div>
                   </div>
                 </div>
