@@ -115,8 +115,7 @@ export default function MegaMenu() {
     const logoLink = document.querySelector('nav.nav-glass a[href="/"]')
     if (!logoLink || logoLink.querySelector('[data-bridge-icon]')) return
 
-    const wrap = document.createElement('span')
-    wrap.innerHTML = `<svg data-bridge-icon viewBox="0 0 56 26" width="46" height="21"
+    const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" data-bridge-icon="1" viewBox="0 0 56 26" width="46" height="21"
       style="display:inline-block;vertical-align:middle;margin-left:5px;margin-bottom:2px;">
       <defs>
         <filter id="blg" x="-50%" y="-50%" width="200%" height="200%">
@@ -150,10 +149,12 @@ export default function MegaMenu() {
         <animate attributeName="opacity" values="0;0.4;0.5;0.4;0" dur="2.5s" begin="0.15s" repeatCount="indefinite"/>
       </circle>
     </svg>`
-    const svg = wrap.firstElementChild
-    if (svg) logoLink.appendChild(svg)
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+    const svg = document.importNode(doc.documentElement, true)
+    logoLink.appendChild(svg)
 
-    return () => { svg?.remove() }
+    return () => { svg.remove() }
   }, [isAdminPage, pathname])
 
   // Desktop: Admin 버튼을 nav CTA 영역에 주입
