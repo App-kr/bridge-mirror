@@ -3640,6 +3640,201 @@ async def admin_update_settings(request: Request):
         conn.close()
 
 
+# ── 방문 추적 (Visit Tracking) ────────────────────────────────────────────────
+
+def _ensure_site_visits_table():
+    """site_visits 테이블 생성."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS site_visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            visitor_hash TEXT NOT NULL,
+            referrer TEXT,
+            channel TEXT,
+            search_keyword TEXT,
+            landing_page TEXT,
+            utm_source TEXT,
+            utm_medium TEXT,
+            utm_campaign TEXT,
+            utm_term TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_visits_created ON site_visits(created_at)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_visits_channel ON site_visits(channel)
+    """)
+    conn.commit()
+    conn.close()
+
+_ensure_site_visits_table()
+
+
+def _classify_channel(referrer: str) -> str:
+    """referrer URL → 채널 분류."""
+    if not referrer:
+        return "direct"
+    r = referrer.lower()
+    if "google." in r:
+        return "google"
+    if "naver.com" in r or "search.naver" in r:
+        return "naver"
+    if "daum.net" in r or "search.daum" in r:
+        return "daum"
+    if "bing.com" in r:
+        return "bing"
+    if "yahoo." in r:
+        return "yahoo"
+    if "facebook.com" in r or "fb.com" in r:
+        return "facebook"
+    if "instagram.com" in r:
+        return "instagram"
+    if "twitter.com" in r or "t.co" in r or "x.com" in r:
+        return "twitter"
+    if "reddit.com" in r:
+        return "reddit"
+    if "youtube.com" in r or "youtu.be" in r:
+        return "youtube"
+    if "kakao" in r:
+        return "kakao"
+    if "linkedin.com" in r:
+        return "linkedin"
+    if "bridgejob" in r:
+        return "internal"
+    return "other"
+
+
+def _extract_search_keyword(referrer: str) -> str:
+    """referrer URL에서 검색어 추출 (Naver, Daum 등)."""
+    if not referrer:
+        return ""
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(referrer)
+        params = parse_qs(parsed.query)
+        # Naver: query=
+        for key in ("query", "q", "p", "search_query", "text", "keyword"):
+            if key in params:
+                return params[key][0]
+    except Exception:
+        pass
+    return ""
+
+
+@app.post("/api/track", tags=["public"])
+async def track_visit(request: Request):
+    """페이지 방문 기록 (공개, rate-limited)."""
+    ip = _ip_hash(request)
+    if not _rate_ok(ip, window=60, max_posts=30):
+        return ok(message="ok")  # 조용히 무시
+
+    try:
+        body = await request.json()
+    except Exception:
+        return ok(message="ok")
+
+    referrer = str(body.get("referrer", ""))[:500]
+    landing = str(body.get("page", ""))[:200]
+    utm_source = str(body.get("utm_source", ""))[:100]
+    utm_medium = str(body.get("utm_medium", ""))[:100]
+    utm_campaign = str(body.get("utm_campaign", ""))[:100]
+    utm_term = str(body.get("utm_term", ""))[:100]
+
+    channel = _classify_channel(referrer)
+    keyword = _extract_search_keyword(referrer)
+
+    # UTM term이 있으면 검색어로 사용
+    if utm_term and not keyword:
+        keyword = utm_term
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            "INSERT INTO site_visits (visitor_hash, referrer, channel, search_keyword, landing_page, "
+            "utm_source, utm_medium, utm_campaign, utm_term) VALUES (?,?,?,?,?,?,?,?,?)",
+            (ip, referrer, channel, keyword, landing, utm_source, utm_medium, utm_campaign, utm_term)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(message="ok")
+
+
+@app.get("/api/admin/analytics", tags=["admin"])
+async def admin_analytics(request: Request, days: int = Query(30, ge=1, le=365)):
+    """방문 분석 데이터 (관리자)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        # 총 방문수
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM site_visits WHERE created_at >= ?", (cutoff,)
+        ).fetchone()["cnt"]
+
+        # 채널별 유입
+        channels = conn.execute(
+            "SELECT channel, COUNT(*) as cnt FROM site_visits WHERE created_at >= ? "
+            "GROUP BY channel ORDER BY cnt DESC", (cutoff,)
+        ).fetchall()
+
+        # 검색 키워드 TOP 30
+        keywords = conn.execute(
+            "SELECT search_keyword, COUNT(*) as cnt FROM site_visits "
+            "WHERE created_at >= ? AND search_keyword != '' "
+            "GROUP BY search_keyword ORDER BY cnt DESC LIMIT 30", (cutoff,)
+        ).fetchall()
+
+        # 인기 랜딩 페이지 TOP 20
+        pages = conn.execute(
+            "SELECT landing_page, COUNT(*) as cnt FROM site_visits "
+            "WHERE created_at >= ? AND landing_page != '' "
+            "GROUP BY landing_page ORDER BY cnt DESC LIMIT 20", (cutoff,)
+        ).fetchall()
+
+        # 일별 방문 추이 (최근 days일)
+        daily = conn.execute(
+            "SELECT DATE(created_at) as day, COUNT(*) as cnt FROM site_visits "
+            "WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY day", (cutoff,)
+        ).fetchall()
+
+        # UTM 캠페인별
+        campaigns = conn.execute(
+            "SELECT utm_source, utm_medium, utm_campaign, COUNT(*) as cnt FROM site_visits "
+            "WHERE created_at >= ? AND (utm_source != '' OR utm_campaign != '') "
+            "GROUP BY utm_source, utm_medium, utm_campaign ORDER BY cnt DESC LIMIT 20", (cutoff,)
+        ).fetchall()
+
+        # 오늘 방문
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM site_visits WHERE DATE(created_at) = ?", (today,)
+        ).fetchone()["cnt"]
+
+        return ok(data={
+            "total_visits": total,
+            "today_visits": today_count,
+            "channels": [{"channel": r["channel"], "count": r["cnt"]} for r in channels],
+            "keywords": [{"keyword": r["search_keyword"], "count": r["cnt"]} for r in keywords],
+            "pages": [{"page": r["landing_page"], "count": r["cnt"]} for r in pages],
+            "daily": [{"date": r["day"], "count": r["cnt"]} for r in daily],
+            "campaigns": [
+                {"source": r["utm_source"], "medium": r["utm_medium"],
+                 "campaign": r["utm_campaign"], "count": r["cnt"]}
+                for r in campaigns
+            ],
+        })
+    finally:
+        conn.close()
+
+
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
 from inbox_api import router as inbox_router
 from gmail_collector import router as gmail_router

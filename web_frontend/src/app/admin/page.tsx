@@ -72,6 +72,16 @@ interface ActivityItem {
   created_at?: string
 }
 
+interface AnalyticsData {
+  total_visits: number
+  today_visits: number
+  channels: { channel: string; count: number }[]
+  keywords: { keyword: string; count: number }[]
+  pages: { page: string; count: number }[]
+  daily: { date: string; count: number }[]
+  campaigns: { source: string; medium: string; campaign: string; count: number }[]
+}
+
 const PIE_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
 const BAR_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
 
@@ -125,6 +135,8 @@ export default function AdminDashboardPage() {
   const [wakeMsg, setWakeMsg] = useState(false)
   const [showCount, setShowCount] = useState(10)
   const [seenPosts, setSeenPosts] = useState<Set<string>>(new Set())
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [analyticsDays, setAnalyticsDays] = useState(30)
 
   useEffect(() => {
     setSeenPosts(getSeenPosts())
@@ -136,11 +148,12 @@ export default function AdminDashboardPage() {
     setWakeMsg(false)
     try {
       const onWaking = () => setWakeMsg(true)
-      const [dashRes, statsRes, monthlyRes, sourceRes] = await Promise.all([
+      const [dashRes, statsRes, monthlyRes, sourceRes, analyticsRes] = await Promise.all([
         adminFetch(`${API}/api/admin/dashboard`, undefined, onWaking),
         adminFetch(`${API}/api/admin/stats`, undefined, onWaking),
         adminFetch(`${API}/api/admin/stats/monthly`, undefined, onWaking),
         adminFetch(`${API}/api/admin/stats/by-source`, undefined, onWaking),
+        adminFetch(`${API}/api/admin/analytics?days=${analyticsDays}`, undefined, onWaking),
       ])
       setWakeMsg(false)
 
@@ -158,8 +171,8 @@ export default function AdminDashboardPage() {
         return
       }
 
-      const [dashJson, statsJson, monthlyJson, sourceJson] = await Promise.all([
-        dashRes.json(), statsRes.json(), monthlyRes.json(), sourceRes.json(),
+      const [dashJson, statsJson, monthlyJson, sourceJson, analyticsJson] = await Promise.all([
+        dashRes.json(), statsRes.json(), monthlyRes.json(), sourceRes.json(), analyticsRes.json(),
       ])
 
       if (dashJson.success) {
@@ -169,13 +182,14 @@ export default function AdminDashboardPage() {
       if (statsJson.success) setInboxStats(statsJson.data ?? {})
       if (monthlyJson.success) setMonthly(monthlyJson.data ?? [])
       if (sourceJson.success) setSources(sourceJson.data ?? [])
+      if (analyticsJson.success) setAnalytics(analyticsJson.data ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : '대시보드 로드 실패')
     } finally {
       setLoading(false)
       setWakeMsg(false)
     }
-  }, [adminFetch])
+  }, [adminFetch, analyticsDays])
 
   useEffect(() => {
     if (authed) fetchAll()
@@ -416,6 +430,171 @@ export default function AdminDashboardPage() {
                   </ResponsiveContainer>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── 검색 유입 분석 ─────────────────────────────────── */}
+          {analytics && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[17px] font-bold text-[#1d1d1f]">검색 유입 분석</h2>
+                <div className="flex items-center gap-2">
+                  {[7, 30, 90].map(d => (
+                    <button key={d} type="button" onClick={() => setAnalyticsDays(d)}
+                      className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
+                        analyticsDays === d
+                          ? 'bg-[#0071e3] text-white'
+                          : 'bg-[#f5f5f7] text-[#424245] hover:bg-[#e8e8ed]'
+                      }`}>
+                      {d}일
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 방문 요약 카드 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
+                  <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">{analytics.total_visits}</div>
+                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">총 방문 ({analyticsDays}일)</div>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
+                  <div className="text-2xl font-bold text-[#0071e3] tabular-nums">{analytics.today_visits}</div>
+                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">오늘 방문</div>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
+                  <div className="text-2xl font-bold text-[#34c759] tabular-nums">{analytics.keywords.length}</div>
+                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">검색어 종류</div>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4">
+                  <div className="text-2xl font-bold text-[#ff9f0a] tabular-nums">{analytics.channels.length}</div>
+                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">유입 채널</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* 채널별 유입 */}
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">유입 채널</h3>
+                  {analytics.channels.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {analytics.channels.map((ch, idx) => {
+                        const totalCh = analytics.channels.reduce((s, c) => s + c.count, 0)
+                        const pct = totalCh > 0 ? Math.round((ch.count / totalCh) * 100) : 0
+                        return (
+                          <div key={ch.channel} className="flex items-center gap-3">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: BAR_COLORS[idx % BAR_COLORS.length] }} />
+                            <span className="text-[13px] text-[#424245] w-20 shrink-0 font-medium capitalize">{ch.channel}</span>
+                            <div className="flex-1 h-[6px] bg-[#f5f5f7] rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: BAR_COLORS[idx % BAR_COLORS.length] }} />
+                            </div>
+                            <span className="text-[12px] font-semibold text-[#1d1d1f] w-8 text-right tabular-nums">{pct}%</span>
+                            <span className="text-[11px] text-[#86868b] w-10 text-right tabular-nums">{ch.count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[#86868b] text-sm py-4 text-center">데이터 수집 중...</p>
+                  )}
+                </div>
+
+                {/* 검색 키워드 TOP */}
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">
+                    검색 키워드 TOP
+                    <span className="text-[11px] text-[#86868b] ml-2 font-normal">Naver · Daum · Google</span>
+                  </h3>
+                  {analytics.keywords.length > 0 ? (
+                    <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+                      {analytics.keywords.map((kw, idx) => (
+                        <div key={kw.keyword} className="flex items-center gap-3 py-1">
+                          <span className="text-[11px] text-[#86868b] w-5 text-right shrink-0 tabular-nums">{idx + 1}</span>
+                          <span className="flex-1 text-[13px] text-[#1d1d1f] font-medium truncate">{kw.keyword}</span>
+                          <span className="text-[12px] font-semibold text-[#0071e3] tabular-nums">{kw.count}회</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[#86868b] text-sm py-4 text-center">
+                      검색어 데이터 수집 중...<br />
+                      <span className="text-[11px]">Naver/Daum 검색 유입 시 자동 기록됩니다</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 인기 페이지 + 일별 추이 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">인기 랜딩 페이지</h3>
+                  {analytics.pages.length > 0 ? (
+                    <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
+                      {analytics.pages.map((pg, idx) => {
+                        const totalPg = analytics.pages.reduce((s, p) => s + p.count, 0)
+                        const pct = totalPg > 0 ? Math.round((pg.count / totalPg) * 100) : 0
+                        return (
+                          <div key={pg.page} className="flex items-center gap-2 py-1">
+                            <span className="text-[11px] text-[#86868b] w-5 text-right shrink-0 tabular-nums">{idx + 1}</span>
+                            <span className="flex-1 text-[13px] text-[#424245] truncate font-mono">{pg.page}</span>
+                            <span className="text-[11px] text-[#86868b] tabular-nums">{pct}%</span>
+                            <span className="text-[12px] font-semibold text-[#1d1d1f] tabular-nums w-8 text-right">{pg.count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[#86868b] text-sm py-4 text-center">데이터 수집 중...</p>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">일별 방문 추이</h3>
+                  {analytics.daily.length > 0 ? (
+                    <div style={{ width: '100%', height: 220 }}>
+                      <ResponsiveContainer>
+                        <BarChart data={analytics.daily}>
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#86868b' }} axisLine={false} tickLine={false}
+                            tickFormatter={(v: string) => v.slice(5)} />
+                          <YAxis tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="#34c759" radius={[4, 4, 0, 0]} name="방문" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-[#86868b] text-sm py-4 text-center">데이터 수집 중...</p>
+                  )}
+                </div>
+              </div>
+
+              {/* UTM 캠페인 */}
+              {analytics.campaigns.length > 0 && (
+                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">UTM 캠페인</h3>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
+                        <th className="px-3 py-2">Source</th>
+                        <th className="px-3 py-2">Medium</th>
+                        <th className="px-3 py-2">Campaign</th>
+                        <th className="px-3 py-2 text-right">방문</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.campaigns.map((c, idx) => (
+                        <tr key={idx} className="border-t border-[#f5f5f7]">
+                          <td className="px-3 py-2 text-[13px] text-[#1d1d1f]">{c.source || '-'}</td>
+                          <td className="px-3 py-2 text-[13px] text-[#424245]">{c.medium || '-'}</td>
+                          <td className="px-3 py-2 text-[13px] text-[#424245]">{c.campaign || '-'}</td>
+                          <td className="px-3 py-2 text-[13px] font-semibold text-[#1d1d1f] text-right tabular-nums">{c.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
