@@ -2241,24 +2241,40 @@ async def community_list(
     board: str,
     limit: int = 30,
     offset: int = 0,
+    category: Optional[str] = None,
 ):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """SELECT id, title, author_hash, pinned, views, created_at,
-                  content_type, sort_order, substr(body, 1, 200) AS preview
-           FROM community_posts
-           WHERE board=? AND is_deleted=0
-           ORDER BY pinned DESC, sort_order DESC, created_at DESC
-           LIMIT ? OFFSET ?""",
-        (board, limit, offset),
-    ).fetchall()
-    total = conn.execute(
-        "SELECT COUNT(*) FROM community_posts WHERE board=? AND is_deleted=0", (board,)
-    ).fetchone()[0]
+    if category:
+        rows = conn.execute(
+            """SELECT id, title, body, author_hash, pinned, views, created_at,
+                      content_type, sort_order, category, substr(body, 1, 200) AS preview
+               FROM community_posts
+               WHERE board=? AND is_deleted=0 AND category=?
+               ORDER BY pinned DESC, sort_order DESC, created_at DESC
+               LIMIT ? OFFSET ?""",
+            (board, category, limit, offset),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM community_posts WHERE board=? AND is_deleted=0 AND category=?",
+            (board, category),
+        ).fetchone()[0]
+    else:
+        rows = conn.execute(
+            """SELECT id, title, author_hash, pinned, views, created_at,
+                      content_type, sort_order, substr(body, 1, 200) AS preview
+               FROM community_posts
+               WHERE board=? AND is_deleted=0
+               ORDER BY pinned DESC, sort_order DESC, created_at DESC
+               LIMIT ? OFFSET ?""",
+            (board, limit, offset),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM community_posts WHERE board=? AND is_deleted=0", (board,)
+        ).fetchone()[0]
     conn.close()
     return ok(data={"total": total, "posts": [dict(r) for r in rows]})
 
@@ -2289,6 +2305,7 @@ class CommunityPost(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     body:  str = Field(..., min_length=10, max_length=10000)
     content_type: str = Field("markdown", pattern=r"^(markdown|html)$")
+    category: Optional[str] = Field(None, max_length=50)
 
 
 @app.post("/api/community/{board}", status_code=201, tags=["community"])
@@ -2315,8 +2332,8 @@ async def community_create(board: str, post: CommunityPost, request: Request):
 
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     cur = conn.execute(
-        "INSERT INTO community_posts (board, title, body, author_hash, content_type) VALUES (?,?,?,?,?)",
-        (board, clean_title, clean_body, ip_hash, post.content_type),
+        "INSERT INTO community_posts (board, title, body, author_hash, content_type, category) VALUES (?,?,?,?,?,?)",
+        (board, clean_title, clean_body, ip_hash, post.content_type, post.category),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -2371,6 +2388,7 @@ class PostEdit(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=200)
     body:  Optional[str] = Field(None, min_length=10, max_length=10000)
     content_type: Optional[str] = Field(None, pattern=r"^(markdown|html)$")
+    category: Optional[str] = Field(None, max_length=50)
 
 
 class ReorderItem(BaseModel):
@@ -2424,6 +2442,9 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
     if body.content_type is not None:
         updates.append("content_type = ?")
         params.append(body.content_type)
+    if body.category is not None:
+        updates.append("category = ?")
+        params.append(body.category)
 
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
@@ -2695,12 +2716,13 @@ _ensure_interviews_schema()
 
 
 def _ensure_community_schema():
-    """community_posts 테이블에 content_type, sort_order 컬럼 추가."""
+    """community_posts 테이블에 content_type, sort_order, category 컬럼 추가."""
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     for col_sql in (
         "ALTER TABLE community_posts ADD COLUMN content_type TEXT DEFAULT 'markdown'",
         "ALTER TABLE community_posts ADD COLUMN sort_order INTEGER DEFAULT 0",
+        "ALTER TABLE community_posts ADD COLUMN category TEXT DEFAULT NULL",
     ):
         try:
             conn.execute(col_sql)
@@ -4264,6 +4286,7 @@ def _ensure_site_settings_table():
     """)
     # 초기 기본값 삽입 (이미 있으면 무시)
     defaults = [
+        ('site_name', 'BRIDGE'),
         ('business_number', ''),
         ('company_name', 'BRIDGE Agency'),
         ('ceo_name', ''),
@@ -4277,6 +4300,11 @@ def _ensure_site_settings_table():
         ('blog', ''),
         ('footer_text', '© 2026 BRIDGE Recruitment · bridgejob.co.kr'),
         ('footer_description', 'Korea ESL Recruitment Platform'),
+        ('hero_tagline', 'A career that changes your life'),
+        ('hero_subtitle', "Korea's #1 ESL recruitment platform — 원어민 영어강사 채용 전문"),
+        ('nav_menu', '[{"href":"/community/about","label":"About us"},{"href":"/community/korea","label":"Korea"},{"href":"/community/visa","label":"Visa"},{"href":"/jobs","label":"Job Board"},{"href":"/community/support","label":"Support"},{"href":"/community/support_kr","label":"업무지원"},{"href":"/community","label":"Community"}]'),
+        ('nav_cta_1', '{"href":"/apply","label":"Apply"}'),
+        ('nav_cta_2', '{"href":"/inquiry","label":"원어민채용의뢰"}'),
     ]
     for key, value in defaults:
         conn.execute(

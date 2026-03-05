@@ -24,6 +24,7 @@ import { RefreshCw } from 'lucide-react'
 import { seededShuffle } from '@/lib/seededShuffle'
 import { TESTIMONIALS, type TestimonialEntry } from '@/data/testimonials'
 import type { PublicJob, AgeGroup } from '@/types'
+import { API_URL } from '@/lib/api'
 const API = ''
 
 // ── Fallback testimonials (subset of static pool) ──
@@ -130,6 +131,10 @@ export default function HomePage() {
   const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
   const editMode = useEditMode()
 
+  // Dynamic site settings
+  const [siteName, setSiteName] = useState('BRIDGE')
+  const [heroTagline, setHeroTagline] = useState('A career that changes your life')
+
   // Raw data ref for job re-shuffling
   const rawFetchedJobs = useRef<PublicJob[]>([])
 
@@ -145,6 +150,20 @@ export default function HomePage() {
     const t1 = setTimeout(() => setShowBridge(true), 50)
     const t2 = setTimeout(() => setShowTagline(true), 50)
     return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [])
+
+  // ── Fetch site settings for dynamic hero ──
+  useEffect(() => {
+    const url = API_URL ? `${API_URL}/api/settings` : '/api/settings'
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.data?.settings) return
+        const s = d.data.settings as Record<string, string>
+        if (s.site_name) setSiteName(s.site_name)
+        if (s.hero_tagline) setHeroTagline(s.hero_tagline)
+      })
+      .catch(() => { /* keep defaults */ })
   }, [])
 
   // ── Hero parallax ──
@@ -367,11 +386,11 @@ export default function HomePage() {
             animate={{ opacity: 1 }}
             transition={{ duration: 1.5, ease: 'easeOut' }}
           >
-            BRIDGE
+            {siteName}
           </motion.h1>
 
           <p className="text-xl sm:text-2xl md:text-3xl font-light tracking-tight">
-            {'A career that changes your life'.split('').map((char, i) => (
+            {heroTagline.split('').map((char, i) => (
               <span
                 key={i}
                 className={showTagline ? 'letter-star' : ''}

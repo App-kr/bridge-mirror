@@ -487,18 +487,31 @@ export default function BoardPage() {
     } catch { /* noop */ }
   }, [board, signedFetch, refreshPosts])
 
-  // Post drag reorder — persists to server via sort_order API
-  const persistOrder = useCallback(async (newItems: Post[]) => {
-    const items = newItems.map((p, i) => ({ id: p.id, sort_order: (newItems.length - i) * 10 }))
+  // Post drag reorder — explicit save button
+  const [orderDirty, setOrderDirty] = useState(false)
+  const [orderSaving, setOrderSaving] = useState(false)
+
+  const onReorderLocal = useCallback(() => {
+    setOrderDirty(true)
+  }, [])
+
+  const postDrag = useDragReorder<Post>(posts, onReorderLocal)
+
+  const handleSaveOrder = useCallback(async () => {
+    const items = postDrag.items.map((p, i) => ({ id: p.id, sort_order: (postDrag.items.length - i) * 10 }))
+    setOrderSaving(true)
     try {
-      await signedFetch(`${API_URL}/api/admin/community-reorder/${board}`, {
+      const res = await signedFetch(`${API_URL}/api/admin/community-reorder/${board}`, {
         method: 'PATCH',
         body: JSON.stringify({ items }),
       })
-    } catch { /* best-effort */ }
-  }, [board, signedFetch])
-
-  const postDrag = useDragReorder<Post>(posts, persistOrder)
+      if (res.ok) {
+        setOrderDirty(false)
+        refreshPosts()
+      }
+    } catch { /* noop */ }
+    setOrderSaving(false)
+  }, [postDrag.items, board, signedFetch, refreshPosts])
 
   // Sync posts from API into drag hook
   useEffect(() => {
@@ -714,6 +727,19 @@ export default function BoardPage() {
           onBulkDelete={handleBulkDelete}
           onBulkPin={handleBulkPin}
         />
+      )}
+      {editMode && orderDirty && (
+        <div className="bg-amber-600 text-white px-6 py-2.5 flex items-center justify-between text-sm">
+          <span className="font-medium">순서가 변경되었습니다</span>
+          <button
+            type="button"
+            onClick={handleSaveOrder}
+            disabled={orderSaving}
+            className="px-4 py-1.5 bg-white text-amber-700 font-semibold rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50 text-[13px]"
+          >
+            {orderSaving ? '저장 중...' : '순서 저장'}
+          </button>
+        </div>
       )}
       <Layout {...props} />
       {editorOpen && (

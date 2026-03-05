@@ -9,6 +9,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { API_URL } from '@/lib/api'
 
 /* ── 드롭다운 데이터 ── */
 interface SubItem { href: string; label: string; labelKr?: string }
@@ -49,7 +50,10 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
 }
 
-const MOBILE_LINKS = [
+interface NavItem { href: string; label: string }
+interface CtaButton { href: string; label: string }
+
+const DEFAULT_MOBILE_LINKS: NavItem[] = [
   { href: '/community/about', label: 'About us' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
@@ -59,6 +63,11 @@ const MOBILE_LINKS = [
   { href: '/community', label: 'Community' },
 ]
 
+function tryParse<T>(val: string | undefined, fallback: T): T {
+  if (!val) return fallback
+  try { return JSON.parse(val) as T } catch { return fallback }
+}
+
 export default function MegaMenu() {
   const [active, setActive] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -66,11 +75,76 @@ export default function MegaMenu() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isAdminPage = pathname?.startsWith('/admin')
 
+  // Dynamic settings
+  const [mobileLinks, setMobileLinks] = useState<NavItem[]>(DEFAULT_MOBILE_LINKS)
+  const [mobileCta1, setMobileCta1] = useState<CtaButton>({ href: '/apply', label: 'Apply Now' })
+  const [mobileCta2, setMobileCta2] = useState<CtaButton>({ href: '/inquiry', label: '원어민채용의뢰' })
+
   // 네비게이션 시 닫기
   useEffect(() => {
     setMobileOpen(false)
     setActive(null)
   }, [pathname])
+
+  // Fetch settings and inject dynamic nav/CTA/logo into server-rendered DOM
+  useEffect(() => {
+    const url = API_URL ? `${API_URL}/api/settings` : '/api/settings'
+    fetch(url)
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.data?.settings) return
+        const s = d.data.settings as Record<string, string>
+
+        // Parse nav items
+        const navData = tryParse<NavItem[]>(s.nav_menu, DEFAULT_MOBILE_LINKS)
+        setMobileLinks(navData)
+
+        // Parse CTA
+        const c1 = tryParse<CtaButton>(s.nav_cta_1, { href: '/apply', label: 'Apply' })
+        const c2 = tryParse<CtaButton>(s.nav_cta_2, { href: '/inquiry', label: '원어민채용의뢰' })
+        setMobileCta1({ href: c1.href, label: c1.label || 'Apply Now' })
+        setMobileCta2({ href: c2.href, label: c2.label || '원어민채용의뢰' })
+
+        // DOM: Update logo text
+        const siteName = s.site_name || 'BRIDGE'
+        const logoEl = document.querySelector<HTMLAnchorElement>('nav.nav-glass a[href="/"]')
+        if (logoEl && logoEl.textContent !== siteName) {
+          logoEl.textContent = siteName
+        }
+
+        // DOM: Update desktop nav links
+        const navContainer = document.querySelector<HTMLElement>('nav.nav-glass .hidden.md\\:flex')
+        if (navContainer) {
+          const existingLinks = navContainer.querySelectorAll<HTMLAnchorElement>('.nav-link')
+          // Remove existing
+          existingLinks.forEach(el => el.remove())
+          // Insert new
+          navData.forEach(item => {
+            const a = document.createElement('a')
+            a.href = item.href
+            a.className = 'nav-link'
+            a.textContent = item.label
+            navContainer.appendChild(a)
+          })
+        }
+
+        // DOM: Update CTA buttons
+        const ctaContainer = document.querySelector<HTMLElement>('nav.nav-glass .flex.items-center.gap-2.ml-3')
+        if (ctaContainer) {
+          const ctaLinks = ctaContainer.querySelectorAll<HTMLAnchorElement>('a.nav-cta')
+          if (ctaLinks.length >= 1) {
+            ctaLinks[0].href = c1.href
+            ctaLinks[0].textContent = c1.label
+          }
+          if (ctaLinks.length >= 2) {
+            ctaLinks[1].href = c2.href
+            ctaLinks[1].textContent = c2.label
+          }
+        }
+      })
+      .catch(() => { /* keep defaults */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // .nav-link 에 hover 리스너 부착 (일반 모드 전용)
   useEffect(() => {
@@ -179,25 +253,22 @@ export default function MegaMenu() {
         <>
           <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />
           <nav className="mobile-drawer">
-            {MOBILE_LINKS.map((l) => {
-              const href = l.href
-              return (
-                <Link
-                  key={l.href}
-                  href={href}
-                  className={`mobile-nav-link${pathname === l.href ? ' active' : ''}`}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  {l.label}
-                </Link>
-              )
-            })}
-            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
-              <Link href="/apply" className="mobile-cta-primary" onClick={() => setMobileOpen(false)}>
-                Apply Now
+            {mobileLinks.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={`mobile-nav-link${pathname === l.href ? ' active' : ''}`}
+                onClick={() => setMobileOpen(false)}
+              >
+                {l.label}
               </Link>
-              <Link href="/inquiry" className="mobile-cta-outline" onClick={() => setMobileOpen(false)}>
-                원어민채용의뢰
+            ))}
+            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
+              <Link href={mobileCta1.href} className="mobile-cta-primary" onClick={() => setMobileOpen(false)}>
+                {mobileCta1.label}
+              </Link>
+              <Link href={mobileCta2.href} className="mobile-cta-outline" onClick={() => setMobileOpen(false)}>
+                {mobileCta2.label}
               </Link>
               <Link href="/admin" onClick={() => setMobileOpen(false)}
                 style={{
