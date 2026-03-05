@@ -528,11 +528,10 @@ a.nav-cta[href="/inquiry"]:hover {
   to   { transform: translateY(0); opacity: 0.45; }
 }
 
-/* ── Stay cables — draw outward from tower, fan-out (0.8s each, starts 0.3s) ── */
+/* ── Stay cables — draw outward from tower, static after ── */
 .bridge-stay {
   stroke-dasharray: var(--len);
   stroke-dashoffset: var(--len);
-  filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
 }
 .bridge-active .bridge-stay {
   animation: stayDraw 0.8s ease-out forwards;
@@ -545,25 +544,18 @@ a.nav-cta[href="/inquiry"]:hover {
 .bridge-active .bridge-stay-r1 { animation-delay: 0.30s; }
 .bridge-active .bridge-stay-r2 { animation-delay: 0.35s; }
 
-/* ── Completion flash (2.5s) + whole bridge breathing (3.1s+) ── */
-.bridge-active .bridge-all {
-  animation:
-    bridgeFlash 0.5s ease-out 2.5s,
-    bridgeBreath 4s ease-in-out 3.1s infinite;
+/* ── Post-draw: breathing glow on arc only (4s cycle, starts 3s) ── */
+.bridge-active .bridge-arc-group {
+  animation: arcBreath 4s ease-in-out 3s infinite;
 }
-@keyframes bridgeFlash {
-  0%   { filter: none; }
-  30%  { filter: drop-shadow(0 0 25px rgba(255,255,255,0.6)); }
-  100% { filter: none; }
-}
-@keyframes bridgeBreath {
-  0%, 100% { filter: drop-shadow(0 0 3px rgba(255,255,255,0.05)); }
-  50%      { filter: drop-shadow(0 0 10px rgba(255,255,255,0.25)); }
+@keyframes arcBreath {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.1)); }
+  50%      { filter: drop-shadow(0 0 12px rgba(255,255,255,0.3)); }
 }
 
 /* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {
-  .bridge-arc, .bridge-tower, .bridge-stay, .bridge-sweep, .bridge-all {
+  .bridge-arc, .bridge-tower, .bridge-stay, .bridge-sweep, .bridge-arc-group {
     animation: none !important;
     filter: none !important;
     transform: none !important;

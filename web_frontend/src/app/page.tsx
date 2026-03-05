@@ -264,53 +264,51 @@ export default function HomePage() {
                 <stop offset="0.5" stopColor="white" stopOpacity="0.35" />
                 <stop offset="0.65" stopColor="white" stopOpacity="0" />
                 <stop offset="1" stopColor="white" stopOpacity="0" />
-                <animate attributeName="x1" values="-700;1400" dur="7s" repeatCount="indefinite" begin="3s" />
-                <animate attributeName="x2" values="0;2100" dur="7s" repeatCount="indefinite" begin="3s" />
+                <animate attributeName="x1" values="-700;1400" dur="3.5s" repeatCount="indefinite" begin="3s" />
+                <animate attributeName="x2" values="0;2100" dur="3.5s" repeatCount="indefinite" begin="3s" />
               </linearGradient>
             </defs>
 
-            {/* ── Whole bridge wrapper (flash + breathing) ── */}
-            <g className="bridge-all">
-              {/* Main cable arc — thin base (0.8px) */}
+            {/* ── Arc group — breathing glow (arc only) ── */}
+            <g className="bridge-arc-group">
               <path d="M 0 520 Q 700 180, 1400 520"
                 className="bridge-arc"
                 stroke="white" strokeWidth={0.8} strokeLinecap="round"
                 filter="url(#cableGlow)"
               />
-              {/* Main cable arc — thick center (2.5px, tapered) */}
               <path d="M 0 520 Q 700 180, 1400 520"
                 className="bridge-arc"
                 stroke="white" strokeWidth={2.5} strokeLinecap="round"
                 mask="url(#taperMask)" filter="url(#cableGlow)"
               />
-
-              {/* Glow sweep — subtle bright spot traveling L→R during draw */}
-              <path d="M 0 520 Q 700 180, 1400 520"
-                className="bridge-sweep"
-                stroke="rgba(255,255,255,0.5)" strokeWidth={3} strokeLinecap="round"
-                filter="url(#sweepGlow)"
-              />
-
-              {/* Towers — both appear simultaneously at 0s */}
-              <line x1={420} y1={520} x2={420} y2={280}
-                className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
-              <line x1={980} y1={520} x2={980} y2={280}
-                className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
-
-              {/* Stay cables — draw outward from tower (fan-out, 0.3s+) */}
-              <line x1={420} y1={280} x2={280} y2={410}
-                className="bridge-stay bridge-stay-l1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-                style={{ '--len': '191' } as React.CSSProperties} />
-              <line x1={420} y1={280} x2={200} y2={465}
-                className="bridge-stay bridge-stay-l2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-                style={{ '--len': '287' } as React.CSSProperties} />
-              <line x1={980} y1={280} x2={1120} y2={410}
-                className="bridge-stay bridge-stay-r1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-                style={{ '--len': '191' } as React.CSSProperties} />
-              <line x1={980} y1={280} x2={1200} y2={465}
-                className="bridge-stay bridge-stay-r2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
-                style={{ '--len': '287' } as React.CSSProperties} />
             </g>
+
+            {/* ── Glow sweep — subtle bright spot traveling L→R during draw ── */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              className="bridge-sweep"
+              stroke="rgba(255,255,255,0.5)" strokeWidth={3} strokeLinecap="round"
+              filter="url(#sweepGlow)"
+            />
+
+            {/* ── Towers — both simultaneous, static after ── */}
+            <line x1={420} y1={520} x2={420} y2={280}
+              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
+            <line x1={980} y1={520} x2={980} y2={280}
+              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
+
+            {/* ── Stay cables — draw outward, static after ── */}
+            <line x1={420} y1={280} x2={280} y2={410}
+              className="bridge-stay bridge-stay-l1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '191' } as React.CSSProperties} />
+            <line x1={420} y1={280} x2={200} y2={465}
+              className="bridge-stay bridge-stay-l2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '287' } as React.CSSProperties} />
+            <line x1={980} y1={280} x2={1120} y2={410}
+              className="bridge-stay bridge-stay-r1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '191' } as React.CSSProperties} />
+            <line x1={980} y1={280} x2={1200} y2={465}
+              className="bridge-stay bridge-stay-r2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '287' } as React.CSSProperties} />
 
             {/* ── Post-draw infinite light sweep ── */}
             <path d="M 0 520 Q 700 180, 1400 520"
