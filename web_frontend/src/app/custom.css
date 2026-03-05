@@ -519,47 +519,54 @@ a.nav-cta[href="/inquiry"]:hover {
   100% { stroke-dashoffset: -2200; opacity: 0; }
 }
 
-/* ── Towers — fade in when light passes ── */
-.bridge-active .bridge-tower-l {
-  animation: fadeReveal 0.6s ease-out 0.6s forwards;
+/* ── Towers — both appear simultaneously at 0s ── */
+.bridge-active .bridge-tower {
+  animation: towerReveal 0.6s ease-out forwards;
 }
-.bridge-active .bridge-tower-r {
-  animation: fadeReveal 0.6s ease-out 1.5s forwards;
-}
-@keyframes fadeReveal {
-  to { opacity: 0.45; }
+@keyframes towerReveal {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 0.45; }
 }
 
-/* ── Stay cables — draw outward from tower (fan-out, 0.7s each) ── */
+/* ── Stay cables — draw outward from tower, fan-out (0.8s each, starts 0.3s) ── */
 .bridge-stay {
   stroke-dasharray: var(--len);
   stroke-dashoffset: var(--len);
+  filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
 }
 .bridge-active .bridge-stay {
-  animation: stayDraw 0.7s ease-out forwards;
+  animation: stayDraw 0.8s ease-out forwards;
 }
 @keyframes stayDraw {
   to { stroke-dashoffset: 0; opacity: 0.12; }
 }
-.bridge-active .bridge-stay-l1 { animation-delay: 0.75s; }
-.bridge-active .bridge-stay-l2 { animation-delay: 0.80s; }
-.bridge-active .bridge-stay-r1 { animation-delay: 1.65s; }
-.bridge-active .bridge-stay-r2 { animation-delay: 1.70s; }
+.bridge-active .bridge-stay-l1 { animation-delay: 0.30s; }
+.bridge-active .bridge-stay-l2 { animation-delay: 0.35s; }
+.bridge-active .bridge-stay-r1 { animation-delay: 0.30s; }
+.bridge-active .bridge-stay-r2 { animation-delay: 0.35s; }
 
-/* ── Post-draw: breathing glow on arc group (4s cycle, starts at 2.8s) ── */
-.bridge-active .bridge-arc-group {
-  animation: arcBreath 4s ease-in-out 2.8s infinite;
+/* ── Completion flash (2.5s) + whole bridge breathing (3.1s+) ── */
+.bridge-active .bridge-all {
+  animation:
+    bridgeFlash 0.5s ease-out 2.5s,
+    bridgeBreath 4s ease-in-out 3.1s infinite;
 }
-@keyframes arcBreath {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.1)); }
-  50%      { filter: drop-shadow(0 0 12px rgba(255,255,255,0.3)); }
+@keyframes bridgeFlash {
+  0%   { filter: none; }
+  30%  { filter: drop-shadow(0 0 25px rgba(255,255,255,0.6)); }
+  100% { filter: none; }
+}
+@keyframes bridgeBreath {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(255,255,255,0.05)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(255,255,255,0.25)); }
 }
 
 /* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {
-  .bridge-arc, .bridge-tower, .bridge-stay, .bridge-sweep, .bridge-arc-group {
+  .bridge-arc, .bridge-tower, .bridge-stay, .bridge-sweep, .bridge-all {
     animation: none !important;
     filter: none !important;
+    transform: none !important;
   }
   .bridge-arc   { opacity: 0.35 !important; stroke-dashoffset: 0 !important; }
   .bridge-tower { opacity: 0.45 !important; }
