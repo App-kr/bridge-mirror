@@ -22,6 +22,7 @@ import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBa
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
+import { useDragReorder, type DragState } from '@/hooks/useDragReorder'
 import {
   Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
   Check, Plus,
@@ -54,13 +55,19 @@ interface LayoutProps {
   onToggleSelect?: (id: number) => void
   onEdit?: (post: Post) => void
   onDelete?: (postId: number) => void
-  onMoveUp?: (postId: number) => void
-  onMoveDown?: (postId: number) => void
+  onMoveUp?: (index: number) => void
+  onMoveDown?: (index: number) => void
   onNewPost?: () => void
   onFaqEdit?: (index: number) => void
   onFaqAdd?: () => void
   onFaqDelete?: (index: number) => void
   onFaqReorder?: (index: number, direction: 'up' | 'down') => void
+  // Drag reorder
+  dragState?: DragState
+  onDragStart?: (index: number) => void
+  onDragOver?: (e: React.DragEvent, index: number) => void
+  onDrop?: (e: React.DragEvent, index: number) => void
+  onDragEnd?: () => void
 }
 
 /** Strip markdown syntax for preview text */
@@ -105,20 +112,39 @@ function AdminCheckbox({ checked, onChange }: { checked: boolean; onChange: () =
   )
 }
 
-function SortHandle({ onMoveUp, onMoveDown }: { onMoveUp: () => void; onMoveDown: () => void }) {
+function SortHandle({ onMoveUp, onMoveDown, draggable, onDragStart, isFirst, isLast }: {
+  onMoveUp: () => void; onMoveDown: () => void
+  draggable?: boolean; onDragStart?: () => void
+  isFirst?: boolean; isLast?: boolean
+}) {
   return (
     <span className="inline-flex items-center shrink-0"
       onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
-      <GripVertical size={14} className="text-zinc-400" />
+      <span
+        draggable={draggable}
+        onDragStart={(e) => {
+          if (!onDragStart) return
+          e.stopPropagation()
+          onDragStart()
+        }}
+        className={`cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-zinc-700/50 transition-colors ${draggable ? '' : 'opacity-50'}`}
+        title="Drag to reorder"
+      >
+        <GripVertical size={14} className="text-zinc-400" />
+      </span>
       <span className="flex flex-col">
-        <button type="button" onClick={onMoveUp}
-          className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Pin (top)">
-          <ChevronUp size={12} />
-        </button>
-        <button type="button" onClick={onMoveDown}
-          className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Unpin">
-          <ChevronDown size={12} />
-        </button>
+        {!isFirst && (
+          <button type="button" onClick={onMoveUp}
+            className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Move up">
+            <ChevronUp size={12} />
+          </button>
+        )}
+        {!isLast && (
+          <button type="button" onClick={onMoveDown}
+            className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Move down">
+            <ChevronDown size={12} />
+          </button>
+        )}
       </span>
     </span>
   )
@@ -461,23 +487,22 @@ export default function BoardPage() {
     } catch { /* noop */ }
   }, [board, signedFetch, refreshPosts])
 
-  const handleMoveUp = useCallback(async (postId: number) => {
-    try {
-      await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
-        method: 'PATCH', body: JSON.stringify({ pinned: 1 }),
-      })
-      refreshPosts()
-    } catch { /* noop */ }
-  }, [signedFetch, refreshPosts])
+  // Post drag reorder (local state only — no sort_order API for community_posts)
+  const postDrag = useDragReorder<Post>(posts)
 
-  const handleMoveDown = useCallback(async (postId: number) => {
-    try {
-      await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
-        method: 'PATCH', body: JSON.stringify({ pinned: 0 }),
-      })
-      refreshPosts()
-    } catch { /* noop */ }
-  }, [signedFetch, refreshPosts])
+  // Sync posts from API into drag hook
+  useEffect(() => {
+    postDrag.setItems(posts)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts])
+
+  const handleMoveUp = useCallback((index: number) => {
+    postDrag.handleMoveUp(index)
+  }, [postDrag])
+
+  const handleMoveDown = useCallback((index: number) => {
+    postDrag.handleMoveDown(index)
+  }, [postDrag])
 
   // Selection handlers
   const toggleSelect = useCallback((id: number) => {
@@ -632,8 +657,10 @@ export default function BoardPage() {
     )
   }
 
+  const displayPosts = editMode ? postDrag.items : posts
+
   const props: LayoutProps = {
-    config, posts, total, board, faqItems,
+    config, posts: displayPosts, total, board, faqItems,
     editMode,
     selectedIds,
     onToggleSelect: toggleSelect,
@@ -646,6 +673,11 @@ export default function BoardPage() {
     onFaqAdd: handleFaqItemAdd,
     onFaqDelete: handleFaqItemDelete,
     onFaqReorder: handleFaqItemReorder,
+    dragState: postDrag.dragState,
+    onDragStart: postDrag.handleDragStart,
+    onDragOver: postDrag.handleDragOver,
+    onDrop: postDrag.handleDrop,
+    onDragEnd: postDrag.handleDragEnd,
   }
 
   const Layout = (() => {
@@ -690,7 +722,7 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
 
   const faqConfig = board === 'support'
@@ -769,11 +801,22 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
           <p className="text-[#86868b] text-center py-16">No posts yet.</p>
         ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible">
-            {regularPosts.map((p) => (
+            {regularPosts.map((p, i) => (
               <motion.div key={p.id} variants={fadeInUp}
-                className={editMode ? 'flex items-center gap-1.5' : ''}>
+                className={editMode ? 'flex items-center gap-1.5' : ''}
+                style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
+                onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
+                onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+              >
+                {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
+                  <div className="w-full h-0.5 bg-blue-500 rounded-full -mb-1" />
+                )}
                 {editMode && onMoveUp && onMoveDown && (
-                  <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                  <SortHandle
+                    onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
+                    draggable isFirst={i === 0} isLast={i === regularPosts.length - 1}
+                    onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                  />
                 )}
                 {editMode && onToggleSelect && (
                   <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
@@ -782,6 +825,7 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                   href={`/community/${board}/${p.id}`}
                   className={`board-list-item group ${editMode ? 'flex-1' : ''}`}
                   style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
+                  onDragEnd={editMode ? onDragEnd : undefined}
                 >
                   <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
                   {editMode && onEdit && onDelete ? (
@@ -887,7 +931,7 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
 // ══════════════════════════════════════════════════════════════════════════════
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -1030,8 +1074,23 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
               variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
             >
               {aboutPosts.map((p, i) => (
-                <motion.div key={p.id} variants={scaleIn}>
+                <motion.div key={p.id} variants={scaleIn}
+                  style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
+                  onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
+                  onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+                  onDragEnd={editMode ? onDragEnd : undefined}
+                >
+                  {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
+                    <div className="w-full h-0.5 bg-blue-500 rounded-full mb-1" />
+                  )}
                   <div className={editMode ? 'flex items-center gap-1.5' : ''}>
+                    {editMode && onMoveUp && onMoveDown && (
+                      <SortHandle
+                        onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
+                        draggable isFirst={i === 0} isLast={i === aboutPosts.length - 1}
+                        onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                      />
+                    )}
                     {editMode && onToggleSelect && (
                       <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                     )}
@@ -1174,13 +1233,21 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => (
-          <motion.div key={p.id} variants={fadeInUp}>
+          <motion.div key={p.id} variants={fadeInUp}
+            style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
+            onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
+            onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+            onDragEnd={editMode ? onDragEnd : undefined}
+          >
+            {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
+              <div className="w-full h-0.5 bg-blue-500 rounded-full mb-1" />
+            )}
             <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
               <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
               <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
@@ -1194,7 +1261,11 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
                     <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                   )}
                   {onMoveUp && onMoveDown && (
-                    <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                    <SortHandle
+                      onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
+                      draggable isFirst={i === 0} isLast={i === posts.length - 1}
+                      onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                    />
                   )}
                   <span className="flex-1" />
                   {onEdit && onDelete && (
@@ -1213,7 +1284,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
@@ -1224,15 +1295,28 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
 
           return (
             <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}
-              className={editMode ? 'flex items-center gap-1.5' : ''}>
+              className={editMode ? 'flex items-center gap-1.5' : ''}
+              style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
+              onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
+              onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+            >
+              {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
+                <div className="w-full h-0.5 bg-blue-500 rounded-full -mb-1" />
+              )}
               {editMode && onMoveUp && onMoveDown && (
-                <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                <SortHandle
+                  onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
+                  draggable isFirst={i === 0} isLast={i === posts.length - 1}
+                  onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                />
               )}
               {editMode && onToggleSelect && (
                 <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
               )}
               <Link href={`/community/${board}/${p.id}`}
-                className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}>
+                className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}
+                onDragEnd={editMode ? onDragEnd : undefined}
+              >
                 <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
                   <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
                 </div>
@@ -1264,7 +1348,7 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
 // ══════════════════════════════════════════════════════════════════════════════
 // TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════════════════
-function TestimonialLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function TestimonialLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
@@ -1272,7 +1356,15 @@ function TestimonialLayout({ config, posts, board, editMode, selectedIds, onTogg
         {posts.map((p, i) => {
           const name = p.title.split('—')[0]?.trim() ?? p.title
           return (
-            <motion.div key={p.id} variants={fadeInUp}>
+            <motion.div key={p.id} variants={fadeInUp}
+              style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
+              onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
+              onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+              onDragEnd={editMode ? onDragEnd : undefined}
+            >
+              {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
+                <div className="w-full h-0.5 bg-blue-500 rounded-full mb-1" />
+              )}
               <Link href={`/community/${board}/${p.id}`} className="testimonial-card group block">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0"
@@ -1296,7 +1388,11 @@ function TestimonialLayout({ config, posts, board, editMode, selectedIds, onTogg
                       <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                     )}
                     {onMoveUp && onMoveDown && (
-                      <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                      <SortHandle
+                        onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
+                        draggable isFirst={i === 0} isLast={i === posts.length - 1}
+                        onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                      />
                     )}
                     <span className="flex-1" />
                     {onEdit && onDelete && (
