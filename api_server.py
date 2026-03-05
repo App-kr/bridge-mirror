@@ -422,6 +422,12 @@ class CandidateApply(BaseModel):
     kakaotalk:               Optional[str] = None   # KakaoTalk [ENCRYPT]
     mobile_phone:            Optional[str] = None   # Mobile Phone [ENCRYPT]
 
+    # ── 수업 대상 & 서류 ─────────────────────────────────────────────────────
+    target:                  Optional[str] = None   # Target (Kindy, Elem 등)
+    target_age:              Optional[str] = None   # Preferred age group
+    korean_criminal_record:  Optional[str] = None   # 한국 내 범죄기록
+    documents:               Optional[str] = None   # 서류 준비 상태
+
     # ── 동의 ───────────────────────────────────────────────────────────────
     agreement:               Optional[str] = None   # Agreement
     facts:                   Optional[str] = None   # Facts
@@ -691,6 +697,31 @@ _CANDIDATE_ENCRYPT = {
     "criminal_record_check", # 범죄경력조회 [고위험]
 }
 
+# ── CandidateApply 모델 → DB 컬럼 매핑 ───────────────────────────────────────
+_APPLY_FIELD_MAP = {
+    "education":                "education_level",
+    "marital_status":           "married",
+    "personal_considerations":  "personal_consideration",
+    "agreement":                "consent",
+    "facts":                    "fact_check",
+    "admin_notes":              "notes",
+}
+
+# payload에서 제거할 키 (DB 컬럼으로 직접 INSERT 불가)
+_APPLY_SKIP_FIELDS = {"file_urls", "apply_token"}
+
+
+def _map_apply_payload(payload: dict) -> dict:
+    """CandidateApply 모델 필드명 → candidates DB 컬럼명 변환"""
+    mapped = {}
+    for k, v in payload.items():
+        if k in _APPLY_SKIP_FIELDS:
+            continue
+        db_key = _APPLY_FIELD_MAP.get(k, k)
+        mapped[db_key] = v
+    mapped["source_file"] = "web_form"
+    return mapped
+
 
 @app.post("/api/apply", status_code=status.HTTP_201_CREATED, tags=["candidates"])
 async def apply(request: Request, body: CandidateApply):
@@ -739,8 +770,9 @@ async def apply(request: Request, body: CandidateApply):
 
             # ── UPDATE (2차 누적)
             if existing_id:
-                sets = ", ".join(f"{k} = ?" for k in payload if k != "candidate_id")
-                vals = [v for k, v in payload.items() if k != "candidate_id"]
+                db_payload = _map_apply_payload(payload)
+                sets = ", ".join(f"{k} = ?" for k in db_payload if k != "candidate_id")
+                vals = [v for k, v in db_payload.items() if k != "candidate_id"]
                 vals.append(existing_id)
                 conn.execute(f"UPDATE candidates SET {sets} WHERE candidate_id = ?", vals)
                 conn.commit()
@@ -758,11 +790,12 @@ async def apply(request: Request, body: CandidateApply):
             payload["status"]     = "Active"
             payload["created_at"] = now_iso
 
-            cols = ", ".join(payload.keys())
-            placeholders = ", ".join("?" * len(payload))
+            db_payload = _map_apply_payload(payload)
+            cols = ", ".join(db_payload.keys())
+            placeholders = ", ".join("?" * len(db_payload))
             conn.execute(
                 f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
-                list(payload.values()),
+                list(db_payload.values()),
             )
             conn.commit()
 

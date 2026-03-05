@@ -1,14 +1,14 @@
 # Bridge Data Pipeline 현황 (2026-03-05)
 
 ## 데이터 흐름
-Google Form → Sheet "Form" 시트 → Apps Script → "New" 시트
-→ google_sheets_puller.py (5분 폴링) → intake CSV
-→ build_candidates_db.py (수동) → master.db candidates
+Google Form -> Sheet "Form" 시트 -> Apps Script -> "New" 시트
+-> google_sheets_puller.py (5분 폴링) -> intake CSV
+-> build_candidates_db.py (수동) -> master.db candidates
 
 ## 적재 현황
-- Form → New → DB: 42건 Active (P0 오염 복구 완료)
-- Source → DB: 3,015건 Inactive (OLD CSV 적재)
-- 구인자: 953건 (149건 폼 + 804건 memo)
+- Form -> New -> DB: 42건 Active (P0 오염 복구 완료)
+- Source -> DB: 3,015건 Inactive (OLD CSV 적재)
+- 구인자: 953건 (149건 폼 + 804건 memo_extract)
 - Jobs: 1,066건
 - 총 candidates: 3,057건
 
@@ -17,18 +17,42 @@ Google Form → Sheet "Form" 시트 → Apps Script → "New" 시트
 - P1: OLD/NEW CSV 자동 분기
 - P2: 14개 확장 필드 매핑
 
-## 향후 개선 (급하지 않음)
-1. build_candidates_db.py 자동 실행 (puller 후 자동 트리거)
-2. 804건 memo_extract에서 salary/housing/schedule 구조화 파싱
-3. jobs 테이블 빈값 보강 (class_size 11%, vacation 17%)
-4. Source 시트 실시간 동기화 (현재는 일괄 CSV로 충분)
-5. /api/apply 웹폼 접수 → 즉시 DB INSERT (이미 구현됨, 정상)
+## 업체관리 DB 전면 정비 분석 (2026-03-05)
+
+### client_inquiries 데이터 그룹
+
+| 그룹 | 건수 | source_file | 특징 |
+|------|------|------------|------|
+| Website 폼 | 149 | BRIDGE_clients_data*.csv | 상세 필드 충실 (20+ 필드) |
+| memo 추출 | 804 | memo_extract | 기본만 (school, location, phone, email, memo) |
+
+### memo_extract 804건 구조화 필드 현황 (모두 0%)
+- start_date, teaching_age, salary_raw: 0/804
+- housing_type, vacation, schedule, working_hours: 0/804
+- contact_name: 217/804 (27%)만 존재
+
+### jobs 테이블에서 보강 가능 (792/804 매칭됨!)
+- 매칭 키: client_inquiries.memo = jobs.internal_notes
+- teaching_age: 792/792 (100%)
+- salary_raw: 791/792 (100%)
+- working_hours: 790/792 (100%)
+- start_date: 758/792 (96%)
+- benefits: 780/792 (98%)
+- housing: 322/792 (41%)
+- vacation: 83/792 (10%)
+
+### memo 텍스트 패턴 분석 (804건)
+- 급여 패턴 (2.3x, 270~ 등): 599건 (75%)
+- 숙소 언급: 278건 (35%)
+- 인원수 (N명): 261건 (32%)
+- 직책 (원장/부원장 등): 284건 (35%)
+- 식사 언급: 54건 (7%)
 
 ## DB 빈값 요약
 
 ### client_inquiries (953건)
 - 충실(90%+): school_name, email, phone, location, memo
-- 빈값 심각(~15%): start_date, teaching_age, salary_raw, housing 등 → 804건 memo_extract 그룹
+- 빈값 심각(~15%): start_date, teaching_age, salary_raw 등 -> 804건 memo_extract
 - 미사용(0%): gmail_message_id, raw_email_body, parsed_data, notes, assigned_to
 
 ### candidates (3,057건)
@@ -40,6 +64,12 @@ Google Form → Sheet "Form" 시트 → Apps Script → "New" 시트
 ### jobs (1,066건)
 - 대부분 충실(90%+)
 - 빈값 주의: district(28%), class_size(11%), vacation(17%), housing(46%)
+
+## 향후 작업
+1. **P3: jobs->client_inquiries 필드 보강** (792건, 즉시 가능)
+2. P4: memo 텍스트에서 급여/숙소/인원 구조화 파싱
+3. P5: build_candidates_db.py 자동 실행
+4. P6: jobs 빈값 보강 (class_size, vacation)
 
 ## 주의
 - build_candidates_db.py 실행 시 NEW CSV는 자동 감지됨

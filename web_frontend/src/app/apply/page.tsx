@@ -130,6 +130,7 @@ const RELIGION = [
 
 const HEALTH = ['I have not','I have a condition','Prefer not to say']
 const CRC    = ['Clean record','I have a record','Prefer not to answer']
+const KR_CRC = ['Clean record','I have a record','Not applicable (never lived in Korea)','Prefer not to answer']
 
 const STEP_LABELS = ['Basic Info', 'Preferences', 'Contact & Agreement']
 
@@ -397,7 +398,7 @@ const INIT = {
   personal_considerations: '', religion: '',
 
   /* Step 3 — Contact & Agreement */
-  health_info: '', criminal_record_check: '',
+  health_info: '', criminal_record_check: '', korean_criminal_record: '',
   interview_time: '', kakaotalk: '', mobile_phone: '',
   agreement: '', facts: '',
 }
@@ -980,11 +981,20 @@ export default function ApplyPage() {
               </div>
               <div>
                 <Label required>Criminal Record Check</Label>
-                <Desc text="Do you have any criminal record in your home country or in Korea? Used only for visa eligibility and standard screening." />
+                <Desc text="Do you have any criminal record in your home country? Used only for visa eligibility and standard screening." />
                 <SingleTog
                   value={form.criminal_record_check}
                   onChange={(v) => setForm((p) => ({ ...p, criminal_record_check: v }))}
                   options={CRC}
+                />
+              </div>
+              <div>
+                <Label required>Criminal Record in Korea</Label>
+                <Desc text="Have you ever had a criminal record while residing in Korea?" />
+                <SingleTog
+                  value={form.korean_criminal_record}
+                  onChange={(v) => setForm((p) => ({ ...p, korean_criminal_record: v }))}
+                  options={KR_CRC}
                 />
               </div>
             </section>
