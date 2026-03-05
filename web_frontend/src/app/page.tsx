@@ -22,22 +22,12 @@ import {
 import { useEditMode } from '@/components/EditModeBar'
 import { RefreshCw } from 'lucide-react'
 import { seededShuffle } from '@/lib/seededShuffle'
+import { TESTIMONIALS, type TestimonialEntry } from '@/data/testimonials'
 import type { PublicJob, AgeGroup } from '@/types'
 const API = ''
 
-// ── Name pool for testimonials (rotates monthly) ──
-const NAME_POOL = [
-  'Sarah M.', 'James K.', 'Emily R.', 'Michael T.', 'Jessica L.',
-  'David H.', 'Amanda W.', 'Chris P.', 'Rachel B.', 'Tom S.',
-]
-
-// ── Fallback testimonials ──
-const FALLBACK_TESTIMONIALS = [
-  { text: 'BRIDGE made the entire process seamless. From my first inquiry to settling into my apartment, I never felt lost or unsupported.', stars: 5 },
-  { text: 'The team was incredibly responsive and helped me find a position that perfectly matched my preferences. Highly recommend!', stars: 5 },
-  { text: 'I was nervous about moving to Korea, but BRIDGE handled everything — visa, housing, school matching. Best decision I ever made.', stars: 5 },
-  { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 5 },
-]
+// ── Fallback testimonials (subset of static pool) ──
+const FALLBACK_TESTIMONIALS: TestimonialEntry[] = TESTIMONIALS.slice(0, 4)
 
 // ── Partner lists (fallback when API fails) ──
 const FALLBACK_ACADEMIES = [
@@ -77,11 +67,6 @@ function getOverrideSeed(storageKey: string): number {
   return override ? parseInt(override, 10) : base
 }
 
-// ── Get deterministic name — rotates with seed ──
-function getMonthlyName(index: number, seed?: number): string {
-  const offset = seed !== undefined ? (seed % NAME_POOL.length) : new Date().getMonth()
-  return NAME_POOL[(index + offset) % NAME_POOL.length]
-}
 
 // ── Fallback featured jobs (when API fails) ──
 const FALLBACK_JOBS: PublicJob[] = [
@@ -90,18 +75,6 @@ const FALLBACK_JOBS: PublicJob[] = [
   { job_id: 'BR-2403', location: 'Incheon', teaching_age: ['pre_k', 'kindergarten'] as AgeGroup[], working_hours: 'Mon-Fri 9-5', monthly_salary: '2.3M KRW', housing: 'Housing + Insurance', is_hot: false, starting_date: 'ASAP' } as PublicJob,
   { job_id: 'BR-2404', location: 'Daegu', teaching_age: ['elementary', 'middle'] as AgeGroup[], working_hours: 'Mon-Fri 10-6', monthly_salary: '2.6M KRW', housing: 'Housing + Bonus', is_hot: false, starting_date: 'ASAP' } as PublicJob,
 ]
-
-// ── Strip markdown for preview ──
-function stripMd(text: string, max = 140): string {
-  return text
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\*{1,3}/g, '')
-    .replace(/>\s*/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\n+/g, ' ')
-    .trim()
-    .slice(0, max)
-}
 
 // ── Format teaching age groups to short labels ──
 const AGE_LABELS: Record<AgeGroup, string> = {
@@ -133,6 +106,7 @@ interface Testimonial {
   text: string
   stars: number
   name: string
+  country: string
 }
 
 
@@ -155,8 +129,7 @@ export default function HomePage() {
   const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
   const editMode = useEditMode()
 
-  // Raw data refs for re-shuffling
-  const rawTestimonialPosts = useRef<Array<{ preview?: string }>>([])
+  // Raw data ref for job re-shuffling
   const rawFetchedJobs = useRef<PublicJob[]>([])
 
   // Animation keys for AnimatePresence
@@ -181,28 +154,16 @@ export default function HomePage() {
   const heroScale = useTransform(heroProgress, [0, 0.6], [1, 0.95])
   const arrowOpacity = useTransform(heroProgress, [0, 0.15], [1, 0])
 
-  // ── Fetch testimonials (monthly-seeded shuffle) ──
+  // ── Testimonials from static pool (monthly-seeded shuffle) ──
   useEffect(() => {
-    fetch(`${API}/api/community/testimonials?limit=10`)
-      .then(r => r.json())
-      .then(d => {
-        const posts: Array<{ preview?: string }> = d?.data?.posts ?? []
-        if (posts.length > 0) {
-          rawTestimonialPosts.current = posts
-          const seed = getOverrideSeed('bridge_featured_testimonials_override')
-          const shuffled = seededShuffle(posts, seed).slice(0, 4)
-          setTestimonials(shuffled.map((p, i) => ({
-            text: stripMd(p.preview ?? '', 140),
-            stars: 5,
-            name: getMonthlyName(i, seed),
-          })))
-        } else {
-          setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
-        }
-      })
-      .catch(() => {
-        setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
-      })
+    const seed = getOverrideSeed('bridge_featured_testimonials_override')
+    const shuffled = seededShuffle(TESTIMONIALS, seed).slice(0, 6)
+    setTestimonials(shuffled.map(t => ({
+      text: t.text,
+      stars: t.stars,
+      name: t.name,
+      country: t.country,
+    })))
   }, [])
 
   // ── Fetch featured jobs (monthly-seeded shuffle) ──
@@ -244,14 +205,14 @@ export default function HomePage() {
   }, [])
 
   const handleRefreshTestimonials = useCallback(() => {
-    if (rawTestimonialPosts.current.length === 0) return
     const newSeed = Math.floor(Math.random() * 2147483647)
     localStorage.setItem('bridge_featured_testimonials_override', String(newSeed))
-    const shuffled = seededShuffle(rawTestimonialPosts.current, newSeed).slice(0, 4)
-    setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
-      text: stripMd(p.preview ?? '', 140),
-      stars: 5,
-      name: getMonthlyName(i, newSeed),
+    const shuffled = seededShuffle(TESTIMONIALS, newSeed).slice(0, 6)
+    setTestimonials(shuffled.map(t => ({
+      text: t.text,
+      stars: t.stars,
+      name: t.name,
+      country: t.country,
     })))
     setTestimonialKey(prev => prev + 1)
     showToast('새로운 항목으로 배치되었습니다')
@@ -436,34 +397,36 @@ export default function HomePage() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={`testimonials-${testimonialKey}`}
-                className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                {testimonials.slice(0, 4).map((t, i) => (
+                {testimonials.slice(0, 6).map((t, i) => (
                   <motion.div
                     key={i}
-                    className="testimonial-glass rounded-2xl p-6 flex flex-col justify-between min-h-[220px]
+                    className="testimonial-glass rounded-2xl p-6 flex flex-col justify-between min-h-[260px]
                                hover:bg-white/[0.08] hover:-translate-y-1 transition-all duration-300"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                    transition={{ duration: 0.4, delay: i * 0.08 }}
                   >
                     <div>
-                      <span className="text-[#2997ff]/40 text-5xl font-serif leading-none select-none block mb-3">&ldquo;</span>
-                      <p className="text-[#d1d1d6] text-sm leading-relaxed line-clamp-3">
+                      <span className="text-[#2997ff]/40 text-4xl font-serif leading-none select-none block mb-3">&ldquo;</span>
+                      <p className="text-[#d1d1d6] text-sm leading-relaxed line-clamp-5">
                         {t.text}
                       </p>
                     </div>
-                    <div className="mt-5 pt-4 border-t border-white/[0.06]">
-                      <div className="flex gap-0.5 mb-1.5">
+                    <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                      <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, s) => (
                           <StarIcon key={s} filled={s < t.stars} />
                         ))}
                       </div>
-                      <p className="text-[#86868b] text-xs font-semibold tracking-wide">{t.name}</p>
+                      <p className="text-[#86868b] text-xs font-semibold tracking-wide">
+                        {t.name} · {t.country}
+                      </p>
                     </div>
                   </motion.div>
                 ))}
