@@ -237,6 +237,34 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
+        {/* ── Twinkling stars ── */}
+        {[
+          { top: '12%', left: '8%',  size: 3,   delay: 0,   dur: 3.2 },
+          { top: '18%', left: '78%', size: 2,   delay: 1.1, dur: 2.8 },
+          { top: '35%', left: '92%', size: 4,   delay: 0.5, dur: 3.8 },
+          { top: '8%',  left: '45%', size: 2.5, delay: 2.0, dur: 2.5 },
+          { top: '55%', left: '15%', size: 3.5, delay: 0.8, dur: 3.5 },
+          { top: '25%', left: '62%', size: 2,   delay: 1.5, dur: 3.0 },
+          { top: '42%', left: '35%', size: 3,   delay: 2.3, dur: 2.6 },
+        ].map((star, i) => (
+          <div
+            key={`star-${i}`}
+            className="hero-star"
+            style={{
+              position: 'absolute',
+              top: star.top,
+              left: star.left,
+              width: star.size,
+              height: star.size,
+              borderRadius: '50%',
+              background: 'white',
+              zIndex: 1,
+              animationDelay: `${star.delay}s`,
+              animationDuration: `${star.dur}s`,
+            }}
+          />
+        ))}
+
         {/* ── Suspension bridge — light sweep reveal ── */}
         <div className={showBridge ? 'bridge-active' : ''} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
           <svg
