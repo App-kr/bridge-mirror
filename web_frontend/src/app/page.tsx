@@ -371,7 +371,7 @@ export default function HomePage() {
           </motion.h1>
 
           <p
-            className={`text-xl sm:text-2xl md:text-3xl font-light tracking-tight tagline-shimmer${showTagline ? ' tagline-shimmer-go' : ''}`}
+            className={`text-xl sm:text-2xl md:text-3xl font-light tracking-tight tagline-glow${showTagline ? ' tagline-glow-on' : ''}`}
           >
             A career that changes your life
           </p>
