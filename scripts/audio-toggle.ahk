@@ -284,6 +284,7 @@ OpenEQ() {
         global gTestBackup
         fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
         mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+        testWav := "Q:\Claudework\bridge base\scripts\test-sweep.wav"
 
         ; Save current config for revert
         try gTestBackup := FileRead(fp)
@@ -304,9 +305,15 @@ OpenEQ() {
         WriteConfig(fp, txt)
         WriteConfig(mc, "Include: footstep-boost.txt")
 
-        ShowOverlay("🔊", "TESTING", "5초 후 원래대로", "0x4488FF")
+        ; Wait for APO to reload config
+        Sleep(400)
 
-        ; Auto-revert after 5 seconds
+        ; Play test sweep tone (40Hz~12kHz) so user hears the EQ effect
+        try SoundPlay(testWav)
+
+        ShowOverlay("🔊", "TESTING", "스윕 재생 중... 4초 후 복원", "0x4488FF")
+
+        ; Auto-revert after 5 seconds (tone is 4s + 1s buffer)
         SetTimer(RevertTest, -5000)
     }
 
