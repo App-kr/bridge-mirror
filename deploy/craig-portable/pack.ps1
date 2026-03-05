@@ -26,6 +26,14 @@ Write-Host "  [OK] craigslist_auto_rpa.py" -ForegroundColor Green
 Copy-Item "$ProjectRoot\tools\rpa_overlay.py" "$OutDir\rpa_overlay.py" -Force
 Write-Host "  [OK] rpa_overlay.py" -ForegroundColor Green
 
+# 설치 가이드 복사
+$guideFile = Join-Path $PackDir ([char[]]@(49352,80,67,95,49444,52824,44032,51060,46300,46041,53944,53944) -join '')
+if (-not (Test-Path $guideFile)) { $guideFile = Get-ChildItem $PackDir -Filter "*설치가이드*" | Select-Object -First 1 -ExpandProperty FullName }
+if ($guideFile -and (Test-Path $guideFile)) {
+    Copy-Item $guideFile (Join-Path $OutDir (Split-Path $guideFile -Leaf)) -Force
+    Write-Host "  [OK] $(Split-Path $guideFile -Leaf)" -ForegroundColor Green
+}
+
 # DB: PII 테이블 제거한 안전 버전 생성
 if (Test-Path "$ProjectRoot\master.db") {
     Copy-Item "$ProjectRoot\master.db" "$OutDir\master_safe.db" -Force
