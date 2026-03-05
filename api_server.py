@@ -817,7 +817,7 @@ async def apply(request: Request, body: CandidateApply):
     except Exception as e:
         import logging as _log_apply
         _log_apply.getLogger("bridge.api").error("apply 접수 실패: %s", e, exc_info=True)
-        err(f"접수 실패: {type(e).__name__}: {e}", 500)
+        err("접수에 실패했습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
 @app.post("/api/inquiry", status_code=status.HTTP_201_CREATED, tags=["clients"])
