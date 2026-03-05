@@ -3373,6 +3373,219 @@ async def admin_create_job_from_inquiry(inquiry_id: int, request: Request):
         conn.close()
 
 
+# ── Admin: Jobs v2 (BRJ ID 시스템) ───────────────────────────────────────────
+
+_JOB_REGION_MAP = {
+    "Seoul": "SE", "서울": "SE", "Busan": "BS", "부산": "BS",
+    "Daegu": "DG", "대구": "DG", "Incheon": "IC", "인천": "IC",
+    "Gwangju": "GJ", "광주": "GJ", "Daejeon": "DJ", "대전": "DJ",
+    "Ulsan": "US", "울산": "US", "Sejong": "SJ", "세종": "SJ",
+    "Gyeonggi": "GG", "경기": "GG", "Gangwon": "GW", "강원": "GW",
+    "Chungbuk": "CB", "충북": "CB", "Chungnam": "CN", "충남": "CN",
+    "Jeonbuk": "JB", "전북": "JB", "Jeonnam": "JN", "전남": "JN",
+    "Gyeongbuk": "KB", "경북": "KB", "Gyeongnam": "KN", "경남": "KN",
+    "Jeju": "JJ", "제주": "JJ",
+    "Suwon": "GG", "Seongnam": "GG", "Yongin": "GG", "Goyang": "GG",
+    "Bucheon": "GG", "Anyang": "GG", "Hwaseong": "GG", "Pyeongtaek": "GG",
+    "Cheonan": "CN", "Cheongju": "CB", "Jeonju": "JB",
+    "Pohang": "KB", "Changwon": "KN", "Gimhae": "KN",
+}
+
+_JOB_REGION_NAMES = {
+    "SE": "서울", "BS": "부산", "DG": "대구", "IC": "인천",
+    "GJ": "광주", "DJ": "대전", "US": "울산", "SJ": "세종",
+    "GG": "경기", "GW": "강원", "CB": "충북", "CN": "충남",
+    "JB": "전북", "JN": "전남", "KB": "경북", "KN": "경남",
+    "JJ": "제주", "XX": "기타",
+}
+
+
+def _detect_region(text: str) -> str:
+    if not text:
+        return "XX"
+    for key, code in _JOB_REGION_MAP.items():
+        if key.lower() in text.lower():
+            return code
+    return "XX"
+
+
+def _next_brj_id(conn, region_code: str) -> str:
+    yymm = datetime.now(timezone.utc).strftime("%y%m")
+    prefix = f"BRJ-{region_code}-{yymm}-"
+    row = conn.execute(
+        "SELECT brj_id FROM jobs WHERE brj_id LIKE ? ORDER BY brj_id DESC LIMIT 1",
+        (f"{prefix}%",),
+    ).fetchone()
+    seq = int(row[0].split("-")[-1]) + 1 if row else 1
+    return f"{prefix}{seq:03d}"
+
+
+_JOB_WRITABLE = {
+    "city", "district", "location", "teaching_age", "class_size",
+    "working_hours", "daily_hours", "start_date", "salary_raw",
+    "salary_min", "salary_max", "salary_krw", "salary_negotiable",
+    "vacation", "vacation_days", "housing", "housing_type", "housing_detail",
+    "benefits", "native_count", "teach_hrs_week", "teaching_hours_weekly",
+    "is_hot", "is_part_time", "status",
+    "enc_employer_name", "enc_contact_name", "enc_contact_phone",
+    "enc_contact_email", "enc_contact_kakao", "employer_display_name",
+    "visa_sponsorship", "f_visa_welcome", "kyopo_welcome",
+    "degree_requirement", "korea_resident_only",
+    "raw_text", "raw_source", "parse_confidence", "parse_warnings",
+    "internal_notes", "recruiter_memo",
+}
+
+
+@app.get("/api/admin/jobs/v2", tags=["admin"])
+async def admin_list_jobs_v2(
+    request: Request,
+    status: Optional[str] = None,
+    region: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """채용공고 v2 전체 목록 (BRJ ID + 관리자 필드 포함)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        where = ["is_deleted = 0"]
+        params: list[Any] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if region:
+            where.append("region = ?")
+            params.append(region)
+        if search:
+            s = f"%{search.strip()[:50]}%"
+            where.append(
+                "(brj_id LIKE ? OR job_code LIKE ? OR city LIKE ? OR location LIKE ? OR employer_display_name LIKE ?)"
+            )
+            params.extend([s, s, s, s, s])
+        w = " AND ".join(where)
+        total = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {w}", params).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT * FROM jobs WHERE {w} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        data = []
+        for r in rows:
+            d = dict(r)
+            for k in list(d.keys()):
+                if isinstance(d[k], bytes):
+                    d[k] = None
+            data.append(d)
+        return ok(data={"jobs": data, "total": total})
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/jobs/v2/{brj_id}", tags=["admin"])
+async def admin_get_job_v2(brj_id: str, request: Request):
+    """채용공고 상세 조회 (BRJ ID)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE brj_id = ? AND is_deleted = 0", (brj_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Job not found")
+        d = dict(row)
+        for k in list(d.keys()):
+            if isinstance(d[k], bytes):
+                d[k] = None
+        return ok(data=d)
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/jobs/v2", status_code=201, tags=["admin"])
+async def admin_create_job_v2(request: Request, body: dict):
+    """새 채용공고 등록 (BRJ ID 자동 생성)."""
+    _check_admin(request)
+    if not _rate_ok(_ip_hash(request)):
+        raise HTTPException(429, "잠시 후 다시 시도해주세요.")
+    record = {k: v for k, v in body.items() if k in _JOB_WRITABLE and v is not None}
+    region = body.get("region") or _detect_region(
+        record.get("city", "") or record.get("location", "")
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        brj_id = _next_brj_id(conn, region)
+        max_row = conn.execute("SELECT MAX(id) FROM jobs").fetchone()
+        job_code = f"Job.{(max_row[0] or 0) + 1001}"
+        record.update({
+            "brj_id": brj_id, "job_code": job_code,
+            "region": region, "region_name": _JOB_REGION_NAMES.get(region, "기타"),
+            "status": record.get("status", "open"),
+            "is_deleted": 0, "is_hot": record.get("is_hot", 0),
+            "created_at": now, "seq": 1,
+        })
+        cols = ", ".join(record.keys())
+        ph = ", ".join("?" for _ in record)
+        conn.execute(f"INSERT INTO jobs ({cols}) VALUES ({ph})", list(record.values()))
+        conn.commit()
+        _maybe_auto_backup()
+        return ok(data={"brj_id": brj_id, "job_code": job_code}, message=f"채용공고 {brj_id} 생성 완료")
+    finally:
+        conn.close()
+
+
+@app.patch("/api/admin/jobs/v2/{brj_id}", tags=["admin"])
+async def admin_update_job_v2(brj_id: str, request: Request, body: dict):
+    """채용공고 수정 (BRJ ID)."""
+    _check_admin(request)
+    updates = {k: v for k, v in body.items() if k in _JOB_WRITABLE}
+    if not updates:
+        raise HTTPException(400, "수정할 항목이 없습니다.")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE brj_id = ? AND is_deleted = 0", (brj_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Job not found")
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        conn.execute(
+            f"UPDATE jobs SET {set_clause} WHERE brj_id = ?",
+            list(updates.values()) + [brj_id],
+        )
+        conn.commit()
+        _maybe_auto_backup()
+        return ok(message=f"채용공고 {brj_id} 수정 완료")
+    finally:
+        conn.close()
+
+
+@app.delete("/api/admin/jobs/v2/{brj_id}", tags=["admin"])
+async def admin_soft_delete_job_v2(brj_id: str, request: Request):
+    """채용공고 soft delete (BRJ ID)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE brj_id = ? AND is_deleted = 0", (brj_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Job not found")
+        conn.execute("UPDATE jobs SET is_deleted = 1 WHERE brj_id = ?", (brj_id,))
+        conn.commit()
+        _maybe_auto_backup()
+        return ok(message=f"채용공고 {brj_id} 삭제 완료")
+    finally:
+        conn.close()
+
+
 # ── Admin: Boards 관리 ─────────────────────────────────────────────────────────
 
 def _ensure_boards_table():
