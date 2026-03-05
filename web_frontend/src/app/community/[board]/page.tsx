@@ -30,7 +30,7 @@ import {
   Check, Plus,
 } from 'lucide-react'
 
-const API = ''
+const API = API_URL
 
 interface Post {
   id: number
@@ -487,8 +487,18 @@ export default function BoardPage() {
     } catch { /* noop */ }
   }, [board, signedFetch, refreshPosts])
 
-  // Post drag reorder (local state only — no sort_order API for community_posts)
-  const postDrag = useDragReorder<Post>(posts)
+  // Post drag reorder — persists to server via sort_order API
+  const persistOrder = useCallback(async (newItems: Post[]) => {
+    const items = newItems.map((p, i) => ({ id: p.id, sort_order: (newItems.length - i) * 10 }))
+    try {
+      await signedFetch(`${API_URL}/api/admin/community-reorder/${board}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ items }),
+      })
+    } catch { /* best-effort */ }
+  }, [board, signedFetch])
+
+  const postDrag = useDragReorder<Post>(posts, persistOrder)
 
   // Sync posts from API into drag hook
   useEffect(() => {

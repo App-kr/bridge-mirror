@@ -2249,10 +2249,10 @@ async def community_list(
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         """SELECT id, title, author_hash, pinned, views, created_at,
-                  content_type, substr(body, 1, 200) AS preview
+                  content_type, sort_order, substr(body, 1, 200) AS preview
            FROM community_posts
            WHERE board=? AND is_deleted=0
-           ORDER BY pinned DESC, created_at DESC
+           ORDER BY pinned DESC, sort_order DESC, created_at DESC
            LIMIT ? OFFSET ?""",
         (board, limit, offset),
     ).fetchall()
@@ -2373,6 +2373,35 @@ class PostEdit(BaseModel):
     content_type: Optional[str] = Field(None, pattern=r"^(markdown|html)$")
 
 
+class ReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+
+class ReorderRequest(BaseModel):
+    items: list[ReorderItem]
+
+
+@app.patch("/api/admin/community-reorder/{board}", tags=["admin"])
+async def admin_reorder_posts(board: str, body: ReorderRequest, request: Request):
+    """게시글 정렬 순서 일괄 업데이트 (관리자 전용)."""
+    _check_admin(request)
+    if board not in _BOARDS:
+        raise HTTPException(404, "Board not found")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        for item in body.items:
+            conn.execute(
+                "UPDATE community_posts SET sort_order=? WHERE id=? AND board=? AND is_deleted=0",
+                (item.sort_order, item.id, board),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(message=f"Reordered {len(body.items)} posts")
+
+
 @app.patch("/api/admin/community/{board}/{post_id}", tags=["admin"])
 async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Request):
     """게시글 제목/본문 수정 (관리자 전용)."""
@@ -2448,10 +2477,10 @@ async def admin_search_posts(
         params.append(limit)
         rows = conn.execute(
             f"""SELECT id, board, title, author_hash, pinned, views, created_at,
-                       content_type, substr(body, 1, 200) AS preview
+                       content_type, sort_order, substr(body, 1, 200) AS preview
                 FROM community_posts
                 WHERE {where}
-                ORDER BY pinned DESC, created_at DESC
+                ORDER BY pinned DESC, sort_order DESC, created_at DESC
                 LIMIT ?""",
             params,
         ).fetchall()
@@ -2666,13 +2695,17 @@ _ensure_interviews_schema()
 
 
 def _ensure_community_schema():
-    """community_posts 테이블에 content_type 컬럼 추가."""
+    """community_posts 테이블에 content_type, sort_order 컬럼 추가."""
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        conn.execute("ALTER TABLE community_posts ADD COLUMN content_type TEXT DEFAULT 'markdown'")
-    except Exception:
-        pass
+    for col_sql in (
+        "ALTER TABLE community_posts ADD COLUMN content_type TEXT DEFAULT 'markdown'",
+        "ALTER TABLE community_posts ADD COLUMN sort_order INTEGER DEFAULT 0",
+    ):
+        try:
+            conn.execute(col_sql)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 

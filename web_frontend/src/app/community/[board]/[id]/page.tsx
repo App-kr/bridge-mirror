@@ -7,8 +7,9 @@ import MarkdownBody from '@/components/MarkdownBody'
 import HtmlPreview from '@/components/HtmlPreview'
 import { getBoardConfig } from '@/lib/boards'
 import EditModeBar, { EditButton } from '@/components/EditModeBar'
+import { API_URL } from '@/lib/api'
 
-const API = ''
+const API = API_URL
 
 interface Post {
   id: number
