@@ -370,10 +370,21 @@ export default function HomePage() {
             BRIDGE
           </motion.h1>
 
-          <p
-            className={`text-xl sm:text-2xl md:text-3xl font-light tracking-tight tagline-glow${showTagline ? ' tagline-glow-on' : ''}`}
-          >
-            A career that changes your life
+          <p className="text-xl sm:text-2xl md:text-3xl font-light tracking-tight">
+            {'A career that changes your life'.split('').map((char, i) => (
+              <span
+                key={i}
+                className={showTagline ? 'letter-star' : ''}
+                style={{
+                  opacity: showTagline ? undefined : 0,
+                  animationDelay: showTagline ? `${i * 0.07}s` : undefined,
+                  display: 'inline-block',
+                  minWidth: char === ' ' ? '0.3em' : undefined,
+                }}
+              >
+                {char}
+              </span>
+            ))}
           </p>
         </motion.div>
 
