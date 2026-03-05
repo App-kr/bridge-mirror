@@ -5,12 +5,13 @@
  * Flow: HERO → Hear from Our Teachers → Featured Positions → Partner Marquee → CTA
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   motion,
   useScroll,
   useTransform,
+  AnimatePresence,
 } from 'framer-motion'
 import {
   fadeInUp,
@@ -19,6 +20,8 @@ import {
   defaultViewport,
 } from '@/lib/animations'
 import { useEditMode } from '@/components/EditModeBar'
+import { RefreshCw } from 'lucide-react'
+import { seededShuffle } from '@/lib/seededShuffle'
 import type { PublicJob, AgeGroup } from '@/types'
 const API = ''
 
@@ -60,10 +63,24 @@ const FALLBACK_SCHOOLS = [
   'Mountain Cherry Academy', 'Seoul International School',
 ]
 
-// ── Get deterministic name — rotates monthly ──
-function getMonthlyName(index: number): string {
-  const month = new Date().getMonth()
-  return NAME_POOL[(index + month) % NAME_POOL.length]
+// ── Monthly seed: changes on the 1st of each month ──
+function getMonthSeed(): number {
+  const now = new Date()
+  return now.getFullYear() * 12 + now.getMonth()
+}
+
+// ── Get override seed from localStorage (SSR-safe) ──
+function getOverrideSeed(storageKey: string): number {
+  const base = getMonthSeed()
+  if (typeof window === 'undefined') return base
+  const override = localStorage.getItem(storageKey)
+  return override ? parseInt(override, 10) : base
+}
+
+// ── Get deterministic name — rotates with seed ──
+function getMonthlyName(index: number, seed?: number): string {
+  const offset = seed !== undefined ? (seed % NAME_POOL.length) : new Date().getMonth()
+  return NAME_POOL[(index + offset) % NAME_POOL.length]
 }
 
 // ── Fallback featured jobs (when API fails) ──
@@ -84,13 +101,6 @@ function stripMd(text: string, max = 140): string {
     .replace(/\n+/g, ' ')
     .trim()
     .slice(0, max)
-}
-
-// ── Seed-based hash for deterministic weekly shuffle ──
-function seedHash(s: string, seed: number): number {
-  let h = seed
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
-  return Math.abs(h)
 }
 
 // ── Format teaching age groups to short labels ──
@@ -145,6 +155,17 @@ export default function HomePage() {
   const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
   const editMode = useEditMode()
 
+  // Raw data refs for re-shuffling
+  const rawTestimonialPosts = useRef<Array<{ preview?: string }>>([])
+  const rawFetchedJobs = useRef<PublicJob[]>([])
+
+  // Animation keys for AnimatePresence
+  const [testimonialKey, setTestimonialKey] = useState(0)
+  const [jobKey, setJobKey] = useState(0)
+
+  // Toast
+  const [toast, setToast] = useState('')
+
   // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
     const t = setTimeout(() => setShowBridge(true), 50)
@@ -160,24 +181,20 @@ export default function HomePage() {
   const heroScale = useTransform(heroProgress, [0, 0.6], [1, 0.95])
   const arrowOpacity = useTransform(heroProgress, [0, 0.15], [1, 0])
 
-  // ── Fetch testimonials ──
+  // ── Fetch testimonials (monthly-seeded shuffle) ──
   useEffect(() => {
     fetch(`${API}/api/community/testimonials?limit=10`)
       .then(r => r.json())
       .then(d => {
-        const posts = d?.data?.posts ?? []
+        const posts: Array<{ preview?: string }> = d?.data?.posts ?? []
         if (posts.length > 0) {
-          const month = new Date().getMonth()
-          const seeded = [...posts].sort((a, b) => {
-            const ha = ((JSON.stringify(a).length * 31 + month) % 1000) / 1000
-            const hb = ((JSON.stringify(b).length * 31 + month) % 1000) / 1000
-            return ha - hb
-          })
-          const shuffled = seeded.slice(0, 4)
-          setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
+          rawTestimonialPosts.current = posts
+          const seed = getOverrideSeed('bridge_featured_testimonials_override')
+          const shuffled = seededShuffle(posts, seed).slice(0, 4)
+          setTestimonials(shuffled.map((p, i) => ({
             text: stripMd(p.preview ?? '', 140),
             stars: 5,
-            name: getMonthlyName(i),
+            name: getMonthlyName(i, seed),
           })))
         } else {
           setTestimonials(FALLBACK_TESTIMONIALS.map((t, i) => ({ ...t, name: getMonthlyName(i) })))
@@ -188,17 +205,17 @@ export default function HomePage() {
       })
   }, [])
 
-  // ── Fetch featured jobs (weekly-seeded shuffle) ──
+  // ── Fetch featured jobs (monthly-seeded shuffle) ──
   useEffect(() => {
     fetch(`${API}/api/jobs?limit=20`)
       .then(r => r.json())
       .then(d => {
         const all: PublicJob[] = d?.data ?? []
         if (all.length > 0) {
-          const now = new Date()
-          const week = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 86400000))
-          const seeded = [...all].sort((a, b) => seedHash(a.job_id, week) - seedHash(b.job_id, week))
-          setJobs(seeded.slice(0, 4))
+          rawFetchedJobs.current = all
+          const seed = getOverrideSeed('bridge_featured_jobs_override')
+          const shuffled = seededShuffle(all, seed)
+          setJobs(shuffled.slice(0, 4))
         }
       })
       .catch(() => { setJobs(FALLBACK_JOBS) })
@@ -219,6 +236,36 @@ export default function HomePage() {
       })
       .catch(() => { /* keep fallback */ })
   }, [])
+
+  // ── Refresh handlers ──
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2000)
+  }, [])
+
+  const handleRefreshTestimonials = useCallback(() => {
+    if (rawTestimonialPosts.current.length === 0) return
+    const newSeed = Math.floor(Math.random() * 2147483647)
+    localStorage.setItem('bridge_featured_testimonials_override', String(newSeed))
+    const shuffled = seededShuffle(rawTestimonialPosts.current, newSeed).slice(0, 4)
+    setTestimonials(shuffled.map((p: { preview?: string }, i: number) => ({
+      text: stripMd(p.preview ?? '', 140),
+      stars: 5,
+      name: getMonthlyName(i, newSeed),
+    })))
+    setTestimonialKey(prev => prev + 1)
+    showToast('새로운 항목으로 배치되었습니다')
+  }, [showToast])
+
+  const handleRefreshJobs = useCallback(() => {
+    if (rawFetchedJobs.current.length === 0) return
+    const newSeed = Math.floor(Math.random() * 2147483647)
+    localStorage.setItem('bridge_featured_jobs_override', String(newSeed))
+    const shuffled = seededShuffle(rawFetchedJobs.current, newSeed)
+    setJobs(shuffled.slice(0, 4))
+    setJobKey(prev => prev + 1)
+    showToast('새로운 항목으로 배치되었습니다')
+  }, [showToast])
 
   return (
     <div className="bg-black">
@@ -375,44 +422,54 @@ export default function HomePage() {
               <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight">
                 Hear from Our Teachers
               </h2>
-            </motion.div>
-
-            <motion.div
-              className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
-              variants={staggerContainer}
-              initial="hidden"
-              whileInView="visible"
-              viewport={defaultViewport}
-            >
-              {testimonials.slice(0, 4).map((t, i) => (
-                <motion.div
-                  key={i}
-                  className="testimonial-glass rounded-2xl p-6 flex flex-col justify-between min-h-[220px]
-                             hover:bg-white/[0.08] hover:-translate-y-1 transition-all duration-300"
-                  variants={scaleIn}
+              {editMode && (
+                <button
+                  type="button"
+                  onClick={handleRefreshTestimonials}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors"
                 >
-                  {/* Big quote icon */}
-                  <div>
-                    <span className="text-[#2997ff]/40 text-5xl font-serif leading-none select-none block mb-3">&ldquo;</span>
-                    <p className="text-[#d1d1d6] text-sm leading-relaxed line-clamp-3">
-                      {t.text}
-                    </p>
-                  </div>
-
-                  {/* Name + Stars at bottom */}
-                  <div className="mt-5 pt-4 border-t border-white/[0.06]">
-                    <div className="flex gap-0.5 mb-1.5">
-                      {Array.from({ length: 5 }).map((_, s) => (
-                        <StarIcon key={s} filled={s < t.stars} />
-                      ))}
-                    </div>
-                    <p className="text-[#86868b] text-xs font-semibold tracking-wide">{t.name}</p>
-                  </div>
-                </motion.div>
-              ))}
+                  <RefreshCw size={14} /> 새로 배치하기
+                </button>
+              )}
             </motion.div>
 
-            {/* "더 보러가기" link */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`testimonials-${testimonialKey}`}
+                className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {testimonials.slice(0, 4).map((t, i) => (
+                  <motion.div
+                    key={i}
+                    className="testimonial-glass rounded-2xl p-6 flex flex-col justify-between min-h-[220px]
+                               hover:bg-white/[0.08] hover:-translate-y-1 transition-all duration-300"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                  >
+                    <div>
+                      <span className="text-[#2997ff]/40 text-5xl font-serif leading-none select-none block mb-3">&ldquo;</span>
+                      <p className="text-[#d1d1d6] text-sm leading-relaxed line-clamp-3">
+                        {t.text}
+                      </p>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                      <div className="flex gap-0.5 mb-1.5">
+                        {Array.from({ length: 5 }).map((_, s) => (
+                          <StarIcon key={s} filled={s < t.stars} />
+                        ))}
+                      </div>
+                      <p className="text-[#86868b] text-xs font-semibold tracking-wide">{t.name}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </AnimatePresence>
+
             <motion.div
               className="text-center mt-10"
               variants={fadeInUp}
@@ -448,76 +505,90 @@ export default function HomePage() {
               <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight">
                 Featured Positions
               </h2>
+              {editMode && (
+                <button
+                  type="button"
+                  onClick={handleRefreshJobs}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <RefreshCw size={14} /> 새로 배치하기
+                </button>
+              )}
             </motion.div>
 
-            <motion.div
-              className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
-              variants={staggerContainer}
-              initial="hidden"
-              whileInView="visible"
-              viewport={defaultViewport}
-            >
-              {jobs.slice(0, 4).map((job) => (
-                <motion.div key={job.job_id} variants={scaleIn}>
-                  <Link
-                    href="/jobs"
-                    className="group block shimmer-card bg-[#141414] border border-white/[0.06] rounded-xl p-6
-                               hover:bg-[#1a1a1a] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]
-                               hover:shadow-[0_8px_32px_rgba(41,151,255,0.12)]"
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`jobs-${jobKey}`}
+                className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {jobs.slice(0, 4).map((job, i) => (
+                  <motion.div
+                    key={job.job_id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
                   >
-                    {/* Location pill + Job ID */}
-                    <div className="mb-5">
-                      <span className="inline-block text-[11px] font-semibold px-3 py-1 rounded-full bg-white/[0.08] text-[#a1a1a6] mb-2">
-                        {job.location ?? 'Korea'}
-                      </span>
-                      {job.is_hot && (
-                        <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase align-middle">
-                          Hot
+                    <Link
+                      href="/jobs"
+                      className="group block shimmer-card bg-[#141414] border border-white/[0.06] rounded-xl p-6
+                                 hover:bg-[#1a1a1a] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]
+                                 hover:shadow-[0_8px_32px_rgba(41,151,255,0.12)]"
+                    >
+                      <div className="mb-5">
+                        <span className="inline-block text-[11px] font-semibold px-3 py-1 rounded-full bg-white/[0.08] text-[#a1a1a6] mb-2">
+                          {job.location ?? 'Korea'}
                         </span>
-                      )}
-                      <p className="text-[#2997ff] text-xs font-bold tracking-wide mt-1">
-                        Job #{job.job_id}
-                      </p>
-                    </div>
+                        {job.is_hot && (
+                          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 uppercase align-middle">
+                            Hot
+                          </span>
+                        )}
+                        <p className="text-[#2997ff] text-xs font-bold tracking-wide mt-1">
+                          Job #{job.job_id}
+                        </p>
+                      </div>
 
-                    {/* Detail rows */}
-                    <div className="space-y-2 text-[13px]">
-                      {job.teaching_age && job.teaching_age.length > 0 && (
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Student Age</span>
-                          <span className="text-[#a1a1a6] text-right">{formatTeachingAge(job.teaching_age)}</span>
-                        </div>
-                      )}
-                      {job.working_hours && (
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Hours</span>
-                          <span className="text-[#a1a1a6] text-right">{job.working_hours}</span>
-                        </div>
-                      )}
-                      {job.monthly_salary && (
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Salary</span>
-                          <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary}</span>
-                        </div>
-                      )}
-                      {job.housing && (
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Benefits</span>
-                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing}</span>
-                        </div>
-                      )}
-                    </div>
+                      <div className="space-y-2 text-[13px]">
+                        {job.teaching_age && job.teaching_age.length > 0 && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-[#636366] font-medium shrink-0">Student Age</span>
+                            <span className="text-[#a1a1a6] text-right">{formatTeachingAge(job.teaching_age)}</span>
+                          </div>
+                        )}
+                        {job.working_hours && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-[#636366] font-medium shrink-0">Hours</span>
+                            <span className="text-[#a1a1a6] text-right">{job.working_hours}</span>
+                          </div>
+                        )}
+                        {job.monthly_salary && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-[#636366] font-medium shrink-0">Salary</span>
+                            <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary}</span>
+                          </div>
+                        )}
+                        {job.housing && (
+                          <div className="flex justify-between gap-2">
+                            <span className="text-[#636366] font-medium shrink-0">Benefits</span>
+                            <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing}</span>
+                          </div>
+                        )}
+                      </div>
 
-                    {/* View details link */}
-                    <div className="mt-5 pt-4 border-t border-white/[0.06] text-right">
-                      <span className="inline-block text-xs font-semibold text-[#2997ff] transition-transform duration-300 group-hover:translate-x-1">
-                        View details &rarr;
-                      </span>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </motion.div>
+                      <div className="mt-5 pt-4 border-t border-white/[0.06] text-right">
+                        <span className="inline-block text-xs font-semibold text-[#2997ff] transition-transform duration-300 group-hover:translate-x-1">
+                          View details &rarr;
+                        </span>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </AnimatePresence>
 
             <motion.div
               className="text-center mt-12"
@@ -642,6 +713,21 @@ export default function HomePage() {
           </motion.div>
         </div>
       </section>
+
+      {/* Toast notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-zinc-800 text-white text-sm rounded-lg shadow-xl border border-zinc-700"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
