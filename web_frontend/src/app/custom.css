@@ -8,12 +8,14 @@
   mask-image: linear-gradient(to right, white 40%, transparent 55%);
   -webkit-mask-size: 250% 100%;
   mask-size: 250% 100%;
-  -webkit-mask-position: 200% 0;
-  mask-position: 200% 0;
-  animation: revealSmooth 1.8s cubic-bezier(0.25, 0.1, 0.25, 1) 0.8s forwards;
+  animation: revealSmooth 1.8s cubic-bezier(0.25, 0.1, 0.25, 1) 0.8s both;
 }
 
 @keyframes revealSmooth {
+  from {
+    -webkit-mask-position: 200% 0;
+    mask-position: 200% 0;
+  }
   to {
     -webkit-mask-position: 0% 0;
     mask-position: 0% 0;
