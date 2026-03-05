@@ -1301,6 +1301,8 @@ async def admin_update_candidate(
         "housing_detail", "referral_fee", "process_date", "past_placement",
         "recruiter_memo", "preferences", "dislikes",
         "residence_type", "start_detail", "target_level", "housing_type",
+        "interview_time", "job_prefs", "invoice", "tattoo", "visa_type",
+        "working_hours",
     }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
