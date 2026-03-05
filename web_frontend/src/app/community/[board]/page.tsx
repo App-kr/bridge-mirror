@@ -23,6 +23,8 @@ import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
 import { useDragReorder, type DragState } from '@/hooks/useDragReorder'
+import { TESTIMONIALS } from '@/data/testimonials'
+import { seededShuffle } from '@/lib/seededShuffle'
 import {
   Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
   Check, Plus,
@@ -320,8 +322,6 @@ function getPostImageKey(title: string): string {
 const TIPS_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
 const TIPS_EMOJIS = ['📸', '🎓', '🎤']
 const HERO_ICONS = ['🏢', '📋', '🆕', '📝', '💰']
-const AVATAR_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
-
 // ── Animated counter hook (for About page stats) ──
 function useAnimatedCounter(target: number, duration: number, start: boolean) {
   const [value, setValue] = useState(0)
@@ -1348,11 +1348,20 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
 // ══════════════════════════════════════════════════════════════════════════════
 // TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════════════════
+
+const PHOTO_AVATARS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#F0A500', '#7B68EE']
+
 function TestimonialLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
+  // Shuffle static testimonials with a stable seed (month-based)
+  const now = new Date()
+  const monthSeed = now.getFullYear() * 12 + now.getMonth()
+  const fakeReviews = seededShuffle(TESTIMONIALS, monthSeed).slice(0, 30)
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
+        {/* ── Real posts (from API) ── */}
         {posts.map((p, i) => {
           const name = p.title.split('—')[0]?.trim() ?? p.title
           return (
@@ -1368,7 +1377,7 @@ function TestimonialLayout({ config, posts, board, editMode, selectedIds, onTogg
               <Link href={`/community/${board}/${p.id}`} className="testimonial-card group block">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0"
-                    style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                    style={{ background: PHOTO_AVATARS[i % PHOTO_AVATARS.length] }}>
                     {name.charAt(0)}
                   </div>
                   <div>
@@ -1378,7 +1387,7 @@ function TestimonialLayout({ config, posts, board, editMode, selectedIds, onTogg
                 </div>
                 <div className="mb-4">
                   <span className="text-3xl text-[#d1d1d6] leading-none">&ldquo;</span>
-                  <p className="text-sm text-[#424245] italic line-clamp-4 mt-1">{stripMd(p.preview, 150)}</p>
+                  <p className="text-sm text-[#424245] italic line-clamp-5 mt-1">{stripMd(p.preview, 200)}</p>
                 </div>
                 <span className="text-sm font-medium text-[#0071e3] group-hover:underline">Read full story &rarr;</span>
                 {editMode && (
@@ -1404,6 +1413,34 @@ function TestimonialLayout({ config, posts, board, editMode, selectedIds, onTogg
             </motion.div>
           )
         })}
+
+        {/* ── Static reviews (fictional, emoji avatar) ── */}
+        {fakeReviews.map((t, i) => (
+          <motion.div key={`static-${i}`} variants={fadeInUp}>
+            <div className="testimonial-card block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-[52px] h-[52px] rounded-full bg-[#f5f5f7] flex items-center justify-center text-2xl shrink-0">
+                  🧑
+                </div>
+                <div>
+                  <div className="font-semibold text-[#1d1d1f] text-sm">{t.name}</div>
+                  <div className="text-xs text-[#86868b]">{t.country}</div>
+                </div>
+              </div>
+              <div className="mb-4">
+                <span className="text-3xl text-[#d1d1d6] leading-none">&ldquo;</span>
+                <p className="text-sm text-[#424245] italic line-clamp-5 mt-1">{t.text}</p>
+              </div>
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, s) => (
+                  <svg key={s} className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="#facc15">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        ))}
       </motion.div>
     </div>
   )
