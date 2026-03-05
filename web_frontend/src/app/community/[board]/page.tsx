@@ -5,7 +5,7 @@
  * Simplified: shared BoardHeader + stripMarkdown utility
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -23,9 +23,15 @@ import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
 import { useDragReorder } from '@/hooks/useDragReorder'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder'
 import {
-  Eye, Pencil, Trash2, ChevronUp, ChevronDown,
+  Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
   Check, Plus,
 } from 'lucide-react'
 
@@ -56,8 +62,9 @@ interface LayoutProps {
   onToggleSelect?: (id: number) => void
   onEdit?: (post: Post) => void
   onDelete?: (postId: number) => void
-  onMoveUp?: (index: number) => void
-  onMoveDown?: (index: number) => void
+  onMoveUp?: (postId: number) => void
+  onMoveDown?: (postId: number) => void
+  onDndMove?: (activeId: string, overId: string) => void
   onNewPost?: () => void
   onFaqEdit?: (index: number) => void
   onFaqAdd?: () => void
@@ -94,6 +101,46 @@ function parseFaqBody(body: string): FaqItem[] {
   return items
 }
 
+// ── @dnd-kit sortable wrappers ─────────────────────────────────────────────
+
+// Context passes drag handle props from SortableItem → SortHandle's GripVertical
+const DragHandleCtx = createContext<Record<string, unknown> | null>(null)
+
+function SortableContainer({ items, onDragEnd, children }: {
+  items: string[]; onDragEnd: (e: DragEndEvent) => void; children: React.ReactNode
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={items} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return (
+    <DragHandleCtx.Provider value={{ ...attributes, ...listeners }}>
+      <div ref={setNodeRef} style={style}>
+        {children}
+      </div>
+    </DragHandleCtx.Provider>
+  )
+}
+
 // ── Admin UI Components ──────────────────────────────────────────────────────
 
 function AdminCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -113,9 +160,17 @@ function SortHandle({ onMoveUp, onMoveDown, isFirst, isLast }: {
   onMoveUp: () => void; onMoveDown: () => void
   isFirst?: boolean; isLast?: boolean
 }) {
+  const dragProps = useContext(DragHandleCtx)
   return (
     <span className="inline-flex items-center gap-0.5 shrink-0"
       onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+      {dragProps && (
+        <span {...dragProps}
+          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-zinc-700/50 transition-colors touch-none"
+          title="Drag to reorder">
+          <GripVertical size={14} className="text-zinc-400" />
+        </span>
+      )}
       <button type="button" onClick={onMoveUp} disabled={isFirst}
         className={`p-1 rounded transition-colors ${isFirst ? 'opacity-20 cursor-default' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
         title="Move up">
@@ -499,12 +554,20 @@ export default function BoardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posts])
 
-  const handleMoveUp = useCallback((index: number) => {
-    postDrag.handleMoveUp(index)
+  const handleMoveUp = useCallback((postId: number) => {
+    const idx = postDrag.items.findIndex(p => p.id === postId)
+    if (idx > 0) postDrag.handleMoveUp(idx)
   }, [postDrag])
 
-  const handleMoveDown = useCallback((index: number) => {
-    postDrag.handleMoveDown(index)
+  const handleMoveDown = useCallback((postId: number) => {
+    const idx = postDrag.items.findIndex(p => p.id === postId)
+    if (idx >= 0) postDrag.handleMoveDown(idx)
+  }, [postDrag])
+
+  const handleDndMove = useCallback((activeId: string, overId: string) => {
+    const fromIdx = postDrag.items.findIndex(p => String(p.id) === activeId)
+    const toIdx = postDrag.items.findIndex(p => String(p.id) === overId)
+    if (fromIdx >= 0 && toIdx >= 0) postDrag.handleDndMove(fromIdx, toIdx)
   }, [postDrag])
 
   // Selection handlers
@@ -677,6 +740,7 @@ export default function BoardPage() {
     onDelete: handleDelete,
     onMoveUp: handleMoveUp,
     onMoveDown: handleMoveDown,
+    onDndMove: handleDndMove,
     onNewPost: handleNewPost,
     onFaqEdit: handleFaqItemEdit,
     onFaqAdd: handleFaqItemAdd,
@@ -741,7 +805,7 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -851,33 +915,48 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
         <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
         {regularPosts.length === 0 ? (
           <p className="text-[#86868b] text-center py-16">No posts yet.</p>
+        ) : editMode ? (
+          <SortableContainer
+            items={regularPosts.map(p => String(p.id))}
+            onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
+          >
+            {regularPosts.map((p, i) => (
+              <SortableItem key={p.id} id={String(p.id)}>
+                <div className="flex items-center gap-1.5">
+                  {onMoveUp && onMoveDown && (
+                    <SortHandle
+                      onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
+                      isFirst={i === 0} isLast={i === regularPosts.length - 1}
+                    />
+                  )}
+                  {onToggleSelect && (
+                    <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                  )}
+                  <Link
+                    href={`/community/${board}/${p.id}`}
+                    className="board-list-item group flex-1"
+                    style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
+                  >
+                    <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
+                    {onEdit && onDelete && (
+                      <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+                    )}
+                  </Link>
+                </div>
+              </SortableItem>
+            ))}
+          </SortableContainer>
         ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible">
-            {regularPosts.map((p, i) => (
-              <motion.div key={p.id} variants={fadeInUp}
-                className={editMode ? 'flex items-center gap-1.5' : ''}
-                layout
-              >
-                {editMode && onMoveUp && onMoveDown && (
-                  <SortHandle
-                    onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                    isFirst={i === 0} isLast={i === regularPosts.length - 1}
-                  />
-                )}
-                {editMode && onToggleSelect && (
-                  <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
-                )}
+            {regularPosts.map((p) => (
+              <motion.div key={p.id} variants={fadeInUp}>
                 <Link
                   href={`/community/${board}/${p.id}`}
-                  className={`board-list-item group ${editMode ? 'flex-1' : ''}`}
+                  className="board-list-item group"
                   style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
                 >
                   <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
-                  {editMode && onEdit && onDelete ? (
-                    <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
-                  ) : (
-                    <span className="arrow">&rarr;</span>
-                  )}
+                  <span className="arrow">&rarr;</span>
                 </Link>
               </motion.div>
             ))}
@@ -976,7 +1055,7 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
 // ══════════════════════════════════════════════════════════════════════════════
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -1114,49 +1193,67 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
             <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
               <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-6">Information</p>
             </motion.div>
-            <motion.div
-              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"
-              variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
-            >
-              {aboutPosts.map((p, i) => (
-                <motion.div key={p.id} variants={scaleIn} layout>
-                  <div className={editMode ? 'flex items-center gap-1.5' : ''}>
-                    {editMode && onMoveUp && onMoveDown && (
-                      <SortHandle
-                        onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                        isFirst={i === 0} isLast={i === aboutPosts.length - 1}
-                      />
-                    )}
-                    {editMode && onToggleSelect && (
-                      <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
-                    )}
+            {editMode ? (
+              <SortableContainer
+                items={aboutPosts.map(p => String(p.id))}
+                onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
+              >
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {aboutPosts.map((p, i) => (
+                    <SortableItem key={p.id} id={String(p.id)}>
+                      <div className="flex items-center gap-1.5">
+                        {onMoveUp && onMoveDown && (
+                          <SortHandle
+                            onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
+                            isFirst={i === 0} isLast={i === aboutPosts.length - 1}
+                          />
+                        )}
+                        {onToggleSelect && (
+                          <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                        )}
+                        <Link
+                          href={`/community/${board}/${p.id}`}
+                          className="group flex items-center gap-4 bg-white rounded-2xl p-5 border border-transparent hover:border-[#0071e3]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-all duration-200 flex-1"
+                        >
+                          <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
+                          <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors flex-1">
+                            {p.title}
+                          </span>
+                          {onEdit && onDelete && (
+                            <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+                          )}
+                        </Link>
+                      </div>
+                    </SortableItem>
+                  ))}
+                  {onNewPost && (
+                    <button type="button" onClick={onNewPost}
+                      className="flex items-center justify-center gap-2 w-full bg-zinc-100 rounded-2xl p-5 border-2 border-dashed border-zinc-300 text-zinc-500 hover:border-blue-400 hover:text-blue-600 transition-colors text-sm font-medium">
+                      <Plus size={16} /> New Post
+                    </button>
+                  )}
+                </div>
+              </SortableContainer>
+            ) : (
+              <motion.div
+                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
+              >
+                {aboutPosts.map((p, i) => (
+                  <motion.div key={p.id} variants={scaleIn}>
                     <Link
                       href={`/community/${board}/${p.id}`}
-                      className={`group flex items-center gap-4 bg-white rounded-2xl p-5
-                                 border border-transparent hover:border-[#0071e3]/20
-                                 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]
-                                 transition-all duration-200 ${editMode ? 'flex-1' : ''}`}
+                      className="group flex items-center gap-4 bg-white rounded-2xl p-5 border border-transparent hover:border-[#0071e3]/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-all duration-200"
                     >
                       <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
                       <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors flex-1">
                         {p.title}
                       </span>
-                      {editMode && onEdit && onDelete && (
-                        <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
-                      )}
                     </Link>
-                  </div>
-                </motion.div>
-              ))}
-              {editMode && onNewPost && (
-                <motion.div variants={scaleIn}>
-                  <button type="button" onClick={onNewPost}
-                    className="flex items-center justify-center gap-2 w-full bg-zinc-100 rounded-2xl p-5 border-2 border-dashed border-zinc-300 text-zinc-500 hover:border-blue-400 hover:text-blue-600 transition-colors text-sm font-medium">
-                    <Plus size={16} /> New Post
-                  </button>
-                </motion.div>
-              )}
-            </motion.div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
           </div>
         </section>
       )}
@@ -1269,41 +1366,60 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
+  const cardContent = (p: Post, i: number) => (
+    <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
+      <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
+      <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
+      <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
+      <p className="text-sm text-[#6e6e73] line-clamp-3 mb-4">{stripMd(p.preview)}</p>
+      <span className="text-sm font-medium text-[#0071e3]">Read more &rarr;</span>
+      {editMode && (
+        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-200"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+          {onToggleSelect && (
+            <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+          )}
+          {onMoveUp && onMoveDown && (
+            <SortHandle
+              onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
+              isFirst={i === 0} isLast={i === posts.length - 1}
+            />
+          )}
+          <span className="flex-1" />
+          {onEdit && onDelete && (
+            <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+          )}
+        </div>
+      )}
+    </Link>
+  )
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
-      <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
-        {posts.map((p, i) => (
-          <motion.div key={p.id} variants={fadeInUp}>
-            <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
-              <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
-              <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
-              <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
-              <p className="text-sm text-[#6e6e73] line-clamp-3 mb-4">{stripMd(p.preview)}</p>
-              <span className="text-sm font-medium text-[#0071e3]">Read more &rarr;</span>
-              {editMode && (
-                <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-200"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
-                  {onToggleSelect && (
-                    <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
-                  )}
-                  {onMoveUp && onMoveDown && (
-                    <SortHandle
-                      onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                      isFirst={i === 0} isLast={i === posts.length - 1}
-                    />
-                  )}
-                  <span className="flex-1" />
-                  {onEdit && onDelete && (
-                    <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
-                  )}
-                </div>
-              )}
-            </Link>
-          </motion.div>
-        ))}
-      </motion.div>
+      {editMode ? (
+        <SortableContainer
+          items={posts.map(p => String(p.id))}
+          onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
+        >
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {posts.map((p, i) => (
+              <SortableItem key={p.id} id={String(p.id)}>
+                {cardContent(p, i)}
+              </SortableItem>
+            ))}
+          </div>
+        </SortableContainer>
+      ) : (
+        <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
+          {posts.map((p, i) => (
+            <motion.div key={p.id} variants={fadeInUp}>
+              {cardContent(p, i)}
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
     </div>
   )
 }
@@ -1311,56 +1427,75 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
+  const photoCard = (p: Post, i: number) => {
+    const imgKey = getPostImageKey(p.title)
+    return (
+      <Link href={`/community/${board}/${p.id}`}
+        className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}
+      >
+        <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
+          <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
+        </div>
+        <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors flex-1">{p.title}</h3>
+            {editMode && onEdit && onDelete && (
+              <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+            )}
+          </div>
+          <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
+          {KOREA_MAP_LINKS[imgKey] && (
+            <a href={KOREA_MAP_LINKS[imgKey]} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-[#0071e3] hover:underline mt-1"
+              onClick={(e) => e.stopPropagation()}>
+              View on Map
+            </a>
+          )}
+        </div>
+      </Link>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
-      <div className="space-y-5">
-        {posts.map((p, i) => {
-          const imgKey = getPostImageKey(p.title)
-          const variant = i % 2 === 0 ? slideInLeft : slideInRight
-
-          return (
-            <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}
-              className={editMode ? 'flex items-center gap-1.5' : ''}
-              layout
-            >
-              {editMode && onMoveUp && onMoveDown && (
-                <SortHandle
-                  onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                  isFirst={i === 0} isLast={i === posts.length - 1}
-                />
-              )}
-              {editMode && onToggleSelect && (
-                <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
-              )}
-              <Link href={`/community/${board}/${p.id}`}
-                className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}
-              >
-                <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
-                  <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
-                </div>
-                <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors flex-1">{p.title}</h3>
-                    {editMode && onEdit && onDelete && (
-                      <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
-                    )}
-                  </div>
-                  <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
-                  {KOREA_MAP_LINKS[imgKey] && (
-                    <a href={KOREA_MAP_LINKS[imgKey]} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-[#0071e3] hover:underline mt-1"
-                      onClick={(e) => e.stopPropagation()}>
-                      View on Map
-                    </a>
+      {editMode ? (
+        <SortableContainer
+          items={posts.map(p => String(p.id))}
+          onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
+        >
+          <div className="space-y-5">
+            {posts.map((p, i) => (
+              <SortableItem key={p.id} id={String(p.id)}>
+                <div className="flex items-center gap-1.5">
+                  {onMoveUp && onMoveDown && (
+                    <SortHandle
+                      onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
+                      isFirst={i === 0} isLast={i === posts.length - 1}
+                    />
                   )}
+                  {onToggleSelect && (
+                    <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                  )}
+                  {photoCard(p, i)}
                 </div>
-              </Link>
-            </motion.div>
-          )
-        })}
-      </div>
+              </SortableItem>
+            ))}
+          </div>
+        </SortableContainer>
+      ) : (
+        <div className="space-y-5">
+          {posts.map((p, i) => {
+            const variant = i % 2 === 0 ? slideInLeft : slideInRight
+            return (
+              <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
+                {photoCard(p, i)}
+              </motion.div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
