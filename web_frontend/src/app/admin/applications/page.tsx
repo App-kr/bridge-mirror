@@ -23,6 +23,7 @@ interface EmployerApp {
   created_at: string
   school_name?: string
   contact_name?: string | null
+  job_code?: string | null
   phone?: string | null
   location?: string | null
   start_date?: string | null
@@ -313,9 +314,9 @@ export default function AdminApplicationsPage() {
         /* ── 기본보기: 10-column table ── */
         <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden relative">
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'fixed', minWidth: '1140px' }}>
+            <table className="w-full" style={{ tableLayout: 'fixed', minWidth: '1170px' }}>
               <colgroup>
-                <col style={{ width: '60px' }} />
+                <col style={{ width: '90px' }} />
                 <col style={{ width: '60px' }} />
                 <col style={{ width: '80px' }} />
                 <col style={{ width: '180px' }} />
@@ -390,7 +391,7 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
   return (
     <>
       <tr className="hover:bg-[#fafafa] cursor-pointer transition-colors" onClick={onToggle}>
-        <td className="px-3 py-2.5 text-[12px] text-[#86868b] font-mono">{app.id}</td>
+        <td className="px-3 py-2.5 text-[12px] text-[#86868b] font-mono truncate" title={v(app.job_code) || app.id}>{v(app.job_code) || app.id}</td>
         <td className="px-3 py-2.5 text-[13px] text-[#424245]">{province}</td>
         <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{city}</td>
         <td className="px-3 py-2.5 text-[13px] font-semibold text-[#1d1d1f] truncate" title={v(app.school_name) || v(app.name)}>
@@ -407,7 +408,7 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
           {v(app.salary_raw)}
         </td>
         <td className="px-3 py-2.5 text-[13px] text-[#424245] whitespace-nowrap">{v(app.start_date)}</td>
-        <td className="px-3 py-2.5" style={{ position: 'sticky', right: 0, background: 'inherit', zIndex: 10 }} onClick={e => e.stopPropagation()}>
+        <td className="px-3 py-2.5" style={{ position: 'sticky', right: 0, background: '#fff', zIndex: 10, boxShadow: '-2px 0 4px rgba(0,0,0,0.04)' }} onClick={e => e.stopPropagation()}>
           <select
             className={`text-[11px] px-2 py-1 rounded-full font-semibold border-0 cursor-pointer ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
             value={app.status}
@@ -423,7 +424,7 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
           <td colSpan={10} className="p-0">
             <div className="bg-[#fafafa] border-t border-[#e5e5e7] px-6 py-5">
               <div className="font-mono text-[13px] leading-relaxed text-[#1d1d1f] space-y-1">
-                <p className="font-bold text-[15px] mb-3">Job. #{app.id}</p>
+                <p className="font-bold text-[15px] mb-3">{v(app.job_code) ? `${app.job_code}` : `#${app.id}`}</p>
                 <DL label="Location" value={[province, city].filter(Boolean).join(' ') || v(app.location)} />
                 <DL label="Starting Date" value={v(app.start_date)} />
                 <DL label="Teaching Age" value={v(app.teaching_age)} />

@@ -2150,13 +2150,17 @@ async def admin_list_applications(request: Request):
                     "updated_at": c["updated_at"],
                 })
 
-            # 구인자 (client_inquiries) — 전체 로드
+            # 구인자 (client_inquiries) + jobs.job_code LEFT JOIN
             inqs = conn.execute(
-                "SELECT id, school_name, contact_name, email, phone, location, "
-                "start_date, vacancies, teaching_age, schedule, working_hours, salary_raw, "
-                "housing_type, housing_detail, travel_support, benefits, vacation, "
-                "sick_leave, meal, memo, notes, assigned_to, inbox_status, submitted_at "
-                "FROM client_inquiries ORDER BY submitted_at DESC"
+                "SELECT ci.id, ci.school_name, ci.contact_name, ci.email, ci.phone, ci.location, "
+                "ci.start_date, ci.vacancies, ci.teaching_age, ci.schedule, ci.working_hours, ci.salary_raw, "
+                "ci.housing_type, ci.housing_detail, ci.travel_support, ci.benefits, ci.vacation, "
+                "ci.sick_leave, ci.meal, ci.memo, ci.notes, ci.assigned_to, ci.inbox_status, ci.submitted_at, "
+                "jm.job_code "
+                "FROM client_inquiries ci "
+                "LEFT JOIN (SELECT internal_notes, MIN(job_code) AS job_code FROM jobs GROUP BY internal_notes) jm "
+                "ON ci.memo = jm.internal_notes "
+                "ORDER BY ci.submitted_at DESC"
             ).fetchall()
             for i in inqs:
                 apps.append({
@@ -2164,6 +2168,7 @@ async def admin_list_applications(request: Request):
                     "name": i["contact_name"] or "", "email": i["email"] or "",
                     "school_name": i["school_name"] or "",
                     "contact_name": i["contact_name"],
+                    "job_code": i["job_code"],
                     "phone": i["phone"],
                     "location": i["location"],
                     "start_date": i["start_date"],
