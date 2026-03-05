@@ -1047,9 +1047,17 @@ async def admin_dashboard(request: Request):
         except Exception:
             stats["inquiries"] = 0
 
-        stats["payments_total"] = 0
-        stats["payments_confirmed"] = 0
-        stats["revenue"] = 0
+        try:
+            r = conn2.execute("SELECT COUNT(*) AS n FROM payments").fetchone()
+            stats["payments_total"] = r["n"] if r else 0
+            r = conn2.execute("SELECT COUNT(*) AS n FROM payments WHERE status='confirmed'").fetchone()
+            stats["payments_confirmed"] = r["n"] if r else 0
+            r = conn2.execute("SELECT COALESCE(SUM(amount),0) AS n FROM payments WHERE status='confirmed'").fetchone()
+            stats["revenue"] = r["n"] if r else 0
+        except Exception:
+            stats["payments_total"] = 0
+            stats["payments_confirmed"] = 0
+            stats["revenue"] = 0
     finally:
         conn2.close()
 
