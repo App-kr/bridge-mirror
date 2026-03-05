@@ -20,7 +20,7 @@ import {
 } from '@/lib/animations'
 import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBar'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import SplitEditor from '@/components/admin/SplitEditor'
+import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
 import {
   Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
@@ -368,18 +368,15 @@ export default function BoardPage() {
   const [faqItems, setFaqItems] = useState<FaqItem[]>([])
   const [faqPostId, setFaqPostId] = useState<number | null>(null)
 
-  // FAQ edit modal state
-  const [faqEditOpen, setFaqEditOpen] = useState(false)
-  const [faqEditIndex, setFaqEditIndex] = useState(-1)
-  const [faqEditQ, setFaqEditQ] = useState('')
-  const [faqEditA, setFaqEditA] = useState('')
-
-  // SplitEditor state
+  // Unified editor state
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create')
-  const [editorPostId, setEditorPostId] = useState<number | undefined>()
-  const [editorTitle, setEditorTitle] = useState('')
-  const [editorBody, setEditorBody] = useState('')
+  const [editorInitialData, setEditorInitialData] = useState<{ title: string; content: string }>({ title: '', content: '' })
+  const [editorPreviewType, setEditorPreviewType] = useState<'faq' | 'list' | 'card' | 'testimonial'>('list')
+  const [editorCtx, setEditorCtx] = useState<{
+    type: 'post-create' | 'post-edit' | 'faq-new' | 'faq-edit'
+    postId?: number
+    faqIndex?: number
+  }>({ type: 'post-create' })
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -418,33 +415,40 @@ export default function BoardPage() {
   }, [board, config])
 
   // ── Admin handlers ──
+  const getPostPreviewType = useCallback((): 'list' | 'card' | 'testimonial' => {
+    switch (config?.layout) {
+      case 'card-grid': return 'card'
+      case 'photo-cards': return 'card'
+      case 'testimonial':
+      case 'testimonials': return 'testimonial'
+      default: return 'list'
+    }
+  }, [config])
+
   const handleNewPost = useCallback(() => {
-    setEditorMode('create')
-    setEditorPostId(undefined)
-    setEditorTitle('')
-    setEditorBody('')
+    setEditorInitialData({ title: '', content: '' })
+    setEditorPreviewType(getPostPreviewType())
+    setEditorCtx({ type: 'post-create' })
     setEditorOpen(true)
-  }, [])
+  }, [getPostPreviewType])
 
   const handleEdit = useCallback(async (post: Post) => {
+    const pvType = getPostPreviewType()
     try {
       const res = await fetch(`${API}/api/community/${board}/${post.id}`)
       const j = await res.json()
       if (j.success) {
-        setEditorMode('edit')
-        setEditorPostId(post.id)
-        setEditorTitle(j.data.title ?? post.title)
-        setEditorBody(j.data.body ?? '')
-        setEditorOpen(true)
+        setEditorInitialData({ title: j.data.title ?? post.title, content: j.data.body ?? '' })
+      } else {
+        setEditorInitialData({ title: post.title, content: post.preview ?? '' })
       }
     } catch {
-      setEditorMode('edit')
-      setEditorPostId(post.id)
-      setEditorTitle(post.title)
-      setEditorBody(post.preview ?? '')
-      setEditorOpen(true)
+      setEditorInitialData({ title: post.title, content: post.preview ?? '' })
     }
-  }, [board])
+    setEditorPreviewType(pvType)
+    setEditorCtx({ type: 'post-edit', postId: post.id })
+    setEditorOpen(true)
+  }, [board, getPostPreviewType])
 
   const handleDelete = useCallback(async (postId: number) => {
     if (!confirm('Delete this post?')) return
@@ -474,11 +478,6 @@ export default function BoardPage() {
       refreshPosts()
     } catch { /* noop */ }
   }, [signedFetch, refreshPosts])
-
-  const handleEditorSave = useCallback(() => {
-    setEditorOpen(false)
-    refreshPosts()
-  }, [refreshPosts])
 
   // Selection handlers
   const toggleSelect = useCallback((id: number) => {
@@ -542,20 +541,60 @@ export default function BoardPage() {
     } catch { /* noop */ }
   }, [board, faqPostId, signedFetch])
 
+  const handleEditorSave = useCallback(async (data: PostData) => {
+    const { type, postId, faqIndex } = editorCtx
+
+    if (type === 'faq-new' || type === 'faq-edit') {
+      let updated: FaqItem[]
+      if (type === 'faq-new') {
+        updated = [...faqItems, { q: data.title, a: data.content }]
+      } else {
+        updated = faqItems.map((item, i) =>
+          i === faqIndex ? { q: data.title, a: data.content } : item
+        )
+      }
+      setFaqItems(updated)
+      setEditorOpen(false)
+      await saveFaqToApi(updated)
+    } else if (type === 'post-create') {
+      const res = await signedFetch(`${API_URL}/api/community/${board}`, {
+        method: 'POST',
+        body: JSON.stringify({ title: data.title, body: data.content }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.detail || j.error || `Error ${res.status}`)
+      }
+      setEditorOpen(false)
+      refreshPosts()
+    } else if (type === 'post-edit' && postId) {
+      const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: data.title, body: data.content }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.detail || j.error || `Error ${res.status}`)
+      }
+      setEditorOpen(false)
+      refreshPosts()
+    }
+  }, [editorCtx, faqItems, saveFaqToApi, board, signedFetch, refreshPosts])
+
   const handleFaqItemEdit = useCallback((index: number) => {
     const item = faqItems[index]
     if (!item) return
-    setFaqEditIndex(index)
-    setFaqEditQ(item.q)
-    setFaqEditA(item.a)
-    setFaqEditOpen(true)
+    setEditorInitialData({ title: item.q, content: item.a })
+    setEditorPreviewType('faq')
+    setEditorCtx({ type: 'faq-edit', faqIndex: index })
+    setEditorOpen(true)
   }, [faqItems])
 
   const handleFaqItemAdd = useCallback(() => {
-    setFaqEditIndex(-1)
-    setFaqEditQ('')
-    setFaqEditA('')
-    setFaqEditOpen(true)
+    setEditorInitialData({ title: '', content: '' })
+    setEditorPreviewType('faq')
+    setEditorCtx({ type: 'faq-new' })
+    setEditorOpen(true)
   }, [])
 
   const handleFaqItemDelete = useCallback(async (index: number) => {
@@ -573,21 +612,6 @@ export default function BoardPage() {
     setFaqItems(updated)
     await saveFaqToApi(updated)
   }, [faqItems, saveFaqToApi])
-
-  const handleFaqEditSave = useCallback(async () => {
-    if (!faqEditQ.trim() || !faqEditA.trim()) return
-    let updated: FaqItem[]
-    if (faqEditIndex === -1) {
-      updated = [...faqItems, { q: faqEditQ.trim(), a: faqEditA.trim() }]
-    } else {
-      updated = faqItems.map((item, i) =>
-        i === faqEditIndex ? { q: faqEditQ.trim(), a: faqEditA.trim() } : item
-      )
-    }
-    setFaqItems(updated)
-    setFaqEditOpen(false)
-    await saveFaqToApi(updated)
-  }, [faqEditIndex, faqEditQ, faqEditA, faqItems, saveFaqToApi])
 
   if (!config) {
     return (
@@ -652,23 +676,11 @@ export default function BoardPage() {
       <Layout {...props} />
       {editorOpen && (
         <SplitEditor
-          mode={editorMode}
-          board={board}
-          postId={editorPostId}
-          initialTitle={editorTitle}
-          initialBody={editorBody}
-          signedFetch={signedFetch}
+          isOpen={true}
+          initialData={editorInitialData}
+          previewType={editorPreviewType}
           onSave={handleEditorSave}
           onClose={() => setEditorOpen(false)}
-        />
-      )}
-      {faqEditOpen && (
-        <FaqEditModal
-          q={faqEditQ} a={faqEditA}
-          onChangeQ={setFaqEditQ} onChangeA={setFaqEditA}
-          onSave={handleFaqEditSave}
-          onClose={() => setFaqEditOpen(false)}
-          isNew={faqEditIndex === -1}
         />
       )}
     </>
@@ -869,63 +881,6 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
         </motion.div>
       )}
     </motion.div>
-  )
-}
-
-// ── FAQ Edit Modal ──
-function FaqEditModal({ q, a, onChangeQ, onChangeA, onSave, onClose, isNew }: {
-  q: string; a: string
-  onChangeQ: (v: string) => void; onChangeA: (v: string) => void
-  onSave: () => void; onClose: () => void
-  isNew: boolean
-}) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg mx-4 bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
-          <span className="text-sm font-medium text-zinc-300">
-            {isNew ? 'New FAQ Item' : 'Edit FAQ Item'}
-          </span>
-          <button type="button" onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-            ✕
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Question</label>
-            <input type="text" value={q} onChange={(e) => onChangeQ(e.target.value)}
-              placeholder="Enter question..."
-              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-4 py-2.5 text-sm placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Answer</label>
-            <textarea value={a} onChange={(e) => onChangeA(e.target.value)}
-              placeholder="Enter answer..."
-              rows={6}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-4 py-3 text-sm resize-none placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed" />
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors">
-            Cancel
-          </button>
-          <button type="button" onClick={onSave} disabled={!q.trim() || !a.trim()}
-            className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
