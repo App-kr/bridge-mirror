@@ -6,6 +6,7 @@ global gOverlay := ""
 global gTrayIndicator := ""
 global gFootstepOn := false
 global gEqGui := ""
+global gTestBackup := ""
 
 ; ===== WM_NCHITTEST — drag EQ window by top bar =====
 OnMessage(0x84, EQ_HitTest)
@@ -43,6 +44,29 @@ EQ_HitTest(wParam, lParam, msg, hwnd) {
     }
 }
 
+; ===== Helper: Write file in-place (APO detects changes) =====
+WriteConfig(path, content) {
+    try {
+        f := FileOpen(path, "w", "UTF-8-RAW")
+        f.Write(content)
+        f.Close()
+    } catch as e {
+        try FileDelete(path)
+        FileAppend(content, path)
+    }
+}
+
+; ===== Helper: Build EQ config text from arrays =====
+BuildEQText(freqs, gains, preamp) {
+    eqStr := ""
+    loop freqs.Length {
+        if A_Index > 1
+            eqStr .= "; "
+        eqStr .= freqs[A_Index] " " gains[A_Index] ".0"
+    }
+    return "Preamp: " preamp " dB`nGraphicEQ: " eqStr "`n"
+}
+
 ; ===== Ctrl+Shift+F9: Audio Toggle =====
 ^+F9:: {
     try {
@@ -64,14 +88,12 @@ EQ_HitTest(wParam, lParam, msg, hwnd) {
     global gFootstepOn
     cf := "C:\Program Files\EqualizerAPO\config\config.txt"
     if gFootstepOn {
-        try FileDelete(cf)
-        FileAppend("Include: flat.txt", cf)
+        WriteConfig(cf, "Include: flat.txt")
         gFootstepOn := false
         ShowOverlay("👟", "Footstep OFF", "Normal Audio", "0x636e72")
         HideTray()
     } else {
-        try FileDelete(cf)
-        FileAppend("Include: footstep-boost.txt", cf)
+        WriteConfig(cf, "Include: footstep-boost.txt")
         gFootstepOn := true
         ShowOverlay("🦶", "Footstep ON", "Bass Enhanced", "0xFF6348")
         ShowTray()
@@ -86,6 +108,7 @@ EQ_HitTest(wParam, lParam, msg, hwnd) {
 ; ==================== EQ EDITOR ====================
 OpenEQ() {
     global gEqGui, gFootstepOn
+
     if gEqGui {
         gEqGui.Destroy()
         gEqGui := ""
@@ -222,7 +245,7 @@ OpenEQ() {
     bx3 := bx2 + btnW + btnGap
     btnH := 48
 
-    ; 테스트 (blue — preview without saving)
+    ; 테스트 (blue — preview 5 seconds then revert)
     eg.Add("Text", "x" bx1 " y" aY " w" btnW " h" btnH " +0x1000 Background1a2a4a")
     eg.SetFont("s13 cAAAAFF Bold", "Segoe UI")
     eg.Add("Text", "x" bx1 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "🔊 테스트")
@@ -252,69 +275,92 @@ OpenEQ() {
     gEqGui := eg
     eg.Show("w" guiW " h" totalH)
 
-    DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -3)
-    DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5)
-    DoBalanced(*) => FillEQ(eg, [0,2,4,5,4,3,1,0,0,1,3,3,1,0,-1], -2)
+    DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -8)
+    DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -10)
+    DoBalanced(*) => FillEQ(eg, [0,2,4,5,4,3,1,0,0,1,3,3,1,0,-1], -5)
     DoFlat(*)     => FillEQ(eg, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 0)
 
     DoTest(*) {
+        global gTestBackup
+        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+
+        ; Save current config for revert
+        try gTestBackup := FileRead(fp)
+        catch
+            gTestBackup := ""
+
+        ; Read slider values and apply temporarily
         pr := eg["Preamp"].Value
-        parts := []
+        gains := []
         loop 15 {
             v := eg["EQ" A_Index].Value
-            parts.Push(fNums[A_Index] " " v)
+            gains.Push(v)
             eg["VL" A_Index].Value := String(v)
         }
         eg["PL"].Value := String(pr) " dB"
-        eqStr := ""
-        for idx, p in parts {
-            if idx > 1
-                eqStr .= "; "
-            eqStr .= p
-        }
-        txt := "# Footstep Amplifier`nPreamp: " pr " dB`nGraphicEQ: " eqStr "`n"
-        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
-        try FileDelete(fp)
-        FileAppend(txt, fp)
-        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
-        try FileDelete(mc)
-        FileAppend("Include: footstep-boost.txt", mc)
-        ShowOverlay("🔊", "TESTING", "Listen now!", "0x4488FF")
+
+        txt := BuildEQText(fNums, gains, pr)
+        WriteConfig(fp, txt)
+        WriteConfig(mc, "Include: footstep-boost.txt")
+
+        ShowOverlay("🔊", "TESTING", "5초 후 원래대로", "0x4488FF")
+
+        ; Auto-revert after 5 seconds
+        SetTimer(RevertTest, -5000)
     }
 
     DoApply(*) {
+        global gTestBackup, gFootstepOn
+        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+
+        ; Cancel any pending test revert
+        SetTimer(RevertTest, 0)
+        gTestBackup := ""
+
         pr := eg["Preamp"].Value
-        parts := []
+        gains := []
         loop 15 {
             v := eg["EQ" A_Index].Value
-            parts.Push(fNums[A_Index] " " v)
+            gains.Push(v)
             eg["VL" A_Index].Value := String(v)
         }
         eg["PL"].Value := String(pr) " dB"
-        eqStr := ""
-        for idx, p in parts {
-            if idx > 1
-                eqStr .= "; "
-            eqStr .= p
-        }
-        txt := "# Footstep Amplifier`nPreamp: " pr " dB`nGraphicEQ: " eqStr "`n"
-        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
-        try FileDelete(fp)
-        FileAppend(txt, fp)
-        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
-        try FileDelete(mc)
-        FileAppend("Include: footstep-boost.txt", mc)
+
+        txt := BuildEQText(fNums, gains, pr)
+        WriteConfig(fp, txt)
+        WriteConfig(mc, "Include: footstep-boost.txt")
+
         gFootstepOn := true
         ShowTray()
         ShowOverlay("✅", "APPLIED", "EQ Saved", "0x66CC66")
     }
 
     CloseEQ(*) {
-        global gEqGui
+        global gEqGui, gTestBackup
+        ; Cancel pending test revert
+        SetTimer(RevertTest, 0)
+        ; If there was a test in progress, revert
+        if gTestBackup != "" {
+            fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+            WriteConfig(fp, gTestBackup)
+            gTestBackup := ""
+        }
         if gEqGui {
             gEqGui.Destroy()
             gEqGui := ""
         }
+    }
+}
+
+RevertTest() {
+    global gTestBackup
+    if gTestBackup != "" {
+        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+        WriteConfig(fp, gTestBackup)
+        gTestBackup := ""
+        ShowOverlay("↩️", "REVERTED", "테스트 종료", "0xFFAA44")
     }
 }
 
@@ -345,8 +391,10 @@ LoadEQ() {
                         pair := Trim(A_LoopField)
                         if pair != "" {
                             sp := StrSplit(pair, " ")
-                            if sp.Length >= 2
-                                vals.Push(Integer(sp[2]))
+                            if sp.Length >= 2 {
+                                numStr := RegExReplace(sp[2], "\.0$", "")
+                                vals.Push(Integer(numStr))
+                            }
                         }
                     }
                 }
@@ -390,14 +438,18 @@ ChkDesk() {
     global gTrayIndicator, gFootstepOn
     if !gFootstepOn or !gTrayIndicator
         return
-    ac := WinGetClass("A")
-    ae := ""
-    try ae := WinGetProcessName("A")
-    ok := (ac = "Progman" or ac = "WorkerW" or ac = "Shell_TrayWnd" or ac = "CabinetWClass" or ae = "explorer.exe")
-    if ok {
-        try gTrayIndicator.Show("NoActivate")
-    } else {
-        try gTrayIndicator.Hide()
+    try {
+        ac := WinGetClass("A")
+        ae := ""
+        try ae := WinGetProcessName("A")
+        ok := (ac = "Progman" or ac = "WorkerW" or ac = "Shell_TrayWnd" or ac = "CabinetWClass" or ae = "explorer.exe")
+        if ok {
+            try gTrayIndicator.Show("NoActivate")
+        } else {
+            try gTrayIndicator.Hide()
+        }
+    } catch {
+        ; No active window (lock screen, desktop switch, etc.)
     }
 }
 
