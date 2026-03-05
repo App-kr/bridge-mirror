@@ -132,7 +132,8 @@
       "Bash(git:*)",
       "Bash(choco search:*)",
       "WebFetch(domain:codepen.io)",
-      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx vercel --prod --yes 2>&1)"
+      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx vercel --prod --yes 2>&1)",
+      "Bash(TASKKILL:*)"
     ]
   }
 }
