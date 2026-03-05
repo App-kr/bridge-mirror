@@ -1,55 +1,55 @@
 """
 BRIDGE RPA Overlay — Apple-inspired Desktop Notification
 =========================================================
-macOS 스타일 알림. 주 모니터 상단 중앙.
-2모니터 환경 게임 방해 없음. 보안: 개인정보 미표시.
+Canvas 직접 렌더링 (Windows 이모지 미사용).
+주 모니터 상단 중앙. 2모니터 게임 방해 없음.
+보안: 개인정보 미표시.
 """
 
+import math
 import threading
 import tkinter as tk
 from tkinter import font as tkfont
 
-# "5개 더 올리기" 콜백용
 _post_more_event = threading.Event()
 
 
 def wants_more() -> bool:
-    """메인 스크립트에서 호출: 유저가 '더 올리기' 눌렀는지 확인."""
     result = _post_more_event.is_set()
     _post_more_event.clear()
     return result
 
 
 class RPAOverlay:
-    """Apple-inspired 오버레이 (frosted glass, rounded, macOS 닫기 버튼)."""
 
-    # ── Apple 색상 팔레트 ──
+    # Apple 팔레트
     WHITE = "#ffffff"
     BG = "#f5f5f7"
-    TEXT_PRIMARY = "#1d1d1f"
-    TEXT_SECONDARY = "#86868b"
-    ACCENT_BLUE = "#0071e3"
-    ACCENT_GREEN = "#34c759"
-    ACCENT_RED = "#ff3b30"
-    ACCENT_ORANGE = "#ff9500"
+    TEXT1 = "#1d1d1f"
+    TEXT2 = "#86868b"
+    TEXT3 = "#aeaeb2"
+    BLUE = "#0071e3"
+    BLUE_HOVER = "#0062c4"
+    GREEN = "#34c759"
+    RED = "#ff3b30"
+    ORANGE = "#ff9500"
     BORDER = "#d2d2d7"
-    CARD_BG = "#ffffff"
-    SHADOW = "#e0e0e0"
+    CARD = "#ffffff"
+    HOVER_BG = "#e8e8ed"
 
     def __init__(self):
         self._root = None
         self._thread = None
         self._ready = threading.Event()
+        self._anim_id = None
 
     def show_working(self):
-        """작업 시작 — macOS 알림 스타일."""
         self.close()
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
 
     def show_complete(self, posted_count: int = 0):
-        """작업 완료 — 확인 요청 + 더 올리기 버튼."""
         self.close()
         self._ready.clear()
         self._thread = threading.Thread(
@@ -67,73 +67,38 @@ class RPAOverlay:
         self._ready.clear()
 
     # ──────────────────────────────────────────────────────────────
-    # Working Overlay
+    # WORKING
     # ──────────────────────────────────────────────────────────────
     def _build_working(self):
-        root = self._create_root(720, 160)
+        root = self._make_root(660, 150)
+        card = self._make_card(root)
 
-        # 외곽 shadow + border 프레임
-        outer = tk.Frame(root, bg=self.BORDER, padx=1, pady=1)
-        outer.pack(fill="both", expand=True, padx=2, pady=2)
+        # 왼쪽: 애니메이션 아이콘 (파란 펄스 원 + 모니터 아이콘)
+        icon_canvas = tk.Canvas(card, width=72, height=72,
+                                bg=self.CARD, highlightthickness=0)
+        icon_canvas.pack(side="left", padx=(0, 24))
+        self._draw_working_icon(icon_canvas, root)
 
-        card = tk.Frame(outer, bg=self.CARD_BG, padx=28, pady=20)
-        card.pack(fill="both", expand=True)
+        # 중앙: 텍스트
+        mid = tk.Frame(card, bg=self.CARD)
+        mid.pack(side="left", fill="both", expand=True)
 
-        # ── 상단 바: macOS 닫기 버튼 (빨간 원) ──
-        top_bar = tk.Frame(card, bg=self.CARD_BG)
-        top_bar.pack(fill="x", pady=(0, 12))
+        tk.Label(mid, text="크래이그 작업중",
+                 font=self._fn(22, "bold"), bg=self.CARD,
+                 fg=self.TEXT1).pack(anchor="w")
+        tk.Label(mid, text="인터넷 창을 건들지 마세요",
+                 font=self._fn(14), bg=self.CARD,
+                 fg=self.TEXT2).pack(anchor="w", pady=(6, 0))
 
-        close_circle = tk.Canvas(top_bar, width=14, height=14,
-                                 bg=self.CARD_BG, highlightthickness=0)
-        close_circle.pack(side="left")
-        close_circle.create_oval(1, 1, 13, 13, fill=self.ACCENT_RED,
-                                 outline="#e0352b", width=1)
-        close_circle.bind("<Button-1>", lambda e: root.destroy())
-        close_circle.bind("<Enter>", lambda e: close_circle.create_text(
-            7, 7, text="×", fill="white", font=("Arial", 8, "bold")))
-        close_circle.bind("<Leave>", lambda e: [
-            close_circle.delete("all"),
-            close_circle.create_oval(1, 1, 13, 13, fill=self.ACCENT_RED,
-                                     outline="#e0352b", width=1)])
+        # 우측: 닫기 영역
+        right = tk.Frame(card, bg=self.CARD)
+        right.pack(side="right", padx=(16, 0))
 
-        # 우측 X 버튼
-        x_btn = self._make_text_btn(top_bar, "✕", self.TEXT_SECONDARY,
-                                    self.CARD_BG, 13, lambda: root.destroy())
-        x_btn.pack(side="right")
+        self._mac_close_btn(right, root)
+        self._pill_btn(right, "닫기", self.BG, self.TEXT1,
+                       lambda: root.destroy(), side="bottom")
 
-        # ── 메인 콘텐츠 ──
-        content = tk.Frame(card, bg=self.CARD_BG)
-        content.pack(fill="both", expand=True)
-
-        # 이모지
-        emoji_lbl = tk.Label(content, text="👨‍💻", bg=self.CARD_BG,
-                             font=self._emoji_font(42))
-        emoji_lbl.pack(side="left", padx=(0, 20))
-
-        # 텍스트
-        text_area = tk.Frame(content, bg=self.CARD_BG)
-        text_area.pack(side="left", fill="both", expand=True)
-
-        tk.Label(text_area, text="크래이그 작업중",
-                 font=self._font(20, "bold"), bg=self.CARD_BG,
-                 fg=self.TEXT_PRIMARY, anchor="w").pack(anchor="w")
-
-        tk.Label(text_area,
-                 text="인터넷 창을 건들지 마세요! 🙏",
-                 font=self._font(13), bg=self.CARD_BG,
-                 fg=self.TEXT_SECONDARY, anchor="w").pack(anchor="w", pady=(4, 0))
-
-        # ── 하단: 닫기 버튼 ──
-        btn_frame = tk.Frame(card, bg=self.CARD_BG)
-        btn_frame.pack(fill="x", pady=(12, 0))
-
-        self._make_pill_btn(btn_frame, "닫기", self.BG, self.TEXT_PRIMARY,
-                            lambda: root.destroy()).pack(side="right")
-
-        # 드래그
-        self._enable_drag(card, root)
-        self._enable_drag(content, root)
-
+        self._draggable(card, root)
         self._ready.set()
         try:
             root.mainloop()
@@ -141,80 +106,49 @@ class RPAOverlay:
             pass
 
     # ──────────────────────────────────────────────────────────────
-    # Complete Overlay
+    # COMPLETE
     # ──────────────────────────────────────────────────────────────
-    def _build_complete(self, posted_count: int):
-        root = self._create_root(720, 220)
+    def _build_complete(self, count: int):
+        root = self._make_root(660, 210)
+        card = self._make_card(root)
 
-        outer = tk.Frame(root, bg=self.BORDER, padx=1, pady=1)
-        outer.pack(fill="both", expand=True, padx=2, pady=2)
+        # 왼쪽: 체크마크 아이콘
+        icon_canvas = tk.Canvas(card, width=72, height=72,
+                                bg=self.CARD, highlightthickness=0)
+        icon_canvas.pack(side="left", padx=(0, 24))
+        self._draw_check_icon(icon_canvas)
 
-        card = tk.Frame(outer, bg=self.CARD_BG, padx=28, pady=20)
-        card.pack(fill="both", expand=True)
+        # 중앙+하단 묶음
+        body = tk.Frame(card, bg=self.CARD)
+        body.pack(side="left", fill="both", expand=True)
 
-        # ── 상단 바 ──
-        top_bar = tk.Frame(card, bg=self.CARD_BG)
-        top_bar.pack(fill="x", pady=(0, 12))
+        # 텍스트
+        tk.Label(body, text=f"광고 {count}건 완료",
+                 font=self._fn(22, "bold"), bg=self.CARD,
+                 fg=self.GREEN).pack(anchor="w")
+        tk.Label(body, text="개인정보 노출이 없도록\n한번 더 직접 확인해주세요",
+                 font=self._fn(14), bg=self.CARD, fg=self.TEXT2,
+                 justify="left").pack(anchor="w", pady=(8, 0))
 
-        close_circle = tk.Canvas(top_bar, width=14, height=14,
-                                 bg=self.CARD_BG, highlightthickness=0)
-        close_circle.pack(side="left")
-        close_circle.create_oval(1, 1, 13, 13, fill=self.ACCENT_RED,
-                                 outline="#e0352b", width=1)
-        close_circle.bind("<Button-1>", lambda e: root.destroy())
-        close_circle.bind("<Enter>", lambda e: close_circle.create_text(
-            7, 7, text="×", fill="white", font=("Arial", 8, "bold")))
-        close_circle.bind("<Leave>", lambda e: [
-            close_circle.delete("all"),
-            close_circle.create_oval(1, 1, 13, 13, fill=self.ACCENT_RED,
-                                     outline="#e0352b", width=1)])
+        # 버튼 행
+        btn_row = tk.Frame(body, bg=self.CARD)
+        btn_row.pack(anchor="w", pady=(16, 0))
 
-        x_btn = self._make_text_btn(top_bar, "✕", self.TEXT_SECONDARY,
-                                    self.CARD_BG, 13, lambda: root.destroy())
-        x_btn.pack(side="right")
-
-        # ── 메인 콘텐츠 ──
-        content = tk.Frame(card, bg=self.CARD_BG)
-        content.pack(fill="both", expand=True)
-
-        emoji_lbl = tk.Label(content, text="🎉", bg=self.CARD_BG,
-                             font=self._emoji_font(42))
-        emoji_lbl.pack(side="left", padx=(0, 20))
-
-        text_area = tk.Frame(content, bg=self.CARD_BG)
-        text_area.pack(side="left", fill="both", expand=True)
-
-        tk.Label(text_area, text=f"광고 {posted_count}건 완료!",
-                 font=self._font(20, "bold"), bg=self.CARD_BG,
-                 fg=self.ACCENT_GREEN, anchor="w").pack(anchor="w")
-
-        tk.Label(text_area,
-                 text="개인정보 노출이 없도록\n한번 더 직접 확인해주세요 🙏",
-                 font=self._font(13), bg=self.CARD_BG,
-                 fg=self.TEXT_SECONDARY, anchor="w",
-                 justify="left").pack(anchor="w", pady=(6, 0))
-
-        # ── 하단 버튼 ──
-        btn_frame = tk.Frame(card, bg=self.CARD_BG)
-        btn_frame.pack(fill="x", pady=(16, 0))
-
-        def _on_post_more():
+        def _on_more():
             _post_more_event.set()
             root.destroy()
 
-        self._make_pill_btn(btn_frame, "5개 더 올리기 🚀",
-                            self.ACCENT_BLUE, self.WHITE,
-                            _on_post_more).pack(side="right", padx=(10, 0))
+        self._pill_btn(btn_row, "5개 더 올리기", self.BLUE, self.WHITE,
+                       _on_more, side="left", padx=(0, 10))
+        self._pill_btn(btn_row, "닫기", self.BG, self.TEXT1,
+                       lambda: root.destroy(), side="left")
 
-        self._make_pill_btn(btn_frame, "닫기",
-                            self.BG, self.TEXT_PRIMARY,
-                            lambda: root.destroy()).pack(side="right")
+        # 우측: 닫기
+        right = tk.Frame(card, bg=self.CARD)
+        right.pack(side="right", anchor="n", padx=(16, 0))
+        self._mac_close_btn(right, root)
 
-        # 드래그
-        self._enable_drag(card, root)
-        self._enable_drag(content, root)
-
-        # 60초 후 자동 닫기
+        self._draggable(card, root)
         root.after(60000, lambda: root.destroy() if root.winfo_exists() else None)
 
         self._ready.set()
@@ -224,88 +158,166 @@ class RPAOverlay:
             pass
 
     # ──────────────────────────────────────────────────────────────
-    # 헬퍼
+    # 커스텀 아이콘 (Canvas 렌더링, 이모지 미사용)
     # ──────────────────────────────────────────────────────────────
-    def _create_root(self, w, h):
+    def _draw_working_icon(self, c: tk.Canvas, root: tk.Tk):
+        """파란 원 + 모니터 아이콘 + 펄스 애니메이션."""
+        cx, cy, r = 36, 36, 30
+
+        # 배경 원
+        c.create_oval(cx - r, cy - r, cx + r, cy + r,
+                      fill="#e8f4fd", outline="#b3d9f7", width=1.5)
+
+        # 모니터 본체
+        c.create_rectangle(20, 20, 52, 44, fill=self.BLUE,
+                           outline="", width=0)
+        # 모니터 화면 (밝은 부분)
+        c.create_rectangle(23, 23, 49, 41, fill="#4da3ef", outline="")
+        # 화면 위 커서 라인들
+        c.create_line(26, 28, 38, 28, fill=self.WHITE, width=1.5)
+        c.create_line(26, 32, 42, 32, fill="#a8d4f5", width=1.5)
+        c.create_line(26, 36, 35, 36, fill="#a8d4f5", width=1.5)
+        # 모니터 받침
+        c.create_line(36, 44, 36, 50, fill=self.BLUE, width=2.5)
+        c.create_line(28, 50, 44, 50, fill=self.BLUE, width=2.5)
+
+        # 펄스 애니메이션 (바깥 원 확대/축소)
+        self._pulse_ring = None
+        self._pulse_step = 0
+
+        def _pulse():
+            if not root.winfo_exists():
+                return
+            if self._pulse_ring:
+                c.delete(self._pulse_ring)
+            s = self._pulse_step % 40
+            scale = 1.0 + 0.15 * math.sin(s * math.pi / 20)
+            pr = r * scale
+            alpha_hex = format(int(80 * (1 - abs(math.sin(s * math.pi / 20)))), '02x')
+            self._pulse_ring = c.create_oval(
+                cx - pr, cy - pr, cx + pr, cy + pr,
+                outline=self.BLUE, width=2, dash=(4, 3))
+            self._pulse_step += 1
+            self._anim_id = root.after(80, _pulse)
+
+        _pulse()
+
+    def _draw_check_icon(self, c: tk.Canvas):
+        """초록 원 + 체크마크."""
+        cx, cy, r = 36, 36, 30
+
+        # 배경 원
+        c.create_oval(cx - r, cy - r, cx + r, cy + r,
+                      fill="#e8f8ed", outline="#a3e4b8", width=1.5)
+
+        # 안쪽 원
+        c.create_oval(cx - 20, cy - 20, cx + 20, cy + 20,
+                      fill=self.GREEN, outline="")
+
+        # 체크마크 (두꺼운 흰 선)
+        c.create_line(26, 36, 33, 44, fill=self.WHITE, width=3.5,
+                      capstyle="round", joinstyle="round")
+        c.create_line(33, 44, 47, 28, fill=self.WHITE, width=3.5,
+                      capstyle="round", joinstyle="round")
+
+    # ──────────────────────────────────────────────────────────────
+    # UI 컴포넌트
+    # ──────────────────────────────────────────────────────────────
+    def _make_root(self, w, h):
         root = tk.Tk()
         self._root = root
         root.overrideredirect(True)
         root.attributes("-topmost", True)
-        root.attributes("-alpha", 0.96)
-        root.configure(bg=self.SHADOW)
+        root.attributes("-alpha", 0.97)
+        root.configure(bg=self.BORDER)
 
         screen_w = root.winfo_screenwidth()
         x = (screen_w - w) // 2
-        root.geometry(f"{w}x{h}+{x}+24")
+        root.geometry(f"{w}x{h}+{x}+28")
         return root
 
-    def _font(self, size, weight="normal"):
-        try:
-            return tkfont.Font(family="Segoe UI", size=size, weight=weight)
-        except Exception:
-            return tkfont.Font(size=size, weight=weight)
+    def _make_card(self, root):
+        """흰 카드 + 미세 border (Apple 스타일)."""
+        # border 역할
+        outer = tk.Frame(root, bg=self.BORDER, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
 
-    def _emoji_font(self, size):
-        try:
-            return tkfont.Font(family="Segoe UI Emoji", size=size)
-        except Exception:
-            return tkfont.Font(size=size)
+        card = tk.Frame(outer, bg=self.CARD, padx=28, pady=24)
+        card.pack(fill="both", expand=True)
+        return card
 
-    def _make_text_btn(self, parent, text, fg, bg, size, command):
-        lbl = tk.Label(parent, text=text, fg=fg, bg=bg, cursor="hand2",
-                       font=self._font(size))
-        lbl.bind("<Button-1>", lambda e: command())
-        lbl.bind("<Enter>", lambda e: lbl.configure(fg=self.ACCENT_RED))
-        lbl.bind("<Leave>", lambda e: lbl.configure(fg=fg))
-        return lbl
+    def _mac_close_btn(self, parent, root):
+        """macOS 빨간 원 닫기 버튼."""
+        c = tk.Canvas(parent, width=16, height=16,
+                      bg=self.CARD, highlightthickness=0, cursor="hand2")
+        c.pack(anchor="ne", pady=(0, 8))
 
-    def _make_pill_btn(self, parent, text, bg_color, fg_color, command):
-        """Apple 스타일 pill 버튼 (rounded-full)."""
-        btn = tk.Label(parent, text=f"  {text}  ", bg=bg_color, fg=fg_color,
-                       cursor="hand2", font=self._font(12, "bold"),
-                       padx=16, pady=6,
-                       relief="flat", borderwidth=0)
-        btn.bind("<Button-1>", lambda e: command())
+        circle_id = c.create_oval(2, 2, 14, 14, fill=self.RED, outline="#e0352b")
+        x_items = []
 
-        # hover 효과
         def _enter(e):
-            if bg_color == self.ACCENT_BLUE:
-                btn.configure(bg="#005ec4")
-            elif bg_color == self.BG:
-                btn.configure(bg="#e8e8ed")
+            x_items.append(c.create_line(5, 5, 11, 11, fill=self.WHITE, width=1.5))
+            x_items.append(c.create_line(11, 5, 5, 11, fill=self.WHITE, width=1.5))
 
         def _leave(e):
-            btn.configure(bg=bg_color)
+            for item in x_items:
+                c.delete(item)
+            x_items.clear()
 
-        btn.bind("<Enter>", _enter)
-        btn.bind("<Leave>", _leave)
+        c.bind("<Enter>", _enter)
+        c.bind("<Leave>", _leave)
+        c.bind("<Button-1>", lambda e: root.destroy())
+        return c
+
+    def _pill_btn(self, parent, text, bg, fg, cmd, side="top", padx=0):
+        """Apple pill 버튼."""
+        btn = tk.Frame(parent, bg=bg, padx=1, pady=1, cursor="hand2")
+        btn.pack(side=side, padx=padx)
+
+        inner = tk.Label(btn, text=f"   {text}   ", bg=bg, fg=fg,
+                         font=self._fn(13, "bold"), padx=14, pady=7)
+        inner.pack()
+
+        def _enter(e):
+            if bg == self.BLUE:
+                inner.configure(bg=self.BLUE_HOVER)
+                btn.configure(bg=self.BLUE_HOVER)
+            else:
+                inner.configure(bg=self.HOVER_BG)
+                btn.configure(bg=self.HOVER_BG)
+
+        def _leave(e):
+            inner.configure(bg=bg)
+            btn.configure(bg=bg)
+
+        for w in (btn, inner):
+            w.bind("<Button-1>", lambda e: cmd())
+            w.bind("<Enter>", _enter)
+            w.bind("<Leave>", _leave)
+
         return btn
 
-    def _enable_drag(self, widget, root):
-        def _start(event):
-            root._drag_x = event.x
-            root._drag_y = event.y
+    def _fn(self, size, weight="normal"):
+        for family in ("SF Pro Display", "Segoe UI", "Malgun Gothic"):
+            try:
+                return tkfont.Font(family=family, size=size, weight=weight)
+            except Exception:
+                continue
+        return tkfont.Font(size=size, weight=weight)
 
-        def _drag(event):
-            nx = root.winfo_x() + (event.x - root._drag_x)
-            ny = root.winfo_y() + (event.y - root._drag_y)
-            root.geometry(f"+{nx}+{ny}")
+    def _draggable(self, widget, root):
+        def _start(e):
+            root._dx, root._dy = e.x, e.y
+
+        def _move(e):
+            root.geometry(f"+{root.winfo_x() + e.x - root._dx}+{root.winfo_y() + e.y - root._dy}")
 
         widget.bind("<ButtonPress-1>", _start)
-        widget.bind("<B1-Motion>", _drag)
+        widget.bind("<B1-Motion>", _move)
 
 
-# ── 싱글턴 ──
+# ── API ──
 _overlay = RPAOverlay()
-
-
-def show_working():
-    _overlay.show_working()
-
-
-def show_complete(posted_count: int = 0):
-    _overlay.show_complete(posted_count)
-
-
-def close():
-    _overlay.close()
+show_working = _overlay.show_working
+show_complete = _overlay.show_complete
+close = _overlay.close
