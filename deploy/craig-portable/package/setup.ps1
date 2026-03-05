@@ -77,9 +77,13 @@ Write-Host "[4/8] Copying files..." -ForegroundColor Yellow
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# RPA 스크립트
+# RPA 스크립트 + 오버레이
 Copy-Item "$ScriptDir\craigslist_auto_rpa.py" "$InstallDir\craigslist_auto_rpa.py" -Force
 Write-Host "  [OK] craigslist_auto_rpa.py" -ForegroundColor Green
+if (Test-Path "$ScriptDir\rpa_overlay.py") {
+    Copy-Item "$ScriptDir\rpa_overlay.py" "$InstallDir\rpa_overlay.py" -Force
+    Write-Host "  [OK] rpa_overlay.py (desktop overlay)" -ForegroundColor Green
+}
 
 # DB 복사 — PII 제거된 안전 버전만
 if (Test-Path "$ScriptDir\master_safe.db") {

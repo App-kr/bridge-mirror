@@ -1250,9 +1250,18 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
+    # 오버레이 알림 (설치되어 있으면 표시)
+    try:
+        from rpa_overlay import show_working, show_complete, close as overlay_close
+        _HAS_OVERLAY = True
+    except ImportError:
+        _HAS_OVERLAY = False
+
     # Selenium 게시
     hl_flag = args.headless
     print(f"\nChrome 시작... {len(ads)}건 게시 예정 (headless={hl_flag})")
+    if _HAS_OVERLAY:
+        show_working()
     driver = build_driver(headless=hl_flag)
 
     try:
@@ -1306,9 +1315,13 @@ def main():
     finally:
         driver.quit()
 
+    posted = sum(1 for _, _, _, aid in ads if aid)
     print("\n" + "=" * 60)
     print(f"  완료: {len(ads)}건 처리")
     print("=" * 60)
+
+    if _HAS_OVERLAY:
+        show_complete(posted_count=posted)
 
 
 if __name__ == "__main__":

@@ -20,9 +20,11 @@ New-Item -Path $OutDir -ItemType Directory -Force | Out-Null
 Copy-Item "$PackDir\setup.ps1" "$OutDir\setup.ps1" -Force
 Write-Host "  [OK] setup.ps1" -ForegroundColor Green
 
-# RPA 스크립트 복사
+# RPA 스크립트 + 오버레이 복사
 Copy-Item "$ProjectRoot\tools\craigslist_auto_rpa.py" "$OutDir\craigslist_auto_rpa.py" -Force
 Write-Host "  [OK] craigslist_auto_rpa.py" -ForegroundColor Green
+Copy-Item "$ProjectRoot\tools\rpa_overlay.py" "$OutDir\rpa_overlay.py" -Force
+Write-Host "  [OK] rpa_overlay.py" -ForegroundColor Green
 
 # DB: PII 테이블 제거한 안전 버전 생성
 if (Test-Path "$ProjectRoot\master.db") {
