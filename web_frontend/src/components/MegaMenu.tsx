@@ -109,6 +109,25 @@ export default function MegaMenu() {
     timer.current = setTimeout(() => setActive(null), 150)
   }, [])
 
+  // Desktop: Admin 버튼을 nav CTA 영역에 주입
+  useEffect(() => {
+    if (isAdminPage) return
+    const applyLink = document.querySelector('nav.nav-glass a[href="/apply"]')
+    const container = applyLink?.parentElement
+    if (!container || container.querySelector('[data-admin-btn]')) return
+
+    const link = document.createElement('a')
+    link.href = '/admin'
+    link.setAttribute('data-admin-btn', '1')
+    link.style.cssText = 'background:#1a1a2e;color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;text-decoration:none;transition:background 0.2s;white-space:nowrap;'
+    link.textContent = 'Admin'
+    link.addEventListener('mouseenter', () => { link.style.background = '#2d2d4e' })
+    link.addEventListener('mouseleave', () => { link.style.background = '#1a1a2e' })
+    container.appendChild(link)
+
+    return () => { link.remove() }
+  }, [isAdminPage, pathname])
+
   // admin 페이지에서는 렌더링 안 함
   if (isAdminPage) return null
 
@@ -177,6 +196,14 @@ export default function MegaMenu() {
               </Link>
               <Link href="/inquiry" className="mobile-cta-outline" onClick={() => setMobileOpen(false)}>
                 원어민채용의뢰
+              </Link>
+              <Link href="/admin" onClick={() => setMobileOpen(false)}
+                style={{
+                  background: '#1a1a2e', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 6, padding: '8px 14px', fontSize: 13, fontWeight: 600,
+                  textAlign: 'center', textDecoration: 'none',
+                }}>
+                Admin
               </Link>
             </div>
           </nav>
