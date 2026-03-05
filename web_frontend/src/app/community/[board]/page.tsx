@@ -22,11 +22,10 @@ import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBa
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
-import { useDragReorder, type DragState } from '@/hooks/useDragReorder'
-import { TESTIMONIALS } from '@/data/testimonials'
-import { seededShuffle } from '@/lib/seededShuffle'
+import { useDragReorder } from '@/hooks/useDragReorder'
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder'
 import {
-  Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
+  Eye, Pencil, Trash2, ChevronUp, ChevronDown,
   Check, Plus,
 } from 'lucide-react'
 
@@ -64,12 +63,8 @@ interface LayoutProps {
   onFaqAdd?: () => void
   onFaqDelete?: (index: number) => void
   onFaqReorder?: (index: number, direction: 'up' | 'down') => void
-  // Drag reorder
-  dragState?: DragState
-  onDragStart?: (index: number) => void
-  onDragOver?: (e: React.DragEvent, index: number) => void
-  onDrop?: (e: React.DragEvent, index: number) => void
-  onDragEnd?: () => void
+  faqSectionTitle?: string
+  onFaqSectionTitleChange?: (title: string) => void
 }
 
 /** Strip markdown syntax for preview text */
@@ -114,40 +109,23 @@ function AdminCheckbox({ checked, onChange }: { checked: boolean; onChange: () =
   )
 }
 
-function SortHandle({ onMoveUp, onMoveDown, draggable, onDragStart, isFirst, isLast }: {
+function SortHandle({ onMoveUp, onMoveDown, isFirst, isLast }: {
   onMoveUp: () => void; onMoveDown: () => void
-  draggable?: boolean; onDragStart?: () => void
   isFirst?: boolean; isLast?: boolean
 }) {
   return (
-    <span className="inline-flex items-center shrink-0"
+    <span className="inline-flex items-center gap-0.5 shrink-0"
       onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
-      <span
-        draggable={draggable}
-        onDragStart={(e) => {
-          if (!onDragStart) return
-          e.stopPropagation()
-          onDragStart()
-        }}
-        className={`cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-zinc-700/50 transition-colors ${draggable ? '' : 'opacity-50'}`}
-        title="Drag to reorder"
-      >
-        <GripVertical size={14} className="text-zinc-400" />
-      </span>
-      <span className="flex flex-col">
-        {!isFirst && (
-          <button type="button" onClick={onMoveUp}
-            className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Move up">
-            <ChevronUp size={12} />
-          </button>
-        )}
-        {!isLast && (
-          <button type="button" onClick={onMoveDown}
-            className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Move down">
-            <ChevronDown size={12} />
-          </button>
-        )}
-      </span>
+      <button type="button" onClick={onMoveUp} disabled={isFirst}
+        className={`p-1 rounded transition-colors ${isFirst ? 'opacity-20 cursor-default' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
+        title="Move up">
+        <ChevronUp size={16} />
+      </button>
+      <button type="button" onClick={onMoveDown} disabled={isLast}
+        className={`p-1 rounded transition-colors ${isLast ? 'opacity-20 cursor-default' : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'}`}
+        title="Move down">
+        <ChevronDown size={16} />
+      </button>
     </span>
   )
 }
@@ -393,6 +371,7 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true)
   const [faqItems, setFaqItems] = useState<FaqItem[]>([])
   const [faqPostId, setFaqPostId] = useState<number | null>(null)
+  const [faqSectionTitle, setFaqSectionTitle] = useState('')
 
   // Unified editor state
   const [editorOpen, setEditorOpen] = useState(false)
@@ -430,6 +409,7 @@ export default function BoardPage() {
           if (j.success && j.data.posts.length > 0) {
             const post = j.data.posts[0]
             setFaqPostId(post.id)
+            if (post.title) setFaqSectionTitle(post.title)
             const parsed = parseFaqBody(post.body ?? '')
             setFaqItems(parsed.length > 0 ? parsed : defaultFaq)
           } else {
@@ -568,8 +548,9 @@ export default function BoardPage() {
     return items.map((item, i) => `### Q${i + 1}. ${item.q}\n**A.** ${item.a}`).join('\n\n')
   }
 
-  const saveFaqToApi = useCallback(async (items: FaqItem[]) => {
-    const title = board === 'support' ? 'Teacher FAQ' : 'Employer FAQ'
+  const saveFaqToApi = useCallback(async (items: FaqItem[], titleOverride?: string) => {
+    const defaultTitle = board === 'support' ? 'Teacher FAQ' : 'Employer FAQ'
+    const title = titleOverride || faqSectionTitle || defaultTitle
     const category = board === 'support' ? 'faq-teacher' : 'faq-employer'
     const body = serializeFaq(items)
     try {
@@ -587,7 +568,12 @@ export default function BoardPage() {
         if (j.success && j.data?.id) setFaqPostId(j.data.id)
       }
     } catch { /* noop */ }
-  }, [board, faqPostId, signedFetch])
+  }, [board, faqPostId, faqSectionTitle, signedFetch])
+
+  const handleFaqSectionTitleChange = useCallback(async (newTitle: string) => {
+    setFaqSectionTitle(newTitle)
+    await saveFaqToApi(faqItems, newTitle)
+  }, [faqItems, saveFaqToApi])
 
   const handleEditorSave = useCallback(async (data: PostData) => {
     const { type, postId, faqIndex } = editorCtx
@@ -696,11 +682,8 @@ export default function BoardPage() {
     onFaqAdd: handleFaqItemAdd,
     onFaqDelete: handleFaqItemDelete,
     onFaqReorder: handleFaqItemReorder,
-    dragState: postDrag.dragState,
-    onDragStart: postDrag.handleDragStart,
-    onDragOver: postDrag.handleDragOver,
-    onDrop: postDrag.handleDrop,
-    onDragEnd: postDrag.handleDragEnd,
+    faqSectionTitle,
+    onFaqSectionTitleChange: handleFaqSectionTitleChange,
   }
 
   const Layout = (() => {
@@ -729,13 +712,13 @@ export default function BoardPage() {
         />
       )}
       {editMode && orderDirty && (
-        <div className="bg-amber-600 text-white px-6 py-2.5 flex items-center justify-between text-sm">
+        <div className="bg-blue-600 text-white px-6 py-2.5 flex items-center justify-between text-sm">
           <span className="font-medium">순서가 변경되었습니다</span>
           <button
             type="button"
             onClick={handleSaveOrder}
             disabled={orderSaving}
-            className="px-4 py-1.5 bg-white text-amber-700 font-semibold rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50 text-[13px]"
+            className="px-5 py-1.5 bg-white text-blue-700 font-bold rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm shadow-sm"
           >
             {orderSaving ? '저장 중...' : '순서 저장'}
           </button>
@@ -758,14 +741,27 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+
+  const defaultLabel = board === 'support' ? 'Teacher FAQ' : board === 'support_kr' ? '자주 묻는 질문' : ''
+  const sectionLabel = faqSectionTitle || defaultLabel
 
   const faqConfig = board === 'support'
-    ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: 'Teacher FAQ', badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: faqItems && faqItems.length > 0 ? faqItems : TEACHER_FAQ }
+    ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: sectionLabel, badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: faqItems && faqItems.length > 0 ? faqItems : TEACHER_FAQ }
     : board === 'support_kr'
-    ? { bg: 'bg-[#0a1f12]', accent: '#22c55e', label: '자주 묻는 질문', badgeBg: 'bg-green-500/20', badgeText: 'text-green-300', items: faqItems && faqItems.length > 0 ? faqItems : EMPLOYER_FAQ }
+    ? { bg: 'bg-[#0a1f12]', accent: '#22c55e', label: sectionLabel, badgeBg: 'bg-green-500/20', badgeText: 'text-green-300', items: faqItems && faqItems.length > 0 ? faqItems : EMPLOYER_FAQ }
     : null
+
+  const handleTitleSave = () => {
+    const trimmed = titleDraft.trim()
+    if (trimmed && trimmed !== sectionLabel && onFaqSectionTitleChange) {
+      onFaqSectionTitleChange(trimmed)
+    }
+    setEditingTitle(false)
+  }
 
   return (
     <div>
@@ -782,9 +778,29 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${faqConfig.badgeBg} ${faqConfig.badgeText} mb-4`}>
                 FAQ
               </span>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                {faqConfig.label}
-              </h2>
+              {editMode && editingTitle ? (
+                <input
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={handleTitleSave}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleTitleSave() }}
+                  autoFocus
+                  className="text-2xl sm:text-3xl font-bold text-white tracking-tight bg-transparent border-b-2 border-white/40 outline-none text-center w-full max-w-md mx-auto block"
+                />
+              ) : (
+                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight inline-flex items-center gap-2 justify-center">
+                  {faqConfig.label}
+                  {editMode && onFaqSectionTitleChange && (
+                    <button type="button"
+                      onClick={() => { setTitleDraft(sectionLabel); setEditingTitle(true) }}
+                      className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                      title="Edit section title">
+                      <Pencil size={16} />
+                    </button>
+                  )}
+                </h2>
+              )}
             </motion.div>
 
             <motion.div
@@ -840,18 +856,12 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
             {regularPosts.map((p, i) => (
               <motion.div key={p.id} variants={fadeInUp}
                 className={editMode ? 'flex items-center gap-1.5' : ''}
-                style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
-                onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
-                onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+                layout
               >
-                {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
-                  <div className="w-full h-0.5 bg-blue-500 rounded-full -mb-1" />
-                )}
                 {editMode && onMoveUp && onMoveDown && (
                   <SortHandle
                     onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                    draggable isFirst={i === 0} isLast={i === regularPosts.length - 1}
-                    onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                    isFirst={i === 0} isLast={i === regularPosts.length - 1}
                   />
                 )}
                 {editMode && onToggleSelect && (
@@ -861,7 +871,6 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                   href={`/community/${board}/${p.id}`}
                   className={`board-list-item group ${editMode ? 'flex-1' : ''}`}
                   style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
-                  onDragEnd={editMode ? onDragEnd : undefined}
                 >
                   <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
                   {editMode && onEdit && onDelete ? (
@@ -967,7 +976,7 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
 // ══════════════════════════════════════════════════════════════════════════════
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
+function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -1110,21 +1119,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
               variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
             >
               {aboutPosts.map((p, i) => (
-                <motion.div key={p.id} variants={scaleIn}
-                  style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
-                  onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
-                  onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
-                  onDragEnd={editMode ? onDragEnd : undefined}
-                >
-                  {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
-                    <div className="w-full h-0.5 bg-blue-500 rounded-full mb-1" />
-                  )}
+                <motion.div key={p.id} variants={scaleIn} layout>
                   <div className={editMode ? 'flex items-center gap-1.5' : ''}>
                     {editMode && onMoveUp && onMoveDown && (
                       <SortHandle
                         onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                        draggable isFirst={i === 0} isLast={i === aboutPosts.length - 1}
-                        onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                        isFirst={i === 0} isLast={i === aboutPosts.length - 1}
                       />
                     )}
                     {editMode && onToggleSelect && (
@@ -1269,21 +1269,13 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => (
-          <motion.div key={p.id} variants={fadeInUp}
-            style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
-            onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
-            onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
-            onDragEnd={editMode ? onDragEnd : undefined}
-          >
-            {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
-              <div className="w-full h-0.5 bg-blue-500 rounded-full mb-1" />
-            )}
+          <motion.div key={p.id} variants={fadeInUp}>
             <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
               <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
               <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
@@ -1299,8 +1291,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
                   {onMoveUp && onMoveDown && (
                     <SortHandle
                       onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                      draggable isFirst={i === 0} isLast={i === posts.length - 1}
-                      onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                      isFirst={i === 0} isLast={i === posts.length - 1}
                     />
                   )}
                   <span className="flex-1" />
@@ -1320,7 +1311,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
@@ -1332,18 +1323,12 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
           return (
             <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}
               className={editMode ? 'flex items-center gap-1.5' : ''}
-              style={editMode && dragState?.dragIndex === i ? { opacity: 0.4 } : undefined}
-              onDragOver={editMode && onDragOver ? (e) => onDragOver(e, i) : undefined}
-              onDrop={editMode && onDrop ? (e) => onDrop(e, i) : undefined}
+              layout
             >
-              {editMode && dragState?.overIndex === i && dragState.dragIndex !== i && (
-                <div className="w-full h-0.5 bg-blue-500 rounded-full -mb-1" />
-              )}
               {editMode && onMoveUp && onMoveDown && (
                 <SortHandle
                   onMoveUp={() => onMoveUp(i)} onMoveDown={() => onMoveDown(i)}
-                  draggable isFirst={i === 0} isLast={i === posts.length - 1}
-                  onDragStart={onDragStart ? () => onDragStart(i) : undefined}
+                  isFirst={i === 0} isLast={i === posts.length - 1}
                 />
               )}
               {editMode && onToggleSelect && (
@@ -1351,7 +1336,6 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
               )}
               <Link href={`/community/${board}/${p.id}`}
                 className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}
-                onDragEnd={editMode ? onDragEnd : undefined}
               >
                 <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
                   <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
@@ -1385,18 +1369,58 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
 // TESTIMONIALS — 팝업 카드 방식
 // ══════════════════════════════════════════════════════════════════════════════
 
-const FACE_EMOJIS = ['👩‍🏫', '👨‍🏫', '🧑‍💻', '👩‍💼', '👨‍💼', '🧑‍🎓', '👩‍🎓', '👨‍🎓', '👱‍♀️', '👱‍♂️', '🧔', '👩‍🦰', '🧑‍🦱', '👨‍🦳', '🧑', '👩']
-const FLAG_EMOJI: Record<string, string> = {
-  USA: '🇺🇸', Canada: '🇨🇦', UK: '🇬🇧', Ireland: '🇮🇪',
-  Australia: '🇦🇺', 'New Zealand': '🇳🇿', 'South Africa': '🇿🇦',
+interface Testimonial {
+  id: number
+  name: string
+  country: string
+  photo_url: string | null
+  rating: number
+  review_text: string
+  sort_order: number
+  created_at: string
 }
 
-function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) {
-  const now = new Date()
-  const monthSeed = now.getFullYear() * 12 + now.getMonth()
-  const allReviews = seededShuffle(TESTIMONIALS, monthSeed).slice(0, 40)
+const PER_PAGE = 5
 
-  const [selectedReview, setSelectedReview] = useState<typeof TESTIMONIALS[0] | null>(null)
+function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) {
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [tLoading, setTLoading] = useState(true)
+  const [selectedReview, setSelectedReview] = useState<Testimonial | null>(null)
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+
+  useEffect(() => {
+    setTLoading(true)
+    const offset = (page - 1) * PER_PAGE
+    fetch(`${API}/api/testimonials?limit=${PER_PAGE}&offset=${offset}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success) {
+          setTestimonials(j.data.testimonials)
+          setTotal(j.data.total)
+        }
+      })
+      .finally(() => setTLoading(false))
+  }, [page])
+
+  const goPage = (p: number) => {
+    if (p >= 1 && p <= totalPages) {
+      setPage(p)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const pageNumbers = (() => {
+    const pages: number[] = []
+    const maxVisible = 5
+    let start = Math.max(1, page - Math.floor(maxVisible / 2))
+    const end = Math.min(totalPages, start + maxVisible - 1)
+    start = Math.max(1, end - maxVisible + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    return pages
+  })()
 
   return (
     <div>
@@ -1425,41 +1449,115 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
         </div>
       </section>
 
-      {/* ── Testimonial cards grid ── */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <motion.div
-          className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"
-          variants={staggerContainer} initial="hidden" animate="visible"
-        >
-          {allReviews.map((t, i) => (
-            <motion.div key={`t-${i}`} variants={fadeInUp}>
-              <button
-                type="button"
-                onClick={() => setSelectedReview(t)}
-                className="testimonial-card w-full text-left group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-11 h-11 rounded-full bg-[#f5f5f7] flex items-center justify-center text-xl shrink-0 border border-[#e5e5ea]">
-                    {FACE_EMOJIS[i % FACE_EMOJIS.length]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[#1d1d1f] text-sm">{t.name}</div>
-                    <div className="text-xs text-[#86868b]">{FLAG_EMOJI[t.country] ?? ''} {t.country}</div>
-                  </div>
-                  <div className="flex gap-0.5 shrink-0">
-                    {Array.from({ length: 5 }).map((_, s) => (
-                      <svg key={s} className="w-3 h-3" viewBox="0 0 20 20" fill="#facc15">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </div>
+      {/* ── Testimonial list ── */}
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        {tLoading ? (
+          <div className="space-y-4">
+            {[...Array(PER_PAGE)].map((_, i) => (
+              <div key={i} className="flex gap-4 animate-pulse">
+                <div className="w-[100px] h-[100px] rounded-xl bg-[#f0f0f0] shrink-0" />
+                <div className="flex-1 space-y-3 py-2">
+                  <div className="h-4 bg-[#f0f0f0] rounded w-1/3" />
+                  <div className="h-3 bg-[#f0f0f0] rounded w-full" />
+                  <div className="h-3 bg-[#f0f0f0] rounded w-4/5" />
                 </div>
-                <p className="text-sm text-[#424245] leading-relaxed line-clamp-3">{t.text}</p>
-                <span className="text-xs text-[#0071e3] font-medium mt-2 block group-hover:underline">Read more</span>
+              </div>
+            ))}
+          </div>
+        ) : testimonials.length === 0 ? (
+          <p className="text-[#86868b] text-center py-16">No reviews yet.</p>
+        ) : (
+          <motion.div
+            className="space-y-5"
+            variants={staggerContainer} initial="hidden" animate="visible"
+          >
+            {testimonials.map((t) => (
+              <motion.div key={t.id} variants={fadeInUp}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReview(t)}
+                  className="w-full flex gap-4 sm:gap-5 p-4 sm:p-5 bg-white rounded-2xl border border-[#e5e5ea] text-left group
+                             hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] hover:border-[#d1d1d6] hover:-translate-y-0.5
+                             transition-all duration-300 cursor-pointer"
+                >
+                  {/* Left: Avatar */}
+                  <div className="shrink-0">
+                    <AvatarPlaceholder name={t.name} photoUrl={t.photo_url} size={100} />
+                  </div>
+
+                  {/* Right: Info */}
+                  <div className="flex-1 min-w-0 py-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-[16px] text-[#1d1d1f]">{t.name}</span>
+                      <span className="text-sm text-[#86868b]">({t.country})</span>
+                    </div>
+                    <div className="flex gap-0.5 mb-2">
+                      {Array.from({ length: 5 }).map((_, s) => (
+                        <svg key={s} className="w-3.5 h-3.5" viewBox="0 0 20 20" fill={s < t.rating ? '#facc15' : '#e5e5ea'}>
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <p className="text-sm text-[#424245] leading-relaxed line-clamp-2">{t.review_text}</p>
+                    <span className="text-xs text-[#0071e3] font-medium mt-1.5 block group-hover:underline">Read more</span>
+                  </div>
+                </button>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+
+        {/* ── Pagination ── */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-1.5 mt-10">
+            <button
+              type="button"
+              onClick={() => goPage(1)}
+              disabled={page === 1}
+              className="px-2.5 py-1.5 text-sm rounded-lg text-[#86868b] hover:bg-[#f5f5f7] disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              &laquo;
+            </button>
+            <button
+              type="button"
+              onClick={() => goPage(page - 1)}
+              disabled={page === 1}
+              className="px-2.5 py-1.5 text-sm rounded-lg text-[#86868b] hover:bg-[#f5f5f7] disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              &lsaquo;
+            </button>
+            {pageNumbers.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => goPage(p)}
+                className={`w-9 h-9 text-sm rounded-lg font-medium transition-colors ${
+                  p === page
+                    ? 'bg-[#0071e3] text-white'
+                    : 'text-[#424245] hover:bg-[#f5f5f7]'
+                }`}
+              >
+                {p}
               </button>
-            </motion.div>
-          ))}
-        </motion.div>
+            ))}
+            <button
+              type="button"
+              onClick={() => goPage(page + 1)}
+              disabled={page === totalPages}
+              className="px-2.5 py-1.5 text-sm rounded-lg text-[#86868b] hover:bg-[#f5f5f7] disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              &rsaquo;
+            </button>
+            <button
+              type="button"
+              onClick={() => goPage(totalPages)}
+              disabled={page === totalPages}
+              className="px-2.5 py-1.5 text-sm rounded-lg text-[#86868b] hover:bg-[#f5f5f7] disabled:opacity-30 disabled:cursor-default transition-colors"
+            >
+              &raquo;
+            </button>
+          </div>
+        )}
       </section>
 
       {/* ── Popup modal ── */}
@@ -1472,10 +1570,7 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {/* Backdrop */}
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedReview(null)} />
-
-            {/* Card */}
             <motion.div
               className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 sm:p-10"
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -1483,7 +1578,6 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
             >
-              {/* Close button */}
               <button
                 type="button"
                 onClick={() => setSelectedReview(null)}
@@ -1492,30 +1586,25 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
                 &times;
               </button>
 
-              {/* Avatar + Info */}
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center text-2xl shrink-0 border border-[#e5e5ea]">
-                  {FACE_EMOJIS[allReviews.indexOf(selectedReview) % FACE_EMOJIS.length]}
-                </div>
+                <AvatarPlaceholder name={selectedReview.name} photoUrl={selectedReview.photo_url} size={72} />
                 <div>
                   <div className="font-bold text-[#1d1d1f] text-lg">{selectedReview.name}</div>
-                  <div className="text-sm text-[#86868b]">{FLAG_EMOJI[selectedReview.country] ?? ''} {selectedReview.country}</div>
+                  <div className="text-sm text-[#86868b]">{selectedReview.country}</div>
                 </div>
               </div>
 
-              {/* Stars */}
               <div className="flex gap-1 mb-5">
                 {Array.from({ length: 5 }).map((_, s) => (
-                  <svg key={s} className="w-4 h-4" viewBox="0 0 20 20" fill="#facc15">
+                  <svg key={s} className="w-4 h-4" viewBox="0 0 20 20" fill={s < selectedReview.rating ? '#facc15' : '#e5e5ea'}>
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
                 ))}
               </div>
 
-              {/* Full text */}
               <div className="border-t border-[#f5f5f7] pt-5">
                 <span className="text-3xl text-[#d1d1d6] leading-none font-serif">&ldquo;</span>
-                <p className="text-[15px] text-[#424245] leading-[1.8] mt-2">{selectedReview.text}</p>
+                <p className="text-[15px] text-[#424245] leading-[1.8] mt-2">{selectedReview.review_text}</p>
               </div>
             </motion.div>
           </motion.div>

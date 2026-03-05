@@ -4589,6 +4589,118 @@ async def admin_analytics(request: Request, days: int = Query(30, ge=1, le=365))
         conn.close()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TESTIMONIALS API
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/testimonials", tags=["testimonials"])
+async def testimonials_list(
+    limit: int = 20,
+    offset: int = 0,
+    random: int = 0,
+):
+    """공개 리뷰 목록. random=1이면 랜덤 순서."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM testimonials WHERE is_visible=1 AND is_deleted=0"
+        ).fetchone()[0]
+        order = "RANDOM()" if random else "sort_order DESC, id DESC"
+        rows = conn.execute(
+            f"SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE is_visible=1 AND is_deleted=0 ORDER BY {order} LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        return ok(data={"total": total, "testimonials": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.post("/api/testimonials", status_code=201, tags=["testimonials"])
+async def testimonials_create(request: Request):
+    """새 리뷰 추가 (Admin)."""
+    _check_admin(request)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    country = (body.get("country") or "").strip()
+    review_text = (body.get("review_text") or "").strip()
+    if not name or not review_text:
+        err("name and review_text are required", 400)
+    rating = int(body.get("rating", 5))
+    photo_url = body.get("photo_url") or None
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        cur = conn.execute(
+            "INSERT INTO testimonials (name,country,photo_url,rating,review_text,sort_order,is_visible,is_deleted,created_at,updated_at) VALUES (?,?,?,?,?,0,1,0,?,?)",
+            (name, country, photo_url, rating, review_text, now, now),
+        )
+        conn.commit()
+        return ok(data={"id": cur.lastrowid}, message="Testimonial created")
+    finally:
+        conn.close()
+
+
+@app.put("/api/testimonials/{tid}", tags=["testimonials"])
+async def testimonials_update(tid: int, request: Request):
+    """리뷰 수정 (Admin)."""
+    _check_admin(request)
+    body = await request.json()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    fields = []
+    values = []
+    for key in ("name", "country", "photo_url", "rating", "review_text", "is_visible"):
+        if key in body:
+            fields.append(f"{key}=?")
+            values.append(body[key])
+    if not fields:
+        err("No fields to update", 400)
+    fields.append("updated_at=?")
+    values.append(now)
+    values.append(tid)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.execute(f"UPDATE testimonials SET {','.join(fields)} WHERE id=? AND is_deleted=0", values)
+        conn.commit()
+        return ok(message="Testimonial updated")
+    finally:
+        conn.close()
+
+
+@app.delete("/api/testimonials/{tid}", tags=["testimonials"])
+async def testimonials_delete(tid: int, request: Request):
+    """리뷰 soft-delete (Admin)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.execute("UPDATE testimonials SET is_deleted=1 WHERE id=?", (tid,))
+        conn.commit()
+        return ok(message="Testimonial deleted")
+    finally:
+        conn.close()
+
+
+@app.patch("/api/testimonials/reorder", tags=["testimonials"])
+async def testimonials_reorder(request: Request):
+    """리뷰 순서 변경 (Admin)."""
+    _check_admin(request)
+    body = await request.json()
+    items = body.get("items", [])
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        for item in items:
+            conn.execute("UPDATE testimonials SET sort_order=? WHERE id=?", (item["sort_order"], item["id"]))
+        conn.commit()
+        return ok(message="Reorder saved")
+    finally:
+        conn.close()
+
+
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
 from inbox_api import router as inbox_router
 from gmail_collector import router as gmail_router

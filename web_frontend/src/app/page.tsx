@@ -175,8 +175,27 @@ export default function HomePage() {
   const heroScale = useTransform(heroProgress, [0, 0.6], [1, 0.95])
   const arrowOpacity = useTransform(heroProgress, [0, 0.15], [1, 0])
 
-  // ── Testimonials from static pool (monthly-seeded shuffle) ──
-  useEffect(() => {
+  // ── Testimonials from DB API (random 6), fallback to static pool ──
+  const fetchTestimonials = useCallback(() => {
+    const apiBase = API_URL || ''
+    fetch(`${apiBase}/api/testimonials?limit=6&random=1`)
+      .then(r => r.json())
+      .then(d => {
+        if (d?.success && d.data?.testimonials?.length > 0) {
+          setTestimonials(d.data.testimonials.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
+            text: t.review_text,
+            stars: t.rating,
+            name: t.name,
+            country: t.country,
+          })))
+        } else {
+          loadFallback()
+        }
+      })
+      .catch(() => { loadFallback() })
+  }, [])
+
+  const loadFallback = useCallback(() => {
     const seed = getOverrideSeed('bridge_featured_testimonials_override')
     const shuffled = seededShuffle(TESTIMONIALS, seed).slice(0, 6)
     setTestimonials(shuffled.map(t => ({
@@ -185,6 +204,11 @@ export default function HomePage() {
       name: t.name,
       country: t.country,
     })))
+  }, [])
+
+  useEffect(() => {
+    fetchTestimonials()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Fetch featured jobs (monthly-seeded shuffle) ──
@@ -226,15 +250,30 @@ export default function HomePage() {
   }, [])
 
   const handleRefreshTestimonials = useCallback(() => {
-    const newSeed = Math.floor(Math.random() * 2147483647)
-    localStorage.setItem('bridge_featured_testimonials_override', String(newSeed))
-    const shuffled = seededShuffle(TESTIMONIALS, newSeed).slice(0, 6)
-    setTestimonials(shuffled.map(t => ({
-      text: t.text,
-      stars: t.stars,
-      name: t.name,
-      country: t.country,
-    })))
+    const apiBase = API_URL || ''
+    fetch(`${apiBase}/api/testimonials?limit=6&random=1`)
+      .then(r => r.json())
+      .then(d => {
+        if (d?.success && d.data?.testimonials?.length > 0) {
+          setTestimonials(d.data.testimonials.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
+            text: t.review_text,
+            stars: t.rating,
+            name: t.name,
+            country: t.country,
+          })))
+        } else {
+          const newSeed = Math.floor(Math.random() * 2147483647)
+          localStorage.setItem('bridge_featured_testimonials_override', String(newSeed))
+          const shuffled = seededShuffle(TESTIMONIALS, newSeed).slice(0, 6)
+          setTestimonials(shuffled.map(t => ({ text: t.text, stars: t.stars, name: t.name, country: t.country })))
+        }
+      })
+      .catch(() => {
+        const newSeed = Math.floor(Math.random() * 2147483647)
+        localStorage.setItem('bridge_featured_testimonials_override', String(newSeed))
+        const shuffled = seededShuffle(TESTIMONIALS, newSeed).slice(0, 6)
+        setTestimonials(shuffled.map(t => ({ text: t.text, stars: t.stars, name: t.name, country: t.country })))
+      })
     setTestimonialKey(prev => prev + 1)
     showToast('새로운 항목으로 배치되었습니다')
   }, [showToast])
