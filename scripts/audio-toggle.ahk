@@ -36,7 +36,7 @@ EQ_HitTest(wParam, lParam, msg, hwnd) {
         return
     ry := sy - wy
     rx := sx - wx
-    if (ry >= 0 and ry < 52 and rx < 598) {
+    if (ry >= 0 and ry < 52 and rx < 630) {
         if isParent
             return 2
         return -1
@@ -99,7 +99,7 @@ OpenEQ() {
     sh := 200
     px := 46
     py := 96
-    guiW := 640
+    guiW := 720
 
     eg := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
     eg.BackColor := "1e2a14"
@@ -112,8 +112,11 @@ OpenEQ() {
     eg.Add("Text", "x52 y8 w300 BackgroundTrans", "TACTICAL AUDIO")
     eg.SetFont("s8 c6a7a4a", "Segoe UI")
     eg.Add("Text", "x52 y30 w300 BackgroundTrans", "Sound Enhancement System")
-    eg.SetFont("s14 c888888 Bold", "Segoe UI")
-    xBtn := eg.Add("Text", "x" (guiW - 42) " y10 w30 h30 Center BackgroundTrans", "✕")
+
+    ; Close button (wide)
+    eg.Add("Text", "x" (guiW - 96) " y8 w86 h34 +0x1000 Background2a1515")
+    eg.SetFont("s11 cCC6666 Bold", "Segoe UI")
+    xBtn := eg.Add("Text", "x" (guiW - 96) " y14 w86 h22 Center BackgroundTrans", "✕ 닫기")
     xBtn.OnEvent("Click", CloseEQ)
 
     ; ═══ ZONE LABELS ═══
@@ -153,9 +156,9 @@ OpenEQ() {
     pY := py + sh + 26
     eg.SetFont("s9 cF0C040 Bold", "Segoe UI")
     eg.Add("Text", "x16 y" pY " w80 BackgroundTrans", "⚡ VOL")
-    eg.Add("Slider", "x90 y" (pY - 2) " w320 Range-12-6 ToolTip vPreamp", vals[16])
+    eg.Add("Slider", "x90 y" (pY - 2) " w400 Range-12-6 ToolTip vPreamp", vals[16])
     eg.SetFont("s10 cFFFFFF Bold", "Consolas")
-    eg.Add("Text", "x420 y" pY " w60 BackgroundTrans vPL", String(vals[16]) " dB")
+    eg.Add("Text", "x500 y" pY " w60 BackgroundTrans vPL", String(vals[16]) " dB")
 
     ; ═══ PRESETS 2x2 ═══
     bY := pY + 40
@@ -210,30 +213,42 @@ OpenEQ() {
     b4c := eg.Add("Text", "x" x2 " y" bY2 " w" cW " h" cH " +0x1000 BackgroundTrans")
     b4c.OnEvent("Click", DoFlat)
 
-    ; ═══ ACTION BUTTONS ═══
+    ; ═══ 3 ACTION BUTTONS: 테스트 | 적용 | 닫기 ═══
     aY := bY2 + cH + 14
-    btnW := (guiW - 32 - gap) // 2
+    btnGap := 10
+    btnW := (guiW - 32 - btnGap * 2) // 3
+    bx1 := 16
+    bx2 := bx1 + btnW + btnGap
+    bx3 := bx2 + btnW + btnGap
+    btnH := 48
 
-    ; 적용하기
-    eg.Add("Text", "x" x1 " y" aY " w" btnW " h48 +0x1000 Background3a6628")
-    eg.SetFont("s13 cFFFFFF Bold", "Segoe UI")
-    eg.Add("Text", "x" x1 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "적용하기")
-    abc := eg.Add("Text", "x" x1 " y" aY " w" btnW " h48 +0x1000 BackgroundTrans")
+    ; 테스트 (blue — preview without saving)
+    eg.Add("Text", "x" bx1 " y" aY " w" btnW " h" btnH " +0x1000 Background1a2a4a")
+    eg.SetFont("s13 cAAAAFF Bold", "Segoe UI")
+    eg.Add("Text", "x" bx1 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "🔊 테스트")
+    tst := eg.Add("Text", "x" bx1 " y" aY " w" btnW " h" btnH " +0x1000 BackgroundTrans")
+    tst.OnEvent("Click", DoTest)
+
+    ; 적용 (green — save & activate)
+    eg.Add("Text", "x" bx2 " y" aY " w" btnW " h" btnH " +0x1000 Background2a4a1a")
+    eg.SetFont("s13 cAAFFAA Bold", "Segoe UI")
+    eg.Add("Text", "x" bx2 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "✅ 적용")
+    abc := eg.Add("Text", "x" bx2 " y" aY " w" btnW " h" btnH " +0x1000 BackgroundTrans")
     abc.OnEvent("Click", DoApply)
 
-    ; 초기화
-    eg.Add("Text", "x" x2 " y" aY " w" btnW " h48 +0x1000 Background2a2a2a")
-    eg.SetFont("s13 cAAAAAA Bold", "Segoe UI")
-    eg.Add("Text", "x" x2 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "초기화")
-    rst := eg.Add("Text", "x" x2 " y" aY " w" btnW " h48 +0x1000 BackgroundTrans")
-    rst.OnEvent("Click", DoFlat)
+    ; 닫기 (dark red — close window)
+    eg.Add("Text", "x" bx3 " y" aY " w" btnW " h" btnH " +0x1000 Background3a1a1a")
+    eg.SetFont("s13 cFF8888 Bold", "Segoe UI")
+    eg.Add("Text", "x" bx3 " y" (aY + 12) " w" btnW " h24 Center BackgroundTrans", "✕ 닫기")
+    cls := eg.Add("Text", "x" bx3 " y" aY " w" btnW " h" btnH " +0x1000 BackgroundTrans")
+    cls.OnEvent("Click", CloseEQ)
 
     ; ═══ FOOTER ═══
-    fY := aY + 56
+    fY := aY + btnH + 8
     eg.SetFont("s7 c4a5a3a", "Segoe UI")
     eg.Add("Text", "x16 y" fY " w" (guiW - 32) " Center BackgroundTrans", "TACTICAL AUDIO  //  PUBG EDITION")
 
-    totalH := fY + 22
+    totalH := fY + 20
     gEqGui := eg
     eg.Show("w" guiW " h" totalH)
 
@@ -241,6 +256,31 @@ OpenEQ() {
     DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5)
     DoBalanced(*) => FillEQ(eg, [0,2,4,5,4,3,1,0,0,1,3,3,1,0,-1], -2)
     DoFlat(*)     => FillEQ(eg, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 0)
+
+    DoTest(*) {
+        pr := eg["Preamp"].Value
+        parts := []
+        loop 15 {
+            v := eg["EQ" A_Index].Value
+            parts.Push(fNums[A_Index] " " v)
+            eg["VL" A_Index].Value := String(v)
+        }
+        eg["PL"].Value := String(pr) " dB"
+        eqStr := ""
+        for idx, p in parts {
+            if idx > 1
+                eqStr .= "; "
+            eqStr .= p
+        }
+        txt := "# Footstep Amplifier`nPreamp: " pr " dB`nGraphicEQ: " eqStr "`n"
+        fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
+        try FileDelete(fp)
+        FileAppend(txt, fp)
+        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+        try FileDelete(mc)
+        FileAppend("Include: footstep-boost.txt", mc)
+        ShowOverlay("🔊", "TESTING", "Listen now!", "0x4488FF")
+    }
 
     DoApply(*) {
         pr := eg["Preamp"].Value
@@ -261,12 +301,12 @@ OpenEQ() {
         fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
         try FileDelete(fp)
         FileAppend(txt, fp)
-        if gFootstepOn {
-            mc := "C:\Program Files\EqualizerAPO\config\config.txt"
-            try FileDelete(mc)
-            FileAppend("Include: footstep-boost.txt", mc)
-        }
-        ShowOverlay("🎯", "DEPLOYED", "EQ Applied", "0xF0C040")
+        mc := "C:\Program Files\EqualizerAPO\config\config.txt"
+        try FileDelete(mc)
+        FileAppend("Include: footstep-boost.txt", mc)
+        gFootstepOn := true
+        ShowTray()
+        ShowOverlay("✅", "APPLIED", "EQ Saved", "0x66CC66")
     }
 
     CloseEQ(*) {
