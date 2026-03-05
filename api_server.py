@@ -1890,6 +1890,272 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
         conn.close()
 
 
+# ── Profile Matching + Bulk Send ─────────────────────────────────────────────
+
+# 지역 매핑: area_prefs 키워드 → client_inquiries.location 매칭값
+_REGION_MAP: dict[str, list[str]] = {
+    "서울": ["서울", "Seoul", "강남", "강북", "송파", "마포", "종로", "영등포", "서초", "용산", "성동", "광진"],
+    "경기": ["경기", "Gyeonggi", "수원", "성남", "용인", "안양", "부천", "화성", "안산", "고양", "일산", "파주", "이천", "평택", "분당", "판교"],
+    "인천": ["인천", "Incheon"],
+    "부산": ["부산", "Busan"],
+    "대구": ["대구", "Daegu"],
+    "대전": ["대전", "Daejeon"],
+    "광주": ["광주", "Gwangju"],
+    "울산": ["울산", "Ulsan"],
+    "세종": ["세종", "Sejong"],
+    "강원": ["강원", "Gangwon", "춘천", "원주", "강릉"],
+    "충북": ["충북", "충청북도", "Chungbuk", "청주", "충주"],
+    "충남": ["충남", "충청남도", "Chungnam", "천안", "아산"],
+    "전북": ["전북", "전라북도", "Jeonbuk", "전주", "익산", "군산"],
+    "전남": ["전남", "전라남도", "Jeonnam", "목포", "순천", "여수"],
+    "경북": ["경북", "경상북도", "Gyeongbuk", "포항", "구미", "경주", "김천"],
+    "경남": ["경남", "경상남도", "Gyeongnam", "창원", "김해", "진주", "거제"],
+    "제주": ["제주", "Jeju"],
+}
+
+# 대상 연령 매핑: target/target_age → teaching_age 매칭
+_TARGET_MAP: dict[str, list[str]] = {
+    "유치": ["Kindergarten", "킨디", "유치원", "유아", "Kinder", "Pre-K", "PreK"],
+    "초등": ["Elementary", "초등학교", "Primary", "초등"],
+    "중등": ["Middle", "중학교", "중등", "Junior"],
+    "고등": ["High", "고등학교", "고등", "Senior"],
+    "성인": ["Adult", "성인", "University", "대학", "Corporate", "기업"],
+    "전체": ["All", "전체", "Any"],
+}
+
+
+class MatchingEmployersQuery(BaseModel):
+    candidate_id: str
+
+
+class ProfileBroadcastBody(BaseModel):
+    candidate_id: str
+    employer_ids: list[int]
+    custom_subject: Optional[str] = None
+    custom_body: Optional[str] = None
+
+
+def _match_region(area_prefs: str, location: str) -> bool:
+    """후보자 area_prefs와 employer location 매칭."""
+    if not area_prefs or not location:
+        return False
+    area_lower = area_prefs.lower()
+    loc_lower = location.lower()
+    # "Anywhere" / "전국" → 모든 지역 매칭
+    if any(kw in area_lower for kw in ["anywhere", "전국", "any", "flexible"]):
+        return True
+    for region_key, keywords in _REGION_MAP.items():
+        area_hit = any(kw.lower() in area_lower for kw in [region_key] + keywords)
+        loc_hit = any(kw.lower() in loc_lower for kw in [region_key] + keywords)
+        if area_hit and loc_hit:
+            return True
+    return False
+
+
+def _match_target(target: str, target_age: str, teaching_age: str) -> bool:
+    """후보자 target/target_age와 employer teaching_age 매칭."""
+    if not teaching_age:
+        return False
+    cand_parts = f"{target or ''} {target_age or ''}".lower()
+    emp_lower = teaching_age.lower()
+    # 전체/Any → 모든 대상 매칭
+    if any(kw in cand_parts for kw in ["all", "any", "전체"]):
+        return True
+    if any(kw in emp_lower for kw in ["all", "any", "전체"]):
+        return True
+    for _tgt_key, keywords in _TARGET_MAP.items():
+        cand_hit = any(kw.lower() in cand_parts for kw in keywords)
+        emp_hit = any(kw.lower() in emp_lower for kw in keywords)
+        if cand_hit and emp_hit:
+            return True
+    return False
+
+
+@app.get("/api/admin/matching/employers", tags=["admin"])
+async def admin_matching_employers(request: Request, candidate_id: str):
+    """후보자 지역/대상 기반 employer 매칭 목록."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        # 후보자 조회
+        cand = conn.execute(
+            "SELECT * FROM candidates WHERE candidate_id = ?", (candidate_id,)
+        ).fetchone()
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        cand = dict(cand)
+
+        area_prefs = cand.get("area_prefs", "") or ""
+        target = cand.get("target", "") or ""
+        target_age = cand.get("target_age", "") or ""
+
+        # 모든 employer (client_inquiries) 조회 — email 있는 것만
+        employers = conn.execute(
+            "SELECT * FROM client_inquiries WHERE email IS NOT NULL AND email != '' ORDER BY id DESC"
+        ).fetchall()
+
+        # 이미 발송된 기록 조회
+        sent_rows = conn.execute(
+            "SELECT employer_id FROM profile_sends WHERE candidate_id = ?",
+            (candidate_id,)
+        ).fetchall()
+        sent_ids = {r["employer_id"] for r in sent_rows}
+
+        matched = []
+        unmatched = []
+        for emp in employers:
+            emp_d = dict(emp)
+            emp_loc = emp_d.get("location", "") or ""
+            emp_teach = emp_d.get("teaching_age", "") or ""
+
+            region_ok = _match_region(area_prefs, emp_loc)
+            target_ok = _match_target(target, target_age, emp_teach)
+            emp_d["_region_match"] = region_ok
+            emp_d["_target_match"] = target_ok
+            emp_d["_already_sent"] = emp_d["id"] in sent_ids
+
+            # 매칭 점수: region+target=2, region만=1, target만=1, 없음=0
+            score = int(region_ok) + int(target_ok)
+            emp_d["_match_score"] = score
+
+            if score > 0:
+                matched.append(emp_d)
+            else:
+                unmatched.append(emp_d)
+
+        # 점수순 정렬 (높은 것 먼저)
+        matched.sort(key=lambda x: (-x["_match_score"], x.get("school_name", "") or ""))
+
+        return ok(data={
+            "candidate": {
+                "candidate_id": cand.get("candidate_id", ""),
+                "full_name": cand.get("full_name", ""),
+                "nationality": cand.get("nationality", ""),
+                "target": target,
+                "target_age": target_age,
+                "area_prefs": area_prefs,
+                "experience": cand.get("experience", ""),
+                "education_level": cand.get("education_level", ""),
+                "certification": cand.get("certification", ""),
+                "visa_type": cand.get("visa_type", ""),
+                "start_date": cand.get("start_date", ""),
+                "photo_url": cand.get("photo_url", ""),
+                "dob": cand.get("dob", ""),
+                "gender": cand.get("gender", ""),
+            },
+            "matched": matched,
+            "unmatched": unmatched,
+            "total_matched": len(matched),
+            "total_unmatched": len(unmatched),
+        })
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/matching/send-profile", tags=["admin"])
+async def admin_matching_send_profile(request: Request, body: ProfileBroadcastBody):
+    """매칭된 employer들에게 후보자 프로필 일괄 발송 (PII 제외)."""
+    _check_admin(request)
+    if not body.employer_ids:
+        raise HTTPException(status_code=400, detail="employer_ids가 비어 있습니다.")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        # 후보자 조회
+        cand = conn.execute(
+            "SELECT * FROM candidates WHERE candidate_id = ?", (body.candidate_id,)
+        ).fetchone()
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        cand_d = dict(cand)
+
+        # 프로필 카드 생성 (PII 제외)
+        card_html = _build_profile_card(cand_d)
+
+        # 템플릿 로드
+        tpl = conn.execute(
+            "SELECT subject, body_html FROM email_templates WHERE template_key = 'profile_broadcast'"
+        ).fetchone()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="profile_broadcast template not found")
+
+        base_subject = body.custom_subject or tpl["subject"]
+        base_body = body.custom_body or tpl["body_html"]
+
+        sent_count = 0
+        fail_count = 0
+        results = []
+
+        for emp_id in body.employer_ids:
+            emp = conn.execute(
+                "SELECT id, email, school_name, contact_name FROM client_inquiries WHERE id = ?",
+                (emp_id,)
+            ).fetchone()
+            if not emp or not emp["email"]:
+                continue
+
+            school = emp["school_name"] or "School"
+            to_email = emp["email"]
+
+            # 템플릿 변수 치환
+            html = base_body.replace("{{profile_cards}}", card_html)
+            html = html.replace("{{school_name}}", school)
+            html = html.replace("{{contact_name}}", emp["contact_name"] or "")
+            html = re.sub(r"\{\{\w+\}\}", "", html)
+
+            subject = f"{base_subject} - {school}" if school != "School" else base_subject
+
+            sent = _smtp_send(to_email, subject, html)
+            status_val = "sent" if sent else "failed"
+            if sent:
+                sent_count += 1
+            else:
+                fail_count += 1
+
+            # 발송 로그 기록
+            conn.execute(
+                """INSERT INTO profile_sends (candidate_id, employer_id, school_name, to_email, status)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (body.candidate_id, emp_id, school, to_email, status_val)
+            )
+            results.append({"employer_id": emp_id, "school": school, "email": to_email, "status": status_val})
+
+        conn.commit()
+
+        return ok(
+            message=f"Profile broadcast: {sent_count} sent, {fail_count} failed",
+            data={"sent": sent_count, "failed": fail_count, "results": results}
+        )
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/matching/history", tags=["admin"])
+async def admin_matching_history(request: Request, candidate_id: str = ""):
+    """프로필 발송 이력 조회."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        if candidate_id:
+            rows = conn.execute(
+                "SELECT * FROM profile_sends WHERE candidate_id = ? ORDER BY sent_at DESC",
+                (candidate_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM profile_sends ORDER BY sent_at DESC LIMIT 200"
+            ).fetchall()
+        return ok(data=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
 # ── Community Board API ──────────────────────────────────────────────────────
 _BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials", "information"}
 _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]

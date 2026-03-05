@@ -27,6 +27,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/candidates', label: '원어민 관리' },
       { href: '/admin/applications', label: '업체관리' },
       { href: '/admin/interviews', label: '인터뷰' },
+      { href: '/admin/matching', label: '프로필 매칭' },
     ],
   },
   {

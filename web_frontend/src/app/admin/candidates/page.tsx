@@ -444,6 +444,21 @@ function CandRow({ c, onPatch, onStatusChange }: {
           )
         }
 
+        // Candidate ID → clickable link to matching page
+        if (col.field === 'candidate_id') {
+          return (
+            <td key={i} className="px-2 py-1.5 text-[12px] border-b border-[#f0f0f2]" style={sty}>
+              <a
+                href={`/admin/matching?candidate=${encodeURIComponent(cid)}`}
+                className="text-[#0071e3] hover:underline font-medium"
+                title="프로필 매칭"
+              >
+                {v(c[col.field])}
+              </a>
+            </td>
+          )
+        }
+
         // Default text cell
         return (
           <td key={i} className="px-2 py-1.5 text-[12px] text-[#424245] border-b border-[#f0f0f2]" style={sty}
