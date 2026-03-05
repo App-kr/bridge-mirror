@@ -4,6 +4,7 @@ Persistent
 
 global gOverlay := ""
 global gTrayIndicator := ""
+global gTrayVisible := false
 global gFootstepOn := false
 global gEqGui := ""
 global gTestBackup := ""
@@ -124,7 +125,7 @@ OpenEQ() {
     py := 96
     guiW := 720
 
-    eg := Gui("+AlwaysOnTop -Caption -Border +ToolWindow")
+    eg := Gui("+AlwaysOnTop -Caption -Border +ToolWindow +E0x80000")
     eg.BackColor := "1e2a14"
 
     ; ═══ TOP BAR (drag to move) ═══
@@ -273,7 +274,7 @@ OpenEQ() {
 
     totalH := fY + 20
     gEqGui := eg
-    eg.Show("w" guiW " h" totalH)
+    eg.Show("w" guiW " h" totalH " NoActivate")
 
     DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -8)
     DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -10)
@@ -416,7 +417,7 @@ LoadEQ() {
 
 ; ==================== TRAY ====================
 ShowTray() {
-    global gTrayIndicator
+    global gTrayIndicator, gTrayVisible
     if gTrayIndicator {
         gTrayIndicator.Destroy()
         gTrayIndicator := ""
@@ -429,20 +430,22 @@ ShowTray() {
     gTrayIndicator.SetFont("s7 cFF6348", "Segoe UI")
     gTrayIndicator.Add("Text", "x0 y28 w44 Center", "BOOST")
     gTrayIndicator.Show("x" (A_ScreenWidth - 56) " y" (A_ScreenHeight - 86) " w44 h42 NoActivate")
+    gTrayVisible := true
     SetTimer(ChkDesk, 1000)
 }
 
 HideTray() {
-    global gTrayIndicator
+    global gTrayIndicator, gTrayVisible
     if gTrayIndicator {
         gTrayIndicator.Destroy()
         gTrayIndicator := ""
     }
+    gTrayVisible := false
     SetTimer(ChkDesk, 0)
 }
 
 ChkDesk() {
-    global gTrayIndicator, gFootstepOn
+    global gTrayIndicator, gFootstepOn, gTrayVisible
     if !gFootstepOn or !gTrayIndicator
         return
     try {
@@ -450,10 +453,13 @@ ChkDesk() {
         ae := ""
         try ae := WinGetProcessName("A")
         ok := (ac = "Progman" or ac = "WorkerW" or ac = "Shell_TrayWnd" or ac = "CabinetWClass" or ae = "explorer.exe")
-        if ok {
-            try gTrayIndicator.Show("NoActivate")
-        } else {
-            try gTrayIndicator.Hide()
+        ; Use transparency instead of Show/Hide to never steal focus from fullscreen games
+        if ok and !gTrayVisible {
+            try WinSetTransparent(140, gTrayIndicator)
+            gTrayVisible := true
+        } else if !ok and gTrayVisible {
+            try WinSetTransparent(0, gTrayIndicator)
+            gTrayVisible := false
         }
     } catch {
         ; No active window (lock screen, desktop switch, etc.)
@@ -469,7 +475,7 @@ ShowOverlay(emoji, title, subtitle, accentColor) {
     }
     gw := 340
     gh := 200
-    gOverlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20")
+    gOverlay := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x80000")
     gOverlay.BackColor := "1a1a2e"
     WinSetTransparent(220, gOverlay)
     gOverlay.SetFont("s80 cFFFFFF", "Segoe UI Emoji")
