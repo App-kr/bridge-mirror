@@ -373,13 +373,8 @@ export default function HomePage() {
           <p
             className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight"
             style={{
-              maskImage: 'linear-gradient(to right, white 40%, transparent 55%)',
-              WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 55%)',
-              maskSize: '250% 100%',
-              WebkitMaskSize: '250% 100%' as string,
-              maskPosition: showTagline ? '0% 0' : '200% 0',
-              WebkitMaskPosition: showTagline ? '0% 0' : '200% 0' as string,
-              transition: 'mask-position 1.8s cubic-bezier(0.25,0.1,0.25,1), -webkit-mask-position 1.8s cubic-bezier(0.25,0.1,0.25,1)',
+              clipPath: showTagline ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+              transition: 'clip-path 1.6s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             A career that changes your life
