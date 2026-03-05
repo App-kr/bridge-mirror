@@ -125,6 +125,7 @@ export default function HomePage() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [jobs, setJobs] = useState<PublicJob[]>([])
   const [showBridge, setShowBridge] = useState(false)
+  const [showTagline, setShowTagline] = useState(false)
   const [academyNames, setAcademyNames] = useState<string[]>(FALLBACK_ACADEMIES)
   const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
   const editMode = useEditMode()
@@ -141,8 +142,9 @@ export default function HomePage() {
 
   // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
-    const t = setTimeout(() => setShowBridge(true), 50)
-    return () => clearTimeout(t)
+    const t1 = setTimeout(() => setShowBridge(true), 50)
+    const t2 = setTimeout(() => setShowTagline(true), 800)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
   // ── Hero parallax ──
@@ -368,7 +370,18 @@ export default function HomePage() {
             BRIDGE
           </motion.h1>
 
-          <p className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight tagline-reveal">
+          <p
+            className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight"
+            style={{
+              maskImage: 'linear-gradient(to right, white 40%, transparent 55%)',
+              WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 55%)',
+              maskSize: '250% 100%',
+              WebkitMaskSize: '250% 100%' as string,
+              maskPosition: showTagline ? '0% 0' : '200% 0',
+              WebkitMaskPosition: showTagline ? '0% 0' : '200% 0' as string,
+              transition: 'mask-position 1.8s cubic-bezier(0.25,0.1,0.25,1), -webkit-mask-position 1.8s cubic-bezier(0.25,0.1,0.25,1)',
+            }}
+          >
             A career that changes your life
           </p>
         </motion.div>
