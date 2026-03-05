@@ -131,7 +131,8 @@
       "Bash(# Find all processes on port 8000\nnetstat -ano 2>/dev/null | grep \":8000\" | grep LISTEN\n# Also check remaining python processes\nWMIC process where \"name='python.exe'\" get ProcessId,CommandLine 2>/dev/null | grep -i \"api_server\\\\|uvicorn\" || echo \"No server processes\")",
       "Bash(git:*)",
       "Bash(choco search:*)",
-      "WebFetch(domain:codepen.io)"
+      "WebFetch(domain:codepen.io)",
+      "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx vercel --prod --yes 2>&1)"
     ]
   }
 }
