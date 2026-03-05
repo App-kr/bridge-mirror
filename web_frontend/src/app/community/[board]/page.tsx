@@ -57,6 +57,10 @@ interface LayoutProps {
   onMoveUp?: (postId: number) => void
   onMoveDown?: (postId: number) => void
   onNewPost?: () => void
+  onFaqEdit?: (index: number) => void
+  onFaqAdd?: () => void
+  onFaqDelete?: (index: number) => void
+  onFaqReorder?: (index: number, direction: 'up' | 'down') => void
 }
 
 /** Strip markdown syntax for preview text */
@@ -362,6 +366,13 @@ export default function BoardPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [faqItems, setFaqItems] = useState<FaqItem[]>([])
+  const [faqPostId, setFaqPostId] = useState<number | null>(null)
+
+  // FAQ edit modal state
+  const [faqEditOpen, setFaqEditOpen] = useState(false)
+  const [faqEditIndex, setFaqEditIndex] = useState(-1)
+  const [faqEditQ, setFaqEditQ] = useState('')
+  const [faqEditA, setFaqEditA] = useState('')
 
   // SplitEditor state
   const [editorOpen, setEditorOpen] = useState(false)
@@ -388,16 +399,21 @@ export default function BoardPage() {
       .finally(() => setLoading(false))
 
     const faqCat = board === 'support' ? 'faq-teacher' : board === 'support_kr' ? 'faq-employer' : null
+    const defaultFaq = board === 'support' ? TEACHER_FAQ : board === 'support_kr' ? EMPLOYER_FAQ : []
     if (faqCat) {
       fetch(`${API}/api/community/${board}?category=${faqCat}`)
         .then((r) => r.json())
         .then((j) => {
           if (j.success && j.data.posts.length > 0) {
-            const body = j.data.posts[0].body ?? ''
-            setFaqItems(parseFaqBody(body))
+            const post = j.data.posts[0]
+            setFaqPostId(post.id)
+            const parsed = parseFaqBody(post.body ?? '')
+            setFaqItems(parsed.length > 0 ? parsed : defaultFaq)
+          } else {
+            setFaqItems(defaultFaq)
           }
         })
-        .catch(() => {})
+        .catch(() => { setFaqItems(defaultFaq) })
     }
   }, [board, config])
 
@@ -500,14 +516,78 @@ export default function BoardPage() {
     refreshPosts()
   }, [selectedIds, signedFetch, refreshPosts])
 
-  // FAQ edit handler
-  const handleFaqEdit = useCallback((item: FaqItem) => {
-    setEditorMode('create')
-    setEditorPostId(undefined)
-    setEditorTitle(item.q)
-    setEditorBody(item.a)
-    setEditorOpen(true)
+  // ── FAQ handlers ──
+  const serializeFaq = (items: FaqItem[]): string => {
+    return items.map((item, i) => `### Q${i + 1}. ${item.q}\n**A.** ${item.a}`).join('\n\n')
+  }
+
+  const saveFaqToApi = useCallback(async (items: FaqItem[]) => {
+    const title = board === 'support' ? 'Teacher FAQ' : 'Employer FAQ'
+    const category = board === 'support' ? 'faq-teacher' : 'faq-employer'
+    const body = serializeFaq(items)
+    try {
+      if (faqPostId) {
+        await signedFetch(`${API_URL}/api/admin/community/${board}/${faqPostId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title, body, category }),
+        })
+      } else {
+        const res = await signedFetch(`${API_URL}/api/community/${board}`, {
+          method: 'POST',
+          body: JSON.stringify({ title, body, category }),
+        })
+        const j = await res.json().catch(() => ({}))
+        if (j.success && j.data?.id) setFaqPostId(j.data.id)
+      }
+    } catch { /* noop */ }
+  }, [board, faqPostId, signedFetch])
+
+  const handleFaqItemEdit = useCallback((index: number) => {
+    const item = faqItems[index]
+    if (!item) return
+    setFaqEditIndex(index)
+    setFaqEditQ(item.q)
+    setFaqEditA(item.a)
+    setFaqEditOpen(true)
+  }, [faqItems])
+
+  const handleFaqItemAdd = useCallback(() => {
+    setFaqEditIndex(-1)
+    setFaqEditQ('')
+    setFaqEditA('')
+    setFaqEditOpen(true)
   }, [])
+
+  const handleFaqItemDelete = useCallback(async (index: number) => {
+    if (!confirm('Delete this FAQ item?')) return
+    const updated = faqItems.filter((_, i) => i !== index)
+    setFaqItems(updated)
+    await saveFaqToApi(updated)
+  }, [faqItems, saveFaqToApi])
+
+  const handleFaqItemReorder = useCallback(async (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    if (newIndex < 0 || newIndex >= faqItems.length) return
+    const updated = [...faqItems]
+    ;[updated[index], updated[newIndex]] = [updated[newIndex], updated[index]]
+    setFaqItems(updated)
+    await saveFaqToApi(updated)
+  }, [faqItems, saveFaqToApi])
+
+  const handleFaqEditSave = useCallback(async () => {
+    if (!faqEditQ.trim() || !faqEditA.trim()) return
+    let updated: FaqItem[]
+    if (faqEditIndex === -1) {
+      updated = [...faqItems, { q: faqEditQ.trim(), a: faqEditA.trim() }]
+    } else {
+      updated = faqItems.map((item, i) =>
+        i === faqEditIndex ? { q: faqEditQ.trim(), a: faqEditA.trim() } : item
+      )
+    }
+    setFaqItems(updated)
+    setFaqEditOpen(false)
+    await saveFaqToApi(updated)
+  }, [faqEditIndex, faqEditQ, faqEditA, faqItems, saveFaqToApi])
 
   if (!config) {
     return (
@@ -538,6 +618,10 @@ export default function BoardPage() {
     onMoveUp: handleMoveUp,
     onMoveDown: handleMoveDown,
     onNewPost: handleNewPost,
+    onFaqEdit: handleFaqItemEdit,
+    onFaqAdd: handleFaqItemAdd,
+    onFaqDelete: handleFaqItemDelete,
+    onFaqReorder: handleFaqItemReorder,
   }
 
   const Layout = (() => {
@@ -578,6 +662,15 @@ export default function BoardPage() {
           onClose={() => setEditorOpen(false)}
         />
       )}
+      {faqEditOpen && (
+        <FaqEditModal
+          q={faqEditQ} a={faqEditA}
+          onChangeQ={setFaqEditQ} onChangeA={setFaqEditA}
+          onSave={handleFaqEditSave}
+          onClose={() => setFaqEditOpen(false)}
+          isNew={faqEditIndex === -1}
+        />
+      )}
     </>
   )
 }
@@ -585,13 +678,13 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
 
   const faqConfig = board === 'support'
-    ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: 'Teacher FAQ', badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: TEACHER_FAQ }
+    ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: 'Teacher FAQ', badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: faqItems && faqItems.length > 0 ? faqItems : TEACHER_FAQ }
     : board === 'support_kr'
-    ? { bg: 'bg-[#0a1f12]', accent: '#22c55e', label: '자주 묻는 질문', badgeBg: 'bg-green-500/20', badgeText: 'text-green-300', items: EMPLOYER_FAQ }
+    ? { bg: 'bg-[#0a1f12]', accent: '#22c55e', label: '자주 묻는 질문', badgeBg: 'bg-green-500/20', badgeText: 'text-green-300', items: faqItems && faqItems.length > 0 ? faqItems : EMPLOYER_FAQ }
     : null
 
   return (
@@ -620,15 +713,23 @@ function ListLayout({ config, posts, board, editMode, selectedIds, onToggleSelec
             >
               {faqConfig.items.map((item, i) => (
                 <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent}
-                  editMode={editMode} onEdit={onEdit ? () => {
-                    // Open SplitEditor with FAQ content as new post
-                    if (onEdit) {
-                      const fakePost: Post = { id: 0, title: item.q, preview: item.a, body: item.a, author_hash: '', pinned: 0, views: 0, created_at: '' }
-                      onEdit(fakePost)
-                    }
-                  } : undefined}
+                  editMode={editMode}
+                  onEdit={onFaqEdit ? () => onFaqEdit(i) : undefined}
+                  onDelete={onFaqDelete ? () => onFaqDelete(i) : undefined}
+                  onMoveUp={onFaqReorder ? () => onFaqReorder(i, 'up') : undefined}
+                  onMoveDown={onFaqReorder ? () => onFaqReorder(i, 'down') : undefined}
+                  isFirst={i === 0}
+                  isLast={i === faqConfig.items.length - 1}
                 />
               ))}
+              {editMode && onFaqAdd && (
+                <motion.div variants={fadeInUp}>
+                  <button type="button" onClick={onFaqAdd}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-xl border-2 border-dashed border-white/20 text-white/50 hover:border-white/40 hover:text-white/70 transition-colors text-sm font-medium">
+                    <Plus size={16} /> 질문 추가
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
 
             {board === 'support_kr' && (
@@ -687,8 +788,11 @@ function ListLayout({ config, posts, board, editMode, selectedIds, onToggleSelec
 }
 
 // ── FAQ Accordion Item ──
-function FaqAccordionItem({ item, index, accent, editMode, onEdit }: {
-  item: FaqItem; index: number; accent: string; editMode?: boolean; onEdit?: () => void
+function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast }: {
+  item: FaqItem; index: number; accent: string; editMode?: boolean
+  onEdit?: () => void; onDelete?: () => void
+  onMoveUp?: () => void; onMoveDown?: () => void
+  isFirst?: boolean; isLast?: boolean
 }) {
   const [open, setOpen] = useState(false)
 
@@ -718,13 +822,33 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit }: {
         <span className="text-[15px] font-medium text-white/90 flex-1 group-hover:text-white transition-colors">
           {item.q}
         </span>
-        {editMode && onEdit && (
+        {editMode && (
           <span className="inline-flex items-center gap-0.5 mr-2"
             onClick={(e) => { e.stopPropagation() }}>
-            <button type="button" onClick={onEdit}
-              className="p-1.5 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors" title="Edit FAQ">
-              <Pencil size={15} />
-            </button>
+            {onMoveUp && !isFirst && (
+              <button type="button" onClick={onMoveUp}
+                className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors" title="Move Up">
+                <ChevronUp size={15} />
+              </button>
+            )}
+            {onMoveDown && !isLast && (
+              <button type="button" onClick={onMoveDown}
+                className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors" title="Move Down">
+                <ChevronDown size={15} />
+              </button>
+            )}
+            {onEdit && (
+              <button type="button" onClick={onEdit}
+                className="p-1.5 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors" title="Edit FAQ">
+                <Pencil size={15} />
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" onClick={onDelete}
+                className="p-1.5 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-700/50 transition-colors" title="Delete FAQ">
+                <Trash2 size={15} />
+              </button>
+            )}
           </span>
         )}
         <span
@@ -745,6 +869,63 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit }: {
         </motion.div>
       )}
     </motion.div>
+  )
+}
+
+// ── FAQ Edit Modal ──
+function FaqEditModal({ q, a, onChangeQ, onChangeA, onSave, onClose, isNew }: {
+  q: string; a: string
+  onChangeQ: (v: string) => void; onChangeA: (v: string) => void
+  onSave: () => void; onClose: () => void
+  isNew: boolean
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg mx-4 bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
+          <span className="text-sm font-medium text-zinc-300">
+            {isNew ? 'New FAQ Item' : 'Edit FAQ Item'}
+          </span>
+          <button type="button" onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+            ✕
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Question</label>
+            <input type="text" value={q} onChange={(e) => onChangeQ(e.target.value)}
+              placeholder="Enter question..."
+              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-4 py-2.5 text-sm placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Answer</label>
+            <textarea value={a} onChange={(e) => onChangeA(e.target.value)}
+              placeholder="Enter answer..."
+              rows={6}
+              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-4 py-3 text-sm resize-none placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-700 rounded-lg hover:bg-zinc-600 transition-colors">
+            Cancel
+          </button>
+          <button type="button" onClick={onSave} disabled={!q.trim() || !a.trim()}
+            className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
