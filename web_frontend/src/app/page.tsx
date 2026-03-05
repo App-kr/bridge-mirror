@@ -377,7 +377,7 @@ export default function HomePage() {
                 className={showTagline ? 'letter-star' : ''}
                 style={{
                   opacity: showTagline ? undefined : 0,
-                  animationDelay: showTagline ? `${i * 0.07}s` : undefined,
+                  animationDelay: showTagline ? `${i * 0.05}s` : undefined,
                   display: 'inline-block',
                   minWidth: char === ' ' ? '0.3em' : undefined,
                 }}
