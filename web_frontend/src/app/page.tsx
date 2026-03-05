@@ -145,9 +145,9 @@ export default function HomePage() {
   const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
   const editMode = useEditMode()
 
-  // ── Trigger bridge drawing animation ──
+  // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
-    const t = setTimeout(() => setShowBridge(true), 300)
+    const t = setTimeout(() => setShowBridge(true), 50)
     return () => clearTimeout(t)
   }, [])
 
@@ -242,83 +242,82 @@ export default function HomePage() {
                 <feGaussianBlur stdDeviation="4" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              <filter id="cableGlowStrong">
-                <feGaussianBlur stdDeviation="8" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+              <filter id="glowDot">
+                <feGaussianBlur stdDeviation="12" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              <clipPath id="tClip">
-                <rect x="0" y="0" width="1400" height="521" />
-              </clipPath>
-              {/* Light sweep gradient — bright spot travels left→right, infinite */}
+              {/* Light sweep gradient — bright spot travels L→R, infinite */}
               <linearGradient id="sweepGrad" gradientUnits="userSpaceOnUse" x1="-700" y1="400" x2="0" y2="400">
                 <stop offset="0" stopColor="white" stopOpacity="0" />
                 <stop offset="0.35" stopColor="white" stopOpacity="0" />
                 <stop offset="0.5" stopColor="white" stopOpacity="0.7" />
                 <stop offset="0.65" stopColor="white" stopOpacity="0" />
                 <stop offset="1" stopColor="white" stopOpacity="0" />
-                <animate attributeName="x1" values="-700;1400" dur="6s" repeatCount="indefinite" begin="2s" />
-                <animate attributeName="x2" values="0;2100" dur="6s" repeatCount="indefinite" begin="2s" />
+                <animate attributeName="x1" values="-700;1400" dur="6s" repeatCount="indefinite" begin="3s" />
+                <animate attributeName="x2" values="0;2100" dur="6s" repeatCount="indefinite" begin="3s" />
               </linearGradient>
+              {/* Taper mask — thick center, thin edges */}
+              <mask id="taperMask">
+                <linearGradient id="taperGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stopColor="white" stopOpacity="0" />
+                  <stop offset="0.12" stopColor="white" stopOpacity="0.25" />
+                  <stop offset="0.5" stopColor="white" stopOpacity="1" />
+                  <stop offset="0.88" stopColor="white" stopOpacity="0.25" />
+                  <stop offset="1" stopColor="white" stopOpacity="0" />
+                </linearGradient>
+                <rect x="0" y="0" width="1400" height="800" fill="url(#taperGrad)" />
+              </mask>
             </defs>
 
-            {/* ── Phase 1: Towers rise from bottom (0s ~ 0.8s) ── */}
-            <g clipPath="url(#tClip)">
-              <line x1={420} y1={520} x2={420} y2={280}
-                className="bridge-tower"
-                stroke="white" strokeWidth={2.5} strokeLinecap="round"
-              />
-            </g>
-            <g clipPath="url(#tClip)">
-              <line x1={980} y1={520} x2={980} y2={280}
-                className="bridge-tower bridge-tower-r"
-                stroke="white" strokeWidth={2.5} strokeLinecap="round"
-              />
-            </g>
+            {/* ── Towers (0s, 2s, ease-out) ── */}
+            <line x1={420} y1={520} x2={420} y2={280}
+              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
+            <line x1={980} y1={520} x2={980} y2={280}
+              className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round" />
 
-            {/* ── Phase 2: Main cable draw with glow (0.6s ~ 1.4s) ── */}
+            {/* ── Main cable — tapered ribbon, clip-path L→R reveal (0s, 2.5s) ── */}
+            {/* Thin base stroke (always visible after reveal) */}
             <path d="M 0 520 Q 700 180, 1400 520"
-              className="bridge-cable"
-              stroke="white" strokeWidth={2.5} strokeLinecap="round"
+              className="bridge-cable-ribbon"
+              stroke="white" strokeWidth={0.8} strokeLinecap="round" opacity={0.35}
               filter="url(#cableGlow)"
             />
-            {/* Glow sweep — bright dot chases cable draw, fades after */}
+            {/* Thick center overlay masked for taper */}
             <path d="M 0 520 Q 700 180, 1400 520"
-              className="bridge-cable-glow"
-              stroke="white" strokeWidth={4} strokeLinecap="round"
-              filter="url(#cableGlowStrong)"
-            />
-            {/* Light sweep — SpaceX atmospheric glow, infinite after draw */}
-            <path d="M 0 520 Q 700 180, 1400 520"
-              stroke="url(#sweepGrad)" strokeWidth={4} strokeLinecap="round"
-              opacity={0.7}
-              filter="url(#cableGlowStrong)"
+              className="bridge-cable-ribbon"
+              stroke="white" strokeWidth={3} strokeLinecap="round" opacity={0.35}
+              mask="url(#taperMask)" filter="url(#cableGlow)"
             />
 
-            {/* ── Phase 3: Stay cables stagger spread (1.2s ~ 2.0s) ── */}
+            {/* Glow dot — chases the cable draw direction */}
+            <circle r="8" fill="white" opacity="0" filter="url(#glowDot)">
+              <animateMotion dur="2.5s" fill="freeze" begin="0.05s"
+                calcMode="spline" keySplines="0.25 0.1 0.25 1"
+                path="M 0 520 Q 700 180, 1400 520" />
+              <animate attributeName="opacity"
+                values="0;0.6;0.6;0.3;0" keyTimes="0;0.04;0.8;0.95;1"
+                dur="2.5s" begin="0.05s" fill="freeze" />
+            </circle>
+
+            {/* Light sweep — infinite SpaceX atmospheric glow */}
+            <path d="M 0 520 Q 700 180, 1400 520"
+              stroke="url(#sweepGrad)" strokeWidth={5} strokeLinecap="round"
+              opacity={0.6} filter="url(#cableGlow)"
+            />
+
+            {/* ── Stay cables (0.8s+, stagger 0.06s, 1.2s each) ── */}
             <line x1={420} y1={280} x2={280} y2={410}
-              className="bridge-stay bridge-stay-1"
-              stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="180"
-              style={{ '--d': '180' } as React.CSSProperties}
-            />
+              className="bridge-stay bridge-stay-1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              strokeDasharray="180" style={{ '--d': '180' } as React.CSSProperties} />
             <line x1={420} y1={280} x2={200} y2={465}
-              className="bridge-stay bridge-stay-2"
-              stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="280"
-              style={{ '--d': '280' } as React.CSSProperties}
-            />
+              className="bridge-stay bridge-stay-2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              strokeDasharray="280" style={{ '--d': '280' } as React.CSSProperties} />
             <line x1={980} y1={280} x2={1120} y2={410}
-              className="bridge-stay bridge-stay-3"
-              stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="180"
-              style={{ '--d': '180' } as React.CSSProperties}
-            />
+              className="bridge-stay bridge-stay-3" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              strokeDasharray="180" style={{ '--d': '180' } as React.CSSProperties} />
             <line x1={980} y1={280} x2={1200} y2={465}
-              className="bridge-stay bridge-stay-4"
-              stroke="white" strokeWidth={0.8} strokeLinecap="round"
-              strokeDasharray="280"
-              style={{ '--d': '280' } as React.CSSProperties}
-            />
+              className="bridge-stay bridge-stay-4" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              strokeDasharray="280" style={{ '--d': '280' } as React.CSSProperties} />
           </svg>
         </div>
 
@@ -338,9 +337,9 @@ export default function HomePage() {
 
           <motion.p
             className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-medium tracking-tight"
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+            transition={{ duration: 1.5, delay: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
           >
             A career that changes your life.
           </motion.p>

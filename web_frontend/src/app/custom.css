@@ -482,104 +482,64 @@ a.nav-cta[href="/inquiry"]:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   10. HERO BRIDGE ANIMATION — 3-phase reveal + SpaceX atmospheric glow
+   10. HERO BRIDGE ANIMATION — cinematic reveal + SpaceX atmospheric glow
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Initial state: all elements hidden ── */
+/* ── Initial: all hidden ── */
 .bridge-tower,
-.bridge-cable,
-.bridge-cable-glow,
+.bridge-cable-ribbon,
 .bridge-stay { opacity: 0; }
 
-.bridge-tower {
-  transform-box: fill-box;
-  transform-origin: center bottom;
-}
-
-/* ── Phase 1 (0s ~ 0.8s): Tower rise from bottom ── */
+/* ── Towers (0s, 2s ease-out) — subtle rise, lands at ~0.45 opacity ── */
 .bridge-active .bridge-tower {
-  animation: bridgeTowerRise 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation: bridgeTower 2s ease-out forwards;
 }
-.bridge-active .bridge-tower-r { animation-delay: 0.05s; }
-
-@keyframes bridgeTowerRise {
-  from   { transform: translateY(100%); opacity: 0; }
-  20%    { opacity: 0.2; }
-  to     { transform: translateY(0); opacity: 0.2; }
+@keyframes bridgeTower {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 0.45; }
 }
 
-/* ── Phase 2 (0.6s ~ 1.4s): Cable draw + glow, then breathing (infinite) ── */
-.bridge-cable {
-  stroke-dasharray: 2200;
-  stroke-dashoffset: 2200;
+/* ── Main cable ribbon — clip-path reveal L→R (0s, 2.5s) + breathing glow ── */
+.bridge-cable-ribbon {
+  clip-path: inset(0 100% 0 0);
 }
-.bridge-active .bridge-cable {
+.bridge-active .bridge-cable-ribbon {
   animation:
-    bridgeCableDraw 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards,
-    bridgeGlowPulse 4s ease-in-out 1.8s infinite;
+    cableReveal 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards,
+    cableBreath 4s ease-in-out 3s infinite;
+}
+@keyframes cableReveal {
+  from { clip-path: inset(0 100% 0 0); opacity: 0.35; }
+  to   { clip-path: inset(0 0 0 0);    opacity: 0.35; }
+}
+@keyframes cableBreath {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(255,255,255,0.15)); opacity: 0.35; }
+  50%      { filter: drop-shadow(0 0 16px rgba(255,255,255,0.4));  opacity: 0.5; }
 }
 
-@keyframes bridgeCableDraw {
-  from { stroke-dashoffset: 2200; opacity: 0; }
-  10%  { opacity: 0.35; }
-  to   { stroke-dashoffset: 0; opacity: 0.35; }
-}
-
-@keyframes bridgeGlowPulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.15));
-    opacity: 0.35;
-  }
-  50% {
-    filter: drop-shadow(0 0 16px rgba(255,255,255,0.4));
-    opacity: 0.5;
-  }
-}
-
-/* Glow sweep — bright dot chases the cable draw */
-.bridge-cable-glow {
-  stroke-dasharray: 200 2200;
-  stroke-dashoffset: 200;
-}
-.bridge-active .bridge-cable-glow {
-  animation: bridgeGlowSweep 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
-}
-
-@keyframes bridgeGlowSweep {
-  from { stroke-dashoffset: 200; opacity: 0; }
-  8%   { opacity: 0.8; }
-  85%  { opacity: 0.8; }
-  to   { stroke-dashoffset: -2200; opacity: 0; }
-}
-
-/* ── Phase 3 (1.2s ~ 2.0s): Stay cables stagger spread ── */
+/* ── Stay cables (0.8s+, stagger 0.06s, 1.2s each) ── */
 .bridge-stay { stroke-dashoffset: var(--d); }
 .bridge-active .bridge-stay {
-  animation: bridgeStaySpread 0.8s ease forwards;
+  animation: stayDraw 1.2s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
-
-@keyframes bridgeStaySpread {
-  from { stroke-dashoffset: var(--d); opacity: 0; }
-  to   { stroke-dashoffset: 0; opacity: 0.12; }
+@keyframes stayDraw {
+  from { stroke-dashoffset: var(--d); opacity: 0; filter: drop-shadow(0 0 10px rgba(255,255,255,0.4)); }
+  70%  { filter: drop-shadow(0 0 6px rgba(255,255,255,0.15)); }
+  to   { stroke-dashoffset: 0; opacity: 0.12; filter: none; }
 }
+.bridge-active .bridge-stay-1 { animation-delay: 0.80s; }
+.bridge-active .bridge-stay-2 { animation-delay: 0.86s; }
+.bridge-active .bridge-stay-3 { animation-delay: 0.92s; }
+.bridge-active .bridge-stay-4 { animation-delay: 0.98s; }
 
-.bridge-active .bridge-stay-1 { animation-delay: 1.20s; }
-.bridge-active .bridge-stay-2 { animation-delay: 1.25s; }
-.bridge-active .bridge-stay-3 { animation-delay: 1.30s; }
-.bridge-active .bridge-stay-4 { animation-delay: 1.35s; }
-
-/* ── Accessibility: respect reduced-motion preference ── */
+/* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {
-  .bridge-tower,
-  .bridge-cable,
-  .bridge-cable-glow,
-  .bridge-stay {
+  .bridge-tower, .bridge-cable-ribbon, .bridge-stay {
     animation: none !important;
     transform: none !important;
     filter: none !important;
   }
-  .bridge-tower  { opacity: 0.2 !important; }
-  .bridge-cable  { opacity: 0.35 !important; stroke-dashoffset: 0 !important; }
-  .bridge-stay   { opacity: 0.08 !important; stroke-dashoffset: 0 !important; }
-  .bridge-cable-glow { opacity: 0 !important; }
+  .bridge-tower        { opacity: 0.45 !important; }
+  .bridge-cable-ribbon { opacity: 0.35 !important; clip-path: none !important; }
+  .bridge-stay         { opacity: 0.08 !important; stroke-dashoffset: 0 !important; }
 }
