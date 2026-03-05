@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import MarkdownBody from '@/components/MarkdownBody'
+import HtmlPreview from '@/components/HtmlPreview'
 
 import { API_URL } from '@/lib/api'
 
@@ -26,6 +27,7 @@ interface Post {
   pinned: number
   views: number
   created_at: string
+  content_type?: string
 }
 
 const boardLabel = (b: string) => {
@@ -60,6 +62,7 @@ export default function AdminPostsPage() {
   const [newBody, setNewBody] = useState('')
   const [posting, setPosting] = useState(false)
   const [newTab, setNewTab] = useState<'write' | 'preview'>('write')
+  const [newContentType, setNewContentType] = useState<'markdown' | 'html'>('markdown')
 
   // Edit state
   const [editId, setEditId] = useState<number | null>(null)
@@ -68,6 +71,7 @@ export default function AdminPostsPage() {
   const [editBoard, setEditBoard] = useState('')
   const [saving, setSaving] = useState(false)
   const [editTab, setEditTab] = useState<'write' | 'preview'>('write')
+  const [editContentType, setEditContentType] = useState<'markdown' | 'html'>('markdown')
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -163,7 +167,7 @@ export default function AdminPostsPage() {
     if (!newTitle.trim() || !newBody.trim()) { setActionMsg('제목과 본문을 입력하세요.'); return }
     setPosting(true)
     try {
-      const bodyStr = JSON.stringify({ title: newTitle.trim(), body: newBody.trim() })
+      const bodyStr = JSON.stringify({ title: newTitle.trim(), body: newBody.trim(), content_type: newContentType })
       const res = await signedFetch(`${API}/api/community/${newBoard}`, {
         method: 'POST',
         body: bodyStr,
@@ -171,7 +175,7 @@ export default function AdminPostsPage() {
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Failed')
       setActionMsg(`게시물 작성 완료: #${json.data.id} [${newBoard}] ${newTitle}`)
-      setNewTitle(''); setNewBody(''); setShowForm(false)
+      setNewTitle(''); setNewBody(''); setShowForm(false); setNewContentType('markdown')
       fetchPosts()
     } catch (e) {
       setActionMsg(`Error: ${e instanceof Error ? e.message : 'Failed'}`)
@@ -207,12 +211,14 @@ export default function AdminPostsPage() {
         setEditBoard(post.board)
         setEditTitle(json.data.title || post.title)
         setEditBody(json.data.body || '')
+        setEditContentType(json.data.content_type === 'html' ? 'html' : 'markdown')
       }
     } catch {
       setEditId(post.id)
       setEditBoard(post.board)
       setEditTitle(post.title)
       setEditBody(post.preview || '')
+      setEditContentType(post.content_type === 'html' ? 'html' : 'markdown')
     }
   }
 
@@ -220,7 +226,7 @@ export default function AdminPostsPage() {
     if (!editTitle.trim()) { setActionMsg('제목을 입력하세요.'); return }
     setSaving(true)
     try {
-      const bodyStr = JSON.stringify({ title: editTitle.trim(), body: editBody.trim() })
+      const bodyStr = JSON.stringify({ title: editTitle.trim(), body: editBody.trim(), content_type: editContentType })
       const res = await signedFetch(`${API}/api/admin/community/${editBoard}/${editId}`, {
         method: 'PATCH',
         body: bodyStr,
@@ -354,17 +360,30 @@ export default function AdminPostsPage() {
                 className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                   newTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}>미리보기</button>
+              <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+                <button type="button" onClick={() => setNewContentType('markdown')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    newContentType === 'markdown' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  }`}>MD</button>
+                <button type="button" onClick={() => setNewContentType('html')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    newContentType === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  }`}>HTML</button>
+              </div>
             </div>
             {newTab === 'write' ? (
               <>
                 <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
                   className="w-full h-48 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  placeholder="## 제목&#10;&#10;본문 내용을 입력하세요..." maxLength={10000} />
+                  placeholder={newContentType === 'html' ? '<p>HTML 내용을 입력하세요...</p>' : '## 제목\n\n본문 내용을 입력하세요...'}
+                  maxLength={10000} />
                 <div className="text-right text-xs text-gray-400 mt-1">{newBody.length}/10,000</div>
               </>
             ) : (
               <div className="w-full min-h-[192px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
-                {newBody.trim() ? <MarkdownBody text={newBody} /> : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
+                {newBody.trim() ? (
+                  newContentType === 'html' ? <HtmlPreview html={newBody} /> : <MarkdownBody text={newBody} />
+                ) : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
               </div>
             )}
           </div>
@@ -498,6 +517,16 @@ export default function AdminPostsPage() {
                           className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                             editTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}>미리보기</button>
+                        <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+                          <button type="button" onClick={() => setEditContentType('markdown')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                              editContentType === 'markdown' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                            }`}>MD</button>
+                          <button type="button" onClick={() => setEditContentType('html')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                              editContentType === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                            }`}>HTML</button>
+                        </div>
                       </div>
                       {editTab === 'write' ? (
                         <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
@@ -505,7 +534,9 @@ export default function AdminPostsPage() {
                           maxLength={10000} />
                       ) : (
                         <div className="w-full min-h-[160px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
-                          {editBody.trim() ? <MarkdownBody text={editBody} /> : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
+                          {editBody.trim() ? (
+                            editContentType === 'html' ? <HtmlPreview html={editBody} /> : <MarkdownBody text={editBody} />
+                          ) : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
                         </div>
                       )}
                     </div>

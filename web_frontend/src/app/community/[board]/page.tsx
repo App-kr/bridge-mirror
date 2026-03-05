@@ -584,7 +584,7 @@ export default function BoardPage() {
     } else if (type === 'post-create') {
       const res = await signedFetch(`${API_URL}/api/community/${board}`, {
         method: 'POST',
-        body: JSON.stringify({ title: data.title, body: data.content }),
+        body: JSON.stringify({ title: data.title, body: data.content, content_type: data.contentType }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -595,7 +595,7 @@ export default function BoardPage() {
     } else if (type === 'post-edit' && postId) {
       const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title: data.title, body: data.content }),
+        body: JSON.stringify({ title: data.title, body: data.content, content_type: data.contentType }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))

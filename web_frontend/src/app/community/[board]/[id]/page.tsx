@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import MarkdownBody from '@/components/MarkdownBody'
+import HtmlPreview from '@/components/HtmlPreview'
 import { getBoardConfig } from '@/lib/boards'
 import EditModeBar, { EditButton } from '@/components/EditModeBar'
 
@@ -18,6 +19,7 @@ interface Post {
   views: number
   created_at: string
   image_paths?: string
+  content_type?: string
 }
 
 export default function PostDetailPage() {
@@ -84,7 +86,11 @@ export default function PostDetailPage() {
 
       {/* Body */}
       <div className="post-body" style={{ fontSize: '15px', lineHeight: '1.9' }}>
-        <MarkdownBody text={post.body} />
+        {post.content_type === 'html' ? (
+          <HtmlPreview html={post.body} />
+        ) : (
+          <MarkdownBody text={post.body} />
+        )}
       </div>
 
       {/* External link button */}

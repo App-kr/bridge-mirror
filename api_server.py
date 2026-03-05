@@ -2249,7 +2249,7 @@ async def community_list(
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         """SELECT id, title, author_hash, pinned, views, created_at,
-                  substr(body, 1, 200) AS preview
+                  content_type, substr(body, 1, 200) AS preview
            FROM community_posts
            WHERE board=? AND is_deleted=0
            ORDER BY pinned DESC, created_at DESC
@@ -2275,7 +2275,7 @@ async def community_get(board: str, post_id: int):
     )
     conn.commit()
     row = conn.execute(
-        """SELECT id, board, title, body, pinned, views, created_at
+        """SELECT id, board, title, body, pinned, views, created_at, content_type
            FROM community_posts WHERE id=? AND board=? AND is_deleted=0""",
         (post_id, board),
     ).fetchone()
@@ -2288,6 +2288,7 @@ async def community_get(board: str, post_id: int):
 class CommunityPost(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     body:  str = Field(..., min_length=10, max_length=10000)
+    content_type: str = Field("markdown", pattern=r"^(markdown|html)$")
 
 
 @app.post("/api/community/{board}", status_code=201, tags=["community"])
@@ -2298,20 +2299,24 @@ async def community_create(board: str, post: CommunityPost, request: Request):
     if not _rate_ok(ip_hash):
         raise HTTPException(429, "Too many posts. Please wait a few minutes.")
 
-    # HTML 태그 strip (Stored XSS 방지)
+    # 콘텐츠 타입에 따라 처리
     _tag_re = re.compile(r'<[^>]+>')
-    clean_title = _tag_re.sub('', post.title.strip())
-    clean_body = _tag_re.sub('', post.body.strip())
+    clean_title = _tag_re.sub('', post.title.strip())  # 제목은 항상 strip
+    if post.content_type == 'html':
+        clean_body = _sanitize_html(post.body.strip())
+    else:
+        clean_body = _tag_re.sub('', post.body.strip())
 
-    # 게시글 본문에서 연락처 PII 차단
+    # 게시글 본문에서 연락처 PII 차단 (태그 제거 후 검사)
     _pii_check = re.compile(r'01[016789][- ]?\d{3,4}[- ]?\d{4}|[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
-    if _pii_check.search(clean_body) or _pii_check.search(clean_title):
+    pii_check_body = _tag_re.sub('', clean_body)  # PII 체크는 태그 제거 후 텍스트만
+    if _pii_check.search(pii_check_body) or _pii_check.search(clean_title):
         raise HTTPException(400, "Phone numbers and email addresses are not allowed in posts.")
 
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     cur = conn.execute(
-        "INSERT INTO community_posts (board, title, body, author_hash) VALUES (?,?,?,?)",
-        (board, clean_title, clean_body, ip_hash),
+        "INSERT INTO community_posts (board, title, body, author_hash, content_type) VALUES (?,?,?,?,?)",
+        (board, clean_title, clean_body, ip_hash, post.content_type),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -2365,6 +2370,7 @@ async def admin_pin_post(post_id: int, body: PinUpdate, request: Request):
 class PostEdit(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=200)
     body:  Optional[str] = Field(None, min_length=10, max_length=10000)
+    content_type: Optional[str] = Field(None, pattern=r"^(markdown|html)$")
 
 
 @app.patch("/api/admin/community/{board}/{post_id}", tags=["admin"])
@@ -2382,7 +2388,13 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
         params.append(_tag_re.sub('', body.title.strip()))
     if body.body is not None:
         updates.append("body = ?")
-        params.append(_tag_re.sub('', body.body.strip()))
+        if body.content_type == 'html':
+            params.append(_sanitize_html(body.body.strip()))
+        else:
+            params.append(_tag_re.sub('', body.body.strip()))
+    if body.content_type is not None:
+        updates.append("content_type = ?")
+        params.append(body.content_type)
 
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
@@ -2436,7 +2448,7 @@ async def admin_search_posts(
         params.append(limit)
         rows = conn.execute(
             f"""SELECT id, board, title, author_hash, pinned, views, created_at,
-                       substr(body, 1, 200) AS preview
+                       content_type, substr(body, 1, 200) AS preview
                 FROM community_posts
                 WHERE {where}
                 ORDER BY pinned DESC, created_at DESC
@@ -2651,6 +2663,98 @@ def _ensure_interviews_schema():
 
 
 _ensure_interviews_schema()
+
+
+def _ensure_community_schema():
+    """community_posts 테이블에 content_type 컬럼 추가."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("ALTER TABLE community_posts ADD COLUMN content_type TEXT DEFAULT 'markdown'")
+    except Exception:
+        pass
+    conn.commit()
+    conn.close()
+
+
+_ensure_community_schema()
+
+
+# ── HTML Sanitizer (allowlist 기반) ──────────────────────────────────────────
+
+_ALLOWED_TAGS = frozenset({
+    "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "a", "img", "strong", "em", "b", "i", "u",
+    "br", "hr", "table", "thead", "tbody", "tr", "th", "td",
+    "div", "span", "blockquote", "code", "pre", "sub", "sup",
+})
+_ALLOWED_ATTRS = frozenset({
+    "href", "src", "alt", "class", "style", "target", "rel",
+    "width", "height", "colspan", "rowspan",
+})
+
+
+def _sanitize_html(html_str: str) -> str:
+    """Allowlist 기반 HTML sanitizer. script/iframe/object 등 위험 태그 제거."""
+    from html.parser import HTMLParser
+    import html as _html_mod
+
+    output: list[str] = []
+
+    class Sanitizer(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self._skip_depth = 0
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]):
+            tag_lower = tag.lower()
+            if tag_lower not in _ALLOWED_TAGS:
+                self._skip_depth += 1
+                return
+            if self._skip_depth > 0:
+                return
+            safe_attrs = []
+            for k, v in attrs:
+                if k.lower() in _ALLOWED_ATTRS and v is not None:
+                    # href/src에서 javascript: 차단
+                    if k.lower() in ("href", "src"):
+                        if v.strip().lower().startswith("javascript:"):
+                            continue
+                    safe_attrs.append(f'{k}="{_html_mod.escape(v, quote=True)}"')
+            attr_str = (" " + " ".join(safe_attrs)) if safe_attrs else ""
+            if tag_lower in ("br", "hr", "img"):
+                output.append(f"<{tag_lower}{attr_str} />")
+            else:
+                output.append(f"<{tag_lower}{attr_str}>")
+
+        def handle_endtag(self, tag: str):
+            tag_lower = tag.lower()
+            if tag_lower not in _ALLOWED_TAGS:
+                if self._skip_depth > 0:
+                    self._skip_depth -= 1
+                return
+            if self._skip_depth > 0:
+                return
+            output.append(f"</{tag_lower}>")
+
+        def handle_data(self, data: str):
+            if self._skip_depth > 0:
+                return
+            output.append(_html_mod.escape(data))
+
+        def handle_entityref(self, name: str):
+            if self._skip_depth > 0:
+                return
+            output.append(f"&{name};")
+
+        def handle_charref(self, name: str):
+            if self._skip_depth > 0:
+                return
+            output.append(f"&#{name};")
+
+    parser = Sanitizer()
+    parser.feed(html_str)
+    return "".join(output)
 
 
 def _ensure_interview_templates():
@@ -3018,6 +3122,16 @@ _FILE_LIMITS: dict[str, tuple[int, set[str], list[bytes]]] = {
         {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"},
         [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"\xff\xd8\xff", b"\x89PNG"],
     ),
+    "community_image": (
+        5 * 1024 * 1024,
+        {".jpg", ".jpeg", ".png", ".gif", ".webp"},
+        [b"\xff\xd8\xff", b"\x89PNG", b"GIF8", b"RIFF"],
+    ),
+    "community_file": (
+        10 * 1024 * 1024,
+        {".pdf", ".doc", ".docx", ".xlsx", ".ppt", ".pptx", ".txt", ".zip"},
+        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK"],
+    ),
 }
 
 
@@ -3074,11 +3188,13 @@ async def upload_file(
 ):
     """
     파일 업로드 엔드포인트.
-    entity_type: 'candidate' | 'inquiry'
-    file_type: 'photo' | 'cv' | 'cover_letter' | 'certificate' | 'video' | 'attachment'
+    entity_type: 'candidate' | 'inquiry' | 'community'
+    file_type: 'photo' | 'cv' | 'cover_letter' | 'certificate' | 'video' | 'attachment' | 'community_image' | 'community_file'
     """
-    if entity_type not in ("candidate", "inquiry"):
-        raise HTTPException(400, "entity_type must be 'candidate' or 'inquiry'")
+    if entity_type not in ("candidate", "inquiry", "community"):
+        raise HTTPException(400, "entity_type must be 'candidate', 'inquiry', or 'community'")
+    if entity_type == "community":
+        _check_admin(request)
 
     if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         raise HTTPException(429, "Too many uploads. Please slow down.")
@@ -3090,7 +3206,7 @@ async def upload_file(
     ext = _validate_file(data, file.filename or "file", file_type)
 
     # Build directory
-    dir_name = "candidates" if entity_type == "candidate" else "inquiries"
+    dir_name = "candidates" if entity_type == "candidate" else ("community" if entity_type == "community" else "inquiries")
     if file_type == "certificate":
         entity_dir = _UPLOAD_BASE / dir_name / entity_id / "certificates"
     else:
@@ -3156,8 +3272,8 @@ async def upload_file(
 async def admin_list_files(entity_type: str, entity_id: str, request: Request):
     """관리자: 엔티티의 업로드된 파일 목록."""
     _check_admin(request)
-    if entity_type not in ("candidate", "inquiry"):
-        raise HTTPException(400, "entity_type must be 'candidate' or 'inquiry'")
+    if entity_type not in ("candidate", "inquiry", "community"):
+        raise HTTPException(400, "entity_type must be 'candidate', 'inquiry', or 'community'")
     try:
         sb = get_svc_client()
         result = (
