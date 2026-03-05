@@ -143,7 +143,7 @@ export default function HomePage() {
   // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
     const t1 = setTimeout(() => setShowBridge(true), 50)
-    const t2 = setTimeout(() => setShowTagline(true), 1800)
+    const t2 = setTimeout(() => setShowTagline(true), 50)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
@@ -371,11 +371,7 @@ export default function HomePage() {
           </motion.h1>
 
           <p
-            className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight"
-            style={{
-              clipPath: showTagline ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-              transition: 'clip-path 2.2s cubic-bezier(0.22, 0.61, 0.36, 1)',
-            }}
+            className={`text-xl sm:text-2xl md:text-3xl font-light tracking-tight tagline-shimmer${showTagline ? ' tagline-shimmer-go' : ''}`}
           >
             A career that changes your life
           </p>

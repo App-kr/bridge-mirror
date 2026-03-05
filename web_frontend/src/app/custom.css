@@ -3,7 +3,44 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    HERO TAGLINE — 왼쪽부터 제자리에서 드러나기
    ═══════════════════════════════════════════════════════════════════════════ */
-/* tagline reveal은 React state + inline transition으로 처리 */
+/* ═══════════════════════════════════════════════════════════════════════════
+   HERO TAGLINE — 다리와 동시에 왼→오 반짝이며 드러남
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tagline-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 300% 100%;
+  background-position: 100% 0;
+}
+
+.tagline-shimmer-go {
+  background: linear-gradient(
+    90deg,
+    #a1a1a6 0%,
+    #a1a1a6 35%,
+    #ffffff 48%,
+    #e0e0e8 52%,
+    #a1a1a6 65%,
+    transparent 80%,
+    transparent 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 300% 100%;
+  animation: taglineSweep 2.5s ease-out forwards;
+}
+
+@keyframes taglineSweep {
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HERO TWINKLING STARS
