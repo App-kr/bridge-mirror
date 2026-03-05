@@ -1,823 +1,481 @@
 'use client'
 
 /**
- * /admin/candidates — Candidate Spreadsheet Grid
- * AG Grid Community v35 기반 고밀도 스프레드시트 UI.
- * 탭(구직자/지난/전체/블랙리스트) + 페이지네이션 + 편집 + 프로필 발송.
+ * /admin/candidates — 원어민 관리
+ * Active/Inactive 탭 + 10-column table + 섹션별 상세 펼침
+ * 모든 DB 필드 보존, 기본 테이블에서만 핵심 10개 표시
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AgGridReact } from 'ag-grid-react'
-import type { ColDef, GridReadyEvent, NewValueParams, ICellRendererParams } from 'ag-grid-community'
-import {
-  ClientSideRowModelModule,
-  ModuleRegistry,
-  TextEditorModule,
-  SelectEditorModule,
-  TextFilterModule,
-} from 'ag-grid-community'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
-import { STAFF_NAMES } from '@/lib/team'
-
-import 'ag-grid-community/styles/ag-grid.css'
-import 'ag-grid-community/styles/ag-theme-balham.css'
-
-ModuleRegistry.registerModules([
-  ClientSideRowModelModule,
-  TextEditorModule,
-  SelectEditorModule,
-  TextFilterModule,
-])
 
 const API = API_URL
 const PAGE_SIZE = 100
 
-/* ── 상태/옵션 상수 ── */
-const STATUS_VALUES = ['new', 'reviewing', 'interviewing', 'offered', 'placed', 'rejected', 'withdrawn', 'inactive', 'blacklisted']
-const ACTIVE_STATUSES = ['new', 'reviewing', 'interviewing', 'offered']
-const PAST_STATUSES = ['placed', 'rejected', 'withdrawn', 'inactive']
+type TabType = 'all' | 'Active' | 'Inactive'
 
-const START_DETAIL_OPTIONS = ['', '즉시 가능', '3월 시작', '4월 시작', '5월 시작', '6월 시작', '7월 시작', '8월 시작', '9월 시작', '10월 시작', '11월 시작', '12월 시작', '1월 시작', '2월 시작', '비자 발급 후 즉시', '현 계약 종료 후', '기타']
-const HOUSING_TYPE_OPTIONS = ['', '하우징 희망', '월세지원 희망', '하우징 희망(반려동물)', '하우징 희망(가족)', '하우징 희망(커플)', '월세지원 희망(반려동물)', '월세지원 희망(가족)', '자가 해결', '무관', '기타']
-const YN_OPTIONS = ['', 'Y', 'N']
-const RESIDENCE_OPTIONS = ['', '국내거주', '해외거주']
-const TARGET_LEVEL_CHOICES = ['유치부', '유초등', '초등', '초중등', '중등', '중고등', '고등', '성인', '유치부선호', '유초등선호', '초등선호', '초중등선호', '중고등선호', '성인선호', '무관', '기타']
+const STATUS_VALUES = ['Active', 'Inactive', 'new', 'reviewing', 'interviewing', 'offered', 'placed', 'rejected', 'withdrawn', 'blacklisted']
 
-const TEMPLATE_MAP: Record<string, { key: string; label: string }> = {
-  email_contract:    { key: 'contract_offer',       label: '계약 안내' },
-  email_immigration: { key: 'immigration_guide',    label: '출입국 안내' },
-  email_overseas:    { key: 'overseas_visa_prep',   label: '영사 준비' },
-  email_transition:  { key: 'job_transition_guide', label: '이직 안내' },
-  email_arrival:     { key: 'arrival_guide',        label: '입국 안내' },
+const statusColors: Record<string, string> = {
+  Active:       'bg-blue-100 text-blue-700',
+  new:          'bg-blue-100 text-blue-700',
+  reviewing:    'bg-yellow-100 text-yellow-700',
+  interviewing: 'bg-indigo-100 text-indigo-700',
+  offered:      'bg-violet-100 text-violet-700',
+  placed:       'bg-green-100 text-green-700',
+  rejected:     'bg-red-100 text-red-700',
+  withdrawn:    'bg-gray-200 text-gray-500',
+  inactive:     'bg-gray-100 text-gray-500',
+  Inactive:     'bg-gray-100 text-gray-500',
+  blacklisted:  'bg-red-200 text-red-800',
 }
 
-type TabType = 'active' | 'past' | 'all' | 'blacklisted'
-
-const TAB_CONFIG: { key: TabType; label: string; color: string; activeColor: string }[] = [
-  { key: 'active',      label: '구직자',     color: 'text-emerald-600', activeColor: 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' },
-  { key: 'past',        label: '지난 지원자', color: 'text-gray-500',    activeColor: 'bg-gray-600 text-white shadow-lg shadow-gray-200' },
-  { key: 'all',         label: '전체 지원자', color: 'text-blue-600',    activeColor: 'bg-blue-600 text-white shadow-lg shadow-blue-200' },
-  { key: 'blacklisted', label: '블랙리스트',  color: 'text-red-500',     activeColor: 'bg-red-500 text-white shadow-lg shadow-red-200' },
-]
-
-/* ── 이메일 발송 셀 렌더러 ── */
-function EmailCellRenderer(props: ICellRendererParams & { colDef: { field?: string } }) {
-  const value = props.value
-  const field = props.colDef.field ?? ''
-  const candidateId = props.data?.id
-  const candidateName = props.data?.full_name ?? '지원자'
-  const tpl = TEMPLATE_MAP[field]
-
-  if (value) {
-    return <span style={{ color: '#6b7280', fontSize: 12 }}>완료 ({value})</span>
-  }
-
-  const handleSend = async () => {
-    if (!tpl) return
-    if (!confirm(`${candidateName}님에게 [${tpl.label}]를 발송하시겠습니까?`)) return
-    try {
-      const adminKey = document.querySelector<HTMLMetaElement>('meta[name="admin-key"]')?.content ?? ''
-      const res = await fetch(`${API}/api/admin/candidates/${candidateId}/send-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ template_key: tpl.key }),
-      })
-      const json = await res.json()
-      if (!res.ok) { alert(json.detail ?? '발송 실패'); return }
-      alert(`발송 완료: ${json.data?.sent_to ?? ''}`)
-      props.api.applyTransaction({
-        update: [{ ...props.data, [field]: new Date().toISOString().slice(0, 10) }],
-      })
-    } catch {
-      alert('발송 중 오류 발생')
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handleSend}
-      style={{
-        background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6,
-        padding: '3px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
-      }}
-    >
-      발송
-    </button>
-  )
+interface Candidate {
+  id: string
+  candidate_id?: string
+  full_name: string
+  nationality: string
+  email: string
+  status: string
+  [key: string]: string | null | undefined
 }
 
-/* ── Target Level 다중선택 팝업 셀 렌더러 ── */
-function TargetLevelRenderer(props: ICellRendererParams) {
-  const [open, setOpen] = useState(false)
-  const [selected, setSelected] = useState<string[]>(() => {
-    const v = props.value ?? ''
-    return v ? v.split(',').map((s: string) => s.trim()).filter(Boolean) : []
-  })
-
-  const handleToggle = (item: string) => {
-    setSelected((prev) => prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item])
-  }
-
-  const handleSave = () => {
-    const newVal = selected.join(', ')
-    setOpen(false)
-    const adminKey = document.querySelector<HTMLMetaElement>('meta[name="admin-key"]')?.content ?? ''
-    fetch(`${API}/api/admin/candidates/${props.data.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-      body: JSON.stringify({ target_level: newVal }),
-    })
-    props.node.setDataValue('target_level', newVal)
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <span
-        onClick={() => setOpen(!open)}
-        style={{ cursor: 'pointer', borderBottom: '1px dashed #3b82f6', fontSize: 12 }}
-      >
-        {props.value || '선택'}
-      </span>
-      {open && (
-        <div style={{
-          position: 'absolute', top: 28, left: 0, zIndex: 100,
-          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
-          padding: 10, width: 220, maxHeight: 280, overflowY: 'auto',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-        }}>
-          {TARGET_LEVEL_CHOICES.map((ch) => (
-            <label key={ch} style={{ display: 'flex', gap: 6, fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
-              <input type="checkbox" checked={selected.includes(ch)} onChange={() => handleToggle(ch)} />
-              {ch}
-            </label>
-          ))}
-          <button
-            type="button"
-            onClick={handleSave}
-            style={{
-              marginTop: 8, width: '100%', background: '#2563eb', color: '#fff',
-              border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 12,
-              cursor: 'pointer', fontWeight: 600,
-            }}
-          >
-            저장
-          </button>
-        </div>
-      )}
-    </div>
-  )
+/** 빈 값 → 공백 */
+function v(s: string | null | undefined): string {
+  if (!s || s.trim() === '' || s.trim() === 'None' || s.trim() === 'N/A') return ''
+  return s.trim()
 }
 
-/* ── 컬럼 빌드 ── */
-function buildColumns(onSave: (id: string, field: string, value: string) => void): ColDef[] {
-  const base: Partial<ColDef> = {
-    resizable: true, sortable: true, filter: true, editable: false, minWidth: 80,
+/** 날짜 포맷 */
+function fmtDate(s: string | null | undefined): string {
+  if (!v(s)) return ''
+  try {
+    return new Date(s as string).toLocaleDateString('ko-KR')
+  } catch {
+    return v(s)
   }
-
-  const editable: Partial<ColDef> = {
-    ...base,
-    editable: true,
-    cellStyle: { borderLeft: '2px solid #3b82f6' },
-    onCellValueChanged: (e: NewValueParams) => {
-      if (e.newValue !== e.oldValue) {
-        onSave(e.data.id, e.colDef.field!, e.newValue ?? '')
-      }
-    },
-  }
-
-  const dropdown = (field: string, headerName: string, values: string[], width = 110): ColDef => ({
-    ...editable,
-    field,
-    headerName,
-    width,
-    cellEditor: 'agSelectCellEditor',
-    cellEditorParams: { values },
-  })
-
-  const emailSendCol = (field: string, headerName: string): ColDef => ({
-    ...base,
-    field,
-    headerName,
-    width: 110,
-    editable: false,
-    cellRenderer: EmailCellRenderer,
-  })
-
-  return [
-    /* ── ID + 상태 + 사진 (고정) ── */
-    { ...base, field: 'id', headerName: 'ID', width: 110, pinned: 'left',
-      headerCheckboxSelection: true, checkboxSelection: true,
-      valueFormatter: (p) => String(p.value ?? '').slice(0, 14) },
-    { ...editable, field: 'status', headerName: '상태', width: 110, pinned: 'left',
-      cellEditor: 'agSelectCellEditor',
-      cellEditorParams: { values: STATUS_VALUES },
-      cellStyle: (p: { value: string }) => {
-        const c: Record<string, string> = {
-          new: '#22c55e', reviewing: '#eab308', interviewing: '#3b82f6', offered: '#8b5cf6',
-          placed: '#0ea5e9', rejected: '#ef4444', withdrawn: '#94a3b8', inactive: '#6b7280',
-          blacklisted: '#dc2626', Active: '#22c55e', Inactive: '#6b7280',
-        }
-        return { color: c[p.value] ?? '#94a3b8', fontWeight: '700', borderLeft: '2px solid #3b82f6', fontSize: '13px' }
-      },
-    },
-    { ...base, field: 'thumb_url', headerName: '사진', width: 55, filter: false, sortable: false,
-      cellRenderer: (p: ICellRendererParams) => {
-        const src = p.value
-        if (!src) {
-          const name = (p.data?.full_name ?? '?') as string
-          const initial = name.charAt(0).toUpperCase()
-          const colors = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316']
-          const ci = name.charCodeAt(0) % colors.length
-          return `<div style="width:26px;height:26px;border-radius:50%;background:${colors[ci]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;line-height:1">${initial}</div>`
-        }
-        const full = p.data?.photo_url ?? src
-        const url = src.startsWith('http') ? src : `${API}${src}`
-        const fullUrl = full.startsWith('http') ? full : `${API}${full}`
-        return `<img src="${url}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="window.__bridgePhotoModal__('${fullUrl}')" />`
-      },
-    },
-
-    /* ── 기본 정보 ── */
-    { ...base, field: 'email', headerName: '이메일', width: 190 },
-    { ...base, field: 'full_name', headerName: '이름', width: 140 },
-    { ...base, field: 'nationality', headerName: '국적', width: 100 },
-    { ...base, field: 'ancestry', headerName: '혈통', width: 90 },
-    { ...base, field: 'dob', headerName: '생년월일', width: 100 },
-    { ...base, field: 'gender', headerName: '성별', width: 70 },
-    { ...base, field: 'current_location', headerName: '현재위치', width: 100 },
-    { ...base, field: 'start_date', headerName: '시작가능일', width: 105 },
-    { ...base, field: 'target', headerName: '대상', width: 90 },
-    { ...base, field: 'area_prefs', headerName: '희망지역', width: 100 },
-    { ...base, field: 'experience', headerName: '경력', width: 85 },
-    { ...base, field: 'employment', headerName: '고용형태', width: 90 },
-    { ...base, field: 'current_salary', headerName: '현재급여', width: 100 },
-    { ...base, field: 'desired_salary', headerName: '희망급여', width: 100 },
-    { ...base, field: 'certification', headerName: '자격증', width: 130 },
-    { ...base, field: 'e_visa', headerName: '비자', width: 100 },
-    { ...base, field: 'mobile_phone', headerName: '전화', width: 130 },
-    { ...base, field: 'kakaotalk', headerName: '카카오톡', width: 110 },
-    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 90 },
-    { ...base, field: 'passport', headerName: '여권', width: 90 },
-    { ...base, field: 'housing', headerName: '숙소', width: 80 },
-    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 90 },
-    { ...base, field: 'job_prefs', headerName: '직무선호', width: 110 },
-    { ...editable, field: 'reference', headerName: '레퍼런스', width: 150 },
-    { ...base, field: 'documents', headerName: '서류', width: 90 },
-
-    /* ── 관리 필드 ── */
-    { ...base, field: 'created_at', headerName: '등록일', width: 110,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-    { ...base, field: 'updated_at', headerName: '수정일', width: 110,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-    { ...base, field: 'source', headerName: '지원경로', width: 100 },
-    { ...base, field: 'inbox_status', headerName: '수신상태', width: 90 },
-    { ...editable, field: 'admin_notes', headerName: '메모', width: 220 },
-    { ...editable, field: 'assigned_to', headerName: '담당자', width: 110,
-      cellEditor: 'agSelectCellEditor',
-      cellEditorParams: { values: ['', ...STAFF_NAMES] },
-    },
-    { ...base, field: 'last_activity', headerName: '최근활동', width: 110,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-
-    /* ── 계약/이메일 ── */
-    dropdown('contract_offered', '계약제안', YN_OPTIONS, 90),
-    dropdown('contract_progress', '진행여부', YN_OPTIONS, 90),
-    emailSendCol('email_contract', '메일1(계약)'),
-    emailSendCol('email_immigration', '메일2(출입국)'),
-    emailSendCol('email_overseas', '메일3(영사)'),
-    emailSendCol('email_transition', '메일4(이직)'),
-    emailSendCol('email_arrival', '메일5(입국)'),
-
-    /* ── 배치/관리 ── */
-    { ...editable, field: 'placed_company', headerName: '채용처', width: 130 },
-    { ...editable, field: 'placed_salary', headerName: '임금', width: 100 },
-    { ...editable, field: 'start_month', headerName: '개시월', width: 90 },
-    { ...editable, field: 'housing_detail', headerName: '숙박내용', width: 120 },
-    { ...editable, field: 'referral_fee', headerName: '소개비용', width: 100 },
-    { ...editable, field: 'process_date', headerName: '처리일자', width: 100 },
-    { ...editable, field: 'past_placement', headerName: '과거채용', width: 110 },
-    { ...editable, field: 'recruiter_memo', headerName: '리크루터메모', width: 180 },
-    { ...editable, field: 'preferences', headerName: '희망사항', width: 150 },
-    { ...editable, field: 'dislikes', headerName: '기피사항', width: 150 },
-    dropdown('residence_type', '거주구분', RESIDENCE_OPTIONS, 100),
-    dropdown('start_detail', '시작상세', START_DETAIL_OPTIONS, 130),
-    { ...base, field: 'target_level', headerName: '교육대상', width: 140,
-      cellRenderer: TargetLevelRenderer },
-    dropdown('housing_type', '주거형태', HOUSING_TYPE_OPTIONS, 140),
-
-    /* ── 추가 정보 ── */
-    { ...base, field: 'education_level', headerName: '학위', width: 90 },
-    { ...base, field: 'major', headerName: '전공', width: 100 },
-    { ...base, field: 'interview_time', headerName: '인터뷰시간', width: 110 },
-    { ...base, field: 'health_info', headerName: '건강정보', width: 100 },
-    { ...base, field: 'personal_consideration', headerName: '개인고려', width: 100 },
-    { ...base, field: 'piercings', headerName: '피어싱', width: 80 },
-    { ...base, field: 'dependents', headerName: '부양가족', width: 90 },
-    { ...base, field: 'pets', headerName: '반려동물', width: 90 },
-    { ...base, field: 'married', headerName: '결혼여부', width: 90 },
-    { ...base, field: 'religion', headerName: '종교', width: 80 },
-    { ...base, field: 'korean_criminal_record', headerName: '한국범죄기록', width: 110 },
-    { ...base, field: 'consent', headerName: '동의', width: 70 },
-    { ...base, field: 'fact_check', headerName: '사실확인', width: 90 },
-    { ...base, field: 'target_age', headerName: '교육연령', width: 90 },
-  ]
 }
 
-/* ── 프로필 발송 모달 ── */
-function ProfileSendModal({
-  candidates, adminKey, onClose,
-}: {
-  candidates: { id: string; full_name: string | null; nationality: string | null; recruiter_memo: string | null; preferences: string | null; dislikes: string | null }[]
-  adminKey: string
-  onClose: () => void
-}) {
-  const [toEmail, setToEmail] = useState('')
-  const [schoolName, setSchoolName] = useState('')
-  const [sending, setSending] = useState(false)
-  const [memos, setMemos] = useState<Record<string, { recruiter_memo: string; preferences: string; dislikes: string }>>(() => {
-    const m: Record<string, { recruiter_memo: string; preferences: string; dislikes: string }> = {}
-    for (const c of candidates) {
-      m[c.id] = {
-        recruiter_memo: c.recruiter_memo ?? '',
-        preferences: c.preferences ?? '',
-        dislikes: c.dislikes ?? '',
-      }
-    }
-    return m
-  })
-
-  const handleSend = async () => {
-    if (!toEmail || !toEmail.includes('@')) { alert('유효한 이메일을 입력하세요.'); return }
-    setSending(true)
-    try {
-      for (const c of candidates) {
-        const m = memos[c.id]
-        if (m) {
-          await fetch(`${API}/api/admin/candidates/${c.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-            body: JSON.stringify({
-              recruiter_memo: m.recruiter_memo,
-              preferences: m.preferences,
-              dislikes: m.dislikes,
-            }),
-          })
-        }
-      }
-      const res = await fetch(`${API}/api/admin/candidates/send-profiles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({
-          candidate_ids: candidates.map((c) => Number(c.id)),
-          to_email: toEmail,
-          school_name: schoolName || undefined,
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) { alert(json.detail ?? '발송 실패'); return }
-      alert(`프로필 발송 완료: ${toEmail}`)
-      onClose()
-    } catch {
-      alert('발송 중 오류 발생')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-base font-bold text-gray-900">프로필 발송</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{candidates.length}명 선택됨</p>
-        </div>
-
-        <div className="px-6 py-4 space-y-3">
-          <div>
-            <label className="text-sm font-medium text-gray-600 block mb-1">수신 이메일 (교육기관)</label>
-            <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              placeholder="school@example.com" value={toEmail} onChange={(e) => setToEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600 block mb-1">학교/기관명 (선택)</label>
-            <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              placeholder="OO 어학원" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-t border-gray-100">
-          <p className="text-sm font-medium text-gray-600 mb-2">선택된 후보자 (메모 편집)</p>
-          {candidates.map((c) => (
-            <div key={c.id} className="bg-gray-50 rounded-lg p-3 mb-2 text-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-bold text-gray-800">ID #{String(c.id).slice(0, 10)}</span>
-                <span className="text-gray-500">{c.nationality ?? ''}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <span className="text-gray-500 block mb-0.5 text-xs">리크루터메모</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
-                    value={memos[c.id]?.recruiter_memo ?? ''}
-                    onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], recruiter_memo: e.target.value } }))} />
-                </div>
-                <div>
-                  <span className="text-gray-500 block mb-0.5 text-xs">희망사항</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
-                    value={memos[c.id]?.preferences ?? ''}
-                    onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], preferences: e.target.value } }))} />
-                </div>
-                <div>
-                  <span className="text-gray-500 block mb-0.5 text-xs">기피사항</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
-                    value={memos[c.id]?.dislikes ?? ''}
-                    onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], dislikes: e.target.value } }))} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-            onClick={onClose}>취소</button>
-          <button type="button"
-            className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            disabled={sending || !toEmail}
-            onClick={handleSend}>
-            {sending ? '발송 중...' : '프로필 발송'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── 페이지네이션 컴포넌트 ── */
-function Pagination({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) {
-  if (totalPages <= 1) return null
-
-  const pages: (number | '...')[] = []
-  if (totalPages <= 9) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i)
-  } else {
-    pages.push(1)
-    if (page > 4) pages.push('...')
-    for (let i = Math.max(2, page - 2); i <= Math.min(totalPages - 1, page + 2); i++) pages.push(i)
-    if (page < totalPages - 3) pages.push('...')
-    pages.push(totalPages)
-  }
-
-  return (
-    <div className="flex items-center justify-center gap-1">
-      <button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)}
-        className="px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
-        &laquo;
-      </button>
-      {pages.map((p, i) =>
-        p === '...' ? (
-          <span key={`dots-${i}`} className="px-2 text-gray-400">...</span>
-        ) : (
-          <button key={p} type="button" onClick={() => onPageChange(p)}
-            className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
-              p === page
-                ? 'bg-[#0071e3] text-white shadow-md'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}>
-            {p}
-          </button>
-        )
-      )}
-      <button type="button" disabled={page === totalPages} onClick={() => onPageChange(page + 1)}
-        className="px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
-        &raquo;
-      </button>
-    </div>
-  )
-}
-
-/* ── 메인 페이지 ── */
 export default function CandidatesPage() {
-  const { adminKey, authed, login, waking } = useAdminAuth()
+  const { adminKey, authed, login, headers, waking } = useAdminAuth()
 
-  const [rows, setRows] = useState<Record<string, string | null>[]>([])
+  const [rows, setRows] = useState<Candidate[]>([])
   const [total, setTotal] = useState(0)
+  const [activeCnt, setActiveCnt] = useState(0)
+  const [inactiveCnt, setInactiveCnt] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [saveMsg, setSaveMsg] = useState('')
-  const [photoModal, setPhotoModal] = useState<string | null>(null)
-  const [tab, setTab] = useState<TabType>('active')
-  const [page, setPage] = useState(1)
-  const [bulkStatus, setBulkStatus] = useState('')
-  const [bulkEmail, setBulkEmail] = useState('')
-  const [profileModal, setProfileModal] = useState(false)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
 
-  const gridRef = useRef<AgGridReact>(null)
+  const [tab, setTab] = useState<TabType>('Active')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  useEffect(() => {
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="admin-key"]')
-    if (!meta) {
-      meta = document.createElement('meta')
-      meta.name = 'admin-key'
-      document.head.appendChild(meta)
-    }
-    meta.content = adminKey
-  }, [adminKey])
-
-  useEffect(() => {
-    const w = window as Window & { __bridgePhotoModal__?: (url: string) => void }
-    w.__bridgePhotoModal__ = (url: string) => setPhotoModal(url)
-    return () => { delete w.__bridgePhotoModal__ }
-  }, [])
-
-  const fetchData = useCallback(async (q: string = '', statusFilter: TabType = tab, pg: number = page) => {
+  const fetchData = useCallback(async (q: string = '', statusTab: TabType = tab, pg: number = page) => {
     setLoading(true)
     setError(null)
     try {
       const offset = (pg - 1) * PAGE_SIZE
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), status: statusFilter })
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+      if (statusTab !== 'all') params.set('status', statusTab)
       if (q) params.set('search', q)
 
-      const res = await fetch(`${API}/api/admin/candidates?${params}`, {
-        headers: { 'x-admin-key': adminKey },
-      })
-      const text = await res.text()
-      let json: { success?: boolean; data?: { candidates: Record<string, string | null>[]; total: number }; detail?: string; message?: string }
-      try {
-        json = JSON.parse(text)
-      } catch {
-        setError(`JSON 파싱 에러 (응답 길이: ${text.length})`)
-        return
-      }
+      const res = await fetch(`${API}/api/admin/candidates?${params}`, { headers: headers() })
       if (res.status === 403) {
-        setError('관리자 키가 올바르지 않습니다.')
+        setError('Invalid admin key.')
+        sessionStorage.removeItem('bridge_admin_key')
         return
       }
+      const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
       setRows(json.data?.candidates ?? [])
       setTotal(json.data?.total ?? 0)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '데이터 로드 실패')
+      setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [adminKey, tab, page])
+  }, [headers, tab, page])
+
+  // 탭 카운트 별도 조회
+  const fetchCounts = useCallback(async () => {
+    try {
+      const [resA, resI] = await Promise.all([
+        fetch(`${API}/api/admin/candidates?status=Active&limit=0&offset=0`, { headers: headers() }),
+        fetch(`${API}/api/admin/candidates?status=Inactive&limit=0&offset=0`, { headers: headers() }),
+      ])
+      const [jA, jI] = await Promise.all([resA.json(), resI.json()])
+      setActiveCnt(jA.data?.total ?? 0)
+      setInactiveCnt(jI.data?.total ?? 0)
+    } catch { /* ignore */ }
+  }, [headers])
 
   useEffect(() => {
-    if (authed) fetchData(search, tab, page)
+    if (authed) {
+      fetchData(search, tab, page)
+      fetchCounts()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, tab, page])
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage)
-    fetchData(search, tab, newPage)
-  }
-
-  const handleTabChange = (newTab: TabType) => {
-    setTab(newTab)
+  const handleTabChange = (t: TabType) => {
+    setTab(t)
     setPage(1)
-    fetchData(search, newTab, 1)
+    setExpanded(null)
+    fetchData(search, t, 1)
   }
 
-  const handleSave = useCallback(async (id: string, field: string, value: string) => {
+  const handleSearch = () => {
+    setPage(1)
+    setExpanded(null)
+    fetchData(search, tab, 1)
+  }
+
+  const updateStatus = async (id: string, newStatus: string) => {
     try {
       const res = await fetch(`${API}/api/admin/candidates/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ [field]: value }),
+        method: 'PATCH', headers: headers(),
+        body: JSON.stringify({ status: newStatus }),
       })
-      if (!res.ok) throw new Error('저장 실패')
-      setSaveMsg(`저장됨 (${new Date().toLocaleTimeString('ko-KR')})`)
-      setTimeout(() => setSaveMsg(''), 3000)
-    } catch (e) {
-      setSaveMsg('저장 실패: ' + (e instanceof Error ? e.message : ''))
-    }
-  }, [adminKey])
-
-  const handleDelete = useCallback(async () => {
-    const sel = gridRef.current?.api.getSelectedRows() ?? []
-    if (!sel.length) return
-    if (!confirm(`${sel.length}명을 삭제(soft delete)하시겠습니까?`)) return
-    for (const row of sel) {
-      await fetch(`${API}/api/admin/candidates/${row.id}`, {
-        method: 'DELETE', headers: { 'x-admin-key': adminKey },
-      })
-    }
-    fetchData(search, tab, page)
-  }, [adminKey, fetchData, search, tab, page])
-
-  const handleBulkStatus = useCallback(async () => {
-    if (!bulkStatus) return
-    const sel = gridRef.current?.api.getSelectedRows() ?? []
-    if (!sel.length) { alert('행을 선택해주세요.'); return }
-    if (!confirm(`${sel.length}명의 상태를 "${bulkStatus}"로 변경하시겠습니까?`)) return
-    try {
-      const res = await fetch(`${API}/api/admin/candidates/bulk-status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ ids: sel.map((r: Record<string, string | null>) => r.id), status: bulkStatus }),
-      })
-      if (!res.ok) throw new Error('일괄 변경 실패')
-      setSaveMsg(`${sel.length}명 → ${bulkStatus}`)
-      setTimeout(() => setSaveMsg(''), 3000)
+      if (!res.ok) throw new Error('Failed')
+      setActionMsg(`#${id} → ${newStatus}`)
+      setTimeout(() => setActionMsg(null), 3000)
       fetchData(search, tab, page)
+      fetchCounts()
     } catch (e) {
-      setSaveMsg('일괄 변경 실패: ' + (e instanceof Error ? e.message : ''))
+      setActionMsg(`Error: ${e instanceof Error ? e.message : 'Failed'}`)
     }
-  }, [adminKey, bulkStatus, fetchData, search, tab, page])
-
-  const handleBulkEmail = useCallback(async () => {
-    if (!bulkEmail) return
-    const sel = gridRef.current?.api.getSelectedRows() ?? []
-    if (!sel.length) { alert('행을 선택해주세요.'); return }
-    const tpl = TEMPLATE_MAP[bulkEmail]
-    if (!tpl) return
-    if (!confirm(`${sel.length}명에게 [${tpl.label}]를 일괄 발송하시겠습니까?`)) return
-    try {
-      const res = await fetch(`${API}/api/admin/candidates/bulk-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({
-          candidate_ids: sel.map((r: Record<string, string | null>) => Number(r.id)),
-          template_key: tpl.key,
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? '일괄 발송 실패')
-      setSaveMsg(json.message ?? '일괄 발송 완료')
-      setTimeout(() => setSaveMsg(''), 5000)
-      fetchData(search, tab, page)
-    } catch (e) {
-      setSaveMsg('일괄 발송 실패: ' + (e instanceof Error ? e.message : ''))
-    }
-  }, [adminKey, bulkEmail, fetchData, search, tab, page])
-
-  const handleExportCsv = useCallback(() => {
-    gridRef.current?.api.exportDataAsCsv({
-      fileName: `candidates_${tab}_${new Date().toISOString().slice(0, 10)}.csv`,
-    })
-  }, [tab])
-
-  const getSelectedForProfile = useCallback(() => {
-    const sel = gridRef.current?.api.getSelectedRows() ?? []
-    return sel.map((r: Record<string, string | null>) => ({
-      id: r.id ?? '',
-      full_name: r.full_name ?? null,
-      nationality: r.nationality ?? null,
-      recruiter_memo: r.recruiter_memo ?? null,
-      preferences: r.preferences ?? null,
-      dislikes: r.dislikes ?? null,
-    }))
-  }, [])
-
-  const colDefs = buildColumns(handleSave)
+  }
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
-    <div className="flex flex-col h-screen -mt-6 lg:-mt-8 -mx-4 lg:-mx-8">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-4 px-5 py-4 bg-white border-b border-gray-200 shrink-0 flex-wrap">
-        <div className="mr-2">
-          <h1 className="text-xl font-bold leading-none text-[#1d1d1f]">원어민 관리</h1>
-          <p className="text-sm text-[#86868b] mt-1">
-            {loading ? '로딩 중...' : `${total.toLocaleString()}명 (표시: ${rows.length}명)`}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[#1d1d1f]">원어민 관리</h1>
+          <p className="text-sm text-[#86868b] mt-0.5">
+            {loading ? '로딩 중...' : `${total.toLocaleString()}명`}
+            {total > rows.length ? ` (표시: ${rows.length}명)` : ''}
           </p>
         </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2">
-          {TAB_CONFIG.map((t) => (
-            <button key={t.key} type="button" onClick={() => handleTabChange(t.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                tab === t.key ? t.activeColor : `bg-white border-2 border-gray-200 ${t.color} hover:border-gray-300`
-              }`}>
-              {t.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {actionMsg && <span className="text-sm text-green-600 font-medium">{actionMsg}</span>}
+          <button type="button" onClick={() => fetchData(search, tab, page)}
+            className="text-sm text-[#0071e3] hover:underline font-medium">새로고침</button>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+      {/* Tabs + Search */}
+      <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Tabs */}
+          <div className="flex bg-gray-100 rounded-xl p-0.5">
+            {([
+              { key: 'all' as TabType, label: '전체', count: activeCnt + inactiveCnt },
+              { key: 'Active' as TabType, label: 'Active', count: activeCnt },
+              { key: 'Inactive' as TabType, label: 'Inactive', count: inactiveCnt },
+            ]).map(t => (
+              <button key={t.key} type="button" onClick={() => handleTabChange(t.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  tab === t.key
+                    ? 'bg-white text-[#1d1d1f] shadow-sm'
+                    : 'text-[#86868b] hover:text-[#424245]'
+                }`}>
+                {t.label}
+                <span className="ml-1.5 text-[11px] text-[#86868b]">{t.count.toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="h-6 w-px bg-gray-200" />
+
+          {/* Search */}
           <input
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="이름/이메일 검색..."
+            className="px-4 py-2 text-sm border border-gray-200 rounded-xl w-56 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="이름, 이메일, 국적..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); fetchData(search, tab, 1) } }}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
           />
-          <button type="button" className="text-sm text-[#0071e3] hover:underline font-medium"
-            onClick={() => { setPage(1); fetchData(search, tab, 1) }}>검색</button>
+          <button type="button" onClick={handleSearch}
+            className="text-sm text-[#0071e3] hover:underline font-medium">검색</button>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 border-b border-gray-200 shrink-0 text-sm flex-wrap">
-        <span className="text-[#86868b] font-semibold">일괄:</span>
+      {error && (
+        <div className="p-4 bg-red-50 text-red-600 text-sm rounded-2xl">{error}</div>
+      )}
 
-        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
-          value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
-          <option value="">상태 선택</option>
-          {[...ACTIVE_STATUSES, ...PAST_STATUSES, 'blacklisted'].map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <button type="button"
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium"
-          onClick={handleBulkStatus} disabled={!bulkStatus}>상태 변경</button>
-
-        <span className="text-gray-300">|</span>
-
-        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
-          value={bulkEmail} onChange={(e) => setBulkEmail(e.target.value)}>
-          <option value="">메일 선택</option>
-          {Object.entries(TEMPLATE_MAP).map(([field, tpl]) => (
-            <option key={field} value={field}>{tpl.label}</option>
-          ))}
-        </select>
-        <button type="button"
-          className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 font-medium"
-          onClick={handleBulkEmail} disabled={!bulkEmail}>일괄 발송</button>
-
-        <span className="text-gray-300">|</span>
-
-        <button type="button"
-          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-          onClick={() => {
-            const sel = getSelectedForProfile()
-            if (!sel.length) { alert('행을 선택해주세요.'); return }
-            setProfileModal(true)
-          }}>프로필 발송</button>
-
-        <button type="button" className="text-red-500 hover:underline font-medium" onClick={handleDelete}>삭제</button>
-
-        <div className="ml-auto flex items-center gap-3">
-          <button type="button" className="text-[#86868b] hover:text-[#1d1d1f] font-medium" onClick={handleExportCsv}>CSV</button>
-          {saveMsg && <span className="text-green-600 font-semibold">{saveMsg}</span>}
-        </div>
-      </div>
-
-      {/* Hint */}
-      <div className="px-5 py-1.5 bg-blue-50 border-b border-blue-100 text-[12px] text-blue-700 shrink-0">
-        파란 테두리 컬럼은 <strong>더블클릭</strong>으로 편집 &middot; 체크박스 선택 &rarr; 일괄 작업 &middot; 교육대상 클릭 &rarr; 다중선택
-      </div>
-
-      {/* Top Pagination */}
-      <div className="px-5 py-2 bg-white border-b border-gray-100 shrink-0">
-        <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
-      </div>
-
-      {error && <div className="px-5 py-2.5 bg-red-50 text-red-600 text-sm shrink-0">{error}</div>}
-
-      {/* AG Grid */}
-      <div className="ag-theme-balham flex-1 overflow-auto"
-        style={{ '--ag-font-size': '13px', '--ag-row-height': '34px', '--ag-header-height': '38px' } as React.CSSProperties}>
-        <AgGridReact
-          ref={gridRef}
-          rowData={rows}
-          columnDefs={colDefs}
-          rowSelection="multiple"
-          suppressRowClickSelection={true}
-          animateRows={false}
-          getRowId={(p) => String(p.data.id ?? p.data.candidate_id ?? '')}
-          defaultColDef={{ resizable: true, sortable: true, filter: true, editable: false }}
-          onGridReady={(e: GridReadyEvent) => e.api.sizeColumnsToFit()}
-          loadingOverlayComponent={() => <div className="text-[#86868b] text-sm animate-pulse py-8">데이터 로딩 중...</div>}
-          noRowsOverlayComponent={() => <div className="text-[#86868b] text-sm py-8">지원자 없음</div>}
-        />
-      </div>
-
-      {/* Bottom Pagination */}
-      <div className="px-5 py-2.5 bg-white border-t border-gray-200 shrink-0">
-        <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
-      </div>
-
-      {/* Photo Modal */}
-      {photoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-          onClick={() => setPhotoModal(null)}>
-          <div className="relative max-w-lg max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
-            <img src={photoModal} alt="Photo" className="max-w-full max-h-[80vh] rounded-xl shadow-2xl" />
-            <button type="button" onClick={() => setPhotoModal(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow text-gray-600 hover:text-gray-900 flex items-center justify-center text-lg font-bold">
-              &times;
-            </button>
+      {loading ? (
+        <div className="text-center py-16 text-[#86868b] animate-pulse text-sm">로딩 중...</div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-16 text-[#86868b] text-sm">해당 지원자가 없습니다.</div>
+      ) : (
+        <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ tableLayout: 'fixed', minWidth: '1140px' }}>
+              <colgroup>
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '140px' }} />
+                <col style={{ width: '80px' }} />
+                <col style={{ width: '120px' }} />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '120px' }} />
+                <col style={{ width: '100px' }} />
+                <col style={{ width: '100px' }} />
+                <col style={{ width: '90px' }} />
+              </colgroup>
+              <thead>
+                <tr className="bg-[#f5f5f7] text-[11px] text-[#86868b] uppercase tracking-wider"
+                  style={{ position: 'sticky', top: 0, zIndex: 20 }}>
+                  <th className="px-3 py-3 text-left font-semibold">No.</th>
+                  <th className="px-3 py-3 text-left font-semibold">이름</th>
+                  <th className="px-3 py-3 text-left font-semibold">국적</th>
+                  <th className="px-3 py-3 text-left font-semibold">현위치</th>
+                  <th className="px-3 py-3 text-left font-semibold">이메일</th>
+                  <th className="px-3 py-3 text-left font-semibold">연락처</th>
+                  <th className="px-3 py-3 text-left font-semibold">Teaching Age</th>
+                  <th className="px-3 py-3 text-left font-semibold">희망급여</th>
+                  <th className="px-3 py-3 text-left font-semibold">시작가능</th>
+                  <th className="px-3 py-3 text-left font-semibold"
+                    style={{ position: 'sticky', right: 0, background: '#f5f5f7', zIndex: 21 }}>상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f0f0f2]">
+                {rows.map(c => (
+                  <CandidateRow key={c.id} c={c}
+                    expanded={expanded === c.id}
+                    onToggle={() => setExpanded(expanded === c.id ? null : c.id)}
+                    onStatusChange={updateStatus} />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Profile Send Modal */}
-      {profileModal && (
-        <ProfileSendModal
-          candidates={getSelectedForProfile()}
-          adminKey={adminKey}
-          onClose={() => { setProfileModal(false); fetchData(search, tab, page) }}
-        />
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1 py-2">
+          <button type="button" disabled={page === 1} onClick={() => { setPage(page - 1); fetchData(search, tab, page - 1) }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
+            &laquo;
+          </button>
+          {Array.from({ length: Math.min(totalPages, 9) }, (_, i) => {
+            let p: number
+            if (totalPages <= 9) { p = i + 1 }
+            else if (page <= 5) { p = i + 1 }
+            else if (page >= totalPages - 4) { p = totalPages - 8 + i }
+            else { p = page - 4 + i }
+            return (
+              <button key={p} type="button" onClick={() => { setPage(p); fetchData(search, tab, p) }}
+                className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
+                  p === page ? 'bg-[#0071e3] text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'
+                }`}>
+                {p}
+              </button>
+            )
+          })}
+          <button type="button" disabled={page === totalPages} onClick={() => { setPage(page + 1); fetchData(search, tab, page + 1) }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
+            &raquo;
+          </button>
+        </div>
       )}
+    </div>
+  )
+}
+
+/* ── 후보자 행 ── */
+function CandidateRow({ c, expanded, onToggle, onStatusChange }: {
+  c: Candidate; expanded: boolean; onToggle: () => void
+  onStatusChange: (id: string, status: string) => void
+}) {
+  const [detailTab, setDetailTab] = useState<'basic' | 'work' | 'docs' | 'placement' | 'comm' | 'extra'>('basic')
+
+  return (
+    <>
+      <tr className="hover:bg-[#f0f4ff] cursor-pointer transition-colors" onClick={onToggle}>
+        <td className="px-3 py-2.5 text-[12px] text-[#86868b] font-mono truncate">{c.id}</td>
+        <td className="px-3 py-2.5 text-[13px] font-semibold text-[#1d1d1f] truncate" title={v(c.full_name)}>{v(c.full_name)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245]">{v(c.nationality)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{v(c.current_location)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate" title={v(c.email)}>{v(c.email)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{v(c.mobile_phone)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{v(c.target)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{v(c.desired_salary)}</td>
+        <td className="px-3 py-2.5 text-[13px] text-[#424245] whitespace-nowrap">{v(c.start_date)}</td>
+        <td className="px-3 py-2.5"
+          style={{ position: 'sticky', right: 0, background: '#fff', zIndex: 10, boxShadow: '-2px 0 4px rgba(0,0,0,0.04)' }}
+          onClick={e => e.stopPropagation()}>
+          <select
+            className={`text-[11px] px-2 py-1 rounded-full font-semibold border-0 cursor-pointer ${statusColors[c.status] ?? 'bg-gray-100 text-gray-600'}`}
+            value={c.status}
+            onChange={e => onStatusChange(c.id, e.target.value)}>
+            {STATUS_VALUES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </td>
+      </tr>
+
+      {expanded && (
+        <tr>
+          <td colSpan={10} className="p-0">
+            <div className="py-4 px-6" style={{ background: '#f8f9ff', borderLeft: '3px solid #3b82f6' }}>
+              {/* Section tabs */}
+              <div className="flex gap-1 mb-4 flex-wrap">
+                {([
+                  { key: 'basic', label: '기본정보' },
+                  { key: 'work', label: '업무정보' },
+                  { key: 'docs', label: '서류/비자' },
+                  { key: 'placement', label: '배치이력' },
+                  { key: 'comm', label: '커뮤니케이션' },
+                  { key: 'extra', label: '메모/기타' },
+                ] as const).map(t => (
+                  <button key={t.key} type="button" onClick={() => setDetailTab(t.key)}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
+                      detailTab === t.key
+                        ? 'bg-[#3b82f6] text-white'
+                        : 'bg-white text-[#424245] border border-[#e5e5e7] hover:bg-gray-50'
+                    }`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Section content */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-2">
+                {detailTab === 'basic' && <>
+                  <DL label="ID" value={c.id} />
+                  <DL label="Full Name" value={v(c.full_name)} />
+                  <DL label="Nationality" value={v(c.nationality)} />
+                  <DL label="Gender" value={v(c.gender)} />
+                  <DL label="Date of Birth" value={v(c.dob)} />
+                  <DL label="Current Location" value={v(c.current_location)} />
+                  <DL label="Email" value={v(c.email)} />
+                  <DL label="Mobile Phone" value={v(c.mobile_phone)} />
+                  <DL label="KakaoTalk" value={v(c.kakaotalk)} />
+                  <DL label="Ancestry" value={v(c.ancestry)} />
+                  <DL label="Created" value={fmtDate(c.created_at)} />
+                  <DL label="Updated" value={fmtDate(c.updated_at)} />
+                </>}
+
+                {detailTab === 'work' && <>
+                  <DL label="Target" value={v(c.target)} />
+                  <DL label="Certification" value={v(c.certification)} />
+                  <DL label="Experience" value={v(c.experience)} />
+                  <DL label="E-Visa" value={v(c.e_visa)} />
+                  <DL label="Desired Salary" value={v(c.desired_salary)} />
+                  <DL label="Current Salary" value={v(c.current_salary)} />
+                  <DL label="Start Date" value={v(c.start_date)} />
+                  <DL label="Employment" value={v(c.employment)} />
+                  <DL label="Area Prefs" value={v(c.area_prefs)} />
+                  <DL label="Job Prefs" value={v(c.job_prefs)} />
+                  <DL label="Housing" value={v(c.housing)} />
+                  <DL label="ARC Holders" value={v(c.arc_holders)} />
+                </>}
+
+                {detailTab === 'docs' && <>
+                  <DL label="Documents" value={v(c.documents)} />
+                  <DL label="Criminal Record" value={v(c.criminal_record)} />
+                  <DL label="Passport" value={v(c.passport)} />
+                  <DL label="Reference" value={v(c.reference)} />
+                  <DL label="Source" value={v(c.source)} />
+                  <DL label="Korean Criminal Record" value={v(c.korean_criminal_record)} />
+                  <DL label="Consent" value={v(c.consent)} />
+                  <DL label="Fact Check" value={v(c.fact_check)} />
+                </>}
+
+                {detailTab === 'placement' && <>
+                  <DL label="Contract Offered" value={v(c.contract_offered)} />
+                  <DL label="Contract Progress" value={v(c.contract_progress)} />
+                  <DL label="Placed Company" value={v(c.placed_company)} />
+                  <DL label="Placed Salary" value={v(c.placed_salary)} />
+                  <DL label="Start Month" value={v(c.start_month)} />
+                  <DL label="Referral Fee" value={v(c.referral_fee)} />
+                  <DL label="Process Date" value={v(c.process_date)} />
+                  <DL label="Past Placement" value={v(c.past_placement)} />
+                </>}
+
+                {detailTab === 'comm' && <>
+                  <DL label="Email Contract" value={v(c.email_contract)} />
+                  <DL label="Email Immigration" value={v(c.email_immigration)} />
+                  <DL label="Email Overseas" value={v(c.email_overseas)} />
+                  <DL label="Email Transition" value={v(c.email_transition)} />
+                  <DL label="Email Arrival" value={v(c.email_arrival)} />
+                  <DL label="Gmail Message ID" value={v(c.gmail_message_id)} />
+                  <DL label="Last Activity" value={fmtDate(c.last_activity)} />
+                  <DL label="Assigned To" value={v(c.assigned_to)} />
+                  <DL label="Inbox Status" value={v(c.inbox_status)} />
+                </>}
+
+                {detailTab === 'extra' && <>
+                  <DL label="Recruiter Memo" value={v(c.recruiter_memo)} />
+                  <DL label="Notes" value={v(c.notes) || v(c.admin_notes)} />
+                  <DL label="Preferences" value={v(c.preferences)} />
+                  <DL label="Dislikes" value={v(c.dislikes)} />
+                  <DL label="Residence Type" value={v(c.residence_type)} />
+                  <DL label="Start Detail" value={v(c.start_detail)} />
+                  <DL label="Target Level" value={v(c.target_level)} />
+                  <DL label="Housing Type" value={v(c.housing_type)} />
+                  <DL label="Housing Detail" value={v(c.housing_detail)} />
+                  <DL label="Education Level" value={v(c.education_level)} />
+                  <DL label="Major" value={v(c.major)} />
+                  <DL label="Interview Time" value={v(c.interview_time)} />
+                  <DL label="Health Info" value={v(c.health_info)} />
+                  <DL label="Personal Consideration" value={v(c.personal_consideration)} />
+                  <DL label="Piercings" value={v(c.piercings)} />
+                  <DL label="Dependents" value={v(c.dependents)} />
+                  <DL label="Pets" value={v(c.pets)} />
+                  <DL label="Married" value={v(c.married)} />
+                  <DL label="Religion" value={v(c.religion)} />
+                  <DL label="Target Age" value={v(c.target_age)} />
+                </>}
+              </div>
+
+              {/* 빈 섹션 안내 */}
+              {detailTab !== 'basic' && detailTab !== 'work' && (
+                <NoDataHint c={c} tab={detailTab} />
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+/** 빈 섹션 힌트 */
+function NoDataHint({ c, tab }: { c: Candidate; tab: string }) {
+  const fieldMap: Record<string, string[]> = {
+    docs: ['documents', 'criminal_record', 'passport', 'reference', 'korean_criminal_record', 'consent', 'fact_check'],
+    placement: ['placed_company', 'placed_salary', 'referral_fee', 'process_date', 'past_placement', 'contract_offered', 'contract_progress'],
+    comm: ['email_contract', 'email_immigration', 'email_overseas', 'email_transition', 'email_arrival', 'gmail_message_id', 'assigned_to'],
+    extra: ['recruiter_memo', 'notes', 'preferences', 'dislikes', 'education_level', 'major', 'health_info'],
+  }
+  const fields = fieldMap[tab] || []
+  const hasData = fields.some(f => {
+    const val = c[f]
+    return val && String(val).trim() !== '' && String(val).trim() !== 'None' && String(val).trim() !== 'N'
+  })
+  if (hasData) return null
+  return <p className="text-[12px] text-[#86868b] mt-3 italic">입력된 데이터가 없습니다.</p>
+}
+
+/** Detail field — 빈 값은 렌더링하지 않음 */
+function DL({ label, value }: { label: string; value: string }) {
+  if (!value) return null
+  return (
+    <div className="text-[13px]">
+      <span className="text-[#86868b] font-medium">{label}</span>
+      <p className="text-[#1d1d1f] mt-0.5 break-words">{value}</p>
     </div>
   )
 }
