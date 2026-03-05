@@ -369,10 +369,10 @@ export default function HomePage() {
           </motion.h1>
 
           <motion.p
-            className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-medium tracking-tight tagline-reveal"
+            className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-[0.08em] tagline-reveal"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 2.2 }}
+            transition={{ duration: 0.01, delay: 0.05 }}
           >
             A career that changes your life
           </motion.p>
