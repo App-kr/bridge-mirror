@@ -368,13 +368,9 @@ export default function HomePage() {
             BRIDGE
           </motion.h1>
 
-          <motion.p
-            className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight tagline-reveal"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 1 }}
-          >
+          <p className="text-xl sm:text-2xl md:text-3xl text-[#a1a1a6] font-light tracking-tight tagline-reveal">
             A career that changes your life
-          </motion.p>
+          </p>
         </motion.div>
 
         {/* ── Scroll indicator ── */}

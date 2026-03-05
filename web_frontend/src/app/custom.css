@@ -4,13 +4,13 @@
    HERO TAGLINE — 왼쪽부터 제자리에서 드러나기
    ═══════════════════════════════════════════════════════════════════════════ */
 .tagline-reveal {
-  -webkit-mask-image: linear-gradient(to right, black 40%, transparent 60%);
-  mask-image: linear-gradient(to right, black 40%, transparent 60%);
-  -webkit-mask-size: 300% 100%;
-  mask-size: 300% 100%;
+  -webkit-mask-image: linear-gradient(to right, white 40%, transparent 55%);
+  mask-image: linear-gradient(to right, white 40%, transparent 55%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
   -webkit-mask-position: 200% 0;
   mask-position: 200% 0;
-  animation: revealSmooth 2s ease-out 0.5s forwards;
+  animation: revealSmooth 1.8s cubic-bezier(0.25, 0.1, 0.25, 1) 0.8s forwards;
 }
 
 @keyframes revealSmooth {
