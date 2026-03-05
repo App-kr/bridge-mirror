@@ -924,6 +924,15 @@ async def admin_login(request: Request):
         raise HTTPException(503, "관리자 인증이 설정되지 않았습니다.")
     if pw != _ADMIN_PW:
         raise HTTPException(403, "비밀번호가 올바르지 않습니다.")
+    # 로그인 성공 → 해당 IP 블랙리스트 자동 리셋
+    try:
+        from security_middleware import ip_blacklist, SecurityMiddleware
+        real_ip = SecurityMiddleware._get_real_ip(request)
+        if real_ip in ip_blacklist._list:
+            del ip_blacklist._list[real_ip]
+            ip_blacklist._save()
+    except Exception:
+        pass
     return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
 
 
@@ -2156,7 +2165,7 @@ async def admin_list_applications(request: Request):
                 "ci.start_date, ci.vacancies, ci.teaching_age, ci.schedule, ci.working_hours, ci.salary_raw, "
                 "ci.housing_type, ci.housing_detail, ci.travel_support, ci.benefits, ci.vacation, "
                 "ci.sick_leave, ci.meal, ci.memo, ci.notes, ci.assigned_to, ci.inbox_status, ci.submitted_at, "
-                "jm.job_code "
+                "ci.source_file, jm.job_code "
                 "FROM client_inquiries ci "
                 "LEFT JOIN (SELECT internal_notes, MIN(job_code) AS job_code FROM jobs GROUP BY internal_notes) jm "
                 "ON ci.memo = jm.internal_notes "
@@ -2169,6 +2178,7 @@ async def admin_list_applications(request: Request):
                     "school_name": i["school_name"] or "",
                     "contact_name": i["contact_name"],
                     "job_code": i["job_code"],
+                    "source_file": i["source_file"],
                     "phone": i["phone"],
                     "location": i["location"],
                     "start_date": i["start_date"],

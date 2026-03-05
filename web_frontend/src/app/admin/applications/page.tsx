@@ -12,7 +12,7 @@ import { API_URL } from '@/lib/api'
 
 const API = API_URL
 
-const STATUS_FLOW = ['new', 'pending', 'reviewing', 'verified', 'matched', 'placed', 'rejected'] as const
+const STATUS_FLOW = ['new', 'contacted', 'interviewing', 'hired', 'rejected', 'hold'] as const
 
 interface EmployerApp {
   id: string
@@ -24,6 +24,7 @@ interface EmployerApp {
   school_name?: string
   contact_name?: string | null
   job_code?: string | null
+  source_file?: string | null
   phone?: string | null
   location?: string | null
   start_date?: string | null
@@ -45,14 +46,16 @@ interface EmployerApp {
 }
 
 const statusColors: Record<string, string> = {
-  new:       'bg-sky-100 text-sky-700',
-  pending:   'bg-yellow-100 text-yellow-700',
-  reviewing: 'bg-blue-100 text-blue-700',
-  verified:  'bg-emerald-100 text-emerald-700',
-  matched:   'bg-violet-100 text-violet-700',
-  placed:    'bg-green-100 text-green-700',
-  rejected:  'bg-red-100 text-red-700',
-  Active:    'bg-emerald-100 text-emerald-700',
+  new:          'bg-sky-100 text-sky-700',
+  contacted:    'bg-yellow-100 text-yellow-700',
+  interviewing: 'bg-blue-100 text-blue-700',
+  hired:        'bg-green-100 text-green-700',
+  rejected:     'bg-red-100 text-red-700',
+  hold:         'bg-gray-100 text-gray-500',
+}
+const statusLabel: Record<string, string> = {
+  new: 'New', contacted: 'Contacted', interviewing: 'Interviewing',
+  hired: 'Hired', rejected: 'Rejected', hold: 'Hold',
 }
 
 /** 지역 정규화 */
@@ -478,17 +481,27 @@ export default function AdminApplicationsPage() {
 }
 
 /* ── 기본보기 행: 10 columns + Word-style expand ── */
+/** No. 컬럼 표시: job_code > F-{id} (폼) > M-{id} (메모) */
+function jobNo(app: EmployerApp): string {
+  if (v(app.job_code)) return app.job_code as string
+  const src = app.source_file || ''
+  if (src.startsWith('BRIDGE_clients')) return `F-${app.id}`
+  if (src === 'memo_extract') return `M-${app.id}`
+  return app.id
+}
+
 function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
   app: EmployerApp; expanded: boolean; onToggle: () => void
   onStatusChange: (id: string, status: string) => void
 }) {
   const province = extractProvince(app.location)
   const city = extractCity(app.location)
+  const no = jobNo(app)
 
   return (
     <>
-      <tr className="hover:bg-[#fafafa] cursor-pointer transition-colors" onClick={onToggle}>
-        <td className="px-3 py-2.5 text-[12px] text-[#86868b] font-mono truncate" title={v(app.job_code) || app.id}>{v(app.job_code) || app.id}</td>
+      <tr className="hover:bg-[#f0f4ff] cursor-pointer transition-colors" onClick={onToggle}>
+        <td className="px-3 py-2.5 text-[12px] text-[#86868b] font-mono truncate" title={no}>{no}</td>
         <td className="px-3 py-2.5 text-[13px] text-[#424245]">{province}</td>
         <td className="px-3 py-2.5 text-[13px] text-[#424245] truncate">{city}</td>
         <td className="px-3 py-2.5 text-[13px] font-semibold text-[#1d1d1f] truncate" title={v(app.school_name) || v(app.name)}>
@@ -510,8 +523,7 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
             className={`text-[11px] px-2 py-1 rounded-full font-semibold border-0 cursor-pointer ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
             value={app.status}
             onChange={e => onStatusChange(app.id, e.target.value)}>
-            {STATUS_FLOW.map(s => <option key={s} value={s}>{s}</option>)}
-            <option value="Active">Active</option>
+            {STATUS_FLOW.map(s => <option key={s} value={s}>{statusLabel[s] || s}</option>)}
           </select>
         </td>
       </tr>
@@ -519,9 +531,9 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
       {expanded && (
         <tr>
           <td colSpan={10} className="p-0">
-            <div className="bg-[#fafafa] border-t border-[#e5e5e7] px-6 py-5">
-              <div className="font-mono text-[13px] leading-relaxed text-[#1d1d1f] space-y-1">
-                <p className="font-bold text-[15px] mb-3">{v(app.job_code) ? `${app.job_code}` : `#${app.id}`}</p>
+            <div className="py-5 px-6" style={{ background: '#f8f9ff', borderLeft: '3px solid #3b82f6' }}>
+              <p className="font-bold text-[15px] text-[#1d1d1f] mb-4">{no}</p>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2">
                 <DL label="Location" value={[province, city].filter(Boolean).join(' ') || v(app.location)} />
                 <DL label="Starting Date" value={v(app.start_date)} />
                 <DL label="Teaching Age" value={v(app.teaching_age)} />
@@ -534,13 +546,13 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
                   [v(app.contact_name) || v(app.name), v(app.phone), v(app.email)]
                     .filter(Boolean).join(' / ')
                 } />
-                {v(app.memo) && (
-                  <div className="mt-3 pt-3 border-t border-[#e5e5e7]">
-                    <span className="font-semibold text-[#86868b]">Memo: </span>
-                    <span className="whitespace-pre-wrap">{v(app.memo)}</span>
-                  </div>
-                )}
               </div>
+              {v(app.memo) && (
+                <div className="mt-4 pt-3 border-t border-[#e0e4ef]">
+                  <span className="text-[12px] font-semibold text-[#86868b]">Memo</span>
+                  <p className="text-[13px] text-[#1d1d1f] mt-1 whitespace-pre-wrap leading-relaxed">{v(app.memo)}</p>
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -549,13 +561,14 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
   )
 }
 
+/** Detail field — 빈 값은 렌더링하지 않음 */
 function DL({ label, value }: { label: string; value: string }) {
   if (!value) return null
   return (
-    <p>
-      <span className="font-semibold text-[#86868b] inline-block" style={{ minWidth: '140px' }}>{label}:</span>
-      <span>{value}</span>
-    </p>
+    <div className="text-[13px]">
+      <span className="text-[#86868b] font-medium">{label}</span>
+      <p className="text-[#1d1d1f] mt-0.5">{value}</p>
+    </div>
   )
 }
 
@@ -565,7 +578,7 @@ function SchoolRow({ app, onStatusChange }: {
   onStatusChange: (id: string, status: string) => void
 }) {
   return (
-    <tr className="hover:bg-[#fafafa] transition-colors">
+    <tr className="hover:bg-[#f0f4ff] transition-colors">
       <td className="px-4 py-3">
         <span className="font-semibold text-[#1d1d1f] text-sm">{v(app.school_name)}</span>
       </td>
@@ -583,8 +596,7 @@ function SchoolRow({ app, onStatusChange }: {
           className={`text-[12px] px-2.5 py-1 rounded-full font-semibold border-0 ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
           value={app.status}
           onChange={e => onStatusChange(app.id, e.target.value)}>
-          {STATUS_FLOW.map(s => <option key={s} value={s}>{s}</option>)}
-          <option value="Active">Active</option>
+          {STATUS_FLOW.map(s => <option key={s} value={s}>{statusLabel[s] || s}</option>)}
         </select>
       </td>
     </tr>
