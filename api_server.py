@@ -2163,6 +2163,7 @@ async def admin_list_applications(request: Request):
                     "id": str(i["id"]), "type": "employer",
                     "name": i["contact_name"] or "", "email": i["email"] or "",
                     "school_name": i["school_name"] or "",
+                    "contact_name": i["contact_name"],
                     "phone": i["phone"],
                     "location": i["location"],
                     "start_date": i["start_date"],
