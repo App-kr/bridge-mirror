@@ -61,29 +61,126 @@ const REGION_NORMALIZE: Record<string, string> = {
   '서울남동': '서울', '서울남서': '서울', '서울북동': '서울', '서울북서': '서울',
 }
 
+/** 도시명 → 시/도 매핑 (extractProvince fallback) */
+const CITY_TO_PROVINCE: Record<string, string> = {
+  // 경기
+  '고양': '경기', '수원': '경기', '성남': '경기', '용인': '경기', '화성': '경기',
+  '파주': '경기', '김포': '경기', '안산': '경기', '안양': '경기', '평택': '경기',
+  '의정부': '경기', '군포': '경기', '구리': '경기', '남양주': '경기', '하남': '경기',
+  '오산': '경기', '이천': '경기', '광명': '경기', '동두천': '경기', '의왕': '경기',
+  '과천': '경기', '수지': '경기', '분당': '경기', '동탄': '경기', '광교': '경기',
+  '일산': '경기', '판교': '경기', '위례': '경기', '망포': '경기',
+  'Suwon': '경기', 'Goyang': '경기', 'Seongnam': '경기', 'Paju': '경기',
+  'Pyeongtaek': '경기', 'Hwaseong Dongtan': '경기', 'Bucheon': '경기',
+  'Seongnam Bundang': '경기',
+  // 충남
+  '천안': '충남', '아산': '충남',
+  // 충북
+  '청주': '충북', '충주': '충북',
+  // 전북
+  '전주': '전북', '군산': '전북',
+  // 전남
+  '순천': '전남', '목포': '전남', '여수': '전남',
+  // 경북
+  '포항': '경북', '구미': '경북', '경주': '경북', '안동': '경북', '김천': '경북',
+  '영주': '경북', '문경': '경북', '의성': '경북',
+  'Gyeongju': '경북', 'Geochang': '경북',
+  // 경남
+  '창원': '경남', '거제': '경남', '양산': '경남', '진주': '경남', '통영': '경남',
+  '김해': '경남', '거창': '경남', '마산': '경남',
+  'Changwon': '경남', 'Changwon Jinhae': '경남', 'Masan': '경남',
+  'Namdong Inchon': '인천',
+  // 강원
+  '강릉': '강원', '춘천': '강원', '원주': '강원', '속초': '강원',
+  // 서울 구
+  '강남구': '서울', '강동구': '서울', '강북구': '서울', '강서구': '서울',
+  '관악구': '서울', '광진구': '서울', '구로구': '서울', '금천구': '서울',
+  '노원구': '서울', '도봉구': '서울', '동대문구': '서울', '동작구': '서울',
+  '마포구': '서울', '서대문구': '서울', '서초구': '서울', '성동구': '서울',
+  '성북구': '서울', '송파구': '서울', '양천구': '서울', '영등포구': '서울',
+  '용산구': '서울', '은평구': '서울', '종로구': '서울', '중구': '서울',
+  '중랑구': '서울',
+  // 경기 구
+  '덕양구': '경기',
+  // 기타
+  '서귀포': '제주',
+}
+
+/** 정규식: 시/도 접두사 (확장형 포함) */
+const PROVINCE_RE = /^(서울[남북][동서]?|경기[남북]부|서울특별시|서울시|서울|부산광역시|부산시|부산진구|부산|대구시|대구|인천광역시|인천시|인천|광주광역시|광주|대전|울산|세종시|세종|경기도|경기|강원도|강원|충북|충남|전남|전북|경북|경남|제주도|제주시|제주|Seoul|SEOUL|Busan|Daegu|Incheon|Gwangju|Daejeon|Ulsan|Sejong|Gyeonggi|Gangwon|Chungbuk|Chungnam|Jeonbuk|Jeonnam|Gyeongbuk|Gyeongnam|Jeju)/i
+
+/** 접두사 → 정규화된 시/도 */
+const PREFIX_NORMALIZE: Record<string, string> = {
+  '서울특별시': '서울', '서울시': '서울', 'SEOUL': '서울',
+  '부산광역시': '부산', '부산시': '부산', '부산진구': '부산',
+  '대구시': '대구',
+  '인천광역시': '인천', '인천시': '인천',
+  '광주광역시': '광주',
+  '세종시': '세종',
+  '경기도': '경기',
+  '강원도': '강원',
+  '제주도': '제주', '제주시': '제주',
+}
+
 function extractProvince(loc: string | null | undefined): string {
   if (!loc) return ''
   const s = loc.trim()
-  const match = s.match(/^(서울[남북][동서]?|경기[남북]부|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|Seoul|Busan|Daegu|Incheon|Gwangju|Daejeon|Ulsan|Sejong|Gyeonggi|Gangwon|Chungbuk|Chungnam|Jeonbuk|Jeonnam|Gyeongbuk|Gyeongnam|Jeju)/i)
+  if (!s) return ''
+
+  // 1) 정규식 접두사 매칭
+  const match = s.match(PROVINCE_RE)
   if (match) {
     const raw = match[1]
-    return REGION_NORMALIZE[raw] || raw
+    return REGION_NORMALIZE[raw] || PREFIX_NORMALIZE[raw] || raw
   }
-  const parts = s.split(',')
-  if (parts.length > 1) {
-    const last = parts[parts.length - 1]?.trim() || ''
-    return REGION_NORMALIZE[last] || last
+
+  // 2) 쉼표 구분 (영문 주소: "Gangnam-gu, Seoul, Republic of Korea")
+  const parts = s.split(',').map(p => p.trim()).filter(p => p && p !== 'Republic of Korea' && p !== 'Korea')
+  for (let idx = parts.length - 1; idx >= 0; idx--) {
+    const part = parts[idx]
+    const m2 = part.match(PROVINCE_RE)
+    if (m2) return REGION_NORMALIZE[m2[1]] || PREFIX_NORMALIZE[m2[1]] || m2[1]
+    if (CITY_TO_PROVINCE[part]) return CITY_TO_PROVINCE[part]
   }
+
+  // 3) 붙여쓰기 fallback: "서울강서" → "서울", "경기성남" → "경기" 등
+  const glued = s.match(/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/)
+  if (glued) return glued[1]
+
+  // 4) 도시명 fallback: "고양 일산" → 경기, "청주 가경" → 충북
+  const firstWord = s.split(/[\s,]/)[0]
+  if (firstWord && CITY_TO_PROVINCE[firstWord]) return CITY_TO_PROVINCE[firstWord]
+
+  // 5) 전체 문자열에서 도시명 검색 (영문 포함)
+  for (const [city, prov] of Object.entries(CITY_TO_PROVINCE)) {
+    if (s.includes(city)) return prov
+  }
+
   return ''
 }
+
+/** 도시 부분만 추출 */
+const PROVINCE_STRIP_RE = /^(?:서울[남북][동서]?|경기[남북]부|서울특별시|서울시|서울|부산광역시|부산시|부산|대구시|대구|인천광역시|인천시|인천|광주광역시|광주|대전|울산|세종시|세종|경기도|경기|강원도|강원|충북|충남|전남|전북|경북|경남|제주도|제주시|제주)\s*/i
 
 function extractCity(loc: string | null | undefined): string {
   if (!loc) return ''
   const s = loc.trim()
-  const krMatch = s.match(/(?:서울[남북][동서]?|경기[남북]부|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\s*(.+?)(?:\s|$)/)
-  if (krMatch) return krMatch[1].trim()
+
+  // 접두사 제거 후 나머지
+  const stripped = s.replace(PROVINCE_STRIP_RE, '')
+  if (stripped && stripped !== s) {
+    const firstPart = stripped.split(/[,\s]/)[0]?.trim()
+    if (firstPart) return firstPart
+  }
+
+  // 쉼표 구분 (영문): "Gangnam-gu, Seoul" → "Gangnam-gu"
   const parts = s.split(',').map(p => p.trim())
   if (parts.length >= 2) return parts[0]
+
+  // 도시명만 있는 경우: "고양 일산" → "일산"
+  const words = s.split(/\s+/)
+  if (words.length >= 2 && CITY_TO_PROVINCE[words[0]]) return words.slice(1).join(' ')
+
   return ''
 }
 
