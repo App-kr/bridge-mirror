@@ -7,6 +7,12 @@ master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
   - 광고에 업체명·연락처·이메일·정확한 주소 절대 미포함
   - internal_notes 완전 차단 (업체 전화/메일 포함)
   - 노출 허용: 도시명, 급여, 근무시간, 연령대, 복지(일반)
+  - 카카오톡 ID 완전 차단
+  - 파일 무결성 체크 (해킹 시도 차단)
+
+다중 계정:
+  python craigslist_auto_rpa.py --account account1 --limit 10
+  python craigslist_auto_rpa.py --account account2 --headless --limit 10
 
 실행:
   python craigslist_auto_rpa.py --dry-run          # 광고 텍스트 출력만
@@ -16,6 +22,7 @@ master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
 """
 
 import argparse
+import hashlib
 import io
 import json
 import logging
@@ -40,6 +47,7 @@ if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
+LOCK_FILE = BASE_DIR / "logs" / ".rpa_running.lock"
 # 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
 _IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,9 +83,25 @@ def _log_event(level: str, job_code: str, stage: str, message: str, extra: dict 
     else:
         _err_logger.info(line)
 
-try:
-    from dotenv import load_dotenv
-    # .env 탐색: BASE_DIR/.env → BASE_DIR/backend/.env → 스크립트 옆 .env
+# ── 계정별 .env 로딩 ─────────────────────────────────────────────────────────
+# --account account1 → account1.env 로딩
+# 미지정 시 기본 .env 사용
+def _load_account_env(account_id: str | None = None):
+    """계정별 .env 파일 로딩. account_id 없으면 기본 .env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+
+    if account_id:
+        acct_env = Path(__file__).resolve().parent / f"{account_id}.env"
+        if acct_env.exists():
+            load_dotenv(acct_env, override=True)
+            print(f"  [ENV] {account_id}.env 로딩 완료")
+            return
+        else:
+            print(f"  [WARN] {acct_env} 없음 → 기본 .env 사용")
+
     for _env_candidate in [
         BASE_DIR / ".env",
         BASE_DIR / "backend" / ".env",
@@ -86,8 +110,76 @@ try:
         if _env_candidate.exists():
             load_dotenv(_env_candidate, override=True)
             break
-except ImportError:
-    pass
+
+# 초기 로딩 (--account 파싱 전이므로 기본 .env)
+_load_account_env()
+
+
+# ── 파일 무결성 체크 (해킹 시도 차단) ────────────────────────────────────────
+_INTEGRITY_FILES = [
+    Path(__file__).resolve(),                          # craigslist_auto_rpa.py
+    Path(__file__).resolve().parent / "rpa_overlay.py",
+]
+_HASH_STORE = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
+
+
+def _compute_hash(filepath: Path) -> str:
+    """SHA-256 해시 계산."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def integrity_init():
+    """현재 파일들의 해시를 저장 (최초 실행 또는 업데이트 후)."""
+    hashes = {}
+    for fp in _INTEGRITY_FILES:
+        if fp.exists():
+            hashes[str(fp)] = _compute_hash(fp)
+    _HASH_STORE.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
+    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일")
+
+
+def integrity_check() -> bool:
+    """파일 무결성 검증. 변조 감지 시 False 반환."""
+    if not _HASH_STORE.exists():
+        print("  [INTEGRITY] 해시 파일 없음 → 최초 초기화")
+        integrity_init()
+        return True
+
+    stored = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
+    tampered = []
+    for fp in _INTEGRITY_FILES:
+        if not fp.exists():
+            continue
+        key = str(fp)
+        if key not in stored:
+            continue
+        current = _compute_hash(fp)
+        if current != stored[key]:
+            tampered.append(fp.name)
+
+    if tampered:
+        print(f"\n  !!!!! [SECURITY ALERT] 파일 변조 감지 !!!!!")
+        for name in tampered:
+            print(f"    - {name}")
+        print(f"  비밀번호 입력 팝업을 확인하세요...")
+        try:
+            from rpa_overlay import ask_integrity_password
+            if ask_integrity_password():
+                integrity_init()
+                print("  무결성 해시가 재초기화되었습니다. 계속 실행합니다.")
+                return True
+        except Exception as exc:
+            print(f"  [팝업 오류] {exc}")
+            print(f"  CLI 리셋: python craigslist_auto_rpa.py --integrity-reset 1234")
+        print(f"  실행을 중단합니다.")
+        _log_event("error", "SYSTEM", "integrity",
+                   f"File tampering detected: {', '.join(tampered)}")
+        return False
+    return True
 
 try:
     from selenium import webdriver
@@ -102,9 +194,22 @@ except ImportError:
     print("[ERROR] pip install selenium webdriver-manager")
     sys.exit(1)
 
+# ── 비밀번호 복호화 헬퍼 ──────────────────────────────────────────────────────
+def _decrypt_env_password(raw: str) -> str:
+    """ENC: 접두사 비밀번호를 Fernet 복호화. 평문이면 그대로 반환."""
+    if not raw.startswith("ENC:"):
+        return raw
+    try:
+        from crypto_util import decrypt_value
+        return decrypt_value(raw)
+    except Exception as e:
+        print(f"  [ERROR] 비밀번호 복호화 실패: {e}")
+        print(f"  .bridge.key 파일 확인 또는 python crypto_util.py setup 실행")
+        sys.exit(1)
+
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
 CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
-CL_PASSWORD = os.getenv("CRAIGSLIST_PASSWORD", "")
+CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 
@@ -1001,22 +1106,48 @@ def take_screenshot(driver, job_code: str) -> str:
 _REDACT_RULES: list[tuple[re.Pattern, str]] = [
     # 한국 휴대전화
     (re.compile(r'010[-\s]?\d{3,4}[-\s]?\d{4}'), '[REDACTED-PHONE]'),
+    # 한국 유선전화 (02, 031, 032 등)
+    (re.compile(r'\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b'), '[REDACTED-PHONE]'),
     # 국제 전화 (+1 xxx xxx xxxx 등)
     (re.compile(r'\+\d{1,3}[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}'), '[REDACTED-PHONE]'),
-    # 이메일 — CL_CONTACT 이외 전부 치환 (CL_CONTACT 는 아래 _apply_redact 에서 보존)
+    # 이메일 — CL_CONTACT 이외 전부 치환
     (re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'), '[REDACTED-EMAIL]'),
+    # 카카오톡 ID
+    (re.compile(r'(?:kakao(?:talk)?|카[카]?오?톡?|KaTalk|카톡)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-KAKAO]'),
+    # LINE ID
+    (re.compile(r'(?:LINE|라인)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-LINE]'),
     # 사업자등록번호
     (re.compile(r'\b\d{3}-\d{2}-\d{5}\b'), '[REDACTED-BIZNUM]'),
     # 한국어 학원/기관명
     (re.compile(r'[\uac00-\ud7a3]+(어학원|학원|유치원|학교|센터|원)\b'), '[REDACTED-SCHOOL]'),
     # 상세 도로명 주소 패턴 (x층, x호 등)
     (re.compile(r'\d+층|\d+호\b'), '[REDACTED-ADDR]'),
+    # 도로명 주소 (xx로, xx길 + 번지)
+    (re.compile(r'[가-힣]+(?:로|길)\s*\d+(?:-\d+)?'), '[REDACTED-ADDR]'),
     # 한국어 이름 — 담당자/성명/이름 컨텍스트 뒤 2-4자 한글
     (re.compile(r'(?:담당자|성명|이름|문의처|연락처)[:：\s]{0,3}([가-힣]{2,4})'), '[REDACTED-NAME]'),
     # 영어 이름 — "Name:", "Contact:", "Teacher:", "Director:" 뒤 Title Case 2단어
     (re.compile(r'(?:Name|Contact|Teacher|Director|Recruiter|Manager):\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)'), '[REDACTED-NAME]'),
     # 한국어 이름+직책 — "홍길동 원장", "김철수 팀장" 패턴
     (re.compile(r'[가-힣]{2,4}\s*(?:원장|팀장|부장|과장|대리|주임|선생님|교감|교장|원감)\b'), '[REDACTED-NAME+TITLE]'),
+    # 웹사이트 URL (http/https/www)
+    (re.compile(r'(?:https?://|www\.)\S+', re.I), '[REDACTED-URL]'),
+    # 회사/업체명 (xx컴퍼니, xx주식회사, xx(주), xx Inc 등)
+    (re.compile(r'[\uac00-\ud7a3]+(?:주식회사|컴퍼니|에듀|잉글리시|영어마을|어린이집)\b'), '[REDACTED-COMPANY]'),
+    (re.compile(r'(?:주식회사|㈜|\(주\))\s*[\uac00-\ud7a3]+'), '[REDACTED-COMPANY]'),
+    (re.compile(r'[\w\s]+(?:Inc\.|Corp\.|Co\.,?\s*Ltd\.?|LLC)\b', re.I), '[REDACTED-COMPANY]'),
+    # 위챗 / WeChat ID
+    (re.compile(r'(?:WeChat|위챗|微信)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-WECHAT]'),
+    # 텔레그램 ID
+    (re.compile(r'(?:Telegram|텔레그램|텔레)\s*(?:id)?[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-TELEGRAM]'),
+    # 인스타그램 / SNS 핸들
+    (re.compile(r'(?:Instagram|인스타(?:그램)?|IG)\s*[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
+    # 팩스 번호
+    (re.compile(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', re.I), '[REDACTED-FAX]'),
+    # 우편번호 (한국 5자리)
+    (re.compile(r'\b\d{5}\b(?=\s*[가-힣])'), '[REDACTED-ZIPCODE]'),
+    # 지번 주소 (xx동 xxx-xx번지)
+    (re.compile(r'[가-힣]+[동리면읍]\s*\d+(?:-\d+)?(?:\s*번지)?'), '[REDACTED-ADDR]'),
 ]
 
 
@@ -1084,6 +1215,41 @@ def security_check(body: str, job_code: str) -> bool:
         print(f"  [보안 차단] {job_code}: '사업자등록번호' 패턴 감지 → 게시 중단")
         passed = False
 
+    # 카카오톡 ID
+    if re.search(r'(?:kakao(?:talk)?|카[카]?오?톡?|KaTalk|카톡)', body, re.I):
+        print(f"  [보안 차단] {job_code}: '카카오톡 ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # LINE ID
+    if re.search(r'(?:LINE|라인)\s*(?:id)?[:：\s]*[\w.\-]{2,}', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'LINE ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # URL 차단
+    if re.search(r'(?:https?://|www\.)\S+', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'URL' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 회사/업체명
+    if re.search(r'(?:주식회사|㈜|\(주\))|[\uac00-\ud7a3]+(?:컴퍼니|에듀|잉글리시|영어마을|어린이집)', body):
+        print(f"  [보안 차단] {job_code}: '업체명' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # SNS/메신저 ID (위챗, 텔레그램, 인스타)
+    if re.search(r'(?:WeChat|위챗|Telegram|텔레그램|Instagram|인스타)', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'SNS/메신저 ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 팩스
+    if re.search(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', body, re.I):
+        print(f"  [보안 차단] {job_code}: '팩스번호' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 지번/도로명 상세주소
+    if re.search(r'[가-힣]+[동리면읍]\s*\d+(?:-\d+)?|[가-힣]+(?:로|길)\s*\d+', body):
+        print(f"  [보안 차단] {job_code}: '상세주소' 패턴 감지 → 게시 중단")
+        passed = False
+
     return passed
 
 
@@ -1095,17 +1261,47 @@ def main():
     parser.add_argument("--headless",  action="store_true", help="Headless Chrome (화면 없이 실행)")
     parser.add_argument("--diagnose",  action="store_true",
                         help="카테고리 페이지까지만 진행 → education 실제 value 자동 탐색 후 종료")
+    parser.add_argument("--account",   default=None,
+                        help="계정 ID (account1/account2/account3) → 해당 .env 로딩")
+    parser.add_argument("--integrity-reset", nargs="?", const="", default=None,
+                        help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
     parser.add_argument("--job-code",  default=None)
     parser.add_argument("--limit",     type=int, default=10)
     args = parser.parse_args()
 
+    # ── 무결성 해시 재초기화 ──
+    if args.integrity_reset is not None:
+        if args.integrity_reset == "1234":
+            integrity_init()
+            print("무결성 해시가 재초기화되었습니다.")
+        else:
+            print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
+        return
+
+    # ── 계정별 .env 재로딩 (--account 지정 시) ──
+    if args.account:
+        _load_account_env(args.account)
+        # 환경변수 재읽기
+        global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
+        CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
+        CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
+        CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
+        CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
+        CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
+
+    # ── 파일 무결성 체크 ──
+    if not integrity_check():
+        sys.exit(99)
+
+    acct_label = args.account or "default"
     print("=" * 60)
     print("  BRIDGE Craigslist Auto RPA")
-    print(f"  Target : {CL_BASE_URL}")
+    print(f"  Target  : {CL_BASE_URL}")
+    print(f"  Account : {acct_label} ({CL_EMAIL})")
     mode_str = ('DRY-RUN' if args.dry_run else
                 'GENERATE' if args.generate else
                 'DIAGNOSE' if args.diagnose else 'POST')
-    print(f"  Mode   : {mode_str}")
+    print(f"  Mode    : {mode_str}")
     print("=" * 60)
 
     # ── DIAGNOSE 모드: 카테고리 페이지 DOM 분석 ──────────────────────────────
@@ -1250,9 +1446,15 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
+    # ── 잠금 파일 (중복 실행 방지) ──
+    import atexit
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
+
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, close as overlay_close, wants_more
+        from rpa_overlay import show_working, show_complete, update_progress, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
     except ImportError:
         _HAS_OVERLAY = False
@@ -1262,7 +1464,7 @@ def main():
         hl_flag = args.headless
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
-            show_working()
+            show_working(current=0, total=len(ad_list), email=CL_EMAIL)
         driver = build_driver(headless=hl_flag)
         posted = 0
 
@@ -1273,6 +1475,11 @@ def main():
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
+                if _HAS_OVERLAY and stop_requested():
+                    print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
+                    _log_event("info", "—", "user_stop", "User requested stop via overlay")
+                    break
+
                 jcode = job["job_code"]
                 print(f"\n{'='*55}")
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
@@ -1287,6 +1494,8 @@ def main():
                         print(f"  📸 스크린샷 : {ss}")
                         _log_event("info", jcode, "posted", "Post successful", {"url": url})
                         posted += 1
+                        if _HAS_OVERLAY:
+                            update_progress(posted, len(ad_list))
                     elif url is None:
                         mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
                         print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
@@ -1318,6 +1527,16 @@ def main():
 
     # ── 첫 게시 세션 ──
     total_posted = _run_post_session(ads)
+
+    # ── 쿨다운 타임스탬프 기록 (수동 실행도 4시간 쿨다운 적용) ──
+    if total_posted > 0:
+        try:
+            from scheduler import stamp_run
+            acct_id = args.account or "default"
+            stamp_run(acct_id)
+            print(f"  [COOLDOWN] {acct_id} — 4시간 쿨다운 기록 완료")
+        except Exception:
+            pass
 
     print("\n" + "=" * 60)
     print(f"  완료: {total_posted}건 게시")
@@ -1356,6 +1575,7 @@ def main():
                 print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
                 show_complete(posted_count=total_posted)
                 break
+
 
 
 if __name__ == "__main__":

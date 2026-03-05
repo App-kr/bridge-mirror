@@ -1289,6 +1289,56 @@ async def admin_candidates(
         err("지원자 목록을 불러올 수 없습니다.", 500)
 
 
+@app.post("/api/admin/candidates", tags=["admin"])
+async def admin_create_candidate(request: Request, body: dict):
+    """새 후보자 추가 (관리자 전용)."""
+    _check_admin(request)
+    if not _rate_ok(request):
+        raise HTTPException(429, "잠시 후 다시 시도해주세요.")
+    full_name = (body.get("full_name") or "").strip()
+    if not full_name:
+        raise HTTPException(400, "이름(full_name)은 필수입니다.")
+    import uuid as _uuid_cand
+    cid = f"cnd_{_uuid_cand.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    ALLOWED = {
+        "email", "full_name", "nationality", "ancestry", "dob", "gender",
+        "current_location", "education_level", "major", "certification",
+        "e_visa", "arc_holders", "passport", "criminal_record", "documents",
+        "start_date", "target", "area_prefs", "job_prefs", "experience",
+        "employment", "reference", "current_salary", "desired_salary",
+        "interview_time", "housing", "personal_consideration", "religion",
+        "health_info", "piercings", "dependents", "pets", "married",
+        "korean_criminal_record", "kakaotalk", "mobile_phone", "consent",
+        "fact_check", "notes", "status", "source", "tattoo", "visa_type",
+        "working_hours", "target_age",
+    }
+    record = {k: v for k, v in body.items() if k in ALLOWED and v}
+    record["candidate_id"] = cid
+    record["created_at"] = now
+    record["updated_at"] = now
+    record["source"] = record.get("source", "admin_manual")
+    record["source_file"] = "admin_manual"
+    record["status"] = record.get("status", "Active")
+    cols = ", ".join(record.keys())
+    placeholders = ", ".join("?" for _ in record)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            conn.execute(
+                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
+                list(record.values()),
+            )
+            conn.commit()
+            return ok(data={"candidate_id": cid}, message="후보자 등록 완료")
+        finally:
+            conn.close()
+    except Exception as e:
+        logging.getLogger("bridge.api").error("admin_create_candidate 실패: %s", e, exc_info=True)
+        err("후보자 등록에 실패했습니다.", 500)
+
+
 @app.patch("/api/admin/candidates/{candidate_id}", tags=["admin"])
 async def admin_update_candidate(
     candidate_id: str,
