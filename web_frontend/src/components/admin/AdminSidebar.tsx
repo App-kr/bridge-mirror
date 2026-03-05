@@ -46,6 +46,13 @@ const NAV_CATEGORIES: NavCategory[] = [
     ],
   },
   {
+    title: '사이트 관리',
+    items: [
+      { href: '/admin/partners', label: '파트너' },
+      { href: '/admin/settings', label: '설정' },
+    ],
+  },
+  {
     title: '운영',
     items: [
       { href: '/admin/jobs', label: '구인 관리' },

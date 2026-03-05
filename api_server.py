@@ -1,5 +1,5 @@
 """
-BRIDGE API Server  v2.1
+BRIDGE API Server  v2.2
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 
@@ -817,7 +817,7 @@ async def apply(request: Request, body: CandidateApply):
     except Exception as e:
         import logging as _log_apply
         _log_apply.getLogger("bridge.api").error("apply 접수 실패: %s", e, exc_info=True)
-        err("접수에 실패했습니다. 잠시 후 다시 시도해주세요.", 500)
+        err(f"접수 실패: {type(e).__name__}: {e}", 500)
 
 
 @app.post("/api/inquiry", status_code=status.HTTP_201_CREATED, tags=["clients"])
@@ -3330,6 +3330,312 @@ async def admin_delete_post(post_id: int, request: Request):
         conn.execute("UPDATE community_posts SET is_deleted=1 WHERE id=?", (post_id,))
         conn.commit()
         return ok(message=f"Post #{post_id} deleted")
+    finally:
+        conn.close()
+
+
+# ── Admin: Site Partners 관리 ──────────────────────────────────────────────────
+
+def _ensure_site_partners_table():
+    """site_partners 테이블 생성 (없으면)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS site_partners (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'academy',
+            logo_url TEXT,
+            website TEXT,
+            sort_order INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            is_deleted INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # 기존 하드코딩 파트너가 비어있으면 시드 데이터 삽입
+    count = conn.execute("SELECT COUNT(*) FROM site_partners").fetchone()[0]
+    if count == 0:
+        academies = [
+            'Chungdahm Learning', 'YBM', 'Warwick Franklin', 'Poly',
+            'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
+            'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
+            'JLS Jungsang', 'Real Class', 'Siwon School',
+            'Korea University Foreign Language Center', 'Crecerse',
+            'LinguaEdu', 'Simson Edu', 'LexKim English', 'MiEdu',
+            'Twinkle Language', 'SDA', 'Wiz Island', 'Kids College',
+        ]
+        schools = [
+            'Busan International Foreign School', 'Dalton School',
+            'Taejon Christian International School', 'Busan Foreign School',
+            'Gyeonggi English Village', 'Dulwich College Seoul',
+            'Korea International School', 'Chadwick International',
+            'Gangwon English Camp', 'Dwight School Seoul',
+            'Yongsan International School of Seoul', 'Saint Paul Academy',
+            'Paju English Village', 'Seoul Scholars International',
+            'North London Collegiate School', 'Seoul Foreign School',
+            'Daegu International School', 'British Council Korea',
+            'Gyeonggi International School', 'Jeju International School',
+            'Mountain Cherry Academy', 'Seoul International School',
+        ]
+        for i, name in enumerate(academies):
+            conn.execute(
+                "INSERT INTO site_partners (name, category, sort_order) VALUES (?, 'academy', ?)",
+                (name, i)
+            )
+        for i, name in enumerate(schools):
+            conn.execute(
+                "INSERT INTO site_partners (name, category, sort_order) VALUES (?, 'school', ?)",
+                (name, i)
+            )
+        conn.commit()
+    conn.close()
+
+_ensure_site_partners_table()
+
+
+class PartnerCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    category: str = Field('academy', pattern=r'^(academy|school)$')
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    sort_order: Optional[int] = 0
+
+
+class PartnerUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    category: Optional[str] = Field(None, pattern=r'^(academy|school)$')
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[int] = Field(None, ge=0, le=1)
+
+
+@app.get("/api/partners", tags=["public"])
+async def public_list_partners():
+    """공개 파트너 목록 (활성 파트너만)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT id, name, category, logo_url, website, sort_order "
+            "FROM site_partners WHERE is_active=1 AND is_deleted=0 ORDER BY sort_order, name"
+        ).fetchall()
+        return ok(data={"partners": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/partners", tags=["admin"])
+async def admin_list_partners(request: Request):
+    """파트너 목록 (관리자 — 비활성 포함)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT * FROM site_partners WHERE is_deleted=0 ORDER BY sort_order, name"
+        ).fetchall()
+        return ok(data={"partners": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/partners", status_code=201, tags=["admin"])
+async def admin_create_partner(body: PartnerCreate, request: Request):
+    """파트너 추가 (관리자)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            "INSERT INTO site_partners (name, category, logo_url, website, sort_order) VALUES (?,?,?,?,?)",
+            (body.name, body.category, body.logo_url, body.website, body.sort_order or 0),
+        )
+        conn.commit()
+        return ok(message="Partner created")
+    finally:
+        conn.close()
+
+
+@app.put("/api/admin/partners/{partner_id}", tags=["admin"])
+async def admin_update_partner(partner_id: int, body: PartnerUpdate, request: Request):
+    """파트너 수정 (관리자)."""
+    _check_admin(request)
+    updates: list[str] = []
+    params: list = []
+    if body.name is not None:
+        updates.append("name=?"); params.append(body.name)
+    if body.category is not None:
+        updates.append("category=?"); params.append(body.category)
+    if body.logo_url is not None:
+        updates.append("logo_url=?"); params.append(body.logo_url)
+    if body.website is not None:
+        updates.append("website=?"); params.append(body.website)
+    if body.sort_order is not None:
+        updates.append("sort_order=?"); params.append(body.sort_order)
+    if body.is_active is not None:
+        updates.append("is_active=?"); params.append(body.is_active)
+    if not updates:
+        raise HTTPException(400, "수정할 항목이 없습니다.")
+    updates.append("updated_at=CURRENT_TIMESTAMP")
+    params.append(partner_id)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        r = conn.execute(
+            "SELECT id FROM site_partners WHERE id=? AND is_deleted=0", (partner_id,)
+        ).fetchone()
+        if not r:
+            raise HTTPException(404, "Partner not found")
+        conn.execute(f"UPDATE site_partners SET {', '.join(updates)} WHERE id=?", params)
+        conn.commit()
+        return ok(message=f"Partner #{partner_id} updated")
+    finally:
+        conn.close()
+
+
+@app.delete("/api/admin/partners/{partner_id}", tags=["admin"])
+async def admin_delete_partner(partner_id: int, request: Request):
+    """파트너 삭제 — soft delete (관리자)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        r = conn.execute(
+            "SELECT id FROM site_partners WHERE id=? AND is_deleted=0", (partner_id,)
+        ).fetchone()
+        if not r:
+            raise HTTPException(404, "Partner not found")
+        conn.execute("UPDATE site_partners SET is_deleted=1 WHERE id=?", (partner_id,))
+        conn.commit()
+        return ok(message=f"Partner #{partner_id} deleted")
+    finally:
+        conn.close()
+
+
+@app.put("/api/admin/partners/reorder", tags=["admin"])
+async def admin_reorder_partners(request: Request):
+    """파트너 순서 일괄 변경 (관리자). body: {order: [{id: 1, sort_order: 0}, ...]}"""
+    _check_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    order_list = body.get("order", [])
+    if not order_list:
+        raise HTTPException(400, "order 필드가 비어있습니다.")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        for item in order_list:
+            pid = item.get("id")
+            so = item.get("sort_order")
+            if pid is not None and so is not None:
+                conn.execute(
+                    "UPDATE site_partners SET sort_order=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND is_deleted=0",
+                    (so, pid)
+                )
+        conn.commit()
+        return ok(message="Partner order updated")
+    finally:
+        conn.close()
+
+
+# ── Admin: Site Settings 관리 ─────────────────────────────────────────────────
+
+def _ensure_site_settings_table():
+    """site_settings 테이블 생성 + 초기 데이터 삽입."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS site_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # 초기 기본값 삽입 (이미 있으면 무시)
+    defaults = [
+        ('business_number', ''),
+        ('company_name', 'BRIDGE Agency'),
+        ('ceo_name', ''),
+        ('address', ''),
+        ('contact_email', 'bridgejobkr@gmail.com'),
+        ('contact_phone', ''),
+        ('kakao_channel', ''),
+        ('instagram', ''),
+        ('facebook', ''),
+        ('youtube', ''),
+        ('blog', ''),
+        ('footer_text', '© 2026 BRIDGE Recruitment · bridgejob.co.kr'),
+        ('footer_description', 'Korea ESL Recruitment Platform'),
+    ]
+    for key, value in defaults:
+        conn.execute(
+            "INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)",
+            (key, value)
+        )
+    conn.commit()
+    conn.close()
+
+_ensure_site_settings_table()
+
+
+@app.get("/api/settings", tags=["public"])
+async def public_get_settings():
+    """공개 사이트 설정 (footer 등)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
+        settings = {r["key"]: r["value"] for r in rows}
+        return ok(data={"settings": settings})
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/settings", tags=["admin"])
+async def admin_get_settings(request: Request):
+    """관리자 사이트 설정 조회."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT key, value, updated_at FROM site_settings").fetchall()
+        settings = {r["key"]: {"value": r["value"], "updated_at": r["updated_at"]} for r in rows}
+        return ok(data={"settings": settings})
+    finally:
+        conn.close()
+
+
+@app.put("/api/admin/settings", tags=["admin"])
+async def admin_update_settings(request: Request):
+    """사이트 설정 일괄 업데이트. body: {settings: {key: value, ...}}"""
+    _check_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    settings = body.get("settings", {})
+    if not settings:
+        raise HTTPException(400, "settings 필드가 비어있습니다.")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        for key, value in settings.items():
+            conn.execute(
+                "INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
+                (str(key), str(value))
+            )
+        conn.commit()
+        return ok(message="Settings updated")
     finally:
         conn.close()
 

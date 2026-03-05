@@ -18,6 +18,7 @@ import {
   scaleIn,
   defaultViewport,
 } from '@/lib/animations'
+import { useEditMode } from '@/components/EditModeBar'
 import type { PublicJob, AgeGroup } from '@/types'
 const API = ''
 
@@ -35,8 +36,8 @@ const FALLBACK_TESTIMONIALS = [
   { text: 'Professional, transparent, and genuinely caring about teachers. They found me a great school in Gangnam within 2 weeks.', stars: 5 },
 ]
 
-// ── Partner lists (schools vs academies) ──
-const ACADEMY_NAMES = [
+// ── Partner lists (fallback when API fails) ──
+const FALLBACK_ACADEMIES = [
   'Chungdahm Learning', 'YBM', 'Warwick Franklin', 'Poly',
   'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
   'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
@@ -45,7 +46,7 @@ const ACADEMY_NAMES = [
   'LinguaEdu', 'Simson Edu', 'LexKim English', 'MiEdu',
   'Twinkle Language', 'SDA', 'Wiz Island', 'Kids College',
 ]
-const SCHOOL_NAMES = [
+const FALLBACK_SCHOOLS = [
   'Busan International Foreign School', 'Dalton School',
   'Taejon Christian International School', 'Busan Foreign School',
   'Gyeonggi English Village', 'Dulwich College Seoul',
@@ -140,6 +141,9 @@ export default function HomePage() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [jobs, setJobs] = useState<PublicJob[]>([])
   const [showBridge, setShowBridge] = useState(false)
+  const [academyNames, setAcademyNames] = useState<string[]>(FALLBACK_ACADEMIES)
+  const [schoolNames, setSchoolNames] = useState<string[]>(FALLBACK_SCHOOLS)
+  const editMode = useEditMode()
 
   // ── Trigger bridge drawing animation ──
   useEffect(() => {
@@ -198,6 +202,22 @@ export default function HomePage() {
         }
       })
       .catch(() => { setJobs(FALLBACK_JOBS) })
+  }, [])
+
+  // ── Fetch partners from API ──
+  useEffect(() => {
+    fetch(`${API}/api/partners`)
+      .then(r => r.json())
+      .then(d => {
+        const partners = d?.data?.partners ?? []
+        if (partners.length > 0) {
+          const academies = partners.filter((p: { category: string }) => p.category === 'academy').map((p: { name: string }) => p.name)
+          const schools = partners.filter((p: { category: string }) => p.category === 'school').map((p: { name: string }) => p.name)
+          if (academies.length > 0) setAcademyNames(academies)
+          if (schools.length > 0) setSchoolNames(schools)
+        }
+      })
+      .catch(() => { /* keep fallback */ })
   }, [])
 
   return (
@@ -515,7 +535,17 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════════════════════
           4. PARTNER MARQUEE — Academies + Schools 2줄
           ═══════════════════════════════════════════════════════════════════ */}
-      <section className="bg-[#111111] py-14 overflow-hidden border-t border-white/[0.06]">
+      <section className="bg-[#111111] py-14 overflow-hidden border-t border-white/[0.06] relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <Link
+              href="/admin/partners"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/90 text-white text-[12px] font-semibold rounded-lg hover:bg-amber-600 transition-colors shadow-lg"
+            >
+              ✏️ 파트너 관리
+            </Link>
+          </div>
+        )}
         {/* Row 1 — Schools & Institutions */}
         <div className="mb-4">
           <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
@@ -523,7 +553,7 @@ export default function HomePage() {
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--slow">
-              {[...SCHOOL_NAMES, ...SCHOOL_NAMES, ...SCHOOL_NAMES].map((name, i) => (
+              {[...schoolNames, ...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
@@ -542,7 +572,7 @@ export default function HomePage() {
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--mid">
-              {[...ACADEMY_NAMES, ...ACADEMY_NAMES, ...ACADEMY_NAMES].map((name, i) => (
+              {[...academyNames, ...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
                   className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"

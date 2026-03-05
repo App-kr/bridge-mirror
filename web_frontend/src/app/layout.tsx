@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import Link from 'next/link'
+import Footer from '@/components/Footer'
 import './globals.css'
 import './custom.css'
 
@@ -89,29 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </main>
 
         {/* ── Footer ── */}
-        <footer className="border-t border-gray-200 bg-[#f5f5f7]">
-          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6e6e73]">
-              <div>
-                <span className="font-semibold text-[#1d1d1f]">BRIDGE</span>
-                {' '}— Korea ESL Recruitment Platform
-              </div>
-              <div className="flex items-center gap-4">
-                {navLinks.slice(0, 4).map((l) => (
-                  <Link key={l.href} href={l.href} className="hover:text-[#1d1d1f] transition-colors">
-                    {l.label}
-                  </Link>
-                ))}
-                <span>|</span>
-                <Link href="/apply" className="hover:text-[#1d1d1f] transition-colors">Apply</Link>
-                <Link href="/inquiry" className="hover:text-[#1d1d1f] transition-colors">Hire</Link>
-              </div>
-            </div>
-            <div className="text-center text-[11px] text-[#86868b] mt-6">
-              © 2026 BRIDGE Recruitment · bridgejob.co.kr
-            </div>
-          </div>
-        </footer>
+        <Footer />
       </body>
     </html>
   )
