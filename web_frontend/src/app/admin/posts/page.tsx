@@ -126,6 +126,24 @@ export default function AdminPostsPage() {
     if (authed) fetchPosts()
   }, [authed, board, fetchPosts])
 
+  // URL ?edit=ID 파라미터 → 자동 편집 열기
+  useEffect(() => {
+    if (!authed || loading || posts.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const editParam = params.get('edit')
+    if (!editParam) return
+    const targetId = parseInt(editParam)
+    if (!targetId || editId === targetId) return
+    const target = posts.find((p) => p.id === targetId)
+    if (target) {
+      startEdit(target)
+      // URL에서 edit 파라미터 제거 (히스토리 교체)
+      params.delete('edit')
+      const qs = params.toString()
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+    }
+  }, [authed, loading, posts, editId])
+
   const handleDelete = async (postBoard: string, postId: number) => {
     if (!confirm(`Delete post #${postId}?`)) return
     try {
