@@ -109,6 +109,53 @@ export default function MegaMenu() {
     timer.current = setTimeout(() => setActive(null), 150)
   }, [])
 
+  // Desktop: BRIDGE 로고 옆에 다리 SVG 아이콘 주입
+  useEffect(() => {
+    if (isAdminPage) return
+    const logoLink = document.querySelector('nav.nav-glass a[href="/"]')
+    if (!logoLink || logoLink.querySelector('[data-bridge-icon]')) return
+
+    const wrap = document.createElement('span')
+    wrap.innerHTML = `<svg data-bridge-icon viewBox="0 0 56 26" width="46" height="21"
+      style="display:inline-block;vertical-align:middle;margin-left:5px;margin-bottom:2px;">
+      <defs>
+        <filter id="blg" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <line x1="1" y1="23" x2="55" y2="23" stroke="#b0b0b0" stroke-width="0.5"/>
+      <path d="M1 21 Q14 21 18 16 Q22 11 28 10.5 Q34 11 38 16 Q42 21 55 21"
+            stroke="#1d1d1f" fill="none" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="18" y1="23" x2="18" y2="3" stroke="#1d1d1f" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="38" y1="23" x2="38" y2="3" stroke="#1d1d1f" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="18" y1="3" x2="5" y2="20.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>
+      <line x1="18" y1="3" x2="9" y2="19.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>
+      <line x1="18" y1="3" x2="13" y2="17.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.55"/>
+      <line x1="18" y1="3" x2="23" y2="12.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>
+      <line x1="18" y1="3" x2="27" y2="11" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>
+      <line x1="38" y1="3" x2="29" y2="11" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>
+      <line x1="38" y1="3" x2="33" y2="12.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>
+      <line x1="38" y1="3" x2="43" y2="17.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.55"/>
+      <line x1="38" y1="3" x2="47" y2="19.5" stroke="#1d1d1f" stroke-width="0.4" opacity="0.5"/>
+      <line x1="38" y1="3" x2="51" y2="20.8" stroke="#1d1d1f" stroke-width="0.4" opacity="0.45"/>
+      <circle r="2" fill="#3b82f6" filter="url(#blg)">
+        <animateMotion dur="2.5s" repeatCount="indefinite"
+          path="M1 21 Q14 21 18 16 Q22 11 28 10.5 Q34 11 38 16 Q42 21 55 21"/>
+        <animate attributeName="opacity" values="0;0.7;1;1;0.7;0" dur="2.5s" repeatCount="indefinite"/>
+      </circle>
+      <circle r="1" fill="#60a5fa">
+        <animateMotion dur="2.5s" begin="0.15s" repeatCount="indefinite"
+          path="M1 21 Q14 21 18 16 Q22 11 28 10.5 Q34 11 38 16 Q42 21 55 21"/>
+        <animate attributeName="opacity" values="0;0.4;0.5;0.4;0" dur="2.5s" begin="0.15s" repeatCount="indefinite"/>
+      </circle>
+    </svg>`
+    const svg = wrap.firstElementChild
+    if (svg) logoLink.appendChild(svg)
+
+    return () => { svg?.remove() }
+  }, [isAdminPage, pathname])
+
   // Desktop: Admin 버튼을 nav CTA 영역에 주입
   useEffect(() => {
     if (isAdminPage) return
