@@ -243,8 +243,8 @@ export default function HomePage() {
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
               <filter id="sweepGlow">
-                <feGaussianBlur stdDeviation="8" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
               {/* Taper mask — thick center, thin edges */}
               <mask id="taperMask">
@@ -285,10 +285,10 @@ export default function HomePage() {
               />
             </g>
 
-            {/* ── Glow sweep — bright spot traveling L→R during draw ── */}
+            {/* ── Glow sweep — subtle bright spot traveling L→R during draw ── */}
             <path d="M 0 520 Q 700 180, 1400 520"
               className="bridge-sweep"
-              stroke="white" strokeWidth={6} strokeLinecap="round"
+              stroke="rgba(255,255,255,0.5)" strokeWidth={3} strokeLinecap="round"
               filter="url(#sweepGlow)"
             />
 
@@ -298,15 +298,19 @@ export default function HomePage() {
             <line x1={980} y1={520} x2={980} y2={280}
               className="bridge-tower bridge-tower-r" stroke="white" strokeWidth={2} strokeLinecap="round" />
 
-            {/* ── Stay cables ── */}
+            {/* ── Stay cables — draw outward from tower (fan-out) ── */}
             <line x1={420} y1={280} x2={280} y2={410}
-              className="bridge-stay bridge-stay-l" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
+              className="bridge-stay bridge-stay-l1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '191' } as React.CSSProperties} />
             <line x1={420} y1={280} x2={200} y2={465}
-              className="bridge-stay bridge-stay-l" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
+              className="bridge-stay bridge-stay-l2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '287' } as React.CSSProperties} />
             <line x1={980} y1={280} x2={1120} y2={410}
-              className="bridge-stay bridge-stay-r" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
+              className="bridge-stay bridge-stay-r1" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '191' } as React.CSSProperties} />
             <line x1={980} y1={280} x2={1200} y2={465}
-              className="bridge-stay bridge-stay-r" stroke="white" strokeWidth={0.8} strokeLinecap="round" />
+              className="bridge-stay bridge-stay-r2" stroke="white" strokeWidth={0.8} strokeLinecap="round"
+              style={{ '--len': '287' } as React.CSSProperties} />
 
             {/* ── Post-draw infinite light sweep ── */}
             <path d="M 0 520 Q 700 180, 1400 520"

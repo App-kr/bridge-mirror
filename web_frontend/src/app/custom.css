@@ -505,17 +505,17 @@ a.nav-cta[href="/inquiry"]:hover {
   to   { stroke-dashoffset: 0; }
 }
 
-/* ── Glow sweep — bright spot traveling L→R (2.5s) ── */
+/* ── Glow sweep — subtle bright spot traveling L→R (2.5s) ── */
 .bridge-sweep {
-  stroke-dasharray: 120 2300;
-  stroke-dashoffset: 120;
+  stroke-dasharray: 80 2200;
+  stroke-dashoffset: 80;
 }
 .bridge-active .bridge-sweep {
   animation: sweepMove 2.5s ease-out forwards;
 }
 @keyframes sweepMove {
-  0%   { stroke-dashoffset: 120; opacity: 0.8; }
-  85%  { opacity: 0.5; }
+  0%   { stroke-dashoffset: 80; opacity: 0.5; }
+  85%  { opacity: 0.35; }
   100% { stroke-dashoffset: -2200; opacity: 0; }
 }
 
@@ -530,16 +530,21 @@ a.nav-cta[href="/inquiry"]:hover {
   to { opacity: 0.45; }
 }
 
-/* ── Stay cables — fade in after respective tower ── */
-.bridge-active .bridge-stay-l {
-  animation: fadeStay 0.8s ease-out 0.75s forwards;
+/* ── Stay cables — draw outward from tower (fan-out, 0.7s each) ── */
+.bridge-stay {
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
 }
-.bridge-active .bridge-stay-r {
-  animation: fadeStay 0.8s ease-out 1.65s forwards;
+.bridge-active .bridge-stay {
+  animation: stayDraw 0.7s ease-out forwards;
 }
-@keyframes fadeStay {
-  to { opacity: 0.12; }
+@keyframes stayDraw {
+  to { stroke-dashoffset: 0; opacity: 0.12; }
 }
+.bridge-active .bridge-stay-l1 { animation-delay: 0.75s; }
+.bridge-active .bridge-stay-l2 { animation-delay: 0.80s; }
+.bridge-active .bridge-stay-r1 { animation-delay: 1.65s; }
+.bridge-active .bridge-stay-r2 { animation-delay: 1.70s; }
 
 /* ── Post-draw: breathing glow on arc group (4s cycle, starts at 2.8s) ── */
 .bridge-active .bridge-arc-group {
@@ -558,6 +563,6 @@ a.nav-cta[href="/inquiry"]:hover {
   }
   .bridge-arc   { opacity: 0.35 !important; stroke-dashoffset: 0 !important; }
   .bridge-tower { opacity: 0.45 !important; }
-  .bridge-stay  { opacity: 0.08 !important; }
+  .bridge-stay  { opacity: 0.08 !important; stroke-dashoffset: 0 !important; }
   .bridge-sweep { opacity: 0 !important; }
 }
