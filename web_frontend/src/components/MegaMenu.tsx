@@ -134,7 +134,6 @@ export default function MegaMenu() {
 
   const items = active ? DROPDOWNS[active] : null
 
-  const DECK = "M1 21 Q14 21 18 16 Q22 11 28 10.5 Q34 11 38 16 Q42 21 55 21"
 
   return (
     <>
