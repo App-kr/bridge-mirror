@@ -905,7 +905,7 @@ def _check_admin(request: Request):
             raise HTTPException(status_code=503, detail="관리자 기능이 비활성화되어 있습니다.")
         # 개발 환경에서만 키 없이 통과 허용
         return
-    if request.headers.get("x-admin-key", "") != _ADMIN_KEY:
+    if request.headers.get("x-admin-key", "").strip() != _ADMIN_KEY.strip():
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
 

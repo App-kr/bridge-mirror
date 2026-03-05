@@ -151,7 +151,7 @@ export default function AdminPostsPage() {
         method: 'DELETE',
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'Failed')
+      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
       setActionMsg(`Post #${postId} deleted`)
       fetchPosts()
     } catch (e) {
@@ -188,7 +188,7 @@ export default function AdminPostsPage() {
         body: bodyStr,
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'Failed')
+      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
       setActionMsg(`Post #${postId} ${currentPin === 1 ? 'unpinned' : 'pinned'}`)
       fetchPosts()
     } catch (e) {
@@ -226,7 +226,7 @@ export default function AdminPostsPage() {
         body: bodyStr,
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'Failed')
+      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
       setActionMsg(`Post #${editId} 수정 완료`)
       setEditId(null)
       fetchPosts()

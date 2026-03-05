@@ -40,7 +40,7 @@ from starlette.types import ASGIApp
 # 설정
 # ═══════════════════════════════════════════════════════════════
 ENV            = os.getenv("ENV", "development")
-HMAC_SECRET    = os.getenv("HMAC_SECRET", os.getenv("ADMIN_API_KEY", ""))
+HMAC_SECRET    = os.getenv("HMAC_SECRET", os.getenv("ADMIN_API_KEY", "")).strip()
 AUDIT_DIR      = Path(os.getenv("AUDIT_DIR", "audit"))
 LOG_DIR        = Path(os.getenv("LOG_DIR", "logs"))
 SECURITY_VERSION_FILE = Path("security_version.json")
@@ -307,10 +307,18 @@ def verify_hmac(request: Request, body: bytes) -> bool:
         if abs(time.time() - ts_int) > SIGNATURE_MAX_AGE:
             return False  # 재전송 공격 방지
         payload = f"{ts}.{body.decode('utf-8', errors='replace')}"
-        expected = hmac.new(
-            HMAC_SECRET.encode(), payload.encode(), hashlib.sha256
-        ).hexdigest()
-        return hmac.compare_digest(expected, sig)
+        # HMAC_SECRET과 ADMIN_API_KEY 모두 시도 (클라이언트는 ADMIN_API_KEY로 서명)
+        admin_key = os.getenv("ADMIN_API_KEY", "").strip()
+        secrets_to_try = {HMAC_SECRET}
+        if admin_key and admin_key != HMAC_SECRET:
+            secrets_to_try.add(admin_key)
+        for secret in secrets_to_try:
+            expected = hmac.new(
+                secret.encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
+            if hmac.compare_digest(expected, sig):
+                return True
+        return False
     except Exception:
         return False
 
@@ -439,8 +447,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return response
 
         # 0-1. 유효한 admin key가 있으면 블랙리스트/rate limit 바이패스
-        _admin_key = os.getenv("ADMIN_API_KEY", "")
-        if _admin_key and request.headers.get("x-admin-key", "") == _admin_key:
+        _admin_key = os.getenv("ADMIN_API_KEY", "").strip()
+        if _admin_key and request.headers.get("x-admin-key", "").strip() == _admin_key:
             response = await call_next(request)
             for k, v in SECURITY_HEADERS.items():
                 response.headers[k] = v
@@ -500,6 +508,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         HMAC_EXEMPT = {"/api/admin/login", "/api/admin/login/"}
         for signed_path in SIGNED_PATHS:
             if path.startswith(signed_path) and method != "GET" and path.rstrip("/") not in {p.rstrip("/") for p in HMAC_EXEMPT}:
+                # 이중 확인: admin key가 유효하면 HMAC 건너뛰기
+                if _admin_key and request.headers.get("x-admin-key", "").strip() == _admin_key:
+                    break
                 if not verify_hmac(request, body):
                     audit.log("INVALID_SIGNATURE", {
                         "ip": client_ip, "path": path
