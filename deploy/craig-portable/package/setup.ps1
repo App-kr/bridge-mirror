@@ -85,6 +85,14 @@ if (Test-Path "$ScriptDir\rpa_overlay.py") {
     Write-Host "  [OK] rpa_overlay.py (desktop overlay)" -ForegroundColor Green
 }
 
+# 이미지 복사
+if (Test-Path "$ScriptDir\images") {
+    $imgDst = "$InstallDir\images"
+    if (-not (Test-Path $imgDst)) { New-Item -Path $imgDst -ItemType Directory -Force | Out-Null }
+    Copy-Item "$ScriptDir\images\*" $imgDst -Force
+    Write-Host "  [OK] images/ (ad photos)" -ForegroundColor Green
+}
+
 # DB 복사 — PII 제거된 안전 버전만
 if (Test-Path "$ScriptDir\master_safe.db") {
     Copy-Item "$ScriptDir\master_safe.db" "$InstallDir\data\master.db" -Force

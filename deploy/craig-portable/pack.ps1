@@ -26,6 +26,15 @@ Write-Host "  [OK] craigslist_auto_rpa.py" -ForegroundColor Green
 Copy-Item "$ProjectRoot\tools\rpa_overlay.py" "$OutDir\rpa_overlay.py" -Force
 Write-Host "  [OK] rpa_overlay.py" -ForegroundColor Green
 
+# 이미지 복사
+$imgSrc = "$ProjectRoot\images"
+if (Test-Path $imgSrc) {
+    $imgDst = "$OutDir\images"
+    New-Item -Path $imgDst -ItemType Directory -Force | Out-Null
+    Copy-Item "$imgSrc\*" $imgDst -Force
+    Write-Host "  [OK] images/" -ForegroundColor Green
+}
+
 # 설치 가이드 복사
 $guideFile = Join-Path $PackDir ([char[]]@(49352,80,67,95,49444,52824,44032,51060,46300,46041,53944,53944) -join '')
 if (-not (Test-Path $guideFile)) { $guideFile = Get-ChildItem $PackDir -Filter "*설치가이드*" | Select-Object -First 1 -ExpandProperty FullName }
