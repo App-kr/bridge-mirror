@@ -3,7 +3,7 @@
 /**
  * /admin/candidates — Candidate Spreadsheet Grid
  * AG Grid Community v35 기반 고밀도 스프레드시트 UI.
- * 탭(활성/지난) + 드롭다운 + 이메일 발송 버튼 + 프로필 발송 + 일괄 작업.
+ * 탭(구직자/지난/전체/블랙리스트) + 페이지네이션 + 편집 + 프로필 발송.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -32,9 +32,10 @@ ModuleRegistry.registerModules([
 ])
 
 const API = API_URL
+const PAGE_SIZE = 100
 
 /* ── 상태/옵션 상수 ── */
-const STATUS_VALUES = ['new', 'reviewing', 'interviewing', 'offered', 'placed', 'rejected', 'withdrawn', 'inactive']
+const STATUS_VALUES = ['new', 'reviewing', 'interviewing', 'offered', 'placed', 'rejected', 'withdrawn', 'inactive', 'blacklisted']
 const ACTIVE_STATUSES = ['new', 'reviewing', 'interviewing', 'offered']
 const PAST_STATUSES = ['placed', 'rejected', 'withdrawn', 'inactive']
 
@@ -52,7 +53,14 @@ const TEMPLATE_MAP: Record<string, { key: string; label: string }> = {
   email_arrival:     { key: 'arrival_guide',        label: '입국 안내' },
 }
 
-type TabType = 'active' | 'past' | 'all'
+type TabType = 'active' | 'past' | 'all' | 'blacklisted'
+
+const TAB_CONFIG: { key: TabType; label: string; color: string; activeColor: string }[] = [
+  { key: 'active',      label: '구직자',     color: 'text-emerald-600', activeColor: 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' },
+  { key: 'past',        label: '지난 지원자', color: 'text-gray-500',    activeColor: 'bg-gray-600 text-white shadow-lg shadow-gray-200' },
+  { key: 'all',         label: '전체 지원자', color: 'text-blue-600',    activeColor: 'bg-blue-600 text-white shadow-lg shadow-blue-200' },
+  { key: 'blacklisted', label: '블랙리스트',  color: 'text-red-500',     activeColor: 'bg-red-500 text-white shadow-lg shadow-red-200' },
+]
 
 /* ── 이메일 발송 셀 렌더러 ── */
 function EmailCellRenderer(props: ICellRendererParams & { colDef: { field?: string } }) {
@@ -63,7 +71,7 @@ function EmailCellRenderer(props: ICellRendererParams & { colDef: { field?: stri
   const tpl = TEMPLATE_MAP[field]
 
   if (value) {
-    return <span style={{ color: '#6b7280', fontSize: 11 }}>완료 ({value})</span>
+    return <span style={{ color: '#6b7280', fontSize: 12 }}>완료 ({value})</span>
   }
 
   const handleSend = async () => {
@@ -92,8 +100,8 @@ function EmailCellRenderer(props: ICellRendererParams & { colDef: { field?: stri
       type="button"
       onClick={handleSend}
       style={{
-        background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4,
-        padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
+        background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6,
+        padding: '3px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
       }}
     >
       발송
@@ -110,10 +118,7 @@ function TargetLevelRenderer(props: ICellRendererParams) {
   })
 
   const handleToggle = (item: string) => {
-    setSelected((prev) => {
-      const next = prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item]
-      return next
-    })
+    setSelected((prev) => prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item])
   }
 
   const handleSave = () => {
@@ -132,19 +137,19 @@ function TargetLevelRenderer(props: ICellRendererParams) {
     <div style={{ position: 'relative' }}>
       <span
         onClick={() => setOpen(!open)}
-        style={{ cursor: 'pointer', borderBottom: '1px dashed #3b82f6', fontSize: 11 }}
+        style={{ cursor: 'pointer', borderBottom: '1px dashed #3b82f6', fontSize: 12 }}
       >
         {props.value || '선택'}
       </span>
       {open && (
         <div style={{
-          position: 'absolute', top: 24, left: 0, zIndex: 100,
-          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
-          padding: 8, width: 200, maxHeight: 260, overflowY: 'auto',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          position: 'absolute', top: 28, left: 0, zIndex: 100,
+          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+          padding: 10, width: 220, maxHeight: 280, overflowY: 'auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
         }}>
           {TARGET_LEVEL_CHOICES.map((ch) => (
-            <label key={ch} style={{ display: 'flex', gap: 4, fontSize: 11, padding: '2px 0', cursor: 'pointer' }}>
+            <label key={ch} style={{ display: 'flex', gap: 6, fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
               <input type="checkbox" checked={selected.includes(ch)} onChange={() => handleToggle(ch)} />
               {ch}
             </label>
@@ -153,8 +158,8 @@ function TargetLevelRenderer(props: ICellRendererParams) {
             type="button"
             onClick={handleSave}
             style={{
-              marginTop: 6, width: '100%', background: '#2563eb', color: '#fff',
-              border: 'none', borderRadius: 4, padding: '4px 0', fontSize: 11,
+              marginTop: 8, width: '100%', background: '#2563eb', color: '#fff',
+              border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 12,
               cursor: 'pointer', fontWeight: 600,
             }}
           >
@@ -169,7 +174,7 @@ function TargetLevelRenderer(props: ICellRendererParams) {
 /* ── 컬럼 빌드 ── */
 function buildColumns(onSave: (id: string, field: string, value: string) => void): ColDef[] {
   const base: Partial<ColDef> = {
-    resizable: true, sortable: true, filter: true, editable: false, minWidth: 70,
+    resizable: true, sortable: true, filter: true, editable: false, minWidth: 80,
   }
 
   const editable: Partial<ColDef> = {
@@ -183,7 +188,7 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     },
   }
 
-  const dropdown = (field: string, headerName: string, values: string[], width = 100): ColDef => ({
+  const dropdown = (field: string, headerName: string, values: string[], width = 110): ColDef => ({
     ...editable,
     field,
     headerName,
@@ -196,7 +201,7 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     ...base,
     field,
     headerName,
-    width: 100,
+    width: 110,
     editable: false,
     cellRenderer: EmailCellRenderer,
   })
@@ -206,19 +211,19 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     { ...base, field: 'id', headerName: 'ID', width: 110, pinned: 'left',
       headerCheckboxSelection: true, checkboxSelection: true,
       valueFormatter: (p) => String(p.value ?? '').slice(0, 14) },
-    { ...editable, field: 'status', headerName: '상태', width: 100, pinned: 'left',
+    { ...editable, field: 'status', headerName: '상태', width: 110, pinned: 'left',
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: STATUS_VALUES },
       cellStyle: (p: { value: string }) => {
         const c: Record<string, string> = {
           new: '#22c55e', reviewing: '#eab308', interviewing: '#3b82f6', offered: '#8b5cf6',
           placed: '#0ea5e9', rejected: '#ef4444', withdrawn: '#94a3b8', inactive: '#6b7280',
-          Active: '#22c55e', Inactive: '#6b7280',
+          blacklisted: '#dc2626', Active: '#22c55e', Inactive: '#6b7280',
         }
-        return { color: c[p.value] ?? '#94a3b8', fontWeight: '600', borderLeft: '2px solid #3b82f6' }
+        return { color: c[p.value] ?? '#94a3b8', fontWeight: '700', borderLeft: '2px solid #3b82f6', fontSize: '13px' }
       },
     },
-    { ...base, field: 'thumb_url', headerName: '사진', width: 50, filter: false, sortable: false,
+    { ...base, field: 'thumb_url', headerName: '사진', width: 55, filter: false, sortable: false,
       cellRenderer: (p: ICellRendererParams) => {
         const src = p.value
         if (!src) {
@@ -226,60 +231,60 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
           const initial = name.charAt(0).toUpperCase()
           const colors = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316']
           const ci = name.charCodeAt(0) % colors.length
-          return `<div style="width:22px;height:22px;border-radius:50%;background:${colors[ci]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;line-height:1">${initial}</div>`
+          return `<div style="width:26px;height:26px;border-radius:50%;background:${colors[ci]};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;line-height:1">${initial}</div>`
         }
         const full = p.data?.photo_url ?? src
         const url = src.startsWith('http') ? src : `${API}${src}`
         const fullUrl = full.startsWith('http') ? full : `${API}${full}`
-        return `<img src="${url}" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="window.__bridgePhotoModal__('${fullUrl}')" />`
+        return `<img src="${url}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="window.__bridgePhotoModal__('${fullUrl}')" />`
       },
     },
 
-    /* ── 기본 정보 (DB 순서) ── */
-    { ...base, field: 'email', headerName: '이메일', width: 180 },
-    { ...base, field: 'full_name', headerName: '이름', width: 130 },
-    { ...base, field: 'nationality', headerName: '국적', width: 90 },
-    { ...base, field: 'ancestry', headerName: '혈통', width: 80 },
-    { ...base, field: 'dob', headerName: '생년월일', width: 95 },
-    { ...base, field: 'gender', headerName: '성별', width: 60 },
-    { ...base, field: 'current_location', headerName: '현재위치', width: 90 },
-    { ...base, field: 'start_date', headerName: '시작가능일', width: 95 },
-    { ...base, field: 'target', headerName: '대상', width: 80 },
-    { ...base, field: 'area_prefs', headerName: '희망지역', width: 90 },
-    { ...base, field: 'experience', headerName: '경력', width: 75 },
-    { ...base, field: 'employment', headerName: '고용형태', width: 80 },
-    { ...base, field: 'current_salary', headerName: '현재급여', width: 90 },
-    { ...base, field: 'desired_salary', headerName: '희망급여', width: 90 },
-    { ...base, field: 'certification', headerName: '자격증', width: 120 },
-    { ...base, field: 'e_visa', headerName: '비자', width: 90 },
-    { ...base, field: 'mobile_phone', headerName: '전화', width: 120 },
-    { ...base, field: 'kakaotalk', headerName: '카카오톡', width: 100 },
-    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 80 },
-    { ...base, field: 'passport', headerName: '여권', width: 80 },
-    { ...base, field: 'housing', headerName: '숙소', width: 70 },
-    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 80 },
-    { ...base, field: 'job_prefs', headerName: '직무선호', width: 100 },
-    { ...editable, field: 'reference', headerName: '레퍼런스', width: 140 },
-    { ...base, field: 'documents', headerName: '서류', width: 80 },
+    /* ── 기본 정보 ── */
+    { ...base, field: 'email', headerName: '이메일', width: 190 },
+    { ...base, field: 'full_name', headerName: '이름', width: 140 },
+    { ...base, field: 'nationality', headerName: '국적', width: 100 },
+    { ...base, field: 'ancestry', headerName: '혈통', width: 90 },
+    { ...base, field: 'dob', headerName: '생년월일', width: 100 },
+    { ...base, field: 'gender', headerName: '성별', width: 70 },
+    { ...base, field: 'current_location', headerName: '현재위치', width: 100 },
+    { ...base, field: 'start_date', headerName: '시작가능일', width: 105 },
+    { ...base, field: 'target', headerName: '대상', width: 90 },
+    { ...base, field: 'area_prefs', headerName: '희망지역', width: 100 },
+    { ...base, field: 'experience', headerName: '경력', width: 85 },
+    { ...base, field: 'employment', headerName: '고용형태', width: 90 },
+    { ...base, field: 'current_salary', headerName: '현재급여', width: 100 },
+    { ...base, field: 'desired_salary', headerName: '희망급여', width: 100 },
+    { ...base, field: 'certification', headerName: '자격증', width: 130 },
+    { ...base, field: 'e_visa', headerName: '비자', width: 100 },
+    { ...base, field: 'mobile_phone', headerName: '전화', width: 130 },
+    { ...base, field: 'kakaotalk', headerName: '카카오톡', width: 110 },
+    { ...base, field: 'criminal_record', headerName: '범죄기록', width: 90 },
+    { ...base, field: 'passport', headerName: '여권', width: 90 },
+    { ...base, field: 'housing', headerName: '숙소', width: 80 },
+    { ...base, field: 'arc_holders', headerName: 'ARC소지', width: 90 },
+    { ...base, field: 'job_prefs', headerName: '직무선호', width: 110 },
+    { ...editable, field: 'reference', headerName: '레퍼런스', width: 150 },
+    { ...base, field: 'documents', headerName: '서류', width: 90 },
 
-    /* ── 관리 필드 (DB 순서) ── */
-    { ...base, field: 'created_at', headerName: '등록일', width: 100,
+    /* ── 관리 필드 ── */
+    { ...base, field: 'created_at', headerName: '등록일', width: 110,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-    { ...base, field: 'updated_at', headerName: '수정일', width: 100,
+    { ...base, field: 'updated_at', headerName: '수정일', width: 110,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
-    { ...base, field: 'source', headerName: '지원경로', width: 90 },
-    { ...base, field: 'inbox_status', headerName: '수신상태', width: 80 },
-    { ...editable, field: 'admin_notes', headerName: '메모', width: 200 },
-    { ...editable, field: 'assigned_to', headerName: '담당자', width: 100,
+    { ...base, field: 'source', headerName: '지원경로', width: 100 },
+    { ...base, field: 'inbox_status', headerName: '수신상태', width: 90 },
+    { ...editable, field: 'admin_notes', headerName: '메모', width: 220 },
+    { ...editable, field: 'assigned_to', headerName: '담당자', width: 110,
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: ['', ...STAFF_NAMES] },
     },
-    { ...base, field: 'last_activity', headerName: '최근활동', width: 100,
+    { ...base, field: 'last_activity', headerName: '최근활동', width: 110,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString('ko-KR') : '—' },
 
     /* ── 계약/이메일 ── */
-    dropdown('contract_offered', '계약제안', YN_OPTIONS, 80),
-    dropdown('contract_progress', '진행여부', YN_OPTIONS, 80),
+    dropdown('contract_offered', '계약제안', YN_OPTIONS, 90),
+    dropdown('contract_progress', '진행여부', YN_OPTIONS, 90),
     emailSendCol('email_contract', '메일1(계약)'),
     emailSendCol('email_immigration', '메일2(출입국)'),
     emailSendCol('email_overseas', '메일3(영사)'),
@@ -287,37 +292,37 @@ function buildColumns(onSave: (id: string, field: string, value: string) => void
     emailSendCol('email_arrival', '메일5(입국)'),
 
     /* ── 배치/관리 ── */
-    { ...editable, field: 'placed_company', headerName: '채용처', width: 120 },
-    { ...editable, field: 'placed_salary', headerName: '임금', width: 90 },
-    { ...editable, field: 'start_month', headerName: '개시월', width: 80 },
-    { ...editable, field: 'housing_detail', headerName: '숙박내용', width: 110 },
-    { ...editable, field: 'referral_fee', headerName: '소개비용', width: 90 },
-    { ...editable, field: 'process_date', headerName: '처리일자', width: 90 },
-    { ...editable, field: 'past_placement', headerName: '과거채용', width: 100 },
-    { ...editable, field: 'recruiter_memo', headerName: '리크루터메모', width: 160 },
-    { ...editable, field: 'preferences', headerName: '희망사항', width: 140 },
-    { ...editable, field: 'dislikes', headerName: '기피사항', width: 140 },
-    dropdown('residence_type', '거주구분', RESIDENCE_OPTIONS, 90),
-    dropdown('start_detail', '시작상세', START_DETAIL_OPTIONS, 120),
-    { ...base, field: 'target_level', headerName: '교육대상', width: 130,
+    { ...editable, field: 'placed_company', headerName: '채용처', width: 130 },
+    { ...editable, field: 'placed_salary', headerName: '임금', width: 100 },
+    { ...editable, field: 'start_month', headerName: '개시월', width: 90 },
+    { ...editable, field: 'housing_detail', headerName: '숙박내용', width: 120 },
+    { ...editable, field: 'referral_fee', headerName: '소개비용', width: 100 },
+    { ...editable, field: 'process_date', headerName: '처리일자', width: 100 },
+    { ...editable, field: 'past_placement', headerName: '과거채용', width: 110 },
+    { ...editable, field: 'recruiter_memo', headerName: '리크루터메모', width: 180 },
+    { ...editable, field: 'preferences', headerName: '희망사항', width: 150 },
+    { ...editable, field: 'dislikes', headerName: '기피사항', width: 150 },
+    dropdown('residence_type', '거주구분', RESIDENCE_OPTIONS, 100),
+    dropdown('start_detail', '시작상세', START_DETAIL_OPTIONS, 130),
+    { ...base, field: 'target_level', headerName: '교육대상', width: 140,
       cellRenderer: TargetLevelRenderer },
-    dropdown('housing_type', '주거형태', HOUSING_TYPE_OPTIONS, 130),
+    dropdown('housing_type', '주거형태', HOUSING_TYPE_OPTIONS, 140),
 
     /* ── 추가 정보 ── */
-    { ...base, field: 'education_level', headerName: '학위', width: 80 },
-    { ...base, field: 'major', headerName: '전공', width: 90 },
-    { ...base, field: 'interview_time', headerName: '인터뷰시간', width: 100 },
-    { ...base, field: 'health_info', headerName: '건강정보', width: 90 },
-    { ...base, field: 'personal_consideration', headerName: '개인고려', width: 90 },
-    { ...base, field: 'piercings', headerName: '피어싱', width: 70 },
-    { ...base, field: 'dependents', headerName: '부양가족', width: 80 },
-    { ...base, field: 'pets', headerName: '반려동물', width: 80 },
-    { ...base, field: 'married', headerName: '결혼여부', width: 80 },
-    { ...base, field: 'religion', headerName: '종교', width: 70 },
-    { ...base, field: 'korean_criminal_record', headerName: '한국범죄기록', width: 100 },
-    { ...base, field: 'consent', headerName: '동의', width: 60 },
-    { ...base, field: 'fact_check', headerName: '사실확인', width: 80 },
-    { ...base, field: 'target_age', headerName: '교육연령', width: 80 },
+    { ...base, field: 'education_level', headerName: '학위', width: 90 },
+    { ...base, field: 'major', headerName: '전공', width: 100 },
+    { ...base, field: 'interview_time', headerName: '인터뷰시간', width: 110 },
+    { ...base, field: 'health_info', headerName: '건강정보', width: 100 },
+    { ...base, field: 'personal_consideration', headerName: '개인고려', width: 100 },
+    { ...base, field: 'piercings', headerName: '피어싱', width: 80 },
+    { ...base, field: 'dependents', headerName: '부양가족', width: 90 },
+    { ...base, field: 'pets', headerName: '반려동물', width: 90 },
+    { ...base, field: 'married', headerName: '결혼여부', width: 90 },
+    { ...base, field: 'religion', headerName: '종교', width: 80 },
+    { ...base, field: 'korean_criminal_record', headerName: '한국범죄기록', width: 110 },
+    { ...base, field: 'consent', headerName: '동의', width: 70 },
+    { ...base, field: 'fact_check', headerName: '사실확인', width: 90 },
+    { ...base, field: 'target_age', headerName: '교육연령', width: 90 },
   ]
 }
 
@@ -348,7 +353,6 @@ function ProfileSendModal({
     if (!toEmail || !toEmail.includes('@')) { alert('유효한 이메일을 입력하세요.'); return }
     setSending(true)
     try {
-      // 메모 먼저 저장
       for (const c of candidates) {
         const m = memos[c.id]
         if (m) {
@@ -363,7 +367,6 @@ function ProfileSendModal({
           })
         }
       }
-      // 프로필 발송
       const res = await fetch(`${API}/api/admin/candidates/send-profiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
@@ -390,46 +393,46 @@ function ProfileSendModal({
         onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-base font-bold text-gray-900">프로필 발송</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{candidates.length}명 선택됨 · 이름/이메일/전화/카카오/주소 제외</p>
+          <p className="text-sm text-gray-500 mt-0.5">{candidates.length}명 선택됨</p>
         </div>
 
         <div className="px-6 py-4 space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">수신 이메일 (교육기관)</label>
+            <label className="text-sm font-medium text-gray-600 block mb-1">수신 이메일 (교육기관)</label>
             <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               placeholder="school@example.com" value={toEmail} onChange={(e) => setToEmail(e.target.value)} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">학교/기관명 (선택)</label>
+            <label className="text-sm font-medium text-gray-600 block mb-1">학교/기관명 (선택)</label>
             <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
               placeholder="OO 어학원" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} />
           </div>
         </div>
 
         <div className="px-6 py-3 border-t border-gray-100">
-          <p className="text-xs font-medium text-gray-600 mb-2">선택된 후보자 (메모 빠른 편집)</p>
+          <p className="text-sm font-medium text-gray-600 mb-2">선택된 후보자 (메모 편집)</p>
           {candidates.map((c) => (
-            <div key={c.id} className="bg-gray-50 rounded-lg p-3 mb-2 text-xs">
+            <div key={c.id} className="bg-gray-50 rounded-lg p-3 mb-2 text-sm">
               <div className="flex items-center gap-2 mb-2">
                 <span className="font-bold text-gray-800">ID #{String(c.id).slice(0, 10)}</span>
                 <span className="text-gray-500">{c.nationality ?? ''}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="text-gray-500 block mb-0.5">리크루터메모</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-xs resize-none" rows={2}
+                  <span className="text-gray-500 block mb-0.5 text-xs">리크루터메모</span>
+                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
                     value={memos[c.id]?.recruiter_memo ?? ''}
                     onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], recruiter_memo: e.target.value } }))} />
                 </div>
                 <div>
-                  <span className="text-gray-500 block mb-0.5">희망사항</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-xs resize-none" rows={2}
+                  <span className="text-gray-500 block mb-0.5 text-xs">희망사항</span>
+                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
                     value={memos[c.id]?.preferences ?? ''}
                     onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], preferences: e.target.value } }))} />
                 </div>
                 <div>
-                  <span className="text-gray-500 block mb-0.5">기피사항</span>
-                  <textarea className="w-full border rounded px-2 py-1 text-xs resize-none" rows={2}
+                  <span className="text-gray-500 block mb-0.5 text-xs">기피사항</span>
+                  <textarea className="w-full border rounded px-2 py-1 text-sm resize-none" rows={2}
                     value={memos[c.id]?.dislikes ?? ''}
                     onChange={(e) => setMemos((p) => ({ ...p, [c.id]: { ...p[c.id], dislikes: e.target.value } }))} />
                 </div>
@@ -439,16 +442,59 @@ function ProfileSendModal({
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button type="button" className="px-4 py-2 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          <button type="button" className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
             onClick={onClose}>취소</button>
           <button type="button"
-            className="px-4 py-2 text-xs text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
             disabled={sending || !toEmail}
             onClick={handleSend}>
-            {sending ? '발송 중…' : '프로필 발송'}
+            {sending ? '발송 중...' : '프로필 발송'}
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── 페이지네이션 컴포넌트 ── */
+function Pagination({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) {
+  if (totalPages <= 1) return null
+
+  const pages: (number | '...')[] = []
+  if (totalPages <= 9) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (page > 4) pages.push('...')
+    for (let i = Math.max(2, page - 2); i <= Math.min(totalPages - 1, page + 2); i++) pages.push(i)
+    if (page < totalPages - 3) pages.push('...')
+    pages.push(totalPages)
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)}
+        className="px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
+        &laquo;
+      </button>
+      {pages.map((p, i) =>
+        p === '...' ? (
+          <span key={`dots-${i}`} className="px-2 text-gray-400">...</span>
+        ) : (
+          <button key={p} type="button" onClick={() => onPageChange(p)}
+            className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
+              p === page
+                ? 'bg-[#0071e3] text-white shadow-md'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}>
+            {p}
+          </button>
+        )
+      )}
+      <button type="button" disabled={page === totalPages} onClick={() => onPageChange(page + 1)}
+        className="px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-30 hover:bg-gray-100 text-gray-600">
+        &raquo;
+      </button>
     </div>
   )
 }
@@ -464,14 +510,15 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState('')
   const [saveMsg, setSaveMsg] = useState('')
   const [photoModal, setPhotoModal] = useState<string | null>(null)
-  const [tab, setTab] = useState<TabType>('all')
+  const [tab, setTab] = useState<TabType>('active')
+  const [page, setPage] = useState(1)
   const [bulkStatus, setBulkStatus] = useState('')
   const [bulkEmail, setBulkEmail] = useState('')
   const [profileModal, setProfileModal] = useState(false)
 
   const gridRef = useRef<AgGridReact>(null)
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // admin key를 meta 태그로 노출 (셀 렌더러에서 접근)
   useEffect(() => {
     let meta = document.querySelector<HTMLMetaElement>('meta[name="admin-key"]')
     if (!meta) {
@@ -488,11 +535,12 @@ export default function CandidatesPage() {
     return () => { delete w.__bridgePhotoModal__ }
   }, [])
 
-  const fetchData = useCallback(async (q: string = '', statusFilter: TabType = tab) => {
+  const fetchData = useCallback(async (q: string = '', statusFilter: TabType = tab, pg: number = page) => {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ limit: '500', offset: '0', status: statusFilter })
+      const offset = (pg - 1) * PAGE_SIZE
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), status: statusFilter })
       if (q) params.set('search', q)
 
       const res = await fetch(`${API}/api/admin/candidates?${params}`, {
@@ -507,16 +555,7 @@ export default function CandidatesPage() {
         return
       }
       if (res.status === 403) {
-        const errBody = await res.json().catch(() => ({}))
-        if (errBody.error?.includes?.('Access denied')) {
-          setError('일시적으로 차단되었습니다. 자동 재시도 중...')
-          const k = sessionStorage.getItem('bridge_admin_key') || ''
-          await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
-          setTimeout(() => window.location.reload(), 3000)
-          return
-        }
-        setError('관리자 키가 올바르지 않습니다. 다시 로그인해주세요.')
-        sessionStorage.removeItem('bridge_admin_key')
+        setError('관리자 키가 올바르지 않습니다.')
         return
       }
       if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
@@ -527,12 +566,23 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false)
     }
-  }, [adminKey, tab])
+  }, [adminKey, tab, page])
 
   useEffect(() => {
-    if (authed) fetchData(search, tab)
+    if (authed) fetchData(search, tab, page)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, tab])
+  }, [authed, tab, page])
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+    fetchData(search, tab, newPage)
+  }
+
+  const handleTabChange = (newTab: TabType) => {
+    setTab(newTab)
+    setPage(1)
+    fetchData(search, newTab, 1)
+  }
 
   const handleSave = useCallback(async (id: string, field: string, value: string) => {
     try {
@@ -558,8 +608,8 @@ export default function CandidatesPage() {
         method: 'DELETE', headers: { 'x-admin-key': adminKey },
       })
     }
-    fetchData(search, tab)
-  }, [adminKey, fetchData, search, tab])
+    fetchData(search, tab, page)
+  }, [adminKey, fetchData, search, tab, page])
 
   const handleBulkStatus = useCallback(async () => {
     if (!bulkStatus) return
@@ -575,11 +625,11 @@ export default function CandidatesPage() {
       if (!res.ok) throw new Error('일괄 변경 실패')
       setSaveMsg(`${sel.length}명 → ${bulkStatus}`)
       setTimeout(() => setSaveMsg(''), 3000)
-      fetchData(search, tab)
+      fetchData(search, tab, page)
     } catch (e) {
       setSaveMsg('일괄 변경 실패: ' + (e instanceof Error ? e.message : ''))
     }
-  }, [adminKey, bulkStatus, fetchData, search, tab])
+  }, [adminKey, bulkStatus, fetchData, search, tab, page])
 
   const handleBulkEmail = useCallback(async () => {
     if (!bulkEmail) return
@@ -601,11 +651,11 @@ export default function CandidatesPage() {
       if (!res.ok) throw new Error(json.detail ?? '일괄 발송 실패')
       setSaveMsg(json.message ?? '일괄 발송 완료')
       setTimeout(() => setSaveMsg(''), 5000)
-      fetchData(search, tab)
+      fetchData(search, tab, page)
     } catch (e) {
       setSaveMsg('일괄 발송 실패: ' + (e instanceof Error ? e.message : ''))
     }
-  }, [adminKey, bulkEmail, fetchData, search, tab])
+  }, [adminKey, bulkEmail, fetchData, search, tab, page])
 
   const handleExportCsv = useCallback(() => {
     gridRef.current?.api.exportDataAsCsv({
@@ -630,77 +680,59 @@ export default function CandidatesPage() {
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
-    <div className="flex flex-col h-screen -mt-6 -mx-4">
-      <div className="px-4 pt-4 shrink-0">
-      </div>
-
+    <div className="flex flex-col h-screen -mt-6 lg:-mt-8 -mx-4 lg:-mx-8">
       {/* Header */}
-      <div className="flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shrink-0">
-        <div>
-          <h1 className="text-lg font-bold leading-none text-gray-900">지원자 관리</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {loading ? '로딩 중…' : `${total}명 (표시: ${rows.length}명)`}
+      <div className="flex items-center gap-4 px-5 py-4 bg-white border-b border-gray-200 shrink-0 flex-wrap">
+        <div className="mr-2">
+          <h1 className="text-xl font-bold leading-none text-[#1d1d1f]">원어민 관리</h1>
+          <p className="text-sm text-[#86868b] mt-1">
+            {loading ? '로딩 중...' : `${total.toLocaleString()}명 (표시: ${rows.length}명)`}
           </p>
         </div>
 
         {/* Tabs */}
-        <div className="flex bg-gray-100 rounded-lg p-0.5 ml-2">
-          <button type="button"
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              tab === 'all' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setTab('all')}>
-            전체
-          </button>
-          <button type="button"
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              tab === 'active' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setTab('active')}>
-            활성 지원자
-          </button>
-          <button type="button"
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              tab === 'past' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setTab('past')}>
-            지난 지원자
-          </button>
+        <div className="flex gap-2">
+          {TAB_CONFIG.map((t) => (
+            <button key={t.key} type="button" onClick={() => handleTabChange(t.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                tab === t.key ? t.activeColor : `bg-white border-2 border-gray-200 ${t.color} hover:border-gray-300`
+              }`}>
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        <input
-          className="input w-48 text-sm py-1.5"
-          placeholder="이름/이메일 검색…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') fetchData(search, tab) }}
-        />
-        <button type="button" className="text-sm text-blue-600 hover:underline"
-          onClick={() => fetchData(search, tab)}>새로고침</button>
+        <div className="flex items-center gap-2 ml-auto">
+          <input
+            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="이름/이메일 검색..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); fetchData(search, tab, 1) } }}
+          />
+          <button type="button" className="text-sm text-[#0071e3] hover:underline font-medium"
+            onClick={() => { setPage(1); fetchData(search, tab, 1) }}>검색</button>
+        </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 shrink-0 text-xs flex-wrap">
-        <span className="text-gray-500 font-medium">일괄:</span>
+      <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 border-b border-gray-200 shrink-0 text-sm flex-wrap">
+        <span className="text-[#86868b] font-semibold">일괄:</span>
 
-        {/* 상태 변경 */}
-        <select className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
           value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
           <option value="">상태 선택</option>
-          {[...ACTIVE_STATUSES, ...PAST_STATUSES].map((s) => (
+          {[...ACTIVE_STATUSES, ...PAST_STATUSES, 'blacklisted'].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
         <button type="button"
-          className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40"
-          onClick={handleBulkStatus} disabled={!bulkStatus}>
-          {tab === 'active' ? '지난으로 이동' : tab === 'past' ? '활성으로 이동' : '상태 변경'}
-        </button>
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium"
+          onClick={handleBulkStatus} disabled={!bulkStatus}>상태 변경</button>
 
         <span className="text-gray-300">|</span>
 
-        {/* 일괄 메일 */}
-        <select className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
           value={bulkEmail} onChange={(e) => setBulkEmail(e.target.value)}>
           <option value="">메일 선택</option>
           {Object.entries(TEMPLATE_MAP).map(([field, tpl]) => (
@@ -708,42 +740,42 @@ export default function CandidatesPage() {
           ))}
         </select>
         <button type="button"
-          className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-40"
-          onClick={handleBulkEmail} disabled={!bulkEmail}>
-          일괄 발송
-        </button>
+          className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 font-medium"
+          onClick={handleBulkEmail} disabled={!bulkEmail}>일괄 발송</button>
 
         <span className="text-gray-300">|</span>
 
-        {/* 프로필 발송 */}
         <button type="button"
-          className="px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
           onClick={() => {
             const sel = getSelectedForProfile()
             if (!sel.length) { alert('행을 선택해주세요.'); return }
             setProfileModal(true)
-          }}>
-          프로필 발송
-        </button>
+          }}>프로필 발송</button>
 
-        <button type="button" className="text-red-500 hover:underline" onClick={handleDelete}>삭제</button>
+        <button type="button" className="text-red-500 hover:underline font-medium" onClick={handleDelete}>삭제</button>
 
         <div className="ml-auto flex items-center gap-3">
-          <button type="button" className="text-gray-500 hover:text-gray-700" onClick={handleExportCsv}>CSV</button>
-          {saveMsg && <span className="text-green-600 font-medium">{saveMsg}</span>}
+          <button type="button" className="text-[#86868b] hover:text-[#1d1d1f] font-medium" onClick={handleExportCsv}>CSV</button>
+          {saveMsg && <span className="text-green-600 font-semibold">{saveMsg}</span>}
         </div>
       </div>
 
       {/* Hint */}
-      <div className="px-4 py-1 bg-blue-50 border-b border-blue-100 text-[11px] text-blue-700 shrink-0">
-        파란 테두리 컬럼은 <strong>더블클릭</strong> 편집 · 체크박스 선택 → 일괄 작업 · 교육대상 클릭 → 다중선택
+      <div className="px-5 py-1.5 bg-blue-50 border-b border-blue-100 text-[12px] text-blue-700 shrink-0">
+        파란 테두리 컬럼은 <strong>더블클릭</strong>으로 편집 &middot; 체크박스 선택 &rarr; 일괄 작업 &middot; 교육대상 클릭 &rarr; 다중선택
       </div>
 
-      {error && <div className="px-4 py-2 bg-red-50 text-red-600 text-sm shrink-0">{error}</div>}
+      {/* Top Pagination */}
+      <div className="px-5 py-2 bg-white border-b border-gray-100 shrink-0">
+        <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
+      </div>
+
+      {error && <div className="px-5 py-2.5 bg-red-50 text-red-600 text-sm shrink-0">{error}</div>}
 
       {/* AG Grid */}
-      <div className="ag-theme-balham flex-1"
-        style={{ '--ag-font-size': '12px', '--ag-row-height': '28px' } as React.CSSProperties}>
+      <div className="ag-theme-balham flex-1 overflow-auto"
+        style={{ '--ag-font-size': '13px', '--ag-row-height': '34px', '--ag-header-height': '38px' } as React.CSSProperties}>
         <AgGridReact
           ref={gridRef}
           rowData={rows}
@@ -754,9 +786,14 @@ export default function CandidatesPage() {
           getRowId={(p) => String(p.data.id ?? p.data.candidate_id ?? '')}
           defaultColDef={{ resizable: true, sortable: true, filter: true, editable: false }}
           onGridReady={(e: GridReadyEvent) => e.api.sizeColumnsToFit()}
-          loadingOverlayComponent={() => <div className="text-gray-400 text-sm animate-pulse">데이터 로딩 중…</div>}
-          noRowsOverlayComponent={() => <div className="text-gray-500 text-sm">지원자 없음</div>}
+          loadingOverlayComponent={() => <div className="text-[#86868b] text-sm animate-pulse py-8">데이터 로딩 중...</div>}
+          noRowsOverlayComponent={() => <div className="text-[#86868b] text-sm py-8">지원자 없음</div>}
         />
+      </div>
+
+      {/* Bottom Pagination */}
+      <div className="px-5 py-2.5 bg-white border-t border-gray-200 shrink-0">
+        <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
       </div>
 
       {/* Photo Modal */}
@@ -778,7 +815,7 @@ export default function CandidatesPage() {
         <ProfileSendModal
           candidates={getSelectedForProfile()}
           adminKey={adminKey}
-          onClose={() => { setProfileModal(false); fetchData(search, tab) }}
+          onClose={() => { setProfileModal(false); fetchData(search, tab, page) }}
         />
       )}
     </div>

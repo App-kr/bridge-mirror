@@ -406,7 +406,7 @@ export default function AdminDashboardPage() {
                     <BarChart data={exposureData} layout="vertical">
                       <XAxis type="number" tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
                       <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: '#424245' }} axisLine={false} tickLine={false} width={80} />
-                      <Tooltip formatter={(value: number) => [`${value}건`, '유입']} />
+                      <Tooltip />
                       <Bar dataKey="count" radius={[0, 6, 6, 0]} name="유입">
                         {exposureData.map((d, idx) => (
                           <Cell key={idx} fill={d.color} />

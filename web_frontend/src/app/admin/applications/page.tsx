@@ -1,9 +1,8 @@
 'use client'
 
 /**
- * /admin/applications — 구인자 접수 관리
- * 기본보기 / 학원·메일 보기 전환 + 지역/교육대상/시작일 필터
- * 구직자는 /admin/candidates에서 관리
+ * /admin/applications — 업체관리
+ * 지역/도시 분리 필터 + 업체명/대상 + 관리자 전용 한글 번역 + 큰 글자
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -55,17 +54,28 @@ const statusColors: Record<string, string> = {
   Active:    'bg-emerald-100 text-emerald-700',
 }
 
-/** 지역 키워드 추출 (첫 시/도 단위) */
-function extractRegion(loc: string | null | undefined): string {
+/** 지역(시/도) 추출 */
+function extractProvince(loc: string | null | undefined): string {
   if (!loc) return ''
   const s = loc.trim()
-  // 한국 시/도 패턴
   const match = s.match(/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|Seoul|Busan|Daegu|Incheon|Gwangju|Daejeon|Ulsan|Sejong|Gyeonggi|Gangwon|Chungbuk|Chungnam|Jeonbuk|Jeonnam|Gyeongbuk|Gyeongnam|Jeju)/i)
   if (match) return match[1]
-  // 영어 주소에서 도시 추출
   const parts = s.split(',')
-  if (parts.length > 1) return parts[parts.length - 2]?.trim() || s.slice(0, 20)
-  return s.slice(0, 10)
+  if (parts.length > 1) return parts[parts.length - 1]?.trim() || ''
+  return ''
+}
+
+/** 도시(구/군/시) 추출 */
+function extractCity(loc: string | null | undefined): string {
+  if (!loc) return ''
+  const s = loc.trim()
+  // "서울 강남구" → "강남구"
+  const krMatch = s.match(/(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\s*(.+?)(?:\s|$)/)
+  if (krMatch) return krMatch[1].trim()
+  // "Gangnam-gu, Seoul" → "Gangnam-gu"
+  const parts = s.split(',').map(p => p.trim())
+  if (parts.length >= 2) return parts[0]
+  return ''
 }
 
 /** 교육대상 키워드 추출 */
@@ -82,6 +92,22 @@ function extractAge(age: string | null | undefined): string[] {
   return result
 }
 
+/** 교육대상 한글 번역 (관리자 전용) */
+function translateAge(age: string | null | undefined): string {
+  if (!age) return ''
+  const map: Record<string, string> = {
+    'Pre-K': '영유아',
+    'Kindergarten': '유치원',
+    'Elementary': '초등',
+    'Middle': '중등',
+    'High': '고등',
+    'Adult': '성인',
+  }
+  const extracted = extractAge(age)
+  if (extracted.length === 0) return age
+  return extracted.map(e => map[e] || e).join(', ')
+}
+
 export default function AdminApplicationsPage() {
   const { authed, login, headers, waking } = useAdminAuth()
 
@@ -91,11 +117,11 @@ export default function AdminApplicationsPage() {
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  // 보기 모드
   const [viewMode, setViewMode] = useState<'default' | 'school'>('default')
 
-  // 필터
-  const [filterRegion, setFilterRegion] = useState('')
+  // 필터: 지역 + 도시 분리
+  const [filterProvince, setFilterProvince] = useState('')
+  const [filterCity, setFilterCity] = useState('')
   const [filterAge, setFilterAge] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchText, setSearchText] = useState('')
@@ -149,15 +175,28 @@ export default function AdminApplicationsPage() {
     }
   }
 
-  // 필터 옵션 추출
-  const regionOptions = useMemo(() => {
+  // 지역 옵션
+  const provinceOptions = useMemo(() => {
     const set = new Set<string>()
     employers.forEach(e => {
-      const r = extractRegion(e.location)
-      if (r) set.add(r)
+      const p = extractProvince(e.location)
+      if (p) set.add(p)
     })
     return Array.from(set).sort()
   }, [employers])
+
+  // 도시 옵션 (선택된 지역 기반)
+  const cityOptions = useMemo(() => {
+    const set = new Set<string>()
+    const filtered = filterProvince
+      ? employers.filter(e => extractProvince(e.location) === filterProvince)
+      : employers
+    filtered.forEach(e => {
+      const c = extractCity(e.location)
+      if (c) set.add(c)
+    })
+    return Array.from(set).sort()
+  }, [employers, filterProvince])
 
   const ageOptions = useMemo(() => {
     const set = new Set<string>()
@@ -174,7 +213,8 @@ export default function AdminApplicationsPage() {
   // 필터링
   const filtered = useMemo(() => {
     return employers.filter(e => {
-      if (filterRegion && !extractRegion(e.location).includes(filterRegion)) return false
+      if (filterProvince && extractProvince(e.location) !== filterProvince) return false
+      if (filterCity && !extractCity(e.location).includes(filterCity)) return false
       if (filterAge && !extractAge(e.teaching_age).includes(filterAge)) return false
       if (filterStatus && e.status !== filterStatus) return false
       if (searchText) {
@@ -184,142 +224,157 @@ export default function AdminApplicationsPage() {
       }
       return true
     })
-  }, [employers, filterRegion, filterAge, filterStatus, searchText])
+  }, [employers, filterProvince, filterCity, filterAge, filterStatus, searchText])
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  const hasFilters = !!(filterRegion || filterAge || filterStatus || searchText)
+  const hasFilters = !!(filterProvince || filterCity || filterAge || filterStatus || searchText)
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 py-6">
-
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">구인자 접수 관리</h1>
-          <p className="text-xs text-gray-500">
+          <h1 className="text-xl font-bold text-[#1d1d1f]">업체관리</h1>
+          <p className="text-sm text-[#86868b] mt-0.5">
             {hasFilters ? `${filtered.length} / ${employers.length}건` : `${employers.length}건`}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {actionMsg && <span className="text-xs text-green-600 font-medium">{actionMsg}</span>}
-          <button type="button" onClick={fetchApplications} className="text-sm text-blue-600 hover:underline">↻ 새로고침</button>
+          {actionMsg && <span className="text-sm text-green-600 font-medium">{actionMsg}</span>}
+          <button type="button" onClick={fetchApplications} className="text-sm text-[#0071e3] hover:underline font-medium">새로고침</button>
         </div>
       </div>
 
       {/* View Toggle + Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {/* View mode toggle */}
-        <div className="flex bg-gray-100 rounded-lg p-0.5">
-          <button type="button" onClick={() => setViewMode('default')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              viewMode === 'default' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            기본보기
-          </button>
-          <button type="button" onClick={() => setViewMode('school')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              viewMode === 'school' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            학원·메일
-          </button>
+      <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* View mode toggle */}
+          <div className="flex bg-gray-100 rounded-xl p-0.5">
+            <button type="button" onClick={() => setViewMode('default')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                viewMode === 'default' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:text-[#424245]'
+              }`}>
+              기본보기
+            </button>
+            <button type="button" onClick={() => setViewMode('school')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                viewMode === 'school' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:text-[#424245]'
+              }`}>
+              학원 &middot; 메일
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-gray-200" />
+
+          {/* 검색 */}
+          <input
+            className="px-4 py-2 text-sm border border-gray-200 rounded-xl w-48 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="학원명, 이름, 이메일..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+          />
+
+          {/* 지역 필터 */}
+          <select className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white font-medium"
+            value={filterProvince} onChange={e => { setFilterProvince(e.target.value); setFilterCity('') }}>
+            <option value="">전체 지역</option>
+            {provinceOptions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+
+          {/* 도시 필터 */}
+          <select className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white font-medium"
+            value={filterCity} onChange={e => setFilterCity(e.target.value)}>
+            <option value="">전체 도시</option>
+            {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          {/* 교육대상 필터 */}
+          <select className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white font-medium"
+            value={filterAge} onChange={e => setFilterAge(e.target.value)}>
+            <option value="">전체 대상</option>
+            {ageOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+
+          {/* 상태 필터 */}
+          <select className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white font-medium"
+            value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">전체 상태</option>
+            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          {hasFilters && (
+            <button type="button" onClick={() => { setFilterProvince(''); setFilterCity(''); setFilterAge(''); setFilterStatus(''); setSearchText('') }}
+              className="text-sm text-red-500 hover:text-red-700 font-medium">
+              필터 초기화
+            </button>
+          )}
         </div>
-
-        <div className="h-5 w-px bg-gray-200 mx-1" />
-
-        {/* Search */}
-        <input
-          className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg w-40 focus:outline-none focus:border-blue-400"
-          placeholder="학원명, 이름, 이메일..."
-          value={searchText}
-          onChange={e => setSearchText(e.target.value)}
-        />
-
-        {/* Region filter */}
-        <select className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
-          value={filterRegion} onChange={e => setFilterRegion(e.target.value)}>
-          <option value="">전체 지역</option>
-          {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-
-        {/* Teaching age filter */}
-        <select className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
-          value={filterAge} onChange={e => setFilterAge(e.target.value)}>
-          <option value="">전체 대상</option>
-          {ageOptions.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-
-        {/* Status filter */}
-        <select className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
-          value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">전체 상태</option>
-          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-
-        {hasFilters && (
-          <button type="button" onClick={() => { setFilterRegion(''); setFilterAge(''); setFilterStatus(''); setSearchText('') }}
-            className="text-xs text-red-500 hover:text-red-700">
-            필터 초기화
-          </button>
-        )}
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>
+        <div className="p-4 bg-red-50 text-red-600 text-sm rounded-2xl">{error}</div>
       )}
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400 animate-pulse">로딩 중...</div>
+        <div className="text-center py-16 text-[#86868b] animate-pulse text-sm">로딩 중...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[#86868b] text-sm">
           {hasFilters ? '필터 조건에 맞는 접수가 없습니다.' : '구인 접수 내역이 없습니다.'}
         </div>
       ) : viewMode === 'default' ? (
-        /* ── 기본보기: 상세 정보 테이블 ── */
-        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase sticky top-0">
-              <tr>
-                <th className="px-3 py-2 text-left">업체명</th>
-                <th className="px-3 py-2 text-left">위치</th>
-                <th className="px-3 py-2 text-left">교육대상</th>
-                <th className="px-3 py-2 text-left">시작일</th>
-                <th className="px-3 py-2 text-left">급여</th>
-                <th className="px-3 py-2 text-left">숙소</th>
-                <th className="px-3 py-2 text-left">접수일</th>
-                <th className="px-3 py-2 text-left">상태</th>
-                <th className="px-3 py-2 text-left w-8"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map(app => (
-                <DefaultRow key={app.id} app={app} expanded={expanded === app.id}
-                  onToggle={() => setExpanded(expanded === app.id ? null : app.id)}
-                  onStatusChange={updateStatus} />
-              ))}
-            </tbody>
-          </table>
+        /* ── 기본보기 ── */
+        <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px]">
+              <thead className="bg-[#f5f5f7] text-[12px] text-[#86868b] uppercase tracking-wider sticky top-0">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">지역</th>
+                  <th className="px-4 py-3 text-left font-semibold">도시</th>
+                  <th className="px-4 py-3 text-left font-semibold">업체명</th>
+                  <th className="px-4 py-3 text-left font-semibold">대상 (원문)</th>
+                  <th className="px-4 py-3 text-left font-semibold">대상 (한글)</th>
+                  <th className="px-4 py-3 text-left font-semibold">시작일</th>
+                  <th className="px-4 py-3 text-left font-semibold">급여</th>
+                  <th className="px-4 py-3 text-left font-semibold">숙소</th>
+                  <th className="px-4 py-3 text-left font-semibold">접수일</th>
+                  <th className="px-4 py-3 text-left font-semibold">상태</th>
+                  <th className="px-4 py-3 text-left w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f0f0f2]">
+                {filtered.map(app => (
+                  <DefaultRow key={app.id} app={app} expanded={expanded === app.id}
+                    onToggle={() => setExpanded(expanded === app.id ? null : app.id)}
+                    onStatusChange={updateStatus} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         /* ── 학원·메일 보기 ── */
-        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
-            <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase sticky top-0">
-              <tr>
-                <th className="px-3 py-2 text-left">학원명</th>
-                <th className="px-3 py-2 text-left">담당자</th>
-                <th className="px-3 py-2 text-left">이메일</th>
-                <th className="px-3 py-2 text-left">전화번호</th>
-                <th className="px-3 py-2 text-left">위치</th>
-                <th className="px-3 py-2 text-left">상태</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map(app => (
-                <SchoolRow key={app.id} app={app} onStatusChange={updateStatus} />
-              ))}
-            </tbody>
-          </table>
+        <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-[#f5f5f7] text-[12px] text-[#86868b] uppercase tracking-wider sticky top-0">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">학원명</th>
+                  <th className="px-4 py-3 text-left font-semibold">담당자</th>
+                  <th className="px-4 py-3 text-left font-semibold">이메일</th>
+                  <th className="px-4 py-3 text-left font-semibold">전화번호</th>
+                  <th className="px-4 py-3 text-left font-semibold">지역</th>
+                  <th className="px-4 py-3 text-left font-semibold">도시</th>
+                  <th className="px-4 py-3 text-left font-semibold">상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f0f0f2]">
+                {filtered.map(app => (
+                  <SchoolRow key={app.id} app={app} onStatusChange={updateStatus} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -332,32 +387,36 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
   onStatusChange: (id: string, status: string) => void
 }) {
   const housing = [app.housing_type, app.housing_detail].filter(v => v && v !== 'None').join(' · ')
+  const province = extractProvince(app.location)
+  const city = extractCity(app.location)
 
   return (
     <>
-      <tr className="hover:bg-gray-50 cursor-pointer" onClick={onToggle}>
-        <td className="px-3 py-2">
-          <span className="font-medium text-gray-900 text-xs">{app.school_name || app.name || '—'}</span>
+      <tr className="hover:bg-[#fafafa] cursor-pointer transition-colors" onClick={onToggle}>
+        <td className="px-4 py-3 text-sm text-[#424245] font-medium">{province || '—'}</td>
+        <td className="px-4 py-3 text-sm text-[#424245]">{city || '—'}</td>
+        <td className="px-4 py-3">
+          <span className="font-semibold text-[#1d1d1f] text-sm">{app.school_name || app.name || '—'}</span>
         </td>
-        <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate" title={app.location || ''}>
-          {app.location ? extractRegion(app.location) || app.location.slice(0, 20) : '—'}
+        <td className="px-4 py-3 text-sm text-[#424245] max-w-[180px] truncate" title={app.teaching_age || ''}>
+          {app.teaching_age || '—'}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-600 max-w-[180px] truncate" title={app.teaching_age || ''}>
-          {app.teaching_age ? extractAge(app.teaching_age).join(', ') || app.teaching_age.slice(0, 25) : '—'}
+        <td className="px-4 py-3 text-sm text-[#0071e3] font-medium max-w-[140px] truncate" title={translateAge(app.teaching_age)}>
+          {translateAge(app.teaching_age) || '—'}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-600">{app.start_date || '—'}</td>
-        <td className="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate" title={app.salary_raw || ''}>
+        <td className="px-4 py-3 text-sm text-[#424245]">{app.start_date || '—'}</td>
+        <td className="px-4 py-3 text-sm text-[#424245] max-w-[120px] truncate" title={app.salary_raw || ''}>
           {app.salary_raw || '—'}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate" title={housing}>
+        <td className="px-4 py-3 text-sm text-[#424245] max-w-[120px] truncate" title={housing}>
           {housing || '—'}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+        <td className="px-4 py-3 text-sm text-[#86868b] whitespace-nowrap">
           {app.created_at?.slice(0, 10) || '—'}
         </td>
-        <td className="px-3 py-2">
+        <td className="px-4 py-3">
           <select
-            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
+            className={`text-[12px] px-2.5 py-1 rounded-full font-semibold border-0 ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
             value={app.status}
             onClick={e => e.stopPropagation()}
             onChange={e => onStatusChange(app.id, e.target.value)}>
@@ -365,55 +424,51 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
             <option value="Active">Active</option>
           </select>
         </td>
-        <td className="px-3 py-2 text-gray-400 text-xs">{expanded ? '▲' : '▼'}</td>
+        <td className="px-4 py-3 text-[#86868b] text-sm">{expanded ? '▲' : '▼'}</td>
       </tr>
 
       {expanded && (
         <tr>
-          <td colSpan={9} className="px-4 py-4 bg-gray-50/80">
-            <div className="space-y-3">
-              {/* 기본 정보 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <td colSpan={11} className="px-5 py-5 bg-[#fafafa]">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Info label="업체명" value={app.school_name} />
                 <Info label="담당자" value={app.name} />
                 <Info label="이메일" value={app.email} />
                 <Info label="전화" value={app.phone} />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Info label="위치" value={app.location} />
                 <Info label="시작일" value={app.start_date} />
                 <Info label="포지션 수" value={app.vacancies} />
                 <Info label="교육대상" value={app.teaching_age} />
               </div>
-              {/* 근무 조건 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Info label="스케줄" value={app.schedule} />
                 <Info label="근무시간" value={app.working_hours} />
                 <Info label="급여" value={app.salary_raw} />
                 <Info label="숙소" value={housing || null} />
               </div>
-              {/* 복리후생 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Info label="교통비" value={app.travel_support} />
                 <Info label="복리후생" value={app.benefits} />
                 <Info label="휴가" value={app.vacation} />
                 <Info label="병가" value={app.sick_leave} />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Info label="식사" value={app.meal} />
                 <Info label="담당자(내부)" value={app.assigned_to} />
               </div>
-              {/* 메모 */}
               {app.memo && app.memo !== 'None' && (
-                <div className="text-xs">
-                  <span className="font-medium text-gray-500">메모:</span>
-                  <p className="text-gray-700 mt-1 whitespace-pre-wrap bg-white p-2 rounded border border-gray-100">{app.memo}</p>
+                <div>
+                  <span className="font-semibold text-[#86868b] text-sm">메모:</span>
+                  <p className="text-[#1d1d1f] text-sm mt-1 whitespace-pre-wrap bg-white p-3 rounded-xl border border-[#e5e5e7]">{app.memo}</p>
                 </div>
               )}
               {app.notes && app.notes !== 'None' && (
-                <div className="text-xs">
-                  <span className="font-medium text-gray-500">관리자 메모:</span>
-                  <p className="text-gray-700 mt-1 whitespace-pre-wrap bg-white p-2 rounded border border-gray-100">{app.notes}</p>
+                <div>
+                  <span className="font-semibold text-[#86868b] text-sm">관리자 메모:</span>
+                  <p className="text-[#1d1d1f] text-sm mt-1 whitespace-pre-wrap bg-white p-3 rounded-xl border border-[#e5e5e7]">{app.notes}</p>
                 </div>
               )}
             </div>
@@ -430,23 +485,22 @@ function SchoolRow({ app, onStatusChange }: {
   onStatusChange: (id: string, status: string) => void
 }) {
   return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-3 py-2">
-        <span className="font-medium text-gray-900 text-xs">{app.school_name || '—'}</span>
+    <tr className="hover:bg-[#fafafa] transition-colors">
+      <td className="px-4 py-3">
+        <span className="font-semibold text-[#1d1d1f] text-sm">{app.school_name || '—'}</span>
       </td>
-      <td className="px-3 py-2 text-xs text-gray-600">{app.name || '—'}</td>
-      <td className="px-3 py-2 text-xs">
+      <td className="px-4 py-3 text-sm text-[#424245]">{app.name || '—'}</td>
+      <td className="px-4 py-3 text-sm">
         {app.email ? (
-          <a href={`mailto:${app.email}`} className="text-blue-600 hover:underline">{app.email}</a>
+          <a href={`mailto:${app.email}`} className="text-[#0071e3] hover:underline">{app.email}</a>
         ) : '—'}
       </td>
-      <td className="px-3 py-2 text-xs text-gray-600">{app.phone || '—'}</td>
-      <td className="px-3 py-2 text-xs text-gray-500 max-w-[200px] truncate" title={app.location || ''}>
-        {app.location ? extractRegion(app.location) || app.location.slice(0, 25) : '—'}
-      </td>
-      <td className="px-3 py-2">
+      <td className="px-4 py-3 text-sm text-[#424245]">{app.phone || '—'}</td>
+      <td className="px-4 py-3 text-sm text-[#424245] font-medium">{extractProvince(app.location) || '—'}</td>
+      <td className="px-4 py-3 text-sm text-[#424245]">{extractCity(app.location) || '—'}</td>
+      <td className="px-4 py-3">
         <select
-          className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
+          className={`text-[12px] px-2.5 py-1 rounded-full font-semibold border-0 ${statusColors[app.status] ?? 'bg-gray-100 text-gray-600'}`}
           value={app.status}
           onChange={e => onStatusChange(app.id, e.target.value)}>
           {STATUS_FLOW.map(s => <option key={s} value={s}>{s}</option>)}
@@ -461,8 +515,8 @@ function Info({ label, value }: { label: string; value: string | null | undefine
   const display = (value && value !== 'None') ? value.trim() : '—'
   return (
     <div>
-      <span className="font-medium text-gray-400">{label}</span>
-      <p className="text-gray-800 mt-0.5 break-words">{display}</p>
+      <span className="font-semibold text-[#86868b] text-sm">{label}</span>
+      <p className="text-[#1d1d1f] text-sm mt-0.5 break-words">{display}</p>
     </div>
   )
 }
