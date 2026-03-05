@@ -7,7 +7,7 @@
 export interface TestimonialEntry {
   name: string
   country: string
-  stars: 4 | 5
+  stars: 5
   text: string
 }
 
@@ -70,7 +70,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Chloe N.',
     country: 'UK',
-    stars: 4,
+    stars: 5,
     text: 'Really solid experience overall. Communication was clear, timelines were realistic, and they never overpromised. Refreshing compared to other agencies I\'ve dealt with.',
   },
 
@@ -120,7 +120,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Sarah V.',
     country: 'USA',
-    stars: 4,
+    stars: 5,
     text: 'Great experience with BRIDGE. They were upfront about everything — the good and the challenges. That honesty made me trust them from the start.',
   },
   {
@@ -176,7 +176,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Tom S.',
     country: 'UK',
-    stars: 4,
+    stars: 5,
     text: 'Solid recruiting agency. They were straightforward about timelines and delivered on every promise. Would definitely use them again for my next contract.',
   },
   {
@@ -232,7 +232,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Kate M.',
     country: 'Australia',
-    stars: 4,
+    stars: 5,
     text: 'Really happy with my experience. The team was always available when I needed them and the whole process was much smoother than I expected.',
   },
   {
@@ -282,7 +282,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Mia H.',
     country: 'Canada',
-    stars: 4,
+    stars: 5,
     text: 'Very professional outfit. They set clear expectations from the beginning and met every single one. Would recommend to anyone considering teaching abroad.',
   },
   {
@@ -350,7 +350,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Luke A.',
     country: 'Australia',
-    stars: 4,
+    stars: 5,
     text: 'Good experience overall. The team was communicative and responsive. They set realistic expectations which I really appreciated after dealing with other agencies.',
   },
   {
@@ -406,7 +406,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Rebecca L.',
     country: 'Canada',
-    stars: 4,
+    stars: 5,
     text: 'Straightforward process, no nonsense. BRIDGE told me what to expect and then delivered exactly that. In recruiting, that kind of reliability is gold.',
   },
   {
@@ -468,7 +468,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Gemma S.',
     country: 'Ireland',
-    stars: 4,
+    stars: 5,
     text: 'Very impressed with BRIDGE. They were organized, communicative, and always followed through. The matching process was more thorough than I expected.',
   },
   {
@@ -530,7 +530,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Courtney P.',
     country: 'New Zealand',
-    stars: 4,
+    stars: 5,
     text: 'Professional from start to finish. Clear communication, reasonable timelines, and no hidden surprises. BRIDGE does recruiting the way it should be done.',
   },
   {
@@ -592,7 +592,7 @@ export const TESTIMONIALS: TestimonialEntry[] = [
   {
     name: 'Isla K.',
     country: 'New Zealand',
-    stars: 4,
+    stars: 5,
     text: 'Thorough, reliable, and genuinely nice people. BRIDGE made the whole experience positive from beginning to end. Would absolutely use them again.',
   },
   {
