@@ -5,44 +5,20 @@ Persistent
 global gOverlay := ""
 global gTrayIndicator := ""
 global gFootstepOn := false
-global gLastAudioState := ""
 
-; ===== Auto-detect headset every 3 seconds =====
-SetTimer(AutoDetect, 3000)
-
-AutoDetect() {
-    global gLastAudioState
-    result := RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Import-Module AudioDeviceCmdlets; $d = Get-AudioDevice -List; $c = Get-AudioDevice -Playback; $has = ($d | Where-Object { $_.Type -eq ''Playback'' -and $_.Name -like ''*Captain*'' }); if ($c.Name -like ''*Captain*'') { Write-Output ''ON_HEADSET'' } elseif ($has) { Write-Output ''AVAIL'' } else { Write-Output ''OFF'' }"')
-    result := Trim(result)
-
-    if InStr(result, "AVAIL") and gLastAudioState != "headset" {
-        ; Headset just appeared - auto switch
-        RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle-to-headset.ps1"')
-        gLastAudioState := "headset"
-        ShowOverlay("🎧", "Headset ON", "Auto-detected", "0x6C5CE7")
-    } else if InStr(result, "OFF") and gLastAudioState != "speaker" {
-        ; Headset disappeared - auto switch to speaker
-        gLastAudioState := "speaker"
-        ; Already on speaker since device is gone, just show overlay on first detect
-        if gLastAudioState = "" {
-            return
-        }
-        ShowOverlay("🔊", "Speaker ON", "Headset disconnected", "0xFFA502")
-    } else if InStr(result, "ON_HEADSET") {
-        gLastAudioState := "headset"
-    }
-}
-
-; ===== Ctrl+Shift+F9: Manual Audio Toggle =====
+; ===== Ctrl+Shift+F9: Audio Toggle =====
 ^+F9:: {
-    result := RunCmd('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle.ps1"')
-    result := Trim(result)
-    if InStr(result, "HEADSET") {
-        ShowOverlay("🎧", "Headset ON", "Captain 780LITE", "0x6C5CE7")
-    } else if InStr(result, "NO_HEADSET") {
-        ShowOverlay("❌", "No Headset", "Turn on headset first", "0xFF4757")
-    } else {
-        ShowOverlay("🔊", "Speaker ON", "Stand Mic + Speaker", "0xFFA502")
+    try {
+        sh := ComObject("WScript.Shell")
+        ex := sh.Exec('powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "Q:\Claudework\bridge base\scripts\audio-toggle.ps1"')
+        result := Trim(ex.StdOut.ReadAll())
+        if InStr(result, "HEADSET") {
+            ShowOverlay("🎧", "Headset ON", "Captain 780LITE", "0x6C5CE7")
+        } else if InStr(result, "NO_HEADSET") {
+            ShowOverlay("❌", "No Headset", "Turn on headset first", "0xFF4757")
+        } else {
+            ShowOverlay("🔊", "Speaker ON", "Stand Mic + Speaker", "0xFFA502")
+        }
     }
 }
 
@@ -107,7 +83,6 @@ OpenEQ() {
 
         eg.SetFont("s7 c888888", "Consolas")
         eg.Add("Text", "x" xp " y" (py - 16) " w" sw " Center vVL" i, String(vals[i]))
-
         eg.Add("Slider", "x" xp " y" py " w" sw " h" sh " Vertical Range-12-12 Invert NoTicks vEQ" i, vals[i])
 
         if (i >= 2 and i <= 5) {
@@ -121,9 +96,9 @@ OpenEQ() {
     }
 
     eg.SetFont("s7 cFF6348", "Segoe UI")
-    eg.Add("Text", "x" (px + 1 * 40) " y" (py + sh + 20) " w120", "🔴 LOW 쿵쿵")
+    eg.Add("Text", "x" (px + 40) " y" (py + sh + 20) " w120", "🔴 LOW 쿵쿵")
     eg.SetFont("s7 cFFA502", "Segoe UI")
-    eg.Add("Text", "x" (px + 10 * 40) " y" (py + sh + 20) " w120", "🟠 HIGH 딱딱")
+    eg.Add("Text", "x" (px + 400) " y" (py + sh + 20) " w120", "🟠 HIGH 딱딱")
 
     pY := py + sh + 44
     eg.SetFont("s9 c888888", "Segoe UI")
@@ -149,8 +124,7 @@ OpenEQ() {
     ab := eg.Add("Button", "x" (px + 150) " y" aY " w180 h38", "✅  APPLY")
     ab.OnEvent("Click", DoApply)
 
-    gH := aY + 52
-    eg.Show("w600 h" gH)
+    eg.Show("w600 h" (aY + 52))
 
     DoFPS(*)      => FillEQ(eg, [-2,4,7,8,6,4,1,-1,-2,0,4,5,2,-1,-3], -3)
     DoBass(*)     => FillEQ(eg, [3,7,9,10,7,4,0,-2,-3,-2,0,1,0,-1,-2], -5)
@@ -166,19 +140,16 @@ OpenEQ() {
             eg["VL" A_Index].Value := String(v)
         }
         eg["PL"].Value := String(pr) " dB"
-
         eqStr := ""
         for idx, p in parts {
             if idx > 1
                 eqStr .= "; "
             eqStr .= p
         }
-
         txt := "# Footstep Amplifier`nPreamp: " pr " dB`nGraphicEQ: " eqStr "`n"
         fp := "C:\Program Files\EqualizerAPO\config\footstep-boost.txt"
         try FileDelete(fp)
         FileAppend(txt, fp)
-
         if gFootstepOn {
             mc := "C:\Program Files\EqualizerAPO\config\config.txt"
             try FileDelete(mc)
@@ -229,7 +200,7 @@ LoadEQ() {
     return vals
 }
 
-; ==================== TRAY INDICATOR ====================
+; ==================== TRAY ====================
 ShowTray() {
     global gTrayIndicator
     if gTrayIndicator {
@@ -301,10 +272,4 @@ CloseOL() {
         gOverlay.Destroy()
         gOverlay := ""
     }
-}
-
-RunCmd(command) {
-    sh := ComObject("WScript.Shell")
-    ex := sh.Exec(command)
-    return ex.StdOut.ReadAll()
 }

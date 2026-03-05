@@ -1252,76 +1252,110 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, close as overlay_close
+        from rpa_overlay import show_working, show_complete, close as overlay_close, wants_more
         _HAS_OVERLAY = True
     except ImportError:
         _HAS_OVERLAY = False
 
-    # Selenium 게시
-    hl_flag = args.headless
-    print(f"\nChrome 시작... {len(ads)}건 게시 예정 (headless={hl_flag})")
-    if _HAS_OVERLAY:
-        show_working()
-    driver = build_driver(headless=hl_flag)
+    def _run_post_session(ad_list):
+        """게시 세션 실행 (최초 + '더 올리기' 공통)."""
+        hl_flag = args.headless
+        print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
+        if _HAS_OVERLAY:
+            show_working()
+        driver = build_driver(headless=hl_flag)
+        posted = 0
 
-    try:
-        if not cl_login(driver):
-            print("[ABORT] 로그인 실패")
-            _log_event("error", "—", "login", "Login failed — aborting session")
-            sys.exit(1)
+        try:
+            if not cl_login(driver):
+                print("[ABORT] 로그인 실패")
+                _log_event("error", "—", "login", "Login failed — aborting session")
+                return 0
 
-        for i, (job, title, body, ad_id) in enumerate(ads, 1):
-            jcode = job["job_code"]
-            print(f"\n{'='*55}")
-            print(f"[{i}/{len(ads)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
+            for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
+                jcode = job["job_code"]
+                print(f"\n{'='*55}")
+                print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
 
-            try:
-                url = cl_post(driver, title, body, job)
-                ss  = take_screenshot(driver, jcode)
+                try:
+                    url = cl_post(driver, title, body, job)
+                    ss  = take_screenshot(driver, jcode)
 
-                if url and url not in ("", "None", None):
-                    mark_posted(ad_id, url, ss)
-                    print(f"  ✅ 게시 완료: {url}")
-                    print(f"  📸 스크린샷 : {ss}")
-                    _log_event("info", jcode, "posted", "Post successful", {"url": url})
-                elif url is None:
-                    # cl_post() 가 None 반환 = 카테고리 선택 실패로 인한 의도적 중단
-                    mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
-                    print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
-                    print(f"     {_LOG_DIR / 'debug_category_page.html'} 에서")
-                    print(f"     education 라디오의 실제 value 확인 후 코드 수정 필요")
-                    _log_event("error", jcode, "category_abort",
-                               "cl_post returned None — education category not selected")
-                else:
-                    mark_error(ad_id, "URL 획득 실패 (게시는 됐을 수 있음)")
-                    print(f"  ⚠️  게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
-                    _log_event("error", jcode, "post", "Posted URL not captured")
+                    if url and url not in ("", "None", None):
+                        mark_posted(ad_id, url, ss)
+                        print(f"  ✅ 게시 완료: {url}")
+                        print(f"  📸 스크린샷 : {ss}")
+                        _log_event("info", jcode, "posted", "Post successful", {"url": url})
+                        posted += 1
+                    elif url is None:
+                        mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
+                        print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
+                        _log_event("error", jcode, "category_abort",
+                                   "cl_post returned None — education category not selected")
+                    else:
+                        mark_error(ad_id, "URL 획득 실패 (게시는 됐을 수 있음)")
+                        print(f"  ⚠️  게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
+                        _log_event("error", jcode, "post", "Posted URL not captured")
 
-            except Exception as exc:
-                err_msg = str(exc)[:300]
-                mark_error(ad_id, err_msg)
-                _log_event("error", jcode, "post_exception", err_msg)
-                print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
-                # Self-healing: 예외가 발생해도 루프 계속
-                continue
+                except Exception as exc:
+                    err_msg = str(exc)[:300]
+                    mark_error(ad_id, err_msg)
+                    _log_event("error", jcode, "post_exception", err_msg)
+                    print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
+                    continue
 
-            if i < len(ads):
-                wait = random.randint(90, 150)
-                countdown(wait, "다음 게시 대기")
+                if i < len(ad_list):
+                    wait = random.randint(90, 150)
+                    countdown(wait, "다음 게시 대기")
 
-    except Exception as session_exc:
-        _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
-        print(f"[SESSION ERROR] {session_exc}")
-    finally:
-        driver.quit()
+        except Exception as session_exc:
+            _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
+            print(f"[SESSION ERROR] {session_exc}")
+        finally:
+            driver.quit()
 
-    posted = sum(1 for _, _, _, aid in ads if aid)
+        return posted
+
+    # ── 첫 게시 세션 ──
+    total_posted = _run_post_session(ads)
+
     print("\n" + "=" * 60)
-    print(f"  완료: {len(ads)}건 처리")
+    print(f"  완료: {total_posted}건 게시")
     print("=" * 60)
 
     if _HAS_OVERLAY:
-        show_complete(posted_count=posted)
+        show_complete(posted_count=total_posted)
+
+        # "5개 더 올리기" 대기 (최대 60초)
+        import time as _time
+        for _ in range(60):
+            _time.sleep(1)
+            if wants_more():
+                print("\n[OVERLAY] 유저 요청: 5개 더 올리기!")
+                overlay_close()
+
+                extra_jobs = fetch_jobs(None, 5)
+                if not extra_jobs:
+                    print("추가 게시할 포지션 없음")
+                    show_complete(posted_count=total_posted)
+                    break
+
+                extra_ads = []
+                for job in extra_jobs:
+                    title, body = generate_ad(job)
+                    body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+                    if removed:
+                        body = body_clean
+                    if not security_check(body, job["job_code"]):
+                        continue
+                    ad_id = save_draft(job, title, body)
+                    extra_ads.append((job, title, body, ad_id))
+
+                extra_posted = _run_post_session(extra_ads)
+                total_posted += extra_posted
+                print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
+                show_complete(posted_count=total_posted)
+                break
 
 
 if __name__ == "__main__":
