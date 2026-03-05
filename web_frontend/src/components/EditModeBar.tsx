@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Wrench, Pencil } from 'lucide-react'
 
 export function useEditMode(): boolean {
   const [editMode, setEditMode] = useState(false)
@@ -39,7 +40,9 @@ export default function EditModeBar() {
       color: '#92400e',
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     }}>
-      <span>🔧 관리자 모드 — 게시물 제목 옆 ✏️ 를 클릭하여 편집</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Wrench size={14} /> Admin Mode — inline edit/delete available
+      </span>
       <button onClick={exit} type="button" style={{
         background: '#fff',
         border: '1px solid #d1d5db',
@@ -50,7 +53,7 @@ export default function EditModeBar() {
         fontWeight: 600,
         color: '#374151',
       }}>
-        편집 종료
+        Exit
       </button>
     </div>
   )
@@ -72,17 +75,18 @@ export function EditButton({ postId, board }: { postId: number | string; board?:
         background: 'none',
         border: 'none',
         cursor: 'pointer',
-        fontSize: '16px',
         padding: '2px 6px',
         borderRadius: '4px',
         marginLeft: '8px',
         opacity: 0.7,
+        display: 'inline-flex',
+        alignItems: 'center',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
       onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7' }}
-      title="편집"
+      title="Edit"
     >
-      ✏️
+      <Pencil size={16} />
     </button>
   )
 }
@@ -96,7 +100,7 @@ export function NewPostButton({ board }: { board: string }) {
       href={`/community/${board}/new`}
       className="inline-flex items-center gap-1 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors"
     >
-      + 새 게시물
+      + New Post
     </Link>
   )
 }

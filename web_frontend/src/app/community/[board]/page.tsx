@@ -22,6 +22,10 @@ import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBa
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
+import {
+  Eye, Pencil, Trash2, GripVertical, ChevronUp, ChevronDown,
+  Check, Plus,
+} from 'lucide-react'
 
 const API = ''
 
@@ -46,9 +50,12 @@ interface LayoutProps {
   board: string
   faqItems?: FaqItem[]
   editMode?: boolean
+  selectedIds?: Set<number>
+  onToggleSelect?: (id: number) => void
   onEdit?: (post: Post) => void
   onDelete?: (postId: number) => void
-  onPin?: (postId: number, currentPin: number) => void
+  onMoveUp?: (postId: number) => void
+  onMoveDown?: (postId: number) => void
   onNewPost?: () => void
 }
 
@@ -79,31 +86,87 @@ function parseFaqBody(body: string): FaqItem[] {
   return items
 }
 
-// ── Inline Admin Buttons (editMode only) ──
-function InlineAdminButtons({ post, onEdit, onDelete, onPin }: {
-  post: Post
-  onEdit: (post: Post) => void
-  onDelete: (postId: number) => void
-  onPin: (postId: number, currentPin: number) => void
-}) {
+// ── Admin UI Components ──────────────────────────────────────────────────────
+
+function AdminCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 ml-2"
-      onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-    >
-      <button type="button" onClick={() => onEdit(post)}
-        className="p-1 rounded text-sm hover:bg-blue-600/20 transition-colors" title="Edit">
-        ✏️
-      </button>
-      <button type="button" onClick={() => onDelete(post.id)}
-        className="p-1 rounded text-sm hover:bg-red-600/20 transition-colors" title="Delete">
-        🗑️
-      </button>
-      <button type="button" onClick={() => onPin(post.id, post.pinned)}
-        className="p-1 rounded text-sm hover:bg-yellow-600/20 transition-colors" title={post.pinned ? 'Unpin' : 'Pin'}>
-        {post.pinned ? '📌' : '📍'}
+    <span onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+      <button type="button" onClick={onChange}
+        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0 ${
+          checked ? 'bg-blue-600 border-blue-600' : 'border-zinc-400 hover:border-zinc-300 bg-transparent'
+        }`}>
+        {checked && <Check size={12} className="text-white" strokeWidth={3} />}
       </button>
     </span>
+  )
+}
+
+function SortHandle({ onMoveUp, onMoveDown }: { onMoveUp: () => void; onMoveDown: () => void }) {
+  return (
+    <span className="inline-flex items-center shrink-0"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+      <GripVertical size={14} className="text-zinc-400" />
+      <span className="flex flex-col">
+        <button type="button" onClick={onMoveUp}
+          className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Pin (top)">
+          <ChevronUp size={12} />
+        </button>
+        <button type="button" onClick={onMoveDown}
+          className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded transition-colors" title="Unpin">
+          <ChevronDown size={12} />
+        </button>
+      </span>
+    </span>
+  )
+}
+
+function InlineAdminActions({ post, board, onEdit, onDelete }: {
+  post: Post; board: string; onEdit: (post: Post) => void; onDelete: (postId: number) => void
+}) {
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-auto shrink-0"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+      <button type="button"
+        onClick={() => window.open(`/community/${board}/${post.id}`, '_blank')}
+        className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors" title="View">
+        <Eye size={15} />
+      </button>
+      <button type="button" onClick={() => onEdit(post)}
+        className="p-1.5 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors" title="Edit">
+        <Pencil size={15} />
+      </button>
+      <button type="button" onClick={() => onDelete(post.id)}
+        className="p-1.5 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-700/50 transition-colors" title="Delete">
+        <Trash2 size={15} />
+      </button>
+    </span>
+  )
+}
+
+function BulkActionBar({ count, totalCount, onSelectAll, onClearSelection, onBulkDelete, onBulkPin }: {
+  count: number; totalCount: number
+  onSelectAll: () => void; onClearSelection: () => void
+  onBulkDelete: () => void; onBulkPin: () => void
+}) {
+  return (
+    <div className="bg-zinc-800 border-b border-zinc-700 px-6 py-2.5 flex items-center gap-4 text-sm">
+      <span className="text-zinc-300 font-medium">{count} selected</span>
+      <button type="button" onClick={onBulkPin}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-blue-400 hover:bg-blue-500/10 rounded transition-colors">
+        <ChevronUp size={14} /> Bulk Pin
+      </button>
+      <button type="button" onClick={onBulkDelete}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors">
+        <Trash2 size={14} /> Bulk Delete
+      </button>
+      <div className="ml-auto">
+        <button type="button"
+          onClick={count === totalCount ? onClearSelection : onSelectAll}
+          className="text-zinc-400 hover:text-white transition-colors">
+          {count === totalCount ? 'Deselect All' : 'Select All'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -121,8 +184,8 @@ function BoardHeader({ config, board, editMode, onNewPost }: {
         <h1 className="text-3xl font-bold text-[#1d1d1f]">{config.label}</h1>
         {editMode && onNewPost ? (
           <button type="button" onClick={onNewPost}
-            className="inline-flex items-center gap-1 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors">
-            + 새 게시물
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors">
+            <Plus size={14} /> New Post
           </button>
         ) : (
           board && <NewPostButton board={board} />
@@ -307,6 +370,9 @@ export default function BoardPage() {
   const [editorTitle, setEditorTitle] = useState('')
   const [editorBody, setEditorBody] = useState('')
 
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
   const refreshPosts = useCallback(() => {
     if (!config) return
     fetch(`${API}/api/community/${board}?limit=50`)
@@ -345,7 +411,6 @@ export default function BoardPage() {
   }, [])
 
   const handleEdit = useCallback(async (post: Post) => {
-    // Fetch full body from detail endpoint
     try {
       const res = await fetch(`${API}/api/community/${board}/${post.id}`)
       const j = await res.json()
@@ -366,22 +431,31 @@ export default function BoardPage() {
   }, [board])
 
   const handleDelete = useCallback(async (postId: number) => {
-    if (!confirm('이 게시물을 삭제하시겠습니까?')) return
+    if (!confirm('Delete this post?')) return
     try {
-      const res = await signedFetch(`${API_URL}/api/community/${board}/${postId}`, {
-        method: 'DELETE',
-      })
-      if (res.ok) refreshPosts()
+      const res = await signedFetch(`${API_URL}/api/community/${board}/${postId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSelectedIds((prev) => { const n = new Set(prev); n.delete(postId); return n })
+        refreshPosts()
+      }
     } catch { /* noop */ }
   }, [board, signedFetch, refreshPosts])
 
-  const handlePin = useCallback(async (postId: number, currentPin: number) => {
+  const handleMoveUp = useCallback(async (postId: number) => {
     try {
-      const res = await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
-        method: 'PATCH',
-        body: JSON.stringify({ pinned: currentPin ? 0 : 1 }),
+      await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
+        method: 'PATCH', body: JSON.stringify({ pinned: 1 }),
       })
-      if (res.ok) refreshPosts()
+      refreshPosts()
+    } catch { /* noop */ }
+  }, [signedFetch, refreshPosts])
+
+  const handleMoveDown = useCallback(async (postId: number) => {
+    try {
+      await signedFetch(`${API_URL}/api/admin/community/posts/${postId}/pin`, {
+        method: 'PATCH', body: JSON.stringify({ pinned: 0 }),
+      })
+      refreshPosts()
     } catch { /* noop */ }
   }, [signedFetch, refreshPosts])
 
@@ -390,11 +464,56 @@ export default function BoardPage() {
     refreshPosts()
   }, [refreshPosts])
 
+  // Selection handlers
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }, [])
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(posts.map((p) => p.id)))
+  }, [posts])
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!confirm(`Delete ${selectedIds.size} posts?`)) return
+    for (const id of selectedIds) {
+      await signedFetch(`${API_URL}/api/community/${board}/${id}`, { method: 'DELETE' }).catch(() => {})
+    }
+    setSelectedIds(new Set())
+    refreshPosts()
+  }, [selectedIds, board, signedFetch, refreshPosts])
+
+  const handleBulkPin = useCallback(async () => {
+    for (const id of selectedIds) {
+      await signedFetch(`${API_URL}/api/admin/community/posts/${id}/pin`, {
+        method: 'PATCH', body: JSON.stringify({ pinned: 1 }),
+      }).catch(() => {})
+    }
+    setSelectedIds(new Set())
+    refreshPosts()
+  }, [selectedIds, signedFetch, refreshPosts])
+
+  // FAQ edit handler
+  const handleFaqEdit = useCallback((item: FaqItem) => {
+    setEditorMode('create')
+    setEditorPostId(undefined)
+    setEditorTitle(item.q)
+    setEditorBody(item.a)
+    setEditorOpen(true)
+  }, [])
+
   if (!config) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
         <p className="text-[#86868b] text-lg">Board not found.</p>
-        <Link href="/community" className="text-[#0071e3] text-sm mt-2 block">← Back to Community</Link>
+        <Link href="/community" className="text-[#0071e3] text-sm mt-2 block">&larr; Back to Community</Link>
       </div>
     )
   }
@@ -412,9 +531,12 @@ export default function BoardPage() {
   const props: LayoutProps = {
     config, posts, total, board, faqItems,
     editMode,
+    selectedIds,
+    onToggleSelect: toggleSelect,
     onEdit: handleEdit,
     onDelete: handleDelete,
-    onPin: handlePin,
+    onMoveUp: handleMoveUp,
+    onMoveDown: handleMoveDown,
     onNewPost: handleNewPost,
   }
 
@@ -433,6 +555,16 @@ export default function BoardPage() {
   return (
     <>
       <EditModeBar />
+      {editMode && selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          totalCount={posts.length}
+          onSelectAll={selectAll}
+          onClearSelection={clearSelection}
+          onBulkDelete={handleBulkDelete}
+          onBulkPin={handleBulkPin}
+        />
+      )}
       <Layout {...props} />
       {editorOpen && (
         <SplitEditor
@@ -453,11 +585,9 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
-  // Filter out FAQ-tagged posts from the main list
+function ListLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
 
-  // FAQ color themes + hardcoded data
   const faqConfig = board === 'support'
     ? { bg: 'bg-[#0a1628]', accent: '#3b82f6', label: 'Teacher FAQ', badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-300', items: TEACHER_FAQ }
     : board === 'support_kr'
@@ -489,11 +619,18 @@ function ListLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, o
               variants={staggerContainer} initial="hidden" animate="visible"
             >
               {faqConfig.items.map((item, i) => (
-                <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent} />
+                <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent}
+                  editMode={editMode} onEdit={onEdit ? () => {
+                    // Open SplitEditor with FAQ content as new post
+                    if (onEdit) {
+                      const fakePost: Post = { id: 0, title: item.q, preview: item.a, body: item.a, author_hash: '', pinned: 0, views: 0, created_at: '' }
+                      onEdit(fakePost)
+                    }
+                  } : undefined}
+                />
               ))}
             </motion.div>
 
-            {/* 업무지원 하단 문의 안내 */}
             {board === 'support_kr' && (
               <motion.div
                 className="mt-10 text-center"
@@ -520,19 +657,25 @@ function ListLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, o
         ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible">
             {regularPosts.map((p) => (
-              <motion.div key={p.id} variants={fadeInUp}>
+              <motion.div key={p.id} variants={fadeInUp}
+                className={editMode ? 'flex items-center gap-1.5' : ''}>
+                {editMode && onMoveUp && onMoveDown && (
+                  <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                )}
+                {editMode && onToggleSelect && (
+                  <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                )}
                 <Link
                   href={`/community/${board}/${p.id}`}
-                  className="board-list-item group"
+                  className={`board-list-item group ${editMode ? 'flex-1' : ''}`}
                   style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
                 >
-                  <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">
-                    {p.title}
-                    {editMode && onEdit && onDelete && onPin && (
-                      <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
-                    )}
-                  </span>
-                  <span className="arrow">→</span>
+                  <span className="text-[15px] text-[#1d1d1f] font-medium group-hover:text-inherit">{p.title}</span>
+                  {editMode && onEdit && onDelete ? (
+                    <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+                  ) : (
+                    <span className="arrow">&rarr;</span>
+                  )}
                 </Link>
               </motion.div>
             ))}
@@ -544,7 +687,9 @@ function ListLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, o
 }
 
 // ── FAQ Accordion Item ──
-function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: number; accent: string }) {
+function FaqAccordionItem({ item, index, accent, editMode, onEdit }: {
+  item: FaqItem; index: number; accent: string; editMode?: boolean; onEdit?: () => void
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -573,6 +718,15 @@ function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: numbe
         <span className="text-[15px] font-medium text-white/90 flex-1 group-hover:text-white transition-colors">
           {item.q}
         </span>
+        {editMode && onEdit && (
+          <span className="inline-flex items-center gap-0.5 mr-2"
+            onClick={(e) => { e.stopPropagation() }}>
+            <button type="button" onClick={onEdit}
+              className="p-1.5 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors" title="Edit FAQ">
+              <Pencil size={15} />
+            </button>
+          </span>
+        )}
         <span
           className="text-lg shrink-0 transition-transform duration-300"
           style={{ color: accent, transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}
@@ -597,7 +751,7 @@ function FaqAccordionItem({ item, index, accent }: { item: FaqItem; index: numbe
 // ══════════════════════════════════════════════════════════════════════════════
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
-function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
+function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   const stats = getDynamicStats()
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
@@ -620,7 +774,6 @@ function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNe
     useAnimatedCounter(stats[3].target, 2500, statsVisible),
   ]
 
-  // Filter out FAQ posts (moved to Support)
   const aboutPosts = posts.filter(p => !p.title.toLowerCase().includes('faq'))
 
   return (
@@ -742,28 +895,33 @@ function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNe
             >
               {aboutPosts.map((p, i) => (
                 <motion.div key={p.id} variants={scaleIn}>
-                  <Link
-                    href={`/community/${board}/${p.id}`}
-                    className="group flex items-center gap-4 bg-white rounded-2xl p-5
-                               border border-transparent hover:border-[#0071e3]/20
-                               hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]
-                               transition-all duration-200"
-                  >
-                    <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
-                    <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors">
-                      {p.title}
-                      {editMode && onEdit && onDelete && onPin && (
-                        <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                  <div className={editMode ? 'flex items-center gap-1.5' : ''}>
+                    {editMode && onToggleSelect && (
+                      <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                    )}
+                    <Link
+                      href={`/community/${board}/${p.id}`}
+                      className={`group flex items-center gap-4 bg-white rounded-2xl p-5
+                                 border border-transparent hover:border-[#0071e3]/20
+                                 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]
+                                 transition-all duration-200 ${editMode ? 'flex-1' : ''}`}
+                    >
+                      <span className="text-2xl">{HERO_ICONS[i] ?? '📄'}</span>
+                      <span className="text-[15px] font-semibold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors flex-1">
+                        {p.title}
+                      </span>
+                      {editMode && onEdit && onDelete && (
+                        <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
                       )}
-                    </span>
-                  </Link>
+                    </Link>
+                  </div>
                 </motion.div>
               ))}
               {editMode && onNewPost && (
                 <motion.div variants={scaleIn}>
                   <button type="button" onClick={onNewPost}
                     className="flex items-center justify-center gap-2 w-full bg-zinc-100 rounded-2xl p-5 border-2 border-dashed border-zinc-300 text-zinc-500 hover:border-blue-400 hover:text-blue-600 transition-colors text-sm font-medium">
-                    + New Post
+                    <Plus size={16} /> New Post
                   </button>
                 </motion.div>
               )}
@@ -863,13 +1021,12 @@ function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNe
             </a>
           </motion.div>
 
-          {/* Registration info — small, subtle */}
           <motion.div
             className="mt-16 pt-8 border-t border-[#e5e5e5]"
             variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}
           >
             <p className="text-xs text-[#86868b] leading-relaxed">
-              BRIDGE Recruitment · 사업자등록번호 000-00-00000
+              BRIDGE Recruitment &middot; 사업자등록번호 000-00-00000
             </p>
           </motion.div>
         </div>
@@ -881,24 +1038,34 @@ function HeroCardsLayout({ posts, board, editMode, onEdit, onDelete, onPin, onNe
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
       <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
         {posts.map((p, i) => (
           <motion.div key={p.id} variants={fadeInUp}>
-            <Link href={`/community/${board}/${p.id}`} className="tips-card group block">
+            <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
               <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
               <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
-              <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">
-                {p.title}
-                {editMode && onEdit && onDelete && onPin && (
-                  <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
-                )}
-              </h3>
+              <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
               <p className="text-sm text-[#6e6e73] line-clamp-3 mb-4">{stripMd(p.preview)}</p>
-              <span className="text-sm font-medium text-[#0071e3]">Read more →</span>
+              <span className="text-sm font-medium text-[#0071e3]">Read more &rarr;</span>
+              {editMode && (
+                <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-200"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+                  {onToggleSelect && (
+                    <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                  )}
+                  {onMoveUp && onMoveDown && (
+                    <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                  )}
+                  <span className="flex-1" />
+                  {onEdit && onDelete && (
+                    <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+                  )}
+                </div>
+              )}
             </Link>
           </motion.div>
         ))}
@@ -910,7 +1077,7 @@ function CardGridLayout({ config, posts, board, editMode, onEdit, onDelete, onPi
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
@@ -920,24 +1087,32 @@ function PhotoCardsLayout({ config, posts, board, editMode, onEdit, onDelete, on
           const variant = i % 2 === 0 ? slideInLeft : slideInRight
 
           return (
-            <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-              <Link href={`/community/${board}/${p.id}`} className="korea-card group flex-col sm:flex-row">
+            <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}
+              className={editMode ? 'flex items-center gap-1.5' : ''}>
+              {editMode && onMoveUp && onMoveDown && (
+                <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+              )}
+              {editMode && onToggleSelect && (
+                <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+              )}
+              <Link href={`/community/${board}/${p.id}`}
+                className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}>
                 <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
                   <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
-                  <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">
-                    {p.title}
-                    {editMode && onEdit && onDelete && onPin && (
-                      <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors flex-1">{p.title}</h3>
+                    {editMode && onEdit && onDelete && (
+                      <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
                     )}
-                  </h3>
+                  </div>
                   <p className="text-sm text-[#6e6e73] line-clamp-2 mb-2">{stripMd(p.preview, 150)}</p>
                   {KOREA_MAP_LINKS[imgKey] && (
                     <a href={KOREA_MAP_LINKS[imgKey]} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-[#0071e3] hover:underline mt-1"
                       onClick={(e) => e.stopPropagation()}>
-                      <span>📍</span> View on Map
+                      View on Map
                     </a>
                   )}
                 </div>
@@ -953,7 +1128,7 @@ function PhotoCardsLayout({ config, posts, board, editMode, onEdit, onDelete, on
 // ══════════════════════════════════════════════════════════════════════════════
 // TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════════════════
-function TestimonialLayout({ config, posts, board, editMode, onEdit, onDelete, onPin, onNewPost }: LayoutProps) {
+function TestimonialLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onNewPost }: LayoutProps) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
@@ -969,20 +1144,30 @@ function TestimonialLayout({ config, posts, board, editMode, onEdit, onDelete, o
                     {name.charAt(0)}
                   </div>
                   <div>
-                    <div className="font-semibold text-[#1d1d1f] text-sm">
-                      {name}
-                      {editMode && onEdit && onDelete && onPin && (
-                        <InlineAdminButtons post={p} onEdit={onEdit} onDelete={onDelete} onPin={onPin} />
-                      )}
-                    </div>
-                    <div className="text-xs text-[#86868b]">English Teacher · BRIDGE</div>
+                    <div className="font-semibold text-[#1d1d1f] text-sm">{name}</div>
+                    <div className="text-xs text-[#86868b]">English Teacher &middot; BRIDGE</div>
                   </div>
                 </div>
                 <div className="mb-4">
                   <span className="text-3xl text-[#d1d1d6] leading-none">&ldquo;</span>
                   <p className="text-sm text-[#424245] italic line-clamp-4 mt-1">{stripMd(p.preview, 150)}</p>
                 </div>
-                <span className="text-sm font-medium text-[#0071e3] group-hover:underline">Read full story →</span>
+                <span className="text-sm font-medium text-[#0071e3] group-hover:underline">Read full story &rarr;</span>
+                {editMode && (
+                  <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-200"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+                    {onToggleSelect && (
+                      <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                    )}
+                    {onMoveUp && onMoveDown && (
+                      <SortHandle onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)} />
+                    )}
+                    <span className="flex-1" />
+                    {onEdit && onDelete && (
+                      <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
+                    )}
+                  </div>
+                )}
               </Link>
             </motion.div>
           )
