@@ -2,7 +2,7 @@
 
 /**
  * /admin — Dashboard (종합 현황)
- * Apple 2026 미니멀: 최근 게시물 테이블 → 통계 카드 → 차트 → 노출 비중
+ * Apple 2026 미니멀: 최근 게시물 테이블 → 통계 카드 → 차트 → 노출 비중 그래프
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -22,6 +22,7 @@ const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
 
 const API = API_URL
+const SEEN_POSTS_KEY = 'bridge_admin_seen_posts'
 
 interface DashboardStats {
   candidates?: number
@@ -71,15 +72,8 @@ interface ActivityItem {
   created_at?: string
 }
 
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
-
-const EXPOSURE_DATA = [
-  { channel: 'Google', pct: 42 },
-  { channel: 'Naver', pct: 28 },
-  { channel: 'Reddit', pct: 14 },
-  { channel: 'Direct', pct: 9 },
-  { channel: 'Craigslist', pct: 7 },
-]
+const PIE_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
+const BAR_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
 
 const boardLabel = (b: string) => {
   const map: Record<string, string> = {
@@ -104,6 +98,20 @@ const boardColor = (b: string) => {
   return map[b] ?? 'bg-gray-100 text-gray-600'
 }
 
+function getSeenPosts(): Set<string> {
+  try {
+    const stored = localStorage.getItem(SEEN_POSTS_KEY)
+    if (stored) return new Set(JSON.parse(stored))
+  } catch { /* empty */ }
+  return new Set()
+}
+
+function markPostSeen(postId: number) {
+  const seen = getSeenPosts()
+  seen.add(String(postId))
+  localStorage.setItem(SEEN_POSTS_KEY, JSON.stringify([...seen]))
+}
+
 export default function AdminDashboardPage() {
   const { authed, waking, login, adminFetch } = useAdminAuth()
 
@@ -115,6 +123,12 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [wakeMsg, setWakeMsg] = useState(false)
+  const [showCount, setShowCount] = useState(10)
+  const [seenPosts, setSeenPosts] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    setSeenPosts(getSeenPosts())
+  }, [])
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -183,7 +197,23 @@ export default function AdminDashboardPage() {
     { label: '커뮤니티', value: inboxStats.community_posts ?? 0, sub: '' },
   ]
 
-  const recentPosts = activity.filter(a => a.type === 'post').slice(0, 10)
+  const recentPosts = activity.filter(a => a.type === 'post')
+  const visiblePosts = recentPosts.slice(0, showCount)
+  const hasMore = recentPosts.length > showCount
+
+  const handleConfirm = (postId: number) => {
+    markPostSeen(postId)
+    setSeenPosts(getSeenPosts())
+  }
+
+  // 노출 비중: sources 데이터 기반 (실제 데이터)
+  const totalSourceCount = sources.reduce((sum, s) => sum + s.count, 0)
+  const exposureData = sources.map((s, idx) => ({
+    label: s.label,
+    count: s.count,
+    pct: totalSourceCount > 0 ? Math.round((s.count / totalSourceCount) * 100) : 0,
+    color: BAR_COLORS[idx % BAR_COLORS.length],
+  }))
 
   return (
     <div className="space-y-8">
@@ -211,45 +241,78 @@ export default function AdminDashboardPage() {
         <>
           {/* ── 최근 게시물 테이블 ────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#f0f0f2]">
+            <div className="px-5 py-4 border-b border-[#f0f0f2] flex items-center justify-between">
               <h2 className="text-[15px] font-semibold text-[#1d1d1f]">최근 게시물</h2>
+              <span className="text-[12px] text-[#86868b]">{recentPosts.length}건</span>
             </div>
-            {recentPosts.length === 0 ? (
+            {visiblePosts.length === 0 ? (
               <div className="px-5 py-10 text-center text-[#86868b] text-sm">최근 게시물이 없습니다.</div>
             ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
-                    <th className="text-left px-5 py-2.5">날짜</th>
-                    <th className="text-left px-5 py-2.5">게시판</th>
-                    <th className="text-left px-5 py-2.5">제목</th>
-                    <th className="text-right px-5 py-2.5">액션</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentPosts.map((post, idx) => (
-                    <tr key={`${post.id}-${idx}`} className="border-t border-[#f5f5f7] hover:bg-[#fafafa] transition-colors">
-                      <td className="px-5 py-3 text-[13px] text-[#86868b] whitespace-nowrap">
-                        {post.created_at ? new Date(post.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-medium ${boardColor(post.board ?? '')}`}>
-                          {boardLabel(post.board ?? '')}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-[13px] text-[#1d1d1f] font-medium truncate max-w-[300px]">
-                        {post.title}
-                      </td>
-                      <td className="px-5 py-3 text-right whitespace-nowrap">
-                        <a href={`/admin/posts?board=${post.board}&edit=${post.id}`}
-                          className="text-[12px] text-[#0071e3] hover:underline mr-3">편집</a>
-                        <a href={`/community/${post.board}`}
-                          className="text-[12px] text-[#86868b] hover:text-[#1d1d1f]">보기</a>
-                      </td>
+              <>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">
+                      <th className="text-left px-5 py-2.5">날짜</th>
+                      <th className="text-left px-5 py-2.5">게시판</th>
+                      <th className="text-left px-5 py-2.5">제목</th>
+                      <th className="text-right px-5 py-2.5">액션</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {visiblePosts.map((post, idx) => {
+                      const isNew = !seenPosts.has(String(post.id))
+                      return (
+                        <tr key={`${post.id}-${idx}`} className="border-t border-[#f5f5f7] hover:bg-[#fafafa] transition-colors">
+                          <td className="px-5 py-3 text-[13px] text-[#86868b] whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5">
+                              {post.created_at ? new Date(post.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
+                              {isNew && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-500 text-white animate-pulse shadow-sm shadow-red-200">
+                                  NEW
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-medium ${boardColor(post.board ?? '')}`}>
+                              {boardLabel(post.board ?? '')}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-[13px] text-[#1d1d1f] font-medium truncate max-w-[300px]">
+                            {post.title}
+                          </td>
+                          <td className="px-5 py-3 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              {isNew && (
+                                <button type="button" onClick={() => handleConfirm(post.id)}
+                                  className="px-2 py-1 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors border border-emerald-200">
+                                  확인
+                                </button>
+                              )}
+                              <a href={`/admin/posts?board=${post.board}&edit=${post.id}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#0071e3]/10 text-[#0071e3] hover:bg-[#0071e3]/20 transition-colors">
+                                편집
+                              </a>
+                              <a href={`/community/${post.board}`} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#f5f5f7] text-[#424245] hover:bg-[#e8e8ed] transition-colors">
+                                보기 &rarr;
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {hasMore && (
+                  <div className="px-5 py-3 border-t border-[#f5f5f7] text-center">
+                    <button type="button" onClick={() => setShowCount(prev => prev + 10)}
+                      className="text-[13px] text-[#0071e3] hover:underline font-medium">
+                      더보기 ({recentPosts.length - showCount}건 남음)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -318,22 +381,43 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* ── 노출 비중 (placeholder) ──────────────────────── */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-            <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">노출 비중</h2>
-            <div className="space-y-3">
-              {EXPOSURE_DATA.map((d) => (
-                <div key={d.channel} className="flex items-center gap-3">
-                  <span className="text-[13px] text-[#424245] w-20 shrink-0">{d.channel}</span>
-                  <div className="flex-1 h-[6px] bg-[#f5f5f7] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#0071e3] rounded-full transition-all duration-500"
-                      style={{ width: `${d.pct}%` }} />
-                  </div>
-                  <span className="text-[12px] font-medium text-[#86868b] w-10 text-right tabular-nums">{d.pct}%</span>
+          {/* ── 유입 채널 비중 (실제 데이터 그래프) ────────────── */}
+          {exposureData.length > 0 && (
+            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-5">유입 채널 비중</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* 가로 바 그래프 */}
+                <div className="space-y-3">
+                  {exposureData.map((d) => (
+                    <div key={d.label} className="flex items-center gap-3">
+                      <span className="text-[13px] text-[#424245] w-24 shrink-0 font-medium">{d.label}</span>
+                      <div className="flex-1 h-[8px] bg-[#f5f5f7] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${d.pct}%`, backgroundColor: d.color }} />
+                      </div>
+                      <span className="text-[12px] font-semibold text-[#1d1d1f] w-12 text-right tabular-nums">{d.pct}%</span>
+                      <span className="text-[11px] text-[#86868b] w-10 text-right tabular-nums">{d.count}건</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+                {/* recharts 바 차트 */}
+                <div style={{ width: '100%', height: 200 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={exposureData} layout="vertical">
+                      <XAxis type="number" tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: '#424245' }} axisLine={false} tickLine={false} width={80} />
+                      <Tooltip formatter={(value: number) => [`${value}건`, '유입']} />
+                      <Bar dataKey="count" radius={[0, 6, 6, 0]} name="유입">
+                        {exposureData.map((d, idx) => (
+                          <Cell key={idx} fill={d.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── 현황 요약 ────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
