@@ -237,15 +237,15 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Twinkling stars ── */}
+        {/* ── Twinkling stars — 상단 배치, 다리(중앙 하단) 회피 ── */}
         {[
-          { top: '12%', left: '8%',  size: 3,   delay: 0,   dur: 3.2 },
-          { top: '18%', left: '78%', size: 2,   delay: 1.1, dur: 2.8 },
-          { top: '35%', left: '92%', size: 4,   delay: 0.5, dur: 3.8 },
-          { top: '8%',  left: '45%', size: 2.5, delay: 2.0, dur: 2.5 },
-          { top: '55%', left: '15%', size: 3.5, delay: 0.8, dur: 3.5 },
-          { top: '25%', left: '62%', size: 2,   delay: 1.5, dur: 3.0 },
-          { top: '42%', left: '35%', size: 3,   delay: 2.3, dur: 2.6 },
+          { top: '5%',  left: '6%',  size: 1.5, delay: 0,   dur: 3.2 },
+          { top: '10%', left: '88%', size: 2.5, delay: 1.1, dur: 2.8 },
+          { top: '3%',  left: '52%', size: 1,   delay: 0.5, dur: 3.8 },
+          { top: '14%', left: '35%', size: 2,   delay: 2.0, dur: 2.5 },
+          { top: '8%',  left: '72%', size: 1.8, delay: 0.8, dur: 3.5 },
+          { top: '18%', left: '12%', size: 1.2, delay: 1.5, dur: 3.0 },
+          { top: '6%',  left: '95%', size: 2.2, delay: 2.3, dur: 2.6 },
         ].map((star, i) => (
           <div
             key={`star-${i}`}
