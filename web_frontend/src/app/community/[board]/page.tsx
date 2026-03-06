@@ -72,6 +72,9 @@ interface LayoutProps {
   onFaqReorder?: (index: number, direction: 'up' | 'down') => void
   faqSectionTitle?: string
   onFaqSectionTitleChange?: (title: string) => void
+  orderDirty?: boolean
+  orderSaving?: boolean
+  onSaveOrder?: () => void
 }
 
 /** Strip markdown syntax for preview text */
@@ -236,8 +239,9 @@ function BulkActionBar({ count, totalCount, onSelectAll, onClearSelection, onBul
 }
 
 // ── Shared Board Header ──
-function BoardHeader({ config, board, editMode, onNewPost }: {
+function BoardHeader({ config, board, editMode, onNewPost, orderDirty, orderSaving, onSaveOrder }: {
   config: BoardConfig; board?: string; editMode?: boolean; onNewPost?: () => void
+  orderDirty?: boolean; orderSaving?: boolean; onSaveOrder?: () => void
 }) {
   return (
     <motion.div
@@ -247,14 +251,22 @@ function BoardHeader({ config, board, editMode, onNewPost }: {
     >
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold text-[#1d1d1f]">{config.label}</h1>
-        {editMode && onNewPost ? (
-          <button type="button" onClick={onNewPost}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors">
-            <Plus size={14} /> New Post
-          </button>
-        ) : (
-          board && <NewPostButton board={board} />
-        )}
+        <div className="flex items-center gap-2">
+          {editMode && orderDirty && onSaveOrder && (
+            <button type="button" onClick={onSaveOrder} disabled={orderSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white text-sm font-medium rounded-full transition-colors">
+              {orderSaving ? '저장 중...' : '💾 순서 저장'}
+            </button>
+          )}
+          {editMode && onNewPost ? (
+            <button type="button" onClick={onNewPost}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0071e3] text-white text-sm font-medium rounded-full hover:bg-[#0077ED] transition-colors">
+              <Plus size={14} /> New Post
+            </button>
+          ) : (
+            board && <NewPostButton board={board} />
+          )}
+        </div>
       </div>
       <p className="text-[#86868b] text-sm mb-8">{config.description}</p>
       {config.notice && (
