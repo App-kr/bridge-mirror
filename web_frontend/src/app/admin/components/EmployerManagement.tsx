@@ -318,9 +318,13 @@ export default function EmployerManagement() {
     })
   }, [])
 
-  /* ── 메모 인라인 편집 (로컬 상태) ── */
+  /* ── 메모/본문 인라인 편집 (로컬 상태) ── */
   const editMemo = useCallback((id: string, memo: string) => {
     setEmployers(prev => prev.map(e => e.id === id ? { ...e, memo } : e))
+  }, [])
+
+  const editNotes = useCallback((id: string, notes: string) => {
+    setEmployers(prev => prev.map(e => e.id === id ? { ...e, notes } : e))
   }, [])
 
   /* ── 필터 옵션 계산 ── */
@@ -608,9 +612,12 @@ export default function EmployerManagement() {
                   showPII={showPII}
                   province={extractProvince(app.location)}
                   city={extractCity(app.location)}
+                  jobNo={jobNo(app)}
+                  searchQuery={searchQuery}
                   onConfirm={confirmNew}
                   onStatusChange={updateStatus}
                   onEditMemo={editMemo}
+                  onEditNotes={editNotes}
                   onMoveTop={() => moveTop(app.id)}
                   onMoveUp={() => moveUp(app.id)}
                   onMoveDown={() => moveDown(app.id)}
