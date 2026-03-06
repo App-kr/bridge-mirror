@@ -57,3 +57,39 @@ interview → api_server.py ──→ master.db + email notification
 - 2-4 options → SingleTog buttons
 - Components: `Dropdown`, `CheckList`, `FileUpload`
 - Post-submission file upload on success screen
+
+## Project Folder Structure (2026-03-06 정리)
+```
+Q:/Claudework/bridge base/
+├── api_server.py          ← 메인 백엔드 (FastAPI)
+├── email_templates.py     ← 이메일 모듈 (api_server 임포트)
+├── security_vault.py      ← PII 암호화 (수정금지, api_server 임포트)
+├── security_middleware.py  ← 보안 미들웨어 (api_server 임포트)
+├── inbox_api.py           ← 인박스 라우터 (api_server 임포트)
+├── gmail_collector.py     ← Gmail 라우터 (api_server 임포트)
+├── auto_pipeline_v2.py    ← master.db → Supabase 동기화
+├── parse_jobs.py          ← Job 파싱 CLI
+├── master.db              ← 메인 DB
+├── CLAUDE.md              ← 프로젝트 규칙
+├── requirements.txt       ← Python 의존성
+├── Procfile / render.yaml / railway.json / runtime.txt  ← 배포 설정 (루트 필수)
+├── run_telegram_bot.py / start_bot.py  ← 봇 실행 스크립트
+│
+├── web_frontend/          ← Next.js 15 프론트엔드
+├── security/              ← 보안 모듈 (pii_scanner, auth, version)
+├── audit/                 ← 감사 로그 (JSONL)
+├── migrations/            ← DB 마이그레이션 + seeders/
+├── scripts/               ← 유틸리티 (audio/, google/, parsers/, generators/)
+├── tools/                 ← RPA/자동화 도구 (craigslist, interview, agent)
+├── deploy/                ← 배포 설정 (nginx, systemd, deploy.sh)
+├── docs/                  ← 문서 (MASTER_PLAN, DEPLOY, CREDENTIALS)
+├── bridge_agent/          ← CLI 에이전트 패키지
+├── telegram_agent/        ← 텔레그램 봇 패키지
+├── admin_app/             ← 데스크톱 관리 앱
+├── backups/               ← 백업 (db/, 스냅샷)
+├── archive/               ← 레거시/테스트 데이터 (gitignored)
+├── uploads/               ← 파일 업로드 저장소
+├── secure_downloads/      ← 보안 다운로드 경로
+└── .memory/               ← Claude 메모리
+```
+주의: 루트 Python 파일 6개는 api_server.py가 임포트하므로 이동 불가.
