@@ -39,15 +39,20 @@ export interface EmployerApp {
   source_file?: string | null
   phone?: string | null
   location?: string | null
+  city?: string | null
   start_date?: string | null
   vacancies?: string | null
   teaching_age?: string | null
+  class_size?: string | null
   schedule?: string | null
   working_hours?: string | null
+  teach_hrs_week?: string | null
   salary_raw?: string | null
+  housing?: string | null
   housing_type?: string | null
   housing_detail?: string | null
   travel_support?: string | null
+  native_count?: string | null
   benefits?: string | null
   vacation?: string | null
   sick_leave?: string | null
@@ -79,25 +84,31 @@ interface DocBlockProps {
   showDivider: boolean
 }
 
-/* 구조화 필드 → 워드뷰 rawText 합성 (notes가 비어있으면 개별 필드로 생성) */
+/* 구조화 필드 → 워드뷰 rawText — 샘플 포맷 순서 그대로 */
 function buildRawText(emp: EmployerApp, province: string, city: string, jobNo: string): string {
   if (emp.notes && emp.notes.trim()) return emp.notes.trim()
   const rows: string[] = []
-  if (province || city) rows.push(`${province} ${city}`.trim())
-  if (jobNo) rows.push(`Job. ${jobNo}`)
+  const loc = v(emp.location) || `${province} ${city}`.trim()
+  if (loc) rows.push(loc)
+  const jc = v(emp.job_code)
+  if (jc) rows.push(jc)
+  else if (jobNo) rows.push(`Job. ${jobNo}`)
   if (v(emp.start_date)) rows.push(`Starting Date : ${v(emp.start_date)}`)
-  if (v(emp.vacancies)) rows.push(`Open Positions : ${v(emp.vacancies)}`)
   if (v(emp.teaching_age)) rows.push(`Teaching Age : ${v(emp.teaching_age)}`)
-  if (v(emp.schedule)) rows.push(`Schedule : ${v(emp.schedule)}`)
+  if (v(emp.class_size)) rows.push(`Class size : ${v(emp.class_size)}`)
   if (v(emp.working_hours)) rows.push(`Working Hours : ${v(emp.working_hours)}`)
   if (v(emp.salary_raw)) rows.push(`Monthly Salary : ${v(emp.salary_raw)}`)
-  if (v(emp.housing_type)) rows.push(`Housing : ${v(emp.housing_type)}`)
+  if (v(emp.teach_hrs_week)) rows.push(`Average Teaching Hours per Week : ${v(emp.teach_hrs_week)}`)
+  if (v(emp.vacation)) rows.push(`Vacation : ${v(emp.vacation)}`)
+  if (v(emp.native_count)) rows.push(`Native Teacher (Numbers can change) : ${v(emp.native_count)}`)
+  if (v(emp.housing)) rows.push(`Housing: ${v(emp.housing)}`)
   if (v(emp.housing_detail)) rows.push(`Housing Details : ${v(emp.housing_detail)}`)
+  if (v(emp.schedule)) rows.push(`Schedule : ${v(emp.schedule)}`)
   if (v(emp.travel_support)) rows.push(`Travel Support : ${v(emp.travel_support)}`)
   if (v(emp.benefits)) rows.push(`Employee Benefits : ${v(emp.benefits)}`)
-  if (v(emp.vacation)) rows.push(`Vacation : ${v(emp.vacation)}`)
   if (v(emp.sick_leave)) rows.push(`Sick Leave : ${v(emp.sick_leave)}`)
   if (v(emp.meal)) rows.push(`Meal : ${v(emp.meal)}`)
+  if (v(emp.vacancies)) rows.push(`Open Positions : ${v(emp.vacancies)}`)
   return rows.join('\n')
 }
 

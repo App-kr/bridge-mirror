@@ -125,10 +125,14 @@ const TEXT_COLORS = [
 
 const BG_COLORS = [
   { label: '없음', value: 'transparent' },
+  { label: '옅은노랑', value: '#fefce8' },
   { label: '노랑', value: '#fef08a' },
-  { label: '연두', value: '#bbf7d0' },
-  { label: '하늘', value: '#bae6fd' },
+  { label: '옅은빨강', value: '#fef2f2' },
   { label: '연분홍', value: '#fecdd3' },
+  { label: '연두', value: '#bbf7d0' },
+  { label: '옅은파랑', value: '#eff6ff' },
+  { label: '하늘', value: '#bae6fd' },
+  { label: '옅은보라', value: '#faf5ff' },
   { label: '연보라', value: '#e9d5ff' },
   { label: '주황', value: '#fed7aa' },
 ]
@@ -194,6 +198,13 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
   // 수동 수신자
   const [recipientInput, setRecipientInput] = useState('')
   const [manualEmails, setManualEmails] = useState<string[]>([])
+
+  // 이미지 리사이즈
+  const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null)
+  const [imgRect, setImgRect] = useState<DOMRect | null>(null)
+  const [imgWidth, setImgWidth] = useState('')
+  const resizingRef = useRef(false)
+  const resizeStartRef = useRef({ x: 0, width: 0 })
 
   const editorRef = useRef<HTMLDivElement>(null)
   const attachInputRef = useRef<HTMLInputElement>(null)

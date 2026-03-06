@@ -162,11 +162,12 @@ function buildColDefs(): ColDef[] {
     sortable: true,
     filter: true,
     resizable: true,
-    valueGetter: c.field === 'rowNum' ? (p: { node: { rowIndex: number | null } }) => (p.node.rowIndex ?? 0) + 1 : undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    valueGetter: c.field === 'rowNum' ? (p: any) => (p.node?.rowIndex ?? 0) + 1 : undefined,
     suppressMovable: false,
     headerTooltip: c.headerName,
     // 이메일, 이름은 bold
-    cellStyle: (i < 3) ? { fontWeight: 700 } : {},
+    cellStyle: (i < 3) ? { fontWeight: 700 } : undefined,
   }))
 }
 
@@ -222,7 +223,8 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
     e.api.sizeColumnsToFit()
   }, [])
 
-  const rowStyle = useCallback((params: { data: DataRow }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rowStyle = useCallback((params: any) => {
     if (String(params.data?.source ?? '').includes('★NEW')) {
       return { background: '#fef2f2', fontWeight: 700 }
     }

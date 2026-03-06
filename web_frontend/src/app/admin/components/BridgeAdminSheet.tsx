@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import AllCandidatesGrid from './AllCandidatesGrid'
 
 /* ─── Types ─── */
 type CategoryKey = 'active' | 'past' | 'blacklist'
@@ -720,7 +721,19 @@ export default function BridgeAdminSheet() {
         </div>
       </div>
 
-      {/* 상단 스크롤바 */}
+      {/* 전체 탭: AG Grid 가상 스크롤 */}
+      {tab === 'all' && (
+        <AllCandidatesGrid
+          rows={dbAll}
+          onCopyTo={mv}
+          loading={loading}
+          loadProgress={dbLoadProgress}
+        />
+      )}
+
+      {/* 수동 탭: 상단 스크롤바 + 테이블 */}
+      {tab !== 'all' && (
+      <>
       <div ref={topRef} onScroll={onTS} style={{ overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, height: 16, background: '#e2e8f0' }}>
         <div style={{ width: tw, height: 1 }} />
       </div>
@@ -847,6 +860,8 @@ export default function BridgeAdminSheet() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* 하단 상태바 */}
       <div style={{ background: '#f1f5f9', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>

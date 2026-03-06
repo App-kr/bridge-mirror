@@ -156,6 +156,21 @@ function saveConfirmed(set: Set<string>) {
   }
 }
 
+/* ══════ Employer Order (localStorage) ══════ */
+const ORDER_KEY = 'bridge_employer_order'
+function loadOrder(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(ORDER_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+function saveOrder(ids: string[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(ids))
+  }
+}
+
 /* ══════ 기본 열 정의 ══════ */
 const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'no', label: 'No.', visible: true, width: 90 },
@@ -199,6 +214,9 @@ export default function EmployerManagement() {
 
   // NEW 확인
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(loadConfirmed)
+
+  // 순서 변경 추적
+  const [orderChanged, setOrderChanged] = useState(false)
 
   // 메일
   const [showMailComposer, setShowMailComposer] = useState(false)
@@ -245,7 +263,20 @@ export default function EmployerManagement() {
       const json = await res.json()
       if (!json.success) throw new Error(json.message || 'Error')
       const all: EmployerApp[] = (json.data ?? []).filter((a: EmployerApp) => a.type === 'employer')
-      setEmployers(all)
+      // Apply saved order if available
+      const savedOrder = loadOrder()
+      if (savedOrder.length > 0) {
+        const orderMap = new Map(savedOrder.map((id, idx) => [id, idx]))
+        const sorted = [...all].sort((a, b) => {
+          const ai = orderMap.has(a.id) ? orderMap.get(a.id)! : 9999
+          const bi = orderMap.has(b.id) ? orderMap.get(b.id)! : 9999
+          return ai - bi
+        })
+        setEmployers(sorted)
+      } else {
+        setEmployers(all)
+      }
+      setOrderChanged(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed')
     } finally {
@@ -297,6 +328,7 @@ export default function EmployerManagement() {
       if (idx <= 0) return prev
       const next = [...prev]
       const [item] = next.splice(idx, 1)
+      setOrderChanged(true)
       return [item, ...next]
     })
   }, [])
@@ -307,6 +339,7 @@ export default function EmployerManagement() {
       if (idx <= 0) return prev
       const next = [...prev]
       ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+      setOrderChanged(true)
       return next
     })
   }, [])
@@ -317,6 +350,7 @@ export default function EmployerManagement() {
       if (idx >= prev.length - 1) return prev
       const next = [...prev]
       ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      setOrderChanged(true)
       return next
     })
   }, [])
@@ -505,14 +539,30 @@ export default function EmployerManagement() {
         <div className="flex items-center gap-3">
           {actionMsg && <span className="text-[12px] text-green-600 font-medium bg-green-50 px-3 py-1 rounded-lg">{actionMsg}</span>}
 
+          {/* 순서 저장 버튼 (순서가 변경됐을 때만 표시) */}
+          {orderChanged && (
+            <button
+              type="button"
+              onClick={() => {
+                saveOrder(employers.map(e => e.id))
+                setOrderChanged(false)
+                flash('순서 저장 완료!')
+              }}
+              className="px-5 py-2 bg-blue-600 text-white text-[13px] font-bold rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              💾 순서 저장
+            </button>
+          )}
+
           {/* 전체 NEW 확인 버튼 */}
           {newUnconfirmedCount > 0 && (
             <button
               type="button"
               onClick={confirmAll}
-              className="px-3 py-1.5 bg-red-500 text-white text-[12px] font-bold rounded-lg hover:bg-red-600 transition-colors employer-blink"
+              className="px-6 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition-colors employer-blink"
+              style={{ minWidth: 180 }}
             >
-              전체 NEW 확인 ({newUnconfirmedCount})
+              ★ 전체 NEW 확인 ({newUnconfirmedCount})
             </button>
           )}
 
