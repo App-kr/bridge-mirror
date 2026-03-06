@@ -610,6 +610,12 @@ export default function EmployerManagement() {
                   city={extractCity(app.location)}
                   onConfirm={confirmNew}
                   onStatusChange={updateStatus}
+                  onEditMemo={editMemo}
+                  onMoveTop={() => moveTop(app.id)}
+                  onMoveUp={() => moveUp(app.id)}
+                  onMoveDown={() => moveDown(app.id)}
+                  isFirst={idx === 0}
+                  isLast={idx === filtered.length - 1}
                   showDivider={(idx + 1) % PAGE_BREAK_EVERY === 0 && idx < filtered.length - 1}
                 />
               ))}

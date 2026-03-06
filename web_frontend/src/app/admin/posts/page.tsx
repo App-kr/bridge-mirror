@@ -62,7 +62,7 @@ function getInitialBoard(): string {
   return params.get('board') ?? 'all'
 }
 
-/* ── 드래그 핸들 래퍼 ── */
+/* ── 전체 카드 드래그 래퍼 ── */
 function SortablePostWrapper({
   id,
   disabled,
@@ -81,25 +81,14 @@ function SortablePostWrapper({
     zIndex: isDragging ? 999 : undefined,
   }
   return (
-    <div ref={setNodeRef} style={style} className="flex items-start gap-1">
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="mt-[14px] p-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
-        style={{ touchAction: 'none' }}
-        title="드래그하여 순서 변경"
-      >
-        <svg width="12" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <rect x="4" y="3" width="2" height="2" rx="1" />
-          <rect x="4" y="7" width="2" height="2" rx="1" />
-          <rect x="4" y="11" width="2" height="2" rx="1" />
-          <rect x="10" y="3" width="2" height="2" rx="1" />
-          <rect x="10" y="7" width="2" height="2" rx="1" />
-          <rect x="10" y="11" width="2" height="2" rx="1" />
-        </svg>
-      </button>
-      <div className="flex-1 min-w-0">{children}</div>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`touch-none select-none ${disabled ? '' : 'cursor-grab active:cursor-grabbing'} ${isDragging ? 'shadow-xl ring-2 ring-blue-400 rounded-xl' : ''}`}
+    >
+      {children}
     </div>
   )
 }
@@ -404,7 +393,9 @@ export default function AdminPostsPage() {
       <>
         <div className={`card !py-3 flex items-start gap-3 ${p.pinned === 1 ? 'border-l-4 !border-l-blue-500' : ''}`}>
           <input type="checkbox" checked={selected.has(key)}
-            onChange={() => toggleSelect(key)} className="mt-1 rounded" />
+            onChange={() => toggleSelect(key)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="mt-1 rounded" />
           <div className="text-xs text-gray-400 font-mono w-8 pt-0.5">#{p.id}</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
@@ -423,7 +414,7 @@ export default function AdminPostsPage() {
               #{p.author_hash} · {new Date(p.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })} · 👁 {p.views}
             </p>
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" onClick={() => startEdit(p)}
               className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
               title="Edit">

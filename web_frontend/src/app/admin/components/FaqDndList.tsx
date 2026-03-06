@@ -43,7 +43,7 @@ interface FaqDndListProps {
   onCancel: () => void
 }
 
-/* ── 드래그 핸들 포함 개별 행 ── */
+/* ── 전체 행 드래그 ── */
 function SortableRow({ post }: { post: FaqPost }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: post.id })
@@ -59,31 +59,15 @@ function SortableRow({ post }: { post: FaqPost }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl mb-2 select-none ${
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl mb-2 select-none touch-none cursor-grab active:cursor-grabbing ${
         isDragging ? 'shadow-xl ring-2 ring-blue-400' : 'hover:bg-gray-50'
       }`}
     >
-      {/* 드래그 핸들 */}
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none"
-        title="드래그하여 순서 변경"
-        style={{ touchAction: 'none' }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <rect x="4" y="3" width="2" height="2" rx="1" />
-          <rect x="4" y="7" width="2" height="2" rx="1" />
-          <rect x="4" y="11" width="2" height="2" rx="1" />
-          <rect x="10" y="3" width="2" height="2" rx="1" />
-          <rect x="10" y="7" width="2" height="2" rx="1" />
-          <rect x="10" y="11" width="2" height="2" rx="1" />
-        </svg>
-      </button>
-
       <span className="text-[11px] text-gray-300 font-mono w-8 shrink-0">#{post.id}</span>
       <span className="flex-1 text-[13px] text-gray-800 truncate">{post.title}</span>
+      <span className="text-gray-200 text-[16px] shrink-0">⠿</span>
     </div>
   )
 }
