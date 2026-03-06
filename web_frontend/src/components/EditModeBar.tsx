@@ -26,10 +26,13 @@ export default function EditModeBar() {
 
   return (
     <div style={{
-      position: 'relative',
-      zIndex: 30,
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 9999,
       background: 'linear-gradient(90deg, #fef3c7, #fde68a)',
-      borderBottom: '2px solid #f59e0b',
+      borderTop: '2px solid #f59e0b',
       padding: '10px 24px',
       display: 'flex',
       justifyContent: 'space-between',
@@ -37,7 +40,7 @@ export default function EditModeBar() {
       fontSize: '14px',
       fontWeight: 500,
       color: '#92400e',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      boxShadow: '0 -2px 12px rgba(0,0,0,0.12)',
     }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <Wrench size={14} /> Admin Mode — inline edit/delete available
