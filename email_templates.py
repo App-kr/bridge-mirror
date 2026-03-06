@@ -1,12 +1,11 @@
 """
 BRIDGE Email Templates & Sender
 ================================
-확인 이메일 발송 — Gmail SMTP 사용
+확인 이메일 발송 — api_server._smtp_send() 위임
 구직자: English / 구인자: Korean
 
-환경변수:
-  BRIDGE_SMTP_EMAIL    — Gmail 계정 (bridgejobkr@gmail.com)
-  BRIDGE_SMTP_PASSWORD — Gmail 앱 비밀번호 (16자리)
+SMTP 설정은 .env의 BRIDGE_SMTP_USER / BRIDGE_SMTP_PASS 사용.
+이 파일은 템플릿만 관리. 실제 발송은 api_server._smtp_send() 단일 경로.
 """
 
 import os
@@ -18,32 +17,37 @@ from email.mime.multipart import MIMEMultipart
 
 log = logging.getLogger("bridge.email")
 
-SMTP_EMAIL    = os.getenv("BRIDGE_SMTP_EMAIL", "")
-SMTP_PASSWORD = os.getenv("BRIDGE_SMTP_PASSWORD", "")
-SMTP_HOST     = "smtp.gmail.com"
-SMTP_PORT     = 587
+# SMTP 설정 — api_server.py와 동일 우선순위 체인
+_SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+_SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+_SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMAIL_USER", "")))
+_SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
 
 
 def _send_email(to: str, subject: str, html_body: str) -> bool:
-    """Gmail SMTP로 이메일 발송. 실패 시 False 반환 (예외 미전파)."""
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
+    """Gmail SMTP로 이메일 발송. 실패 시 False 반환 (예외 미전파).
+    SECURITY: CC/BCC 없음, Reply-To bridgejobkr@gmail.com 고정."""
+    if not _SMTP_USER or not _SMTP_PASS:
         log.warning("SMTP 미설정 — 이메일 발송 스킵 (to=%s)", to)
         return False
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["From"]    = f"BRIDGE Recruitment <{SMTP_EMAIL}>"
-        msg["To"]      = to
+        # SECURITY: From/Reply-To 고정
+        msg["From"] = f"BRIDGE <{_SMTP_USER}>"
+        msg["To"] = to
         msg["Subject"] = subject
+        msg["Reply-To"] = "bridgejobkr@gmail.com"
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         ctx = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
             server.ehlo()
             server.starttls(context=ctx)
             server.ehlo()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to, msg.as_string())
+            server.login(_SMTP_USER, _SMTP_PASS)
+            # SECURITY: 수신자 1명만 전달
+            server.sendmail(_SMTP_USER, [to], msg.as_string())
 
         log.info("이메일 발송 성공: %s → %s", subject, to)
         return True

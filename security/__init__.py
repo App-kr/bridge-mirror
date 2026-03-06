@@ -1,20 +1,16 @@
 """
 BRIDGE Security Package
-- encryption: AES-256-GCM PII 암호화/복호화
 - pii_scanner: outbound PII 감지 + fail-closed 차단
-- auth: HMAC 관리자 인증 + Rate Limiter + Input Sanitizer
+- auth: InputSanitizer (XSS/SQL Injection 방지)
+
+암호화는 security_vault.py 단일 모듈 사용 (BRIDGE_FIELD_KEY 환경변수).
+PIICrypto / AdminAuth / RateLimiter 는 기존 api_server.py 구현으로 통합됨.
 """
 
-from security.encryption import PIICrypto, PII_FIELDS_ALL, PII_FIELDS_CRITICAL
 from security.pii_scanner import PIIScanner
-from security.auth import AdminAuth, RateLimiter, InputSanitizer
+from security.auth import InputSanitizer
 
 __all__ = [
-    "PIICrypto",
-    "PIIScanner", 
-    "AdminAuth",
-    "RateLimiter",
+    "PIIScanner",
     "InputSanitizer",
-    "PII_FIELDS_ALL",
-    "PII_FIELDS_CRITICAL",
 ]

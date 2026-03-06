@@ -116,16 +116,16 @@ except Exception as _vault_exc:
     print("[CRITICAL] pip install cryptography 후 재시작하세요.")
     sys.exit(1)
 
-# ── security 패키지 (PII 암호화/스캐너/인증/Rate Limiter/Sanitizer) ────────
+# ── security 패키지 (PIIScanner + InputSanitizer만 사용) ─────────────────
+# 암호화: security_vault.py (위에서 import 완료)
+# PII 스캔 + 입력 검증: security/ 패키지
 try:
-    from security import PIICrypto, PIIScanner, AdminAuth, RateLimiter as SecRateLimiter, InputSanitizer
-    _sec_crypto = PIICrypto()
+    from security import PIIScanner, InputSanitizer
     _sec_scanner = PIIScanner(fail_closed=True)
     _sec_sanitizer = InputSanitizer()
     _SECURITY_PKG_OK = True
 except Exception as _sec_exc:
     _SECURITY_PKG_OK = False
-    _sec_crypto = None
     _sec_scanner = None
     _sec_sanitizer = None
     print(f"[WARN] security 패키지 로드 실패 (선택적): {_sec_exc}")
