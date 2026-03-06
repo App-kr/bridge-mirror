@@ -320,7 +320,7 @@ export default function AdminDashboardPage() {
                       const isNew = !seenPosts.has(String(post.id))
                       return (
                         <tr key={`${post.id}-${idx}`} className="border-t border-[#f5f5f7] hover:bg-[#fafafa] transition-colors">
-                          <td className="px-5 py-3 text-[13px] text-[#86868b] whitespace-nowrap">
+                          <td className="px-5 py-3 text-[13px] text-[#1d1d1f] whitespace-nowrap">
                             <span className="inline-flex items-center gap-1.5">
                               {post.created_at ? new Date(post.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '-'}
                               {isNew && (
@@ -331,7 +331,7 @@ export default function AdminDashboardPage() {
                             </span>
                           </td>
                           <td className="px-5 py-3">
-                            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-medium ${boardColor(post.board ?? '')}`}>
+                            <span className={`inline-block px-2.5 py-0.5 rounded-md text-[13px] font-semibold ${boardColor(post.board ?? '')}`}>
                               {boardLabel(post.board ?? '')}
                             </span>
                           </td>

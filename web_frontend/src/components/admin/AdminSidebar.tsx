@@ -25,7 +25,7 @@ const NAV_CATEGORIES: NavCategory[] = [
     items: [
       { href: '/admin/inbox', label: '수신함' },
       { href: '/admin/candidates', label: '원어민 관리' },
-      { href: '/admin/applications', label: '업체관리' },
+      { href: '/admin/employers', label: '구인자관리' },
       { href: '/admin/interviews', label: '인터뷰' },
       { href: '/admin/matching', label: '프로필 매칭' },
     ],
@@ -77,8 +77,8 @@ export default function AdminSidebar() {
       {/* Logo */}
       <div className="px-5 pt-6 pb-4">
         <a href="/admin" className="block">
-          <span className="text-[15px] font-bold tracking-tight text-[#1d1d1f]">BRIDGE</span>
-          <span className="text-[11px] text-[#86868b] ml-1.5 font-medium">Admin</span>
+          <span className="text-[17px] font-bold tracking-tight text-[#1d1d1f]">BRIDGE</span>
+          <span className="text-[13px] text-[#86868b] ml-1.5 font-medium">Admin</span>
         </a>
       </div>
 
@@ -87,7 +87,7 @@ export default function AdminSidebar() {
         {NAV_CATEGORIES.map((cat) => (
           <div key={cat.title || '_dashboard'}>
             {cat.title && (
-              <div className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#86868b]">
+              <div className="px-2 mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-[#86868b]">
                 {cat.title}
               </div>
             )}
@@ -100,7 +100,7 @@ export default function AdminSidebar() {
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     className={`
-                      group flex items-center px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                      group flex items-center px-2.5 py-2.5 rounded-lg text-[15px] font-medium transition-all duration-150
                       ${active
                         ? 'bg-[#0071e3]/10 text-[#0071e3]'
                         : 'text-[#424245] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]'

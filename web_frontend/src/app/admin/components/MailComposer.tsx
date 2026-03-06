@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EmployerApp } from './DocBlock'
 
 /* ── 발신자 목록 ── */
-const SENDERS = [
+const SENDERS: { label: string; value: string }[] = [
   { label: 'Gmail', value: 'bridgejobkr@gmail.com' },
   { label: 'Naver', value: 'bridgejobkr@naver.com' },
-] as const
+]
 
 /* ── 메일 양식 ── */
 interface MailTemplate {
@@ -103,7 +103,7 @@ interface MailComposerProps {
 }
 
 export default function MailComposer({ recipients, extractProvince, extractCity, onClose }: MailComposerProps) {
-  const [sender, setSender] = useState(SENDERS[0].value)
+  const [sender, setSender] = useState<string>(SENDERS[0].value)
   const [templateIdx, setTemplateIdx] = useState(0)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
   const [attachments, setAttachments] = useState<File[]>([])
