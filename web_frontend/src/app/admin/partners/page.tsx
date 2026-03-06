@@ -342,16 +342,16 @@ export default function AdminPartnersPage() {
                           type="button"
                           onClick={handleSaveEdit}
                           disabled={saving}
-                          className="px-3 py-1 bg-[#0071e3] text-white text-[12px] font-semibold rounded-md hover:bg-[#0077ED] transition-colors disabled:opacity-50"
+                          className="admin-btn admin-btn-save"
                         >
-                          {saving ? '...' : '저장'}
+                          {saving ? '...' : '💾 저장'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditId(null)}
-                          className="px-3 py-1 bg-[#f5f5f7] text-[#424245] text-[12px] font-medium rounded-md hover:bg-[#e8e8ed] transition-colors"
+                          className="admin-btn admin-btn-cancel"
                         >
-                          취소
+                          ✕ 취소
                         </button>
                       </div>
                     ) : (
@@ -359,16 +359,16 @@ export default function AdminPartnersPage() {
                         <button
                           type="button"
                           onClick={() => startEdit(partner)}
-                          className="px-3 py-1 bg-[#f5f5f7] text-[#424245] text-[12px] font-medium rounded-md hover:bg-[#e8e8ed] transition-colors"
+                          className="admin-btn admin-btn-edit"
                         >
-                          수정
+                          ✏️ 수정
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(partner)}
-                          className="px-3 py-1 bg-red-50 text-red-500 text-[12px] font-medium rounded-md hover:bg-red-100 transition-colors"
+                          className="admin-btn admin-btn-delete"
                         >
-                          삭제
+                          − 삭제
                         </button>
                       </div>
                     )}

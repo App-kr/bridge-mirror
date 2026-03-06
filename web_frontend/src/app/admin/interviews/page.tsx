@@ -123,12 +123,12 @@ function EmailPreviewModal({
           {!error && <span />}
           <div className="flex gap-2">
             <button type="button" onClick={onClose}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
-              Cancel
+              className="admin-btn admin-btn-cancel">
+              ✕ 취소
             </button>
             <button type="button" onClick={handleSend} disabled={sending || !preview}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-              {sending ? 'Sending...' : 'Confirm & Send'}
+              className="admin-btn admin-btn-save">
+              {sending ? '발송 중...' : '💾 발송 확인'}
             </button>
           </div>
         </div>
@@ -350,10 +350,10 @@ export default function AdminInterviewsPage() {
 
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">취소</button>
+              className="admin-btn admin-btn-cancel">✕ 취소</button>
             <button type="button" onClick={handleCreate}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              저장
+              className="admin-btn admin-btn-save">
+              💾 저장
             </button>
           </div>
         </div>
@@ -437,8 +437,8 @@ export default function AdminInterviewsPage() {
                     </>
                   )}
                   <button type="button" onClick={() => handleDelete(iv.id)}
-                    className="text-[11px] px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">
-                    Delete
+                    className="admin-btn admin-btn-delete">
+                    − 삭제
                   </button>
                 </div>
               </div>

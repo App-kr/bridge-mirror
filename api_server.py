@@ -2776,46 +2776,43 @@ async def admin_list_applications(request: Request):
                     "updated_at": c["updated_at"],
                 })
 
-            # 구인자 (client_inquiries) + jobs.job_code LEFT JOIN
-            inqs = conn.execute(
-                "SELECT ci.id, ci.school_name, ci.contact_name, ci.email, ci.phone, ci.location, "
-                "ci.start_date, ci.vacancies, ci.teaching_age, ci.schedule, ci.working_hours, ci.salary_raw, "
-                "ci.housing_type, ci.housing_detail, ci.travel_support, ci.benefits, ci.vacation, "
-                "ci.sick_leave, ci.meal, ci.memo, ci.notes, ci.assigned_to, ci.inbox_status, ci.submitted_at, "
-                "ci.source_file, jm.job_code "
-                "FROM client_inquiries ci "
-                "LEFT JOIN (SELECT internal_notes, MIN(job_code) AS job_code FROM jobs GROUP BY internal_notes) jm "
-                "ON ci.memo = jm.internal_notes "
-                "ORDER BY ci.submitted_at DESC"
+            # 구인자 — jobs 테이블 (원본 워드포맷 데이터)
+            job_rows = conn.execute(
+                "SELECT id, job_code, seq, location, city, district, region_name, "
+                "start_date, teaching_age, class_size, working_hours, salary_raw, "
+                "teach_hrs_week, vacation, housing, housing_type, housing_detail, "
+                "native_count, benefits, sick_leave, meal, travel_support, "
+                "internal_notes, status, created_at, source_file "
+                "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
             ).fetchall()
-            for i in inqs:
+            for j in job_rows:
                 apps.append({
-                    "id": str(i["id"]), "type": "employer",
-                    "name": i["contact_name"] or "", "email": i["email"] or "",
-                    "school_name": i["school_name"] or "",
-                    "contact_name": i["contact_name"],
-                    "job_code": i["job_code"],
-                    "source_file": i["source_file"],
-                    "phone": i["phone"],
-                    "location": i["location"],
-                    "start_date": i["start_date"],
-                    "vacancies": i["vacancies"],
-                    "teaching_age": i["teaching_age"],
-                    "schedule": i["schedule"],
-                    "working_hours": i["working_hours"],
-                    "salary_raw": i["salary_raw"],
-                    "housing_type": i["housing_type"],
-                    "housing_detail": i["housing_detail"],
-                    "travel_support": i["travel_support"],
-                    "benefits": i["benefits"],
-                    "vacation": i["vacation"],
-                    "sick_leave": i["sick_leave"],
-                    "meal": i["meal"],
-                    "memo": i["memo"],
-                    "notes": i["notes"],
-                    "assigned_to": i["assigned_to"],
-                    "status": i["inbox_status"] or "pending",
-                    "created_at": i["submitted_at"] or "",
+                    "id": str(j["id"]), "type": "employer",
+                    "name": "", "email": "",
+                    "school_name": "",
+                    "job_code": j["job_code"] or "",
+                    "source_file": j["source_file"],
+                    "location": j["location"] or "",
+                    "city": j["city"] or "",
+                    "start_date": j["start_date"],
+                    "teaching_age": j["teaching_age"],
+                    "class_size": j["class_size"],
+                    "working_hours": j["working_hours"],
+                    "salary_raw": j["salary_raw"],
+                    "teach_hrs_week": str(j["teach_hrs_week"]) if j["teach_hrs_week"] else None,
+                    "vacation": j["vacation"],
+                    "housing": j["housing"],
+                    "housing_type": j["housing_type"],
+                    "housing_detail": j["housing_detail"],
+                    "native_count": j["native_count"],
+                    "benefits": j["benefits"],
+                    "sick_leave": j["sick_leave"],
+                    "meal": j["meal"],
+                    "travel_support": j["travel_support"],
+                    "memo": j["internal_notes"],
+                    "notes": None,
+                    "status": j["status"] or "open",
+                    "created_at": j["created_at"] or "",
                 })
 
             apps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
@@ -2851,9 +2848,10 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
                     (body.status, now_iso, app_id),
                 )
             else:
+                # employer → jobs 테이블 업데이트
                 conn.execute(
-                    "UPDATE client_inquiries SET inbox_status = ?, last_activity = ? WHERE id = ?",
-                    (body.status, now_iso, int(app_id)),
+                    "UPDATE jobs SET status = ? WHERE id = ?",
+                    (body.status, int(app_id)),
                 )
             conn.commit()
             return ok(message=f"{app_id} → {body.status}")

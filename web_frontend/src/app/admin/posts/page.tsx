@@ -416,9 +416,9 @@ export default function AdminPostsPage() {
           </div>
           <div className="flex gap-1 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" onClick={() => startEdit(p)}
-              className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+              className="admin-btn admin-btn-edit"
               title="Edit">
-              ✏️
+              ✏️ 수정
             </button>
             <button type="button" onClick={() => handlePin(p.board, p.id, p.pinned)}
               className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
@@ -426,9 +426,9 @@ export default function AdminPostsPage() {
               {p.pinned === 1 ? '📌' : '📍'}
             </button>
             <button type="button" onClick={() => handleDelete(p.board, p.id)}
-              className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+              className="admin-btn admin-btn-delete"
               title="Delete">
-              🗑
+              − 삭제
             </button>
           </div>
         </div>
@@ -478,12 +478,12 @@ export default function AdminPostsPage() {
             </div>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setEditId(null)}
-                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
-                취소
+                className="admin-btn admin-btn-cancel">
+                ✕ 취소
               </button>
               <button type="button" onClick={handleEdit} disabled={saving}
-                className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
-                {saving ? '저장 중...' : '수정 저장'}
+                className="admin-btn admin-btn-save">
+                {saving ? '저장 중...' : '💾 저장'}
               </button>
             </div>
           </div>

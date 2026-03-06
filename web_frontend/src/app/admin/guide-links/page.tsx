@@ -168,8 +168,8 @@ function LinkRow({ link, onSave }: { link: GuideLink; onSave: (key: string, url:
       <td className="px-3 py-2">
         {changed && (
           <button type="button"
-            className="text-xs text-blue-600 font-medium hover:underline"
-            onClick={() => onSave(link.link_key, url, label)}>저장</button>
+            className="admin-btn admin-btn-save"
+            onClick={() => onSave(link.link_key, url, label)}>💾 저장</button>
         )}
       </td>
     </tr>

@@ -159,16 +159,16 @@ export default function FaqDndList({
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="px-5 py-2 bg-[#1d1d1f] text-white text-[13px] font-semibold rounded-lg hover:bg-[#424245] disabled:opacity-50 transition-colors"
+          className="admin-btn admin-btn-save"
         >
-          {saving ? '저장 중...' : '순서 저장'}
+          {saving ? '저장 중...' : '💾 순서 저장'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-5 py-2 bg-gray-100 text-gray-600 text-[13px] font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          className="admin-btn admin-btn-cancel"
         >
-          취소
+          ✕ 취소
         </button>
       </div>
     </div>

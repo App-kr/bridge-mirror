@@ -285,12 +285,12 @@ export default function AdminBoardsPage() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button type="button" onClick={() => setEditId(null)}
-                      className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
-                      취소
+                      className="admin-btn admin-btn-cancel">
+                      ✕ 취소
                     </button>
                     <button type="button" onClick={handleEdit} disabled={saving}
-                      className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
-                      {saving ? '저장 중...' : '수정 저장'}
+                      className="admin-btn admin-btn-save">
+                      {saving ? '저장 중...' : '💾 저장'}
                     </button>
                   </div>
                 </div>
