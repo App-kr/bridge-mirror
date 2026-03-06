@@ -724,8 +724,8 @@ export default function BridgeAdminSheet() {
       {/* 전체 탭: AG Grid 가상 스크롤 */}
       {tab === 'all' && (
         <AllCandidatesGrid
-          rows={dbAll}
-          onCopyTo={mv}
+          rows={dbAll as Record<string, string | number>[]}
+          onCopyTo={mv as (row: Record<string, string | number>, cat: 'active' | 'past' | 'blacklist') => void}
           loading={loading}
           loadProgress={dbLoadProgress}
         />

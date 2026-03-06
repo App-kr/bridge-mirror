@@ -257,6 +257,68 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     return () => editor.removeEventListener('paste', handlePaste)
   }, [])
 
+  /* 이미지 선택 outline 관리 */
+  useEffect(() => {
+    editorRef.current?.querySelectorAll('img').forEach(img => {
+      (img as HTMLImageElement).style.outline = ''
+    })
+    if (selectedImg) {
+      selectedImg.style.outline = '2px solid #0071E3'
+      selectedImg.style.outlineOffset = '2px'
+    }
+  }, [selectedImg])
+
+  /* 이미지 리사이즈 드래그 */
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current || !selectedImg) return
+      const dx = e.clientX - resizeStartRef.current.x
+      const newW = Math.max(40, resizeStartRef.current.width + dx)
+      selectedImg.style.width = `${newW}px`
+      selectedImg.style.height = 'auto'
+      setImgRect(selectedImg.getBoundingClientRect())
+      setImgWidth(String(Math.round(newW)))
+    }
+    const onUp = () => { resizingRef.current = false }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [selectedImg])
+
+  /* 이미지 클릭 감지 */
+  const handleEditorClick = (e: React.MouseEvent) => {
+    closePopovers()
+    const target = e.target as HTMLElement
+    if (target.tagName === 'IMG') {
+      const img = target as HTMLImageElement
+      setSelectedImg(img)
+      setImgRect(img.getBoundingClientRect())
+      setImgWidth(String(img.offsetWidth))
+    } else {
+      setSelectedImg(null)
+      setImgRect(null)
+    }
+  }
+
+  /* 이미지 크기 설정 */
+  const applyImgWidth = (w: string | number) => {
+    if (!selectedImg) return
+    selectedImg.style.width = typeof w === 'number' ? `${w}px` : w
+    selectedImg.style.height = 'auto'
+    setImgRect(selectedImg.getBoundingClientRect())
+    setImgWidth(String(selectedImg.offsetWidth))
+  }
+
+  /* 이미지 삭제 */
+  const deleteSelectedImg = () => {
+    selectedImg?.remove()
+    setSelectedImg(null)
+    setImgRect(null)
+  }
+
   /* 첨부파일 추가 */
   const addFiles = (files: FileList | File[]) => {
     setAttachments(prev => [...prev, ...Array.from(files)])
@@ -402,11 +464,11 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     }
   }
 
-  /* 팔레트 닫기 */
+  /* 팔레트/패널 닫기 */
   const closePopovers = () => {
     setShowTextColor(false)
     setShowBgColor(false)
-    if (!showLinkPanel) return
+    setShowLinkPanel(false)
   }
 
   /* 발송 완료 화면 */
@@ -771,7 +833,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                 ref={editorRef}
                 contentEditable
                 suppressContentEditableWarning
-                onClick={closePopovers}
+                onClick={handleEditorClick}
                 className="w-full min-h-[240px] max-h-[360px] overflow-y-auto px-4 py-3 text-[13px] border border-gray-200 rounded-b-lg focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 bg-white leading-relaxed"
                 style={{ fontFamily: 'Nanum Gothic, sans-serif' }}
               />
@@ -826,6 +888,105 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
             </div>
           </div>
         </div>
+
+        {/* ── 이미지 선택 툴바 (fixed overlay) ── */}
+        {selectedImg && imgRect && (
+          <>
+            {/* 툴바 */}
+            <div
+              style={{
+                position: 'fixed',
+                left: Math.max(4, imgRect.left),
+                top: Math.max(4, imgRect.top - 40),
+                zIndex: 10000,
+                background: '#1d1d1f',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+              }}
+              onMouseDown={e => e.preventDefault()}
+            >
+              {/* 프리셋 */}
+              {[
+                { label: '원본', value: 'auto' },
+                { label: '25%', value: '25%' },
+                { label: '50%', value: '50%' },
+                { label: '75%', value: '75%' },
+                { label: '100%', value: '100%' },
+              ].map(p => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); applyImgWidth(p.value) }}
+                  style={{
+                    background: 'rgba(255,255,255,0.12)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    padding: '2px 7px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <span style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.2)' }} />
+              {/* 픽셀 직접입력 */}
+              <input
+                type="number"
+                value={imgWidth}
+                onChange={e => setImgWidth(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') applyImgWidth(Number(imgWidth)) }}
+                onBlur={() => { if (imgWidth) applyImgWidth(Number(imgWidth)) }}
+                style={{
+                  width: '52px', background: 'rgba(255,255,255,0.12)',
+                  border: 'none', borderRadius: '4px', color: '#fff',
+                  fontSize: '11px', padding: '2px 5px', outline: 'none', textAlign: 'center',
+                }}
+                placeholder="px"
+              />
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>px</span>
+              <span style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.2)' }} />
+              {/* 삭제 */}
+              <button
+                type="button"
+                onMouseDown={e => { e.preventDefault(); deleteSelectedImg() }}
+                style={{
+                  background: 'rgba(239,68,68,0.3)', border: 'none',
+                  borderRadius: '4px', color: '#fca5a5',
+                  fontSize: '11px', padding: '2px 7px', cursor: 'pointer',
+                }}
+              >
+                삭제
+              </button>
+            </div>
+            {/* 우하단 리사이즈 핸들 */}
+            <div
+              style={{
+                position: 'fixed',
+                left: imgRect.right - 9,
+                top: imgRect.bottom - 9,
+                width: 16,
+                height: 16,
+                background: '#0071E3',
+                border: '2px solid #fff',
+                borderRadius: '3px',
+                cursor: 'se-resize',
+                zIndex: 10000,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+              }}
+              onMouseDown={e => {
+                e.preventDefault()
+                resizingRef.current = true
+                resizeStartRef.current = { x: e.clientX, width: selectedImg.offsetWidth }
+              }}
+            />
+          </>
+        )}
 
         {/* 하단 발송 바 */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0 bg-white">

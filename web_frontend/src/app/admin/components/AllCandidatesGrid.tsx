@@ -194,26 +194,13 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
   }), [])
 
   const getContextMenuItems = useCallback(
-    (params: GetContextMenuItemsParams): (string | MenuItemDef)[] => {
+    (params: GetContextMenuItemsParams): MenuItemDef[] => {
       const row = params.node?.data as DataRow | undefined
       if (!row) return []
       return [
-        {
-          name: '👤 구직활동중으로 복사',
-          action: () => onCopyTo(row, 'active'),
-        },
-        {
-          name: '✅ 체결완료로 복사',
-          action: () => onCopyTo(row, 'past'),
-        },
-        {
-          name: '⛔ 블랙리스트로 복사',
-          action: () => onCopyTo(row, 'blacklist'),
-        },
-        'separator',
-        'copy',
-        'copyWithHeaders',
-        'export',
+        { name: '👤 구직활동중으로 복사', action: () => onCopyTo(row, 'active') },
+        { name: '✅ 체결완료로 복사', action: () => onCopyTo(row, 'past') },
+        { name: '⛔ 블랙리스트로 복사', action: () => onCopyTo(row, 'blacklist') },
       ]
     },
     [onCopyTo]
@@ -224,11 +211,11 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
   }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rowStyle = useCallback((params: any) => {
+  const rowStyle = useCallback((params: any): Record<string, string | number> | undefined => {
     if (String(params.data?.source ?? '').includes('★NEW')) {
       return { background: '#fef2f2', fontWeight: 700 }
     }
-    return {}
+    return undefined
   }, [])
 
   return (

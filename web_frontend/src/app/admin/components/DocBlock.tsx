@@ -359,7 +359,7 @@ export default function DocBlock({
             onChange={e => onStatusChange(employer.id, e.target.value)}
             style={{ fontSize: '0.78rem', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd', background: '#fafafa', cursor: 'pointer' }}
           >
-            {['new', 'contacted', 'interviewing', 'hired', 'rejected', 'hold', 'blacklist'].map(s => (
+            {['open', 'contacted', 'hired', 'hold', 'closed', 'blacklist'].map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
