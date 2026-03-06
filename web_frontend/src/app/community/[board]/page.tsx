@@ -807,7 +807,7 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -914,7 +914,7 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
 
       {/* ── Regular Post List ── */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
+        <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
         {regularPosts.length === 0 ? (
           <p className="text-[#86868b] text-center py-16">No posts yet.</p>
         ) : editMode ? (
@@ -1368,7 +1368,7 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 // ══════════════════════════════════════════════════════════════════════════════
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
-function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
+function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
   const cardContent = (p: Post, i: number) => (
     <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
       <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
@@ -1399,7 +1399,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
+      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
       {editMode ? (
         <SortableContainer
           items={posts.map(p => String(p.id))}
@@ -1429,7 +1429,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 // ══════════════════════════════════════════════════════════════════════════════
 // PHOTO-CARDS — Korea
 // ══════════════════════════════════════════════════════════════════════════════
-function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
   const photoCard = (p: Post, i: number) => {
     const imgKey = getPostImageKey(p.title)
     return (
@@ -1461,7 +1461,7 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} />
+      <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
       {editMode ? (
         <SortableContainer
           items={posts.map(p => String(p.id))}
