@@ -2,10 +2,28 @@
 
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  Video,
+  MessageSquare,
+  Mail,
+  FileText,
+  MailCheck,
+  Link2,
+  Image,
+  Megaphone,
+  Handshake,
+  Settings,
+  CreditCard,
+  Brain,
+} from 'lucide-react'
 
 interface NavItem {
   href: string
   label: string
+  icon: React.ReactNode
 }
 
 interface NavCategory {
@@ -13,52 +31,53 @@ interface NavCategory {
   items: NavItem[]
 }
 
+const ICON_SIZE = 17
+
 const NAV_CATEGORIES: NavCategory[] = [
   {
     title: '',
     items: [
-      { href: '/admin', label: '대시보드' },
+      { href: '/admin', label: '대시보드', icon: <LayoutDashboard size={ICON_SIZE} /> },
     ],
   },
   {
     title: '인력 관리',
     items: [
-      { href: '/admin/inbox', label: '수신함' },
-      { href: '/admin/candidates', label: '원어민 관리' },
-      { href: '/admin/employers', label: '구인자관리' },
-      { href: '/admin/interviews', label: '인터뷰' },
-      { href: '/admin/matching', label: '프로필 매칭' },
+      { href: '/admin/candidates', label: '원어민 관리', icon: <Users size={ICON_SIZE} /> },
+      { href: '/admin/employers', label: '구인자 관리', icon: <Building2 size={ICON_SIZE} /> },
+      { href: '/admin/interviews', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
+      { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
+    ],
+  },
+  {
+    title: '메일 관리',
+    items: [
+      { href: '/admin/mail-send', label: '메일 발송', icon: <Mail size={ICON_SIZE} /> },
+      { href: '/admin/email-templates', label: '이메일 템플릿', icon: <FileText size={ICON_SIZE} /> },
+      { href: '/admin/mail-logs', label: '메일 수발신 관리', icon: <MailCheck size={ICON_SIZE} /> },
     ],
   },
   {
     title: '게시판 관리',
     items: [
-      { href: '/admin/posts', label: '게시글' },
-      { href: '/admin/boards', label: '보드 관리' },
-      { href: '/admin/banners', label: '배너' },
-      { href: '/admin/guide-links', label: '가이드 링크' },
+      { href: '/admin/posts', label: '전체 게시물', icon: <FileText size={ICON_SIZE} /> },
+      { href: '/admin/guide-links', label: '링크 관리', icon: <Link2 size={ICON_SIZE} /> },
     ],
   },
   {
     title: '광고 관리',
     items: [
-      { href: '/admin/ad-posts', label: 'Ad Posts' },
-      { href: '/admin/email-templates', label: '이메일 템플릿' },
+      { href: '/admin/banners', label: '배너 관리', icon: <Image size={ICON_SIZE} /> },
+      { href: '/admin/ad-posts', label: 'AD 광고 관리', icon: <Megaphone size={ICON_SIZE} /> },
     ],
   },
   {
     title: '사이트 관리',
     items: [
-      { href: '/admin/partners', label: '파트너' },
-      { href: '/admin/settings', label: '설정' },
-    ],
-  },
-  {
-    title: '운영',
-    items: [
-      { href: '/admin/jobs', label: '구인 관리' },
-      { href: '/admin/payments', label: '결제' },
-      { href: '/admin/inquiries', label: '문의' },
+      { href: '/admin/partners', label: '파트너', icon: <Handshake size={ICON_SIZE} /> },
+      { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
+      { href: '/admin/payments', label: '결제', icon: <CreditCard size={ICON_SIZE} /> },
+      { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
     ],
   },
 ]
@@ -83,11 +102,11 @@ export default function AdminSidebar() {
       </div>
 
       {/* Nav Items */}
-      <div className="flex-1 overflow-y-auto px-3 pb-6 space-y-5">
+      <div className="flex-1 overflow-y-auto px-3 pb-6">
         {NAV_CATEGORIES.map((cat) => (
           <div key={cat.title || '_dashboard'}>
             {cat.title && (
-              <div className="px-2 mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-[#86868b]">
+              <div className="px-2 mb-1 mt-5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                 {cat.title}
               </div>
             )}
@@ -100,17 +119,20 @@ export default function AdminSidebar() {
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     className={`
-                      group flex items-center px-2.5 py-2.5 rounded-lg text-[15px] font-medium transition-all duration-150
+                      group flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[14px] font-medium transition-all duration-150
                       ${active
-                        ? 'bg-[#0071e3]/10 text-[#0071e3]'
-                        : 'text-[#424245] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]'
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-[#424245] hover:bg-blue-50/50 hover:text-[#1d1d1f]'
                       }
                     `}
                   >
                     {active && (
-                      <span className="w-[3px] h-4 bg-[#0071e3] rounded-full mr-2 shrink-0" />
+                      <span className="absolute left-0 w-[3px] h-5 bg-blue-600 rounded-r-full" />
                     )}
-                    <span className={active ? '' : 'ml-[11px]'}>{item.label}</span>
+                    <span className={`shrink-0 ${active ? 'text-blue-600' : 'text-zinc-400 group-hover:text-zinc-600'}`}>
+                      {item.icon}
+                    </span>
+                    <span>{item.label}</span>
                   </a>
                 )
               })}
@@ -124,7 +146,7 @@ export default function AdminSidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-[240px] shrink-0 border-r border-[#e5e5e7] bg-white/80 backdrop-blur-xl h-screen sticky top-0 flex-col">
+      <aside className="hidden lg:flex w-[240px] shrink-0 border-r border-[#e5e5e7] bg-white h-screen sticky top-0 flex-col relative">
         {sidebarContent}
       </aside>
 
@@ -151,7 +173,7 @@ export default function AdminSidebar() {
             className="lg:hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="lg:hidden fixed inset-y-0 left-0 w-[280px] bg-white z-50 shadow-2xl">
+          <aside className="lg:hidden fixed inset-y-0 left-0 w-[280px] bg-white z-50 shadow-2xl relative">
             {sidebarContent}
           </aside>
         </>
