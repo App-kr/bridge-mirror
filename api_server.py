@@ -32,6 +32,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Any
 import hashlib
+import hmac
 import asyncio
 import threading
 
@@ -951,6 +952,19 @@ def _log_unauthorized_access(request: Request):
         pass
 
 
+def _verify_admin_password(input_pw: str, stored: str) -> bool:
+    """평문 또는 pbkdf2 해시 비교 (하위 호환)"""
+    if stored.startswith("pbkdf2:sha256:"):
+        try:
+            _, _, iterations, salt, dk_hex = stored.split(":", 4)
+            dk = hashlib.pbkdf2_hmac("sha256", input_pw.encode(), salt.encode(), int(iterations))
+            return hmac.compare_digest(dk.hex(), dk_hex)
+        except Exception:
+            return False
+    # 기존 평문 비교 (마이그레이션 전 호환)
+    return hmac.compare_digest(input_pw, stored)
+
+
 def _check_admin(request: Request):
     """ADMIN_API_KEY 헤더 검증. 프로덕션에서 키 미설정 시 접근 차단."""
     if not _ADMIN_KEY:
@@ -976,7 +990,7 @@ async def admin_login(request: Request):
     pw = str(body.get("password", ""))
     if not _ADMIN_PW or not _ADMIN_KEY:
         raise HTTPException(503, "관리자 인증이 설정되지 않았습니다.")
-    if pw != _ADMIN_PW:
+    if not _verify_admin_password(pw, _ADMIN_PW):
         raise HTTPException(403, "비밀번호가 올바르지 않습니다.")
     # 로그인 성공 → 해당 IP 블랙리스트 자동 리셋
     try:
