@@ -1004,6 +1004,34 @@ async def admin_login(request: Request):
     return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
 
 
+@app.post("/api/admin/change-password", tags=["admin"])
+async def admin_change_password(request: Request):
+    """관리자 비밀번호 변경 — PBKDF2 해시로 .env 업데이트."""
+    _check_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    new_pw = str(body.get("new_password", "")).strip()
+    if len(new_pw) < 8:
+        raise HTTPException(400, "비밀번호는 8자 이상이어야 합니다.")
+    import secrets as _sec
+    import re as _re
+    salt = _sec.token_hex(16)
+    iterations = 260000
+    dk = hashlib.pbkdf2_hmac("sha256", new_pw.encode(), salt.encode(), iterations)
+    new_hash = f"pbkdf2:sha256:{iterations}:{salt}:{dk.hex()}"
+    env_path = Path(__file__).resolve().parent / ".env"
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+        updated = _re.sub(r"^ADMIN_PASSWORD=.*$", f"ADMIN_PASSWORD={new_hash}",
+                          content, flags=_re.MULTILINE)
+        env_path.write_text(updated, encoding="utf-8")
+    global _ADMIN_PW
+    _ADMIN_PW = new_hash
+    return ok(data={"hash": new_hash}, message="비밀번호 변경 완료. 서버 재시작 후 완전 적용됩니다.")
+
+
 @app.post("/api/admin/reset-blacklist", tags=["admin"])
 async def admin_reset_blacklist(request: Request):
     """IP 블랙리스트 초기화 (관리자 전용)."""
