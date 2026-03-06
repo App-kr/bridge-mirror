@@ -268,6 +268,14 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     }
   }, [selectedImg])
 
+  /* 이미지 선택 중 스크롤 시 툴바/핸들 위치 갱신 */
+  useEffect(() => {
+    if (!selectedImg) return
+    const update = () => setImgRect(selectedImg.getBoundingClientRect())
+    document.addEventListener('scroll', update, true)
+    return () => document.removeEventListener('scroll', update, true)
+  }, [selectedImg])
+
   /* 이미지 리사이즈 드래그 */
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -568,7 +576,16 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                   }
                 }}
                 onBlur={parseRecipientInput}
-                onPaste={() => setTimeout(parseRecipientInput, 50)}
+                onPaste={(e: React.ClipboardEvent<HTMLInputElement>) => {
+                  // stale closure 방지: 클립보드 데이터를 이벤트에서 직접 읽어 파싱
+                  e.preventDefault()
+                  const pasted = e.clipboardData.getData('text')
+                  const combined = (recipientInput + ' ' + pasted).trim()
+                  const emails = parseEmails(combined)
+                  const fresh = emails.filter(em => !manualEmails.includes(em))
+                  if (fresh.length > 0) setManualEmails(prev => [...prev, ...fresh])
+                  setRecipientInput('')
+                }}
                 placeholder="이메일 직접 추가 — 콤마·세미콜론·줄바꿈으로 여러 개 붙여넣기 가능"
                 className="w-full px-3 py-2 text-[12px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
               />
@@ -713,7 +730,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                     <span className="w-4 h-4 rounded border border-gray-300 block" style={{ background: 'linear-gradient(135deg, #fef08a 50%, #bae6fd 50%)' }} />
                   </button>
                   {showBgColor && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1 z-50 w-[110px]">
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1 z-50 w-[165px]">
                       {BG_COLORS.map(c => (
                         <button
                           key={c.value}
