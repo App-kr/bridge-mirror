@@ -71,6 +71,7 @@ function tryParse<T>(val: string | undefined, fallback: T): T {
 export default function MegaMenu() {
   const [active, setActive] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [navKey, setNavKey] = useState(0)
   const pathname = usePathname()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isAdminPage = pathname?.startsWith('/admin')
@@ -142,7 +143,8 @@ export default function MegaMenu() {
           }
         }
       })
-      .catch(() => { /* keep defaults */ })
+      .then(() => setNavKey(k => k + 1))
+      .catch(() => { setNavKey(k => k + 1) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -162,7 +164,7 @@ export default function MegaMenu() {
         setActive(p)
       }
       const leave = () => {
-        timer.current = setTimeout(() => setActive(null), 180)
+        timer.current = setTimeout(() => setActive(null), 350)
       }
 
       el.addEventListener('mouseenter', enter)
@@ -174,7 +176,7 @@ export default function MegaMenu() {
     })
 
     return () => cleanups.forEach((fn) => fn())
-  }, [pathname, isAdminPage])
+  }, [pathname, isAdminPage, navKey])
 
   const panelEnter = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)

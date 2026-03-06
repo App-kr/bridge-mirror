@@ -49,10 +49,13 @@
   font-size: 21px !important;
 }
 
-/* 네비 링크: 폰트 크기 약간 증가 */
+/* 네비 링크: 폰트 크기 약간 증가 + nav 바 전체 높이 채움 (hover gap 제거) */
 .nav-link {
   font-size: 13px !important;
-  padding: 8px 14px !important;
+  padding: 0 14px !important;
+  align-self: stretch !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
 /* ── Apply 버튼: 파란색 (#2563EB) ── */

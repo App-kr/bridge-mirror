@@ -322,41 +322,90 @@ export default function BridgeAdminSheet() {
     } catch { /* ignore */ }
   }, [cols, rh, ready, frozenCols])
 
-  /* DB 연동 — Active candidates 로드 */
+  /* DB 연동 — 전체 로드 (Active 우선, Inactive 백그라운드) */
   const fetchFromDB = useCallback(async () => {
     setLoading(true)
+    const edits = loadEdits()
+    let idxOffset = 0
+
+    const applyRows = (
+      incoming: DataRow[],
+      prev: DataStore,
+      key: CategoryKey,
+    ): DataRow[] =>
+      incoming.map(dbRow => {
+        const cid = String(dbRow._cid ?? '')
+        if (cid && editedCids.current.has(cid)) {
+          const existing = prev[key].find(r => String(r._cid ?? '') === cid)
+          return existing ?? dbRow
+        }
+        return dbRow
+      })
+
     try {
-      const res = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
-      if (!res.ok) return
-      const json = await res.json()
-      const candidates: Record<string, unknown>[] = json.data?.candidates ?? []
-      const edits = loadEdits()
-      const mapped = candidates.map((c, i) => mapCandidateToRow(c, i, edits))
-      const nc = mapped.filter(r => String(r.source).includes('★NEW')).length
-      setNewCount(nc)
-      // 유저가 편집하지 않은 행만 DB 데이터로 갱신
-      setData(p => ({
-        ...p,
-        active: mapped.map(dbRow => {
-          const cid = String(dbRow._cid ?? '')
-          if (cid && editedCids.current.has(cid)) {
-            const existing = p.active.find(r => String(r._cid ?? '') === cid)
-            return existing ?? dbRow
-          }
-          return dbRow
-        }),
-      }))
-      setLastSync(new Date().toLocaleTimeString())
-    } catch { /* ignore */ } finally {
-      setLoading(false)
-    }
+      /* 1단계: Active 먼저 (빠름) */
+      const resA = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
+      if (resA.ok) {
+        const jsonA = await resA.json()
+        const rowsA: Record<string, unknown>[] = jsonA.data?.candidates ?? []
+        const mappedA = rowsA.map((c, i) => mapCandidateToRow(c, idxOffset + i, edits))
+        idxOffset += rowsA.length
+        const nc = mappedA.filter(r => String(r.source).includes('★NEW')).length
+        setNewCount(nc)
+        setData(p => ({ ...p, active: applyRows(mappedA, p, 'active') }))
+        setLastSync(new Date().toLocaleTimeString())
+        setLoading(false)   // Active 표시 후 로딩 해제
+      }
+    } catch { setLoading(false) }
+
+    try {
+      /* 2단계: Inactive (백그라운드, 1000개씩 청크) */
+      const total = 3100
+      const CHUNK = 1000
+      for (let offset = 0; offset < total; offset += CHUNK) {
+        const resI = await fetch(
+          `${API}/api/admin/candidates?status=Inactive&limit=${CHUNK}&offset=${offset}`,
+          { headers: headers() },
+        )
+        if (!resI.ok) break
+        const jsonI = await resI.json()
+        const rowsI: Record<string, unknown>[] = jsonI.data?.candidates ?? []
+        if (!rowsI.length) break
+        const mappedI = rowsI.map((c, i) => mapCandidateToRow(c, idxOffset + offset + i, edits))
+        setData(p => ({ ...p, past: [...p.past, ...applyRows(mappedI, p, 'past')] }))
+        setLastSync(new Date().toLocaleTimeString())
+      }
+    } catch { /* ignore */ }
   }, [headers])
 
   useEffect(() => {
     fetchFromDB()
-    const iv = setInterval(fetchFromDB, 60_000)
+    // 60초마다 Active만 재폴링 (신규 폼 지원자 감지)
+    const iv = setInterval(async () => {
+      const edits = loadEdits()
+      try {
+        const res = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
+        if (!res.ok) return
+        const json = await res.json()
+        const rows: Record<string, unknown>[] = json.data?.candidates ?? []
+        const mapped = rows.map((c, i) => mapCandidateToRow(c, i, edits))
+        const nc = mapped.filter(r => String(r.source).includes('★NEW')).length
+        setNewCount(nc)
+        setData(p => ({
+          ...p,
+          active: mapped.map(dbRow => {
+            const cid = String(dbRow._cid ?? '')
+            if (cid && editedCids.current.has(cid)) {
+              return p.active.find(r => String(r._cid ?? '') === cid) ?? dbRow
+            }
+            return dbRow
+          }),
+        }))
+        setLastSync(new Date().toLocaleTimeString())
+      } catch { /* ignore */ }
+    }, 60_000)
     return () => clearInterval(iv)
-  }, [fetchFromDB])
+  }, [fetchFromDB, headers])
 
   /* Ctrl+Z */
   useEffect(() => {
