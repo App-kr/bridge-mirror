@@ -93,7 +93,11 @@ function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Recor
     category: ov.category ?? cat,
     stage: ov.stage ?? 'none',
     mailStatus: ov.mailStatus ?? '',
-    photoUrl: String(c.photo_url ?? ov.photoUrl ?? ''),
+    photoUrl: (() => {
+      const raw = String(c.photo_url ?? ov.photoUrl ?? '')
+      if (!raw) return ''
+      return raw.startsWith('http') ? raw : `${API}${raw}`
+    })(),
     photoSize: Number(ov.photoSize ?? 50),
     email: String(c.email ?? ''),
     name: String(c.full_name ?? ''),
@@ -338,34 +342,45 @@ export default function BridgeAdminSheet() {
     try { localStorage.setItem(SK_DATA, JSON.stringify(data)) } catch { /* ignore */ }
   }, [data, ready])
 
-  /* DB 연동 — 전체 탭(dbAll)에 모든 구직자 로드, 100건씩 청크 */
+  /* DB 연동 — 4개 병렬 청크로 전체 로드 */
   const fetchFromDB = useCallback(async () => {
     setLoading(true)
     setDbLoadProgress(0)
     const edits = loadEdits()
-    const CHUNK = 100
-    let offset = 0
-    let accumulated: DataRow[] = []
+    const CHUNK = 800   // 4 병렬 × 800 = 3200 (3059명 커버)
+    const PARALLEL = 4
 
     try {
-      while (true) {
-        const res = await fetch(
-          `${API}/api/admin/candidates?limit=${CHUNK}&offset=${offset}`,
-          { headers: headers() }
-        )
-        if (!res.ok) break
-        const json = await res.json()
-        const rows: Record<string, unknown>[] = json.data?.candidates ?? []
-        if (!rows.length) break
+      // 1) 총 건수 파악
+      const cntRes = await fetch(`${API}/api/admin/candidates?limit=1&offset=0`, { headers: headers() })
+      if (!cntRes.ok) return
+      const cntJson = await cntRes.json()
+      const total: number = cntJson.data?.total ?? 4000
 
-        const mapped = rows.map((c, i) => mapCandidateToRow(c, offset + i, edits))
-        accumulated = [...accumulated, ...mapped]
-        setDbAll([...accumulated])          // 100건마다 화면 갱신
-        setDbLoadProgress(accumulated.length)
-        offset += CHUNK
-        if (rows.length < CHUNK) break     // 마지막 페이지
+      // 2) 오프셋 목록 생성 후 병렬 배치 처리
+      const offsets = Array.from({ length: Math.ceil(total / CHUNK) }, (_, i) => i * CHUNK)
+      const allRows: DataRow[] = []
+
+      for (let i = 0; i < offsets.length; i += PARALLEL) {
+        const batch = offsets.slice(i, i + PARALLEL)
+        const results = await Promise.all(
+          batch.map(off =>
+            fetch(`${API}/api/admin/candidates?limit=${CHUNK}&offset=${off}`, { headers: headers() })
+              .then(r => r.ok ? r.json() : { data: { candidates: [] } })
+              .then(j => (j.data?.candidates ?? []) as Record<string, unknown>[])
+          )
+        )
+        let batchIdx = allRows.length
+        for (const rows of results) {
+          const mapped = rows.map((c, i2) => mapCandidateToRow(c, batchIdx + i2, edits))
+          allRows.push(...mapped)
+          batchIdx += rows.length
+        }
+        setDbAll([...allRows])
+        setDbLoadProgress(allRows.length)
       }
-      const nc = accumulated.filter(r => String(r.source).includes('★NEW')).length
+
+      const nc = allRows.filter(r => String(r.source).includes('★NEW')).length
       setNewCount(nc)
       setLastSync(new Date().toLocaleTimeString())
     } catch { /* ignore */ } finally {
@@ -587,10 +602,39 @@ export default function BridgeAdminSheet() {
 
   /* Photo */
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!photoTarget) return; const f = e.target.files?.[0]; if (!f) return
-    const rd = new FileReader()
-    rd.onload = ev2 => { pushU(); upData(x => x.id === photoTarget ? { ...x, photoUrl: ev2.target?.result as string } : x) }
-    rd.readAsDataURL(f); setPT(null)
+    if (!photoTarget) return
+    const f = e.target.files?.[0]; if (!f) return
+    const tid = photoTarget; setPT(null)
+
+    // 1) 서버 업로드 → DB PATCH → 로컬 state 갱신
+    const fd = new FormData(); fd.append('file', f)
+    fetch(`${API}/api/admin/upload-image`, { method: 'POST', headers: headers(), body: fd })
+      .then(r => r.ok ? r.json() : null)
+      .then(async j => {
+        const url: string = j?.data?.url ?? ''
+        // 로컬 state 갱신 (전체 + 수동 탭 모두)
+        const fullUrl = url.startsWith('http') ? url : `${API}${url}`
+        const applyUrl = (x: DataRow) => x.id === tid ? { ...x, photoUrl: fullUrl } : x
+        pushU()
+        upData(applyUrl)
+        setDbAll(p => p.map(applyUrl))
+        // DB PATCH (candidate_id 있는 경우)
+        const targetRow = [...data.active, ...data.past, ...data.blacklist, ...dbAll].find(r => r.id === tid)
+        const cid = String(targetRow?._cid ?? '')
+        if (cid && url) {
+          await fetch(`${API}/api/admin/candidates/${cid}`, {
+            method: 'PATCH',
+            headers: { ...headers(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ photo_url: url }),
+          })
+        }
+      })
+      .catch(() => {
+        // 업로드 실패 시 base64 폴백
+        const rd = new FileReader()
+        rd.onload = ev2 => { pushU(); upData(x => x.id === tid ? { ...x, photoUrl: ev2.target?.result as string } : x) }
+        rd.readAsDataURL(f)
+      })
   }
 
   /* CSV */
