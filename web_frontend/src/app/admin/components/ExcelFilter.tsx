@@ -26,29 +26,31 @@ export default function ExcelFilter({ label, options, selected, onChange }: Exce
     ? options.filter(o => o.toLowerCase().includes(search.toLowerCase()))
     : options
 
-  const allSelected = selected.length === 0 || selected.length === options.length
-  const hasSelection = selected.length > 0 && selected.length < options.length
+  const allSelected = selected.length === 0
+  const hasSelection = selected.length > 0
 
-  const toggleAll = () => {
-    if (allSelected) return
-    onChange([])
-  }
+  const toggleAll = () => onChange([])
 
   const toggle = (val: string) => {
-    if (selected.includes(val)) {
+    if (allSelected) {
+      onChange(options.filter(o => o !== val))
+    } else if (selected.includes(val)) {
       const next = selected.filter(s => s !== val)
-      onChange(next)
+      if (next.length === 0) onChange([])
+      else onChange(next)
     } else {
       onChange([...selected, val])
     }
   }
+
+  const isChecked = (val: string) => allSelected || selected.includes(val)
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 text-[12px] border rounded-lg font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-2 text-[12px] border rounded-lg font-medium transition-colors whitespace-nowrap ${
           hasSelection
             ? 'bg-blue-50 border-blue-300 text-blue-700'
             : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -67,7 +69,6 @@ export default function ExcelFilter({ label, options, selected, onChange }: Exce
 
       {open && (
         <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-xl border border-gray-200 shadow-xl z-50 overflow-hidden">
-          {/* Search */}
           <div className="p-2 border-b border-gray-100">
             <input
               type="text"
@@ -79,46 +80,30 @@ export default function ExcelFilter({ label, options, selected, onChange }: Exce
             />
           </div>
 
-          {/* Select All */}
           <div
             className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
             onClick={toggleAll}
           >
-            <input
-              type="checkbox"
-              checked={allSelected}
-              readOnly
-              className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
-            />
+            <input type="checkbox" checked={allSelected} readOnly className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600" />
             <span className="text-[12px] font-semibold text-gray-700">전체선택</span>
           </div>
 
-          {/* Options */}
           <div className="max-h-48 overflow-y-auto">
-            {filtered.map(opt => {
-              const checked = selected.length === 0 || selected.includes(opt)
-              return (
-                <div
-                  key={opt}
-                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-blue-50 cursor-pointer"
-                  onClick={() => toggle(opt)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    readOnly
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
-                  />
-                  <span className="text-[12px] text-gray-700 truncate">{opt}</span>
-                </div>
-              )
-            })}
+            {filtered.map(opt => (
+              <div
+                key={opt}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-blue-50 cursor-pointer"
+                onClick={() => toggle(opt)}
+              >
+                <input type="checkbox" checked={isChecked(opt)} readOnly className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600" />
+                <span className="text-[12px] text-gray-700 truncate">{opt}</span>
+              </div>
+            ))}
             {filtered.length === 0 && (
               <div className="px-3 py-3 text-[12px] text-gray-400 text-center">결과 없음</div>
             )}
           </div>
 
-          {/* Clear */}
           {hasSelection && (
             <div className="p-2 border-t border-gray-100">
               <button
