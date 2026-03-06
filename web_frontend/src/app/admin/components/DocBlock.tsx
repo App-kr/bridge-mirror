@@ -79,6 +79,28 @@ interface DocBlockProps {
   showDivider: boolean
 }
 
+/* 구조화 필드 → 워드뷰 rawText 합성 (notes가 비어있으면 개별 필드로 생성) */
+function buildRawText(emp: EmployerApp, province: string, city: string, jobNo: string): string {
+  if (emp.notes && emp.notes.trim()) return emp.notes.trim()
+  const rows: string[] = []
+  if (province || city) rows.push(`${province} ${city}`.trim())
+  if (jobNo) rows.push(`Job. ${jobNo}`)
+  if (v(emp.start_date)) rows.push(`Starting Date : ${v(emp.start_date)}`)
+  if (v(emp.vacancies)) rows.push(`Open Positions : ${v(emp.vacancies)}`)
+  if (v(emp.teaching_age)) rows.push(`Teaching Age : ${v(emp.teaching_age)}`)
+  if (v(emp.schedule)) rows.push(`Schedule : ${v(emp.schedule)}`)
+  if (v(emp.working_hours)) rows.push(`Working Hours : ${v(emp.working_hours)}`)
+  if (v(emp.salary_raw)) rows.push(`Monthly Salary : ${v(emp.salary_raw)}`)
+  if (v(emp.housing_type)) rows.push(`Housing : ${v(emp.housing_type)}`)
+  if (v(emp.housing_detail)) rows.push(`Housing Details : ${v(emp.housing_detail)}`)
+  if (v(emp.travel_support)) rows.push(`Travel Support : ${v(emp.travel_support)}`)
+  if (v(emp.benefits)) rows.push(`Employee Benefits : ${v(emp.benefits)}`)
+  if (v(emp.vacation)) rows.push(`Vacation : ${v(emp.vacation)}`)
+  if (v(emp.sick_leave)) rows.push(`Sick Leave : ${v(emp.sick_leave)}`)
+  if (v(emp.meal)) rows.push(`Meal : ${v(emp.meal)}`)
+  return rows.join('\n')
+}
+
 export default function DocBlock({
   employer, isNew, isConfirmed, isBlacklist, showPII,
   province, city, jobNo, searchQuery,
@@ -87,7 +109,7 @@ export default function DocBlock({
   showDivider,
 }: DocBlockProps) {
   /* JSX와 동일한 변수명 */
-  const rawText = employer.notes || ''
+  const rawText = buildRawText(employer, province, city, jobNo)
   const lines = rawText ? rawText.split('\n') : []
   const isGlow = isNew && !isConfirmed
   const sq = (searchQuery || '').toLowerCase()
@@ -105,8 +127,8 @@ export default function DocBlock({
 
   useEffect(() => {
     setMemoVal(employer.memo || '')
-    setRawVal(employer.notes || '')
-  }, [employer.memo, employer.notes])
+    setRawVal(buildRawText(employer, province, city, jobNo))
+  }, [employer, province, city, jobNo])
 
   const displayName = employer.school_name || employer.name || ''
   const isNewCode = jobNo.startsWith('N')
