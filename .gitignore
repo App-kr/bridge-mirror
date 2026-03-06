@@ -80,18 +80,22 @@ bridge-overnight/
 .bridge.key
 mail_log_*.json
 
+# ── Archive (large test data, old files) ─────────────────────
+archive/
+tmp_photos/
+
 # ── Misc ──────────────────────────────────────────────────────
 *.bak
 *.tmp
 debug_*.html
 night_shift_test.log
+*.wav
+*.xlsx
 
-# PyInstaller build artifacts
+# ── PyInstaller build artifacts ──────────────────────────────
 bridge_agent/build_temp/
 bridge_agent/dist/
 *.pkg
 *.spec
-bridge_agent/build_temp/
-bridge_agent/dist/
 bridge_agent/*.spec
 bridge_agent/*.ico
