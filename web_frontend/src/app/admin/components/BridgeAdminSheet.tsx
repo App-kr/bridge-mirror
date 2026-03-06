@@ -62,7 +62,8 @@ const TABS: TabDef[] = [
 ]
 const PC = ['#3b82f6', '#ef4444', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#f43e5e', '#84cc16', '#d946ef', '#14b8a6']
 const SK = 'bridge-v10'
-const SK_EDITS = 'bridge-v10-edits'  // {[cid]: {stage, mailStatus, proposal, notice, ...}}
+const SK_EDITS = 'bridge-v10-edits'   // {[cid]: {stage, mailStatus, ...}}
+const SK_DATA  = 'bridge-v10-data'    // {active, past, blacklist} 수동 관리 탭
 const API = API_URL
 
 /* ─── Override localStorage helpers ─── */
@@ -274,6 +275,8 @@ export default function BridgeAdminSheet() {
   const [eSRL, setESRL] = useState<string | null>(null)
   const [eSRV, setESRV] = useState('')
   const [undoStack, setUS] = useState<UndoSnapshot[]>([])
+  const [dbAll, setDbAll] = useState<DataRow[]>([])       // 전체 탭 전용 (DB 원본)
+  const [dbLoadProgress, setDbLoadProgress] = useState(0) // 로드된 건수
   const [loading, setLoading] = useState(false)
   const [lastSync, setLastSync] = useState('')
   const [newCount, setNewCount] = useState(0)
@@ -309,6 +312,13 @@ export default function BridgeAdminSheet() {
         if (p.rh) setRh(p.rh)
         if (p.fc !== undefined) setFC(p.fc)
       }
+      // 수동 탭 데이터 복원 (구직활동중/체결완료/블랙리스트)
+      const sd = localStorage.getItem(SK_DATA)
+      if (sd) {
+        const d = JSON.parse(sd) as DataStore
+        if (d.active || d.past || d.blacklist)
+          setData({ active: d.active || [], past: d.past || [], blacklist: d.blacklist || [] })
+      }
     } catch { /* ignore */ }
     setReady(true)
   }, [])
@@ -322,65 +332,50 @@ export default function BridgeAdminSheet() {
     } catch { /* ignore */ }
   }, [cols, rh, ready, frozenCols])
 
-  /* DB 연동 — 전체 로드 (Active 우선, Inactive 백그라운드) */
+  // 수동 탭(active/past/blacklist) 변경 시 localStorage 저장
+  useEffect(() => {
+    if (!ready) return
+    try { localStorage.setItem(SK_DATA, JSON.stringify(data)) } catch { /* ignore */ }
+  }, [data, ready])
+
+  /* DB 연동 — 전체 탭(dbAll)에 모든 구직자 로드, 100건씩 청크 */
   const fetchFromDB = useCallback(async () => {
     setLoading(true)
+    setDbLoadProgress(0)
     const edits = loadEdits()
-    let idxOffset = 0
-
-    const applyRows = (
-      incoming: DataRow[],
-      prev: DataStore,
-      key: CategoryKey,
-    ): DataRow[] =>
-      incoming.map(dbRow => {
-        const cid = String(dbRow._cid ?? '')
-        if (cid && editedCids.current.has(cid)) {
-          const existing = prev[key].find(r => String(r._cid ?? '') === cid)
-          return existing ?? dbRow
-        }
-        return dbRow
-      })
+    const CHUNK = 100
+    let offset = 0
+    let accumulated: DataRow[] = []
 
     try {
-      /* 1단계: Active 먼저 (빠름) */
-      const resA = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
-      if (resA.ok) {
-        const jsonA = await resA.json()
-        const rowsA: Record<string, unknown>[] = jsonA.data?.candidates ?? []
-        const mappedA = rowsA.map((c, i) => mapCandidateToRow(c, idxOffset + i, edits))
-        idxOffset += rowsA.length
-        const nc = mappedA.filter(r => String(r.source).includes('★NEW')).length
-        setNewCount(nc)
-        setData(p => ({ ...p, active: applyRows(mappedA, p, 'active') }))
-        setLastSync(new Date().toLocaleTimeString())
-        setLoading(false)   // Active 표시 후 로딩 해제
-      }
-    } catch { setLoading(false) }
-
-    try {
-      /* 2단계: Inactive (백그라운드, 1000개씩 청크) */
-      const total = 3100
-      const CHUNK = 1000
-      for (let offset = 0; offset < total; offset += CHUNK) {
-        const resI = await fetch(
-          `${API}/api/admin/candidates?status=Inactive&limit=${CHUNK}&offset=${offset}`,
-          { headers: headers() },
+      while (true) {
+        const res = await fetch(
+          `${API}/api/admin/candidates?limit=${CHUNK}&offset=${offset}`,
+          { headers: headers() }
         )
-        if (!resI.ok) break
-        const jsonI = await resI.json()
-        const rowsI: Record<string, unknown>[] = jsonI.data?.candidates ?? []
-        if (!rowsI.length) break
-        const mappedI = rowsI.map((c, i) => mapCandidateToRow(c, idxOffset + offset + i, edits))
-        setData(p => ({ ...p, past: [...p.past, ...applyRows(mappedI, p, 'past')] }))
-        setLastSync(new Date().toLocaleTimeString())
+        if (!res.ok) break
+        const json = await res.json()
+        const rows: Record<string, unknown>[] = json.data?.candidates ?? []
+        if (!rows.length) break
+
+        const mapped = rows.map((c, i) => mapCandidateToRow(c, offset + i, edits))
+        accumulated = [...accumulated, ...mapped]
+        setDbAll([...accumulated])          // 100건마다 화면 갱신
+        setDbLoadProgress(accumulated.length)
+        offset += CHUNK
+        if (rows.length < CHUNK) break     // 마지막 페이지
       }
-    } catch { /* ignore */ }
+      const nc = accumulated.filter(r => String(r.source).includes('★NEW')).length
+      setNewCount(nc)
+      setLastSync(new Date().toLocaleTimeString())
+    } catch { /* ignore */ } finally {
+      setLoading(false)
+    }
   }, [headers])
 
   useEffect(() => {
     fetchFromDB()
-    // 60초마다 Active만 재폴링 (신규 폼 지원자 감지)
+    // 60초마다 신규 Active 폴링 (★NEW 감지)
     const iv = setInterval(async () => {
       const edits = loadEdits()
       try {
@@ -391,16 +386,12 @@ export default function BridgeAdminSheet() {
         const mapped = rows.map((c, i) => mapCandidateToRow(c, i, edits))
         const nc = mapped.filter(r => String(r.source).includes('★NEW')).length
         setNewCount(nc)
-        setData(p => ({
-          ...p,
-          active: mapped.map(dbRow => {
-            const cid = String(dbRow._cid ?? '')
-            if (cid && editedCids.current.has(cid)) {
-              return p.active.find(r => String(r._cid ?? '') === cid) ?? dbRow
-            }
-            return dbRow
-          }),
-        }))
+        // 전체 dbAll에서 Active 행 갱신
+        setDbAll(p => {
+          const passiveCids = new Set(mapped.map(r => String(r._cid ?? '')))
+          const others = p.filter(r => !passiveCids.has(String(r._cid ?? '')))
+          return [...mapped, ...others]
+        })
         setLastSync(new Date().toLocaleTimeString())
       } catch { /* ignore */ }
     }, 60_000)
@@ -466,7 +457,8 @@ export default function BridgeAdminSheet() {
 
   /* Derived */
   const visCols = useMemo(() => cols.filter(c => c.v !== false), [cols])
-  const allTD = useMemo(() => tab === 'all' ? [...data.active, ...data.past, ...data.blacklist] : (data[tab as CategoryKey] || []), [tab, data])
+  // 전체 탭 = DB 원본(dbAll), 나머지 탭 = 수동 관리
+  const allTD = useMemo(() => tab === 'all' ? dbAll : (data[tab as CategoryKey] || []), [tab, data, dbAll])
   const cur = useMemo(() => {
     let it = [...allTD]
     Object.entries(filters).forEach(([k, v]) => { if (v?.size > 0) it = it.filter(r => v.has(String(r[k] || ''))) })
@@ -474,7 +466,7 @@ export default function BridgeAdminSheet() {
     if (sk) it.sort((a, b) => { const av = String(a[sk] || ''), bv = String(b[sk] || ''); return sd === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) })
     return it
   }, [allTD, filters, q, sk, sd])
-  const cnt = useMemo(() => ({ active: data.active.length, past: data.past.length, blacklist: data.blacklist.length, all: data.active.length + data.past.length + data.blacklist.length }), [data])
+  const cnt = useMemo(() => ({ active: data.active.length, past: data.past.length, blacklist: data.blacklist.length, all: dbAll.length }), [data, dbAll])
   const gFO = useCallback((k: string) => { const v = new Set<string>(); allTD.forEach(r => { const val = String(r[k] || ''); if (val) v.add(val) }); return [...v].sort() }, [allTD])
 
   /* Column resize */
@@ -560,10 +552,23 @@ export default function BridgeAdminSheet() {
   const hC = (e: React.MouseEvent, row: DataRow) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, row }) }
   const mv = (row: DataRow, cat: CategoryKey) => {
     pushU()
-    setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); u[cat] = [...u[cat], { ...row, category: cat }]; return u })
+    if (tab === 'all') {
+      // 전체 탭 → 수동 탭으로 복사 (전체 탭에는 유지)
+      const newId = maxId() + 1
+      setData(p => ({ ...p, [cat]: [...p[cat], { ...row, id: newId, category: cat }] }))
+    } else {
+      // 수동 탭 간 이동
+      setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); u[cat] = [...u[cat], { ...row, category: cat }]; return u })
+    }
     setCtx(null)
   }
-  const dR = (row: DataRow) => { pushU(); setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); return u }); setCtx(null) }
+  // 전체 탭에서는 삭제 불가 (DB 원본), 수동 탭에서만 삭제
+  const dR = (row: DataRow) => {
+    if (tab === 'all') { setCtx(null); return }
+    pushU()
+    setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); return u })
+    setCtx(null)
+  }
   const delSR = (id: string) => { pushU(); setSR(p => p.filter(r => r.id !== id)) }
   const addSR = () => { pushU(); setSR(p => [...p, { id: 's' + Date.now(), label: 'New', bg: '#fff', text: '', h: 40 }]) }
 
@@ -573,7 +578,7 @@ export default function BridgeAdminSheet() {
   }, [])
 
   /* Add rows */
-  const maxId = () => Math.max(...[...data.active, ...data.past, ...data.blacklist].map(r => r.id), 0)
+  const maxId = () => Math.max(...[...data.active, ...data.past, ...data.blacklist, ...dbAll].map(r => r.id), 0)
   const addN = () => { pushU(); const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey; setData(p => ({ ...p, [tt]: [...p[tt], mkRow(maxId() + 1, tt)] })) }
   const addRow = (aid: number) => {
     pushU(); const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
@@ -633,8 +638,8 @@ export default function BridgeAdminSheet() {
               ★ NEW {newCount}명
             </span>
           )}
-          {loading && <span style={{ fontSize: 13, color: '#6b7280' }}>⟳ DB 동기화 중...</span>}
-          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>마지막 동기화: {lastSync}</span>}
+          {loading && <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 700 }}>⟳ DB 로딩 {dbLoadProgress.toLocaleString()}건...</span>}
+          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>DB {dbAll.length.toLocaleString()}명 · {lastSync}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
