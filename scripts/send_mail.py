@@ -1,222 +1,253 @@
-#!/usr/bin/env python3
 """
-BRIDGE — 개별 메일 발송 스크립트
-매 수신자마다 새 SMTP 세션/메일 객체를 생성하여 PII Zero-Leak 보장.
+BRIDGE 개별 메일 발송 스크립트
+- 각 수신자에게 1:1 개별 발송 (BCC 아님, 타인 정보 절대 미노출)
+- SMTP over TLS (Gmail)
+- 테스트 모드: --dry-run으로 실제 발송 없이 확인
 
-사용법:
-  python scripts/send_mail.py --recipients recipients.json --sender bridgejobkr@gmail.com
-  python scripts/send_mail.py --recipients recipients.json --sender bridgejobkr@naver.com
-  python scripts/send_mail.py --dry-run --recipients recipients.json
+사전 준비:
+  Gmail → 2단계 인증 활성화 → 앱 비밀번호 생성
+  환경변수 설정:
+    set BRIDGE_SMTP_USER=bridgejobkr@gmail.com
+    set BRIDGE_SMTP_PASS=앱비밀번호16자리
 
-recipients.json 형식:
-[
-  {
-    "email": "recipient@example.com",
-    "name": "업체명",
-    "region": "서울",
-    "city": "강남",
-    "teachingAge": "Kindergarten",
-    "subject": "메일 제목",
-    "body_html": "<p>HTML 본문</p>"
-  }
-]
+Usage:
+  # 테스트 (발송 안 함, 로그만)
+  python send_mail.py --dry-run
 
-환경변수:
-  BRIDGE_SMTP_USER  — SMTP 인증 사용자 (발신 이메일)
-  BRIDGE_SMTP_PASS  — SMTP 앱 비밀번호 (메인 비밀번호 사용 금지)
+  # 실제 발송 테스트 (3명에게)
+  python send_mail.py
+
+  # JSON 파일에서 수신자 로드
+  python send_mail.py --recipients recipients.json
 """
 
-import argparse
-import json
-import logging
-import os
+from __future__ import annotations
+
 import smtplib
+import json
+import os
 import sys
-from datetime import datetime
-from email.mime.multipart import MIMEMultipart
+import time
+import argparse
+import logging
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from pathlib import Path
+from dataclasses import dataclass
 
-# ── 로깅 (PII 미포함) ──
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    datefmt="%H:%M:%S",
 )
 log = logging.getLogger("bridge_mail")
 
-# ── SMTP 설정 ──
-SMTP_CONFIG = {
-    "gmail": {"host": "smtp.gmail.com", "port": 587},
-    "naver": {"host": "smtp.naver.com", "port": 587},
-}
+# ─── 설정 ───────────────────────────────────────────────
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USER = os.environ.get("BRIDGE_SMTP_USER", "")
+SMTP_PASS = os.environ.get("BRIDGE_SMTP_PASS", "")
+FROM_NAME = "BRIDGE Recruitment"
+
+# ─── 테스트 수신자 ──────────────────────────────────────
+TEST_RECIPIENTS = [
+    {
+        "name": "Test User 1",
+        "email": "cnee89@gmail.com",
+        "region": "부산",
+        "city": "해운대",
+        "teachingAge": "Kindy - Elem",
+    },
+    {
+        "name": "Test User 2",
+        "email": "bridgejobkr@naver.com",
+        "region": "서울",
+        "city": "구로",
+        "teachingAge": "Elem, Adult",
+    },
+    {
+        "name": "Test User 3",
+        "email": "bestpucca@naver.com",
+        "region": "경기",
+        "city": "수원",
+        "teachingAge": "Kinder",
+    },
+]
+
+# ─── 메일 템플릿 ─────────────────────────────────────────
+TEMPLATE_SUBJECT = "[BRIDGE] 개별발송 테스트 — {{name}}님 전용"
+TEMPLATE_BODY = """Dear {{name}},
+
+This is a test email from BRIDGE Recruitment System.
+
+This email was sent INDIVIDUALLY to you only.
+No other recipients can see this email or your information.
+
+▸ Your Info (verification):
+  - Name: {{name}}
+  - Email: {{email}}
+  - Region: {{region}} {{city}}
+  - Teaching Age: {{teachingAge}}
+
+If you received this email, the individual sending system is working correctly.
+
+Best regards,
+BRIDGE Recruitment Team
+bridgejob.co.kr
+
+---
+이 메일은 개별 발송 테스트입니다.
+수신자 본인에게만 발송되었으며, 다른 수신자의 정보는 포함되지 않습니다.
+"""
 
 
-def detect_provider(sender: str) -> str:
-    """발신자 이메일에서 SMTP 제공자 판별."""
-    if "gmail" in sender.lower():
-        return "gmail"
-    if "naver" in sender.lower():
-        return "naver"
-    raise ValueError(f"지원하지 않는 발신자 도메인: {sender}")
+def replace_placeholders(text: str, data: dict) -> str:
+    """{{key}} 플레이스홀더를 데이터로 치환"""
+    result = text
+    for key, value in data.items():
+        result = result.replace(f"{{{{{key}}}}}", str(value))
+    return result
 
 
-def mask_email_for_log(email: str) -> str:
-    """로그용 이메일 마스킹."""
-    at = email.index("@") if "@" in email else len(email)
-    if at <= 1:
-        return "****@****"
-    return email[0] + "****" + email[at:]
-
-
-def substitute_variables(text: str, recipient: dict) -> str:
-    """템플릿 변수를 수신자 데이터로 치환."""
-    return (
-        text.replace("{{name}}", recipient.get("name", ""))
-        .replace("{{region}}", recipient.get("region", ""))
-        .replace("{{city}}", recipient.get("city", ""))
-        .replace("{{teachingAge}}", recipient.get("teachingAge", ""))
-        .replace("{{email}}", recipient.get("email", ""))
-    )
-
-
-def send_one(
-    sender: str,
-    smtp_user: str,
-    smtp_pass: str,
+def send_individual_email(
     recipient: dict,
+    subject_template: str,
+    body_template: str,
     attachments: list[str] | None = None,
     dry_run: bool = False,
-) -> dict:
-    """
-    수신자 1명에게 메일 1통 발송.
-    매번 새 MIMEMultipart + 새 SMTP 세션. BCC/CC 절대 없음.
+) -> bool:
+    """단일 수신자에게 1:1 개별 메일 발송
+
+    핵심: To 필드에 수신자 1명만. BCC/CC 없음.
     """
     to_email = recipient["email"]
-    subject = substitute_variables(recipient.get("subject", ""), recipient)
-    body_html = substitute_variables(recipient.get("body_html", ""), recipient)
+    subject = replace_placeholders(subject_template, recipient)
+    body = replace_placeholders(body_template, recipient)
 
-    # 새 메일 객체
     msg = MIMEMultipart()
-    msg["From"] = f"BRIDGE <{sender}>"
-    msg["To"] = to_email  # 수신자 1명만
+    msg["From"] = f"{FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email  # 수신자 1명만!
     msg["Subject"] = subject
+    # Reply-To 설정
+    msg["Reply-To"] = SMTP_USER
 
-    # HTML 본문
-    msg.attach(MIMEText(body_html, "html", "utf-8"))
+    # 본문
+    msg.attach(MIMEText(body, "plain", "utf-8"))
 
     # 첨부파일
-    for fpath in (attachments or []):
-        p = Path(fpath)
-        if not p.exists():
-            log.warning("첨부파일 없음 (스킵): %s", fpath)
-            continue
-        part = MIMEBase("application", "octet-stream")
-        part.set_payload(p.read_bytes())
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f'attachment; filename="{p.name}"')
-        msg.attach(part)
-
-    # 보안 검증: msg 전체에서 다른 수신자 이메일 흔적 없는지 확인
-    raw = msg.as_string()
-    if raw.count(to_email) < 1:
-        return {"email": mask_email_for_log(to_email), "status": "error", "error": "수신자 이메일 미포함"}
-
-    result = {"email": mask_email_for_log(to_email), "status": "pending"}
+    if attachments:
+        for filepath in attachments:
+            path = Path(filepath)
+            if path.exists():
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(path.read_bytes())
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename={path.name}",
+                )
+                msg.attach(part)
+                log.info(f"  첨부: {path.name}")
 
     if dry_run:
-        log.info("[DRY-RUN] To: %s | Subject: %s", mask_email_for_log(to_email), subject[:50])
-        result["status"] = "dry-run"
-        return result
+        log.info(f"  [DRY-RUN] To: {to_email} | Subject: {subject[:50]}...")
+        log.info(f"  [DRY-RUN] Body preview: {body[:100]}...")
+        return True
 
-    # SMTP 발송
-    provider = detect_provider(sender)
-    cfg = SMTP_CONFIG[provider]
     try:
-        server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=30)
-        server.ehlo()
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
-        result["status"] = "sent"
-        log.info("발송 성공: %s", mask_email_for_log(to_email))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        log.info(f"  ✓ 발송 완료: {to_email}")
+        return True
     except smtplib.SMTPAuthenticationError:
-        result["status"] = "error"
-        result["error"] = "SMTP 인증 실패 — 앱 비밀번호 확인 필요"
-        log.error("SMTP 인증 실패: %s", mask_email_for_log(to_email))
+        log.error(f"  ✗ SMTP 인증 실패 — 앱 비밀번호 확인 필요")
+        return False
     except smtplib.SMTPRecipientsRefused:
-        result["status"] = "error"
-        result["error"] = "수신자 거부"
-        log.error("수신자 거부: %s", mask_email_for_log(to_email))
-    except Exception as exc:
-        result["status"] = "error"
-        result["error"] = str(type(exc).__name__)
-        log.error("발송 실패: %s — %s", mask_email_for_log(to_email), type(exc).__name__)
-
-    return result
+        log.error(f"  ✗ 수신자 거부: {to_email}")
+        return False
+    except Exception as e:
+        log.error(f"  ✗ 발송 실패 [{to_email}]: {e}")
+        return False
 
 
 def main():
     parser = argparse.ArgumentParser(description="BRIDGE 개별 메일 발송")
-    parser.add_argument("--recipients", required=True, help="수신자 JSON 파일 경로")
-    parser.add_argument("--sender", default="bridgejobkr@gmail.com", help="발신자 이메일")
-    parser.add_argument("--attachments", nargs="*", default=[], help="첨부파일 경로 (복수 가능)")
     parser.add_argument("--dry-run", action="store_true", help="실제 발송 없이 테스트")
+    parser.add_argument("--recipients", "-r", help="수신자 JSON 파일 경로")
+    parser.add_argument("--subject", "-s", help="제목 템플릿 (기본: 테스트)")
+    parser.add_argument("--body", "-b", help="본문 템플릿 파일 경로")
+    parser.add_argument("--attach", "-a", nargs="*", help="첨부파일 경로들")
     args = parser.parse_args()
 
-    # 환경변수에서 SMTP 인증 정보
-    smtp_user = os.getenv("BRIDGE_SMTP_USER", args.sender)
-    smtp_pass = os.getenv("BRIDGE_SMTP_PASS", "")
-    if not smtp_pass and not args.dry_run:
-        log.error("BRIDGE_SMTP_PASS 환경변수가 설정되지 않았습니다.")
-        sys.exit(1)
-
     # 수신자 로드
-    rpath = Path(args.recipients)
-    if not rpath.exists():
-        log.error("수신자 파일 없음: %s", rpath)
-        sys.exit(1)
+    if args.recipients:
+        recipients = json.loads(Path(args.recipients).read_text("utf-8"))
+    else:
+        recipients = TEST_RECIPIENTS
 
-    recipients = json.loads(rpath.read_text(encoding="utf-8"))
-    if not isinstance(recipients, list):
-        log.error("수신자 파일은 JSON 배열이어야 합니다.")
-        sys.exit(1)
+    # 템플릿
+    subject_tpl = args.subject or TEMPLATE_SUBJECT
+    if args.body:
+        body_tpl = Path(args.body).read_text("utf-8")
+    else:
+        body_tpl = TEMPLATE_BODY
 
-    log.info(
-        "발송 시작: %d명 | 발신자: %s | dry-run: %s",
-        len(recipients), mask_email_for_log(args.sender), args.dry_run,
-    )
+    # 환경변수 확인
+    if not args.dry_run:
+        if not SMTP_USER or not SMTP_PASS:
+            log.error("환경변수 설정 필요:")
+            log.error("  set BRIDGE_SMTP_USER=bridgejobkr@gmail.com")
+            log.error("  set BRIDGE_SMTP_PASS=앱비밀번호")
+            sys.exit(1)
 
-    results = []
-    for idx, r in enumerate(recipients, 1):
-        if not r.get("email"):
-            log.warning("[%d/%d] 이메일 없음, 스킵", idx, len(recipients))
-            continue
-        log.info("[%d/%d] 발송 중: %s", idx, len(recipients), mask_email_for_log(r["email"]))
-        result = send_one(
-            sender=args.sender,
-            smtp_user=smtp_user,
-            smtp_pass=smtp_pass,
-            recipient=r,
-            attachments=args.attachments,
+    log.info("=" * 60)
+    log.info(f"BRIDGE 개별 메일 발송 {'[DRY-RUN]' if args.dry_run else '[LIVE]'}")
+    log.info(f"수신자: {len(recipients)}명")
+    log.info(f"발송 방식: 1:1 개별 (BCC 없음, 타인 미노출)")
+    log.info("=" * 60)
+
+    success = 0
+    fail = 0
+    for i, recipient in enumerate(recipients):
+        log.info(f"\n[{i+1}/{len(recipients)}] {recipient['name']} <{recipient['email']}>")
+        ok = send_individual_email(
+            recipient=recipient,
+            subject_template=subject_tpl,
+            body_template=body_tpl,
+            attachments=args.attach,
             dry_run=args.dry_run,
         )
-        results.append(result)
+        if ok:
+            success += 1
+        else:
+            fail += 1
+        # Rate limiting — 1초 간격
+        if not args.dry_run and i < len(recipients) - 1:
+            time.sleep(1)
 
-    # 로그 저장
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = Path("Q:/Claudework/bridge base/logs")
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / f"mail_log_{ts}.json"
-    log_file.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    log.info("\n" + "=" * 60)
+    log.info(f"결과: 성공 {success} / 실패 {fail} / 총 {len(recipients)}")
+    log.info("=" * 60)
 
-    sent = sum(1 for r in results if r["status"] == "sent")
-    dry = sum(1 for r in results if r["status"] == "dry-run")
-    failed = sum(1 for r in results if r["status"] == "error")
-    log.info("완료: 성공 %d | dry-run %d | 실패 %d | 로그: %s", sent, dry, failed, log_file)
+    # 발송 로그 저장
+    log_data = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": "dry-run" if args.dry_run else "live",
+        "total": len(recipients),
+        "success": success,
+        "fail": fail,
+        "recipients": [
+            {"name": r["name"], "email": r["email"], "status": "sent"}
+            for r in recipients
+        ],
+    }
+    log_path = f"mail_log_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    Path(log_path).write_text(json.dumps(log_data, ensure_ascii=False, indent=2), "utf-8")
+    log.info(f"로그 저장: {log_path}")
 
 
 if __name__ == "__main__":
