@@ -134,14 +134,15 @@ function MatchingPageInner() {
 
   const clearSelection = () => setSelected(new Set())
 
-  /* ── Send profiles ── */
+  /* ── Send profiles (SECURITY: 보안 엔드포인트 사용) ── */
   const handleSend = async () => {
     if (selected.size === 0 || !candidate) return
     setSending(true)
     setError(null)
     setMsg(null)
     try {
-      const res = await signedFetch(`${API_URL}/api/admin/matching/send-profile`, {
+      // SECURITY: 개별 발송 + PII 스캔 + Rate limit 적용 엔드포인트
+      const res = await signedFetch(`${API_URL}/api/admin/matching/send-profile-secure`, {
         method: 'POST',
         body: JSON.stringify({
           candidate_id: candidate.candidate_id,
@@ -153,7 +154,8 @@ function MatchingPageInner() {
         throw new Error(j.detail || j.error || `Error ${res.status}`)
       }
       const j = await res.json()
-      setMsg(j.message || 'Sent!')
+      const data = j.data || {}
+      setMsg(`${data.sent || 0}건 발송 완료, ${data.failed || 0}건 실패`)
       // Refresh to update _already_sent
       fetchMatching(candidate.candidate_id)
     } catch (e) {
@@ -409,9 +411,13 @@ function MatchingPageInner() {
                   <p className="text-[#86868b]">
                     Sending profile to <span className="font-semibold text-[#1d1d1f]">{selected.size}</span> employer(s)
                   </p>
-                  <p className="text-[11px] text-[#86868b] mt-2">
-                    PII (name, email, phone) will NOT be included in the email.
-                  </p>
+                  <div className="mt-3 space-y-1 text-[11px] text-[#86868b]">
+                    <p>&#x2713; PII (name, email, phone) will NOT be included</p>
+                    <p>&#x2713; Each email sent individually (no CC/BCC)</p>
+                    <p>&#x2713; Reply-To: bridgejobkr@gmail.com</p>
+                    <p>&#x2713; Rate limit: 3s interval, 10/min, 200/day</p>
+                    <p>&#x2713; PII auto-scan before each send</p>
+                  </div>
                 </div>
 
                 <div className="space-y-1 max-h-[200px] overflow-y-auto mb-4">

@@ -27,7 +27,9 @@ const TEMPLATE_LABELS: Record<string, string> = {
   job_transition_guide: '이직 안내',
   arrival_guide:        '입국 안내',
   candidate_profile:    '프로필 발송',
+  profile_broadcast:    '프로필 매칭 발송',
   interview_school:     '인터뷰 (학교)',
+  interview_employer:   '인터뷰 (구인자)',
   interview_candidate:  '인터뷰 (후보자)',
 }
 
@@ -40,7 +42,9 @@ const TEMPLATE_CATEGORY: Record<string, Category> = {
   job_transition_guide: 'contract',
   arrival_guide:        'immigration',
   candidate_profile:    'profile',
+  profile_broadcast:    'profile',
   interview_school:     'interview',
+  interview_employer:   'interview',
   interview_candidate:  'interview',
 }
 

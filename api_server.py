@@ -1678,16 +1678,93 @@ _TEMPLATE_COL_MAP = {
 }
 
 
-def _smtp_send(to_email: str, subject: str, html_body: str) -> bool:
+# ── SECURITY: PII 스캔 — 메일 본문에 개인정보 포함 시 발송 차단 ───────────────
+_PII_EMAIL_RE = re.compile(r'[\w.\-+]+@[\w.\-]+\.\w+')
+_PII_PHONE_RE = re.compile(r'\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4}')
+_PII_KR_ID_RE = re.compile(r'\d{6}-[1-4]\d{6}')
+
+# 허용 이메일: BRIDGE 공식 이메일은 PII 스캔에서 제외
+_SAFE_EMAILS = frozenset({"bridgejobkr@gmail.com", "bridgejobkr@naver.com"})
+
+
+def _pii_scan_body(html_body: str) -> list[str]:
+    """메일 본문에서 PII 패턴 감지. 위반 항목 리스트 반환 (빈 리스트 = 안전)."""
+    violations: list[str] = []
+    # SECURITY: 이메일 주소 패턴 감지
+    found_emails = _PII_EMAIL_RE.findall(html_body)
+    unsafe_emails = [e for e in found_emails if e.lower() not in _SAFE_EMAILS]
+    if unsafe_emails:
+        violations.append(f"이메일 주소 감지: {len(unsafe_emails)}건")
+    # SECURITY: 전화번호 패턴 감지
+    if _PII_PHONE_RE.search(html_body):
+        violations.append("전화번호 패턴 감지")
+    # SECURITY: 주민등록번호 패턴 감지
+    if _PII_KR_ID_RE.search(html_body):
+        violations.append("주민등록번호 패턴 감지")
+    return violations
+
+
+# ── SECURITY: 메일 발송 Rate Limiter (3초 간격, 10/분, 200/일) ──────────────
+_MAIL_SEND_TIMES: list[float] = []
+_MAIL_DAILY_COUNT: dict[str, int] = {}  # date_str → count
+_MAIL_RATE_LOCK = threading.Lock()
+
+
+def _mail_rate_check() -> tuple[bool, str]:
+    """메일 발송 속도 제한 체크. (통과여부, 거부사유)."""
+    now = _time.time()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    with _MAIL_RATE_LOCK:
+        # SECURITY: 일일 최대 200통
+        daily = _MAIL_DAILY_COUNT.get(today, 0)
+        if daily >= 200:
+            return False, "일일 발송 한도 초과 (200통/일)"
+
+        # SECURITY: 분당 최대 10통
+        recent_min = [t for t in _MAIL_SEND_TIMES if now - t < 60]
+        if len(recent_min) >= 10:
+            return False, "분당 발송 한도 초과 (10통/분)"
+
+        # SECURITY: 최소 3초 간격
+        if _MAIL_SEND_TIMES and (now - _MAIL_SEND_TIMES[-1]) < 3:
+            return False, "발송 간격 부족 (최소 3초)"
+
+        return True, ""
+
+
+def _mail_rate_record():
+    """발송 성공 시 카운트 기록."""
+    now = _time.time()
+    today = datetime.now().strftime("%Y-%m-%d")
+    with _MAIL_RATE_LOCK:
+        _MAIL_SEND_TIMES.append(now)
+        # 5분 이상 된 타임스탬프 정리
+        cutoff = now - 300
+        while _MAIL_SEND_TIMES and _MAIL_SEND_TIMES[0] < cutoff:
+            _MAIL_SEND_TIMES.pop(0)
+        _MAIL_DAILY_COUNT[today] = _MAIL_DAILY_COUNT.get(today, 0) + 1
+        # 어제 이전 카운트 정리
+        for d in list(_MAIL_DAILY_COUNT.keys()):
+            if d != today:
+                del _MAIL_DAILY_COUNT[d]
+
+
+def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bridgejobkr@gmail.com") -> bool:
     """Gmail SMTP로 이메일 발송. 실패 시 False."""
     if not _SMTP_USER or not _SMTP_PASS or _SMTP_PASS == "your_app_password":
         _log_email.warning("SMTP 미설정 — 발송 스킵 (to=%s)", to_email)
         return False
     try:
         msg = MIMEMultipart("alternative")
-        msg["From"] = f"BRIDGE Recruitment <{_SMTP_USER}>"
+        # SECURITY: From 고정 — BRIDGE 공식 계정
+        msg["From"] = f"BRIDGE <{_SMTP_USER}>"
+        # SECURITY: To에 수신자 1명만 — CC/BCC 절대 금지
         msg["To"] = to_email
         msg["Subject"] = subject
+        # SECURITY: Reply-To → 우리 메일로만 회신
+        msg["Reply-To"] = reply_to
+        # SECURITY: X-Mailer 헤더 미설정 (기본 제거)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         ctx = _ssl.create_default_context()
@@ -1696,13 +1773,69 @@ def _smtp_send(to_email: str, subject: str, html_body: str) -> bool:
             srv.starttls(context=ctx)
             srv.ehlo()
             srv.login(_SMTP_USER, _SMTP_PASS)
-            srv.sendmail(_SMTP_USER, to_email, msg.as_string())
+            # SECURITY: sendmail에 수신자 1명만 전달
+            srv.sendmail(_SMTP_USER, [to_email], msg.as_string())
 
         _log_email.info("이메일 발송 성공: %s → %s", subject[:40], to_email)
         return True
     except Exception as e:
         _log_email.error("이메일 발송 실패 (to=%s): %s", to_email, e, exc_info=True)
         return False
+
+
+def _secure_send_email(to_email: str, subject: str, html_body: str,
+                       skip_pii_scan: bool = False) -> tuple[bool, str]:
+    """보안 규칙 적용 이메일 발송. (성공여부, 메시지) 반환.
+
+    Security rules applied:
+    1. 개별 발송 (CC/BCC 없음) — _smtp_send에서 강제
+    2. PII 스캔 — 본문에 개인정보 감지 시 차단
+    3. Rate limit — 3초 간격, 10/분, 200/일
+    4. Reply-To 격리 — bridgejobkr@gmail.com
+    """
+    # SECURITY: PII 스캔
+    if not skip_pii_scan:
+        violations = _pii_scan_body(html_body)
+        if violations:
+            detail = "; ".join(violations)
+            _log_email.warning("PII 발송 차단 (to=%s): %s", to_email, detail)
+            return False, f"PII 위반으로 발송 차단: {detail}"
+
+    # SECURITY: Rate limit 체크
+    rate_ok, rate_msg = _mail_rate_check()
+    if not rate_ok:
+        return False, rate_msg
+
+    # 발송
+    sent = _smtp_send(to_email, subject, html_body)
+    if sent:
+        _mail_rate_record()
+        return True, "발송 성공"
+    return False, "SMTP 발송 실패"
+
+
+def _strip_image_exif(file_bytes: bytes) -> bytes:
+    """SECURITY: 이미지 EXIF 데이터 제거 (Pillow 사용)."""
+    if not _PILLOW_OK:
+        return file_bytes
+    try:
+        img = PILImage.open(io.BytesIO(file_bytes))
+        out = io.BytesIO()
+        # SECURITY: exif 데이터 없이 저장
+        img.save(out, format=img.format or "JPEG")
+        return out.getvalue()
+    except Exception:
+        return file_bytes
+
+
+def _mask_email_for_log(email: str) -> str:
+    """SECURITY: 로그용 이메일 마스킹. abc***@gmail.com"""
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.rsplit("@", 1)
+    if len(local) <= 3:
+        return f"{local[0]}**@{domain}"
+    return f"{local[:3]}***@{domain}"
 
 
 def _load_guide_links(conn: sqlite3.Connection) -> dict:
@@ -2937,9 +3070,48 @@ def _ensure_interview_templates():
 </div>
 </body></html>"""
 
+    # profile_broadcast 템플릿 (구인자에게 후보자 프로필 발송용)
+    profile_subject = "BRIDGE — 채용 후보자 프로필 안내"
+    profile_html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
+<div style="text-align:center;padding:20px 0;border-bottom:2px solid #1d1d1f;">
+<h1 style="margin:0;font-size:24px;color:#1d1d1f;font-weight:700;">BRIDGE</h1>
+<p style="margin:4px 0 0;font-size:12px;color:#86868b;">ESL Teacher Recruitment Platform</p>
+</div>
+<div style="padding:30px 0;">
+<p>안녕하세요, {{contact_name}}님</p>
+<p>BRIDGE에서 {{school_name}} 조건에 맞는 채용 후보자를 안내드립니다.</p>
+
+<div style="margin:24px 0;">
+{{profile_cards}}
+</div>
+
+{{download_link}}
+
+<div style="background:#f5f5f7;padding:20px;margin:24px 0;border-radius:12px;">
+<p style="margin:0 0 12px;font-weight:600;color:#1d1d1f;">안내 사항</p>
+<ul style="margin:0;padding-left:20px;color:#424245;line-height:1.9;">
+<li>후보자 개인정보(성명, 연락처, 이메일 등)는 BRIDGE 정책에 따라 비공개입니다.</li>
+<li>채용 진행은 반드시 BRIDGE를 통해 진행해 주세요.</li>
+<li>관심 있는 후보자가 있으시면 이 이메일에 회신해 주세요.</li>
+<li>인터뷰 일정을 잡아드리겠습니다.</li>
+</ul>
+</div>
+
+<p>궁금한 점이 있으시면 <a href="mailto:bridgejobkr@gmail.com" style="color:#0071e3;">bridgejobkr@gmail.com</a>으로 연락해 주세요.</p>
+<p style="color:#6e6e73;margin-top:30px;">감사합니다.<br><strong>BRIDGE Team 드림</strong></p>
+</div>
+<div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;font-size:12px;color:#86868b;">
+<p>The BRIDGE Team &middot; <a href="https://bridgejob.co.kr" style="color:#0071e3;">bridgejob.co.kr</a></p>
+<p style="font-size:10px;color:#aeaeb2;">이 이메일은 BRIDGE 채용 서비스의 일환으로 발송되었습니다.</p>
+</div>
+</body></html>"""
+
     for key, subj, body in [
         ("interview_employer", employer_subject, employer_html),
         ("interview_candidate", candidate_subject, candidate_html),
+        ("profile_broadcast", profile_subject, profile_html),
     ]:
         conn.execute(
             """INSERT INTO email_templates (template_key, subject, body_html, updated_at)
@@ -2951,7 +3123,27 @@ def _ensure_interview_templates():
     conn.close()
 
 
+def _ensure_profile_sends_schema():
+    """profile_sends 테이블 생성 (없으면)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS profile_sends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_id TEXT NOT NULL,
+            employer_id INTEGER NOT NULL,
+            school_name TEXT,
+            to_email TEXT,
+            status TEXT DEFAULT 'sent',
+            sent_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
 _ensure_interview_templates()
+_ensure_profile_sends_schema()
 
 
 class InterviewCreate(BaseModel):
@@ -4724,6 +4916,320 @@ async def testimonials_reorder(request: Request):
             conn.execute("UPDATE testimonials SET sort_order=? WHERE id=?", (item["sort_order"], item["id"]))
         conn.commit()
         return ok(message="Reorder saved")
+    finally:
+        conn.close()
+
+
+# ── Secure Download Links System ──────────────────────────────────────────────
+
+_DOWNLOAD_DIR = Path(os.getenv("BRIDGE_DOWNLOAD_DIR", str(Path(__file__).resolve().parent / "secure_downloads")))
+_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_download_links_schema():
+    """secure download_links + mail_logs 테이블 생성."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS download_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT UNIQUE NOT NULL,
+            file_path TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            candidate_id TEXT,
+            max_downloads INTEGER DEFAULT 3,
+            download_count INTEGER DEFAULT 0,
+            expires_at TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            is_deleted INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS download_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            link_uuid TEXT NOT NULL,
+            ip_hash TEXT,
+            downloaded_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mail_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_type TEXT DEFAULT 'profile_broadcast',
+            candidate_id TEXT,
+            employer_count INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            failed_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'completed',
+            sent_at TEXT DEFAULT (datetime('now')),
+            details TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+_ensure_download_links_schema()
+
+
+@app.post("/api/admin/download-links", tags=["admin"])
+async def admin_create_download_link(request: Request):
+    """SECURITY: 보안 다운로드 링크 생성 (UUID, 3회 제한, 14일 만료)."""
+    _check_admin(request)
+    body = await request.json()
+    file_path = body.get("file_path", "")
+    original_name = body.get("original_name", "")
+    candidate_id = body.get("candidate_id", "")
+
+    if not file_path or not original_name:
+        raise HTTPException(400, "file_path and original_name required")
+
+    # SECURITY: 첨부파일명에 실명 금지 → candidate_{번호}_resume.pdf
+    if candidate_id:
+        ext = Path(original_name).suffix
+        original_name = f"candidate_{candidate_id}{ext}"
+
+    link_uuid = str(uuid.uuid4())
+    expires = (datetime.now(timezone.utc) + timedelta(days=14)).strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            """INSERT INTO download_links (uuid, file_path, original_name, candidate_id, max_downloads, expires_at)
+               VALUES (?, ?, ?, ?, 3, ?)""",
+            (link_uuid, file_path, original_name, candidate_id, expires),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return ok(data={"uuid": link_uuid, "url": f"/dl/{link_uuid}", "expires_at": expires})
+
+
+@app.get("/dl/{link_uuid}", tags=["download"])
+async def download_file(link_uuid: str, request: Request):
+    """SECURITY: 보안 파일 다운로드 — UUID 기반, 횟수/만료 제한."""
+    from fastapi.responses import FileResponse as FastFileResponse
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        link = conn.execute(
+            "SELECT * FROM download_links WHERE uuid = ? AND is_deleted = 0", (link_uuid,)
+        ).fetchone()
+
+        if not link:
+            return SafeJSONResponse({"error": "링크를 찾을 수 없습니다"}, status_code=404)
+
+        # SECURITY: 다운로드 횟수 제한 (최대 3회)
+        if link["download_count"] >= link["max_downloads"]:
+            return SafeJSONResponse(
+                {"error": "다운로드 횟수를 초과했습니다 (최대 3회)"}, status_code=403
+            )
+
+        # SECURITY: 만료일 체크 (14일)
+        expires = datetime.strptime(link["expires_at"], "%Y-%m-%d %H:%M:%S")
+        if datetime.now(timezone.utc).replace(tzinfo=None) > expires:
+            return SafeJSONResponse(
+                {"error": "링크가 만료되었습니다 (14일)"}, status_code=410
+            )
+
+        file_p = Path(link["file_path"])
+        if not file_p.exists():
+            return SafeJSONResponse({"error": "파일을 찾을 수 없습니다"}, status_code=404)
+
+        # SECURITY: 다운로드 카운트 증가 + IP 로그
+        ip_h = _ip_hash(request)
+        conn.execute(
+            "UPDATE download_links SET download_count = download_count + 1 WHERE uuid = ?",
+            (link_uuid,),
+        )
+        conn.execute(
+            "INSERT INTO download_logs (link_uuid, ip_hash) VALUES (?, ?)",
+            (link_uuid, ip_h),
+        )
+        conn.commit()
+
+        return FastFileResponse(
+            path=str(file_p),
+            filename=link["original_name"],
+            media_type="application/octet-stream",
+        )
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/download-links/cleanup", tags=["admin"])
+async def admin_cleanup_download_links(request: Request):
+    """SECURITY: 만료된 다운로드 링크 + 파일 자동 삭제."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        expired = conn.execute(
+            "SELECT uuid, file_path FROM download_links WHERE expires_at < ? AND is_deleted = 0",
+            (now_str,),
+        ).fetchall()
+
+        cleaned = 0
+        for row in expired:
+            fp = Path(row["file_path"])
+            if fp.exists():
+                fp.unlink()
+            conn.execute(
+                "UPDATE download_links SET is_deleted = 1 WHERE uuid = ?", (row["uuid"],)
+            )
+            cleaned += 1
+
+        conn.commit()
+        return ok(message=f"만료 링크 {cleaned}건 정리 완료")
+    finally:
+        conn.close()
+
+
+# ── Secure Profile Broadcast (보안 규칙 적용) ────────────────────────────────
+
+
+class SecureProfileBroadcastBody(BaseModel):
+    candidate_id: str
+    employer_ids: list[int]
+    custom_subject: Optional[str] = None
+    custom_body: Optional[str] = None
+    download_link_uuid: Optional[str] = None
+
+
+@app.post("/api/admin/matching/send-profile-secure", tags=["admin"])
+async def admin_matching_send_profile_secure(request: Request, body: SecureProfileBroadcastBody):
+    """SECURITY: 매칭된 employer들에게 후보자 프로필 개별 발송 (전체 보안 규칙 적용).
+
+    보안 규칙:
+    1. 완전 개별 발송 — CC/BCC 절대 금지, To에 1명만
+    2. PII 마스킹 — 후보자 실명/이메일/전화/주소 절대 미포함
+    3. Reply-To: bridgejobkr@gmail.com (회신 격리)
+    4. 발송 전 PII 자동 스캔
+    5. Rate limit: 3초 간격, 10/분, 200/일
+    6. 발송 로그: employer 이메일 마스킹 저장
+    """
+    _check_admin(request)
+    if not body.employer_ids:
+        raise HTTPException(400, "employer_ids가 비어 있습니다.")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        # 후보자 조회
+        cand = conn.execute(
+            "SELECT * FROM candidates WHERE candidate_id = ?", (body.candidate_id,)
+        ).fetchone()
+        if not cand:
+            raise HTTPException(404, "Candidate not found")
+        cand_d = dict(cand)
+
+        # SECURITY: 프로필 카드 — PII 제외
+        card_html = _build_profile_card(cand_d)
+
+        # 템플릿 로드
+        tpl = conn.execute(
+            "SELECT subject, body_html FROM email_templates WHERE template_key = 'profile_broadcast'"
+        ).fetchone()
+        if not tpl:
+            raise HTTPException(404, "profile_broadcast template not found")
+
+        base_subject = body.custom_subject or tpl["subject"]
+        base_body = body.custom_body or tpl["body_html"]
+
+        # 다운로드 링크 삽입
+        dl_html = ""
+        if body.download_link_uuid:
+            dl_html = f'<p style="margin:16px 0"><a href="https://bridgejob.co.kr/dl/{body.download_link_uuid}" style="display:inline-block;background:#1d1d1f;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600">View Full Profile</a></p>'
+
+        sent_count = 0
+        fail_count = 0
+        results = []
+
+        for emp_id in body.employer_ids:
+            emp = conn.execute(
+                "SELECT id, email, school_name, contact_name FROM client_inquiries WHERE id = ?",
+                (emp_id,),
+            ).fetchone()
+            if not emp or not emp["email"]:
+                continue
+
+            school = emp["school_name"] or "School"
+            to_email = emp["email"]
+
+            # 개별 템플릿 치환
+            html = base_body.replace("{{profile_cards}}", card_html)
+            html = html.replace("{{school_name}}", school)
+            html = html.replace("{{contact_name}}", emp["contact_name"] or "")
+            html = html.replace("{{download_link}}", dl_html)
+            html = re.sub(r"\{\{\w+\}\}", "", html)
+
+            subject = f"{base_subject} - {school}" if school != "School" else base_subject
+
+            # SECURITY: 개별 발송 + PII 스캔 + Rate limit
+            success, msg = _secure_send_email(to_email, subject, html)
+
+            status_val = "sent" if success else "failed"
+            if success:
+                sent_count += 1
+            else:
+                fail_count += 1
+
+            # SECURITY: 발송 로그 — 이메일 마스킹 저장
+            conn.execute(
+                """INSERT INTO profile_sends (candidate_id, employer_id, school_name, to_email, status)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (body.candidate_id, emp_id, school, _mask_email_for_log(to_email), status_val),
+            )
+            results.append({"employer_id": emp_id, "school": school, "status": status_val, "message": msg})
+
+            # SECURITY: 발송 간격 최소 3초
+            if success:
+                await asyncio.sleep(3)
+
+        conn.commit()
+
+        # SECURITY: 메일 발송 로그 (수신자 이메일 직접 저장 금지)
+        conn.execute(
+            """INSERT INTO mail_logs (log_type, candidate_id, employer_count, sent_count, failed_count, status, details)
+               VALUES ('profile_broadcast', ?, ?, ?, ?, 'completed', ?)""",
+            (body.candidate_id, len(body.employer_ids), sent_count, fail_count,
+             json.dumps({"employer_ids": body.employer_ids})),
+        )
+        conn.commit()
+
+        return ok(
+            message=f"Profile broadcast: {sent_count} sent, {fail_count} failed",
+            data={"sent": sent_count, "failed": fail_count, "results": results},
+        )
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/mail-logs", tags=["admin"])
+async def admin_mail_logs(request: Request, log_type: str = "", limit: int = 100):
+    """SECURITY: 메일 발송 로그 조회 (수신자 이메일 직접 저장 없음)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        if log_type:
+            rows = conn.execute(
+                "SELECT * FROM mail_logs WHERE log_type = ? ORDER BY sent_at DESC LIMIT ?",
+                (log_type, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM mail_logs ORDER BY sent_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return ok(data=[dict(r) for r in rows])
     finally:
         conn.close()
 
