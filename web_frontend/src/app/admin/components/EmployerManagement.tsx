@@ -2,7 +2,7 @@
 
 /**
  * EmployerManagement — 구인자관리 메인 컴포넌트
- * 워드뷰 + 엑셀뷰 + 메일링 + 블랙리스트
+ * 워드뷰 + 엑셀뷰 + 블랙리스트
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -14,7 +14,11 @@ import DocBlock, { type EmployerApp, maskEmail, maskPhone, maskName, v } from '.
 import MailComposer from './MailComposer'
 
 const API = API_URL
-type TabKey = 'active' | 'all' | 'mailing' | 'blacklist'
+
+// ─── 상수 ────────────────────────────────────────────
+const PAGE_BREAK_EVERY = 2 // 워드뷰 페이지 구분선 간격 (2 또는 3)
+
+type TabKey = 'active' | 'all' | 'blacklist'
 type ViewMode = 'word' | 'excel'
 
 const STATUS_FLOW = ['new', 'contacted', 'interviewing', 'hired', 'rejected', 'hold', 'blacklist'] as const
@@ -32,7 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   blacklist: 'bg-red-200 text-red-800',
 }
 
-/* ══════ 지역 정규화 (기존 로직 재사용) ══════ */
+/* ══════ 지역 정규화 ══════ */
 const REGION_NORMALIZE: Record<string, string> = {
   '경기남부': '경기', '경기북부': '경기',
   '서울남동': '서울', '서울남서': '서울', '서울북동': '서울', '서울북서': '서울',
@@ -185,11 +189,15 @@ export default function EmployerManagement() {
   const [filterAge, setFilterAge] = useState<string[]>([])
   const [filterStatus, setFilterStatus] = useState<string[]>([])
 
+  // Ctrl+F 검색
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
   // NEW 확인
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(loadConfirmed)
 
-  // 메일링
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // 메일
   const [showMailComposer, setShowMailComposer] = useState(false)
   const [mailRecipients, setMailRecipients] = useState<EmployerApp[]>([])
 
@@ -204,6 +212,23 @@ export default function EmployerManagement() {
 
   const flash = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(null), 3000) }
 
+  /* ── Ctrl+F 가로채기 ── */
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+        setTimeout(() => searchInputRef.current?.focus(), 50)
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false)
+        setSearchQuery('')
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
+
   /* ── Fetch ── */
   const fetchEmployers = useCallback(async () => {
     setLoading(true)
@@ -211,10 +236,7 @@ export default function EmployerManagement() {
     try {
       const res = await fetch(`${API}/api/admin/applications`, { headers: headers() })
       if (!res.ok) {
-        if (res.status === 403) {
-          setError('인증 오류. 다시 로그인해주세요.')
-          return
-        }
+        if (res.status === 403) { setError('인증 오류. 다시 로그인해주세요.'); return }
         throw new Error('데이터 로딩 실패')
       }
       const json = await res.json()
@@ -245,7 +267,7 @@ export default function EmployerManagement() {
     }
   }, [headers, fetchEmployers])
 
-  /* ── NEW 확인 ── */
+  /* ── NEW 확인 (단건) ── */
   const confirmNew = useCallback((id: string) => {
     setConfirmedIds(prev => {
       const next = new Set(prev)
@@ -254,6 +276,16 @@ export default function EmployerManagement() {
       return next
     })
   }, [])
+
+  /* ── 전체 NEW 확인 ── */
+  const confirmAll = useCallback(() => {
+    setConfirmedIds(prev => {
+      const next = new Set(prev)
+      employers.filter(e => e.status === 'new').forEach(e => next.add(e.id))
+      saveConfirmed(next)
+      return next
+    })
+  }, [employers])
 
   /* ── 필터 옵션 계산 ── */
   const provinceOptions = useMemo(() => {
@@ -283,80 +315,53 @@ export default function EmployerManagement() {
     return [...s].sort()
   }, [employers])
 
-  /* ── 탭 + 필터 적용 ── */
+  /* ── 탭 + 필터 + 검색 적용 ── */
   const filtered = useMemo(() => {
     let list = employers
 
     // 탭 필터
     if (tab === 'active') {
       list = list.filter(e => e.status !== 'blacklist' && ['new', 'contacted', 'interviewing'].includes(e.status))
-    } else if (tab === 'mailing') {
-      list = list.filter(e => e.status !== 'blacklist')
     } else if (tab === 'blacklist') {
       list = list.filter(e => e.status === 'blacklist')
     }
     // 'all' → 전체
 
-    // 다수선택 필터
-    if (filterProvince.length > 0) {
-      list = list.filter(e => filterProvince.includes(extractProvince(e.location)))
-    }
-    if (filterCity.length > 0) {
-      list = list.filter(e => filterCity.includes(extractCity(e.location)))
-    }
-    if (filterAge.length > 0) {
-      list = list.filter(e => {
-        const ages = extractAgeLabels(e.teaching_age)
-        return filterAge.some(a => ages.includes(a))
-      })
-    }
-    if (filterStatus.length > 0) {
-      list = list.filter(e => filterStatus.includes(e.status))
+    // 다중선택 필터
+    if (filterProvince.length > 0) list = list.filter(e => filterProvince.includes(extractProvince(e.location)))
+    if (filterCity.length > 0) list = list.filter(e => filterCity.includes(extractCity(e.location)))
+    if (filterAge.length > 0) list = list.filter(e => {
+      const ages = extractAgeLabels(e.teaching_age)
+      return filterAge.some(a => ages.includes(a))
+    })
+    if (filterStatus.length > 0) list = list.filter(e => filterStatus.includes(e.status))
+
+    // Ctrl+F 검색
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(e =>
+        (e.school_name || '').toLowerCase().includes(q) ||
+        (e.name || '').toLowerCase().includes(q) ||
+        (e.memo || '').toLowerCase().includes(q) ||
+        (e.notes || '').toLowerCase().includes(q) ||
+        (e.job_code || '').toLowerCase().includes(q) ||
+        e.id.toLowerCase().includes(q)
+      )
     }
 
     return list
-  }, [employers, tab, filterProvince, filterCity, filterAge, filterStatus])
+  }, [employers, tab, filterProvince, filterCity, filterAge, filterStatus, searchQuery])
 
   /* ── NEW 카운트 ── */
   const newUnconfirmedCount = useMemo(() => {
     return employers.filter(e => e.status === 'new' && !confirmedIds.has(e.id)).length
   }, [employers, confirmedIds])
 
-  /* ── 메일링 선택 ── */
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const selectAll = () => {
-    const ids = filtered.map(e => e.id)
-    setSelectedIds(new Set(ids))
-  }
-
-  const selectNone = () => setSelectedIds(new Set())
-
-  const selectFirst10 = () => {
-    const ids = filtered.slice(0, 10).map(e => e.id)
-    setSelectedIds(new Set(ids))
-  }
-
-  const openMailComposer = (list?: EmployerApp[]) => {
-    const targets = list || filtered.filter(e => selectedIds.has(e.id))
-    if (targets.length === 0) { flash('수신자를 선택해주세요'); return }
-    setMailRecipients(targets)
+  /* ── 메일 열기 ── */
+  const openMailComposer = (list: EmployerApp[]) => {
+    if (list.length === 0) { flash('수신자를 선택해주세요'); return }
+    setMailRecipients(list)
     setShowMailComposer(true)
-  }
-
-  /* ── 탭 전환 ── */
-  const switchTab = (t: TabKey) => {
-    setTab(t)
-    if (t === 'mailing') {
-      setViewMode('excel')
-    }
   }
 
   /* ── 열 리사이즈 ── */
@@ -401,43 +406,81 @@ export default function EmployerManagement() {
   }
 
   const visibleCols = columns.filter(c => c.visible)
-  const isMailing = tab === 'mailing'
-  const isBlacklistTab = tab === 'blacklist'
   const hasFilters = filterProvince.length > 0 || filterCity.length > 0 || filterAge.length > 0 || filterStatus.length > 0
+
+  const TABS = [
+    { key: 'active' as TabKey, label: '활발한 채용보기' },
+    { key: 'all' as TabKey, label: '전체보기' },
+    { key: 'blacklist' as TabKey, label: '블랙리스트' },
+  ]
 
   /* ══════ RENDER ══════ */
   return (
     <div className="space-y-5">
-      {/* Blink 애니메이션 */}
+      {/* 애니메이션 */}
       <style>{`
         @keyframes employer-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
         .employer-blink { animation: employer-blink 0.8s ease-in-out infinite; }
+        @keyframes search-pop { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
+
+      {/* Ctrl+F 검색 팝업 */}
+      {searchOpen && (
+        <div
+          className="fixed top-16 right-5 z-[9999] bg-white rounded-xl shadow-2xl border-2 border-blue-500 flex items-center gap-2 px-3 py-2.5"
+          style={{ animation: 'search-pop 0.2s ease', minWidth: 280 }}
+        >
+          <span className="text-blue-500 text-[14px]">🔍</span>
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="이름, Job번호, 메모 검색..."
+            className="flex-1 outline-none text-[13px] text-gray-800 bg-transparent"
+          />
+          {searchQuery && (
+            <span className="text-[11px] text-blue-600 font-bold whitespace-nowrap">{filtered.length}건</span>
+          )}
+          <button
+            type="button"
+            onClick={() => { setSearchOpen(false); setSearchQuery('') }}
+            className="text-gray-400 hover:text-gray-600 text-[16px] leading-none ml-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── 헤더 ── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">구인자관리</h1>
           <p className="text-[13px] text-[#86868b] mt-0.5">
-            {hasFilters ? `${filtered.length} / ${employers.length}건` : `${employers.length}건`}
+            {hasFilters || searchQuery ? `${filtered.length} / ${employers.length}건` : `${employers.length}건`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {actionMsg && <span className="text-[12px] text-green-600 font-medium bg-green-50 px-3 py-1 rounded-lg">{actionMsg}</span>}
+
+          {/* 전체 NEW 확인 버튼 */}
+          {newUnconfirmedCount > 0 && (
+            <button
+              type="button"
+              onClick={confirmAll}
+              className="px-3 py-1.5 bg-red-500 text-white text-[12px] font-bold rounded-lg hover:bg-red-600 transition-colors employer-blink"
+            >
+              전체 NEW 확인 ({newUnconfirmedCount})
+            </button>
+          )}
+
           <button type="button" onClick={fetchEmployers} className="text-[12px] text-[#0071e3] hover:underline font-medium">새로고침</button>
         </div>
       </div>
 
-      {/* ── 상단 탭 4개 ── */}
+      {/* ── 탭 3개 ── */}
       <div className="flex items-end gap-1">
-        {([
-          { key: 'active' as TabKey, label: '활발한 채용보기' },
-          { key: 'all' as TabKey, label: '전체보기' },
-          { key: 'mailing' as TabKey, label: '메일링' },
-          { key: 'blacklist' as TabKey, label: '블랙리스트' },
-        ]).map(t => (
+        {TABS.map(t => (
           <div key={t.key} className="relative">
-            {/* NEW 뱃지 */}
             {t.key === 'active' && newUnconfirmedCount > 0 && (
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full employer-blink whitespace-nowrap">
                 NEW {newUnconfirmedCount}
@@ -445,7 +488,7 @@ export default function EmployerManagement() {
             )}
             <button
               type="button"
-              onClick={() => switchTab(t.key)}
+              onClick={() => { setTab(t.key); setSearchQuery('') }}
               className={`px-4 py-2.5 text-[13px] font-semibold rounded-t-xl transition-colors border border-b-0 ${
                 tab === t.key
                   ? 'bg-white text-[#1d1d1f] border-gray-200'
@@ -461,24 +504,20 @@ export default function EmployerManagement() {
       {/* ── 필터 + 뷰 토글 바 ── */}
       <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {/* 뷰 모드 (메일링탭이 아닐 때만) */}
-          {!isMailing && (
-            <>
-              <div className="flex bg-gray-100 rounded-xl p-0.5">
-                <button type="button" onClick={() => setViewMode('word')}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
-                    viewMode === 'word' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b]'
-                  }`}>워드뷰</button>
-                <button type="button" onClick={() => setViewMode('excel')}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
-                    viewMode === 'excel' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b]'
-                  }`}>엑셀뷰</button>
-              </div>
-              <div className="h-6 w-px bg-gray-200" />
-            </>
-          )}
+          {/* 뷰 모드 */}
+          <div className="flex bg-gray-100 rounded-xl p-0.5">
+            <button type="button" onClick={() => setViewMode('word')}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
+                viewMode === 'word' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b]'
+              }`}>워드뷰</button>
+            <button type="button" onClick={() => setViewMode('excel')}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
+                viewMode === 'excel' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b]'
+              }`}>엑셀뷰</button>
+          </div>
+          <div className="h-6 w-px bg-gray-200" />
 
-          {/* 엑셀 스타일 다수선택 필터 */}
+          {/* 공통 필터 드롭다운 */}
           <ExcelFilter label="전체 지역" options={provinceOptions} selected={filterProvince} onChange={v => { setFilterProvince(v); setFilterCity([]) }} />
           <ExcelFilter label="전체 도시" options={cityOptions} selected={filterCity} onChange={setFilterCity} />
           <ExcelFilter label="전체 대상" options={ageOptions} selected={filterAge} onChange={setFilterAge} />
@@ -488,6 +527,8 @@ export default function EmployerManagement() {
             <button type="button" onClick={() => { setFilterProvince([]); setFilterCity([]); setFilterAge([]); setFilterStatus([]) }}
               className="text-[11px] text-red-500 hover:text-red-700 font-medium">초기화</button>
           )}
+
+          <span className="text-[11px] text-gray-400 ml-1">Ctrl+F 검색</span>
 
           <div className="flex-1" />
 
@@ -499,32 +540,13 @@ export default function EmployerManagement() {
           </label>
 
           {/* 열 관리 (엑셀뷰에서만) */}
-          {(viewMode === 'excel' || isMailing) && (
+          {viewMode === 'excel' && (
             <button type="button" onClick={() => setShowColumnMgr(true)}
               className="text-[11px] text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-2 py-1 rounded-lg">
               열 관리
             </button>
           )}
         </div>
-
-        {/* 메일링 탭: 선택 버튼 */}
-        {isMailing && (
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-            <button type="button" onClick={selectAll} className="text-[11px] px-2.5 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium">전체선택</button>
-            <button type="button" onClick={selectNone} className="text-[11px] px-2.5 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium">선택취소</button>
-            <button type="button" onClick={selectFirst10} className="text-[11px] px-2.5 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium">10개선택</button>
-            <span className="text-[12px] text-blue-600 font-semibold ml-2">{selectedIds.size}명 선택</span>
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={() => openMailComposer()}
-              disabled={selectedIds.size === 0}
-              className="px-4 py-2 bg-[#0071E3] text-white text-[12px] font-semibold rounded-lg hover:bg-[#0066CC] transition-colors disabled:opacity-40"
-            >
-              메일 보내기 ({selectedIds.size}명)
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── 에러 / 로딩 ── */}
@@ -535,7 +557,7 @@ export default function EmployerManagement() {
       {!loading && !error && (
         <>
           {/* ── 워드뷰 ── */}
-          {viewMode === 'word' && !isMailing && (
+          {viewMode === 'word' && (
             <div className="space-y-4">
               {filtered.length === 0 && (
                 <div className="text-center py-16 text-[#86868b] text-[14px]">데이터가 없습니다.</div>
@@ -552,47 +574,33 @@ export default function EmployerManagement() {
                   city={extractCity(app.location)}
                   onConfirm={confirmNew}
                   onStatusChange={updateStatus}
-                  showDivider={(idx + 1) % 2 === 0 && idx < filtered.length - 1}
+                  showDivider={(idx + 1) % PAGE_BREAK_EVERY === 0 && idx < filtered.length - 1}
                 />
               ))}
             </div>
           )}
 
-          {/* ── 엑셀뷰 / 메일링뷰 ── */}
-          {(viewMode === 'excel' || isMailing) && (
+          {/* ── 엑셀뷰 ── */}
+          {viewMode === 'excel' && (
             <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + (isMailing ? 120 : 0)}px` }}>
+                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + 80}px` }}>
                   <colgroup>
-                    {isMailing && <col style={{ width: '50px' }} />}
                     {visibleCols.map(c => <col key={c.key} style={{ width: `${c.width}px` }} />)}
-                    {isMailing && <col style={{ width: '70px' }} />}
+                    <col style={{ width: '80px' }} />
                   </colgroup>
                   <thead>
                     <tr className="bg-[#f5f5f7] text-[11px] text-[#86868b] uppercase tracking-wider" style={{ position: 'sticky', top: 0, zIndex: 20 }}>
-                      {isMailing && (
-                        <th className="px-2 py-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.size === filtered.length && filtered.length > 0}
-                            onChange={() => selectedIds.size === filtered.length ? selectNone() : selectAll()}
-                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
-                          />
-                        </th>
-                      )}
                       {visibleCols.map(c => (
                         <th key={c.key} className="px-3 py-3 text-left font-semibold relative group">
                           {c.label}
-                          {/* 리사이즈 핸들 */}
                           <div
                             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-blue-300 transition-opacity"
                             onMouseDown={e => startResize(c.key, e)}
                           />
                         </th>
                       ))}
-                      {isMailing && (
-                        <th className="px-2 py-3 text-center font-semibold">메뉴</th>
-                      )}
+                      <th className="px-2 py-3 text-center font-semibold">메일</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0f0f2]">
@@ -601,30 +609,39 @@ export default function EmployerManagement() {
                       const isNew = app.status === 'new' && !confirmedIds.has(app.id)
                       const no = jobNo(app)
                       const isNewCode = isNewJobCode(no)
+                      const sq = searchQuery.toLowerCase()
+                      const isHl = sq && (
+                        (app.school_name || '').toLowerCase().includes(sq) ||
+                        (app.name || '').toLowerCase().includes(sq) ||
+                        (app.memo || '').toLowerCase().includes(sq) ||
+                        (app.job_code || '').toLowerCase().includes(sq) ||
+                        app.id.toLowerCase().includes(sq)
+                      )
                       return (
                         <tr
                           key={app.id}
                           className={`transition-colors ${
-                            isBlacklist ? 'bg-[rgba(220,38,38,0.04)]' : 'hover:bg-[#f0f4ff]'
+                            isBlacklist ? 'bg-[rgba(220,38,38,0.04)]' : isHl ? 'bg-yellow-50' : 'hover:bg-[#f0f4ff]'
                           } ${isNew ? 'employer-blink' : ''}`}
                           style={isBlacklist ? { borderLeft: '3px solid rgba(220,38,38,0.4)' } : undefined}
                         >
-                          {isMailing && (
-                            <td className="px-2 py-2.5 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(app.id)}
-                                onChange={() => toggleSelect(app.id)}
-                                className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
-                              />
-                            </td>
-                          )}
                           {visibleCols.map(c => (
                             <td key={c.key} className="px-3 py-2.5 text-[13px] truncate" title={cellValue(app, c.key)}>
                               {c.key === 'no' ? (
-                                <code className={`px-1.5 py-0.5 text-[11px] font-bold rounded ${
-                                  isNewCode ? 'bg-blue-600 text-white' : 'bg-[#1d1d1f] text-white'
-                                }`} style={{ fontFamily: 'Consolas, monospace' }}>{no}</code>
+                                <>
+                                  <code className={`px-1.5 py-0.5 text-[11px] font-bold rounded ${
+                                    isNewCode ? 'bg-blue-600 text-white' : 'bg-[#1d1d1f] text-white'
+                                  }`} style={{ fontFamily: 'Consolas, monospace' }}>{no}</code>
+                                  {isNew && (
+                                    <button
+                                      type="button"
+                                      onClick={() => confirmNew(app.id)}
+                                      className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded hover:bg-red-600 employer-blink"
+                                    >
+                                      NEW
+                                    </button>
+                                  )}
+                                </>
                               ) : c.key === 'status' ? (
                                 <select
                                   className={`text-[11px] px-2 py-1 rounded-full font-semibold border-0 cursor-pointer ${
@@ -641,39 +658,27 @@ export default function EmployerManagement() {
                                   {cellValue(app, c.key)}
                                 </span>
                               )}
-                              {/* NEW 확인 버튼 (No. 열 옆) */}
-                              {c.key === 'no' && isNew && (
-                                <button
-                                  type="button"
-                                  onClick={() => confirmNew(app.id)}
-                                  className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded hover:bg-red-600 employer-blink"
-                                >
-                                  NEW
-                                </button>
-                              )}
-                              {/* 블랙리스트 뱃지 */}
                               {c.key === 'status' && isBlacklist && (
                                 <span className="ml-1 px-1 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded">BLOCK</span>
                               )}
                             </td>
                           ))}
-                          {isMailing && (
-                            <td className="px-2 py-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => openMailComposer([app])}
-                                className="px-2 py-1 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-lg hover:bg-blue-100 transition-colors"
-                              >
-                                메일
-                              </button>
-                            </td>
-                          )}
+                          {/* 메일 버튼 — 항상 표시 */}
+                          <td className="px-2 py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => openMailComposer([app])}
+                              className="px-2 py-1 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-lg hover:bg-blue-100 transition-colors"
+                            >
+                              메일
+                            </button>
+                          </td>
                         </tr>
                       )
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={visibleCols.length + (isMailing ? 2 : 0)} className="text-center py-16 text-[#86868b] text-[14px]">
+                        <td colSpan={visibleCols.length + 1} className="text-center py-16 text-[#86868b] text-[14px]">
                           데이터가 없습니다.
                         </td>
                       </tr>
