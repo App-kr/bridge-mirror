@@ -1691,8 +1691,8 @@ from email.mime.multipart import MIMEMultipart
 
 _SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 _SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-_SMTP_USER = os.getenv("SMTP_USER", os.getenv("GMAIL_USER", ""))
-_SMTP_PASS = os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", ""))
+_SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMAIL_USER", "")))
+_SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
 _log_email = logging.getLogger("bridge.email_send")
 
 # template_key → candidates 컬럼 매핑

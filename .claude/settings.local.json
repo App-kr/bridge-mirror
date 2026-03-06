@@ -134,7 +134,8 @@
       "WebFetch(domain:codepen.io)",
       "Bash(cd \"Q:/Claudework/bridge base/web_frontend\" && npx vercel --prod --yes 2>&1)",
       "Bash(TASKKILL:*)",
-      "Bash(tasklist | grep -i -E \"powershell|pwsh|cmd\" 2>/dev/null || tasklist | findstr -i \"powershell pwsh cmd\" 2>/dev/null)"
+      "Bash(tasklist | grep -i -E \"powershell|pwsh|cmd\" 2>/dev/null || tasklist | findstr -i \"powershell pwsh cmd\" 2>/dev/null)",
+      "Bash(cscript:*)"
     ]
   }
 }
