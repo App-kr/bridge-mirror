@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { usePathname } from "next/navigation"
 import AdminSidebar from "@/components/admin/AdminSidebar"
 import { useAdminAuth } from "@/hooks/useAdminAuth"
 
@@ -9,6 +10,8 @@ const DEV_MODE = true
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { authed } = useAdminAuth()
+  const pathname = usePathname()
+  const isFullWidth = pathname === '/admin/sheet'
 
   useEffect(() => {
     document.body.style.filter = ""
@@ -36,10 +39,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex">
       <AdminSidebar />
-      <main className="flex-1 min-w-0">
-        <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-          {children}
-        </div>
+      <main className="flex-1 min-w-0 overflow-hidden">
+        {isFullWidth ? (
+          <div className="w-full h-full">
+            {children}
+          </div>
+        ) : (
+          <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+            {children}
+          </div>
+        )}
       </main>
     </div>
   )

@@ -10,6 +10,7 @@ import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import MarkdownBody from '@/components/MarkdownBody'
 import HtmlPreview from '@/components/HtmlPreview'
+import FaqDndList from '@/app/admin/components/FaqDndList'
 
 import { API_URL } from '@/lib/api'
 
@@ -54,6 +55,7 @@ export default function AdminPostsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [dndMode, setDndMode] = useState(false)
 
   // New post form
   const [showForm, setShowForm] = useState(false)
@@ -310,6 +312,14 @@ export default function AdminPostsPage() {
             }`}>
             {showForm ? '취소' : '+ 새 게시물'}
           </button>
+          {(board === 'support' || board === 'support_kr') && (
+            <button type="button" onClick={() => setDndMode(v => !v)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                dndMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-300 hover:bg-blue-50'
+              }`}>
+              ⠿ FAQ 순서변경
+            </button>
+          )}
           <button type="button" onClick={fetchPosts} className="text-sm text-blue-600 hover:underline px-2">↻ 새로고침</button>
         </div>
       </div>
@@ -442,6 +452,15 @@ export default function AdminPostsPage() {
         <div className="text-center py-16 text-red-500">{error}</div>
       ) : posts.length === 0 ? (
         <div className="text-center py-16 text-gray-400">게시물이 없습니다.</div>
+      ) : dndMode && (board === 'support' || board === 'support_kr') ? (
+        <FaqDndList
+          posts={posts.map(p => ({ id: p.id, title: p.title, board: p.board }))}
+          board={board}
+          apiBase={API}
+          authHeaders={headers}
+          onSaved={() => { setDndMode(false); fetchPosts() }}
+          onCancel={() => setDndMode(false)}
+        />
       ) : (
         <div className="space-y-2">
           {/* Select all */}
