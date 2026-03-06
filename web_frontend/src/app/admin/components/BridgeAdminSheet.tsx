@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { API_URL } from '@/lib/api'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 /* ─── Types ─── */
 type CategoryKey = 'active' | 'past' | 'blacklist'
@@ -60,6 +62,88 @@ const TABS: TabDef[] = [
 ]
 const PC = ['#3b82f6', '#ef4444', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#f43e5e', '#84cc16', '#d946ef', '#14b8a6']
 const SK = 'bridge-v10'
+const SK_EDITS = 'bridge-v10-edits'  // {[cid]: {stage, mailStatus, proposal, notice, ...}}
+const API = API_URL
+
+/* ─── Override localStorage helpers ─── */
+type EditOverride = Partial<Pick<DataRow, 'stage' | 'mailStatus' | 'proposal' | 'notice' | 'applied' | 'history' | 'reference' | 'photoUrl' | 'photoSize' | 'category'>>
+function loadEdits(): Record<string, EditOverride> {
+  try { return JSON.parse(localStorage.getItem(SK_EDITS) || '{}') } catch { return {} }
+}
+function saveEdit(cid: string, patch: EditOverride) {
+  try {
+    const edits = loadEdits()
+    edits[cid] = { ...(edits[cid] || {}), ...patch }
+    localStorage.setItem(SK_EDITS, JSON.stringify(edits))
+  } catch { /* ignore */ }
+}
+
+/* ─── DB → DataRow mapping ─── */
+function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Record<string, EditOverride>): DataRow {
+  const cid = String(c.candidate_id ?? c.id ?? '')
+  const ov = edits[cid] || {}
+  const cat: CategoryKey = String(c.status) === 'Active' ? 'active' : 'past'
+  const tattoo = [c.tattoo, c.piercings].filter(Boolean).join('/')
+  const ts = String(c.created_at ?? '').slice(0, 10).replace(/-/g, '.').slice(2)
+  const isWebForm = String(c.source) === 'web_form'
+  return {
+    id: idx + 1,
+    _cid: cid,
+    category: ov.category ?? cat,
+    stage: ov.stage ?? 'none',
+    mailStatus: ov.mailStatus ?? '',
+    photoUrl: String(c.photo_url ?? ov.photoUrl ?? ''),
+    photoSize: Number(ov.photoSize ?? 50),
+    email: String(c.email ?? ''),
+    name: String(c.full_name ?? ''),
+    mgtNum: cid.slice(-4),
+    arc: String(c.arc_holders ?? ''),
+    nationality: String(c.nationality ?? ''),
+    background: String(c.ancestry ?? ''),
+    age: String(c.dob ?? ''),
+    gender: String(c.gender ?? ''),
+    currentLoc: String(c.current_location ?? ''),
+    startDate: String(c.start_date ?? ''),
+    university: String(c.target ?? ''),
+    prefRegion: String(c.area_prefs ?? ''),
+    reference: ov.reference ?? String(c.reference ?? ''),
+    totalExp: String(c.experience ?? ''),
+    notice: ov.notice ?? '',
+    preference: String(c.preferences ?? ''),
+    applied: ov.applied ?? String(c.job_prefs ?? ''),
+    proposal: ov.proposal ?? '',
+    mailAction: '',
+    curSalary: String(c.current_salary ?? ''),
+    hopeSalary: String(c.desired_salary ?? ''),
+    interviewCol: String(c.interview_time ?? ''),
+    degree: String(c.education_level ?? ''),
+    major: String(c.major ?? ''),
+    cert: String(c.certification ?? ''),
+    docs: String(c.doc_status ?? c.documents ?? ''),
+    health: String(c.health_info ?? ''),
+    tattooPiercing: tattoo,
+    family: String(c.dependents ?? ''),
+    married: String(c.married ?? ''),
+    housing: String(c.housing ?? c.housing_type ?? ''),
+    religion: String(c.religion ?? ''),
+    e2visa: String(c.e_visa ?? c.visa_type ?? ''),
+    kakao: String(c.kakaotalk ?? ''),
+    phone: String(c.mobile_phone ?? ''),
+    crimCheck: String(c.criminal_record_check ?? c.criminal_record ?? ''),
+    domesticCrim: String(c.korean_criminal_record ?? ''),
+    infoProvide: String(c.consent ?? ''),
+    verified: String(c.fact_check ?? ''),
+    source: isWebForm ? '★NEW' : String(c.how_to ?? c.source ?? ''),
+    timestamp: ts,
+    hired: String(c.placed_company ?? ''),
+    wage: String(c.placed_salary ?? ''),
+    moveIn: String(c.start_month ?? ''),
+    housingCost: String(c.housing_detail ?? ''),
+    introFee: String(c.referral_fee ?? ''),
+    process: String(c.process_date ?? ''),
+    history: ov.history ?? String(c.past_placement ?? ''),
+  }
+}
 const SROWS_I: StatusRow[] = [
   { id: 's1', label: '인터뷰', bg: '#fff', text: '아르테4977 강서프라5513 5271', h: 40 },
   { id: 's2', label: '제안', bg: '#ffff00', text: '에더빈5092', h: 40 },
@@ -158,6 +242,7 @@ function Hov({ children, bg, style, ...p }: HovProps) {
 
 /* ─── Main ─── */
 export default function BridgeAdminSheet() {
+  const { headers } = useAdminAuth()
   const [data, setData] = useState<DataStore>(mkD)
   const [tab, setTab] = useState<TabKey>('active')
   const [sRows, setSR] = useState<StatusRow[]>(SROWS_I)
@@ -189,6 +274,9 @@ export default function BridgeAdminSheet() {
   const [eSRL, setESRL] = useState<string | null>(null)
   const [eSRV, setESRV] = useState('')
   const [undoStack, setUS] = useState<UndoSnapshot[]>([])
+  const [loading, setLoading] = useState(false)
+  const [lastSync, setLastSync] = useState('')
+  const [newCount, setNewCount] = useState(0)
 
   const eR = useRef<HTMLTextAreaElement>(null)
   const cR = useRef<{ i: number; sx: number; sw: number } | null>(null)
@@ -199,6 +287,7 @@ export default function BridgeAdminSheet() {
   const syncR = useRef(false)
   const fRef = useRef<HTMLInputElement>(null)
   const photoRef = useRef<HTMLInputElement>(null)
+  const editedCids = useRef<Set<string>>(new Set())
 
   const pushU = useCallback(() => {
     setUS(p => [...p, { d: JSON.parse(JSON.stringify(data)), s: JSON.parse(JSON.stringify(sRows)) }].slice(-10))
@@ -232,6 +321,42 @@ export default function BridgeAdminSheet() {
       localStorage.setItem(SK, JSON.stringify({ cw, cl, cv, rh, fc: frozenCols }))
     } catch { /* ignore */ }
   }, [cols, rh, ready, frozenCols])
+
+  /* DB 연동 — Active candidates 로드 */
+  const fetchFromDB = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
+      if (!res.ok) return
+      const json = await res.json()
+      const candidates: Record<string, unknown>[] = json.data?.candidates ?? []
+      const edits = loadEdits()
+      const mapped = candidates.map((c, i) => mapCandidateToRow(c, i, edits))
+      const nc = mapped.filter(r => String(r.source).includes('★NEW')).length
+      setNewCount(nc)
+      // 유저가 편집하지 않은 행만 DB 데이터로 갱신
+      setData(p => ({
+        ...p,
+        active: mapped.map(dbRow => {
+          const cid = String(dbRow._cid ?? '')
+          if (cid && editedCids.current.has(cid)) {
+            const existing = p.active.find(r => String(r._cid ?? '') === cid)
+            return existing ?? dbRow
+          }
+          return dbRow
+        }),
+      }))
+      setLastSync(new Date().toLocaleTimeString())
+    } catch { /* ignore */ } finally {
+      setLoading(false)
+    }
+  }, [headers])
+
+  useEffect(() => {
+    fetchFromDB()
+    const iv = setInterval(fetchFromDB, 60_000)
+    return () => clearInterval(iv)
+  }, [fetchFromDB])
 
   /* Ctrl+Z */
   useEffect(() => {
@@ -339,7 +464,19 @@ export default function BridgeAdminSheet() {
   }
   const cE = () => {
     if (!ec) return; pushU()
-    setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(x => x.id === ec.id ? { ...x, [ec.key]: ev } : x); return u })
+    setData(p => {
+      const u: DataStore = { active: [], past: [], blacklist: [] }
+      for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(x => {
+        if (x.id !== ec.id) return x
+        const cid = String(x._cid ?? '')
+        if (cid) {
+          editedCids.current.add(cid)
+          saveEdit(cid, { [ec.key]: ev } as EditOverride)
+        }
+        return { ...x, [ec.key]: ev }
+      })
+      return u
+    })
     setEc(null)
   }
   useEffect(() => { if (ec && eR.current) eR.current.focus() }, [ec])
@@ -349,12 +486,25 @@ export default function BridgeAdminSheet() {
 
   /* Stage / Field / Tag */
   const upData = (fn: (x: DataRow) => DataRow) => { pushU(); setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(fn); return u }) }
-  const setSt = (rid: number, s: string) => upData(x => x.id === rid ? { ...x, stage: s } : x)
-  const setField = (rid: number, key: string, val: string) => upData(x => x.id === rid ? { ...x, [key]: val } : x)
+  const setSt = (rid: number, s: string) => upData(x => {
+    if (x.id !== rid) return x
+    const cid = String(x._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { stage: s }) }
+    return { ...x, stage: s }
+  })
+  const setField = (rid: number, key: string, val: string) => upData(x => {
+    if (x.id !== rid) return x
+    const cid = String(x._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { [key]: val } as EditOverride) }
+    return { ...x, [key]: val }
+  })
   const tMT = (rid: number, tk: string) => upData(x => {
     if (x.id !== rid) return x
     const c = String(x.mailStatus || '').split(',').filter(Boolean)
-    return { ...x, mailStatus: (c.includes(tk) ? c.filter(i => i !== tk) : [...c, tk]).join(',') }
+    const ms = (c.includes(tk) ? c.filter(i => i !== tk) : [...c, tk]).join(',')
+    const cid = String(x._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { mailStatus: ms }) }
+    return { ...x, mailStatus: ms }
   })
 
   /* Context menu */
@@ -429,10 +579,18 @@ export default function BridgeAdminSheet() {
           <b style={{ fontSize: 26, letterSpacing: 4 }}>BRIDGE</b>
           <span style={{ fontSize: 18, fontWeight: 700 }}>원어민 관리</span>
           <span style={{ fontSize: 14, color: '#dc2626', background: '#fee2e2', padding: '4px 14px', borderRadius: 6, fontWeight: 900, border: '2px solid #fca5a5' }}>ADMIN</span>
+          {newCount > 0 && (
+            <span style={{ fontSize: 14, color: '#fff', background: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 900, animation: 'pulse 2s infinite' }}>
+              ★ NEW {newCount}명
+            </span>
+          )}
+          {loading && <span style={{ fontSize: 13, color: '#6b7280' }}>⟳ DB 동기화 중...</span>}
+          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>마지막 동기화: {lastSync}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
           {sel.size > 0 && <button onClick={() => { openMM([...data.active, ...data.past, ...data.blacklist].filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
+          <button onClick={fetchFromDB} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
           <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
           <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
           <button onClick={addN} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>+새후보자</button>
