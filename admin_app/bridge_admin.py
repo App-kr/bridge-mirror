@@ -545,6 +545,59 @@ class BridgeAdminApp:
         for widget in self.root.winfo_children():
             widget.destroy()
 
+    def _change_password_dialog(self):
+        """관리자 비밀번호 변경 — 입력 글자 안 보임."""
+        win = tk_Toplevel(self.root)
+        win.title("비밀번호 변경")
+        win.geometry("380x280")
+        win.resizable(False, False)
+        win.configure(bg=Colors.BG)
+        win.grab_set()
+
+        Label(win, text="관리자 비밀번호 변경", font=("Segoe UI", 14, "bold"),
+              bg=Colors.BG, fg=Colors.PRIMARY).pack(pady=(24, 4))
+        Label(win, text="입력 내용은 화면에 표시되지 않습니다", font=("Segoe UI", 9),
+              bg=Colors.BG, fg=Colors.TEXT_SEC).pack(pady=(0, 18))
+
+        frame = Frame(win, bg=Colors.BG)
+        frame.pack(fill=X, padx=30)
+
+        Label(frame, text="새 비밀번호", font=("Segoe UI", 10),
+              bg=Colors.BG, fg=Colors.TEXT).pack(anchor=W)
+        pw1_var = StringVar()
+        Entry(frame, textvariable=pw1_var, show="●", font=("Segoe UI", 12),
+              relief="solid", bd=1).pack(fill=X, pady=(3, 12))
+
+        Label(frame, text="비밀번호 확인", font=("Segoe UI", 10),
+              bg=Colors.BG, fg=Colors.TEXT).pack(anchor=W)
+        pw2_var = StringVar()
+        Entry(frame, textvariable=pw2_var, show="●", font=("Segoe UI", 12),
+              relief="solid", bd=1).pack(fill=X, pady=(3, 18))
+
+        def _submit():
+            pw = pw1_var.get()
+            if len(pw) < 8:
+                messagebox.showwarning("오류", "비밀번호는 8자 이상이어야 합니다.", parent=win)
+                return
+            if pw != pw2_var.get():
+                messagebox.showwarning("오류", "비밀번호가 일치하지 않습니다.", parent=win)
+                return
+            result = api_call("POST", "/api/admin/change-password",
+                              self.admin_key.get(),
+                              {"new_password": pw})
+            if result.get("success"):
+                messagebox.showinfo("완료",
+                    "비밀번호 변경 완료!\n\n"
+                    "⚠️ Render 대시보드에서도 ADMIN_PASSWORD를\n"
+                    "업데이트한 후 서버를 재시작하세요.", parent=win)
+                win.destroy()
+            else:
+                messagebox.showerror("실패", result.get("message", "변경 실패"), parent=win)
+
+        Button(frame, text="변경", font=("Segoe UI", 11, "bold"),
+               bg=Colors.ACCENT, fg="white", relief="flat", cursor="hand2",
+               padx=30, pady=6, command=_submit).pack()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Interview 생성 다이얼로그
@@ -626,60 +679,6 @@ class _InterviewDialog:
             self.top.destroy()
         else:
             messagebox.showerror("Error", result.get("message", "Failed to create interview"))
-
-
-    def _change_password_dialog(self):
-        """관리자 비밀번호 변경 — 입력 글자 안 보임."""
-        win = tk_Toplevel(self.root)
-        win.title("비밀번호 변경")
-        win.geometry("380x280")
-        win.resizable(False, False)
-        win.configure(bg=Colors.BG)
-        win.grab_set()
-
-        Label(win, text="관리자 비밀번호 변경", font=("Segoe UI", 14, "bold"),
-              bg=Colors.BG, fg=Colors.PRIMARY).pack(pady=(24, 4))
-        Label(win, text="입력 내용은 화면에 표시되지 않습니다", font=("Segoe UI", 9),
-              bg=Colors.BG, fg=Colors.TEXT_SEC).pack(pady=(0, 18))
-
-        frame = Frame(win, bg=Colors.BG)
-        frame.pack(fill=X, padx=30)
-
-        Label(frame, text="새 비밀번호", font=("Segoe UI", 10),
-              bg=Colors.BG, fg=Colors.TEXT).pack(anchor=W)
-        pw1_var = StringVar()
-        Entry(frame, textvariable=pw1_var, show="●", font=("Segoe UI", 12),
-              relief="solid", bd=1).pack(fill=X, pady=(3, 12))
-
-        Label(frame, text="비밀번호 확인", font=("Segoe UI", 10),
-              bg=Colors.BG, fg=Colors.TEXT).pack(anchor=W)
-        pw2_var = StringVar()
-        Entry(frame, textvariable=pw2_var, show="●", font=("Segoe UI", 12),
-              relief="solid", bd=1).pack(fill=X, pady=(3, 18))
-
-        def _submit():
-            pw = pw1_var.get()
-            if len(pw) < 8:
-                messagebox.showwarning("오류", "비밀번호는 8자 이상이어야 합니다.", parent=win)
-                return
-            if pw != pw2_var.get():
-                messagebox.showwarning("오류", "비밀번호가 일치하지 않습니다.", parent=win)
-                return
-            result = api_call("POST", "/api/admin/change-password",
-                              self.admin_key.get(),
-                              {"new_password": pw})
-            if result.get("success"):
-                messagebox.showinfo("완료",
-                    "비밀번호 변경 완료!\n\n"
-                    "⚠️ Render 대시보드에서도 ADMIN_PASSWORD를\n"
-                    "업데이트한 후 서버를 재시작하세요.", parent=win)
-                win.destroy()
-            else:
-                messagebox.showerror("실패", result.get("message", "변경 실패"), parent=win)
-
-        Button(frame, text="변경", font=("Segoe UI", 11, "bold"),
-               bg=Colors.ACCENT, fg="white", relief="flat", cursor="hand2",
-               padx=30, pady=6, command=_submit).pack()
 
 
 # tkinter.Toplevel alias
