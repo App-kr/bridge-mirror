@@ -760,6 +760,9 @@ export default function BoardPage() {
     onFaqReorder: handleFaqItemReorder,
     faqSectionTitle,
     onFaqSectionTitleChange: handleFaqSectionTitleChange,
+    orderDirty,
+    orderSaving,
+    onSaveOrder: handleSaveOrder,
   }
 
   const Layout = (() => {
@@ -788,16 +791,6 @@ export default function BoardPage() {
         />
       )}
       <Layout {...props} />
-      {editMode && orderDirty && (
-        <button
-          type="button"
-          onClick={handleSaveOrder}
-          disabled={orderSaving}
-          className="fixed bottom-14 right-5 z-[9998] flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white text-sm font-bold rounded-full shadow-lg transition-colors animate-pulse"
-        >
-          {orderSaving ? '저장 중...' : '💾 순서 저장'}
-        </button>
-      )}
       {editorOpen && (
         <SplitEditor
           isOpen={true}

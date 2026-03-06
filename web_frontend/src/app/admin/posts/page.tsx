@@ -2,7 +2,7 @@
 
 /**
  * /admin/posts — Community Posts Management
- * 검색, 인라인 수정, 벌크 선택/고정/삭제
+ * 검색, 인라인 수정, 벌크 선택/고정/삭제, 드래그앤드롭 순서변경
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -10,7 +10,23 @@ import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import MarkdownBody from '@/components/MarkdownBody'
 import HtmlPreview from '@/components/HtmlPreview'
-import FaqDndList from '@/app/admin/components/FaqDndList'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 import { API_URL } from '@/lib/api'
 
@@ -46,16 +62,59 @@ function getInitialBoard(): string {
   return params.get('board') ?? 'all'
 }
 
+/* ── 드래그 핸들 래퍼 ── */
+function SortablePostWrapper({
+  id,
+  disabled,
+  children,
+}: {
+  id: number
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+    zIndex: isDragging ? 999 : undefined,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-start gap-1">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="mt-[14px] p-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
+        style={{ touchAction: 'none' }}
+        title="드래그하여 순서 변경"
+      >
+        <svg width="12" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="4" y="3" width="2" height="2" rx="1" />
+          <rect x="4" y="7" width="2" height="2" rx="1" />
+          <rect x="4" y="11" width="2" height="2" rx="1" />
+          <rect x="10" y="3" width="2" height="2" rx="1" />
+          <rect x="10" y="7" width="2" height="2" rx="1" />
+          <rect x="10" y="11" width="2" height="2" rx="1" />
+        </svg>
+      </button>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  )
+}
+
 export default function AdminPostsPage() {
   const { authed, login, headers, signedFetch, waking } = useAdminAuth()
 
   const [posts, setPosts] = useState<Post[]>([])
+  const [localPosts, setLocalPosts] = useState<Post[] | null>(null)
   const [board, setBoard] = useState<string>(getInitialBoard)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
-  const [dndMode, setDndMode] = useState(false)
+  const [savingOrder, setSavingOrder] = useState(false)
 
   // New post form
   const [showForm, setShowForm] = useState(false)
@@ -78,9 +137,50 @@ export default function AdminPostsPage() {
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  // DnD 상태
+  const displayPosts = localPosts ?? posts
+  const orderChanged = localPosts !== null
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const source = localPosts ?? posts
+    const oldIdx = source.findIndex(p => p.id === active.id)
+    const newIdx = source.findIndex(p => p.id === over.id)
+    setLocalPosts(arrayMove(source, oldIdx, newIdx))
+  }
+
+  const handleSaveOrder = async () => {
+    if (!localPosts) return
+    setSavingOrder(true)
+    try {
+      const items = localPosts.map((p, idx) => ({ id: p.id, sort_order: localPosts.length - idx }))
+      const res = await fetch(`${API}/api/admin/community-reorder/${board}`, {
+        method: 'PATCH',
+        headers: { ...headers(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
+      setActionMsg('순서 저장 완료!')
+      setLocalPosts(null)
+      fetchPosts()
+    } catch (e) {
+      setActionMsg(`순서 저장 오류: ${e instanceof Error ? e.message : '실패'}`)
+    } finally {
+      setSavingOrder(false)
+    }
+  }
+
   const fetchPosts = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setLocalPosts(null)
     try {
       // 검색어가 있으면 관리자 검색 API 사용
       if (search.trim()) {
@@ -143,7 +243,6 @@ export default function AdminPostsPage() {
     const target = posts.find((p) => p.id === targetId)
     if (target) {
       startEdit(target)
-      // URL에서 edit 파라미터 제거 (히스토리 교체)
       params.delete('edit')
       const qs = params.toString()
       window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
@@ -204,7 +303,6 @@ export default function AdminPostsPage() {
 
   // Edit handlers
   const startEdit = async (post: Post) => {
-    // 전체 본문 로드
     try {
       const res = await fetch(`${API}/api/community/${post.board}/${post.id}`, { headers: headers() })
       const json = await res.json()
@@ -298,6 +396,111 @@ export default function AdminPostsPage() {
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
+  /* ── 개별 게시물 카드 ── */
+  const renderPost = (p: Post) => {
+    const key = `${p.board}-${p.id}`
+    const isEditing = editId === p.id && editBoard === p.board
+    return (
+      <>
+        <div className={`card !py-3 flex items-start gap-3 ${p.pinned === 1 ? 'border-l-4 !border-l-blue-500' : ''}`}>
+          <input type="checkbox" checked={selected.has(key)}
+            onChange={() => toggleSelect(key)} className="mt-1 rounded" />
+          <div className="text-xs text-gray-400 font-mono w-8 pt-0.5">#{p.id}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className={`badge text-[10px] ${
+                p.board === 'visa' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                p.board === 'support_kr' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                p.board === 'support' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                p.board === 'about' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
+                p.board === 'korea' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>{boardLabel(p.board)}</span>
+              {p.pinned === 1 && <span className="badge bg-blue-50 text-blue-600 border border-blue-200 text-[10px]">pinned</span>}
+              <span className="font-semibold text-gray-900 truncate">{p.title}</span>
+            </div>
+            <p className="text-xs text-gray-400">
+              #{p.author_hash} · {new Date(p.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })} · 👁 {p.views}
+            </p>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <button type="button" onClick={() => startEdit(p)}
+              className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+              title="Edit">
+              ✏️
+            </button>
+            <button type="button" onClick={() => handlePin(p.board, p.id, p.pinned)}
+              className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
+              title={p.pinned === 1 ? 'Unpin' : 'Pin'}>
+              {p.pinned === 1 ? '📌' : '📍'}
+            </button>
+            <button type="button" onClick={() => handleDelete(p.board, p.id)}
+              className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+              title="Delete">
+              🗑
+            </button>
+          </div>
+        </div>
+
+        {/* Inline Edit Form */}
+        {isEditing && (
+          <div className="card border-2 border-yellow-200 bg-yellow-50/30 space-y-3 mt-1">
+            <h3 className="text-sm font-bold text-gray-700">게시글 수정 #{p.id}</h3>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">제목</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                maxLength={200} />
+            </div>
+            <div>
+              <div className="flex items-center gap-1 mb-2">
+                <button type="button" onClick={() => setEditTab('write')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    editTab === 'write' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>작성</button>
+                <button type="button" onClick={() => setEditTab('preview')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    editTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>미리보기</button>
+                <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+                  <button type="button" onClick={() => setEditContentType('markdown')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      editContentType === 'markdown' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                    }`}>MD</button>
+                  <button type="button" onClick={() => setEditContentType('html')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      editContentType === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                    }`}>HTML</button>
+                </div>
+              </div>
+              {editTab === 'write' ? (
+                <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
+                  className="w-full h-40 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  maxLength={10000} />
+              ) : (
+                <div className="w-full min-h-[160px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
+                  {editBody.trim() ? (
+                    editContentType === 'html' ? <HtmlPreview html={editBody} /> : <MarkdownBody text={editBody} />
+                  ) : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setEditId(null)}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
+                취소
+              </button>
+              <button type="button" onClick={handleEdit} disabled={saving}
+                className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
+                {saving ? '저장 중...' : '수정 저장'}
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -305,21 +508,26 @@ export default function AdminPostsPage() {
           <h1 className="text-2xl font-bold text-gray-900">게시판 관리</h1>
           <p className="text-gray-500 text-sm">{posts.length} posts</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {orderChanged && (
+            <>
+              <span className="text-xs text-blue-600">순서 변경됨</span>
+              <button type="button" onClick={() => setLocalPosts(null)}
+                className="px-3 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+                되돌리기
+              </button>
+              <button type="button" onClick={handleSaveOrder} disabled={savingOrder}
+                className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                {savingOrder ? '저장 중...' : '순서 저장'}
+              </button>
+            </>
+          )}
           <button type="button" onClick={() => setShowForm(!showForm)}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               showForm ? 'bg-gray-200 text-gray-700' : 'bg-[#1d1d1f] text-white hover:bg-[#424245]'
             }`}>
             {showForm ? '취소' : '+ 새 게시물'}
           </button>
-          {(board === 'support' || board === 'support_kr') && (
-            <button type="button" onClick={() => setDndMode(v => !v)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
-                dndMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-300 hover:bg-blue-50'
-              }`}>
-              ⠿ FAQ 순서변경
-            </button>
-          )}
           <button type="button" onClick={fetchPosts} className="text-sm text-blue-600 hover:underline px-2">↻ 새로고침</button>
         </div>
       </div>
@@ -409,7 +617,7 @@ export default function AdminPostsPage() {
       {/* Board filter */}
       <div className="flex gap-2 flex-wrap">
         {BOARDS.map((b) => (
-          <button key={b} type="button" onClick={() => setBoard(b)}
+          <button key={b} type="button" onClick={() => { setLocalPosts(null); setBoard(b) }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
               board === b ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}>
@@ -452,15 +660,6 @@ export default function AdminPostsPage() {
         <div className="text-center py-16 text-red-500">{error}</div>
       ) : posts.length === 0 ? (
         <div className="text-center py-16 text-gray-400">게시물이 없습니다.</div>
-      ) : dndMode && (board === 'support' || board === 'support_kr') ? (
-        <FaqDndList
-          posts={posts.map(p => ({ id: p.id, title: p.title, board: p.board }))}
-          board={board}
-          apiBase={API}
-          authHeaders={headers}
-          onSaved={() => { setDndMode(false); fetchPosts() }}
-          onCancel={() => setDndMode(false)}
-        />
       ) : (
         <div className="space-y-2">
           {/* Select all */}
@@ -468,112 +667,28 @@ export default function AdminPostsPage() {
             <input type="checkbox" checked={selected.size === posts.length && posts.length > 0}
               onChange={toggleAll} className="rounded" />
             <span>전체 선택</span>
+            {board !== 'all' && (
+              <span className="ml-auto text-gray-300">⠿ 드래그로 순서 변경 가능</span>
+            )}
           </div>
 
-          {posts.map((p) => {
-            const key = `${p.board}-${p.id}`
-            const isEditing = editId === p.id && editBoard === p.board
-
-            return (
-              <div key={key}>
-                <div className={`card !py-3 flex items-start gap-3 ${p.pinned === 1 ? 'border-l-4 !border-l-blue-500' : ''}`}>
-                  <input type="checkbox" checked={selected.has(key)}
-                    onChange={() => toggleSelect(key)} className="mt-1 rounded" />
-                  <div className="text-xs text-gray-400 font-mono w-8 pt-0.5">#{p.id}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`badge text-[10px] ${
-                        p.board === 'visa' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        p.board === 'support_kr' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                        p.board === 'support' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                        p.board === 'about' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
-                        p.board === 'korea' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>{boardLabel(p.board)}</span>
-                      {p.pinned === 1 && <span className="badge bg-blue-50 text-blue-600 border border-blue-200 text-[10px]">pinned</span>}
-                      <span className="font-semibold text-gray-900 truncate">{p.title}</span>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      #{p.author_hash} · {new Date(p.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })} · 👁 {p.views}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button type="button" onClick={() => startEdit(p)}
-                      className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
-                      title="Edit">
-                      ✏️
-                    </button>
-                    <button type="button" onClick={() => handlePin(p.board, p.id, p.pinned)}
-                      className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
-                      title={p.pinned === 1 ? 'Unpin' : 'Pin'}>
-                      {p.pinned === 1 ? '📌' : '📍'}
-                    </button>
-                    <button type="button" onClick={() => handleDelete(p.board, p.id)}
-                      className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
-                      title="Delete">
-                      🗑
-                    </button>
-                  </div>
-                </div>
-
-                {/* Inline Edit Form */}
-                {isEditing && (
-                  <div className="card border-2 border-yellow-200 bg-yellow-50/30 space-y-3 mt-1">
-                    <h3 className="text-sm font-bold text-gray-700">게시글 수정 #{p.id}</h3>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">제목</label>
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        maxLength={200} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <button type="button" onClick={() => setEditTab('write')}
-                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                            editTab === 'write' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}>작성</button>
-                        <button type="button" onClick={() => setEditTab('preview')}
-                          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                            editTab === 'preview' ? 'bg-[#1d1d1f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}>미리보기</button>
-                        <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
-                          <button type="button" onClick={() => setEditContentType('markdown')}
-                            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                              editContentType === 'markdown' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                            }`}>MD</button>
-                          <button type="button" onClick={() => setEditContentType('html')}
-                            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                              editContentType === 'html' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                            }`}>HTML</button>
-                        </div>
-                      </div>
-                      {editTab === 'write' ? (
-                        <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                          className="w-full h-40 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                          maxLength={10000} />
-                      ) : (
-                        <div className="w-full min-h-[160px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
-                          {editBody.trim() ? (
-                            editContentType === 'html' ? <HtmlPreview html={editBody} /> : <MarkdownBody text={editBody} />
-                          ) : <p className="text-gray-400 text-sm">미리보기할 내용이 없습니다.</p>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button type="button" onClick={() => setEditId(null)}
-                        className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
-                        취소
-                      </button>
-                      <button type="button" onClick={handleEdit} disabled={saving}
-                        className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
-                        {saving ? '저장 중...' : '수정 저장'}
-                      </button>
-                    </div>
-                  </div>
-                )}
+          {board !== 'all' ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={displayPosts.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                {displayPosts.map((p) => (
+                  <SortablePostWrapper key={`${p.board}-${p.id}`} id={p.id} disabled={editId === p.id}>
+                    {renderPost(p)}
+                  </SortablePostWrapper>
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            displayPosts.map((p) => (
+              <div key={`${p.board}-${p.id}`}>
+                {renderPost(p)}
               </div>
-            )
-          })}
+            ))
+          )}
         </div>
       )}
     </div>
