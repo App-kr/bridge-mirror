@@ -243,7 +243,7 @@ function Hov({ children, bg, style, ...p }: HovProps) {
 /* ─── Main ─── */
 export default function BridgeAdminSheet() {
   const { headers } = useAdminAuth()
-  const [data, setData] = useState<DataStore>(mkD)
+  const [data, setData] = useState<DataStore>({ active: [], past: [], blacklist: [] })
   const [tab, setTab] = useState<TabKey>('active')
   const [sRows, setSR] = useState<StatusRow[]>(SROWS_I)
   const [cols, setCols] = useState<ColDef[]>(initCols)
