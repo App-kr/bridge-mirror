@@ -76,6 +76,10 @@ sheets_state.json
 backups/
 bridge-overnight/
 
+# ── Security Keys ────────────────────────────────────────────
+.bridge.key
+mail_log_*.json
+
 # ── Misc ──────────────────────────────────────────────────────
 *.bak
 *.tmp

@@ -61,13 +61,13 @@ export default function AdminBannersPage() {
         const errBody = await res.json().catch(() => ({}))
         if (errBody.error?.includes?.('Access denied')) {
           setError('일시적으로 차단되었습니다. 자동 재시도 중...')
-          const k = sessionStorage.getItem('bridge_admin_key') || ''
+          const k = localStorage.getItem('bridge_admin_key') || ''
           await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
           setTimeout(() => window.location.reload(), 3000)
           return
         }
         setError('관리자 키가 올바르지 않습니다. 다시 로그인해주세요.')
-        sessionStorage.removeItem('bridge_admin_key')
+        localStorage.removeItem('bridge_admin_key')
         return
       }
       const json = await res.json()
