@@ -116,6 +116,19 @@ except Exception as _vault_exc:
     print("[CRITICAL] pip install cryptography 후 재시작하세요.")
     sys.exit(1)
 
+# ── security 패키지 (PII 암호화/스캐너/인증/Rate Limiter/Sanitizer) ────────
+try:
+    from security import PIICrypto, PIIScanner, AdminAuth, RateLimiter as SecRateLimiter, InputSanitizer
+    _sec_crypto = PIICrypto()
+    _sec_scanner = PIIScanner(fail_closed=True)
+    _sec_sanitizer = InputSanitizer()
+    _SECURITY_PKG_OK = True
+except Exception as _sec_exc:
+    _SECURITY_PKG_OK = False
+    _sec_crypto = None
+    _sec_scanner = None
+    _sec_sanitizer = None
+    print(f"[WARN] security 패키지 로드 실패 (선택적): {_sec_exc}")
 
 # ── JWT Magic Link ────────────────────────────────────────────────────────────
 import jwt as _jwt   # PyJWT
@@ -324,8 +337,10 @@ app = FastAPI(
 
 # 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
 try:
-    from security_middleware import SecurityMiddleware
+    from security_middleware import SecurityMiddleware, security_router, admin_security_router
     app.add_middleware(SecurityMiddleware)
+    app.include_router(security_router)
+    app.include_router(admin_security_router)
 except ImportError:
     pass  # 선택적: 파일 없으면 무시
 
@@ -337,7 +352,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Bridge-Signature"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature"],
 )
 
 # ── Supabase 클라이언트 (지연 초기화) ─────────────────────────────────────────
@@ -734,6 +749,12 @@ async def apply(request: Request, body: CandidateApply):
     2차 제출: apply_token 검증 → UPDATE (누적)
     토큰 없음: dedup_key 복합키로 기존 레코드 탐색 → UPSERT
     """
+    # Input Sanitizer 검증
+    if _SECURITY_PKG_OK and _sec_sanitizer:
+        for _f in ["full_name", "email", "phone", "message"]:
+            _v = getattr(body, _f, None)
+            if _v and isinstance(_v, str) and not _sec_sanitizer.is_safe(_v):
+                raise HTTPException(400, "유효하지 않은 입력입니다.")
     try:
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -829,6 +850,12 @@ async def inquiry(request: Request, body: ClientInquiry):
     - 학교/학원 → 채용 문의 → client_inquiries 테이블 INSERT
     - 연락처/담당자명은 security_vault AES-256-GCM 암호화 후 저장
     """
+    # Input Sanitizer 검증
+    if _SECURITY_PKG_OK and _sec_sanitizer:
+        for _f in ["school_name", "contact_name", "email", "phone", "message"]:
+            _v = getattr(body, _f, None)
+            if _v and isinstance(_v, str) and not _sec_sanitizer.is_safe(_v):
+                raise HTTPException(400, "유효하지 않은 입력입니다.")
     # 구인처 암호화: 식별 가능 정보 + 사업자
     _INQUIRY_ENCRYPT = {"phone", "email", "contact_name", "business_registration"}
 
