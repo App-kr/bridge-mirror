@@ -65,6 +65,8 @@ const PC = ['#3b82f6', '#ef4444', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#
 const SK = 'bridge-v10'
 const SK_EDITS = 'bridge-v10-edits'   // {[cid]: {stage, mailStatus, ...}}
 const SK_DATA  = 'bridge-v10-data'    // {active, past, blacklist} 수동 관리 탭
+const SK_ALL   = 'bridge-v10-all'     // {rows, ts} dbAll 캐시
+const CACHE_TTL = 5 * 60 * 1000      // 캐시 유효기간 5분
 const API = API_URL
 
 /* ─── Override localStorage helpers ─── */
@@ -343,53 +345,73 @@ export default function BridgeAdminSheet() {
     try { localStorage.setItem(SK_DATA, JSON.stringify(data)) } catch { /* ignore */ }
   }, [data, ready])
 
-  /* DB 연동 — 4개 병렬 청크로 전체 로드 */
-  const fetchFromDB = useCallback(async () => {
-    setLoading(true)
-    setDbLoadProgress(0)
+  /* DB 연동 — 단일 요청으로 전체 로드 + localStorage 캐시 */
+  const fetchFromDB = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true)
+      setDbLoadProgress(0)
+    }
     const edits = loadEdits()
-    const CHUNK = 800   // 4 병렬 × 800 = 3200 (3059명 커버)
-    const PARALLEL = 4
 
     try {
-      // 1) 총 건수 파악
-      const cntRes = await fetch(`${API}/api/admin/candidates?limit=1&offset=0`, { headers: headers() })
-      if (!cntRes.ok) return
-      const cntJson = await cntRes.json()
-      const total: number = cntJson.data?.total ?? 4000
+      const res = await fetch(`${API}/api/admin/candidates?limit=9999`, { headers: headers() })
+      if (!res.ok) return
+      const json = await res.json()
+      const rawRows: Record<string, unknown>[] = json.data?.candidates ?? []
+      const allRows = rawRows.map((c, i) => mapCandidateToRow(c, i, edits))
 
-      // 2) 오프셋 목록 생성 후 병렬 배치 처리
-      const offsets = Array.from({ length: Math.ceil(total / CHUNK) }, (_, i) => i * CHUNK)
-      const allRows: DataRow[] = []
-
-      for (let i = 0; i < offsets.length; i += PARALLEL) {
-        const batch = offsets.slice(i, i + PARALLEL)
-        const results = await Promise.all(
-          batch.map(off =>
-            fetch(`${API}/api/admin/candidates?limit=${CHUNK}&offset=${off}`, { headers: headers() })
-              .then(r => r.ok ? r.json() : { data: { candidates: [] } })
-              .then(j => (j.data?.candidates ?? []) as Record<string, unknown>[])
-          )
-        )
-        let batchIdx = allRows.length
-        for (const rows of results) {
-          const mapped = rows.map((c, i2) => mapCandidateToRow(c, batchIdx + i2, edits))
-          allRows.push(...mapped)
-          batchIdx += rows.length
-        }
-        setDbAll([...allRows])
-        setDbLoadProgress(allRows.length)
-      }
-
+      setDbAll(allRows)
+      setDbLoadProgress(allRows.length)
       const nc = allRows.filter(r => String(r.source).includes('★NEW')).length
       setNewCount(nc)
       setLastSync(new Date().toLocaleTimeString())
+
+      // 캐시 저장
+      try { localStorage.setItem(SK_ALL, JSON.stringify({ rows: allRows, ts: Date.now() })) } catch { /* ignore */ }
     } catch { /* ignore */ } finally {
       setLoading(false)
     }
   }, [headers])
 
   useEffect(() => {
+    // 캐시 즉시 표시 → 백그라운드에서 새 데이터 로드
+    try {
+      const cached = localStorage.getItem(SK_ALL)
+      if (cached) {
+        const { rows, ts } = JSON.parse(cached) as { rows: DataRow[]; ts: number }
+        if (rows?.length > 0) {
+          setDbAll(rows)
+          setDbLoadProgress(rows.length)
+          setLastSync('캐시')
+          if (Date.now() - ts < CACHE_TTL) {
+            // 캐시가 신선하면 백그라운드로만 갱신
+            fetchFromDB(true)
+          } else {
+            fetchFromDB()
+          }
+          // 60초마다 신규 Active 폴링 (★NEW 감지)
+          const iv = setInterval(async () => {
+            const edts = loadEdits()
+            try {
+              const res2 = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
+              if (!res2.ok) return
+              const j2 = await res2.json()
+              const rows2: Record<string, unknown>[] = j2.data?.candidates ?? []
+              const mapped = rows2.map((c, i) => mapCandidateToRow(c, i, edts))
+              const nc = mapped.filter(r => String(r.source).includes('★NEW')).length
+              setNewCount(nc)
+              setDbAll(p => {
+                const activeCids = new Set(mapped.map(r => String(r._cid ?? '')))
+                return [...mapped, ...p.filter(r => !activeCids.has(String(r._cid ?? '')))]
+              })
+              setLastSync(new Date().toLocaleTimeString())
+            } catch { /* ignore */ }
+          }, 60_000)
+          return () => clearInterval(iv)
+        }
+      }
+    } catch { /* ignore */ }
+
     fetchFromDB()
     // 60초마다 신규 Active 폴링 (★NEW 감지)
     const iv = setInterval(async () => {
@@ -689,7 +711,7 @@ export default function BridgeAdminSheet() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
           {sel.size > 0 && <button onClick={() => { openMM([...data.active, ...data.past, ...data.blacklist].filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
-          <button onClick={fetchFromDB} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
+          <button onClick={() => fetchFromDB()} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
           <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
           <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
           <button onClick={addN} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>+새후보자</button>
