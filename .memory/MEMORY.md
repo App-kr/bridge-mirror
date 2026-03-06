@@ -33,6 +33,7 @@
 - **서버 규칙**: dev 서버는 별도 터미널에서 --reload로 상시 실행 중. 코드 수정 시 Hot Reload 자동 반영. 서버 시작/종료/재시작 명령 실행 금지. package.json이나 .env 변경 시에만 "재시작 필요" 안내.
 - **화면 확인 규칙**: 브라우저를 열어 보여주기 전 반드시 curl로 서버 응답/렌더링 검증. 검증 통과 후에만 브라우저 열기.
 - **포커스 스틸 금지**: 게임 중 바탕화면 튕김 방지. GUI 앱(브라우저/탐색기/메모장) 실행 금지, `start` 명령 금지, 모든 작업은 현재 bash 셸 내에서만. 서버는 `run_in_background`로만 시작.
+- **백그라운드 실행 규칙**: 자동실행/타이머/스케줄러 → `-WindowStyle Hidden` 필수. 타스크 스케줄러 → `wscript + silent_run.vbs` 래퍼. Python 백그라운드 → `pythonw.exe` 또는 `Start-Process -WindowStyle Hidden`. 로그 → `logs/` 디렉토리 파일 출력 (콘솔 금지).
 
 ## Team Names (영국식 영문 이름)
 - **Scarlett** — 대표 (User)

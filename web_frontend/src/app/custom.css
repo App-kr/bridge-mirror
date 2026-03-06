@@ -584,6 +584,17 @@ a.nav-cta[href="/inquiry"]:hover {
   50%      { filter: drop-shadow(0 0 12px rgba(255,255,255,0.3)); }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   11. ADMIN WARNING BAR — 비관리자 접근 경고
+   ═══════════════════════════════════════════════════════════════════════════ */
+.admin-warning-bar {
+  animation: slowPulse 3s ease-in-out infinite;
+}
+@keyframes slowPulse {
+  0%, 100% { background: rgba(239, 68, 68, 0.1); }
+  50%      { background: rgba(239, 68, 68, 0.03); }
+}
+
 /* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {
   .bridge-arc, .bridge-tower, .bridge-stay, .bridge-sweep, .bridge-arc-group {

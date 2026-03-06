@@ -1,11 +1,28 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { API_URL } from '@/lib/api'
 
 const STORAGE_KEY = 'bridge_admin_key'
+const EXPIRY_KEY = 'bridge_admin_key_expiry'
+const KEY_TTL = 86400000 // 24시간 (ms)
 const MAX_WAKE_RETRIES = 3
 const WAKE_DELAY = 3000
+
+/** localStorage에서 admin key 동기 로드 (만료 체크 포함) */
+function getStoredKey(): string {
+  if (typeof window === 'undefined') return ''
+  const key = localStorage.getItem(STORAGE_KEY)
+  const expiry = localStorage.getItem(EXPIRY_KEY)
+  if (!key) return ''
+  if (expiry && Date.now() > parseInt(expiry, 10)) {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(EXPIRY_KEY)
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    return ''
+  }
+  return key
+}
 
 async function createHmacSignature(key: string, body: string): Promise<string> {
   const ts = Math.floor(Date.now() / 1000).toString()
@@ -42,18 +59,10 @@ async function fetchWithWake(
 }
 
 export function useAdminAuth() {
-  const [adminKey, setAdminKey] = useState('')
-  const [authed, setAuthed] = useState(false)
+  // 동기 초기화: localStorage에서 즉시 로드 (useEffect 지연 제거)
+  const [adminKey, setAdminKey] = useState<string>(getStoredKey)
+  const [authed, setAuthed] = useState<boolean>(() => !!getStoredKey())
   const [waking, setWaking] = useState(false)
-
-  // sessionStorage에서 복원
-  useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY)
-    if (stored !== null) {
-      setAdminKey(stored)
-      setAuthed(true)
-    }
-  }, [])
 
   /** 비밀번호로 서버 로그인 → API 키 받아서 저장 */
   const login = useCallback(async (password: string): Promise<string | null> => {
@@ -80,7 +89,8 @@ export function useAdminAuth() {
 
       setAdminKey(key)
       setAuthed(true)
-      sessionStorage.setItem(STORAGE_KEY, key)
+      localStorage.setItem(STORAGE_KEY, key)
+      localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
       document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax'
 
       // 로그인 성공 시 IP 블랙리스트 자동 초기화
@@ -99,7 +109,8 @@ export function useAdminAuth() {
   const logout = useCallback(() => {
     setAdminKey('')
     setAuthed(false)
-    sessionStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(EXPIRY_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
   }, [])
 
@@ -116,12 +127,13 @@ export function useAdminAuth() {
     onWaking?: (attempt: number) => void,
   ): Promise<Response> => {
     const method = (options?.method ?? 'GET').toUpperCase()
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
+    const h: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
 
     if (method !== 'GET' && method !== 'HEAD' && adminKey) {
-      const body = typeof options?.body === 'string' ? options.body : ''
-      const sig = await createHmacSignature(adminKey, body)
+      const bodyStr = typeof options?.body === 'string' ? options.body : ''
+      const sig = await createHmacSignature(adminKey, bodyStr)
       h['X-Bridge-Signature'] = sig
     }
 

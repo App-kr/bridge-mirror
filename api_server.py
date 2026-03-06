@@ -898,6 +898,32 @@ if not _ADMIN_KEY:
     )
 
 
+def _ensure_access_logs():
+    """access_logs 테이블 생성 (없으면)"""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("CREATE TABLE IF NOT EXISTS access_logs (id INTEGER PRIMARY KEY, ip TEXT, url TEXT, timestamp TEXT DEFAULT (datetime('now')))")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+_ensure_access_logs()
+
+
+def _log_unauthorized_access(request: Request):
+    """비관리자 접근 시 IP + URL + 시간 기록"""
+    try:
+        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+        url = str(request.url.path)
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("INSERT INTO access_logs (ip, url) VALUES (?, ?)", (ip, url))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def _check_admin(request: Request):
     """ADMIN_API_KEY 헤더 검증. 프로덕션에서 키 미설정 시 접근 차단."""
     if not _ADMIN_KEY:
@@ -906,6 +932,7 @@ def _check_admin(request: Request):
         # 개발 환경에서만 키 없이 통과 허용
         return
     if request.headers.get("x-admin-key", "").strip() != _ADMIN_KEY.strip():
+        _log_unauthorized_access(request)
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
 

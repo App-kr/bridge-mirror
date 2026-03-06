@@ -6,6 +6,23 @@ import { API_URL } from '@/lib/api'
 const MAX_WAKE_RETRIES = 3
 const WAKE_DELAY = 3000
 const STORAGE_KEY = 'bridge_admin_key'
+const EXPIRY_KEY = 'bridge_admin_key_expiry'
+const KEY_TTL = 86400000 // 24시간 (ms)
+
+/** localStorage에서 admin key 동기 로드 (만료 체크 포함) */
+function getStoredKey(): string {
+  if (typeof window === 'undefined') return ''
+  const key = localStorage.getItem(STORAGE_KEY)
+  const expiry = localStorage.getItem(EXPIRY_KEY)
+  if (!key) return ''
+  if (expiry && Date.now() > parseInt(expiry, 10)) {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(EXPIRY_KEY)
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    return ''
+  }
+  return key
+}
 
 async function createHmacSignature(key: string, body: string): Promise<string> {
   const ts = Math.floor(Date.now() / 1000).toString()
@@ -60,14 +77,8 @@ const AdminAuthContext = createContext<AdminAuthState>({
 })
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    return sessionStorage.getItem(STORAGE_KEY) ?? ''
-  })
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return !!sessionStorage.getItem(STORAGE_KEY)
-  })
+  const [token, setToken] = useState<string>(getStoredKey)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => !!getStoredKey())
   const [waking, setWaking] = useState(false)
 
   const login = useCallback(async (password: string): Promise<string | null> => {
@@ -94,7 +105,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
       setToken(key)
       setIsLoggedIn(true)
-      sessionStorage.setItem(STORAGE_KEY, key)
+      localStorage.setItem(STORAGE_KEY, key)
+      localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
       return null
     } catch (e) {
       setWaking(false)
@@ -105,19 +117,21 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken('')
     setIsLoggedIn(false)
-    sessionStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(EXPIRY_KEY)
   }, [])
 
   const signedFetch = useCallback(async (
     url: string, options?: RequestInit, onWaking?: (a: number) => void,
   ): Promise<Response> => {
     const method = (options?.method ?? 'GET').toUpperCase()
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
+    const h: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' }
     if (token) h['x-admin-key'] = token
 
     if (method !== 'GET' && method !== 'HEAD' && token) {
-      const body = typeof options?.body === 'string' ? options.body : ''
-      const sig = await createHmacSignature(token, body)
+      const bodyStr = typeof options?.body === 'string' ? options.body : ''
+      const sig = await createHmacSignature(token, bodyStr)
       h['X-Bridge-Signature'] = sig
     }
 

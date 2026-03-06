@@ -775,20 +775,33 @@ export default function BoardPage() {
           onBulkPin={handleBulkPin}
         />
       )}
-      {editMode && orderDirty && (
-        <div className="bg-blue-600 text-white px-6 py-2.5 flex items-center justify-between text-sm">
-          <span className="font-medium">순서가 변경되었습니다</span>
+      {editMode && (
+        <div className={`${orderDirty ? 'bg-orange-500 animate-pulse' : 'bg-blue-600'} text-white px-6 py-2.5 flex items-center justify-between text-sm transition-colors`}>
+          <span className="font-medium">{orderDirty ? '순서가 변경되었습니다' : '순서 저장 가능'}</span>
           <button
             type="button"
             onClick={handleSaveOrder}
             disabled={orderSaving}
-            className="px-5 py-1.5 bg-white text-blue-700 font-bold rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm shadow-sm"
+            className={`px-5 py-1.5 font-bold rounded-lg transition-colors disabled:opacity-50 text-sm shadow-sm ${orderDirty ? 'bg-white text-orange-600 hover:bg-orange-50' : 'bg-white/20 text-white hover:bg-white/30'}`}
           >
             {orderSaving ? '저장 중...' : '순서 저장'}
           </button>
         </div>
       )}
       <Layout {...props} />
+      {editMode && (
+        <div className={`${orderDirty ? 'bg-orange-500 animate-pulse' : 'bg-blue-600'} text-white px-6 py-2.5 flex items-center justify-between text-sm transition-colors mt-4`}>
+          <span className="font-medium">{orderDirty ? '순서가 변경되었습니다' : '순서 저장 가능'}</span>
+          <button
+            type="button"
+            onClick={handleSaveOrder}
+            disabled={orderSaving}
+            className={`px-5 py-1.5 font-bold rounded-lg transition-colors disabled:opacity-50 text-sm shadow-sm ${orderDirty ? 'bg-white text-orange-600 hover:bg-orange-50' : 'bg-white/20 text-white hover:bg-white/30'}`}
+          >
+            {orderSaving ? '저장 중...' : '순서 저장'}
+          </button>
+        </div>
+      )}
       {editorOpen && (
         <SplitEditor
           isOpen={true}
