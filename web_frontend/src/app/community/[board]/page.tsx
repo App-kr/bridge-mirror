@@ -136,11 +136,9 @@ function SortableItem({ id, children }: { id: string; children: React.ReactNode 
     zIndex: isDragging ? 10 : undefined,
   }
   return (
-    <DragHandleCtx.Provider value={{ ...attributes, ...listeners }}>
-      <div ref={setNodeRef} style={style}>
-        {children}
-      </div>
-    </DragHandleCtx.Provider>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
   )
 }
 
@@ -252,7 +250,7 @@ function BoardHeader({ config, board, editMode, onNewPost, orderDirty, orderSavi
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold text-[#1d1d1f]">{config.label}</h1>
         <div className="flex items-center gap-2">
-          {editMode && orderDirty && onSaveOrder && (
+          {editMode && onSaveOrder && (
             <button type="button" onClick={onSaveOrder} disabled={orderSaving}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white text-sm font-medium rounded-full transition-colors">
               {orderSaving ? '저장 중...' : '💾 순서 저장'}
@@ -925,12 +923,6 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
             {regularPosts.map((p, i) => (
               <SortableItem key={p.id} id={String(p.id)}>
                 <div className="flex items-center gap-1.5">
-                  {onMoveUp && onMoveDown && (
-                    <SortHandle
-                      onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
-                      isFirst={i === 0} isLast={i === regularPosts.length - 1}
-                    />
-                  )}
                   {onToggleSelect && (
                     <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                   )}
@@ -1204,12 +1196,6 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
                   {aboutPosts.map((p, i) => (
                     <SortableItem key={p.id} id={String(p.id)}>
                       <div className="flex items-center gap-1.5">
-                        {onMoveUp && onMoveDown && (
-                          <SortHandle
-                            onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
-                            isFirst={i === 0} isLast={i === aboutPosts.length - 1}
-                          />
-                        )}
                         {onToggleSelect && (
                           <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                         )}
