@@ -287,6 +287,42 @@ export default function EmployerManagement() {
     })
   }, [employers])
 
+  /* ── 워드뷰 이동 버튼 ── */
+  const moveTop = useCallback((id: string) => {
+    setEmployers(prev => {
+      const idx = prev.findIndex(e => e.id === id)
+      if (idx <= 0) return prev
+      const next = [...prev]
+      const [item] = next.splice(idx, 1)
+      return [item, ...next]
+    })
+  }, [])
+
+  const moveUp = useCallback((id: string) => {
+    setEmployers(prev => {
+      const idx = prev.findIndex(e => e.id === id)
+      if (idx <= 0) return prev
+      const next = [...prev]
+      ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+      return next
+    })
+  }, [])
+
+  const moveDown = useCallback((id: string) => {
+    setEmployers(prev => {
+      const idx = prev.findIndex(e => e.id === id)
+      if (idx >= prev.length - 1) return prev
+      const next = [...prev]
+      ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+      return next
+    })
+  }, [])
+
+  /* ── 메모 인라인 편집 (로컬 상태) ── */
+  const editMemo = useCallback((id: string, memo: string) => {
+    setEmployers(prev => prev.map(e => e.id === id ? { ...e, memo } : e))
+  }, [])
+
   /* ── 필터 옵션 계산 ── */
   const provinceOptions = useMemo(() => {
     const s = new Set<string>()
