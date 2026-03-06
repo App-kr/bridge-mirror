@@ -18,39 +18,73 @@ interface MailTemplate {
 
 const TEMPLATES: MailTemplate[] = [
   {
-    name: '채용 안내',
-    subject: '[BRIDGE] {{name}}님, 우수 원어민 교사를 소개합니다',
+    name: '📢 소개발송',
+    subject: '📢 BRIDGE 원어민 강사 소식 — 국내/해외 프로필 확인하세요',
     body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
-<p>BRIDGE 채용 플랫폼입니다.</p>
-<p>{{region}} {{city}} 지역에서 {{teachingAge}} 과정 원어민 교사를 찾고 계신 것으로 확인되었습니다.</p>
-<p>현재 BRIDGE에 등록된 우수한 원어민 교사 후보를 소개해 드리고자 합니다.</p>
-<br/>
-<p>관심이 있으시면 회신 부탁드립니다.</p>
-<p>감사합니다.</p>
-<p><strong>BRIDGE 채용팀</strong><br/>bridgejob.co.kr</p>`,
+<p>BRIDGE 원어민 강사 프로필을 공유드립니다.<br/>Start date and preferences noted. Reference provided for review only.</p>
+<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"/>
+<p><em>아래 프로필을 확인해 주시고, 관심 있으신 경우 회신 부탁드립니다.</em></p>
+<p>&nbsp;</p>
+<p style="font-size:12px;color:#888;">💡 If you are not the intended recipient or no longer in this role, please notify us and delete this email. Additionally, let us know if any contact should be removed due to a change in management.</p>`,
   },
   {
-    name: '팔로업',
-    subject: '[BRIDGE] {{name}}님, 채용 진행 현황 안내',
+    name: '기본안내',
+    subject: '[BRIDGE] 안내드립니다',
     body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
-<p>이전에 안내드린 원어민 교사 채용 건 관련하여 진행 현황을 안내드립니다.</p>
-<p>혹시 채용이 아직 진행 중이시라면, 적합한 후보를 추가로 소개해 드릴 수 있습니다.</p>
-<br/>
-<p>궁금하신 점이 있으시면 언제든 문의해 주세요.</p>
-<p>감사합니다.</p>
-<p><strong>BRIDGE 채용팀</strong></p>`,
+<p>BRIDGE 리크루팅입니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
   },
   {
-    name: '긴급 채용',
-    subject: '[BRIDGE] 긴급! {{region}} {{city}} 원어민 교사 즉시 배치 가능',
+    name: '요금안내',
+    subject: '[BRIDGE] 서비스 요금 안내',
     body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
-<p><strong style="color:red;">긴급 안내</strong> — {{region}} {{city}} 지역에서 즉시 근무 가능한 원어민 교사가 있습니다.</p>
-<p>빠른 배치가 필요하신 경우 즉시 회신해 주시면 우선 매칭해 드리겠습니다.</p>
-<br/>
-<p><strong>BRIDGE 채용팀</strong><br/>bridgejob.co.kr</p>`,
+<p>요청하신 서비스 요금을 안내드립니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE</strong></p>`,
   },
   {
-    name: '직접 작성',
+    name: '체결안내',
+    subject: '[BRIDGE] 계약 체결 안내',
+    body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
+<p>계약 체결 관련 안내드립니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
+  },
+  {
+    name: '확정안내',
+    subject: '[BRIDGE] 채용 확정 안내',
+    body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
+<p>채용이 확정되었음을 안내드립니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
+  },
+  {
+    name: '입국안내',
+    subject: '[BRIDGE] 입국 관련 안내',
+    body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
+<p>입국 일정 관련 안내드립니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
+  },
+  {
+    name: '출입국업무',
+    subject: '[BRIDGE] 출입국 업무 안내',
+    body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
+<p>출입국 업무 관련 안내드립니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
+  },
+  {
+    name: '채용정보접수',
+    subject: '[BRIDGE] 채용 정보 접수 확인',
+    body: `<p>안녕하세요, <strong>{{name}}</strong> 담당자님.</p>
+<p>채용 정보를 접수하였습니다.</p>
+<p>&nbsp;</p>
+<p>감사합니다.<br/><strong>BRIDGE Recruitment Team</strong></p>`,
+  },
+  {
+    name: '직접작성',
     subject: '',
     body: '<p></p>',
   },
@@ -486,9 +520,9 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
             type="button"
             onClick={handleSend}
             disabled={sending || recipients.length === 0}
-            className="px-5 py-2.5 bg-[#0071E3] text-white text-[13px] font-semibold rounded-xl hover:bg-[#0066CC] transition-colors disabled:opacity-50 shadow-sm"
+            className="px-5 py-2.5 bg-[#03c75a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#02a84a] transition-colors disabled:opacity-50 shadow-sm"
           >
-            {sending ? '발송 중...' : `메일 발송 (${recipients.length}명 개별 발송)`}
+            {sending ? '발송 중...' : `보내기 (${recipients.length}개 업체 개별발송)`}
           </button>
         </div>
       </div>
