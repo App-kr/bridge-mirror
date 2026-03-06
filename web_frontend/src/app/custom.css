@@ -610,3 +610,26 @@ a.nav-cta[href="/inquiry"]:hover {
   .bridge-stay  { opacity: 0.08 !important; stroke-dashoffset: 0 !important; }
   .bridge-sweep { opacity: 0 !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ADMIN UNIFIED BUTTON VARIANTS
+   ══════════════════════════════════════════════════════════════════════ */
+.admin-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+  white-space: nowrap; line-height: 1.4;
+}
+.admin-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 수정 — 옅은 주황 */
+.admin-btn-edit   { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.admin-btn-edit:hover { background: #ffedd5; }
+/* 저장 — 파랑 */
+.admin-btn-save   { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.admin-btn-save:hover { background: #dbeafe; }
+/* 취소 — 옅은 블랙 */
+.admin-btn-cancel { background: #f4f4f5; color: #3f3f46; border-color: #d4d4d8; }
+.admin-btn-cancel:hover { background: #e4e4e7; }
+/* 삭제 — 옅은 빨강 */
+.admin-btn-delete { background: #fff1f2; color: #dc2626; border-color: #fecaca; }
+.admin-btn-delete:hover { background: #ffe4e6; }

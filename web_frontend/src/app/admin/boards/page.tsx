@@ -242,8 +242,8 @@ export default function AdminBoardsPage() {
                 <span className="text-xs text-gray-400">순서: {b.sort_order}</span>
                 <div className="flex gap-1 shrink-0">
                   <button type="button" onClick={() => startEdit(b)}
-                    className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
-                    ✏️
+                    className="admin-btn admin-btn-edit">
+                    ✏️ 수정
                   </button>
                   <button type="button" onClick={() => toggleHidden(b)}
                     className={`text-xs px-2 py-1 rounded border transition-colors ${
