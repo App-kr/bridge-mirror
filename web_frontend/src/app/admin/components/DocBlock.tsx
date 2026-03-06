@@ -101,6 +101,20 @@ function buildRawText(emp: EmployerApp, province: string, city: string, jobNo: s
   return rows.join('\n')
 }
 
+/* ── 버튼 공통 스타일 헬퍼 ── */
+const btnBase: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 3,
+  padding: '4px 10px', border: '1px solid #ddd', borderRadius: 5,
+  background: '#f8f8f8', cursor: 'pointer', fontSize: '0.75rem',
+  color: '#555', fontWeight: 600, whiteSpace: 'nowrap',
+}
+const btnBlue: React.CSSProperties = {
+  ...btnBase, background: '#2563eb', color: '#fff', border: 'none', fontWeight: 700,
+}
+const btnGhost: React.CSSProperties = {
+  ...btnBase, background: '#fff', color: '#888',
+}
+
 export default function DocBlock({
   employer, isNew, isConfirmed, isBlacklist, showPII,
   province, city, jobNo, searchQuery,
@@ -108,7 +122,6 @@ export default function DocBlock({
   onMoveTop, onMoveUp, onMoveDown, isFirst, isLast,
   showDivider,
 }: DocBlockProps) {
-  /* JSX와 동일한 변수명 */
   const rawText = buildRawText(employer, province, city, jobNo)
   const lines = rawText ? rawText.split('\n') : []
   const isGlow = isNew && !isConfirmed
@@ -135,12 +148,11 @@ export default function DocBlock({
 
   return (
     <>
-      {/* JSX DocBlock 그대로 */}
       <div
         id={`job-${jobNo}`}
         style={{
           marginBottom: 16,
-          padding: '20px 28px',
+          padding: '18px 24px 14px',
           background: isHl ? '#fffff0' : '#fff',
           borderLeft: isGlow ? '5px solid #2563eb' : isBlacklist ? '5px solid #dc2626' : '5px solid #e5e5e5',
           position: 'relative',
@@ -153,131 +165,182 @@ export default function DocBlock({
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(220,38,38,0.06)', pointerEvents: 'none', border: '1px solid rgba(220,38,38,0.15)' }} />
         )}
 
-        {/* NEW 확인 버튼 */}
-        {isGlow && (
-          <button
-            type="button"
-            onClick={() => onConfirm(employer.id)}
-            style={{ position: 'absolute', top: 10, right: 10, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 18px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', animation: 'blink 0.8s step-end infinite', zIndex: 2 }}
-          >
-            ★ NEW — 확인
-          </button>
-        )}
-
-        {/* 이동 버튼 (⤒ ↑ ↓) */}
-        <div style={{ position: 'absolute', top: 10, right: isGlow ? 170 : 10, display: 'flex', gap: 3, zIndex: 2 }}>
-          {!isFirst && (
-            <button type="button" onClick={onMoveTop} title="맨위로" style={{ padding: '3px 7px', border: '1px solid #ddd', borderRadius: 4, background: '#f8f8f8', cursor: 'pointer', fontSize: '0.75rem', color: '#666' }}>⤒</button>
-          )}
-          {!isFirst && (
-            <button type="button" onClick={onMoveUp} title="위로" style={{ padding: '3px 7px', border: '1px solid #ddd', borderRadius: 4, background: '#f8f8f8', cursor: 'pointer', fontSize: '0.75rem', color: '#666' }}>↑</button>
-          )}
-          {!isLast && (
-            <button type="button" onClick={onMoveDown} title="아래로" style={{ padding: '3px 7px', border: '1px solid #ddd', borderRadius: 4, background: '#f8f8f8', cursor: 'pointer', fontSize: '0.75rem', color: '#666' }}>↓</button>
-          )}
-        </div>
-
-        {/* 헤더: Job번호 + 지역 + 업체명 + 블랙리스트 뱃지 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, position: 'relative', zIndex: 1, paddingRight: isGlow ? 200 : 90 }}>
-          <span style={{ fontFamily: "'Consolas',monospace", fontSize: '1.05rem', fontWeight: 800, background: isNewCode ? '#2563eb' : '#111', color: '#fff', padding: '3px 14px', borderRadius: 5 }}>
+        {/* ── 헤더 행: Job번호 + 지역 + 업체명 + 이동버튼 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, position: 'relative', zIndex: 2 }}>
+          {/* Job 번호 뱃지 */}
+          <span style={{
+            fontFamily: "'Consolas',monospace", fontSize: '1.0rem', fontWeight: 800,
+            background: isNewCode ? '#2563eb' : '#111', color: '#fff',
+            padding: '3px 13px', borderRadius: 5, flexShrink: 0,
+          }}>
             {jobNo}
           </span>
-          <span style={{ fontSize: '0.95rem', color: '#444', fontWeight: 600 }}>{province} {city}</span>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111' }}>{displayName}</span>
+
+          {/* 지역 + 업체명 */}
+          <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 600 }}>{province} {city}</span>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111', flex: 1 }}>{displayName}</span>
+
           {isBlacklist && (
-            <span style={{ fontSize: '0.75rem', background: '#dc2626', color: '#fff', padding: '3px 10px', borderRadius: 999, fontWeight: 800 }}>BLACKLIST</span>
+            <span style={{ fontSize: '0.72rem', background: '#dc2626', color: '#fff', padding: '2px 9px', borderRadius: 999, fontWeight: 800, flexShrink: 0 }}>BLACKLIST</span>
+          )}
+
+          {/* ── 이동 버튼 (맨위로 / 위로 / 아래로) ── */}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            {!isFirst && (
+              <button type="button" onClick={onMoveTop} style={btnBase} title="맨 위로">
+                ⤒ 맨위로
+              </button>
+            )}
+            {!isFirst && (
+              <button type="button" onClick={onMoveUp} style={btnBase} title="위로">
+                ↑ 위로
+              </button>
+            )}
+            {!isLast && (
+              <button type="button" onClick={onMoveDown} style={btnBase} title="아래로">
+                ↓ 아래로
+              </button>
+            )}
+          </div>
+
+          {/* NEW 확인 버튼 */}
+          {isGlow && (
+            <button
+              type="button"
+              onClick={() => onConfirm(employer.id)}
+              style={{
+                background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8,
+                padding: '6px 16px', fontSize: '0.83rem', fontWeight: 700, cursor: 'pointer',
+                animation: 'blink 0.8s step-end infinite', flexShrink: 0,
+              }}
+            >
+              ★ NEW — 확인
+            </button>
           )}
         </div>
 
-        {/* MEMO */}
-        <div style={{ position: 'relative', zIndex: 1, marginBottom: 12 }}>
+        {/* ── MEMO 박스 (항상 표시 — 옅은 노랑) ── */}
+        <div style={{ position: 'relative', zIndex: 1, marginBottom: 14 }}>
           {editingMemo ? (
-            <div style={{ background: '#fffde7', border: '1px solid #f0e68c', padding: '10px 14px', borderRadius: 5 }}>
-              <span style={{ fontWeight: 800, color: '#b8860b', fontSize: '0.75rem', marginRight: 8, display: 'block', marginBottom: 6 }}>MEMO</span>
+            <div style={{ background: '#fffde7', border: '1px solid #e8d87a', borderRadius: 6, padding: '10px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontWeight: 800, color: '#b8860b', fontSize: '0.73rem', letterSpacing: '0.08em' }}>MEMO</span>
+              </div>
               <textarea
                 value={memoVal}
                 onChange={e => setMemoVal(e.target.value)}
-                style={{ width: '100%', minHeight: 80, border: '1px solid #f0e68c', borderRadius: 4, padding: '6px', fontSize: '0.88rem', background: '#fffff0', resize: 'vertical', outline: 'none' }}
+                autoFocus
+                placeholder="내부 메모를 입력하세요 (예: 원장 연락처, 특이사항 등)"
+                style={{
+                  width: '100%', minHeight: 90, border: '1px solid #e0cc6a', borderRadius: 4,
+                  padding: '8px 10px', fontSize: '0.88rem', background: '#fffff5',
+                  resize: 'vertical', outline: 'none', lineHeight: 1.7, fontFamily: 'inherit',
+                }}
               />
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button type="button"
                   onClick={() => { onEditMemo?.(employer.id, memoVal); setEditingMemo(false) }}
-                  style={{ padding: '4px 12px', border: 'none', borderRadius: 4, background: '#2563eb', color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                  style={btnBlue}>
+                  💾 저장
+                </button>
                 <button type="button"
                   onClick={() => { setMemoVal(employer.memo || ''); setEditingMemo(false) }}
-                  style={{ padding: '4px 12px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', color: '#666', fontSize: '0.78rem', cursor: 'pointer' }}>취소</button>
+                  style={btnGhost}>
+                  취소
+                </button>
               </div>
             </div>
-          ) : employer.memo ? (
-            <div style={{ background: '#fffde7', border: '1px solid #f0e68c', padding: '10px 14px', borderRadius: 5, fontSize: '0.9rem', lineHeight: 1.7, color: '#5d4e0f', animation: isGlow ? 'blink 0.8s step-end infinite' : 'none', position: 'relative' }}>
-              <span style={{ fontWeight: 800, color: '#b8860b', fontSize: '0.75rem', marginRight: 8 }}>MEMO</span>{employer.memo}
-              <button type="button" onClick={() => setEditingMemo(true)}
-                style={{ position: 'absolute', top: 8, right: 10, padding: '2px 8px', border: '1px solid #d4b44a', borderRadius: 4, background: '#fff', fontSize: '0.72rem', cursor: 'pointer', color: '#a08020' }}>
-                ✏ 메모수정
-              </button>
-            </div>
           ) : (
-            <button type="button" onClick={() => setEditingMemo(true)}
-              style={{ padding: '3px 10px', border: '1px dashed #ccc', borderRadius: 4, background: 'transparent', fontSize: '0.72rem', cursor: 'pointer', color: '#aaa' }}>
-              + 메모 추가
-            </button>
+            <div
+              style={{
+                background: '#fffde7', border: '1px solid #e8d87a', borderRadius: 6,
+                padding: '9px 14px', position: 'relative',
+                animation: isGlow ? 'blink 0.8s step-end infinite' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontWeight: 800, color: '#b8860b', fontSize: '0.73rem', letterSpacing: '0.08em', paddingTop: 2, flexShrink: 0 }}>MEMO</span>
+                <span style={{
+                  flex: 1, fontSize: '0.9rem', lineHeight: 1.7, color: employer.memo ? '#5d4e0f' : '#c8b870',
+                  fontStyle: employer.memo ? 'normal' : 'italic',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {employer.memo || '메모를 추가하려면 ✏ 편집을 클릭하세요'}
+                </span>
+                <button type="button" onClick={() => setEditingMemo(true)}
+                  style={{ ...btnBase, background: '#fff7d6', border: '1px solid #d4b44a', color: '#a08020', flexShrink: 0 }}>
+                  ✏ 편집
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* rawText (notes) 전체 파싱 표시 */}
-        {editingRaw ? (
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <textarea
-              value={rawVal}
-              onChange={e => setRawVal(e.target.value)}
-              style={{ width: '100%', minHeight: 120, border: '1px solid #ccc', borderRadius: 4, padding: '8px', fontSize: '0.88rem', fontFamily: "'Consolas',monospace", resize: 'vertical', outline: 'none' }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <button type="button"
-                onClick={() => { onEditNotes?.(employer.id, rawVal); setEditingRaw(false) }}
-                style={{ padding: '4px 12px', border: 'none', borderRadius: 4, background: '#2563eb', color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>저장</button>
-              <button type="button"
-                onClick={() => { setRawVal(employer.notes || ''); setEditingRaw(false) }}
-                style={{ padding: '4px 12px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', color: '#666', fontSize: '0.78rem', cursor: 'pointer' }}>취소</button>
+        {/* ── 본문 (rawText 워드뷰) ── */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {editingRaw ? (
+            <div>
+              <textarea
+                value={rawVal}
+                onChange={e => setRawVal(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%', minHeight: 180, border: '1px solid #bbb', borderRadius: 5,
+                  padding: '10px 12px', fontSize: '0.88rem', fontFamily: "'Consolas',monospace",
+                  resize: 'vertical', outline: 'none', background: '#fafafa', lineHeight: 1.8,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button type="button"
+                  onClick={() => { onEditNotes?.(employer.id, rawVal); setEditingRaw(false) }}
+                  style={btnBlue}>
+                  💾 저장
+                </button>
+                <button type="button"
+                  onClick={() => { setRawVal(rawText); setEditingRaw(false) }}
+                  style={btnGhost}>
+                  취소
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div style={{ fontFamily: "'Malgun Gothic',sans-serif", fontSize: '0.92rem', lineHeight: 1.85, color: '#111', position: 'relative', zIndex: 1 }}>
-            {lines.map((line, i) => {
-              const t = line.trim()
-              if (!t) return <div key={i} style={{ height: 6 }} />
-              const kv = t.match(/^(.+?)\s*:\s*(.+)$/)
-              if (kv) return (
-                <div key={i} style={{ display: 'flex', gap: 6, wordBreak: 'break-word' }}>
-                  <span style={{ color: '#555', fontWeight: 600, minWidth: 280, flexShrink: 0 }}>{kv[1]} :</span>
-                  <span style={{ color: '#111', fontWeight: 500 }}>{kv[2]}</span>
-                </div>
-              )
-              return <div key={i} style={{ fontWeight: 500, width: '100%' }}>{t}</div>
-            })}
-            <button type="button" onClick={() => setEditingRaw(true)}
-              style={{ marginTop: 8, padding: '3px 10px', border: '1px solid #ddd', borderRadius: 4, background: '#f8f8f8', fontSize: '0.72rem', cursor: 'pointer', color: '#666' }}>
-              ✏ 본문수정
-            </button>
-          </div>
-        )}
+          ) : (
+            <div style={{ fontFamily: "'Malgun Gothic',sans-serif", fontSize: '0.92rem', lineHeight: 1.9, color: '#111' }}>
+              {lines.map((line, i) => {
+                const t = line.trim()
+                if (!t) return <div key={i} style={{ height: 5 }} />
+                const kv = t.match(/^(.+?)\s*:\s*(.+)$/)
+                if (kv) return (
+                  <div key={i} style={{ display: 'flex', gap: 8, wordBreak: 'break-word' }}>
+                    <span style={{ color: '#555', fontWeight: 600, minWidth: 260, flexShrink: 0 }}>{kv[1]} :</span>
+                    <span style={{ color: '#111', fontWeight: 400 }}>{kv[2]}</span>
+                  </div>
+                )
+                return <div key={i} style={{ fontWeight: 500, width: '100%', color: '#222' }}>{t}</div>
+              })}
+              <button type="button" onClick={() => setEditingRaw(true)}
+                style={{ ...btnBase, marginTop: 10, background: '#f4f4f4' }}>
+                ✏ 본문 편집
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* CONTACT 섹션 — PII 마스킹 */}
-        <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #ebebeb', position: 'relative', zIndex: 1 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#bbb', letterSpacing: '0.1em', display: 'block', marginBottom: 5 }}>CONTACT</span>
+        {/* ── CONTACT 섹션 — PII 마스킹 ── */}
+        <div style={{ marginTop: 16, paddingTop: 10, borderTop: '1px solid #ebebeb', position: 'relative', zIndex: 1 }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#bbb', letterSpacing: '0.12em', display: 'block', marginBottom: 6 }}>CONTACT</span>
           {[
             { label: '업체명', value: showPII ? (employer.school_name || employer.name) : maskName(employer.school_name || employer.name) },
             { label: '이메일', value: showPII ? employer.email : maskEmail(employer.email) },
             { label: '전화', value: showPII ? (employer.phone || '—') : maskPhone(employer.phone) },
           ].map(row => (
-            <div key={row.label} style={{ display: 'flex', gap: 6, fontSize: '0.85rem', marginBottom: 3 }}>
-              <span style={{ color: '#888', fontWeight: 600, minWidth: 280, flexShrink: 0 }}>{row.label} :</span>
+            <div key={row.label} style={{ display: 'flex', gap: 8, fontSize: '0.85rem', marginBottom: 3 }}>
+              <span style={{ color: '#888', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{row.label} :</span>
               <span style={{ color: '#444' }}>{row.value}</span>
             </div>
           ))}
         </div>
 
-        {/* 상태 변경 (production 전용) */}
+        {/* ── 상태 변경 ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 8, borderTop: '1px solid #f0f0f0', position: 'relative', zIndex: 1 }}>
           <span style={{ fontSize: '0.72rem', color: '#aaa' }}>상태:</span>
           <select
@@ -285,7 +348,7 @@ export default function DocBlock({
             onChange={e => onStatusChange(employer.id, e.target.value)}
             style={{ fontSize: '0.78rem', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd', background: '#fafafa', cursor: 'pointer' }}
           >
-            {['new','contacted','interviewing','hired','rejected','hold','blacklist'].map(s => (
+            {['new', 'contacted', 'interviewing', 'hired', 'rejected', 'hold', 'blacklist'].map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
@@ -295,10 +358,10 @@ export default function DocBlock({
 
       {/* 페이지 구분선 */}
       {showDivider && (
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
-          <div style={{ flex: 1, height: 1, background: '#ccc' }} />
-          <span style={{ padding: '0 14px', fontSize: '0.7rem', color: '#aaa', fontFamily: 'monospace' }}>— page break —</span>
-          <div style={{ flex: 1, height: 1, background: '#ccc' }} />
+        <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0' }}>
+          <div style={{ flex: 1, height: 1, background: '#ddd' }} />
+          <span style={{ padding: '0 16px', fontSize: '0.68rem', color: '#bbb', fontFamily: 'monospace' }}>— page break —</span>
+          <div style={{ flex: 1, height: 1, background: '#ddd' }} />
         </div>
       )}
     </>
