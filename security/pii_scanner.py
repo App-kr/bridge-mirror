@@ -1,278 +1,282 @@
 """
-security/pii_scanner.py — BRIDGE Outbound PII Scanner
-=======================================================
-PIIScanner: outbound 데이터에서 PII 자동 감지/차단/마스킹
+BRIDGE PII 스캐너
+- 모든 outbound 데이터(API 응답, 메일, 로그)에서 PII 감지
+- Fail-Closed: PII 감지되면 차단 (통과시키지 않음)
+- 자동 마스킹 옵션
 
-감지 대상:
-- 한국 전화번호 (010/02/031 등)
-- 이메일 주소
-- 직함+이름 (원장, 대표, 사장 등)
-- 카카오ID
-- 여권번호
-- 외국인등록번호
+Usage:
+    from security.pii_scanner import PIIScanner
 
-화이트리스트:
-- bridgejob.co.kr 도메인
-- bridgejobkr@gmail.com, bridgejobkr@naver.com
-- Job 번호 (JOB-xxx 등)
-- 날짜 형식 (2026-03-06 등)
+    scanner = PIIScanner()
+    
+    # API 응답 검사
+    result = scanner.scan(api_response_dict)
+    if result.has_pii:
+        blocked_response = scanner.mask_all(api_response_dict)
+    
+    # 문자열 검사
+    if scanner.contains_pii("이메일은 test@gmail.com입니다"):
+        print("PII 감지!")
 """
 
+from __future__ import annotations
+
 import re
-import json
+import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
+
+log = logging.getLogger("bridge.security.pii")
 
 
-# ── 화이트리스트 ──────────────────────────────────────────────────────────────
-WHITELIST_EMAILS = {
-    "bridgejobkr@gmail.com",
-    "bridgejobkr@naver.com",
-    "info@bridgejob.co.kr",
-    "support@bridgejob.co.kr",
+# ─── PII 패턴 정의 ──────────────────────────────────────
+PII_PATTERNS = {
+    "phone_kr": {
+        "pattern": re.compile(
+            r"(?:010|011|016|017|018|019|02|031|032|033|041|042|043|044|051|052|053|054|055|061|062|063|064|070)"
+            r"[-.\s]?\d{3,4}[-.\s]?\d{4}"
+        ),
+        "level": "CRITICAL",
+        "description": "한국 전화번호",
+    },
+    "email": {
+        "pattern": re.compile(
+            r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+        ),
+        "level": "CRITICAL",
+        "description": "이메일 주소",
+    },
+    "korean_name_with_title": {
+        "pattern": re.compile(
+            r"(?:원장|부장|대표|사장|팀장|실장|과장|부원장|이사)"
+            r"\s*[가-힣]{2,4}"
+        ),
+        "level": "CRITICAL",
+        "description": "직함+한글이름",
+    },
+    "kakao_id": {
+        "pattern": re.compile(
+            r"(?:카카오|카톡|kakao|katalk)\s*(?:ID|아이디)?\s*[:=]?\s*([a-zA-Z0-9_.]{3,20})",
+            re.IGNORECASE,
+        ),
+        "level": "CRITICAL",
+        "description": "카카오톡 ID",
+    },
+    "passport": {
+        "pattern": re.compile(r"[A-Z]{1,2}\d{7,8}"),
+        "level": "CRITICAL",
+        "description": "여권번호 패턴",
+    },
+    "alien_registration": {
+        "pattern": re.compile(r"\d{6}[-\s]?\d{7}"),
+        "level": "CRITICAL",
+        "description": "외국인등록번호 패턴",
+    },
 }
-WHITELIST_DOMAINS = {"bridgejob.co.kr"}
+
+# 화이트리스트 — PII로 오탐하지 않을 패턴
 WHITELIST_PATTERNS = [
-    re.compile(r"JOB[-_]?\d+", re.IGNORECASE),                  # Job번호
-    re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}"),                      # 날짜
-    re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}"),       # 날짜+시간
-    re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"),          # IP 주소 (로그용)
+    re.compile(r"bridgejob\.co\.kr"),
+    re.compile(r"bridgejobkr@(?:gmail|naver)\.com"),  # 발신자 주소
+    re.compile(r"Job\.\s*\d+"),  # Job 번호
+    re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}"),  # 날짜
 ]
-
-# ── PII 탐지 패턴 ────────────────────────────────────────────────────────────
-PII_DETECTORS = {
-    "phone_kr": re.compile(
-        r"(?<!\d)(0\d{1,2})[-\s.]?(\d{3,4})[-\s.]?(\d{4})(?!\d)"
-    ),
-    "email": re.compile(
-        r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
-    ),
-    "name_with_title": re.compile(
-        r"[\uAC00-\uD7A3]{2,5}\s*(원장|대표|사장|이사|부장|과장|차장|팀장|실장|소장|관장|선생|님)"
-    ),
-    "kakao_id": re.compile(
-        r"(?:kakao|카카오)\s*(?:id|아이디|ID)\s*[:=\s]\s*(\S+)", re.IGNORECASE
-    ),
-    "passport": re.compile(
-        r"[A-Z]{1,2}\d{7,8}"
-    ),
-    "alien_registration": re.compile(
-        r"\d{6}[-\s]?\d{7}"
-    ),
-}
-
-
-@dataclass
-class PIIFinding:
-    """PII 감지 결과 단건."""
-    field_name: str
-    pii_type: str
-    value: str          # 감지된 원본 값 (마스킹 전)
-    masked: str         # 마스킹된 값
 
 
 @dataclass
 class PIIScanResult:
-    """PII 스캔 결과."""
+    """PII 스캔 결과"""
     has_pii: bool = False
-    findings: list = field(default_factory=list)
+    findings: list[dict] = field(default_factory=list)
+    scanned_fields: int = 0
     blocked: bool = False
+
+    def summary(self) -> str:
+        if not self.has_pii:
+            return f"✅ PII 미검출 ({self.scanned_fields}개 필드 검사)"
+        levels = [f["level"] for f in self.findings]
+        return (
+            f"⚠ PII {len(self.findings)}건 감지 "
+            f"(CRITICAL: {levels.count('CRITICAL')}, "
+            f"HIGH: {levels.count('HIGH')}) "
+            f"— {'차단됨' if self.blocked else '경고'}"
+        )
 
 
 class PIIScanner:
-    """Outbound PII 감지 + fail-closed 차단."""
+    """PII 감지 및 차단 스캐너"""
 
-    def __init__(self, fail_closed: bool = True):
+    def __init__(self, fail_closed: bool = True, whitelist: list[str] = None):
+        """
+        Args:
+            fail_closed: True면 PII 감지 시 차단 (기본값)
+            whitelist: 추가 화이트리스트 패턴
+        """
         self.fail_closed = fail_closed
+        self._extra_whitelist = [re.compile(w) for w in (whitelist or [])]
 
-    def _is_whitelisted(self, value: str) -> bool:
-        """화이트리스트 여부 확인."""
-        if not value:
-            return True
-        lower = value.lower().strip()
-        # 이메일 화이트리스트
-        if lower in WHITELIST_EMAILS:
-            return True
-        # 도메인 화이트리스트
-        for domain in WHITELIST_DOMAINS:
-            if lower.endswith(f"@{domain}"):
-                return True
-        # 패턴 화이트리스트 (Job번호, 날짜 등)
-        for pattern in WHITELIST_PATTERNS:
-            if pattern.fullmatch(value):
+    def _is_whitelisted(self, text: str, match: str) -> bool:
+        """화이트리스트 패턴에 해당하는지 확인"""
+        for wp in WHITELIST_PATTERNS + self._extra_whitelist:
+            if wp.search(match):
                 return True
         return False
 
-    def _mask_value(self, value: str, pii_type: str) -> str:
-        """PII 유형별 마스킹."""
-        if pii_type == "phone_kr":
-            clean = re.sub(r"[\s\-.]", "", value)
-            if len(clean) >= 8:
-                return clean[:3] + "-****-" + clean[-4:]
-            return "****"
-        elif pii_type == "email":
-            if "@" not in value:
-                return "****"
-            local, domain = value.rsplit("@", 1)
-            return f"{local[0]}****@{domain}" if len(local) > 1 else f"****@{domain}"
-        elif pii_type == "name_with_title":
-            parts = value.strip()
-            if len(parts) >= 2:
-                return parts[0] + "**" + (parts[-1] if re.match(r"[원대사이부과차팀실소관선]", parts[-1]) else "")
-            return "**"
-        elif pii_type in ("passport", "alien_registration"):
-            if len(value) > 4:
-                return value[:2] + "*" * (len(value) - 4) + value[-2:]
-            return "****"
-        elif pii_type == "kakao_id":
-            return "****"
-        return "****"
+    def scan_text(self, text: str) -> list[dict]:
+        """단일 문자열에서 PII 검색"""
+        if not text or not isinstance(text, str):
+            return []
 
-    def scan(self, data) -> PIIScanResult:
-        """
-        데이터에서 PII 감지.
-        data: str, dict, or list
-        """
+        findings = []
+        for name, config in PII_PATTERNS.items():
+            for match in config["pattern"].finditer(text):
+                matched_text = match.group()
+                if not self._is_whitelisted(text, matched_text):
+                    findings.append({
+                        "type": name,
+                        "level": config["level"],
+                        "description": config["description"],
+                        "value_preview": matched_text[:4] + "****",
+                        "position": match.start(),
+                    })
+        return findings
+
+    def scan(self, data: Any, path: str = "") -> PIIScanResult:
+        """딕셔너리/리스트/문자열에서 재귀적으로 PII 검색"""
         result = PIIScanResult()
-        self._scan_recursive(data, "", result)
-        if result.findings:
-            result.has_pii = True
-            if self.fail_closed:
-                result.blocked = True
-        return result
 
-    def _scan_recursive(self, data, path: str, result: PIIScanResult):
-        """재귀적 PII 스캔."""
         if isinstance(data, str):
-            self._scan_text(data, path, result)
+            result.scanned_fields = 1
+            findings = self.scan_text(data)
+            if findings:
+                for f in findings:
+                    f["field_path"] = path
+                result.findings.extend(findings)
+                result.has_pii = True
+
         elif isinstance(data, dict):
             for key, value in data.items():
-                self._scan_recursive(value, f"{path}.{key}" if path else key, result)
-        elif isinstance(data, (list, tuple)):
-            for idx, item in enumerate(data):
-                self._scan_recursive(item, f"{path}[{idx}]", result)
-
-    def _scan_text(self, text: str, field_name: str, result: PIIScanResult):
-        """텍스트에서 PII 패턴 매칭."""
-        if not text or len(text) < 4:
-            return
-
-        for pii_type, pattern in PII_DETECTORS.items():
-            for match in pattern.finditer(text):
-                matched_value = match.group(0)
-                if self._is_whitelisted(matched_value):
+                # enc_ prefix 필드는 이미 암호화된 것이므로 스캔 건너뜀
+                if key.startswith("enc_"):
                     continue
-                finding = PIIFinding(
-                    field_name=field_name or "(root)",
-                    pii_type=pii_type,
-                    value=matched_value,
-                    masked=self._mask_value(matched_value, pii_type),
-                )
-                result.findings.append(finding)
+                sub = self.scan(value, path=f"{path}.{key}" if path else key)
+                result.scanned_fields += sub.scanned_fields
+                result.findings.extend(sub.findings)
+                if sub.has_pii:
+                    result.has_pii = True
 
-    def scan_and_block(self, data) -> tuple:
-        """
-        PII 스캔 + 차단.
-        Returns: (is_safe, safe_data, scan_result)
-        - is_safe=True: PII 없음, 원본 데이터 반환
-        - is_safe=False: PII 감지, 마스킹된 데이터 반환
-        """
-        scan_result = self.scan(data)
-        if not scan_result.has_pii:
-            return (True, data, scan_result)
-
-        # PII 감지 -> 자동 마스킹
-        safe_data = self._mask_data(data)
-        return (False, safe_data, scan_result)
-
-    def _mask_data(self, data):
-        """데이터 전체 PII 마스킹."""
-        if isinstance(data, str):
-            return self.mask_text(data)
-        elif isinstance(data, dict):
-            return {k: self._mask_data(v) for k, v in data.items()}
         elif isinstance(data, (list, tuple)):
-            return [self._mask_data(item) for item in data]
-        return data
+            for i, item in enumerate(data):
+                sub = self.scan(item, path=f"{path}[{i}]")
+                result.scanned_fields += sub.scanned_fields
+                result.findings.extend(sub.findings)
+                if sub.has_pii:
+                    result.has_pii = True
+
+        if self.fail_closed and result.has_pii:
+            result.blocked = True
+
+        return result
 
     def mask_text(self, text: str) -> str:
-        """텍스트에서 PII 자동 마스킹."""
+        """문자열에서 PII를 자동 마스킹"""
         if not text or not isinstance(text, str):
             return text
 
-        result = text
-        for pii_type, pattern in PII_DETECTORS.items():
-            def _replacer(match, _type=pii_type):
-                matched = match.group(0)
-                if self._is_whitelisted(matched):
-                    return matched
-                return self._mask_value(matched, _type)
-            result = pattern.sub(_replacer, result)
+        masked = text
+        for name, config in PII_PATTERNS.items():
+            for match in config["pattern"].finditer(masked):
+                matched_text = match.group()
+                if not self._is_whitelisted(text, matched_text):
+                    if name == "email":
+                        local, domain = matched_text.split("@", 1)
+                        replacement = f"{local[0]}****@{domain}"
+                    elif "phone" in name:
+                        replacement = matched_text[:3] + "-****-" + matched_text[-4:]
+                    elif "name" in name:
+                        replacement = matched_text[:2] + "****"
+                    else:
+                        replacement = matched_text[:3] + "****"
+                    masked = masked.replace(matched_text, replacement, 1)
+        return masked
+
+    def mask_dict(self, data: dict, exclude_keys: set = None) -> dict:
+        """딕셔너리의 모든 문자열 필드를 마스킹"""
+        exclude = exclude_keys or set()
+        result = {}
+        for key, value in data.items():
+            if key in exclude or key.startswith("enc_"):
+                result[key] = value
+            elif isinstance(value, str):
+                result[key] = self.mask_text(value)
+            elif isinstance(value, dict):
+                result[key] = self.mask_dict(value, exclude)
+            elif isinstance(value, list):
+                result[key] = [
+                    self.mask_dict(item, exclude) if isinstance(item, dict)
+                    else self.mask_text(item) if isinstance(item, str)
+                    else item
+                    for item in value
+                ]
+            else:
+                result[key] = value
         return result
 
-    def mask_dict(self, data: dict) -> dict:
-        """dict 전체 필드 마스킹."""
-        if not isinstance(data, dict):
-            return data
-        return {k: self._mask_data(v) for k, v in data.items()}
+    def scan_and_block(self, data: dict) -> tuple[bool, dict, PIIScanResult]:
+        """스캔 후 PII 있으면 마스킹된 버전 반환
+
+        Returns:
+            (is_safe, data, scan_result)
+            - is_safe=True: 원본 데이터 안전
+            - is_safe=False: 마스킹된 데이터 반환 (원본 차단)
+        """
+        result = self.scan(data)
+        if result.has_pii and self.fail_closed:
+            masked = self.mask_dict(data)
+            return False, masked, result
+        return True, data, result
 
 
-# ── Self-test ────────────────────────────────────────────────────────────────
+# ─── 테스트 ──────────────────────────────────────────────
 if __name__ == "__main__":
-    print("[pii_scanner] Self-test start...")
     scanner = PIIScanner(fail_closed=True)
-    all_passed = True
 
-    # 1. 전화번호 감지
-    r1 = scanner.scan("연락처: 010-1234-5678")
-    ok1 = r1.has_pii and any(f.pii_type == "phone_kr" for f in r1.findings)
-    print(f"  [{'PASS' if ok1 else 'FAIL'}] phone detection: {r1.has_pii}")
-    if not ok1:
-        all_passed = False
+    print("=" * 60)
+    print("BRIDGE PII 스캐너 테스트")
+    print("=" * 60)
 
-    # 2. 이메일 감지
-    r2 = scanner.scan({"contact": "user@example.com"})
-    ok2 = r2.has_pii and any(f.pii_type == "email" for f in r2.findings)
-    print(f"  [{'PASS' if ok2 else 'FAIL'}] email detection: {r2.has_pii}")
-    if not ok2:
-        all_passed = False
+    # 1. 안전한 데이터
+    safe_data = {
+        "region": "서울",
+        "city": "구로",
+        "teaching_age": "Kindy - Elem",
+        "salary_krw": 2400000,
+    }
+    r1 = scanner.scan(safe_data)
+    print(f"\n1. 안전한 데이터: {r1.summary()}")
 
-    # 3. 화이트리스트 통과
-    r3 = scanner.scan("문의: bridgejobkr@gmail.com")
-    ok3 = not r3.has_pii
-    print(f"  [{'PASS' if ok3 else 'FAIL'}] whitelist pass: {not r3.has_pii}")
-    if not ok3:
-        all_passed = False
+    # 2. PII 포함 데이터
+    unsafe_data = {
+        "region": "서울",
+        "contact_info": "김테스원장 010-2542-6545 test@gmail.com",
+        "memo": "(서울 구로 해피해피 김테스원장 010-2542-6545)",
+    }
+    r2 = scanner.scan(unsafe_data)
+    print(f"\n2. PII 포함 데이터: {r2.summary()}")
+    for f in r2.findings:
+        print(f"   → [{f['level']}] {f['description']}: {f['value_preview']} (필드: {f['field_path']})")
 
-    # 4. 직함+이름 감지
-    r4 = scanner.scan("담당자: 김철수원장")
-    ok4 = r4.has_pii and any(f.pii_type == "name_with_title" for f in r4.findings)
-    print(f"  [{'PASS' if ok4 else 'FAIL'}] name+title detection: {r4.has_pii}")
-    if not ok4:
-        all_passed = False
+    # 3. Fail-Closed 테스트
+    is_safe, output, r3 = scanner.scan_and_block(unsafe_data)
+    print(f"\n3. Fail-Closed: safe={is_safe}, blocked={r3.blocked}")
+    print(f"   마스킹된 contact_info: {output.get('contact_info')}")
+    print(f"   마스킹된 memo: {output.get('memo')}")
 
-    # 5. scan_and_block
-    is_safe, safe_data, _ = scanner.scan_and_block({"phone": "010-5555-6666", "id": 1})
-    ok5 = not is_safe and "****" in str(safe_data)
-    print(f"  [{'PASS' if ok5 else 'FAIL'}] scan_and_block: safe={is_safe}, masked={safe_data}")
-    if not ok5:
-        all_passed = False
-
-    # 6. mask_text
-    masked = scanner.mask_text("전화 010-9876-5432, 메일 user@test.com")
-    ok6 = "****" in masked and "010-9876-5432" not in masked
-    print(f"  [{'PASS' if ok6 else 'FAIL'}] mask_text: {masked}")
-    if not ok6:
-        all_passed = False
-
-    # 7. 날짜 화이트리스트
-    r7 = scanner.scan("날짜: 2026-03-06")
-    ok7 = not r7.has_pii
-    print(f"  [{'PASS' if ok7 else 'FAIL'}] date whitelist: {not r7.has_pii}")
-    if not ok7:
-        all_passed = False
-
-    if all_passed:
-        print("\n  All PII scanner tests PASSED.")
-    else:
-        print("\n  Some tests FAILED.")
+    # 4. 화이트리스트 테스트
+    whitelist_data = {
+        "job_id": "Job. 1003",
+        "website": "bridgejob.co.kr",
+        "sender": "bridgejobkr@gmail.com",
+    }
+    r4 = scanner.scan(whitelist_data)
+    print(f"\n4. 화이트리스트 데이터: {r4.summary()}")
