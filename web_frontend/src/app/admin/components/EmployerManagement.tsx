@@ -21,19 +21,22 @@ const PAGE_BREAK_EVERY = 2 // 워드뷰 페이지 구분선 간격 (2 또는 3)
 type TabKey = 'active' | 'all' | 'blacklist'
 type ViewMode = 'word' | 'excel'
 
-const STATUS_FLOW = ['new', 'contacted', 'interviewing', 'hired', 'rejected', 'hold', 'blacklist'] as const
+const STATUS_FLOW = ['open', 'contacted', 'hired', 'hold', 'closed', 'blacklist'] as const
 const STATUS_LABEL: Record<string, string> = {
-  new: 'New', contacted: 'Contacted', interviewing: 'Interviewing',
-  hired: 'Hired', rejected: 'Rejected', hold: 'Hold', blacklist: 'Blacklist',
+  open: 'Open', contacted: 'Contacted', hired: 'Hired',
+  hold: 'Hold', closed: 'Closed', blacklist: 'Blacklist',
+  new: 'New', interviewing: 'Interviewing', rejected: 'Rejected',
 }
 const STATUS_COLORS: Record<string, string> = {
-  new: 'bg-sky-100 text-sky-700',
+  open: 'bg-sky-100 text-sky-700',
   contacted: 'bg-yellow-100 text-yellow-700',
-  interviewing: 'bg-blue-100 text-blue-700',
   hired: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
   hold: 'bg-gray-100 text-gray-500',
+  closed: 'bg-gray-200 text-gray-600',
   blacklist: 'bg-red-200 text-red-800',
+  new: 'bg-sky-100 text-sky-700',
+  interviewing: 'bg-blue-100 text-blue-700',
+  rejected: 'bg-red-100 text-red-700',
 }
 
 /* ══════ 지역 정규화 ══════ */
@@ -361,7 +364,7 @@ export default function EmployerManagement() {
 
     // 탭 필터
     if (tab === 'active') {
-      list = list.filter(e => e.status !== 'blacklist' && ['new', 'contacted', 'interviewing'].includes(e.status))
+      list = list.filter(e => e.status !== 'blacklist' && ['open', 'contacted', 'new', 'interviewing'].includes(e.status))
     } else if (tab === 'blacklist') {
       list = list.filter(e => e.status === 'blacklist')
     }
@@ -394,7 +397,7 @@ export default function EmployerManagement() {
 
   /* ── NEW 카운트 ── */
   const newUnconfirmedCount = useMemo(() => {
-    return employers.filter(e => e.status === 'new' && !confirmedIds.has(e.id)).length
+    return employers.filter(e => (e.status === 'new' || e.status === 'open') && !confirmedIds.has(e.id)).length
   }, [employers, confirmedIds])
 
   /* ── 메일 열기 ── */

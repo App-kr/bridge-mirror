@@ -3,18 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EmployerApp } from './DocBlock'
 
-/* ── 발신자 목록 ── */
-const SENDERS: { label: string; value: string }[] = [
+/* ── 발신자 ── */
+const SENDERS = [
   { label: 'Gmail', value: 'bridgejobkr@gmail.com' },
   { label: 'Naver', value: 'bridgejobkr@naver.com' },
 ]
 
 /* ── 메일 양식 ── */
-interface MailTemplate {
-  name: string
-  subject: string
-  body: string
-}
+interface MailTemplate { name: string; subject: string; body: string }
 
 const TEMPLATES: MailTemplate[] = [
   {
@@ -100,31 +96,71 @@ function subVars(text: string, r: EmployerApp, province: string, cityVal: string
     .replace(/\{\{email\}\}/g, r.email || '')
 }
 
-/* ── 에디터 커맨드 ── */
+/* ── execCommand helper ── */
 function execCmd(cmd: string, val?: string) {
   document.execCommand(cmd, false, val)
 }
 
-/* ── 툴바 색상 ── */
-const COLORS = [
+/* ── 수신자 이메일 파싱 ── */
+function parseEmails(raw: string): string[] {
+  return raw
+    .split(/[,;\n\r\s]+/)
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e.includes('@') && e.includes('.') && e.length > 4)
+}
+
+/* ── 색상 팔레트 ── */
+const TEXT_COLORS = [
   { label: '검정', value: '#000000' },
   { label: '빨강', value: '#dc2626' },
   { label: '파랑', value: '#2563eb' },
   { label: '초록', value: '#16a34a' },
+  { label: '주황', value: '#ea580c' },
   { label: '노랑', value: '#ca8a04' },
   { label: '보라', value: '#9333ea' },
+  { label: '분홍', value: '#db2777' },
+  { label: '청록', value: '#0891b2' },
   { label: '회색', value: '#6b7280' },
 ]
 
-const FONTS = [
-  'Nanum Gothic', 'Malgun Gothic', 'Arial', 'Georgia', 'Verdana', 'Courier New',
+const BG_COLORS = [
+  { label: '없음', value: 'transparent' },
+  { label: '노랑', value: '#fef08a' },
+  { label: '연두', value: '#bbf7d0' },
+  { label: '하늘', value: '#bae6fd' },
+  { label: '연분홍', value: '#fecdd3' },
+  { label: '연보라', value: '#e9d5ff' },
+  { label: '주황', value: '#fed7aa' },
 ]
+
+const FONTS = ['Nanum Gothic', 'Malgun Gothic', 'Arial', 'Georgia', 'Verdana', 'Courier New']
 
 const SIZES = [
   { label: '12', value: '1' }, { label: '14', value: '2' }, { label: '16', value: '3' },
   { label: '18', value: '4' }, { label: '20', value: '5' }, { label: '24', value: '6' },
   { label: '36', value: '7' },
 ]
+
+const LINE_SPACINGS = [
+  { label: '1.0', value: '1.0' }, { label: '1.2', value: '1.2' }, { label: '1.5', value: '1.5' },
+  { label: '1.8', value: '1.8' }, { label: '2.0', value: '2.0' }, { label: '2.5', value: '2.5' },
+]
+
+/* ── 파일 아이콘 ── */
+function fileIcon(f: File): string {
+  if (f.type.startsWith('image/')) return '🖼'
+  if (f.type.includes('pdf')) return '📄'
+  if (f.type.includes('video')) return '🎥'
+  if (f.type.includes('word') || f.name.endsWith('.doc') || f.name.endsWith('.docx')) return '📝'
+  return '📎'
+}
+
+/* ── 파일 크기 표시 ── */
+function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
 
 /* ══════════════════════════════════════════════════════════════════
    MailComposer
@@ -137,96 +173,210 @@ interface MailComposerProps {
 }
 
 export default function MailComposer({ recipients, extractProvince, extractCity, onClose }: MailComposerProps) {
-  const [sender, setSender] = useState<string>(SENDERS[0].value)
+  const [sender, setSender] = useState(SENDERS[0].value)
   const [templateIdx, setTemplateIdx] = useState(0)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
   const [attachments, setAttachments] = useState<File[]>([])
   const [previewHtml, setPreviewHtml] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [showColorPicker, setShowColorPicker] = useState(false)
+
+  // 팔레트 표시 상태
+  const [showTextColor, setShowTextColor] = useState(false)
+  const [showBgColor, setShowBgColor] = useState(false)
+
+  // 링크 패널
+  const [showLinkPanel, setShowLinkPanel] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('https://')
+  const [linkText, setLinkText] = useState('')
+  const savedRangeRef = useRef<Range | null>(null)
+
+  // 수동 수신자
+  const [recipientInput, setRecipientInput] = useState('')
+  const [manualEmails, setManualEmails] = useState<string[]>([])
 
   const editorRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const attachInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   /* 템플릿 변경 */
   const selectTemplate = useCallback((idx: number) => {
     setTemplateIdx(idx)
     setSubject(TEMPLATES[idx].subject)
-    if (editorRef.current) {
-      editorRef.current.innerHTML = TEMPLATES[idx].body
-    }
+    if (editorRef.current) editorRef.current.innerHTML = TEMPLATES[idx].body
   }, [])
 
   /* 초기화 */
   useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.innerHTML = TEMPLATES[0].body
-    }
+    if (editorRef.current) editorRef.current.innerHTML = TEMPLATES[0].body
   }, [])
 
   /* 미리보기 0.5초 갱신 */
   useEffect(() => {
     const timer = setInterval(() => {
-      if (editorRef.current) {
-        setPreviewHtml(editorRef.current.innerHTML)
-      }
+      if (editorRef.current) setPreviewHtml(editorRef.current.innerHTML)
     }, 500)
     return () => clearInterval(timer)
   }, [])
 
-  /* 첨부파일 */
+  /* 이미지 붙여넣기 (Ctrl+V) */
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const file = item.getAsFile()
+          if (!file) continue
+          const reader = new FileReader()
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result as string
+            editorRef.current?.focus()
+            execCmd('insertHTML', `<img src="${dataUrl}" style="max-width:100%;height:auto;display:block;margin:6px 0;" alt="image"/>`)
+          }
+          reader.readAsDataURL(file)
+          break
+        }
+      }
+    }
+    editor.addEventListener('paste', handlePaste)
+    return () => editor.removeEventListener('paste', handlePaste)
+  }, [])
+
+  /* 첨부파일 추가 */
+  const addFiles = (files: FileList | File[]) => {
+    setAttachments(prev => [...prev, ...Array.from(files)])
+  }
+
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    const files = Array.from(e.dataTransfer.files)
-    setAttachments(prev => [...prev, ...files])
+    addFiles(e.dataTransfer.files)
   }
 
   const removeAttachment = (idx: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== idx))
   }
 
-  /* 링크 삽입 */
-  const insertLink = () => {
-    const url = prompt('URL을 입력하세요:')
-    if (url) execCmd('createLink', url)
+  /* 이미지를 본문에 삽입 */
+  const insertImageFromFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      editorRef.current?.focus()
+      execCmd('insertHTML', `<img src="${dataUrl}" style="max-width:100%;height:auto;display:block;margin:6px 0;" alt="${file.name}"/>`)
+    }
+    reader.readAsDataURL(file)
   }
 
-  /* 미리보기용 첫 번째 수신자 */
+  /* 링크 패널 열기 (선택 영역 저장) */
+  const openLinkPanel = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+      setLinkText(sel.toString())
+    }
+    setShowLinkPanel(true)
+    setShowTextColor(false)
+    setShowBgColor(false)
+  }
+
+  /* 링크 삽입 */
+  const applyLink = () => {
+    if (!linkUrl) return
+    const sel = window.getSelection()
+    if (savedRangeRef.current) {
+      sel?.removeAllRanges()
+      sel?.addRange(savedRangeRef.current)
+    }
+    editorRef.current?.focus()
+    if (linkText && (!sel || sel.toString() === '')) {
+      execCmd('insertHTML', `<a href="${linkUrl}">${linkText}</a>`)
+    } else {
+      execCmd('createLink', linkUrl)
+    }
+    setShowLinkPanel(false)
+    setLinkUrl('https://')
+    setLinkText('')
+    savedRangeRef.current = null
+  }
+
+  /* 줄간격 적용 */
+  const applyLineSpacing = (value: string) => {
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount || !editorRef.current) return
+    const range = sel.getRangeAt(0)
+    let node: Node | null = range.commonAncestorContainer
+    while (node && node !== editorRef.current) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement
+        if (['P', 'DIV', 'LI', 'H1', 'H2', 'H3'].includes(el.tagName)) {
+          el.style.lineHeight = value
+          return
+        }
+      }
+      node = node.parentNode
+    }
+    editorRef.current.style.lineHeight = value
+  }
+
+  /* 수신자 텍스트 파싱 */
+  const parseRecipientInput = () => {
+    if (!recipientInput.trim()) return
+    const emails = parseEmails(recipientInput)
+    const newEmails = emails.filter(e => !manualEmails.includes(e))
+    if (newEmails.length > 0) setManualEmails(prev => [...prev, ...newEmails])
+    setRecipientInput('')
+  }
+
+  const removeManualEmail = (email: string) => {
+    setManualEmails(prev => prev.filter(e => e !== email))
+  }
+
+  /* 미리보기 */
   const firstR = recipients[0]
   const previewProvince = firstR ? extractProvince(firstR.location) : ''
   const previewCity = firstR ? extractCity(firstR.location) : ''
   const previewSubject = firstR ? subVars(subject, firstR, previewProvince, previewCity) : subject
   const previewBody = firstR ? subVars(previewHtml, firstR, previewProvince, previewCity) : previewHtml
 
+  const totalRecipients = recipients.length + manualEmails.length
+
   /* 발송 */
   const handleSend = async () => {
-    if (sending || recipients.length === 0) return
+    if (sending || totalRecipients === 0) return
     setSending(true)
     try {
       const bodyHtml = editorRef.current?.innerHTML || ''
+      const employerRecips = recipients.map(r => ({
+        email: r.email,
+        name: r.school_name || r.name,
+        region: extractProvince(r.location),
+        city: extractCity(r.location),
+        teachingAge: r.teaching_age || '',
+      }))
+      const manualRecips = manualEmails.map(email => ({
+        email,
+        name: email,
+        region: '',
+        city: '',
+        teachingAge: '',
+      }))
       const payload = {
         sender,
         subject,
         body_html: bodyHtml,
-        recipients: recipients.map(r => ({
-          email: r.email,
-          name: r.school_name || r.name,
-          region: extractProvince(r.location),
-          city: extractCity(r.location),
-          teachingAge: r.teaching_age || '',
-        })),
+        recipients: [...employerRecips, ...manualRecips],
       }
-
       const adminKey = typeof window !== 'undefined' ? localStorage.getItem('bridge_admin_key') || '' : ''
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
-
       const res = await fetch(`${apiUrl}/api/admin/mail/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
         body: JSON.stringify(payload),
       })
-
       if (res.ok) {
         setSent(true)
         setTimeout(() => onClose(), 2000)
@@ -241,6 +391,13 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     }
   }
 
+  /* 팔레트 닫기 */
+  const closePopovers = () => {
+    setShowTextColor(false)
+    setShowBgColor(false)
+    if (!showLinkPanel) return
+  }
+
   /* 발송 완료 화면 */
   if (sent) {
     return (
@@ -248,7 +405,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
         <div className="bg-white rounded-2xl shadow-2xl p-10 text-center max-w-sm">
           <div className="text-5xl mb-4">&#9989;</div>
           <h3 className="text-[18px] font-bold text-[#1d1d1f]">발송 완료</h3>
-          <p className="text-[13px] text-gray-500 mt-2">{recipients.length}명에게 개별 발송되었습니다.</p>
+          <p className="text-[13px] text-gray-500 mt-2">{totalRecipients}명에게 개별 발송되었습니다.</p>
           <p className="text-[11px] text-gray-400 mt-3">2초 후 자동 닫힘</p>
         </div>
       </div>
@@ -269,12 +426,13 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
 
         {/* 메인 (좌: 작성, 우: 미리보기) */}
         <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* ── 좌측: 작성 영역 ── */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 border-r border-gray-100">
-            {/* 양식 선택 */}
+          {/* ── 좌측: 작성 ── */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-3 border-r border-gray-100">
+
+            {/* 메일 양식 */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">메일 양식</label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {TEMPLATES.map((t, i) => (
                   <button
                     key={t.name}
@@ -313,15 +471,77 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
             {/* 받는 사람 */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
-                받는 사람 ({recipients.length}명)
+                받는 사람 ({totalRecipients}명)
               </label>
-              <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
-                {recipients.map(r => (
-                  <span key={r.id} className="inline-flex items-center px-2 py-1 bg-gray-100 text-[11px] text-gray-700 rounded-lg">
-                    {r.school_name || r.name}
-                  </span>
-                ))}
+              {/* 선택된 업체 칩 */}
+              {recipients.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 max-h-14 overflow-y-auto mb-2">
+                  {recipients.map(r => (
+                    <span key={r.id} className="inline-flex items-center px-2 py-1 bg-blue-50 text-[11px] text-blue-700 rounded-lg">
+                      {r.school_name || r.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* 이메일 직접 입력/붙여넣기 */}
+              <input
+                type="text"
+                value={recipientInput}
+                onChange={e => setRecipientInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault()
+                    parseRecipientInput()
+                  }
+                }}
+                onBlur={parseRecipientInput}
+                onPaste={() => setTimeout(parseRecipientInput, 50)}
+                placeholder="이메일 직접 추가 — 콤마·세미콜론·줄바꿈으로 여러 개 붙여넣기 가능"
+                className="w-full px-3 py-2 text-[12px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 focus:border-[#0071E3]"
+              />
+              {manualEmails.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5 max-h-14 overflow-y-auto">
+                  {manualEmails.map(email => (
+                    <span key={email} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-[11px] text-gray-700 rounded-lg">
+                      {email}
+                      <button type="button" onClick={() => removeManualEmail(email)} className="text-red-400 hover:text-red-600 ml-0.5">&#10005;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 첨부파일 (제목 위) */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">첨부파일</label>
+              <div
+                className="border-2 border-dashed border-gray-200 rounded-lg px-3 py-2 flex items-center gap-2 hover:border-blue-300 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleFileDrop}
+                onClick={() => attachInputRef.current?.click()}
+              >
+                <span className="text-[18px]">📎</span>
+                <span className="text-[12px] text-gray-400 flex-1">파일 드래그 또는 클릭 &middot; 이미지·동영상·PDF·Word 등 모든 형식 &middot; 대용량 가능 &middot; 여러 개 첨부</span>
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  multiple
+                  accept="*/*"
+                  className="hidden"
+                  onChange={e => { if (e.target.files) { addFiles(e.target.files); e.currentTarget.value = '' } }}
+                />
               </div>
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {attachments.map((f, i) => (
+                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-[11px] text-gray-600 rounded">
+                      {fileIcon(f)} {f.name}
+                      <span className="text-gray-400 ml-0.5">({fmtSize(f.size)})</span>
+                      <button type="button" onClick={() => removeAttachment(i)} className="text-red-400 hover:text-red-600 ml-0.5">&#10005;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 제목 */}
@@ -336,16 +556,17 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
               />
             </div>
 
-            {/* HTML 에디터 */}
+            {/* 본문 에디터 */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">본문</label>
 
-              {/* 툴바 */}
-              <div className="flex flex-wrap items-center gap-1 p-2 bg-gray-50 border border-gray-200 rounded-t-lg border-b-0">
+              {/* ── 툴바 ── */}
+              <div className="flex flex-wrap items-center gap-0.5 p-1.5 bg-gray-50 border border-gray-200 rounded-t-lg border-b-0">
+
                 {/* 폰트 */}
                 <select
                   onChange={e => execCmd('fontName', e.target.value)}
-                  className="text-[11px] px-1.5 py-1 border border-gray-200 rounded bg-white"
+                  className="text-[11px] px-1 py-1 border border-gray-200 rounded bg-white max-w-[100px]"
                   defaultValue=""
                 >
                   <option value="" disabled>폰트</option>
@@ -355,40 +576,50 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                 {/* 크기 */}
                 <select
                   onChange={e => execCmd('fontSize', e.target.value)}
-                  className="text-[11px] px-1.5 py-1 border border-gray-200 rounded bg-white"
+                  className="text-[11px] px-1 py-1 border border-gray-200 rounded bg-white"
                   defaultValue=""
                 >
                   <option value="" disabled>크기</option>
-                  {SIZES.map(s => <option key={s.value} value={s.value}>{s.label}px</option>)}
+                  {SIZES.map(s => <option key={s.label} value={s.value}>{s.label}px</option>)}
+                </select>
+
+                {/* 줄간격 */}
+                <select
+                  onChange={e => applyLineSpacing(e.target.value)}
+                  className="text-[11px] px-1 py-1 border border-gray-200 rounded bg-white"
+                  defaultValue=""
+                >
+                  <option value="" disabled>줄간격</option>
+                  {LINE_SPACINGS.map(ls => <option key={ls.value} value={ls.value}>{ls.label}</option>)}
                 </select>
 
                 <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
-                {/* B/I/U/S */}
-                <button type="button" onClick={() => execCmd('bold')} className="w-7 h-7 flex items-center justify-center text-[13px] font-bold rounded hover:bg-gray-200" title="Bold">B</button>
-                <button type="button" onClick={() => execCmd('italic')} className="w-7 h-7 flex items-center justify-center text-[13px] italic rounded hover:bg-gray-200" title="Italic">I</button>
-                <button type="button" onClick={() => execCmd('underline')} className="w-7 h-7 flex items-center justify-center text-[13px] underline rounded hover:bg-gray-200" title="Underline">U</button>
-                <button type="button" onClick={() => execCmd('strikeThrough')} className="w-7 h-7 flex items-center justify-center text-[13px] line-through rounded hover:bg-gray-200" title="Strikethrough">S</button>
+                {/* B / I / U / S */}
+                <button type="button" onClick={() => execCmd('bold')} className="w-7 h-7 flex items-center justify-center text-[13px] font-bold rounded hover:bg-gray-200" title="굵게">B</button>
+                <button type="button" onClick={() => execCmd('italic')} className="w-7 h-7 flex items-center justify-center text-[13px] italic rounded hover:bg-gray-200" title="기울임">I</button>
+                <button type="button" onClick={() => execCmd('underline')} className="w-7 h-7 flex items-center justify-center text-[13px] underline rounded hover:bg-gray-200" title="밑줄">U</button>
+                <button type="button" onClick={() => execCmd('strikeThrough')} className="w-7 h-7 flex items-center justify-center text-[13px] line-through rounded hover:bg-gray-200" title="취소선">S</button>
 
                 <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
-                {/* 색상 */}
+                {/* 글자 색 */}
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setShowColorPicker(!showColorPicker)}
-                    className="w-7 h-7 flex items-center justify-center text-[13px] rounded hover:bg-gray-200"
-                    title="글자 색상"
+                    onClick={() => { setShowTextColor(v => !v); setShowBgColor(false); setShowLinkPanel(false) }}
+                    className="w-7 h-7 flex items-center justify-center text-[13px] font-bold rounded hover:bg-gray-200"
+                    title="글자 색"
                   >
-                    A
+                    <span className="font-bold" style={{ borderBottom: '3px solid #dc2626' }}>A</span>
                   </button>
-                  {showColorPicker && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex gap-1 z-50">
-                      {COLORS.map(c => (
+                  {showTextColor && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1 z-50 w-[130px]">
+                      {TEXT_COLORS.map(c => (
                         <button
                           key={c.value}
                           type="button"
-                          onClick={() => { execCmd('foreColor', c.value); setShowColorPicker(false) }}
+                          onClick={() => { execCmd('foreColor', c.value); setShowTextColor(false) }}
                           className="w-6 h-6 rounded-full border border-gray-200 hover:scale-110 transition-transform"
                           style={{ backgroundColor: c.value }}
                           title={c.label}
@@ -398,79 +629,151 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                   )}
                 </div>
 
+                {/* 배경 색 */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => { setShowBgColor(v => !v); setShowTextColor(false); setShowLinkPanel(false) }}
+                    className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200"
+                    title="배경 색"
+                  >
+                    <span className="w-4 h-4 rounded border border-gray-300 block" style={{ background: 'linear-gradient(135deg, #fef08a 50%, #bae6fd 50%)' }} />
+                  </button>
+                  {showBgColor && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1 z-50 w-[110px]">
+                      {BG_COLORS.map(c => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => {
+                            document.execCommand('styleWithCSS', false, 'true')
+                            execCmd('hiliteColor', c.value === 'transparent' ? 'transparent' : c.value)
+                            setShowBgColor(false)
+                          }}
+                          className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform flex items-center justify-center"
+                          style={{ backgroundColor: c.value === 'transparent' ? '#fff' : c.value }}
+                          title={c.label}
+                        >
+                          {c.value === 'transparent' && <span className="text-[9px] text-gray-400 font-bold">✕</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
                 {/* 정렬 */}
-                <button type="button" onClick={() => execCmd('justifyLeft')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="좌측">&#9776;</button>
-                <button type="button" onClick={() => execCmd('justifyCenter')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="가운데">&#9776;</button>
-                <button type="button" onClick={() => execCmd('justifyRight')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="우측">&#9776;</button>
+                <button type="button" onClick={() => execCmd('justifyLeft')} className="w-7 h-7 flex items-center justify-center text-[10px] rounded hover:bg-gray-200" title="좌측 정렬">&#9776;</button>
+                <button type="button" onClick={() => execCmd('justifyCenter')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="가운데">&#8801;</button>
+                <button type="button" onClick={() => execCmd('justifyRight')} className="w-7 h-7 flex items-center justify-center text-[10px] rounded hover:bg-gray-200" title="우측 정렬" style={{ transform: 'scaleX(-1)' }}>&#9776;</button>
 
                 <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
                 {/* 목록 */}
-                <button type="button" onClick={() => execCmd('insertUnorderedList')} className="w-7 h-7 flex items-center justify-center text-[12px] rounded hover:bg-gray-200" title="글머리">&#8226;</button>
-                <button type="button" onClick={() => execCmd('insertOrderedList')} className="w-7 h-7 flex items-center justify-center text-[12px] rounded hover:bg-gray-200" title="번호">1.</button>
+                <button type="button" onClick={() => execCmd('insertUnorderedList')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="글머리 목록">&#8226;&#8801;</button>
+                <button type="button" onClick={() => execCmd('insertOrderedList')} className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200" title="번호 목록">1&#8801;</button>
 
-                {/* 링크 */}
-                <button type="button" onClick={insertLink} className="w-7 h-7 flex items-center justify-center text-[12px] rounded hover:bg-gray-200" title="링크">&#128279;</button>
+                {/* 구분선 */}
+                <button
+                  type="button"
+                  onClick={() => execCmd('insertHorizontalRule')}
+                  className="w-7 h-7 flex items-center justify-center text-[11px] rounded hover:bg-gray-200"
+                  title="구분선"
+                >
+                  &#8212;
+                </button>
+
+                <span className="w-px h-5 bg-gray-200 mx-0.5" />
+
+                {/* 링크 삽입 */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={openLinkPanel}
+                    className="w-7 h-7 flex items-center justify-center text-[12px] rounded hover:bg-gray-200"
+                    title="링크 삽입"
+                  >
+                    &#128279;
+                  </button>
+                  {showLinkPanel && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-50 w-[280px] space-y-2">
+                      <p className="text-[11px] font-semibold text-gray-500">링크 삽입</p>
+                      <input
+                        type="text"
+                        value={linkText}
+                        onChange={e => setLinkText(e.target.value)}
+                        placeholder="표시 텍스트 (선택사항)"
+                        className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                      />
+                      <input
+                        type="text"
+                        value={linkUrl}
+                        onChange={e => setLinkUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                        autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') applyLink() }}
+                      />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={applyLink} className="flex-1 px-3 py-1.5 bg-[#0071E3] text-white text-[12px] font-semibold rounded hover:bg-[#005ec7]">삽입</button>
+                        <button type="button" onClick={() => setShowLinkPanel(false)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">취소</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 이미지 본문 삽입 */}
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-7 h-7 flex items-center justify-center text-[12px] rounded hover:bg-gray-200"
+                  title="이미지 삽입 (본문에 직접)"
+                >
+                  &#128444;
+                </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) insertImageFromFile(file)
+                    e.currentTarget.value = ''
+                  }}
+                />
 
                 {/* 서식 제거 */}
-                <button type="button" onClick={() => execCmd('removeFormat')} className="w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded hover:bg-gray-200 text-red-400" title="서식 제거">Tx</button>
+                <button
+                  type="button"
+                  onClick={() => execCmd('removeFormat')}
+                  className="w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded hover:bg-gray-200 text-red-400"
+                  title="서식 제거"
+                >
+                  Tx
+                </button>
               </div>
 
-              {/* contentEditable */}
+              {/* contentEditable 본문 */}
               <div
                 ref={editorRef}
                 contentEditable
                 suppressContentEditableWarning
-                className="w-full min-h-[250px] max-h-[400px] overflow-y-auto px-4 py-3 text-[13px] border border-gray-200 rounded-b-lg focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 bg-white leading-relaxed"
+                onClick={closePopovers}
+                className="w-full min-h-[240px] max-h-[360px] overflow-y-auto px-4 py-3 text-[13px] border border-gray-200 rounded-b-lg focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 bg-white leading-relaxed"
                 style={{ fontFamily: 'Nanum Gothic, sans-serif' }}
               />
-
               <p className="text-[10px] text-gray-400 mt-1">
-                변수: {'{{name}}'} {'{{region}}'} {'{{city}}'} {'{{teachingAge}}'} {'{{email}}'}
+                변수: {'{{name}}'} {'{{region}}'} {'{{city}}'} {'{{teachingAge}}'} {'{{email}}'} &middot; 이미지 Ctrl+V 또는 🖼 버튼으로 본문에 직접 삽입 · 브라우저에서 이미지 클릭 시 크기 조정 가능
               </p>
-            </div>
-
-            {/* 첨부파일 */}
-            <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">첨부파일</label>
-              <div
-                className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center hover:border-blue-300 transition-colors cursor-pointer"
-                onDragOver={e => e.preventDefault()}
-                onDrop={handleFileDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <p className="text-[12px] text-gray-400">파일을 드래그하거나 클릭하여 추가</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={e => {
-                    if (e.target.files) setAttachments(prev => [...prev, ...Array.from(e.target.files!)])
-                  }}
-                />
-              </div>
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {attachments.map((f, i) => (
-                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-[11px] text-gray-600 rounded">
-                      {f.name}
-                      <button type="button" onClick={() => removeAttachment(i)} className="text-red-400 hover:text-red-600 ml-0.5">&#10005;</button>
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
           {/* ── 우측: 미리보기 ── */}
-          <div className="w-[400px] shrink-0 overflow-y-auto p-5 bg-gray-50">
+          <div className="w-[380px] shrink-0 overflow-y-auto p-5 bg-gray-50">
             <h3 className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-3">미리보기</h3>
-
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {/* 헤더 */}
               <div className="px-4 py-3 border-b border-gray-100 space-y-1.5">
                 <div className="text-[11px]">
                   <span className="text-gray-400 font-medium">From:</span>
@@ -479,8 +782,12 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                 <div className="text-[11px]">
                   <span className="text-gray-400 font-medium">To:</span>
                   <span className="text-gray-700 ml-1">
-                    {firstR ? `${firstR.school_name || firstR.name}` : '—'}
-                    {recipients.length > 1 && <span className="text-gray-400 ml-1">(+{recipients.length - 1}명 개별발송)</span>}
+                    {firstR
+                      ? (firstR.school_name || firstR.name)
+                      : manualEmails[0] || '—'}
+                    {totalRecipients > 1 && (
+                      <span className="text-gray-400 ml-1">(+{totalRecipients - 1}명 개별발송)</span>
+                    )}
                   </span>
                 </div>
                 <div className="text-[11px]">
@@ -488,21 +795,19 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                   <span className="text-gray-700 ml-1 font-medium">{previewSubject}</span>
                 </div>
               </div>
-
-              {/* 본문 */}
               <div
                 className="px-4 py-4 text-[13px] leading-relaxed"
                 style={{ fontFamily: 'Nanum Gothic, sans-serif' }}
                 dangerouslySetInnerHTML={{ __html: previewBody }}
               />
-
-              {/* 첨부파일 */}
               {attachments.length > 0 && (
                 <div className="px-4 py-2 border-t border-gray-100">
-                  <span className="text-[10px] text-gray-400 font-medium">첨부 ({attachments.length})</span>
+                  <span className="text-[10px] text-gray-400 font-medium">첨부 ({attachments.length}개)</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {attachments.map((f, i) => (
-                      <span key={`p-${f.name}-${i}`} className="text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{f.name}</span>
+                      <span key={`p-${f.name}-${i}`} className="text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">
+                        {fileIcon(f)} {f.name}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -519,10 +824,10 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
           <button
             type="button"
             onClick={handleSend}
-            disabled={sending || recipients.length === 0}
+            disabled={sending || totalRecipients === 0}
             className="px-5 py-2.5 bg-[#03c75a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#02a84a] transition-colors disabled:opacity-50 shadow-sm"
           >
-            {sending ? '발송 중...' : `보내기 (${recipients.length}개 업체 개별발송)`}
+            {sending ? '발송 중...' : `보내기 (${totalRecipients}명 개별발송)`}
           </button>
         </div>
       </div>
