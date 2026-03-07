@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
+import HtmlPreview from '@/components/HtmlPreview'
 
 const API = API_URL
 
@@ -486,10 +487,7 @@ export default function EmailTemplatesPage() {
                     <p className="text-[11px] text-gray-400 mb-1">Subject</p>
                     <p className="text-sm font-medium text-gray-900">{editSubject || '(제목 없음)'}</p>
                   </div>
-                  <div
-                    className="prose prose-sm max-w-none text-gray-800"
-                    dangerouslySetInnerHTML={{ __html: substituteVars(editBody) }}
-                  />
+                  <HtmlPreview html={substituteVars(editBody)} />
                 </div>
               </div>
             </div>

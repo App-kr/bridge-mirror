@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import DOMPurify from 'dompurify'
 import type { EmployerApp } from './DocBlock'
 
 /* ── 발신자 ── */
@@ -888,7 +889,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
               <div
                 className="px-4 py-4 text-[13px] leading-relaxed"
                 style={{ fontFamily: 'Nanum Gothic, sans-serif' }}
-                dangerouslySetInnerHTML={{ __html: previewBody }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewBody) }}
               />
               {attachments.length > 0 && (
                 <div className="px-4 py-2 border-t border-gray-100">
