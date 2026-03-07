@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import DOMPurify from 'dompurify'
 import { API_URL } from '@/lib/api'
 import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2 } from 'lucide-react'
 
@@ -214,7 +215,7 @@ export default function MailSendPage() {
             {showPreview ? (
               <div
                 className="w-full min-h-[200px] px-4 py-3 rounded-xl border border-[#d2d2d7] bg-[#fafafa] text-[13px] prose prose-sm max-w-none overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }}
               />
             ) : (
               <textarea
