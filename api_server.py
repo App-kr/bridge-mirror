@@ -2500,7 +2500,9 @@ _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]
 import hashlib, time as _time
 
 def _ip_hash(request: Request) -> str:
-    ip = request.client.host if request.client else "unknown"
+    # X-Forwarded-For 우선 (Render/Cloudflare 프록시 환경)
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
     return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
 def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
