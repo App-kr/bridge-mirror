@@ -53,7 +53,19 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 # ═══════════════════════════════════════════════════════════════
 # 이 나라에서 오는 공격 패턴은 임계치를 낮춰 빠르게 차단
 # (정상 사용자는 공격 패턴을 안 보내므로 영향 없음)
-STRICT_COUNTRIES: set[str] = {"US", "GB", "ZA"}  # 미국, 영국, 남아공
+STRICT_COUNTRIES: set[str] = {
+    "US", "GB", "ZA",        # 미국, 영국, 남아공
+    "CN",                    # 중국
+    "AE",                    # UAE (두바이)
+    "RU",                    # 러시아
+    "KP",                    # 북한
+    "BR",                    # 브라질
+    "VN",                    # 베트남
+    "ID",                    # 인도네시아
+    "RO",                    # 루마니아
+    "TR",                    # 터키
+    "NG",                    # 나이지리아
+}
 STRICT_ATTACK_THRESHOLD = 1   # 이 나라에서는 1회 공격 패턴 = 즉시 차단
 STRICT_RATE_WINDOW = 60       # 엄격 rate limit 윈도우 (초)
 STRICT_RATE_MAX = 30          # 이 나라에서는 60초에 30 요청 초과 시 차단

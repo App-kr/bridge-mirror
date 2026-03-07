@@ -721,6 +721,12 @@ export default function BoardPage() {
     await saveFaqToApi(updated)
   }, [faqItems, saveFaqToApi])
 
+  const handleFaqDndReorder = useCallback((from: number, to: number) => {
+    const updated = arrayMove([...faqItems], from, to)
+    setFaqItems(updated)
+    saveFaqToApi(updated)
+  }, [faqItems, saveFaqToApi])
+
   if (!config) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
@@ -757,6 +763,7 @@ export default function BoardPage() {
     onFaqAdd: handleFaqItemAdd,
     onFaqDelete: handleFaqItemDelete,
     onFaqReorder: handleFaqItemReorder,
+    onFaqDndReorder: handleFaqDndReorder,
     faqSectionTitle,
     onFaqSectionTitleChange: handleFaqSectionTitleChange,
     orderDirty,
@@ -806,7 +813,7 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, faqSectionTitle, onFaqSectionTitleChange, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, onFaqDndReorder, faqSectionTitle, onFaqSectionTitleChange, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -1049,6 +1056,32 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
         </motion.div>
       )}
     </motion.div>
+  )
+}
+
+/* ── FAQ 드래그앤드롭 래퍼 ── */
+function SortableFaqAccordionItem({ id, item, index, accent, editMode, onEdit, onDelete, isFirst, isLast }: {
+  id: string; item: FaqItem; index: number; accent: string; editMode?: boolean
+  onEdit?: () => void; onDelete?: () => void; isFirst?: boolean; isLast?: boolean
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    position: 'relative',
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      <FaqAccordionItem
+        item={item} index={index} accent={accent} editMode={editMode}
+        onEdit={onEdit} onDelete={onDelete}
+        isFirst={isFirst} isLast={isLast}
+        dragHandleRef={setActivatorNodeRef as (el: HTMLElement | null) => void}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
   )
 }
 
