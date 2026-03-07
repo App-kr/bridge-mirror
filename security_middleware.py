@@ -132,34 +132,69 @@ def detect_attack(text: str) -> Optional[str]:
 # ═══════════════════════════════════════════════════════════════
 # IP 블랙리스트 (메모리 + 파일 영속)
 # ═══════════════════════════════════════════════════════════════
-BLACKLIST_FILE = AUDIT_DIR / "ip_blacklist.json"
-IP_TTL_MINUTES = 5
-ATTACK_THRESHOLD = 30
+BLACKLIST_FILE    = AUDIT_DIR / "ip_blacklist.json"
+PERMANENT_BAN_FILE = AUDIT_DIR / "ip_permanent_ban.json"
+ATTACK_THRESHOLD  = 5   # 낮춤: 5회 → 차단 (이전 30)
+
+# ── 누진 차단 시간 (오펜스 횟수 → 분) ──────────────────────────
+BAN_TIERS = [60, 1440, 10080, 43200]   # 1h / 24h / 7d / 30d
+
+# ── 허니팟 경로 — 접근 즉시 24h 차단 ──────────────────────────
+HONEYPOT_PATHS: set[str] = {
+    "/wp-admin", "/wp-login.php", "/wordpress/",
+    "/phpmyadmin", "/pma", "/adminer",
+    "/.env", "/.git/config", "/.htaccess",
+    "/admin.php", "/config.php", "/setup.php",
+    "/xmlrpc.php", "/eval-stdin.php",
+    "/shell", "/cmd", "/exec",
+    "/etc/passwd", "/proc/self/environ",
+    "/actuator", "/actuator/health",  # Spring Boot 스캔
+    "/solr/", "/jenkins/", "/jmx-console/",
+}
+
 
 class IPBlacklist:
     def __init__(self):
-        self._list: dict[str, dict] = {}  # ip -> {until, reason, count}
+        self._list: dict[str, dict] = {}   # ip -> {until, reason, count, offenses}
+        self._permanent: set[str] = set()  # 영구 차단 목록
         self._load()
 
     def _load(self):
+        # 일반 블랙리스트 (만료된 것 제외)
         if BLACKLIST_FILE.exists():
             try:
                 data = json.loads(BLACKLIST_FILE.read_text())
                 now = datetime.now(timezone.utc).isoformat()
-                self._list = {k: v for k, v in data.items() if v.get("until", "") > now}
+                self._list = {k: v for k, v in data.items() if v.get("until", "") > now or v.get("permanent")}
             except Exception:
                 self._list = {}
+        # 영구 차단 목록
+        if PERMANENT_BAN_FILE.exists():
+            try:
+                self._permanent = set(json.loads(PERMANENT_BAN_FILE.read_text()))
+            except Exception:
+                self._permanent = set()
 
     def _save(self):
         try:
             BLACKLIST_FILE.write_text(json.dumps(self._list, ensure_ascii=False, indent=2))
         except Exception:
             pass
+        try:
+            PERMANENT_BAN_FILE.write_text(json.dumps(list(self._permanent), ensure_ascii=False))
+        except Exception:
+            pass
 
     def is_blocked(self, ip: str) -> bool:
+        # 영구 차단 먼저
+        if ip in self._permanent:
+            return True
         entry = self._list.get(ip)
         if not entry:
             return False
+        if entry.get("permanent"):
+            self._permanent.add(ip)
+            return True
         until_str = entry.get("until", "")
         if not until_str:
             return False
@@ -168,20 +203,30 @@ class IPBlacklist:
         except (ValueError, TypeError):
             return False
         if datetime.now(timezone.utc) > until:
-            del self._list[ip]
+            # 만료됐어도 오펜스 기록은 유지 (누진 적용)
+            entry["until"] = ""
+            self._list[ip] = entry
             self._save()
             return False
         return True
 
     def record_attack(self, ip: str, reason: str) -> bool:
-        """공격 기록 → 임계치 초과 시 자동 차단, 차단됐으면 True"""
-        entry = self._list.get(ip, {"count": 0, "reason": reason, "until": ""})
+        """공격 기록 → 누진 차단 적용. 차단됐으면 True."""
+        entry = self._list.get(ip, {"count": 0, "offenses": 0, "reason": reason, "until": ""})
         entry["count"] = entry.get("count", 0) + 1
         entry["reason"] = reason
         if entry["count"] >= ATTACK_THRESHOLD:
-            entry["until"] = (
-                datetime.now(timezone.utc) + timedelta(minutes=IP_TTL_MINUTES)
-            ).isoformat()
+            offenses = entry.get("offenses", 0)
+            if offenses >= len(BAN_TIERS):
+                # 반복 공격자 → 영구 차단
+                entry["permanent"] = True
+                entry["until"] = "9999-12-31T23:59:59+00:00"
+                self._permanent.add(ip)
+            else:
+                ban_minutes = BAN_TIERS[offenses]
+                entry["until"] = (datetime.now(timezone.utc) + timedelta(minutes=ban_minutes)).isoformat()
+            entry["offenses"] = offenses + 1
+            entry["count"] = 0  # 카운트 리셋 (다음 오펜스를 위해)
             self._list[ip] = entry
             self._save()
             return True
@@ -189,15 +234,55 @@ class IPBlacklist:
         self._save()
         return False
 
-    def block(self, ip: str, reason: str, minutes: int = IP_TTL_MINUTES):
+    def block(self, ip: str, reason: str, minutes: int = 60):
+        """즉시 차단 (기본 1시간)."""
+        entry = self._list.get(ip, {"count": ATTACK_THRESHOLD, "offenses": 0})
+        entry["until"] = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+        entry["reason"] = reason
+        entry["offenses"] = entry.get("offenses", 0) + 1
+        self._list[ip] = entry
+        self._save()
+
+    def block_permanent(self, ip: str, reason: str):
+        """영구 차단."""
+        self._permanent.add(ip)
         self._list[ip] = {
-            "until": (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(),
+            "until": "9999-12-31T23:59:59+00:00",
             "reason": reason,
             "count": ATTACK_THRESHOLD,
+            "offenses": 99,
+            "permanent": True,
         }
         self._save()
 
+
 ip_blacklist = IPBlacklist()
+
+
+# ── 관리자 로그인 Brute-Force 전용 보호 ─────────────────────────
+class AdminLoginGuard:
+    """로그인 실패 5회 → 24h 차단, 10회 → 7일 차단, 15회 → 영구"""
+    THRESHOLDS = [(5, 1440), (10, 10080), (15, None)]  # (실패수, 차단분) None=영구
+
+    def __init__(self):
+        self._fails: dict[str, list[float]] = defaultdict(list)
+
+    def record_fail(self, ip: str) -> Optional[int]:
+        """실패 기록. 차단해야 하면 차단 분(None=영구) 반환, 아니면 None."""
+        now = time.time()
+        self._fails[ip] = [t for t in self._fails[ip] if now - t < 86400]  # 24h 윈도우
+        self._fails[ip].append(now)
+        count = len(self._fails[ip])
+        for threshold, minutes in self.THRESHOLDS:
+            if count >= threshold:
+                return minutes  # minutes=None → 영구
+        return None
+
+    def clear(self, ip: str):
+        self._fails.pop(ip, None)
+
+
+admin_login_guard = AdminLoginGuard()
 
 # ═══════════════════════════════════════════════════════════════
 # Rate Limiting (슬라이딩 윈도우)
@@ -440,11 +525,23 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         method = request.method
         req_id = str(uuid.uuid4())[:8]
 
-        # 0. 헬스체크/로그인은 미들웨어 검사 건너뛰기
-        BYPASS_PATHS = {"/", "/health", "/api/admin/login", "/api/admin/login/", "/api/admin/reset-blacklist"}
+        # 0. 헬스체크만 바이패스 (로그인은 반드시 검사)
+        BYPASS_PATHS = {"/", "/health"}
         if path in BYPASS_PATHS:
             response = await call_next(request)
             return response
+
+        # 0-0. 허니팟: 스캐너/해커가 자주 탐색하는 경로 → 즉시 24h 차단
+        path_lower = path.lower().rstrip("/")
+        for hp in HONEYPOT_PATHS:
+            if path_lower == hp.lower().rstrip("/") or path_lower.startswith(hp.lower()):
+                ip_blacklist.block(client_ip, f"honeypot:{path}", minutes=1440)
+                audit.log("HONEYPOT_TRIGGERED", {"ip": client_ip, "path": path}, "CRITICAL")
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "Not found."},
+                    headers={"X-Request-ID": req_id},
+                )
 
         # 0-1. 유효한 admin key가 있으면 블랙리스트/rate limit 바이패스
         _admin_key = os.getenv("ADMIN_API_KEY", "").strip()

@@ -980,27 +980,50 @@ def _check_admin(request: Request):
 @app.post("/api/admin/login", tags=["admin"])
 async def admin_login(request: Request):
     """비밀번호 검증 → ADMIN_API_KEY 반환."""
+    try:
+        from security_middleware import ip_blacklist, SecurityMiddleware, admin_login_guard
+        real_ip = SecurityMiddleware._get_real_ip(request)
+    except Exception:
+        real_ip = request.client.host if request.client else "unknown"
+
+    # IP 블랙리스트 선제 차단
+    if ip_blacklist.is_blocked(real_ip):
+        raise HTTPException(403, "Access denied.")
+
     ip = _ip_hash(request)
     if not _rate_ok(ip, window=300, max_posts=10):
         raise HTTPException(429, "Too many login attempts.")
+
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(400, "Invalid JSON")
+
     pw = str(body.get("password", ""))
     if not _ADMIN_PW or not _ADMIN_KEY:
         raise HTTPException(503, "관리자 인증이 설정되지 않았습니다.")
+
     if not _verify_admin_password(pw, _ADMIN_PW):
+        # 실패 기록 → 누진 차단
+        try:
+            ban_minutes = admin_login_guard.record_fail(real_ip)
+            if ban_minutes is None:
+                ip_blacklist.block_permanent(real_ip, "admin_brute_force:permanent")
+            elif ban_minutes is not None:
+                ip_blacklist.block(real_ip, "admin_brute_force", minutes=ban_minutes)
+        except Exception:
+            pass
         raise HTTPException(403, "비밀번호가 올바르지 않습니다.")
-    # 로그인 성공 → 해당 IP 블랙리스트 자동 리셋
+
+    # 로그인 성공 → 실패 기록 초기화 + 블랙리스트 해제
     try:
-        from security_middleware import ip_blacklist, SecurityMiddleware
-        real_ip = SecurityMiddleware._get_real_ip(request)
+        admin_login_guard.clear(real_ip)
         if real_ip in ip_blacklist._list:
             del ip_blacklist._list[real_ip]
             ip_blacklist._save()
     except Exception:
         pass
+
     return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
 
 
