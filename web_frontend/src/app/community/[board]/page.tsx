@@ -817,6 +817,7 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
   const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  const faqDndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   const defaultLabel = board === 'support' ? 'Teacher FAQ' : board === 'support_kr' ? '자주 묻는 질문' : ''
   const sectionLabel = faqSectionTitle || defaultLabel
@@ -879,17 +880,44 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
               className="space-y-3"
               variants={staggerContainer} initial="hidden" animate="visible"
             >
-              {faqConfig.items.map((item, i) => (
-                <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent}
-                  editMode={editMode}
-                  onEdit={onFaqEdit ? () => onFaqEdit(i) : undefined}
-                  onDelete={onFaqDelete ? () => onFaqDelete(i) : undefined}
-                  onMoveUp={onFaqReorder ? () => onFaqReorder(i, 'up') : undefined}
-                  onMoveDown={onFaqReorder ? () => onFaqReorder(i, 'down') : undefined}
-                  isFirst={i === 0}
-                  isLast={i === faqConfig.items.length - 1}
-                />
-              ))}
+              {editMode && onFaqDndReorder ? (
+                <DndContext
+                  sensors={faqDndSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event: DragEndEvent) => {
+                    const { active, over } = event
+                    if (!over || active.id === over.id) return
+                    const ids = faqConfig.items.map((_, i) => `faq-${i}`)
+                    const from = ids.indexOf(String(active.id))
+                    const to = ids.indexOf(String(over.id))
+                    if (from >= 0 && to >= 0) onFaqDndReorder(from, to)
+                  }}
+                >
+                  <SortableContext items={faqConfig.items.map((_, i) => `faq-${i}`)} strategy={verticalListSortingStrategy}>
+                    {faqConfig.items.map((item, i) => (
+                      <SortableFaqAccordionItem key={`faq-${i}`} id={`faq-${i}`} item={item} index={i} accent={faqConfig.accent}
+                        editMode={editMode}
+                        onEdit={onFaqEdit ? () => onFaqEdit(i) : undefined}
+                        onDelete={onFaqDelete ? () => onFaqDelete(i) : undefined}
+                        isFirst={i === 0}
+                        isLast={i === faqConfig.items.length - 1}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                faqConfig.items.map((item, i) => (
+                  <FaqAccordionItem key={i} item={item} index={i} accent={faqConfig.accent}
+                    editMode={editMode}
+                    onEdit={onFaqEdit ? () => onFaqEdit(i) : undefined}
+                    onDelete={onFaqDelete ? () => onFaqDelete(i) : undefined}
+                    onMoveUp={onFaqReorder ? () => onFaqReorder(i, 'up') : undefined}
+                    onMoveDown={onFaqReorder ? () => onFaqReorder(i, 'down') : undefined}
+                    isFirst={i === 0}
+                    isLast={i === faqConfig.items.length - 1}
+                  />
+                ))
+              )}
               {editMode && onFaqAdd && (
                 <motion.div variants={fadeInUp}>
                   <button type="button" onClick={onFaqAdd}
