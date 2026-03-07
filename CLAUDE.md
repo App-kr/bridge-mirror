@@ -31,8 +31,8 @@
 ### 5. PC 종료 명령
 - 사용자가 "PC 꺼줘", "컴퓨터 꺼줘", "작업 끝났으니 꺼", "끄고 자야지", "셧다운" 등을 말하면:
   1. git add -A && git commit -m "session-end backup" && git push 실행
-  2. shutdown /s /t 60 실행 (60초 후 종료)
-  3. "60초 후 PC가 꺼집니다. 취소: shutdown /a" 안내
+  2. shutdown /s /t 300 실행 (5분 후 종료)
+  3. "5분 후 PC가 꺼집니다. 취소: shutdown /a" 안내
 - 절대 건너뛰지 말 것 — 사용자가 이미 자리를 뜰 준비가 된 상태임
 
 ### 6. 창 관리
