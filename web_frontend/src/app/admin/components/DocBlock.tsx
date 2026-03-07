@@ -51,12 +51,9 @@ export interface EmployerApp {
   housing?: string | null
   housing_type?: string | null
   housing_detail?: string | null
-  travel_support?: string | null
   native_count?: string | null
   benefits?: string | null
   vacation?: string | null
-  sick_leave?: string | null
-  meal?: string | null
   memo?: string | null
   notes?: string | null
   assigned_to?: string | null
@@ -103,11 +100,7 @@ function buildRawText(emp: EmployerApp, province: string, city: string, jobNo: s
   if (v(emp.native_count)) rows.push(`Native Teacher (Numbers can change) : ${v(emp.native_count)}`)
   if (v(emp.housing)) rows.push(`Housing: ${v(emp.housing)}`)
   if (v(emp.housing_detail)) rows.push(`Housing Details : ${v(emp.housing_detail)}`)
-  if (v(emp.schedule)) rows.push(`Schedule : ${v(emp.schedule)}`)
-  if (v(emp.travel_support)) rows.push(`Travel Support : ${v(emp.travel_support)}`)
   if (v(emp.benefits)) rows.push(`Employee Benefits : ${v(emp.benefits)}`)
-  if (v(emp.sick_leave)) rows.push(`Sick Leave : ${v(emp.sick_leave)}`)
-  if (v(emp.meal)) rows.push(`Meal : ${v(emp.meal)}`)
   if (v(emp.vacancies)) rows.push(`Open Positions : ${v(emp.vacancies)}`)
   return rows.join('\n')
 }

@@ -2781,7 +2781,7 @@ async def admin_list_applications(request: Request):
                 "SELECT id, job_code, seq, location, city, district, region_name, "
                 "start_date, teaching_age, class_size, working_hours, salary_raw, "
                 "teach_hrs_week, vacation, housing, housing_type, housing_detail, "
-                "native_count, benefits, sick_leave, meal, travel_support, "
+                "native_count, benefits, "
                 "internal_notes, status, created_at, source_file "
                 "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
             ).fetchall()
@@ -2806,9 +2806,6 @@ async def admin_list_applications(request: Request):
                     "housing_detail": j["housing_detail"],
                     "native_count": j["native_count"],
                     "benefits": j["benefits"],
-                    "sick_leave": j["sick_leave"],
-                    "meal": j["meal"],
-                    "travel_support": j["travel_support"],
                     "memo": j["internal_notes"],
                     "notes": None,
                     "status": j["status"] or "open",
