@@ -6,7 +6,8 @@
 ## Quick Reference
 - **서비스**: bridgejob.co.kr (ESL 교사 채용)
 - **스택**: FastAPI + Next.js 15 + Supabase + SQLite
-- **빌드**: 14 routes, 0 errors (2026-02-28)
+- **빌드**: 35 routes, 0 errors (2026-03-07)
+- **최근 세션**: [worklog-2026-03-07.md](worklog-2026-03-07.md)
 
 ---
 
@@ -20,6 +21,7 @@
 | [admin-system.md](admin-system.md) | 관리자 페이지, Desktop 앱, 인터뷰 | 2026-02-28 |
 | [design-system.md](design-system.md) | UI 디자인 규칙, CSS 클래스, 레이아웃 | 2026-02-28 |
 | [deployment.md](deployment.md) | 배포 설정, nginx, systemd, 환경변수 | 2026-02-28 |
+| [worklog-2026-03-07.md](worklog-2026-03-07.md) | 24시간 작업 기록 — 보안·MailComposer·드래그UX 등 | 2026-03-07 |
 
 ---
 
