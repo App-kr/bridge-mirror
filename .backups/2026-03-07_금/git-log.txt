@@ -1,0 +1,20 @@
+82ac2eb rule: 세션 종료 루틴 완성 — 백업+일지+5분셧다운
+8e694b9 fix: candidates email endpoints - id→candidate_id, int→str type
+44babfd rule: PC 종료 딜레이 5분으로 변경
+3f1fee3 rule: PC 종료 명령 자동 실행 규칙 추가
+daa73ad docs: 2026-03-07 24시간 작업 기록 저장
+ca0f45d feat: FAQ 순서변경 드래그앤드롭 구현 — 번호 배지를 grab 핸들로 사용
+993ce7d security: 강화감지 국가 확대 — 중국/UAE/러시아/북한/브라질 외 추가
+54e91df security: 미국/영국/남아공 공격 패턴 강화 감지 — 1회 패턴 탐지 즉시 24h 차단
+375d69e MANDATORY-BACKUP: FAQ DnD 구현 전 백업
+0ef7072 security: 해외 해킹 방지 강화 — 누진차단/허니팟/관리자로그인보호
+6afb701 MANDATORY-BACKUP: 해외서버 해킹방지 구축 작업 전
+f8f8e1b fix: remove non-existent columns sick_leave/meal/travel_support from jobs query
+9ca48af perf: 스프레드시트 로딩 속도 개선 — 단일 요청 + localStorage 캐시
+7b39864 MANDATORY-BACKUP: 스프레드시트 로딩 속도 개선 작업 전
+0401c28 feat: employer data from jobs table + status dropdown fix + AG Grid type fixes
+044b269 MANDATORY-BACKUP: 세션 재개 전 백업
+8cbfe6f MANDATORY-BACKUP: AllCandidatesGrid 통합 작업 전
+b241535 feat: 어드민 버튼 통일 — 수정(주황)/저장(파란)/취소(회색)/삭제(빨강) 전체 게시판 적용
+0193bc8 MANDATORY-BACKUP: MailComposer enhancement
+e92eecc MANDATORY-BACKUP: 어드민 버튼 통일 작업 재시작 전 백업

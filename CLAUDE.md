@@ -32,32 +32,50 @@
 사용자가 "꺼줘", "PC 꺼줘", "컴퓨터 꺼줘", "끄고 자야지", "셧다운", "작업 끝" 등을 말하면
 아래 순서를 **반드시 모두** 실행 (건너뜀 금지):
 
-**STEP 1 — 전체 백업**
+**STEP 1 — git 전체 백업**
 ```
-git add -A && git commit -m "session-end: $(date '+%Y-%m-%d %H:%M')" && git push
+git add -A && git commit -m "session-end: YYYY-MM-DD HH:MM" && git push
 ```
 
-**STEP 2 — 24시간 작업 정리 요약 저장**
-`Q:/Claudework/bridge base/.memory/daily-log.md` 파일에 아래 형식으로 추가:
+**STEP 2 — 날짜/요일 백업 폴더 생성** (스크립트: `tools/session-end-backup.py`)
+`Q:/Claudework/bridge base/.backups/YYYY-MM-DD_요일/` 폴더 생성 후:
+- `.memory/` 폴더 전체 복사
+- `daily-log.md` 복사
+- `git log --oneline -20` 결과를 `git-log.txt` 로 저장
+- 오늘 수정된 파일 목록을 `changed-files.txt` 로 저장
+- 폴더 구조 예시:
+  ```
+  .backups/
+    2026-03-07_금/
+      memory/          ← .memory 스냅샷
+      git-log.txt      ← 최근 20 커밋
+      changed-files.txt← 오늘 변경 파일
+      session-note.md  ← 작업 요약
+  ```
+- 오래된 백업은 **14일치만 유지** (그 이전 폴더 자동 삭제)
+
+**STEP 3 — daily-log.md 업데이트**
+`Q:/Claudework/bridge base/.memory/daily-log.md` 맨 위에 추가:
 ```
-## [날짜 시간] 세션 종료
-### 오늘 한 작업
-- (이번 세션에서 완료한 작업 목록)
-### 미완료 / 다음에 이어서
-- (미완료 항목, 다음 세션에서 할 일)
-### 주요 변경 파일
-- (수정된 핵심 파일 목록)
+## [YYYY-MM-DD 요일 HH:MM] 세션 종료
+### 완료한 작업
+- (목록)
+### 내일 이어서
+- (미완료 항목)
+### 변경 파일
+- (핵심 파일)
 ---
 ```
 
-**STEP 3 — 사용자에게 요약 출력**
-내용을 텍스트로 보여주고 "내일 이어서 할 일" 명확히 안내
+**STEP 4 — 화면에 요약 출력**
+- 오늘 한 작업 + 내일 할 일을 깔끔하게 출력
+- 백업 폴더 경로 알려주기
 
-**STEP 4 — 종료 예약**
+**STEP 5 — 종료 예약**
 ```
 shutdown /s /t 300
 ```
-"✅ 백업 완료 · 5분 후 PC가 꺼집니다. 취소: shutdown /a" 출력
+"✅ 백업 완료 · `.backups/YYYY-MM-DD_요일/` 저장됨 · 5분 후 꺼집니다. 취소: shutdown /a"
 
 ### 6. 창 관리
 - 사용자가 현재 사용 중인 창 뒤에서만 실행
