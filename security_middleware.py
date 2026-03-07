@@ -49,6 +49,45 @@ AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ═══════════════════════════════════════════════════════════════
+# 국가별 강화 감지 설정
+# ═══════════════════════════════════════════════════════════════
+# 이 나라에서 오는 공격 패턴은 임계치를 낮춰 빠르게 차단
+# (정상 사용자는 공격 패턴을 안 보내므로 영향 없음)
+STRICT_COUNTRIES: set[str] = {"US", "GB", "ZA"}  # 미국, 영국, 남아공
+STRICT_ATTACK_THRESHOLD = 1   # 이 나라에서는 1회 공격 패턴 = 즉시 차단
+STRICT_RATE_WINDOW = 60       # 엄격 rate limit 윈도우 (초)
+STRICT_RATE_MAX = 30          # 이 나라에서는 60초에 30 요청 초과 시 차단
+
+# IP→국가 캐시 (메모리, TTL 1시간)
+_geo_cache: dict[str, tuple[str, float]] = {}   # ip -> (country_code, expire_ts)
+_GEO_TTL = 3600.0  # 1시간
+
+async def _get_country(ip: str) -> str:
+    """IP 국가코드 조회 (ip-api.com, 캐시 1시간). 실패 시 '' 반환."""
+    now = time.time()
+    cached = _geo_cache.get(ip)
+    if cached and now < cached[1]:
+        return cached[0]
+    # private / localhost → KR로 간주 (개발 환경)
+    try:
+        addr = ipaddress.ip_address(ip)
+        if addr.is_private or addr.is_loopback:
+            _geo_cache[ip] = ("KR", now + _GEO_TTL)
+            return "KR"
+    except ValueError:
+        pass
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            r = await client.get(f"http://ip-api.com/json/{ip}?fields=countryCode")
+            if r.status_code == 200:
+                cc = r.json().get("countryCode", "")
+                _geo_cache[ip] = (cc, now + _GEO_TTL)
+                return cc
+    except Exception:
+        pass
+    return ""
+
+# ═══════════════════════════════════════════════════════════════
 # 개인정보(PII) 탐지 패턴 — 절대 노출 금지
 # ═══════════════════════════════════════════════════════════════
 PII_PATTERNS = [
@@ -313,9 +352,15 @@ class RateLimiter:
                 return rule
         return self.RULES["default"]
 
-    async def check(self, ip: str, path: str) -> bool:
-        """True = 허용, False = 차단"""
+    async def check(self, ip: str, path: str,
+                    override_window: Optional[int] = None,
+                    override_max: Optional[int] = None) -> bool:
+        """True = 허용, False = 차단. override로 엄격 국가 임계치 적용 가능."""
         max_req, window = self._get_rule(path)
+        if override_window is not None:
+            window = override_window
+        if override_max is not None:
+            max_req = override_max
         key = f"{ip}:{path.split('/')[1] if '/' in path else path}"
         now = time.time()
         async with self._get_lock():
@@ -571,6 +616,26 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": "60", "X-Request-ID": req_id},
             )
 
+        # 2-1. 국가 조회 (비동기, 캐시 활용)
+        country_code = await _get_country(client_ip)
+        is_strict_country = country_code in STRICT_COUNTRIES
+
+        # 2-2. 엄격 국가 Rate Limit (기본 Rate Limit보다 낮은 임계치)
+        if is_strict_country:
+            strict_key = f"strict:{client_ip}"
+            if not await rate_limiter.check(strict_key, path,
+                                             override_window=STRICT_RATE_WINDOW,
+                                             override_max=STRICT_RATE_MAX):
+                audit.log("STRICT_RATE_LIMIT", {
+                    "ip": client_ip, "country": country_code, "path": path
+                }, "WARNING")
+                ip_blacklist.block(client_ip, f"strict_rate:{country_code}", minutes=60)
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "Too many requests."},
+                    headers={"Retry-After": "3600", "X-Request-ID": req_id},
+                )
+
         # 3. 요청 본문 읽기 (공격 탐지 + HMAC)
         body = b""
         if method in ("POST", "PUT", "PATCH") and "multipart" not in request.headers.get("content-type", ""):
@@ -579,7 +644,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             except Exception:
                 body = b""
 
-        # 4. 공격 패턴 탐지 (쿼리스트링 + body만 — UA/Referer는 오탐 방지로 제외)
+        # 4. 공격 패턴 탐지 (쿼리스트링 + body)
+        # 엄격 국가(US/GB/ZA)에서는 1회 탐지 즉시 차단, 그 외는 5회 누적 후 차단
         check_targets = [
             str(request.url.query),
             body.decode("utf-8", errors="replace"),
@@ -587,14 +653,25 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         for target in check_targets:
             attack_type = detect_attack(target)
             if attack_type:
-                blocked = ip_blacklist.record_attack(client_ip, attack_type)
-                audit.log("ATTACK_DETECTED", {
-                    "ip": client_ip,
-                    "type": attack_type,
-                    "path": path,
-                    "auto_blocked": blocked,
-                    "req_id": req_id,
-                }, "CRITICAL")
+                if is_strict_country:
+                    # 엄격 국가: 즉시 24h 차단
+                    ip_blacklist.block(client_ip, f"strict_attack:{attack_type}:{country_code}", minutes=1440)
+                    audit.log("STRICT_ATTACK_BLOCKED", {
+                        "ip": client_ip,
+                        "country": country_code,
+                        "type": attack_type,
+                        "path": path,
+                        "req_id": req_id,
+                    }, "CRITICAL")
+                else:
+                    blocked = ip_blacklist.record_attack(client_ip, attack_type)
+                    audit.log("ATTACK_DETECTED", {
+                        "ip": client_ip,
+                        "type": attack_type,
+                        "path": path,
+                        "auto_blocked": blocked,
+                        "req_id": req_id,
+                    }, "CRITICAL")
                 return JSONResponse(
                     status_code=400,
                     content={"error": "Invalid request detected."},

@@ -27,7 +27,7 @@ import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder'
 import {
@@ -70,6 +70,7 @@ interface LayoutProps {
   onFaqAdd?: () => void
   onFaqDelete?: (index: number) => void
   onFaqReorder?: (index: number, direction: 'up' | 'down') => void
+  onFaqDndReorder?: (from: number, to: number) => void
   faqSectionTitle?: string
   onFaqSectionTitleChange?: (title: string) => void
   orderDirty?: boolean
@@ -962,11 +963,13 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
 }
 
 // ── FAQ Accordion Item ──
-function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast }: {
+function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast, dragHandleRef, dragHandleProps }: {
   item: FaqItem; index: number; accent: string; editMode?: boolean
   onEdit?: () => void; onDelete?: () => void
   onMoveUp?: () => void; onMoveDown?: () => void
   isFirst?: boolean; isLast?: boolean
+  dragHandleRef?: (el: HTMLElement | null) => void
+  dragHandleProps?: Record<string, unknown>
 }) {
   const [open, setOpen] = useState(false)
 
@@ -988,8 +991,11 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
         onClick={() => setOpen((v) => !v)}
       >
         <span
-          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
+          ref={dragHandleRef as ((el: HTMLSpanElement | null) => void) | undefined}
+          {...(dragHandleProps || {})}
+          className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${editMode && dragHandleRef ? 'cursor-grab active:cursor-grabbing touch-none' : ''}`}
           style={{ background: accent }}
+          title={editMode && dragHandleRef ? '드래그하여 순서 변경' : undefined}
         >
           {index + 1}
         </span>
