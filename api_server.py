@@ -972,7 +972,7 @@ def _check_admin(request: Request):
             raise HTTPException(status_code=503, detail="관리자 기능이 비활성화되어 있습니다.")
         # 개발 환경에서만 키 없이 통과 허용
         return
-    if request.headers.get("x-admin-key", "").strip() != _ADMIN_KEY.strip():
+    if not hmac.compare_digest(request.headers.get("x-admin-key", "").strip(), _ADMIN_KEY.strip()):
         _log_unauthorized_access(request)
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
 
@@ -1011,8 +1011,12 @@ async def admin_login(request: Request):
                 ip_blacklist.block_permanent(real_ip, "admin_brute_force:permanent")
             elif ban_minutes is not None:
                 ip_blacklist.block(real_ip, "admin_brute_force", minutes=ban_minutes)
-        except Exception:
-            pass
+        except Exception as _blk_err:
+            import logging as _blk_log
+            _blk_log.getLogger("bridge.security").error(
+                "admin brute-force blacklist 등록 실패 ip=%s error_type=%s",
+                real_ip[:8] + "****", type(_blk_err).__name__,
+            )
         raise HTTPException(403, "비밀번호가 올바르지 않습니다.")
 
     # 로그인 성공 → 실패 기록 초기화 + 블랙리스트 해제
@@ -1412,7 +1416,7 @@ async def admin_candidates(
 async def admin_create_candidate(request: Request, body: dict):
     """새 후보자 추가 (관리자 전용)."""
     _check_admin(request)
-    if not _rate_ok(request):
+    if not _rate_ok(_ip_hash(request)):
         raise HTTPException(429, "잠시 후 다시 시도해주세요.")
     full_name = (body.get("full_name") or "").strip()
     if not full_name:
@@ -1526,14 +1530,37 @@ async def admin_delete_candidate(candidate_id: str, request: Request):
         err("삭제에 실패했습니다.", 500)
 
 
+_CANDIDATES_MUTABLE_COLS: frozenset = frozenset({
+    "email", "full_name", "nationality", "ancestry", "dob", "gender",
+    "current_location", "start_date", "target", "area_prefs", "experience",
+    "employment", "current_salary", "desired_salary", "certification",
+    "e_visa", "mobile_phone", "kakaotalk", "criminal_record", "passport",
+    "housing", "arc_holders", "job_prefs", "reference", "documents", "status",
+    "source", "inbox_status", "notes", "assigned_to", "last_activity",
+    "contract_offered", "contract_progress", "email_contract", "email_immigration",
+    "email_overseas", "email_transition", "email_arrival", "placed_company",
+    "placed_salary", "start_month", "housing_detail", "referral_fee",
+    "process_date", "past_placement", "recruiter_memo", "preferences",
+    "dislikes", "residence_type", "start_detail", "target_level", "housing_type",
+    "education_level", "major", "interview_time", "health_info",
+    "personal_consideration", "piercings", "dependents", "pets", "married",
+    "religion", "korean_criminal_record", "consent", "fact_check",
+    "photo_url", "thumb_url", "target_age", "criminal_record_check",
+    "doc_status", "how_to", "tattoo", "visa_type", "working_hours", "invoice",
+    "updated_at",
+})
+
+
 @app.put("/api/admin/candidates/{candidate_id}", tags=["admin"])
 async def admin_full_update_candidate(candidate_id: str, request: Request, body: dict):
     """지원자 모든 컬럼 수정 (관리자 전용)."""
     _check_admin(request)
-    # candidate_id, created_at는 수정 불가
-    body.pop("candidate_id", None)
-    body.pop("id", None)
-    body.pop("created_at", None)
+    # 수정 불가 필드 제거
+    for _immutable in ("candidate_id", "id", "created_at", "source_file", "source_row",
+                       "gmail_message_id", "raw_email_body", "parsed_data"):
+        body.pop(_immutable, None)
+    # 화이트리스트 필터 — DB에 없는 컬럼명 주입 차단
+    body = {k: v for k, v in body.items() if k in _CANDIDATES_MUTABLE_COLS}
     if not body:
         raise HTTPException(400, "수정할 데이터 없음")
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
