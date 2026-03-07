@@ -2009,14 +2009,14 @@ class SendEmailBody(BaseModel):
 
 
 @app.post("/api/admin/candidates/{candidate_id}/send-email", tags=["admin"])
-async def admin_send_email(candidate_id: int, request: Request, body: SendEmailBody):
+async def admin_send_email(candidate_id: str, request: Request, body: SendEmailBody):
     """후보자에게 이메일 템플릿 발송. template_key에 따라 해당 email_* 컬럼 업데이트."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
         # 후보자 조회
-        row = conn.execute("SELECT * FROM candidates WHERE id = ?", (candidate_id,)).fetchone()
+        row = conn.execute("SELECT * FROM candidates WHERE candidate_id = ?", (candidate_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="후보자를 찾을 수 없습니다.")
         c = dict(row)
@@ -2062,7 +2062,7 @@ async def admin_send_email(candidate_id: int, request: Request, body: SendEmailB
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         col = _TEMPLATE_COL_MAP.get(body.template_key)
         if col:
-            conn.execute(f"UPDATE candidates SET {col} = ? WHERE id = ?", (now_iso, candidate_id))
+            conn.execute(f"UPDATE candidates SET {col} = ? WHERE candidate_id = ?", (now_iso, candidate_id))
             conn.commit()
 
         return ok(message=f"이메일 발송 완료 → {to_email}", data={"sent_to": to_email, "template": body.template_key})
@@ -2071,7 +2071,7 @@ async def admin_send_email(candidate_id: int, request: Request, body: SendEmailB
 
 
 class BulkSendBody(BaseModel):
-    candidate_ids: list[int]
+    candidate_ids: list[str]
     template_key: str
 
 
@@ -2096,7 +2096,7 @@ async def admin_bulk_send(request: Request, body: BulkSendBody):
         results = []
 
         for cid in body.candidate_ids:
-            row = conn.execute("SELECT * FROM candidates WHERE id = ?", (cid,)).fetchone()
+            row = conn.execute("SELECT * FROM candidates WHERE candidate_id = ?", (cid,)).fetchone()
             if not row:
                 results.append({"id": cid, "status": "not_found"})
                 continue
@@ -2125,7 +2125,7 @@ async def admin_bulk_send(request: Request, body: BulkSendBody):
                 now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 col = _TEMPLATE_COL_MAP.get(body.template_key)
                 if col:
-                    conn.execute(f"UPDATE candidates SET {col} = ? WHERE id = ?", (now_iso, cid))
+                    conn.execute(f"UPDATE candidates SET {col} = ? WHERE candidate_id = ?", (now_iso, cid))
                 results.append({"id": cid, "status": "sent"})
             else:
                 results.append({"id": cid, "status": "failed"})
@@ -2144,7 +2144,7 @@ async def admin_bulk_send(request: Request, body: BulkSendBody):
 
 
 class SendProfilesBody(BaseModel):
-    candidate_ids: list[int]
+    candidate_ids: list[str]
     to_email: str
     school_name: Optional[str] = None
 
@@ -2166,7 +2166,7 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
         # 프로필 카드 생성
         cards_html = ""
         for cid in body.candidate_ids:
-            row = conn.execute("SELECT * FROM candidates WHERE id = ?", (cid,)).fetchone()
+            row = conn.execute("SELECT * FROM candidates WHERE candidate_id = ?", (cid,)).fetchone()
             if not row:
                 continue
             c = dict(row)
