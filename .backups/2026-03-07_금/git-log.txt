@@ -1,3 +1,4 @@
+bc1d9dc feat: 세션종료 날짜별 백업 폴더 자동 생성 (14일 보관)
 82ac2eb rule: 세션 종료 루틴 완성 — 백업+일지+5분셧다운
 8e694b9 fix: candidates email endpoints - id→candidate_id, int→str type
 44babfd rule: PC 종료 딜레이 5분으로 변경
@@ -17,4 +18,3 @@ f8f8e1b fix: remove non-existent columns sick_leave/meal/travel_support from job
 8cbfe6f MANDATORY-BACKUP: AllCandidatesGrid 통합 작업 전
 b241535 feat: 어드민 버튼 통일 — 수정(주황)/저장(파란)/취소(회색)/삭제(빨강) 전체 게시판 적용
 0193bc8 MANDATORY-BACKUP: MailComposer enhancement
-e92eecc MANDATORY-BACKUP: 어드민 버튼 통일 작업 재시작 전 백업
