@@ -1,0 +1,71 @@
+총 21건
+id=316 cat=None masked=False title=표준근로계약서 작성 가이드 — 필수 기재사항
+
+id=315 cat=None masked=False title=4대보험 안내 — 원어민 강사 보험 가입 필수사항
+
+id=283 cat=None masked=False title=근로계약 — 외국인근로자 표준근로계약서
+
+id=282 cat=None masked=False title=추가근무 — 사업장 등록 및 추가 근무 안내
+
+id=281 cat=None masked=False title=해외초청 — 원어민 강사 해외 초청 절차
+
+id=280 cat=None masked=False title=체류·등록 — 외국인 강사 체류 신고 및 변경 가이드
+
+id=232 cat=None masked=False title=긴급 연락처 안내
+
+id=231 cat=faq-employer masked=False title=자주 묻는 질문 (FAQ)
+  body:
+## 자주 묻는 질문 (FAQ)
+
+### Q1. 채용까지 얼마나 걸리나요?
+
+**A.** 평균적으로 **6~12주** 소요됩니다. 해외 거주 강사의 경우 비자 발급 기간이 포함되어 더 걸릴 수 있습니다. 국내 거주 강사(비자 소지자)는 **2~4주** 내 배치 가능합니다.
+
+### Q2. 수수료는 얼마인가요?
+
+**A.** 구인 공고 등록과 후보자 추천은 **무료**입니다. 채용 확정 시 성공 보수가 발생하며, 기관 유형과 조건에 따라 금액이 달라집니다. 자세한 견적은 의뢰 시 안내드립니다.
+
+### Q3. 강사가 중도 퇴사하면 어떻게 되나요?
+
+**A.** 채용 후 **3개월 이내** 강사의 자발적 퇴사 시, 1회에 한하여 **무상 재배치**를 지원합니다. 기관 귀책 사유에 의한 퇴사는 해당되지 않습니다.
+
+### Q4. E-2 비자가 아닌 다른 비자 소지자도 채용 가능한가요?
+
+**A.** 네, **F-2(거주), F-4(재외동포), F-5(영주), F-6(결혼이민)** 비자 소지자도 영어강사로 근무할 수 있습니다. 단, 해당 비자에서 허용하는 활동 범위를 확인해야 합니다.
+
+### Q5. 원어민 강사에게 숙소를 반드시 제공해야 하나요?
+
+**A.** 법적 의무는 아니지만, 대부분의 원어민 강사가 **숙소 제공을 기대**합니다. 숙소를 제공하지 않을 경우 주거수당(월 40~60만 원)을 지급하는 것이 일반적입니다.
+
+### Q6. 서류 검증은 어떻게 하나요?
+
+**A.** 브릿지잡에서 학위증명서, 범죄경력회보서, 자격증 등의 **진위 확인**을 지원합니다. 아포스티유 인증 여부도 함께 확인합니다.
+
+###
+
+id=230 cat=None masked=False title=계약 해지 시 주의사항
+
+id=229 cat=None masked=False title=방과후학교 원어민 배치 안내
+
+id=228 cat=None masked=False title=학원 인건비 지원사업 안내
+
+id=227 cat=None masked=False title=외국인 강사 세금 신고 안내
+
+id=226 cat=None masked=False title=퇴직금 규정 안내
+
+id=225 cat=None masked=False title=4대보험 가입 안내
+
+id=224 cat=None masked=False title=근로계약서 작성 시 유의사항
+
+id=223 cat=None masked=False title=E-2 비자 초청 서류 목록
+
+id=222 cat=None masked=False title=원어민 강사 자격요건 안내
+
+id=221 cat=None masked=False title=비용 및 결제 안내
+
+id=220 cat=None masked=False title=구인 의뢰서 작성 가이드
+
+id=219 cat=None masked=False title=채용 절차 안내
+
+id=218 cat=None masked=False title=브릿지잡 서비스 이용안내
+
