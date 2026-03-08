@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
+import SecureAdminImage from '@/components/SecureAdminImage'
 
 const API = API_URL
 const PAGE_SIZE = 200
@@ -181,7 +182,7 @@ const SCROLL_CSS = `
 
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function CandidatesPage() {
-  const { authed, login, headers, waking } = useAdminAuth()
+  const { authed, login, headers, waking, adminKey } = useAdminAuth()
 
   const [rows, setRows] = useState<Candidate[]>([])
   const [total, setTotal] = useState(0)
@@ -473,6 +474,7 @@ export default function CandidatesPage() {
                       }}
                       onPatch={patchField}
                       onStatusChange={updateStatus}
+                      adminKey={adminKey}
                     />
                   ))}
                 </tbody>
@@ -521,13 +523,14 @@ export default function CandidatesPage() {
 /* ═══════════════════════════════════════════════════════════════════ */
 /* Row component                                                      */
 /* ═══════════════════════════════════════════════════════════════════ */
-function CandRow({ c, colWidths, expanded, onToggleExpand, onPatch, onStatusChange }: {
+function CandRow({ c, colWidths, expanded, onToggleExpand, onPatch, onStatusChange, adminKey }: {
   c: Candidate
   colWidths: Record<string, number>
   expanded: boolean
   onToggleExpand: () => void
   onPatch: (candidateId: string, field: string, value: string) => Promise<void>
   onStatusChange: (candidateId: string, status: string) => void
+  adminKey: string
 }) {
   const bg = rowBg(c)
   const cid = v(c.candidate_id) || c.id
@@ -563,14 +566,29 @@ function CandRow({ c, colWidths, expanded, onToggleExpand, onPatch, onStatusChan
         }
         if (col.bold) sty.fontWeight = 600
 
-        // Photo
+        // Photo — SecureAdminImage (인증 필수, 블랙스크린 보호)
         if (col.type === 'photo') {
           const url = v(c.photo_url)
           const bgColor = natColor(c.nationality)
           return (
             <td key={i} className="px-2 py-1.5 border-b border-[#f0f0f2]" style={sty}>
               {url ? (
-                <img src={url} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} />
+                <SecureAdminImage
+                  fileUrl={url}
+                  adminKey={adminKey}
+                  width={38}
+                  height={38}
+                  style={{ borderRadius: '50%', objectFit: 'cover' }}
+                  fallback={
+                    <div style={{
+                      width: 38, height: 38, borderRadius: '50%', background: bgColor,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 14, fontWeight: 700,
+                    }}>
+                      {getInitial(c.full_name)}
+                    </div>
+                  }
+                />
               ) : (
                 <div style={{
                   width: 38, height: 38, borderRadius: '50%', background: bgColor,

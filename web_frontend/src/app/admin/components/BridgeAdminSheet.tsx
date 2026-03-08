@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AllCandidatesGrid from './AllCandidatesGrid'
+import SecureAdminImage from '@/components/SecureAdminImage'
 
 /* ─── Types ─── */
 type CategoryKey = 'active' | 'past' | 'blacklist'
@@ -250,7 +251,7 @@ function Hov({ children, bg, style, ...p }: HovProps) {
 
 /* ─── Main ─── */
 export default function BridgeAdminSheet() {
-  const { headers } = useAdminAuth()
+  const { headers, adminKey } = useAdminAuth()
   const [data, setData] = useState<DataStore>({ active: [], past: [], blacklist: [] })
   const [tab, setTab] = useState<TabKey>('active')
   const [sRows, setSR] = useState<StatusRow[]>(SROWS_I)
@@ -840,7 +841,17 @@ export default function BridgeAdminSheet() {
 
                     if (col.key === 'photo') return (
                       <td key={col.key} style={{ padding: 1, border: '1px solid #d1d5db', textAlign: 'center', verticalAlign: 'middle', cursor: 'pointer', ...frS }} onClick={() => setPT(row.id)} onDoubleClick={() => { setPT(row.id); photoRef.current?.click() }} onWheel={e => { e.preventDefault(); upData(x => x.id === row.id ? { ...x, photoSize: Math.max(30, Math.min(120, Number(x.photoSize || 50) + (e.deltaY < 0 ? 5 : -5))) } : x) }}>
-                        {row.photoUrl ? <img src={String(row.photoUrl)} style={{ width: ps, height: ps, borderRadius: 4, objectFit: 'cover' }} alt={String(row.name)} /> : <div style={{ width: ps, height: ps, borderRadius: 4, background: PC[row.id % PC.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: ps * 0.4, fontWeight: 900 }}>{(String(row.name) || '?')[0]?.toUpperCase()}</div>}
+                        {row.photoUrl
+                          ? <SecureAdminImage
+                              fileUrl={String(row.photoUrl)}
+                              adminKey={adminKey}
+                              width={ps} height={ps}
+                              style={{ borderRadius: 4, objectFit: 'cover' }}
+                              alt={String(row.name)}
+                              fallback={<div style={{ width: ps, height: ps, borderRadius: 4, background: PC[row.id % PC.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: ps * 0.4, fontWeight: 900 }}>{(String(row.name) || '?')[0]?.toUpperCase()}</div>}
+                            />
+                          : <div style={{ width: ps, height: ps, borderRadius: 4, background: PC[row.id % PC.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: ps * 0.4, fontWeight: 900 }}>{(String(row.name) || '?')[0]?.toUpperCase()}</div>
+                        }
                       </td>
                     )
                     if (col.key === 'rowNum') return <td key={col.key} style={{ padding: '3px 4px', textAlign: 'center', fontSize: 14, fontWeight: 700, background: '#f8fafc', border: '1px solid #d1d5db', ...frS }}>{val}</td>

@@ -606,11 +606,18 @@ def _job_row_to_public(row: dict) -> dict:
     benefits_raw = row.get("benefits") or ""
     benefits_list = [b.strip() for b in benefits_raw.split(",") if b.strip()] if benefits_raw else []
 
+    # raw_text: 내부 메모(괄호 블록)·연락처 PII 제거 후 공개
+    raw_text = row.get("raw_text") or ""
+    if raw_text:
+        raw_text = re.sub(r'\([^)]*\)', '', raw_text)   # ( 업체명 이메일 전화 ) 제거
+        raw_text = "\n".join(l for l in raw_text.splitlines() if l.strip())
+
     return {
         "location":                row.get("city") or row.get("location"),
         "job_id":                  row.get("job_code", ""),
         "starting_date":           row.get("start_date"),
         "teaching_age":            age_groups or None,
+        "teaching_age_raw":        teaching_age_raw or None,
         "class_size":              row.get("class_size"),
         "working_hours":           row.get("working_hours"),
         "monthly_salary":          row.get("salary_raw"),
@@ -620,6 +627,8 @@ def _job_row_to_public(row: dict) -> dict:
         "housing":                 row.get("housing"),
         "preferences":             None,
         "employee_benefits":       benefits_list or None,
+        "raw_text":                raw_text or None,
+        "notes":                   None,
         "is_hot":                  bool(row.get("is_hot", 0)),
         "employment_type":         "part_time" if row.get("is_part_time") else "full_time",
         "hours_per_day":           row.get("daily_hours"),
