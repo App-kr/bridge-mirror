@@ -713,17 +713,26 @@ async def get_job(job_id: str, request: Request):
         err("포지션 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
-# 구직자 암호화 필드 — 고위험 PII 전체 포함
+# 구직자 암호화 필드 — 고위험 PII 전체 + 준식별자(quasi-identifier) 포함
 _CANDIDATE_ENCRYPT = {
+    # ── 직접 식별자 ──
     "full_name",            # 식별 가능 이름
     "email",                # 이메일
     "mobile_phone",         # 휴대폰
     "kakaotalk",            # 카카오톡
+    # ── 신원/법적 ──
     "passport",             # 여권 (번호/상태)
     "criminal_record",      # 전과기록 (자체 기술)
+    "criminal_record_check", # 범죄경력조회 [고위험]
+    "korean_criminal_record", # 한국 범죄경력 [고위험]
+    # ── 민감 정보 ──
     "religion",             # 종교 [고위험]
     "health_info",          # 건강 정보 [고위험]
-    "criminal_record_check", # 범죄경력조회 [고위험]
+    # ── 준식별자 (단독으론 무해하나 조합 시 재식별 가능) ──
+    "dob",                  # 생년월일 — 재식별 위험
+    "nationality",          # 국적
+    "current_location",     # 현재 거주지
+    "reference",            # 소개자/이전 학교 연락처 (제3자 PII 포함)
 }
 
 # ── CandidateApply 모델 → DB 컬럼 매핑 ───────────────────────────────────────
@@ -840,6 +849,9 @@ async def apply(request: Request, body: CandidateApply):
             if _EMAIL_OK and body.email:
                 send_applicant_confirmation(body.email, body.full_name)
 
+            # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
+            threading.Thread(target=_backup_on_submit, args=("apply",), daemon=True).start()
+
             return ok(
                 data={"id": new_id, "apply_token": token_out, "mode": "created"},
                 message="지원이 접수되었습니다. 담당자가 검토 후 연락드리겠습니다."
@@ -870,8 +882,12 @@ async def inquiry(request: Request, body: ClientInquiry):
             _v = getattr(body, _f, None)
             if _v and isinstance(_v, str) and not _sec_sanitizer.is_safe(_v):
                 raise HTTPException(400, "유효하지 않은 입력입니다.")
-    # 구인처 암호화: 식별 가능 정보 + 사업자
-    _INQUIRY_ENCRYPT = {"phone", "email", "contact_name", "business_registration"}
+    # 구인처 암호화: 직접 식별자 + 위치 + 메모 (제3자 정보 포함 가능)
+    _INQUIRY_ENCRYPT = {
+        "phone", "email", "contact_name", "business_registration",  # 직접 식별자
+        "school_location",  # 위치 정보
+        "memo",             # 자유 입력 — PII 노출 가능성
+    }
 
     try:
         payload = body.model_dump(exclude_none=True)
@@ -899,6 +915,9 @@ async def inquiry(request: Request, body: ClientInquiry):
             # 확인 이메일 발송 (실패해도 접수는 완료)
             if _EMAIL_OK and body.email:
                 send_employer_confirmation(body.email, body.school_name, body.contact_name or "")
+
+            # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
+            threading.Thread(target=_backup_on_submit, args=("inquiry",), daemon=True).start()
 
             return ok(
                 data={"id": new_id},
@@ -3650,6 +3669,115 @@ _UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
 _log_upload = logging.getLogger("bridge.upload")
 
+# ── 서명 URL (HMAC-SHA256) — 업로드 파일 접근 보호 ──────────────────────────
+_UPLOAD_SIGN_KEY: str = os.getenv("UPLOAD_SIGN_KEY", "").strip()
+_SIGN_EXPIRY: int = 600  # 10분
+
+
+def _sign_file_path(rel_path: str, expires: int) -> str:
+    """HMAC-SHA256 서명 생성. rel_path = 'candidates/cnd_xxx/photo.jpg' 형식."""
+    if not _UPLOAD_SIGN_KEY:
+        raise RuntimeError("UPLOAD_SIGN_KEY 환경변수 미설정")
+    msg = f"{rel_path}:{expires}"
+    return hmac.new(_UPLOAD_SIGN_KEY.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def generate_signed_url(rel_path: str, expires_in: int = _SIGN_EXPIRY) -> str:
+    """서명 URL 생성. /api/files/{rel_path}?expires=...&sig=... 형식 반환."""
+    expires = int(time.time()) + expires_in
+    sig = _sign_file_path(rel_path, expires)
+    return f"/api/files/{rel_path}?expires={expires}&sig={sig}"
+
+
+def _verify_signed_url(rel_path: str, expires: str, sig: str) -> bool:
+    """서명 URL 검증. 만료 또는 서명 불일치 시 False."""
+    if not _UPLOAD_SIGN_KEY:
+        return False
+    try:
+        exp = int(expires)
+    except (ValueError, TypeError):
+        return False
+    if exp < int(time.time()):
+        return False  # 만료됨
+    expected = _sign_file_path(rel_path, exp)
+    return hmac.compare_digest(expected, sig or "")
+
+
+@app.get("/api/files/{entity_type}/{entity_id}/{filename:path}", tags=["files"])
+async def serve_protected_file(
+    entity_type: str,
+    entity_id: str,
+    filename: str,
+    request: Request,
+    expires: str = "",
+    sig: str = "",
+):
+    """
+    HMAC 서명 URL 또는 관리자 인증으로만 파일 접근 허용.
+    - 유효 서명 or 관리자 키 → FileResponse
+    - 서명 불일치/만료/미제공 → 403
+    - entity_type: candidates | inquiries | community 등
+    """
+    from fastapi.responses import FileResponse as _FR
+
+    # 경로 순회 공격 방지
+    try:
+        file_path = (_UPLOAD_BASE / entity_type / entity_id / filename).resolve()
+        file_path.relative_to(_UPLOAD_BASE.resolve())  # 범위 벗어나면 ValueError
+    except (ValueError, Exception):
+        raise HTTPException(403, "접근이 거부되었습니다.")
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(404, "파일을 찾을 수 없습니다.")
+
+    # 관리자 인증 우선 체크
+    admin_key = request.headers.get("x-admin-key", "").strip()
+    is_admin = bool(_ADMIN_KEY and hmac.compare_digest(admin_key, _ADMIN_KEY))
+
+    if not is_admin:
+        rel_path = f"{entity_type}/{entity_id}/{filename}"
+        if not _verify_signed_url(rel_path, expires, sig):
+            _log_upload.warning(
+                "UNSIGNED_FILE_ACCESS ip=%s path=%s",
+                _ip_hash(request), rel_path
+            )
+            raise HTTPException(403, "파일 접근 권한이 없습니다. 서명 URL을 사용하세요.")
+
+    # 콘텐츠 타입 감지 (확장자 기반)
+    import mimetypes
+    mime, _ = mimetypes.guess_type(str(file_path))
+    media_type = mime or "application/octet-stream"
+
+    return _FR(
+        path=str(file_path),
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+        },
+    )
+
+
+@app.get("/api/admin/sign-url", tags=["admin"])
+async def admin_sign_url(request: Request, path: str = ""):
+    """
+    관리자 전용: 파일 서명 URL 생성.
+    ?path=candidates/cnd_xxx/photo.jpg → {signed_url, expires_at}
+    """
+    _check_admin(request)
+    if not path or ".." in path or path.startswith("/"):
+        raise HTTPException(400, "유효하지 않은 파일 경로입니다.")
+    if not _UPLOAD_SIGN_KEY:
+        raise HTTPException(503, "UPLOAD_SIGN_KEY 미설정 — 서버 환경변수를 확인하세요.")
+    signed = generate_signed_url(path)
+    expires_at = int(time.time()) + _SIGN_EXPIRY
+    return ok(data={
+        "signed_url": signed,
+        "expires_at": expires_at,
+        "expires_in": _SIGN_EXPIRY,
+    })
+
 # File type configs: (max_bytes, allowed_extensions, magic_bytes_prefixes)
 _FILE_LIMITS: dict[str, tuple[int, set[str], list[bytes]]] = {
     "photo": (
@@ -3989,10 +4117,34 @@ async def admin_toggle_job_hot(job_id: int, request: Request):
 _db_change_count = 0
 _DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
 
+# 제출 백업 디렉터리 (Render: /data/backups/auto, 로컬: ./backups/auto)
+_BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR", str(Path(__file__).resolve().parent / "backups" / "auto")))
+_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+# 카운터 영속화 파일 (재시작 후에도 유지)
+_CHANGE_COUNT_FILE = Path(__file__).resolve().parent / "backups" / "change_count.txt"
+_CHANGE_COUNT_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def _load_change_count() -> int:
+    try:
+        return int(_CHANGE_COUNT_FILE.read_text().strip())
+    except Exception:
+        return 0
+
+def _save_change_count(n: int) -> None:
+    try:
+        _CHANGE_COUNT_FILE.write_text(str(n))
+    except Exception:
+        pass
+
+_db_change_count = _load_change_count()
+
+
 def _maybe_auto_backup():
-    """DB 변경 누적 카운트 → 10건마다 master.db.auto_backup 생성."""
+    """DB 변경 누적 카운트 → 10건마다 master.db.auto_backup 생성. 카운터 영속화."""
     global _db_change_count
     _db_change_count += 1
+    _save_change_count(_db_change_count)
     if _db_change_count % _DB_BACKUP_INTERVAL != 0:
         return
     try:
@@ -4003,6 +4155,53 @@ def _maybe_auto_backup():
         logging.getLogger("bridge.api").info("AUTO_BACKUP: master.db → %s (after %d changes)", dst.name, _db_change_count)
     except Exception as e:
         logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
+
+
+def _backup_on_submit(source: str = "") -> None:
+    """
+    강사 지원 / 채용의뢰 제출 시 즉시 타임스탬프 백업 생성.
+    AES-256-GCM 암호화 후 backups/auto/submit_YYYYMMDD_HHMMSS.enc 저장.
+    실패해도 접수에는 영향 없음 (비동기 호출 권장).
+    """
+    import shutil
+    _log_bk = logging.getLogger("bridge.backup")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    src = _ADMIN_DB_PATH
+
+    # 1. 일반 .auto_backup 갱신 (빠른 비암호화 스냅샷)
+    try:
+        shutil.copy2(str(src), str(src.with_suffix(".db.auto_backup")))
+    except Exception as e:
+        _log_bk.warning("auto_backup copy failed: %s", e)
+
+    # 2. 암호화 백업 (AES-256-GCM)
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        import base64 as _b64
+        _key_raw = os.getenv("BRIDGE_FIELD_KEY", "").strip()
+        if not _key_raw:
+            raise EnvironmentError("BRIDGE_FIELD_KEY 미설정")
+        import hashlib as _hs
+        key = _hs.sha256(_key_raw.encode()).digest()
+        nonce = os.urandom(12)
+        plaintext = src.read_bytes()
+        aesgcm = AESGCM(key)
+        ciphertext = aesgcm.encrypt(nonce, plaintext, source.encode() or b"submit")
+        payload = nonce + ciphertext  # nonce(12) + ciphertext + tag(16)
+        enc_path = _BACKUP_DIR / f"submit_{ts}_{source}.enc"
+        enc_path.write_bytes(payload)
+        _log_bk.info("SUBMIT_BACKUP: %s (%d bytes encrypted)", enc_path.name, len(payload))
+
+        # 3. 오래된 제출 백업 정리 (최근 50개 유지)
+        backups = sorted(_BACKUP_DIR.glob("submit_*.enc"), key=lambda p: p.stat().st_mtime)
+        for old in backups[:-50]:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+
+    except Exception as e:
+        _log_bk.error("암호화 백업 실패 (접수는 완료됨): %s", e)
 
 
 # ── Admin: Create Job from Inquiry ─────────────────────────────────────────────
@@ -5526,9 +5725,9 @@ from gmail_collector import router as gmail_router
 app.include_router(inbox_router)
 app.include_router(gmail_router)
 
-# ── Static Files Mount (개발 환경용) ──────────────────────────────────────────
-if not _IS_PROD:
-    app.mount("/uploads", StaticFiles(directory=str(_UPLOAD_BASE)), name="uploads")
+# ── Static Files Mount 제거 ─────────────────────────────────────────────────
+# /uploads/ 직접 접근은 HMAC 서명 URL (/api/files/) 로 교체됨.
+# 비인증 직접 접근 → 403 (security_middleware.py에서 차단)
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────

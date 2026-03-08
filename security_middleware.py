@@ -588,6 +588,19 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
 
+        # 0-0-pre. /uploads/ 직접 접근 차단 — 서명 URL(/api/files/)만 허용
+        if path.startswith("/uploads/") or path == "/uploads":
+            audit.log(
+                "UNSIGNED_UPLOAD_ACCESS",
+                {"ip": client_ip, "path": path},
+                "WARNING",
+            )
+            return JSONResponse(
+                status_code=403,
+                content={"error": "직접 파일 접근이 차단되었습니다. 서명 URL을 통해 접근하세요."},
+                headers={"X-Request-ID": req_id, "X-Content-Type-Options": "nosniff"},
+            )
+
         # 0-0. 허니팟: 스캐너/해커가 자주 탐색하는 경로 → 즉시 24h 차단
         path_lower = path.lower().rstrip("/")
         for hp in HONEYPOT_PATHS:
