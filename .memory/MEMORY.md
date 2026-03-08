@@ -61,6 +61,12 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - 파일 수정 전 반드시 백업
 - 하위 폴더 정리 원칙
 - 묻지 말고 자율 실행 선호
+- **완료 보고 필수 형식** (2026-03-08 확정 — 모든 작업 완료 시 의무):
+  1. 날짜·시간·제목
+  2. 변경 파일별: 변경 내용 + 기능 한글 설명 1줄
+  3. 검증 수치 (실측값만)
+  4. 추천 다음 작업 3가지 (웹 레퍼런스 확인 후 실현 가능한 것만)
+  → CLAUDE.md 섹션 6 참조
 - `.next` 캐시 충돌 → `rm -rf .next` 후 재시작
 - `.env.local`: `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
 - 모든 메모리/설정 파일은 프로젝트 내부(`Q:\Claudework\bridge base`)에만 보관
