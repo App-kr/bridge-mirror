@@ -284,6 +284,25 @@ export default function DocBlock({
             {!isFirst && <button type="button" onClick={onMoveTop} style={btnBase}>⤒ 맨위로</button>}
             {!isFirst && <button type="button" onClick={onMoveUp} style={btnBase}>↑ 위로</button>}
             {!isLast && <button type="button" onClick={onMoveDown} style={btnBase}>↓ 아래로</button>}
+            {!editingRaw ? (
+              <button type="button" onClick={() => setEditingRaw(true)}
+                style={{ ...btnBase, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c' }}>
+                본문 수정
+              </button>
+            ) : (
+              <>
+                <button type="button"
+                  onClick={() => { onEditNotes?.(employer.id, rawVal); setEditingRaw(false) }}
+                  style={{ ...btnBlue, fontSize: '0.75rem', padding: '3px 12px' }}>
+                  💾 저장
+                </button>
+                <button type="button"
+                  onClick={() => { setRawVal(rawText); setEditingRaw(false) }}
+                  style={{ ...btnGhost, fontSize: '0.75rem', padding: '3px 10px' }}>
+                  취소
+                </button>
+              </>
+            )}
           </div>
           {isGlow && (
             <button type="button" onClick={() => onConfirm(employer.id)} style={{

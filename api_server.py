@@ -2912,6 +2912,40 @@ async def admin_list_applications(request: Request):
                     "created_at": j["created_at"] or "",
                 })
 
+            # 구인자 — client_inquiries 테이블 (이메일/폼 접수 데이터)
+            inq_rows = conn.execute(
+                "SELECT id, school_name, email, contact_name, phone, location, "
+                "start_date, vacancies, teaching_age, schedule, working_hours, "
+                "salary_raw, housing_type, housing_detail, benefits, vacation, "
+                "memo, notes, assigned_to, submitted_at "
+                "FROM client_inquiries WHERE is_deleted = 0 ORDER BY submitted_at DESC"
+            ).fetchall()
+            for inq in inq_rows:
+                apps.append({
+                    "id": f"inq_{inq['id']}", "type": "employer",
+                    "name": inq["school_name"] or "",
+                    "email": inq["email"] or "",
+                    "school_name": inq["school_name"],
+                    "contact_name": inq["contact_name"],
+                    "phone": inq["phone"],
+                    "location": inq["location"],
+                    "start_date": inq["start_date"],
+                    "vacancies": inq["vacancies"],
+                    "teaching_age": inq["teaching_age"],
+                    "schedule": inq["schedule"],
+                    "working_hours": inq["working_hours"],
+                    "salary_raw": inq["salary_raw"],
+                    "housing_type": inq["housing_type"],
+                    "housing_detail": inq["housing_detail"],
+                    "benefits": inq["benefits"],
+                    "vacation": inq["vacation"],
+                    "memo": inq["memo"],
+                    "notes": inq["notes"],
+                    "assigned_to": inq["assigned_to"],
+                    "status": "open",
+                    "created_at": inq["submitted_at"] or "",
+                })
+
             apps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             return ok(data=apps)
         finally:

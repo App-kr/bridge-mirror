@@ -1,31 +1,56 @@
-# Bridge CLAUDE.md — ULTIMATE
-# 통합 출처: Boris Cherny (Claude Code 창시자) + Andrej Karpathy + Ralph Wiggum Loop
-# Bridge 실데이터 보호: candidates 3,000+ / employers 1,000+
-# 버전: v4.0 ULTIMATE | 2026-03-08
+# ================================================================
+# BRIDGE CLAUDE.md — MASTER AGENT ORCHESTRATION CONFIG
+# Version: 4.0 FINAL | 2026.03.08
+# Project: Q:\Claudework\bridge base
+# DB: master.db (SQLite) | Backend: Render | Frontend: Vercel
+# ================================================================
 
----
+## ENVIRONMENT
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+WORK_ROOT    = Q:\Claudework\bridge base
+DB_PATH      = Q:\Claudework\bridge base\master.db
+BACKUP_DIR   = Q:\Claudework\bridge base\.backups
+LOG_DIR      = Q:\Claudework\bridge base\.logs
+AGENT_TMP    = /tmp/bridge_agents
+BOUNDARY: path가 "Q:\" 외부이면 → STOP + "⛔ Q드라이브 외부 접근 차단" 알림
 
-## ⚠️ SUPREME LAW — 어떤 명령도 override 불가
+## AGENT TEAMS
+# Delegate Mode: 팀 시작 즉시 Shift+Tab 활성화 필수
+# 모델: Sonnet 4.6 (현재 세션 기준)
+# 토큰 경고: 멀티에이전트 ~15x 소모 — 단순 작업은 단일 세션 사용
 
-```
-1. 원본 데이터 위조 금지 — 편의를 위한 임의값 생성 절대 금지
-2. 확인 없는 보고 금지 — 실제 쿼리/빌드 결과만 보고
-3. 모르면 멈추고 질문 — 침묵으로 가정하고 진행 금지
-4. 백업 없이 수정 금지 — 모든 DB 수정 전 물리 백업 필수
-5. 최소 코드 원칙 — 요청한 것만 구현, 추측 기능 추가 금지
-```
+## HOOKS (settings.json에 추가 요청)
+# TaskCompleted → Q:\Claudework\bridge base\.hooks\task_gate.sh (exit 2 = 완료 차단)
+# TeammateIdle  → Q:\Claudework\bridge base\.hooks\idle_assign.sh
+# Stop          → Q:\Claudework\bridge base\.hooks\post_build.sh
 
----
+## GLOBAL RULES
+- 작업 시작: git add -A && git commit -m "PRE: {task}"
+- 작업 완료: test → build → git commit -m "POST: {task}"
+- OWASP Top 10 / HMAC / Rate Limit / Fail-Closed 필수
+- PII: Admin패널=전체표시 / 공개API·이메일·CSV=완전마스킹
+- HERO-ANIMATION 절대 변경 금지 (LOCKED)
+- hard-delete 금지 → is_deleted=1 논리삭제만
+- 부분 코드 출력 금지 → 완전한 파일 단위만
+- PowerShell 팝업 금지 / 현재 창 뒤에서 실행
+- SQL: 100% parameterized query (f-string 삽입 금지)
 
-## 0. 세션 시작 루틴 (MANDATORY — 매 세션 첫 실행)
+## 모듈 경계 (에이전트 파일 충돌 방지)
+# ※ 실제 프로젝트 경로 기준
+- Frontend Agent:  web_frontend/components/**, web_frontend/app/**
+- Server Engineer: api_server.py, security_middleware.py, email_templates.py
+- Security Agent:  전체 읽기 / 보안 관련만 쓰기
+- 공유파일(DB스키마·환경설정·CLAUDE.md): Lead만 최종 수정
 
+## 검증 명령어
+# ※ 실제 프로젝트 구조 기준
+- Backend:  python -m py_compile api_server.py && echo "COMPILE_OK"
+- Frontend: cd web_frontend && npm run build && npm run lint
+- 보안:     grep -rn 'f".*{' api_server.py → 0건이어야 PASS
+- DB:       python -c "import sqlite3; conn=sqlite3.connect('master.db'); cur=conn.cursor(); cur.execute('PRAGMA integrity_check'); assert cur.fetchone()[0]=='ok'; cur.execute('SELECT COUNT(*) FROM candidates'); assert cur.fetchone()[0]>=3000; print('DB OK')"
+
+## DB 수호자 체크 (세션 시작 시 MANDATORY)
 ```bash
-cd "Q:/Claudework/bridge base"
-
-# 1. 이전 실수 복습 (Self-Improvement Loop)
-echo "=== LESSONS ===" && cat tasks/lessons.md 2>/dev/null | tail -20
-
-# 2. DB 무결성 + 건수 수호자 체크
 python -c "
 import sqlite3, os
 db = 'master.db'
@@ -44,433 +69,90 @@ cur.execute('SELECT COUNT(*) FROM jobs')
 j = cur.fetchone()[0]
 conn.close()
 print(f'DB={os.path.getsize(db)//1024}KB | integrity={ic} | candidates={c} | employers={e} | jobs={j}')
-assert ic == 'ok',   f'🚨 DB 손상!'
-assert c  >= 3000,   f'⚠️ candidates 이상: {c} (기대 3000+)'
-assert e  >= 900,    f'⚠️ employers 이상: {e} (기대 900+)'
-assert j  >= 1000,   f'⚠️ jobs 이상: {j} (기대 1000+)'
+assert ic == 'ok',  '🚨 DB 손상!'
+assert c  >= 3000,  f'⚠️ candidates 이상: {c} (기대 3000+)'
+assert e  >= 900,   f'⚠️ employers 이상: {e} (기대 900+)'
+assert j  >= 1000,  f'⚠️ jobs 이상: {j} (기대 1000+)'
 print('✅ 수호자 체크 통과')
 "
-
-# 3. 미완료 작업 + 최근 커밋
-cat tasks/todo.md 2>/dev/null | grep "^\- \[ \]" | head -5
-git log --oneline -3
 ```
+건수 이탈 감지 시 → 즉시 작업 중단 + 사용자 보고 + 원인 파악 먼저
 
-**건수 이탈 감지 시 → 즉시 작업 중단 + 사용자 보고 + 원인 파악 먼저**
+## AGENT 역할
+Director      | 태스크분해·스폰·merge / Delegate Mode시 직접구현 금지
+Server Eng    | Python Flask/SQLite·api_server.py·Pydantic
+Security      | HMAC·JWT·RateLimit·PII·OWASP
+Frontend      | Next.js·Tailwind·shadcn/ui / HERO불변·모바일퍼스트
+QA            | 빌드검증·py_compile·회귀방지 / TeammateIdle시 자동배정
+PM Agent      | PRD·경쟁사분석·MoSCoW (필요시 스폰)
+Content       | 한국어공지·이메일·SEO (필요시 스폰)
+
+## SLASH COMMANDS
+
+/bridge-team [task]
+→ Delegate Mode ON → Director가 에이전트 스폰
+→ 각 spawn prompt: 대상파일경로 + 수락기준 + 수정금지파일 명시
+→ TaskCompleted hook → QA 최종 빌드 후 merge
+
+/bridge-loop [task]
+→ 구현 → 3-axis검토(보안·성능·PII) → 수정 → 재확인
+→ 최대 3회. 초과시 STOP + 사유 + human 판단 요청
+
+/bridge-planner [idea]
+→ 현황분석 / 경쟁사(Korvia·Worxphere·Epik·JobKorea) /
+   기술스택 / DB스키마 / API목록 / MoSCoW / 보안고려
+
+/bridge-secure
+→ JWT / HMAC누락라우터 / RateLimit미적용 / PII공개API /
+   CORS / SQLi / 파일업로드 / 브루트포스 전수점검
+→ 실패항목 존재시 배포 BLOCK
+
+/bridge-seo
+→ title·meta / OG / sitemap / robots / hreflang(ko·en) / JSON-LD
+
+/bridge-deploy [staging|prod]
+→ /bridge-secure → py_compile → build → git tag →
+   Render+Vercel 배포 → 헬스체크 → Slack알림
+→ 단계 실패시 전체 BLOCK
+
+## EXECUTION PRINCIPLES
+CoT:        단계분해 → 실패시뮬레이션 → 실행
+Self-Verify: 구현후 3-axis 자기검토 필수 (보안·성능·PII)
+Least Priv: 에이전트는 담당모듈만 쓰기접근
+Parallel:   의존성 없는 작업 = 항상 병렬
+Fail-Closed: 보안불확실 → 차단
+Anti-pattern: 불필요한 에이전트 과다스폰 금지
+
+## COMPLETION FORMAT
+✅ [작업명] 완료 — [한 줄 설명]
+📋 다음 추천: [구체적 다음 작업 1개]
+
+## DATA INTEGRITY (영구 규칙)
+- 원본 데이터 위조 금지 — 편의를 위한 임의값 생성 절대 금지
+- 확인 없는 보고 금지 — 실제 쿼리/빌드 결과만 보고
+- 모르면 멈추고 질문 — 침묵으로 가정하고 진행 금지
+- 백업 없이 수정 금지 — 모든 DB 수정 전 물리 백업 필수
+- 최소 코드 원칙 — 요청한 것만 구현, 추측 기능 추가 금지
+- PRAGMA table_info() 먼저 → 컬럼명 확인 → 쿼리 (PK 혼동 방지)
+
+## RENDER 배포 비용 관리 (영구 규칙)
+- 월 500분 예산 / 70% 경고 수신 시 → Auto-Deploy OFF
+- 구조 변경 커밋은 단독 배포 후 로그 즉시 확인 필수
+- 신규 DB 테이블 → api_server.py init_db()에 CREATE TABLE IF NOT EXISTS 추가
+- 폴더 구조 변경 시 → render.yaml Start Command 동시 업데이트
+
+## LOCKED CONSTANTS
+- HERO: 검정배경 + BRIDGE로고 + "A career that changes your life." + 흰색 현수교 케이블 → 절대 수정 금지
+- DB 경로: Q:/Claudework/bridge base/master.db → 절대 이동 금지
+- KEY 경로: Q:/Claudework/bridge base/.bridge.key → 절대 이동 금지
+
+## tasks/ 폴더
+tasks/todo.md      — 현재 작업 체크리스트
+tasks/lessons.md   — 실수 학습 로그
+tasks/backlog.md   — 미래 작업 목록
+tasks/db_checksum.log — DB 수정 전후 SHA-256
+tasks/pre_snapshot.txt — 작업 전 건수 스냅샷
+tasks/ralph_log.md — Ralph 루프 실행 로그
 
 ---
-
-## 1. Karpathy 4원칙 (AI 착각/과잉 방지)
-
-<출처: Andrej Karpathy — 7k stars, LLM 코딩 실수 관찰>
-
-### 1-1. Clarify Before Acting (가정 금지)
-- 구현 전: 가정을 명시적으로 선언
-- 불확실하면: 멈추고 질문
-- 해석이 여러 개면: 선택지 제시 후 확인 요청 (침묵으로 선택 금지)
-- 더 단순한 방법이 있으면: 먼저 제안
-
-**Bridge 적용:**
-```
-# 금지: 테이블명 추측 후 바로 쿼리
-# 필수: PRAGMA table_info() 먼저 → 컬럼명 확인 → 쿼리
-```
-
-### 1-2. Minimal Footprint (최소 발자국)
-- 요청한 것만 구현
-- 추측 기능 추가 금지
-- 단일 사용 코드에 추상화 금지
-- 요청 없는 "유연성"/"설정 가능성" 추가 금지
-- 200줄이 50줄로 가능하면 → 50줄로 재작성
-
-**Bridge 적용:**
-```
-# 금지: "혹시 나중에 필요할 것 같아서" 컬럼 추가
-# 금지: 요청 없는 에러핸들링 레이어 추가
-# 필수: 요청된 변경사항만, 관련 없는 코드 무수정
-```
-
-### 1-3. Preserve Working Code (작동 코드 보호)
-- 이해 못한 코드 수정/삭제 금지
-- 작업과 무관한 코드 사이드이펙트 금지
-- 수정 전 반드시 해당 코드 역할 파악
-- 주석 임의 변경 금지
-
-**Bridge 적용:**
-```
-# 수정 전 확인: "이 코드가 무엇을 하는가?"
-# git diff로 의도치 않은 변경 사전 확인
-```
-
-### 1-4. Goal-Driven Execution (목표 주도 실행)
-- 명령어가 아닌 성공 기준으로 작업
-- 목표 달성까지 루프 반복 (Ralph 패턴과 연계)
-- 실패는 데이터 — 실패 로그로 다음 시도 개선
-
-**Bridge 적용:**
-```
-# 명령형: "candidates 테이블 업데이트해" (X)
-# 목표형: "candidates visa_type 60% 이상 채우기
-#          성공기준: SELECT COUNT(*)/3058 >= 0.6
-#          완료신호: <promise>VISA_DONE</promise>"
-```
-
----
-
-## 2. Ralph Wiggum Loop (자율 반복 실행)
-
-<출처: Anthropic 공식 plugins/ralph-wiggum — Stop hook 기반 루프>
-
-### 2-1. 핵심 개념
-Stop hook이 Claude의 종료를 가로채 동일 프롬프트를 다시 주입 → 자기참조 피드백 루프.
-이전 작업 결과(파일/git)가 다음 이터레이션에서 보임 → 자율 개선.
-
-### 2-2. Bridge Ralph 루프 명령어
-
-**DB 보강 루프:**
-```
-/ralph-loop "
-Bridge DB visa_type 보강 작업.
-
-현재 상태 확인:
-python -c \"
-import sqlite3
-conn = sqlite3.connect('master.db')
-cur = conn.cursor()
-cur.execute(\"SELECT COUNT(*) FROM candidates WHERE visa_type IS NOT NULL AND visa_type != ''\")
-filled = cur.fetchone()[0]
-cur.execute('SELECT COUNT(*) FROM candidates')
-total = cur.fetchone()[0]
-pct = round(filled/total*100)
-print(f'visa_type: {filled}/{total} ({pct}%)')
-conn.close()
-\"
-
-목표: visa_type 채움률 35% 이상
-방법:
-1. e_visa, arc_holders 필드에서 패턴 추출
-2. 비자코드(E-2, F-4 등) 정규화
-3. Yes/No → ARC-Yes/No 변환
-4. 날짜 단독으로 visa_type 추정 금지 (생일/시작일/여권만료일 모두 날짜 → 근거 없는 추정은 위조)
-
-성공 기준: SELECT COUNT(*) WHERE visa_type IS NOT NULL / 3058 >= 0.35
-완료 신호: <promise>VISA_BOOST_DONE</promise>
-" --max-iterations 10 --completion-promise "VISA_BOOST_DONE"
-```
-
-**빌드 자동화 루프:**
-```
-/ralph-loop "
-Next.js 빌드 통과 작업.
-
-현재 빌드 실행:
-cd web_frontend && npm run build 2>&1 | tail -20
-
-목표: npm run build 에러 0
-방법:
-1. 빌드 에러 메시지 분석
-2. 타입 에러 수정
-3. import 누락 수정
-4. 재빌드 확인
-
-성공 기준: 빌드 출력에 'error' 없음
-완료 신호: <promise>BUILD_CLEAN</promise>
-" --max-iterations 15 --completion-promise "BUILD_CLEAN"
-```
-
-**API 엔드포인트 검증 루프:**
-```
-/ralph-loop "
-api_server.py 전체 검증.
-
-실행:
-python -m py_compile api_server.py && echo COMPILE_OK
-grep -n 'f\"SELECT\|f\"UPDATE\|f\"INSERT\|f\"DELETE' api_server.py | head -20
-
-목표: f-string SQL 0건, 컴파일 에러 0건
-방법:
-1. f-string SQL → parameterized query 변환
-2. 컴파일 에러 수정
-3. 재검증
-
-성공 기준: grep 결과 0건 + 컴파일 OK
-완료 신호: <promise>API_SECURE</promise>
-" --max-iterations 20 --completion-promise "API_SECURE"
-```
-
-### 2-3. Ralph 안전장치
-- 항상 `--max-iterations` 설정 (무한루프 방지)
-- DB 수정 루프: 매 이터레이션 전 체크섬 확인
-- 루프 중단: `/cancel-ralph`
-- 루프 전 반드시 백업:
-  ```bash
-  cp master.db master.db.backup_ralph_$(date +%Y%m%d_%H%M%S)
-  ```
-
----
-
-## 3. Boris Cherny Workflow Orchestration
-
-<출처: Boris Cherny — Claude Code 창시자>
-
-### 3-1. Plan Node Default
-- 3단계 이상 → Plan 먼저 (tasks/todo.md)
-- 이상 감지 → STOP + re-plan
-- 검증도 Plan에 포함
-
-### 3-2. Self-Improvement Loop
-수정 발생 즉시 tasks/lessons.md:
-```
-## [날짜] [작업명]
-- 실수: X
-- 원인: Y  
-- 수정: Z
-- 재발방지: [규칙화]
-```
-
-### 3-3. Verification Before Done
-```bash
-# 완료 선언 전 필수
-python -m py_compile api_server.py && echo "✅ API"
-cd web_frontend && npm run build 2>&1 | grep -E "error|✓" | tail -5
-python -c "
-import sqlite3
-conn = sqlite3.connect('master.db')
-cur = conn.cursor()
-cur.execute('PRAGMA integrity_check')
-assert cur.fetchone()[0] == 'ok'
-cur.execute('SELECT COUNT(*) FROM candidates')
-assert cur.fetchone()[0] >= 3000
-print('✅ DB OK')
-conn.close()
-"
-```
-
-### 3-4. Autonomous Bug Fixing
-- 버그 보고 → 즉시 수정, 손잡아달라는 요청 금지
-- 추정 완료 보고 금지 → 실제 확인 후 보고
-
----
-
-## 4. 데이터 무결성 수호 (Bridge 특화)
-
-### 4-1. 수정 전 3단계 프로토콜
-```bash
-# Step 1: 체크섬 (파일 직접 해시 — iterdump 대비 63배 빠름)
-python -c "
-import hashlib, datetime
-h = hashlib.sha256(open('master.db','rb').read()).hexdigest()
-with open('tasks/db_checksum.log','a') as f:
-    f.write(f'{datetime.datetime.now().isoformat()} PRE {h}\n')
-print(f'PRE: {h[:12]}...')
-"
-
-# Step 2: 물리 백업
-cp master.db "master.db.backup_$(date +%Y%m%d_%H%M%S)"
-
-# Step 3: 건수 스냅샷
-python -c "
-import sqlite3
-conn = sqlite3.connect('master.db')
-cur = conn.cursor()
-for t in ['candidates','client_inquiries','jobs']:
-    cur.execute(f'SELECT COUNT(*) FROM {t}')
-    print(f'{t}: {cur.fetchone()[0]}')
-conn.close()
-" | tee tasks/pre_snapshot.txt
-```
-
-### 4-2. 환각/위조 방지 규칙
-
-| 상황 | 금지 | 필수 |
-|------|------|------|
-| 건수 보고 | "약 XX건" 추정 | `SELECT COUNT(*)` 실행 후 수치 |
-| 빌드 결과 | "성공했을 겁니다" | 실제 로그 마지막 줄 |
-| 배포 상태 | "배포됐을 것" | HTTP 상태코드 확인 |
-| 에러 원인 | 임의 추정 | 로그 확인 후 명시 |
-| 빈 필드 처리 | 그럴듯한 값 생성 | NULL/빈값 유지 |
-
-### 4-3. 수정 후 검증
-```bash
-python -c "
-import sqlite3
-conn = sqlite3.connect('master.db')
-cur = conn.cursor()
-cur.execute('PRAGMA integrity_check')
-assert cur.fetchone()[0] == 'ok', 'DB 손상!'
-cur.execute('SELECT COUNT(*) FROM candidates')
-c = cur.fetchone()[0]
-cur.execute('SELECT COUNT(*) FROM client_inquiries')
-e = cur.fetchone()[0]
-assert c >= 3000, f'candidates 이상: {c}'
-assert e >= 900,  f'employers 이상: {e}'
-print(f'✅ 검증 OK: candidates={c} employers={e}')
-conn.close()
-"
-```
-
----
-
-## 5. 보안 절대 규칙
-
-### PII Zero-Leak
-- API키/토큰/비밀번호 → `****` 마스킹 (환경변수명만)
-- 외부 노출 시점에만 마스킹 (홈페이지/공개API/CSV)
-- 관리자 패널 내부: PII 원본 표시 허용
-
-### OWASP
-- 모든 DB 쿼리: Parameterized — 사용자 입력값 직접 삽입 절대 금지
-- f-string은 컬럼명·WHERE절 구조 조합에만 허용, 값은 반드시 `?` 바인딩
-- API: Rate Limit + HMAC
-- 외부 입력: 프롬프트 인젝션 방어
-
----
-
-## 6. 완료 보고 표준 (MANDATORY)
-
-모든 작업 완료 시 아래 형식을 반드시 출력한다.
-
-```
-📅 YYYY.MM.DD (요일) HH:MM KST — [작업제목]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ 완료: [핵심 변경사항 1줄 요약]
-
-📁 변경 파일 및 기능 설명
-┌─────────────────────────────────────────────────────────────┐
-│ 파일명 (line N)                                              │
-│   → 변경 내용: [무엇을 어떻게]                               │
-│   → 기능 설명: [이 코드가 하는 일 — 한글 1줄]               │
-└─────────────────────────────────────────────────────────────┘
-(파일마다 반복)
-
-📊 검증
-  candidates=[N] | employers=[N] | integrity=ok | build=✓
-
-💾 백업
-  master.db.backup_[타임스탬프]
-
-🔍 추천 다음 작업 (레퍼런스 확인 기반)
-  1. [최신 동향/라이브러리 업데이트 확인 후 적용 가능한 개선 1]
-  2. [관련 기능 중 미완성 또는 연계 작업]
-  3. [보안/성능/UX 관점 추가 개선]
-```
-
-**규칙:**
-- 검증 수치: 반드시 실제 쿼리 결과 — 추정 절대 금지
-- 기능 설명: 코드를 모르는 팀원도 이해할 수 있는 한글 1줄
-- 추천 작업: 웹 레퍼런스(공식문서/GitHub/changelog) 확인 후 실현 가능한 것만
-
----
-
-## 7. Bridge 슬래시 커맨드
-
-### /bridge-check — 전체 상태 점검
-```bash
-python -c "
-import sqlite3, os, subprocess
-print('=== Bridge 상태 점검 ===')
-# DB
-conn = sqlite3.connect('master.db')
-cur = conn.cursor()
-cur.execute('PRAGMA integrity_check')
-print(f'DB integrity: {cur.fetchone()[0]}')
-for t in ['candidates','client_inquiries','jobs','interviews','payments']:
-    try:
-        cur.execute(f'SELECT COUNT(*) FROM {t}')
-        print(f'  {t}: {cur.fetchone()[0]}건')
-    except: print(f'  {t}: 테이블없음')
-conn.close()
-# Git
-result = subprocess.run(['git','log','--oneline','-3'], capture_output=True, text=True)
-print(f'Git: {result.stdout.strip()}')
-# 백업
-import glob
-bs = sorted(glob.glob('master.db.backup_*'))
-print(f'백업: {len(bs)}개, 최신: {bs[-1] if bs else \"없음\"}')
-"
-```
-
-### /bridge-backup — 즉시 백업
-```bash
-cp master.db "master.db.backup_$(date +%Y%m%d_%H%M%S)" && \
-git add -A && git commit -m "backup: manual $(date +%Y%m%d_%H%M%S)" && git push && \
-echo "✅ 백업 + 커밋 완료"
-```
-
-### /bridge-rollback — 롤백
-```bash
-python -c "
-import glob, os
-backups = sorted(glob.glob('master.db.backup_*'), reverse=True)
-print('사용 가능한 백업:')
-for i, b in enumerate(backups[:5]):
-    size = os.path.getsize(b)
-    print(f'  {i+1}. {b} ({size//1024}KB)')
-print()
-print('롤백 명령: cp [백업파일명] master.db')
-print('롤백 후: python -c \"import sqlite3; conn=sqlite3.connect(chr(109)+chr(97)+chr(115)+chr(116)+chr(101)+chr(114)+chr(46)+chr(100)+chr(98)); cur=conn.cursor(); cur.execute(chr(80)+chr(82)+chr(65)+chr(71)+chr(77)+chr(65)+chr(32)+chr(105)+chr(110)+chr(116)+chr(101)+chr(103)+chr(114)+chr(105)+chr(116)+chr(121)+chr(95)+chr(99)+chr(104)+chr(101)+chr(99)+chr(107)); print(cur.fetchone()[0])\"'
-"
-```
-
-### /bridge-loop [작업] — Ralph 루프 실행
-```
-/ralph-loop "
-[작업 설명]
-
-성공 기준: [측정 가능한 수치]
-완료 신호: <promise>BRIDGE_DONE</promise>
-실패 시: 진행 상황과 장애물을 tasks/ralph_log.md에 기록
-" --max-iterations 20 --completion-promise "BRIDGE_DONE"
-```
-
----
-
-## 8. tasks/ 폴더 구조
-
-```
-Q:/Claudework/bridge base/tasks/
-├── todo.md           # 현재 작업 체크리스트
-├── lessons.md        # 실수 학습 로그 (Self-Improvement)
-├── backlog.md        # 미래 작업 목록
-├── db_checksum.log   # DB 수정 전후 SHA-256
-├── pre_snapshot.txt  # 작업 전 건수 스냅샷
-└── ralph_log.md      # Ralph 루프 실행 로그
-```
-
----
-
-## 9. 잠금 규칙
-
-Bridge 홈페이지 Hero — 절대 수정 금지:
-- 검정 배경 + 중앙 BRIDGE 로고
-- "A career that changes your life."
-- 흰색 현수교 케이블 아치 + 두 기둥 + SCROLL
-
-DB 경로 — 절대 이동 금지:
-- `Q:/Claudework/bridge base/master.db`
-- `Q:/Claudework/bridge base/.bridge.key`
-
----
-
-## 10. Render 배포 비용 관리 (영구 규칙)
-
-### 빌드분 예산
-- 월 500분 = 약 16커밋/일 (평균 빌드 30분 기준 → 실제 약 5~10분)
-- 70% 경고 이메일 수신 시 → 즉시 Auto-Deploy OFF, 배치 커밋 전환
-- 구조 변경(폴더/파일 이동) 커밋은 단독 배포 후 로그 즉시 확인 필수
-
-### 배포 전 체크리스트 (모든 커밋 전)
-1. `api_server.py` 루트 위치 유지 여부
-2. `requirements.txt` 루트 존재 여부
-3. 신규 DB 테이블 → `api_server.py` `init_db()` 에 `CREATE TABLE IF NOT EXISTS` 추가
-4. 폴더 구조 변경 시 → `render.yaml` 또는 Render 대시보드 Start Command 동시 업데이트
-
-### Render Free 제약 (항시 인지)
-- 15분 무트래픽 시 sleep → `/health` keepalive cron 필수 유지
-- SQLite ephemeral → 재배포 시 DB 초기화 (`master.db`는 로컬 전용)
-- 빌드 실패해도 기존 서비스는 유지됨 (패닉 불필요)
-
----
-
-*Bridge CLAUDE.md v4.0 ULTIMATE — 2026-03-08*
-*통합: Boris Cherny + Andrej Karpathy + Ralph Wiggum + Bridge 도메인*
+*Bridge CLAUDE.md v4.0 FINAL — 2026-03-08*
