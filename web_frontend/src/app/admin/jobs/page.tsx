@@ -5,7 +5,7 @@
  * BRJ ID 시스템, A4 문서 뷰, PII 토글, 상태 관리
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -100,6 +100,35 @@ function fmtSalary(krw: number | null | undefined): string {
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '—'
   return d.slice(0, 10)
+}
+
+/* raw_text 에서 backtick 필드 파싱 */
+function parseRawFields(raw: string | null): Array<{ label: string; value: string }> {
+  if (!raw) return []
+  const result: Array<{ label: string; value: string }> = []
+  const seen = new Set<string>()
+  for (const line of raw.split('\n')) {
+    const cleaned = line.replace(/^[`"]+/, '').replace(/"$/, '').trim()
+    if (!cleaned || cleaned.startsWith('Job.') || cleaned.startsWith('(')) continue
+    const colonIdx = cleaned.indexOf(':')
+    if (colonIdx > 0 && colonIdx < 60) {
+      const label = cleaned.slice(0, colonIdx).trim()
+      const value = cleaned.slice(colonIdx + 1).trim()
+      if (label && value && label.length < 60 && !seen.has(label)) {
+        seen.add(label)
+        result.push({ label, value })
+      }
+    }
+  }
+  return result
+}
+
+/* raw_text 에서 특정 키 값 추출 */
+function extractFromRaw(raw: string | null, key: string): string | null {
+  if (!raw) return null
+  const pattern = new RegExp(`${key}[^:]*:\\s*(.+)`, 'i')
+  const m = raw.match(pattern)
+  return m ? m[1].replace(/^[`"]+|"$/g, '').trim() || null : null
 }
 
 function maskPII(val: string | null | undefined, show: boolean): string {
@@ -260,13 +289,44 @@ function JobDocumentView({ job, showPII, onAction }: {
           </tbody></table>
         </section>
 
-        {/* Internal Notes (PII only) */}
-        {showPII && (job.internal_notes || job.recruiter_memo) && (
-          <section>
-            <h3 className="text-[12px] font-bold text-gray-600 uppercase tracking-wider pb-1 mb-2 border-b border-gray-200">Internal Notes</h3>
-            <p className="text-[13px] text-gray-500 italic whitespace-pre-wrap">{job.internal_notes || job.recruiter_memo}</p>
-          </section>
-        )}
+        {/* 원문 — Word 원본 형식 전체 표시 */}
+        <section>
+          <h3 className="text-[12px] font-bold text-gray-500 uppercase tracking-wider pb-1 mb-2 border-b-2 border-gray-200">
+            원문 / Word Source
+          </h3>
+          <div className="bg-[#f9f9fb] border border-gray-200 rounded-xl p-4 space-y-2">
+            {/* 업체 내부 노트 (한국어) */}
+            {(job.internal_notes || job.recruiter_memo) && (
+              <p className={`text-[12px] rounded-lg px-3 py-2 leading-relaxed whitespace-pre-wrap ${
+                showPII
+                  ? 'bg-amber-50 border border-amber-200 text-amber-900'
+                  : 'bg-gray-100 text-gray-400 italic'
+              }`}>
+                {showPII
+                  ? (job.internal_notes || job.recruiter_memo)
+                  : '(업체 내부 노트 — PII 체크 시 표시)'}
+              </p>
+            )}
+            {/* 도시 + Job 코드 */}
+            <div className="flex items-center gap-2">
+              {job.city && <span className="text-[13px] font-semibold text-gray-700">{job.city}</span>}
+              <code className="text-[12px] font-bold text-[#0071E3] bg-blue-50 px-2 py-0.5 rounded">{job.job_code}</code>
+            </div>
+            {/* 원문 필드들 */}
+            {job.raw_text ? (
+              <table className="w-full"><tbody>
+                {parseRawFields(job.raw_text).map((f, i) => (
+                  <tr key={i} className="border-b border-gray-100 last:border-0">
+                    <td className="py-1.5 px-2 text-[11px] font-semibold text-gray-500 w-[180px] align-top whitespace-nowrap">{f.label}</td>
+                    <td className="py-1.5 px-2 text-[13px] text-[#1d1d1f]">{f.value}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            ) : (
+              <p className="text-[12px] text-gray-400 italic">원문 없음</p>
+            )}
+          </div>
+        </section>
 
         {/* Meta Footer */}
         <div className="flex items-center justify-between text-[11px] text-gray-400 pt-3 border-t border-gray-100">
@@ -533,12 +593,16 @@ export default function AdminJobsPage() {
 
   const flash = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(null), 3000) }
 
-  /* ── Fetch ── */
+  /* ── Fetch (서버사이드 페이지네이션) ── */
   const fetchJobs = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ limit: '2000', offset: '0' })
+      const offset = (page - 1) * PER_PAGE
+      const params = new URLSearchParams({
+        limit: String(PER_PAGE),
+        offset: String(offset),
+      })
       if (statusFilter) params.set('status', statusFilter)
       if (regionFilter) params.set('region', regionFilter)
       if (search.trim()) params.set('search', search.trim())
@@ -556,17 +620,14 @@ export default function AdminJobsPage() {
     } finally {
       setLoading(false)
     }
-  }, [signedFetch, statusFilter, regionFilter, search])
+  }, [signedFetch, statusFilter, regionFilter, search, page])
 
   useEffect(() => { if (authed) fetchJobs() }, [authed, fetchJobs])
   useEffect(() => { setPage(1) }, [search, statusFilter, regionFilter])
 
-  /* ── Pagination ── */
-  const totalPages = Math.max(1, Math.ceil(jobs.length / PER_PAGE))
-  const pageJobs = useMemo(() => {
-    const start = (page - 1) * PER_PAGE
-    return jobs.slice(start, start + PER_PAGE)
-  }, [jobs, page])
+  /* ── Pagination (서버 total 기준) ── */
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  const pageJobs = jobs
 
   /* ── Actions ── */
   const toggleStatus = useCallback(async (job: AdminJob) => {
@@ -631,9 +692,6 @@ export default function AdminJobsPage() {
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  const openCount = jobs.filter(j => (j.status || 'open') === 'open').length
-  const closedCount = jobs.filter(j => (j.status || 'open') === 'closed').length
-
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-8">
       {/* Header */}
@@ -641,7 +699,7 @@ export default function AdminJobsPage() {
         <div>
           <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">Jobs Management</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">
-            Total {total || jobs.length} &middot; Open {openCount} &middot; Closed {closedCount}
+            Total {total} &middot; Page {page}/{totalPages}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -721,11 +779,16 @@ export default function AdminJobsPage() {
                     </div>
 
                     {/* Teaching */}
-                    <span className="text-[12px] text-gray-500 min-w-[80px] truncate">{v(job.teaching_age)}</span>
+                    <span className="text-[12px] text-gray-500 min-w-[80px] truncate">
+                      {v(job.teaching_age) !== '—' ? v(job.teaching_age)
+                        : extractFromRaw(job.raw_text, 'Teaching Age') || '—'}
+                    </span>
 
                     {/* Salary */}
                     <span className="text-[13px] text-gray-700 min-w-[90px]">
-                      {job.salary_krw ? fmtSalary(job.salary_krw) : v(job.salary_raw)}
+                      {job.salary_krw ? fmtSalary(job.salary_krw)
+                        : v(job.salary_raw) !== '—' ? v(job.salary_raw)
+                        : extractFromRaw(job.raw_text, 'Monthly Salary') || '—'}
                     </span>
 
                     {/* Confidence */}
