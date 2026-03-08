@@ -1637,7 +1637,7 @@ async def admin_candidate_profile(candidate_id: str, request: Request):
 @app.get("/api/admin/inquiries", tags=["admin"])
 async def admin_list_inquiries(
     request: Request,
-    limit: int = 1000,
+    limit: int = 50,
     offset: int = 0,
     q: str = "",
     source: str = "",

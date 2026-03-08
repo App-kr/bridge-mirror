@@ -37,7 +37,7 @@ interface Inquiry {
   last_activity:  string | null
 }
 
-const STATUS_OPTIONS = ['pending', 'processing', 'completed']
+const STATUS_OPTIONS = ['new', 'pending', 'processing', 'completed']
 const SOURCE_OPTIONS = [
   { value: '', label: '전체' },
   { value: 'BRIDGE_clients_data.csv', label: 'CSV (구형식)' },
@@ -334,6 +334,7 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, registerin
   sourceLabel: (src: string | null) => string
 }) {
   const statusColor: Record<string, string> = {
+    new: 'bg-gray-100 text-gray-600',
     pending: 'bg-yellow-100 text-yellow-700',
     processing: 'bg-blue-100 text-blue-700',
     completed: 'bg-green-100 text-green-700',
