@@ -710,8 +710,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # 7. 응답 본문 PII 마스킹 (JSON 응답만)
+        # /api/community/ 는 관리자 작성 콘텐츠 — 본문 마스킹 제외
         content_type = response.headers.get("content-type", "")
-        if "application/json" in content_type and ENV == "production":
+        _community_path = path.startswith("/api/community/") or path == "/api/community"
+        if "application/json" in content_type and ENV == "production" and not _community_path:
             try:
                 body_bytes = b""
                 async for chunk in response.body_iterator:

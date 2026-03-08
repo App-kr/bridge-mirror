@@ -228,17 +228,26 @@ def _scrub_value(v: str) -> str:
     return v
 
 
-def _scrub_obj(obj: Any) -> Any:
+# 관리자 작성 콘텐츠 필드 — 값 수준 PII 정규식 스캔 제외
+# (FAQ 본문, 게시글 본문 등 의도적으로 포함된 비즈니스 이메일/연락처 보호)
+_CONTENT_FIELDS: frozenset[str] = frozenset({
+    "body", "preview", "review_text", "html_content", "description",
+})
+
+
+def _scrub_obj(obj: Any, _key: str = "") -> Any:
     """Recursively walk a JSON-deserialized object and mask PII."""
     if isinstance(obj, dict):
         return {
-            k: _scrub_obj(v)
+            k: _scrub_obj(v, _key=k)
             for k, v in obj.items()
             if k not in _PII_BLOCKED_KEYS   # drop blocked keys entirely
         }
     if isinstance(obj, list):
-        return [_scrub_obj(item) for item in obj]
+        return [_scrub_obj(item, _key=_key) for item in obj]
     if isinstance(obj, str):
+        if _key in _CONTENT_FIELDS:
+            return obj  # 콘텐츠 필드는 값 수준 스캔 제외 — 비즈니스 연락처 마스킹 방지
         return _scrub_value(obj)
     return obj
 
