@@ -742,7 +742,7 @@ export default function AdminJobsPage() {
         </label>
 
         <span className="text-[12px] text-gray-400 ml-auto">
-          {jobs.length} results &middot; Page {page}/{totalPages}
+          총 {total}건 &middot; {page}/{totalPages}페이지
         </span>
       </div>
 
