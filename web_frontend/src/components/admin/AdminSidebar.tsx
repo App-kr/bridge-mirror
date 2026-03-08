@@ -19,6 +19,7 @@ import {
   CreditCard,
   Brain,
   Table2,
+  HelpCircle,
 } from 'lucide-react'
 
 interface NavItem {
@@ -63,6 +64,7 @@ const NAV_CATEGORIES: NavCategory[] = [
     title: '게시판 관리',
     items: [
       { href: '/admin/posts', label: '전체 게시물', icon: <FileText size={ICON_SIZE} /> },
+      { href: '/admin/faq', label: 'FAQ 관리', icon: <HelpCircle size={ICON_SIZE} /> },
       { href: '/admin/guide-links', label: '링크 관리', icon: <Link2 size={ICON_SIZE} /> },
     ],
   },
