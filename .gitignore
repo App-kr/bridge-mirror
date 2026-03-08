@@ -17,6 +17,7 @@ CREDENTIALS_REFERENCE.md
 !master.db
 *.db-shm
 *.db-wal
+master.db.backup_*
 *.sqlite
 *.sqlite3
 
