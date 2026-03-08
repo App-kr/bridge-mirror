@@ -319,7 +319,8 @@ conn.close()
 - 관리자 패널 내부: PII 원본 표시 허용
 
 ### OWASP
-- 모든 DB 쿼리: Parameterized (f-string SQL 절대 금지)
+- 모든 DB 쿼리: Parameterized — 사용자 입력값 직접 삽입 절대 금지
+- f-string은 컬럼명·WHERE절 구조 조합에만 허용, 값은 반드시 `?` 바인딩
 - API: Rate Limit + HMAC
 - 외부 입력: 프롬프트 인젝션 방어
 
