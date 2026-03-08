@@ -151,7 +151,7 @@ conn.close()
 1. e_visa, arc_holders 필드에서 패턴 추출
 2. 비자코드(E-2, F-4 등) 정규화
 3. Yes/No → ARC-Yes/No 변환
-4. 날짜 있으면 ARC-Yes로 추정
+4. 날짜 단독으로 visa_type 추정 금지 (생일/시작일/여권만료일 모두 날짜 → 근거 없는 추정은 위조)
 
 성공 기준: SELECT COUNT(*) WHERE visa_type IS NOT NULL / 3058 >= 0.35
 완료 신호: <promise>VISA_BOOST_DONE</promise>
