@@ -452,5 +452,25 @@ DB 경로 — 절대 이동 금지:
 
 ---
 
+## 10. Render 배포 비용 관리 (영구 규칙)
+
+### 빌드분 예산
+- 월 500분 = 약 16커밋/일 (평균 빌드 30분 기준 → 실제 약 5~10분)
+- 70% 경고 이메일 수신 시 → 즉시 Auto-Deploy OFF, 배치 커밋 전환
+- 구조 변경(폴더/파일 이동) 커밋은 단독 배포 후 로그 즉시 확인 필수
+
+### 배포 전 체크리스트 (모든 커밋 전)
+1. `api_server.py` 루트 위치 유지 여부
+2. `requirements.txt` 루트 존재 여부
+3. 신규 DB 테이블 → `api_server.py` `init_db()` 에 `CREATE TABLE IF NOT EXISTS` 추가
+4. 폴더 구조 변경 시 → `render.yaml` 또는 Render 대시보드 Start Command 동시 업데이트
+
+### Render Free 제약 (항시 인지)
+- 15분 무트래픽 시 sleep → `/health` keepalive cron 필수 유지
+- SQLite ephemeral → 재배포 시 DB 초기화 (`master.db`는 로컬 전용)
+- 빌드 실패해도 기존 서비스는 유지됨 (패닉 불필요)
+
+---
+
 *Bridge CLAUDE.md v4.0 ULTIMATE — 2026-03-08*
 *통합: Boris Cherny + Andrej Karpathy + Ralph Wiggum + Bridge 도메인*

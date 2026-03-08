@@ -75,6 +75,14 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **포커스 스틸 금지**: 게임 중 바탕화면 튕김 방지. GUI 앱(브라우저/탐색기/메모장) 실행 금지, `start` 명령 금지, 모든 작업은 현재 bash 셸 내에서만. 서버는 `run_in_background`로만 시작.
 - **백그라운드 실행 규칙**: 자동실행/타이머/스케줄러 → `-WindowStyle Hidden` 필수. 타스크 스케줄러 → `wscript + silent_run.vbs` 래퍼. Python 백그라운드 → `pythonw.exe` 또는 `Start-Process -WindowStyle Hidden`. 로그 → `logs/` 디렉토리 파일 출력 (콘솔 금지).
 
+## Render 배포 비용 (영구 규칙 — 2026-03-08 확정)
+- 월 500분 한도 / 70% 경고 → 즉시 Auto-Deploy OFF
+- 커밋 전 필수: api_server.py 루트 위치 + requirements.txt 존재 확인
+- 신규 테이블 → init_db()에 CREATE TABLE IF NOT EXISTS 추가
+- 구조 변경 커밋 → render.yaml / Start Command 동시 업데이트
+- Free tier: 15분 무트래픽 sleep, SQLite ephemeral(master.db 로컬 전용)
+→ 상세: CLAUDE.md 섹션 10
+
 ## Team Names (영국식 영문 이름)
 - **Scarlett** — 대표 (User)
 - **Violet** — 운영부장
