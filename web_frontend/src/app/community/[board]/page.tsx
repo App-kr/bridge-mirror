@@ -559,6 +559,14 @@ export default function BoardPage() {
     setOrderSaving(false)
   }, [postDrag.items, board, signedFetch, refreshPosts])
 
+  // EditModeBar "순서 저장" 버튼 → bridge:saveOrder 이벤트 수신
+  useEffect(() => {
+    if (!editMode) return
+    const handler = (e: Event) => { e.preventDefault(); handleSaveOrder() }
+    document.addEventListener('bridge:saveOrder', handler)
+    return () => document.removeEventListener('bridge:saveOrder', handler)
+  }, [editMode, handleSaveOrder])
+
   // Sync posts from API into drag hook
   useEffect(() => {
     postDrag.setItems(posts)
@@ -899,8 +907,6 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                         editMode={editMode}
                         onEdit={onFaqEdit ? () => onFaqEdit(i) : undefined}
                         onDelete={onFaqDelete ? () => onFaqDelete(i) : undefined}
-                        isFirst={i === 0}
-                        isLast={i === faqConfig.items.length - 1}
                       />
                     ))}
                   </SortableContext>
@@ -998,13 +1004,11 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
 }
 
 // ── FAQ Accordion Item ──
-function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast, dragHandleRef, dragHandleProps }: {
+function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast }: {
   item: FaqItem; index: number; accent: string; editMode?: boolean
   onEdit?: () => void; onDelete?: () => void
   onMoveUp?: () => void; onMoveDown?: () => void
   isFirst?: boolean; isLast?: boolean
-  dragHandleRef?: (el: HTMLElement | null) => void
-  dragHandleProps?: Record<string, unknown>
 }) {
   const [open, setOpen] = useState(false)
 
@@ -1017,29 +1021,39 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
         borderLeft: `3px solid ${accent}`,
       }}
       variants={fadeInUp}
-      whileHover={{ y: -2 }}
+      whileHover={editMode ? undefined : { y: -2 }}
       transition={{ duration: 0.2 }}
     >
-      <button
-        type="button"
-        className="w-full flex items-center gap-3 px-5 py-4 text-left group"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <div className="flex items-center gap-2 px-5 py-4">
+        {/* 번호 뱃지 — 편집모드에서는 드래그 힌트 표시 */}
         <span
-          ref={dragHandleRef as ((el: HTMLSpanElement | null) => void) | undefined}
-          {...(dragHandleProps || {})}
-          className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${editMode && dragHandleRef ? 'cursor-grab active:cursor-grabbing touch-none' : ''}`}
+          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white select-none"
           style={{ background: accent }}
-          title={editMode && dragHandleRef ? '드래그하여 순서 변경' : undefined}
+          title={editMode ? '드래그하여 순서 변경' : undefined}
         >
-          {index + 1}
+          {editMode ? <GripVertical size={13} /> : index + 1}
         </span>
-        <span className="text-[15px] font-medium text-white/90 flex-1 group-hover:text-white transition-colors">
-          {item.q}
-        </span>
+
+        {/* 아코디언 토글 버튼 — 제목 + 펼침 표시 */}
+        <button
+          type="button"
+          className="flex-1 flex items-center gap-3 text-left group"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="text-[15px] font-medium text-white/90 flex-1 group-hover:text-white transition-colors">
+            {item.q}
+          </span>
+          <span
+            className="text-lg shrink-0 transition-transform duration-300"
+            style={{ color: accent, transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}
+          >
+            +
+          </span>
+        </button>
+
+        {/* 편집 컨트롤 */}
         {editMode && (
-          <span className="inline-flex items-center gap-0.5 mr-2"
-            onClick={(e) => { e.stopPropagation() }}>
+          <span className="inline-flex items-center gap-0.5">
             {onMoveUp && !isFirst && (
               <button type="button" onClick={onMoveUp}
                 className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors" title="Move Up">
@@ -1066,13 +1080,7 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
             )}
           </span>
         )}
-        <span
-          className="text-lg shrink-0 transition-transform duration-300"
-          style={{ color: accent, transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}
-        >
-          +
-        </span>
-      </button>
+      </div>
       {open && (
         <motion.div
           className="px-5 pb-4 pl-[52px]"
@@ -1087,28 +1095,115 @@ function FaqAccordionItem({ item, index, accent, editMode, onEdit, onDelete, onM
   )
 }
 
-/* ── FAQ 드래그앤드롭 래퍼 ── */
-function SortableFaqAccordionItem({ id, item, index, accent, editMode, onEdit, onDelete, isFirst, isLast }: {
+/* ── FAQ 드래그앤드롭 아이템 (완전 독립 구현 — framer-motion 미사용) ── */
+function SortableFaqAccordionItem({ id, item, index, accent, editMode, onEdit, onDelete }: {
   id: string; item: FaqItem; index: number; accent: string; editMode?: boolean
-  onEdit?: () => void; onDelete?: () => void; isFirst?: boolean; isLast?: boolean
+  onEdit?: () => void; onDelete?: () => void
 }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
     transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 10 : undefined,
-    position: 'relative',
-  }
+    isDragging,
+  } = useSortable({ id })
+
+  const [open, setOpen] = useState(false)
+
   return (
-    <div ref={setNodeRef} style={style}>
-      <FaqAccordionItem
-        item={item} index={index} accent={accent} editMode={editMode}
-        onEdit={onEdit} onDelete={onDelete}
-        isFirst={isFirst} isLast={isLast}
-        dragHandleRef={setActivatorNodeRef as (el: HTMLElement | null) => void}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        zIndex: isDragging ? 999 : undefined,
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          background: isDragging ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${isDragging ? accent : 'rgba(255,255,255,0.08)'}`,
+          borderLeft: `3px solid ${accent}`,
+          borderRadius: '12px',
+          overflow: 'hidden',
+          boxShadow: isDragging ? `0 8px 32px rgba(0,0,0,0.4)` : undefined,
+        }}
+      >
+        <div className="flex items-center gap-2 px-4 py-3">
+          {/* 전용 드래그 핸들 — listeners는 오직 이 요소에만 */}
+          <div
+            ref={setActivatorNodeRef}
+            {...listeners}
+            style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'grab' }}
+            className="shrink-0 p-1.5 rounded text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors"
+            title="드래그하여 순서 변경"
+          >
+            <GripVertical size={16} />
+          </div>
+
+          {/* 숫자 뱃지 */}
+          <span
+            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            style={{ background: accent }}
+          >
+            {index + 1}
+          </span>
+
+          {/* 아코디언 토글 — 클릭만, 드래그와 완전 분리 */}
+          <button
+            type="button"
+            className="flex-1 flex items-center gap-2 text-left"
+            onClick={() => setOpen(v => !v)}
+          >
+            <span className="flex-1 text-[14px] font-medium text-white/90 hover:text-white transition-colors">
+              {item.q}
+            </span>
+            <span
+              className="text-lg shrink-0 transition-transform duration-300"
+              style={{ color: accent, transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}
+            >
+              +
+            </span>
+          </button>
+
+          {/* 편집 컨트롤 */}
+          {editMode && (
+            <div className="flex items-center gap-0.5 ml-1">
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onEdit() }}
+                  className="p-1.5 rounded text-zinc-400 hover:text-blue-400 hover:bg-zinc-700/50 transition-colors"
+                  title="Edit FAQ"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onDelete() }}
+                  className="p-1.5 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-700/50 transition-colors"
+                  title="Delete FAQ"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {open && (
+          <div className="px-5 pb-4 pl-[72px]">
+            <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line">{item.a}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
