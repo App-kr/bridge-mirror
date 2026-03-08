@@ -1,0 +1,141 @@
+PRE checksum: 1c32a42243e01eff...  백업: master.db.backup_20260308_223229
+
+=== CANDIDATES_MASTER_COMBINED.xlsx → candidates ===
+Excel 매핑: email=2341개, name=2671개
+DB에 없는 컬럼 (skip): ['notice', 'applied']
+
+BEFORE 채움률:
+  preferences                   :     0건  (0.0%)
+  interview_time                :    41건  (1.3%)
+  major                         :    44건  (1.4%)
+  religion                      :    39건  (1.3%)
+  consent                       :    39건  (1.3%)
+  placed_company                :     0건  (0.0%)
+  placed_salary                 :     0건  (0.0%)
+  start_month                   :     0건  (0.0%)
+  housing_detail                :     0건  (0.0%)
+  referral_fee                  :     0건  (0.0%)
+  visa_type                     :   980건  (32.0%)
+  education_level               :    43건  (1.4%)
+  health_info                   :    42건  (1.4%)
+  tattoo                        :     0건  (0.0%)
+  piercings                     :    28건  (0.9%)
+  married                       :    33건  (1.1%)
+  korean_criminal_record        :    35건  (1.1%)
+  documents                     :  1042건  (34.1%)
+  notes                         :     0건  (0.0%)
+
+AFTER 채움률:
+  preferences                   :  1010건  (33.0%)  [+1010]
+  interview_time                :  1084건  (35.4%)  [+1043]
+  major                         :  2447건  (80.0%)  [+2403]
+  religion                      :  1052건  (34.4%)  [+1013]
+  consent                       :   974건  (31.8%)  [+935]
+  placed_company                :   228건  (7.5%)  [+228]
+  placed_salary                 :   129건  (4.2%)  [+129]
+  start_month                   :   139건  (4.5%)  [+139]
+  housing_detail                :   131건  (4.3%)  [+131]
+  referral_fee                  :   119건  (3.9%)  [+119]
+  visa_type                     :  1201건  (39.3%)  [+221]
+  education_level               :  1135건  (37.1%)  [+1092]
+  health_info                   :  1100건  (36.0%)  [+1058]
+  tattoo                        :  1210건  (39.6%)  [+1210]
+  piercings                     :   874건  (28.6%)  [+846]
+  married                       :   919건  (30.0%)  [+886]
+  korean_criminal_record        :   266건  (8.7%)  [+231]
+  documents                     :  1085건  (35.5%)  [+43]
+  notes                         :   119건  (3.9%)  [+119]
+
+업데이트 통계 (field별):
+  preferences: 1010건
+  interview_time: 1043건
+  major: 2403건
+  religion: 1013건
+  consent: 935건
+  placed_company: 228건
+  placed_salary: 129건
+  start_month: 139건
+  housing_detail: 131건
+  referral_fee: 119건
+  visa_type: 221건
+  education_level: 1092건
+  health_info: 1058건
+  tattoo: 1210건
+  piercings: 846건
+  married: 886건
+  korean_criminal_record: 231건
+  documents: 43건
+  notes: 119건
+  email_match: 2440
+  name_match:  297
+  no_match:    322
+
+=== JOBS_MASTER_COMBINED.xlsx → client_inquiries ===
+신규 INSERT: 272건 / 업데이트: 610건 / 스킵: 0건
+
+=== unified_bridge_data.xlsx Candidates_Master (21행) ===
+unified 업데이트: 1건 / 스킵: 5건
+
+=== POST 검증 ===
+integrity: ok
+candidates: 3059
+client_inquiries: 1227
+jobs: 1072
+
+전체 채움률 최종 (candidates):
+  email                         :  2726건  (89.1%)
+  full_name                     :  3057건  (99.9%)
+  nationality                   :  3059건  (100.0%)
+  arc_holders                   :  1078건  (35.2%)
+  ancestry                      :  1162건  (38.0%)
+  dob                           :  2657건  (86.9%)
+  gender                        :  1001건  (32.7%)
+  current_location              :  2885건  (94.3%)
+  start_date                    :  2723건  (89.0%)
+  target                        :  2277건  (74.4%)
+  area_prefs                    :  2713건  (88.7%)
+  reference                     :  2052건  (67.1%)
+  experience                    :  1664건  (54.4%)
+  preferences                   :  1010건  (33.0%)
+  applied                       : 컬럼없음
+  job_prefs                     :  1851건  (60.5%)
+  current_salary                :  1415건  (46.3%)
+  desired_salary                :  1652건  (54.0%)
+  interview_time                :  1085건  (35.5%)
+  education_level               :  1135건  (37.1%)
+  major                         :  2447건  (80.0%)
+  certification                 :  1987건  (65.0%)
+  documents                     :  1085건  (35.5%)
+  doc_status                    :     0건  (0.0%)
+  health_info                   :  1100건  (36.0%)
+  tattoo                        :  1210건  (39.6%)
+  piercings                     :   874건  (28.6%)
+  dependents                    :    31건  (1.0%)
+  married                       :   919건  (30.0%)
+  housing                       :  1270건  (41.5%)
+  housing_type                  :     0건  (0.0%)
+  religion                      :  1052건  (34.4%)
+  e_visa                        :  1490건  (48.7%)
+  visa_type                     :  1201건  (39.3%)
+  kakaotalk                     :  1394건  (45.6%)
+  mobile_phone                  :  2229건  (72.9%)
+  criminal_record               :   949건  (31.0%)
+  criminal_record_check         :     0건  (0.0%)
+  korean_criminal_record        :   266건  (8.7%)
+  consent                       :   974건  (31.8%)
+  fact_check                    :    41건  (1.3%)
+  how_to                        :  1024건  (33.5%)
+  source                        :  3059건  (100.0%)
+  placed_company                :   228건  (7.5%)
+  placed_salary                 :   129건  (4.2%)
+  start_month                   :   139건  (4.5%)
+  housing_detail                :   131건  (4.3%)
+  referral_fee                  :   119건  (3.9%)
+  process_date                  :    91건  (3.0%)
+  past_placement                :     3건  (0.1%)
+  photo_url                     :     0건  (0.0%)
+  status                        :  3059건  (100.0%)
+  notes                         :   119건  (3.9%)
+
+POST checksum: 889e38bd3ee6ea77...
+=== 완료 ===
