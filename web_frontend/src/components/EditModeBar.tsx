@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Pencil } from 'lucide-react'
+import { Wrench, Pencil, ArrowUpDown, LogOut } from 'lucide-react'
 
 export function useEditMode(): boolean {
   const [editMode, setEditMode] = useState(false)
@@ -18,17 +18,19 @@ export default function EditModeBar() {
   const editMode = useEditMode()
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [mounted, setMounted] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
   const dragging = useRef(false)
   const offset = useRef({ x: 0, y: 0 })
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setPos({ x: window.innerWidth - 180, y: Math.floor(window.innerHeight / 2) })
+    // 우측 중앙, 팝업 너비(320px) 감안해 배치
+    setPos({ x: window.innerWidth - 340, y: Math.floor(window.innerHeight / 2) - 20 })
     setMounted(true)
   }, [])
 
   const onMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).tagName === 'BUTTON') return
+    if ((e.target as HTMLElement).closest('button')) return
     dragging.current = true
     offset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
     e.preventDefault()
@@ -55,6 +57,31 @@ export default function EditModeBar() {
     window.location.reload()
   }
 
+  const saveOrder = () => {
+    // 현재 페이지의 순서 저장 이벤트 발행 — 각 페이지에서 bridge:saveOrder 이벤트 수신 후 처리
+    const handled = document.dispatchEvent(new CustomEvent('bridge:saveOrder', { cancelable: true }))
+    if (!handled) {
+      setSaveMsg('저장 완료')
+    } else {
+      setSaveMsg('저장 중...')
+    }
+    setTimeout(() => setSaveMsg(null), 2000)
+  }
+
+  const btnBase: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    border: '1.5px solid rgba(220,38,38,0.5)',
+    borderRadius: '7px',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    transition: 'background 0.15s',
+  }
+
   return (
     <div
       ref={ref}
@@ -64,38 +91,70 @@ export default function EditModeBar() {
         left: pos.x,
         top: pos.y,
         zIndex: 9999,
-        background: 'rgba(239, 68, 68, 0.08)',
-        border: '1.5px solid rgba(239, 68, 68, 0.5)',
+        background: 'rgba(220, 38, 38, 0.11)',
+        border: '2px solid #dc2626',
         borderRadius: '12px',
-        padding: '8px 12px',
+        padding: '9px 14px',
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
         alignItems: 'center',
-        gap: '6px',
-        fontSize: '11px',
-        fontWeight: 600,
-        color: '#dc2626',
+        gap: '10px',
         cursor: 'grab',
         userSelect: 'none',
-        backdropFilter: 'blur(8px)',
-        boxShadow: '0 2px 12px rgba(239,68,68,0.15)',
-        minWidth: '80px',
+        backdropFilter: 'blur(12px)',
+        boxShadow: '0 0 0 1px rgba(239,68,68,0.25), 0 4px 24px rgba(220,38,38,0.28)',
+        minWidth: '300px',
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <Wrench size={11} /> ADMIN
-      </span>
-      <button onClick={exit} type="button" style={{
-        background: 'rgba(239,68,68,0.15)',
-        border: '1px solid rgba(239,68,68,0.4)',
-        borderRadius: '6px',
-        padding: '3px 10px',
-        cursor: 'pointer',
-        fontSize: '11px',
-        fontWeight: 600,
+      {/* 라벨 */}
+      <span style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        fontSize: '13px',
+        fontWeight: 800,
         color: '#dc2626',
-        width: '100%',
+        letterSpacing: '0.02em',
+        whiteSpace: 'nowrap',
       }}>
+        <Wrench size={14} />
+        ADMIN 편집모드
+      </span>
+
+      {/* 구분선 */}
+      <div style={{ width: 1, height: 22, background: 'rgba(220,38,38,0.35)', flexShrink: 0 }} />
+
+      {/* 순서 저장 버튼 */}
+      <button
+        onClick={saveOrder}
+        type="button"
+        style={{
+          ...btnBase,
+          background: saveMsg ? 'rgba(220,38,38,0.22)' : 'rgba(220,38,38,0.10)',
+          color: '#dc2626',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.22)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = saveMsg ? 'rgba(220,38,38,0.22)' : 'rgba(220,38,38,0.10)' }}
+        title="현재 페이지 게시물 순서를 저장합니다"
+      >
+        <ArrowUpDown size={12} />
+        {saveMsg ?? '순서 저장'}
+      </button>
+
+      {/* Exit 버튼 */}
+      <button
+        onClick={exit}
+        type="button"
+        style={{
+          ...btnBase,
+          background: 'rgba(220,38,38,0.10)',
+          color: '#dc2626',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.22)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.10)' }}
+        title="편집모드 종료"
+      >
+        <LogOut size={12} />
         Exit
       </button>
     </div>

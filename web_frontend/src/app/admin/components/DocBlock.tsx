@@ -316,26 +316,16 @@ export default function DocBlock({
         {/* ══ 4. 본문 (실제 job 내용) ══ */}
         <div style={{ position: 'relative', zIndex: 1 }}>
           {editingRaw ? (
-            <div>
-              <textarea
-                value={rawVal}
-                onChange={e => setRawVal(e.target.value)}
-                autoFocus
-                style={{
-                  width: '100%', minHeight: 180, border: '1px solid #bbb', borderRadius: 5,
-                  padding: '10px 12px', fontSize: '0.88rem', fontFamily: "'Consolas',monospace",
-                  resize: 'vertical', outline: 'none', background: '#fafafa', lineHeight: 1.8,
-                }}
-              />
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <button type="button"
-                  onClick={() => { onEditNotes?.(employer.id, rawVal); setEditingRaw(false) }}
-                  style={btnBlue}>💾 저장</button>
-                <button type="button"
-                  onClick={() => { setRawVal(rawText); setEditingRaw(false) }}
-                  style={btnGhost}>취소</button>
-              </div>
-            </div>
+            <textarea
+              value={rawVal}
+              onChange={e => setRawVal(e.target.value)}
+              autoFocus
+              style={{
+                width: '100%', minHeight: 180, border: '1px solid #bbb', borderRadius: 5,
+                padding: '10px 12px', fontSize: '0.88rem', fontFamily: "'Consolas',monospace",
+                resize: 'vertical', outline: 'none', background: '#fafafa', lineHeight: 1.8,
+              }}
+            />
           ) : (
             <div style={{ fontFamily: "'Malgun Gothic',sans-serif", fontSize: '0.92rem', lineHeight: 1.9, color: '#111' }}>
               {lines.map((line, i) => {
@@ -350,10 +340,6 @@ export default function DocBlock({
                 )
                 return <div key={i} style={{ fontWeight: 500, color: '#222' }}>{t}</div>
               })}
-              <button type="button" onClick={() => setEditingRaw(true)}
-                style={{ ...btnBase, marginTop: 10, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c' }}>
-                  본문 수정
-                </button>
             </div>
           )}
         </div>

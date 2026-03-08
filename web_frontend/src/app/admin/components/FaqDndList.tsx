@@ -27,7 +27,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export interface FaqPost {
   id: number
@@ -284,8 +284,8 @@ export default function FaqDndList({
     setItems(prev => prev.map(p => p.id === id ? { ...p, title } : p))
   }
 
-  const handleSaveOrder = async () => {
-    if (!orderChanged) return
+  const handleSaveOrder = useCallback(async (force = false) => {
+    if (!force && !orderChanged) return
     setSaving(true)
     setMsg(null)
     try {
@@ -308,7 +308,17 @@ export default function FaqDndList({
     } finally {
       setSaving(false)
     }
-  }
+  }, [orderChanged, items, apiBase, board, authHeaders, onSaved])
+
+  // EditModeBar의 "순서 저장" 버튼 → bridge:saveOrder 이벤트 수신
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      handleSaveOrder(true)
+    }
+    document.addEventListener('bridge:saveOrder', handler)
+    return () => document.removeEventListener('bridge:saveOrder', handler)
+  }, [handleSaveOrder])
 
   return (
     <div className="space-y-3">
