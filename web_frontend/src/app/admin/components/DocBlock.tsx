@@ -169,61 +169,7 @@ export default function DocBlock({
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(220,38,38,0.06)', pointerEvents: 'none', border: '1px solid rgba(220,38,38,0.15)' }} />
         )}
 
-        {/* ── 헤더 행: Job번호 + 지역 + 업체명 + 이동버튼 ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, position: 'relative', zIndex: 2 }}>
-          {/* Job 번호 뱃지 */}
-          <span style={{
-            fontFamily: "'Consolas',monospace", fontSize: '1.0rem', fontWeight: 800,
-            background: isNewCode ? '#2563eb' : '#111', color: '#fff',
-            padding: '3px 13px', borderRadius: 5, flexShrink: 0,
-          }}>
-            {jobNo}
-          </span>
-
-          {/* 지역 + 업체명 */}
-          <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 600 }}>{province} {city}</span>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111', flex: 1 }}>{displayName}</span>
-
-          {isBlacklist && (
-            <span style={{ fontSize: '0.72rem', background: '#dc2626', color: '#fff', padding: '2px 9px', borderRadius: 999, fontWeight: 800, flexShrink: 0 }}>BLACKLIST</span>
-          )}
-
-          {/* ── 이동 버튼 (맨위로 / 위로 / 아래로) ── */}
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            {!isFirst && (
-              <button type="button" onClick={onMoveTop} style={btnBase} title="맨 위로">
-                ⤒ 맨위로
-              </button>
-            )}
-            {!isFirst && (
-              <button type="button" onClick={onMoveUp} style={btnBase} title="위로">
-                ↑ 위로
-              </button>
-            )}
-            {!isLast && (
-              <button type="button" onClick={onMoveDown} style={btnBase} title="아래로">
-                ↓ 아래로
-              </button>
-            )}
-          </div>
-
-          {/* NEW 확인 버튼 */}
-          {isGlow && (
-            <button
-              type="button"
-              onClick={() => onConfirm(employer.id)}
-              style={{
-                background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8,
-                padding: '6px 16px', fontSize: '0.83rem', fontWeight: 700, cursor: 'pointer',
-                animation: 'blink 0.8s step-end infinite', flexShrink: 0,
-              }}
-            >
-              ★ NEW — 확인
-            </button>
-          )}
-        </div>
-
-        {/* ── MEMO 박스 (항상 표시 — 옅은 노랑) ── */}
+        {/* ── MEMO 박스 (최상단 — 옅은 노랑) ── */}
         <div style={{ position: 'relative', zIndex: 1, marginBottom: 14 }}>
           {editingMemo ? (
             <div style={{ background: '#fffde7', border: '1px solid #e8d87a', borderRadius: 6, padding: '10px 14px' }}>
@@ -277,6 +223,64 @@ export default function DocBlock({
                 </button>
               </div>
             </div>
+          )}
+        </div>
+
+        {/* ── 구분선 ── */}
+        <div style={{ borderTop: '1px dashed #e0cc6a', marginBottom: 14, position: 'relative', zIndex: 1 }} />
+
+        {/* ── 헤더 행: Job번호(초록) + 도시 + 업체명 + 이동버튼 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, position: 'relative', zIndex: 2 }}>
+          {/* Job 번호 + 도시 — 옅은 초록 뱃지 */}
+          <span style={{
+            fontFamily: "'Consolas',monospace", fontSize: '1.0rem', fontWeight: 800,
+            background: isNewCode ? '#2563eb' : '#f0fdf4',
+            color: isNewCode ? '#fff' : '#166534',
+            border: isNewCode ? 'none' : '1px solid #bbf7d0',
+            padding: '3px 13px', borderRadius: 5, flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}>
+            {jobNo}
+            {(province || city) && (
+              <span style={{ fontWeight: 500, fontSize: '0.85rem', opacity: 0.75 }}>
+                · {[province, city].filter(Boolean).join(' ')}
+              </span>
+            )}
+          </span>
+
+          {/* 업체명 */}
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111', flex: 1 }}>{displayName}</span>
+
+          {isBlacklist && (
+            <span style={{ fontSize: '0.72rem', background: '#dc2626', color: '#fff', padding: '2px 9px', borderRadius: 999, fontWeight: 800, flexShrink: 0 }}>BLACKLIST</span>
+          )}
+
+          {/* ── 이동 버튼 ── */}
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            {!isFirst && (
+              <button type="button" onClick={onMoveTop} style={btnBase} title="맨 위로">⤒ 맨위로</button>
+            )}
+            {!isFirst && (
+              <button type="button" onClick={onMoveUp} style={btnBase} title="위로">↑ 위로</button>
+            )}
+            {!isLast && (
+              <button type="button" onClick={onMoveDown} style={btnBase} title="아래로">↓ 아래로</button>
+            )}
+          </div>
+
+          {/* NEW 확인 버튼 */}
+          {isGlow && (
+            <button
+              type="button"
+              onClick={() => onConfirm(employer.id)}
+              style={{
+                background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8,
+                padding: '6px 16px', fontSize: '0.83rem', fontWeight: 700, cursor: 'pointer',
+                animation: 'blink 0.8s step-end infinite', flexShrink: 0,
+              }}
+            >
+              ★ NEW — 확인
+            </button>
           )}
         </div>
 
