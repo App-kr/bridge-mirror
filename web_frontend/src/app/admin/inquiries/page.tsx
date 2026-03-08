@@ -370,9 +370,12 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicat
 
   return (
     <>
-      <tr className="hover:bg-gray-50 cursor-pointer" onClick={onToggle}>
+      <tr className={`hover:bg-gray-50 cursor-pointer ${inq.is_duplicate_suspect ? 'bg-orange-50' : ''}`} onClick={onToggle}>
         <td className="px-3 py-2 text-gray-400 text-xs">{inq.id}</td>
-        <td className="px-3 py-2 font-medium text-gray-900 max-w-[160px] truncate">{inq.school_name ?? '—'}</td>
+        <td className="px-3 py-2 font-medium text-gray-900 max-w-[160px] truncate">
+          {inq.is_duplicate_suspect ? <span className="text-orange-500 mr-1">⚠</span> : null}
+          {inq.school_name ?? '—'}
+        </td>
         <td className="px-3 py-2 text-xs">{inq.contact_name ?? '—'}</td>
         <td className="px-3 py-2 text-xs text-gray-500 max-w-[160px] truncate">{inq.email ?? '—'}</td>
         <td className="px-3 py-2 text-xs">{inq.phone ?? '—'}</td>
@@ -419,6 +422,24 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicat
                 </p>
               </div>
             )}
+            {/* 중복 의심 마킹 */}
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDuplicateFlag(inq.id) }}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                  inq.is_duplicate_suspect
+                    ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                    : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {inq.is_duplicate_suspect ? '⚠ 중복 의심 마킹됨' : '중복 의심 마킹'}
+              </button>
+              {inq.is_duplicate_suspect ? (
+                <span className="text-[10px] text-orange-500">클릭하면 마킹 해제</span>
+              ) : null}
+            </div>
+
             {/* 직업 등록 버튼 */}
             <div className="mb-3">
               {(inq.notes ?? '').includes('JOB_REGISTERED') ? (
