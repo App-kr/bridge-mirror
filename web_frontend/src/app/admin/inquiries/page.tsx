@@ -29,6 +29,10 @@ interface Inquiry {
   housing_detail:        string | null
   benefits:              string | null
   working_hours:         string | null
+  schedule:              string | null
+  vacation:              string | null
+  sick_leave:            string | null
+  meal:                  string | null
   memo:                  string | null
   source_file:           string | null
   inbox_status:          string | null
@@ -371,7 +375,12 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicat
   return (
     <>
       <tr className={`hover:bg-gray-50 cursor-pointer ${inq.is_duplicate_suspect ? 'bg-orange-50' : ''}`} onClick={onToggle}>
-        <td className="px-3 py-2 text-gray-400 text-xs">{inq.id}</td>
+        <td className="px-3 py-2 text-xs">
+          <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded font-semibold text-[11px]">
+            Job.{inq.id}
+            {inq.location ? <span className="text-green-500 font-normal">· {inq.location.split(' ')[0]}</span> : null}
+          </span>
+        </td>
         <td className="px-3 py-2 font-medium text-gray-900 max-w-[160px] truncate">
           {inq.is_duplicate_suspect ? <span className="text-orange-500 mr-1">⚠</span> : null}
           {inq.school_name ?? '—'}
@@ -403,90 +412,116 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicat
 
       {expanded && (
         <tr>
-          <td colSpan={10} className="px-4 py-4 bg-gray-50">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-4">
-              <InfoItem label="시작일" value={inq.start_date} />
-              <InfoItem label="교육대상" value={inq.teaching_age} />
-              <InfoItem label="급여" value={inq.salary_raw} />
-              <InfoItem label="근무시간" value={inq.working_hours} />
-              <InfoItem label="숙소" value={`${inq.housing_type ?? ''} ${inq.housing_detail ?? ''}`} />
-              <InfoItem label="복리후생" value={inq.benefits} />
-              <InfoItem label="소스파일" value={inq.source_file} />
-              <InfoItem label="담당자" value={inq.assigned_to} />
-            </div>
-            {inq.memo && (
-              <div className="mb-3 text-xs">
-                <span className="font-medium text-gray-600">메모 (원문):</span>
-                <p className="text-gray-700 mt-1 whitespace-pre-wrap bg-white border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto">
-                  {inq.memo}
-                </p>
-              </div>
-            )}
-            {/* 중복 의심 마킹 */}
-            <div className="mb-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onDuplicateFlag(inq.id) }}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                  inq.is_duplicate_suspect
-                    ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
-                    : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {inq.is_duplicate_suspect ? '⚠ 중복 의심 마킹됨' : '중복 의심 마킹'}
-              </button>
-              {inq.is_duplicate_suspect ? (
-                <span className="text-[10px] text-orange-500">클릭하면 마킹 해제</span>
-              ) : null}
-            </div>
+          <td colSpan={10} className="px-4 py-4 bg-gray-50 border-t border-gray-200">
+            <div className="max-w-3xl">
 
-            {/* 직업 등록 버튼 */}
-            <div className="mb-3">
-              {(inq.notes ?? '').includes('JOB_REGISTERED') ? (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
-                  등록됨 — {(inq.notes ?? '').match(/JOB_REGISTERED:(\S+)/)?.[1] ?? ''}
+              {/* ── 관리자 메모 (상단 노란박스) ── */}
+              {inq.memo && (
+                <>
+                  <div className="mb-3 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {inq.memo}
+                  </div>
+                  <div className="border-t border-dashed border-gray-300 mb-4" />
+                </>
+              )}
+
+              {/* ── Job 번호 + 도시 뱃지 ── */}
+              <div className="mb-3">
+                <span className="inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 px-3 py-1 rounded-lg text-sm font-bold">
+                  Job. {inq.id}
+                  {inq.location && <span className="font-normal text-green-600">· {inq.location}</span>}
                 </span>
-              ) : (
+              </div>
+
+              {/* ── 원본 형식 job 내용 ── */}
+              <div className="text-xs text-gray-800 space-y-1 leading-relaxed font-mono mb-4">
+                {inq.vacancies && (
+                  <p>Native Teacher (Numbers can change) : Approx. {inq.vacancies}</p>
+                )}
+                {inq.start_date && <p>Starting Date : {inq.start_date}</p>}
+                {inq.teaching_age && <p>Teaching Age : {inq.teaching_age}</p>}
+                {inq.working_hours && <p>Working Hours : {inq.working_hours}</p>}
+                {inq.schedule && <p>Schedule : {inq.schedule}</p>}
+                {inq.salary_raw && <p>Monthly Salary : {inq.salary_raw}</p>}
+                {inq.vacation && <p>Vacation : {inq.vacation}</p>}
+                {inq.sick_leave && <p>Sick Leave : {inq.sick_leave}</p>}
+                {(inq.housing_type || inq.housing_detail) && (
+                  <p>Housing : {[inq.housing_type, inq.housing_detail].filter(Boolean).join(', ')}</p>
+                )}
+                {inq.meal && <p>Meal : {inq.meal}</p>}
+                {inq.benefits && <p>Employee Benefits : {inq.benefits}</p>}
+              </div>
+
+              {/* ── 구분선 ── */}
+              <div className="border-t border-gray-200 mb-3" />
+
+              {/* ── 관리 도구 영역 ── */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {/* 중복 의심 마킹 */}
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onRegisterJob(inq.id) }}
-                  disabled={registeringId === inq.id}
-                  className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  onClick={(e) => { e.stopPropagation(); onDuplicateFlag(inq.id) }}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                    inq.is_duplicate_suspect
+                      ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                      : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
+                  }`}
                 >
-                  {registeringId === inq.id ? '등록 중...' : '직업 등록'}
+                  {inq.is_duplicate_suspect ? '⚠ 중복 의심 마킹됨' : '중복 의심 마킹'}
                 </button>
-              )}
-            </div>
+                {inq.is_duplicate_suspect && (
+                  <span className="text-[10px] text-orange-500">클릭하면 마킹 해제</span>
+                )}
 
-            <div className="flex items-start gap-3">
-              <div className="flex-1">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">관리자 메모</label>
-                <textarea
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs resize-none"
-                  rows={2}
-                  defaultValue={inq.notes ?? ''}
-                  onBlur={(e) => {
-                    if (e.target.value !== (inq.notes ?? '')) {
-                      onUpdate(inq.id, 'notes', e.target.value)
-                    }
-                  }}
-                />
+                {/* 직업 등록 */}
+                {(inq.notes ?? '').includes('JOB_REGISTERED') ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
+                    등록됨 — {(inq.notes ?? '').match(/JOB_REGISTERED:(\S+)/)?.[1] ?? ''}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onRegisterJob(inq.id) }}
+                    disabled={registeringId === inq.id}
+                    className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {registeringId === inq.id ? '등록 중...' : '직업 등록'}
+                  </button>
+                )}
               </div>
-              <div className="w-40">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">담당자 배정</label>
-                <select
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs"
-                  defaultValue={inq.assigned_to ?? ''}
-                  onChange={(e) => {
-                    if (e.target.value !== (inq.assigned_to ?? '')) {
-                      onUpdate(inq.id, 'assigned_to', e.target.value)
-                    }
-                  }}
-                >
-                  <option value="">— 선택 —</option>
-                  {STAFF_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+
+              {/* ── 관리자 메모 입력 + 담당자 ── */}
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">관리자 메모</label>
+                  <textarea
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs resize-none"
+                    rows={2}
+                    defaultValue={inq.notes ?? ''}
+                    onBlur={(e) => {
+                      if (e.target.value !== (inq.notes ?? '')) {
+                        onUpdate(inq.id, 'notes', e.target.value)
+                      }
+                    }}
+                  />
+                </div>
+                <div className="w-40">
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">담당자 배정</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs"
+                    defaultValue={inq.assigned_to ?? ''}
+                    onChange={(e) => {
+                      if (e.target.value !== (inq.assigned_to ?? '')) {
+                        onUpdate(inq.id, 'assigned_to', e.target.value)
+                      }
+                    }}
+                  >
+                    <option value="">— 선택 —</option>
+                    {STAFF_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
               </div>
+
             </div>
           </td>
         </tr>
