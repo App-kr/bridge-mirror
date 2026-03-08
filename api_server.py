@@ -49,6 +49,7 @@ except ImportError:
 try:
     from fastapi import FastAPI, HTTPException, Request, Query, status, UploadFile, File as FastFile
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.middleware.gzip import GZipMiddleware
     from fastapi.staticfiles import StaticFiles
     from starlette.middleware.base import BaseHTTPMiddleware
     from fastapi.responses import JSONResponse, Response
@@ -355,6 +356,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature"],
 )
+
+# GZip 압축 — 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ── Supabase 클라이언트 (지연 초기화) ─────────────────────────────────────────
 _anon_client: Optional["Client"] = None
