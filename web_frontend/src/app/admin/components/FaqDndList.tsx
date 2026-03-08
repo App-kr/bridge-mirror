@@ -363,7 +363,7 @@ export default function FaqDndList({
       <div className="flex gap-2 pt-1">
         <button
           type="button"
-          onClick={handleSaveOrder}
+          onClick={() => handleSaveOrder()}
           disabled={saving || !orderChanged}
           className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
             orderChanged
