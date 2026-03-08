@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { API_URL } from '@/lib/api'
 import {
@@ -35,6 +35,7 @@ interface NavCategory {
 }
 
 const ICON_SIZE = 17
+const ADMIN_KEY_STORAGE = 'bridge_admin_key'
 
 const NAV_CATEGORIES: NavCategory[] = [
   {
@@ -91,6 +92,7 @@ export default function AdminSidebar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [kakaoUrl, setKakaoUrl] = useState<string>('')
+  const [newCount, setNewCount] = useState(0)
 
   useEffect(() => {
     fetch(`${API_URL}/api/settings`)
@@ -98,6 +100,23 @@ export default function AdminSidebar() {
       .then(j => { if (j.success) setKakaoUrl(j.data?.settings?.kakao_channel ?? '') })
       .catch(() => {})
   }, [])
+
+  const pollNewCount = useCallback(() => {
+    const key = typeof window !== 'undefined' ? localStorage.getItem(ADMIN_KEY_STORAGE) : ''
+    if (!key) return
+    fetch(`${API_URL}/api/admin/inquiries/new-count`, {
+      headers: { 'x-admin-key': key },
+    })
+      .then(r => r.json())
+      .then(j => { if (j.success) setNewCount(j.data?.count ?? 0) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    pollNewCount()
+    const timer = setInterval(pollNewCount, 5000)
+    return () => clearInterval(timer)
+  }, [pollNewCount])
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
@@ -142,10 +161,15 @@ export default function AdminSidebar() {
                     {active && (
                       <span className="absolute left-0 w-[3px] h-5 bg-blue-600 rounded-r-full" />
                     )}
-                    <span className={`shrink-0 ${active ? 'text-blue-600' : 'text-zinc-400 group-hover:text-zinc-600'}`}>
+                    <span className={`shrink-0 ${active ? 'text-blue-600' : item.href === '/admin/employers' && newCount > 0 ? 'text-blue-500' : 'text-zinc-400 group-hover:text-zinc-600'}`}>
                       {item.icon}
                     </span>
                     <span>{item.label}</span>
+                    {item.href === '/admin/employers' && newCount > 0 && (
+                      <span className="ml-auto shrink-0 text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 animate-pulse leading-none">
+                        {newCount}
+                      </span>
+                    )}
                   </a>
                 )
               })}

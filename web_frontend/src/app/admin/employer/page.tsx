@@ -23,6 +23,7 @@ interface Inquiry {
   teaching_age: string | null
   salary_raw: string | null
   source: string | null
+  is_new?: number
 }
 
 const STATUS_OPTIONS = ['open', 'contacted', 'hired', 'hold', 'closed', 'blacklist']
@@ -54,13 +55,15 @@ interface InquiryCardProps {
   apiBase: string
   authHeaders: () => Record<string, string>
   onUpdated: (id: number, patch: Partial<Inquiry>) => void
+  onNewConfirmed: (id: number) => void
 }
 
-function InquiryCard({ inq, apiBase, authHeaders, onUpdated }: InquiryCardProps) {
+function InquiryCard({ inq, apiBase, authHeaders, onUpdated, onNewConfirmed }: InquiryCardProps) {
   const [memo, setMemo] = useState(inq.memo ?? '')
   const [bodyText, setBodyText] = useState(inq.raw_email_body ?? '')
   const [bodyEdit, setBodyEdit] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [isNew, setIsNew] = useState(!!inq.is_new)
 
   const [infoRegion, setInfoRegion] = useState(inq.location ?? '')
   const [infoCompany, setInfoCompany] = useState(inq.school_name ?? '')
@@ -131,6 +134,21 @@ function InquiryCard({ inq, apiBase, authHeaders, onUpdated }: InquiryCardProps)
     }
   }, [patch, inq.id, onUpdated])
 
+  const confirmNew = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/admin/inquiries/${inq.id}/confirm-new`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error('확인 실패')
+      setIsNew(false)
+      onNewConfirmed(inq.id)
+      showToast('NEW 확인 완료')
+    } catch {
+      showToast('NEW 확인 실패')
+    }
+  }, [apiBase, inq.id, authHeaders, onNewConfirmed])
+
   const currentStatus = inq.inbox_status
 
   return (
@@ -141,7 +159,17 @@ function InquiryCard({ inq, apiBase, authHeaders, onUpdated }: InquiryCardProps)
       <div className="bg-amber-50 p-4 space-y-3">
         {/* MEMO 섹션 */}
         <div>
-          <label className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">MEMO</label>
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">MEMO</label>
+            {isNew && (
+              <span
+                className="text-[10px] font-bold text-white bg-red-500 rounded px-1.5 py-0.5 leading-none"
+                style={{ animation: 'blink-badge 1s step-end infinite' }}
+              >
+                NEW
+              </span>
+            )}
+          </div>
           <textarea
             value={memo}
             onChange={e => setMemo(e.target.value)}
@@ -149,13 +177,24 @@ function InquiryCard({ inq, apiBase, authHeaders, onUpdated }: InquiryCardProps)
             placeholder="메모를 입력하세요..."
             className="w-full mt-1 px-3 py-2 text-[13px] bg-white border border-amber-200 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
-          <button
-            type="button"
-            onClick={saveMemo}
-            className="mt-1 text-[12px] px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-          >
-            저장
-          </button>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              onClick={saveMemo}
+              className="text-[12px] px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+            >
+              저장
+            </button>
+            {isNew && (
+              <button
+                type="button"
+                onClick={confirmNew}
+                className="text-[12px] px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                NEW 확인
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 구분선 */}
@@ -364,6 +403,23 @@ function AdminEmployerContent() {
     setInquiries(prev => prev.map(inq => inq.id === id ? { ...inq, ...patch } : inq))
   }, [])
 
+  const handleNewConfirmed = useCallback((id: number) => {
+    setInquiries(prev => prev.map(inq => inq.id === id ? { ...inq, is_new: 0 } : inq))
+  }, [])
+
+  const confirmAllNew = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/inquiries/confirm-all-new`, {
+        method: 'PATCH',
+        headers: headers(),
+      })
+      if (!res.ok) throw new Error('일괄 확인 실패')
+      setInquiries(prev => prev.map(inq => ({ ...inq, is_new: 0 })))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '일괄 확인 실패')
+    }
+  }, [headers])
+
   const handleSearch = () => {
     setPage(0)
     setSearch(searchInput)
@@ -373,6 +429,12 @@ function AdminEmployerContent() {
 
   return (
     <div className="space-y-5">
+      <style>{`
+        @keyframes blink-badge {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -426,6 +488,15 @@ function AdminEmployerContent() {
           >
             새로고침
           </button>
+          {inquiries.some(inq => inq.is_new) && (
+            <button
+              type="button"
+              onClick={confirmAllNew}
+              className="text-[12px] px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+            >
+              전체 NEW 확인
+            </button>
+          )}
         </div>
       </div>
 
@@ -449,6 +520,7 @@ function AdminEmployerContent() {
                 apiBase={API}
                 authHeaders={headers}
                 onUpdated={handleUpdated}
+                onNewConfirmed={handleNewConfirmed}
               />
             ))}
           </div>

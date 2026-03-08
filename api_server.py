@@ -1786,6 +1786,59 @@ async def admin_toggle_duplicate_flag(inquiry_id: int, request: Request):
         err("마킹 처리에 실패했습니다.", 500)
 
 
+# ── Admin: NEW 접수 알림 ──────────────────────────────────────────────────────
+
+@app.get("/api/admin/inquiries/new-count", tags=["admin"])
+async def admin_inquiries_new_count(request: Request):
+    """is_new=1 건수 반환 (사이드바 폴링용)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM client_inquiries WHERE is_new=1 AND is_deleted=0"
+        ).fetchone()
+        return ok(data={"count": row[0] if row else 0})
+    finally:
+        conn.close()
+
+
+@app.patch("/api/admin/inquiries/{inquiry_id}/confirm-new", tags=["admin"])
+async def admin_confirm_new(inquiry_id: int, request: Request):
+    """카드 NEW 확인 -> is_new=0, 남은 new 건수 반환."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            "UPDATE client_inquiries SET is_new=0 WHERE id=? AND is_deleted=0",
+            (inquiry_id,),
+        )
+        conn.commit()
+        remaining = conn.execute(
+            "SELECT COUNT(*) FROM client_inquiries WHERE is_new=1 AND is_deleted=0"
+        ).fetchone()[0]
+        return ok(data={"id": inquiry_id, "is_new": 0, "remaining_new": remaining})
+    finally:
+        conn.close()
+
+
+@app.patch("/api/admin/inquiries/confirm-all-new", tags=["admin"])
+async def admin_confirm_all_new(request: Request):
+    """전체 NEW 일괄 확인 -> is_new=0."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        cur = conn.execute(
+            "UPDATE client_inquiries SET is_new=0 WHERE is_new=1 AND is_deleted=0"
+        )
+        conn.commit()
+        return ok(data={"updated": cur.rowcount, "remaining_new": 0})
+    finally:
+        conn.close()
+
+
 # ── Admin: Email Templates & Guide Links ────────────────────────────────────
 
 @app.get("/api/admin/email-templates", tags=["admin"])
