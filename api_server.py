@@ -1382,8 +1382,21 @@ async def admin_candidates(
             ).fetchone()
             total = total_row[0] if total_row else 0
 
+            _COLS = (
+                "candidate_id, email, full_name, nationality, ancestry, dob, gender, "
+                "current_location, start_date, target, area_prefs, experience, "
+                "current_salary, desired_salary, certification, e_visa, mobile_phone, "
+                "kakaotalk, criminal_record, housing, arc_holders, job_prefs, "
+                "reference, documents, status, created_at, source, notes, "
+                "placed_company, placed_salary, start_month, housing_detail, "
+                "referral_fee, process_date, past_placement, preferences, "
+                "housing_type, education_level, major, interview_time, health_info, "
+                "piercings, dependents, married, religion, korean_criminal_record, "
+                "consent, fact_check, photo_url, criminal_record_check, doc_status, "
+                "how_to, tattoo, visa_type"
+            )
             rows_raw = conn.execute(
-                f"""SELECT * FROM candidates
+                f"""SELECT {_COLS} FROM candidates
                     WHERE {where_sql}
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?""",
@@ -1653,7 +1666,7 @@ async def admin_list_inquiries(
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.row_factory = sqlite3.Row
         try:
-            where_clauses = []
+            where_clauses = ["is_deleted = 0"]
             params: list = []
             if q:
                 where_clauses.append(
@@ -1664,7 +1677,7 @@ async def admin_list_inquiries(
             if source:
                 where_clauses.append("source_file = ?")
                 params.append(source)
-            where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            where_sql = " WHERE " + " AND ".join(where_clauses)
             total = conn.execute(f"SELECT COUNT(*) FROM client_inquiries{where_sql}", params).fetchone()[0]
             rows = conn.execute(
                 f"SELECT * FROM client_inquiries{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
@@ -1685,7 +1698,7 @@ async def admin_list_inquiries(
 async def admin_update_inquiry(inquiry_id: int, request: Request, body: dict):
     """채용의뢰 상태/메모 수정."""
     _check_admin(request)
-    EDITABLE = {"inbox_status", "notes", "assigned_to"}
+    EDITABLE = {"inbox_status", "notes", "assigned_to", "is_duplicate_suspect"}
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
         raise HTTPException(400, "수정 가능한 필드: inbox_status, notes, assigned_to")
@@ -1705,6 +1718,37 @@ async def admin_update_inquiry(inquiry_id: int, request: Request, body: dict):
         import logging as _log_upd
         _log_upd.getLogger("bridge.api").error("admin_update_inquiry 실패: %s", e, exc_info=True)
         err("수정에 실패했습니다.", 500)
+
+
+@app.patch("/api/admin/inquiries/{inquiry_id}/duplicate-flag", tags=["admin"])
+async def admin_toggle_duplicate_flag(inquiry_id: int, request: Request):
+    """중복 의심 마킹 토글 — 삭제하지 않고 플래그만 표시."""
+    _check_admin(request)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT is_duplicate_suspect FROM client_inquiries WHERE id = ? AND is_deleted = 0",
+                (inquiry_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "해당 채용의뢰를 찾을 수 없습니다.")
+            new_flag = 0 if row[0] else 1
+            conn.execute(
+                "UPDATE client_inquiries SET is_duplicate_suspect = ?, last_activity = ? WHERE id = ?",
+                (new_flag, datetime.now(timezone.utc).isoformat(), inquiry_id),
+            )
+            conn.commit()
+            return ok(data={"is_duplicate_suspect": new_flag}, message="마킹 완료" if new_flag else "마킹 해제")
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging as _log_dup
+        _log_dup.getLogger("bridge.api").error("duplicate_flag 실패: %s", e, exc_info=True)
+        err("마킹 처리에 실패했습니다.", 500)
 
 
 # ── Admin: Email Templates & Guide Links ────────────────────────────────────

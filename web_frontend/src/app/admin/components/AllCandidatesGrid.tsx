@@ -206,8 +206,8 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
     [onCopyTo]
   )
 
-  const onGridReady = useCallback((e: GridReadyEvent) => {
-    e.api.sizeColumnsToFit()
+  const onGridReady = useCallback((_e: GridReadyEvent) => {
+    // sizeColumnsToFit 제거 — 48컬럼 전체 너비 재계산 불필요, 정의된 너비 그대로 유지
   }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -366,8 +366,9 @@ export default function BridgeAdminSheet() {
       setNewCount(nc)
       setLastSync(new Date().toLocaleTimeString())
 
-      // 캐시 저장
-      try { localStorage.setItem(SK_ALL, JSON.stringify({ rows: allRows, ts: Date.now() })) } catch { /* ignore */ }
+      // 캐시 저장 — UI 렌더 먼저, 쓰기는 50ms defer (4MB 동기 블로킹 방지)
+      const _cachePayload = JSON.stringify({ rows: allRows, ts: Date.now() })
+      setTimeout(() => { try { localStorage.setItem(SK_ALL, _cachePayload) } catch { /* ignore */ } }, 50)
     } catch { /* ignore */ } finally {
       setLoading(false)
     }

@@ -1,4 +1,5 @@
-candidates: 3059°Ç
-client_inquiries: 955°Ç
-jobs: 1066°Ç
-integrity: ok
+PRE-SNAPSHOT 2026-03-08T14:31:21.593816
+candidates: 3059
+client_inquiries: 955
+jobs: 1066
+checksum: c42591d166ea375f540ce7f2b4d52482d583f38b723477f264306c6143ab6773

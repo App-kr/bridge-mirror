@@ -14,27 +14,28 @@ import { API_URL } from '@/lib/api'
 const API = API_URL
 
 interface Inquiry {
-  id:             number
-  submitted_at:   string | null
-  email:          string | null
-  school_name:    string | null
-  location:       string | null
-  contact_name:   string | null
-  phone:          string | null
-  start_date:     string | null
-  vacancies:      string | null
-  teaching_age:   string | null
-  salary_raw:     string | null
-  housing_type:   string | null
-  housing_detail: string | null
-  benefits:       string | null
-  working_hours:  string | null
-  memo:           string | null
-  source_file:    string | null
-  inbox_status:   string | null
-  notes:          string | null
-  assigned_to:    string | null
-  last_activity:  string | null
+  id:                    number
+  submitted_at:          string | null
+  email:                 string | null
+  school_name:           string | null
+  location:              string | null
+  contact_name:          string | null
+  phone:                 string | null
+  start_date:            string | null
+  vacancies:             string | null
+  teaching_age:          string | null
+  salary_raw:            string | null
+  housing_type:          string | null
+  housing_detail:        string | null
+  benefits:              string | null
+  working_hours:         string | null
+  memo:                  string | null
+  source_file:           string | null
+  inbox_status:          string | null
+  notes:                 string | null
+  assigned_to:           string | null
+  last_activity:         string | null
+  is_duplicate_suspect:  number | null
 }
 
 const STATUS_OPTIONS = ['new', 'pending', 'processing', 'completed']
