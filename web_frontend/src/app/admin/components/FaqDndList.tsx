@@ -67,7 +67,7 @@ function SortableRow({
   const [deleting, setDeleting] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: post.id, disabled: editing })
 
   const style: React.CSSProperties = {
@@ -139,7 +139,7 @@ function SortableRow({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="mb-2">
+    <div ref={setNodeRef} style={style} className="mb-2" {...attributes}>
       {/* 메인 행 */}
       <div
         className={`flex items-center gap-2 px-3 py-2.5 bg-white border rounded-xl select-none ${
@@ -150,19 +150,17 @@ function SortableRow({
             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
         }`}
       >
-        {/* 드래그 핸들 — 이 부분만 드래그 활성화 */}
+        {/* 드래그 핸들 — listeners만 여기에, 자식은 pointer-events-none */}
         <span
-          ref={setActivatorNodeRef as (el: HTMLSpanElement | null) => void}
-          {...attributes}
           {...listeners}
-          className={`shrink-0 flex flex-col gap-[3px] p-1.5 rounded cursor-grab active:cursor-grabbing touch-none text-gray-300 hover:text-gray-400 transition-colors ${
+          className={`shrink-0 flex flex-col gap-[3px] p-2 rounded cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-600 transition-colors ${
             editing ? 'opacity-30 pointer-events-none' : ''
           }`}
           title="드래그하여 순서 변경"
         >
-          <span className="block w-3.5 h-px bg-current" />
-          <span className="block w-3.5 h-px bg-current" />
-          <span className="block w-3.5 h-px bg-current" />
+          <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
+          <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
+          <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
         </span>
 
         {/* ID 뱃지 */}
