@@ -171,6 +171,24 @@ export default function InquiriesPage() {
     }
   }, [adminKey, fetchData])
 
+  const handleDuplicateFlag = useCallback(async (inquiryId: number) => {
+    try {
+      const res = await fetch(`${API}/api/admin/inquiries/${inquiryId}/duplicate-flag`, {
+        method: 'PATCH',
+        headers: { 'x-admin-key': adminKey },
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.detail ?? '실패')
+      setSaveMsg(`#${inquiryId} ${json.message}`)
+      setTimeout(() => setSaveMsg(''), 3000)
+      setRows((prev) =>
+        prev.map((r) => r.id === inquiryId ? { ...r, is_duplicate_suspect: json.data.is_duplicate_suspect } : r)
+      )
+    } catch (e) {
+      setSaveMsg('마킹 실패: ' + (e instanceof Error ? e.message : ''))
+    }
+  }, [adminKey])
+
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   /* ── 소스별 카운트 (표시용) ── */
@@ -254,6 +272,7 @@ export default function InquiriesPage() {
                   onToggle={() => setExpanded(expanded === inq.id ? null : inq.id)}
                   onUpdate={handleUpdate}
                   onRegisterJob={handleRegisterJob}
+                  onDuplicateFlag={handleDuplicateFlag}
                   registeringId={registeringId}
                   sourceLabel={sourceLabel}
                 />
@@ -325,12 +344,13 @@ export default function InquiriesPage() {
 }
 
 /* ── 테이블 Row ── */
-function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, registeringId, sourceLabel }: {
+function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicateFlag, registeringId, sourceLabel }: {
   inq: Inquiry
   expanded: boolean
   onToggle: () => void
   onUpdate: (id: number, field: string, value: string) => void
   onRegisterJob: (id: number) => void
+  onDuplicateFlag: (id: number) => void
   registeringId: number | null
   sourceLabel: (src: string | null) => string
 }) {
