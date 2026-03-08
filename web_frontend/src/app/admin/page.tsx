@@ -179,6 +179,14 @@ export default function AdminDashboardPage() {
   const [seenPosts, setSeenPosts] = useState<Set<string>>(new Set())
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [analyticsDays, setAnalyticsDays] = useState(30)
+  const [kakaoUrl, setKakaoUrl] = useState<string>('')
+
+  useEffect(() => {
+    fetch(`${API}/api/settings`)
+      .then(r => r.json())
+      .then(j => { if (j.success) setKakaoUrl(j.data?.settings?.kakao_channel ?? '') })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     setSeenPosts(getSeenPosts())
@@ -282,6 +290,41 @@ export default function AdminDashboardPage() {
         <button type="button" onClick={fetchAll} className="text-sm text-[#0071e3] hover:underline">
           새로고침
         </button>
+      </div>
+
+      {/* 빠른 실행 */}
+      <div className="flex flex-wrap gap-2">
+        {kakaoUrl ? (
+          <a
+            href={kakaoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#191919] shadow-sm hover:brightness-95 active:scale-[0.98] transition-all"
+            style={{ background: '#FEE500' }}
+          >
+            <span className="text-[16px] leading-none">💬</span>
+            카카오 채널 관리
+            <span className="text-[11px] opacity-50 ml-1">↗</span>
+          </a>
+        ) : (
+          <a
+            href="/admin/settings"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#aaa] hover:text-[#424245] transition-colors"
+          >
+            <span className="text-[15px] leading-none">💬</span>
+            카카오 채널 URL 설정
+          </a>
+        )}
+        <a
+          href="https://bridgejob.co.kr"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-[#424245] bg-white border border-[#e5e5e7] hover:bg-[#f5f5f7] transition-colors shadow-sm"
+        >
+          <span className="text-[14px] leading-none">🌐</span>
+          사이트 바로가기
+          <span className="text-[11px] opacity-40 ml-1">↗</span>
+        </a>
       </div>
 
       {loading ? (

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { API_URL } from '@/lib/api'
 import {
   LayoutDashboard,
   Users,
@@ -89,6 +90,14 @@ const NAV_CATEGORIES: NavCategory[] = [
 export default function AdminSidebar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [kakaoUrl, setKakaoUrl] = useState<string>('')
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/settings`)
+      .then(r => r.json())
+      .then(j => { if (j.success) setKakaoUrl(j.data?.settings?.kakao_channel ?? '') })
+      .catch(() => {})
+  }, [])
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
@@ -106,7 +115,7 @@ export default function AdminSidebar() {
       </div>
 
       {/* Nav Items */}
-      <div className="flex-1 overflow-y-auto px-3 pb-6">
+      <div className="flex-1 overflow-y-auto px-3 pb-2">
         {NAV_CATEGORIES.map((cat) => (
           <div key={cat.title || '_dashboard'}>
             {cat.title && (
@@ -143,6 +152,33 @@ export default function AdminSidebar() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* 카카오 채널 바로가기 — 하단 고정 */}
+      <div className="px-3 pb-4 pt-2 border-t border-[#f0f0f2]">
+        {kakaoUrl ? (
+          <a
+            href={kakaoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl w-full font-semibold text-[13px] text-[#191919] transition-all duration-150 hover:brightness-95 active:scale-[0.98]"
+            style={{ background: '#FEE500' }}
+            onClick={() => setMobileOpen(false)}
+          >
+            <span className="text-[17px] leading-none">💬</span>
+            <span>카카오 채널</span>
+            <span className="ml-auto text-[11px] opacity-50">↗</span>
+          </a>
+        ) : (
+          <a
+            href="/admin/settings"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl w-full text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#c0c0c5] hover:text-[#424245] transition-colors"
+            onClick={() => setMobileOpen(false)}
+          >
+            <span className="text-[15px] leading-none">💬</span>
+            <span>카카오 채널 설정</span>
+          </a>
+        )}
       </div>
     </nav>
   )
