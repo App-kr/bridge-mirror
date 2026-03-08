@@ -98,11 +98,9 @@ export default function AdminFaqPage() {
           <button
             type="button"
             onClick={() => setShowForm(!showForm)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              showForm ? 'bg-gray-200 text-gray-700' : 'bg-[#1d1d1f] text-white hover:bg-[#424245]'
-            }`}
+            className={`admin-btn ${showForm ? 'admin-btn-cancel' : 'admin-btn-save'}`}
           >
-            {showForm ? '취소' : '+ 새 게시물'}
+            {showForm ? '✕ 취소' : '+ 새 게시물'}
           </button>
           <button
             type="button"
@@ -162,9 +160,9 @@ export default function AdminFaqPage() {
               type="button"
               onClick={handleCreate}
               disabled={posting || !newTitle.trim()}
-              className="px-5 py-2 rounded-full bg-[#1d1d1f] text-white text-sm font-medium hover:bg-[#424245] disabled:opacity-50 transition-colors"
+              className="admin-btn admin-btn-save disabled:opacity-50"
             >
-              {posting ? '게시 중...' : '게시하기'}
+              {posting ? '게시 중...' : '💾 게시하기'}
             </button>
           </div>
         </div>

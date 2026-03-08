@@ -181,7 +181,7 @@ function SortableRow({
             <button
               type="button"
               onClick={startEdit}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors text-[12px]"
+              className="p-1.5 rounded-lg text-orange-500 hover:text-orange-700 hover:bg-orange-50 transition-colors text-[12px]"
               title="수정"
             >
               ✏️

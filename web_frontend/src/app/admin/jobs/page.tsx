@@ -282,21 +282,21 @@ function JobDocumentView({ job, showPII, onAction }: {
       {/* Action Bar */}
       <div className="px-7 py-3 bg-[#f5f5f7] border-t border-gray-200 flex items-center gap-2 flex-wrap">
         <button type="button" onClick={() => onAction('toggle-status')}
-          className="px-3 py-1.5 text-[12px] rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+          className="admin-btn admin-btn-edit">
           {(job.status || 'open') === 'open' ? 'Close' : 'Reopen'}
         </button>
         <button type="button" onClick={() => onAction('toggle-hot')}
-          className="px-3 py-1.5 text-[12px] rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+          className={`admin-btn ${job.is_hot ? 'admin-btn-cancel' : 'admin-btn-save'}`}>
           {job.is_hot ? 'HOT OFF' : 'HOT ON'}
         </button>
         <button type="button" onClick={() => onAction('delete')}
-          className="px-3 py-1.5 text-[12px] rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+          className="admin-btn admin-btn-delete">
           Delete
         </button>
         <div className="flex-1" />
         {job.raw_text && (
           <button type="button" onClick={() => onAction('raw-text')}
-            className="px-3 py-1.5 text-[12px] rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+            className="admin-btn">
             Raw Text
           </button>
         )}
@@ -469,11 +469,11 @@ function JobRegistrationForm({ onSubmit, onClose }: {
 
         <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
           <button type="button" onClick={onClose}
-            className="px-4 py-2 text-[13px] rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+            className="admin-btn admin-btn-cancel">
             Cancel
           </button>
           <button type="button" onClick={handleSubmit}
-            className="px-5 py-2 text-[13px] rounded-lg bg-[#0071E3] text-white font-medium hover:bg-[#0066CC] transition-colors">
+            className="admin-btn admin-btn-save">
             Register
           </button>
         </div>

@@ -200,8 +200,8 @@ export default function DocBlock({
                 </>
               ) : (
                 <button type="button" onClick={() => setEditingMemo(true)}
-                  style={{ ...btnBase, background: '#fff7d6', border: '1px solid #d4b44a', color: '#92700a', fontSize: '0.75rem', padding: '3px 10px' }}>
-                  ✏ 편집
+                  style={{ ...btnBase, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '0.75rem', padding: '3px 10px' }}>
+                  <span style={{ display: 'inline-block', transform: 'rotate(-45deg)' }}>✏</span> 수정
                 </button>
               )}
             </div>
@@ -226,7 +226,7 @@ export default function DocBlock({
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 fontWeight: employer.memo ? 500 : 400,
               }}>
-                {employer.memo || '메모를 추가하려면 ✏ 편집을 클릭하세요'}
+                {employer.memo || '메모를 추가하려면 수정을 클릭하세요'}
               </span>
             )}
           </div>
@@ -332,7 +332,9 @@ export default function DocBlock({
                 return <div key={i} style={{ fontWeight: 500, color: '#222' }}>{t}</div>
               })}
               <button type="button" onClick={() => setEditingRaw(true)}
-                style={{ ...btnBase, marginTop: 10, background: '#f4f4f4' }}>✏ 본문 편집</button>
+                style={{ ...btnBase, marginTop: 10, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c' }}>
+                  <span style={{ display: 'inline-block', transform: 'rotate(-45deg)' }}>✏</span> 본문 수정
+                </button>
             </div>
           )}
         </div>
