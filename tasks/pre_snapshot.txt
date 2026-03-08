@@ -1,0 +1,4 @@
+candidates: 3059°Ç
+client_inquiries: 955°Ç
+jobs: 1066°Ç
+integrity: ok
