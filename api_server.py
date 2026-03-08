@@ -979,12 +979,9 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
 
 
 def _check_admin(request: Request):
-    """ADMIN_API_KEY 헤더 검증. 프로덕션에서 키 미설정 시 접근 차단."""
+    """ADMIN_API_KEY 헤더 검증. 키 미설정 시 항상 접근 차단 (개발/프로덕션 구분 없음)."""
     if not _ADMIN_KEY:
-        if _IS_PROD:
-            raise HTTPException(status_code=503, detail="관리자 기능이 비활성화되어 있습니다.")
-        # 개발 환경에서만 키 없이 통과 허용
-        return
+        raise HTTPException(status_code=503, detail="관리자 기능이 비활성화되어 있습니다.")
     if not hmac.compare_digest(request.headers.get("x-admin-key", "").strip(), _ADMIN_KEY.strip()):
         _log_unauthorized_access(request)
         raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
@@ -1726,6 +1723,35 @@ async def admin_update_inquiry(inquiry_id: int, request: Request, body: dict):
     except Exception as e:
         import logging as _log_upd
         _log_upd.getLogger("bridge.api").error("admin_update_inquiry 실패: %s", e, exc_info=True)
+        err("수정에 실패했습니다.", 500)
+
+
+@app.patch("/api/admin/inquiries/{inquiry_id}", tags=["admin"])
+async def admin_patch_inquiry(inquiry_id: int, request: Request, body: dict):
+    """채용의뢰 필드 수정 — memo, raw_email_body, school_name, email, phone, location, inbox_status."""
+    _check_admin(request)
+    EDITABLE = {"memo", "raw_email_body", "school_name", "email", "phone", "location", "inbox_status", "notes", "assigned_to"}
+    update = {k: v for k, v in body.items() if k in EDITABLE}
+    if not update:
+        raise HTTPException(400, f"수정 가능한 필드: {', '.join(sorted(EDITABLE))}")
+    update["last_activity"] = datetime.now(timezone.utc).isoformat()
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            sets = ", ".join(f"{k} = ?" for k in update)
+            vals = list(update.values()) + [inquiry_id]
+            conn.execute(f"UPDATE client_inquiries SET {sets} WHERE id = ?", vals)
+            conn.commit()
+            return ok(message="수정 완료")
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging as _log_patch
+        _log_patch.getLogger("bridge.api").error("admin_patch_inquiry 실패: %s", e, exc_info=True)
         err("수정에 실패했습니다.", 500)
 
 
