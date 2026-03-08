@@ -25,6 +25,38 @@
 
 ---
 
+## 자동 실행 규칙 (사용자 누락 시에도 반드시 실행)
+
+### 세션 시작 시 — 무조건 자동 실행
+```bash
+# 1. 이전 실수 복습
+cat tasks/lessons.md | tail -20
+
+# 2. 미완료 작업 확인
+cat tasks/todo.md | grep "^\- \[ \]"
+
+# 3. 최근 커밋 + 변경 파일 확인 (중복 구현 방지)
+git log --name-only -3
+
+# 4. DB 건수 수호자
+python -c "import sqlite3; conn=sqlite3.connect('master.db'); cur=conn.cursor(); [print(t, cur.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]) for t in ['candidates','client_inquiries','jobs']]; conn.close()"
+```
+→ 이 루틴 없이 코드 수정 시작 금지. 사용자가 요청하지 않아도 자동 실행.
+
+### 작업 전 — 중복 구현 방지 체크
+```bash
+git log --name-only -5 | grep -E "\.tsx|\.py|\.ts"
+```
+→ 이미 커밋된 파일이 있으면 내용 확인 후 차이점만 추가. 재작성 금지.
+
+### 빌드 시 — 항상 클린 빌드
+```bash
+rm -rf web_frontend/.next && cd web_frontend && npm run build
+```
+→ `.next` 캐시 충돌 방지. `npm run build` 단독 실행 금지.
+
+---
+
 ## User Preferences
 - 파일 수정 전 반드시 백업
 - 하위 폴더 정리 원칙
