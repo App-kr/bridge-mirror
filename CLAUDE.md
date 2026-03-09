@@ -157,6 +157,12 @@ Anti-pattern: 불필요한 에이전트 과다스폰 금지
 - 신규 DB 테이블 → api_server.py init_db()에 CREATE TABLE IF NOT EXISTS 추가
 - 폴더 구조 변경 시 → render.yaml Start Command 동시 업데이트
 
+## 개발 워크플로 (필수 준수)
+1. 프론트엔드 수정 → `cd web_frontend && npm run dev` (localhost:3000) 로컬 확인 후 보고
+2. 백엔드 수정 → `uvicorn api_server:app --reload --port 8000` (localhost:8000) 로컬 확인 후 보고
+3. 로컬 확인 없이 push 절대 금지
+4. push는 보스가 "배포해" 명시 시만 (아래 배포 비용 규칙 준수)
+
 ## 배포 비용 규칙 (ABSOLUTE — 절대 준수)
 
 ### push 금지 조건
