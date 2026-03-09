@@ -66,8 +66,7 @@ const PC = ['#3b82f6', '#ef4444', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#
 const SK = 'bridge-v10'
 const SK_EDITS = 'bridge-v10-edits'   // {[cid]: {stage, mailStatus, ...}}
 const SK_DATA  = 'bridge-v10-data'    // {active, past, blacklist} 수동 관리 탭
-const SK_ALL   = 'bridge-v10-all'     // {rows, ts} dbAll 캐시
-const CACHE_TTL = 5 * 60 * 1000      // 캐시 유효기간 5분
+const PAGE_SIZE = 150
 const API = API_URL
 
 /* ─── Override localStorage helpers ─── */
@@ -284,18 +283,14 @@ export default function BridgeAdminSheet() {
   const [eSRV, setESRV] = useState('')
   const [undoStack, setUS] = useState<UndoSnapshot[]>([])
   const [dbAll, setDbAll] = useState<DataRow[]>([])       // 전체 탭 전용 (DB 원본)
-  const [dbLoadProgress, setDbLoadProgress] = useState(0) // 로드된 건수
+  const [dbOffset, setDbOffset] = useState(0)             // 현재 페이지 오프셋
   const [dbTotal, setDbTotal] = useState(0)               // DB 전체 건수
-  const [dbHasMore, setDbHasMore] = useState(true)        // 더 불러올 데이터 있음
-  const [dbLoadingMore, setDbLoadingMore] = useState(false) // 추가 로딩 중
   const [loading, setLoading] = useState(false)
   const [lastSync, setLastSync] = useState('')
   const [newCount, setNewCount] = useState(0)
 
-  // cursor-based pagination refs (stale closure 방지)
-  const dbCursorRef = useRef<number>(0)    // 다음 fetch에 사용할 cursor (마지막 rowid)
-  const dbFetchingRef = useRef(false)      // 동시 요청 방지
-  const dbHasMoreRef = useRef(true)        // 더 불러올 데이터 있음
+  // fetch 중복 방지 ref
+  const dbFetchingRef = useRef(false)
 
   const eR = useRef<HTMLTextAreaElement>(null)
   const cR = useRef<{ i: number; sx: number; sw: number } | null>(null)
@@ -354,129 +349,55 @@ export default function BridgeAdminSheet() {
     try { localStorage.setItem(SK_DATA, JSON.stringify(data)) } catch { /* ignore */ }
   }, [data, ready])
 
-  /* DB 연동 — cursor-based 150건씩 점진 로드 */
-  const fetchMore = useCallback(async (reset = false) => {
-    if (!reset && (dbFetchingRef.current || !dbHasMoreRef.current)) return
-    if (reset) {
-      dbCursorRef.current = 0
-      dbHasMoreRef.current = true
-      setDbHasMore(true)
-      setDbAll([])
-      setDbLoadProgress(0)
-    }
-
+  /* DB 연동 — offset-based 150건씩 페이지 로드 */
+  const fetchPage = useCallback(async (pageOffset: number) => {
+    if (dbFetchingRef.current) return
     dbFetchingRef.current = true
-    const cursor = dbCursorRef.current
-    if (cursor === 0) setLoading(true)
-    else setDbLoadingMore(true)
+    setLoading(true)
+    setDbAll([])
 
     const edits = loadEdits()
     try {
       const res = await fetch(
-        `${API}/api/admin/candidates?limit=150&cursor=${cursor}`,
+        `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${pageOffset}`,
         { headers: headers() },
       )
       if (!res.ok) return
       const json = await res.json()
       const rawRows: Record<string, unknown>[] = json.data?.candidates ?? []
-      const nextCursor: number | null = json.data?.next_cursor ?? null
       const total: number = json.data?.total ?? 0
 
-      dbCursorRef.current = nextCursor ?? 0
-      dbHasMoreRef.current = nextCursor !== null
-      setDbHasMore(nextCursor !== null)
       setDbTotal(total)
+      const newRows = rawRows.map((c, i) => mapCandidateToRow(c, pageOffset + i, edits))
+      setDbAll(newRows)
 
-      setDbAll(prev => {
-        const startIdx = cursor === 0 ? 0 : prev.length
-        const newRows = rawRows.map((c, i) => mapCandidateToRow(c, startIdx + i, edits))
-        const allRows = cursor === 0 ? newRows : [...prev, ...newRows]
-        // 첫 페이지만 캐시 저장
-        if (cursor === 0) {
-          const payload = JSON.stringify({ rows: newRows, ts: Date.now() })
-          setTimeout(() => { try { localStorage.setItem(SK_ALL, payload) } catch { /* ignore */ } }, 50)
-        }
-        return allRows
-      })
-      setDbLoadProgress(prev => cursor === 0 ? rawRows.length : prev + rawRows.length)
-
-      if (cursor === 0) {
-        const nc = rawRows.filter(r => String(r.source ?? '').includes('★NEW')).length
+      if (pageOffset === 0) {
+        const nc = rawRows.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
         setNewCount(nc)
       }
       setLastSync(new Date().toLocaleTimeString())
     } catch { /* ignore */ } finally {
       dbFetchingRef.current = false
       setLoading(false)
-      setDbLoadingMore(false)
     }
   }, [headers])
 
   useEffect(() => {
-    // 캐시 즉시 표시 → 새 데이터 cursor=0부터 로드
-    try {
-      const cached = localStorage.getItem(SK_ALL)
-      if (cached) {
-        const { rows, ts } = JSON.parse(cached) as { rows: DataRow[]; ts: number }
-        if (rows?.length > 0) {
-          setDbAll(rows)
-          setDbLoadProgress(rows.length)
-          setLastSync('캐시')
-          if (Date.now() - ts >= CACHE_TTL) {
-            // 캐시 만료: 새로 로드
-            fetchMore(true)
-          }
-          // 60초마다 신규 Active 폴링 (★NEW 감지, ID 충돌 방지)
-          const iv = setInterval(async () => {
-            const edts = loadEdits()
-            try {
-              const res2 = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
-              if (!res2.ok) return
-              const j2 = await res2.json()
-              const rows2: Record<string, unknown>[] = j2.data?.candidates ?? []
-              const nc = rows2.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
-              setNewCount(nc)
-              // 진짜 신규(dbAll에 없는) 후보자만 맨 앞에 추가
-              setDbAll(p => {
-                const prevCids = new Set(p.map(r => String(r._cid ?? '')))
-                const genuinelyNew = rows2.filter(r => !prevCids.has(String(r.candidate_id ?? '')))
-                if (genuinelyNew.length === 0) return p
-                const maxId = Math.max(...p.map(r => Number(r.id) || 0), 0)
-                const newRows = genuinelyNew.map((c, i) => ({ ...mapCandidateToRow(c, maxId + i, edts), id: maxId + i + 1 }))
-                return [...newRows, ...p]
-              })
-              setLastSync(new Date().toLocaleTimeString())
-            } catch { /* ignore */ }
-          }, 60_000)
-          return () => clearInterval(iv)
-        }
-      }
-    } catch { /* ignore */ }
-
-    fetchMore(true)
-    // 60초마다 신규 Active 폴링
+    // 초기 로드: offset=0 (1페이지)
+    fetchPage(0)
+    // 60초마다 신규 web_form 폼 제출 감지
     const iv = setInterval(async () => {
-      const edits = loadEdits()
       try {
-        const res = await fetch(`${API}/api/admin/candidates?status=Active&limit=9999`, { headers: headers() })
+        const res = await fetch(`${API}/api/admin/candidates?status=Active&limit=50`, { headers: headers() })
         if (!res.ok) return
         const json = await res.json()
         const rows: Record<string, unknown>[] = json.data?.candidates ?? []
         const nc = rows.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
         setNewCount(nc)
-        setDbAll(p => {
-          const prevCids = new Set(p.map(r => String(r._cid ?? '')))
-          const genuinelyNew = rows.filter(r => !prevCids.has(String(r.candidate_id ?? '')))
-          if (genuinelyNew.length === 0) return p
-          const maxId = Math.max(...p.map(r => Number(r.id) || 0), 0)
-          const newRows = genuinelyNew.map((c, i) => ({ ...mapCandidateToRow(c, maxId + i, edits), id: maxId + i + 1 }))
-          return [...newRows, ...p]
-        })
-        setLastSync(new Date().toLocaleTimeString())
       } catch { /* ignore */ }
     }, 60_000)
     return () => clearInterval(iv)
-  }, [fetchMore, headers])
+  }, [fetchPage, headers])
 
   /* Ctrl+Z */
   useEffect(() => {
@@ -546,7 +467,7 @@ export default function BridgeAdminSheet() {
     if (sk) it.sort((a, b) => { const av = String(a[sk] || ''), bv = String(b[sk] || ''); return sd === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) })
     return it
   }, [allTD, filters, q, sk, sd])
-  const cnt = useMemo(() => ({ active: data.active.length, past: data.past.length, blacklist: data.blacklist.length, all: dbAll.length }), [data, dbAll])
+  const cnt = useMemo(() => ({ active: data.active.length, past: data.past.length, blacklist: data.blacklist.length, all: dbTotal || dbAll.length }), [data, dbAll, dbTotal])
   const gFO = useCallback((k: string) => { const v = new Set<string>(); allTD.forEach(r => { const val = String(r[k] || ''); if (val) v.add(val) }); return [...v].sort() }, [allTD])
 
   /* Column resize */
@@ -747,14 +668,13 @@ export default function BridgeAdminSheet() {
               ★ NEW {newCount}명
             </span>
           )}
-          {loading && <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 700 }}>⟳ DB 로딩 {dbLoadProgress.toLocaleString()}건...</span>}
-          {dbLoadingMore && !loading && <span style={{ fontSize: 13, color: '#7c3aed', fontWeight: 700 }}>⟳ +150건 로딩...</span>}
-          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>{dbLoadProgress.toLocaleString()}건 표시 중 / 전체 {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 · {lastSync}{dbHasMore ? '' : ' · 전체 로드'}</span>}
+          {loading && <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 700 }}>⟳ DB 로딩 중...</span>}
+          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>{dbAll.length.toLocaleString()}건 표시 중 / 전체 {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 · {lastSync}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
           {sel.size > 0 && <button onClick={() => { openMM([...data.active, ...data.past, ...data.blacklist].filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
-          <button onClick={() => fetchMore(true)} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
+          <button onClick={() => { setDbOffset(0); fetchPage(0) }} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
           <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
           <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
           <button onClick={addN} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>+새후보자</button>
@@ -786,18 +706,42 @@ export default function BridgeAdminSheet() {
         </div>
       </div>
 
-      {/* 전체 탭: AG Grid + 무한스크롤 */}
+      {/* 전체 탭: AG Grid + 오프셋 페이지네이션 */}
       {tab === 'all' && (
-        <AllCandidatesGrid
-          rows={dbAll as Record<string, string | number>[]}
-          onCopyTo={mv as (row: Record<string, string | number>, cat: 'active' | 'past' | 'blacklist') => void}
-          loading={loading}
-          loadProgress={dbLoadProgress}
-          hasMore={dbHasMore}
-          loadingMore={dbLoadingMore}
-          onLoadMore={fetchMore}
-          total={dbTotal}
-        />
+        <>
+          <AllCandidatesGrid
+            rows={dbAll as Record<string, string | number>[]}
+            onCopyTo={mv as (row: Record<string, string | number>, cat: 'active' | 'past' | 'blacklist') => void}
+            loading={loading}
+            total={dbTotal}
+          />
+          {/* 페이지네이션 컨트롤 */}
+          <div style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1', padding: '10px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                const newOffset = Math.max(0, dbOffset - PAGE_SIZE)
+                setDbOffset(newOffset)
+                fetchPage(newOffset)
+              }}
+              disabled={loading || dbOffset === 0}
+              style={{ padding: '8px 20px', fontSize: 15, border: '2px solid #2563eb', borderRadius: 8, background: dbOffset === 0 ? '#f1f5f9' : '#eff6ff', color: dbOffset === 0 ? '#aaa' : '#2563eb', cursor: dbOffset === 0 ? 'default' : 'pointer', fontWeight: 800 }}
+            >◀ 이전</button>
+            <span style={{ fontSize: 15, fontWeight: 700, minWidth: 200, textAlign: 'center' }}>
+              {loading ? '로딩 중...' : `${(dbOffset + 1).toLocaleString()} ~ ${Math.min(dbOffset + PAGE_SIZE, dbTotal).toLocaleString()} / 전체 ${dbTotal.toLocaleString()}건`}
+            </span>
+            <button
+              onClick={() => {
+                const newOffset = dbOffset + PAGE_SIZE
+                if (newOffset < dbTotal) {
+                  setDbOffset(newOffset)
+                  fetchPage(newOffset)
+                }
+              }}
+              disabled={loading || dbOffset + PAGE_SIZE >= dbTotal}
+              style={{ padding: '8px 20px', fontSize: 15, border: '2px solid #2563eb', borderRadius: 8, background: (dbOffset + PAGE_SIZE >= dbTotal) ? '#f1f5f9' : '#eff6ff', color: (dbOffset + PAGE_SIZE >= dbTotal) ? '#aaa' : '#2563eb', cursor: (dbOffset + PAGE_SIZE >= dbTotal) ? 'default' : 'pointer', fontWeight: 800 }}
+            >다음 ▶</button>
+          </div>
+        </>
       )}
 
       {/* 수동 탭: 상단 스크롤바 + 테이블 */}

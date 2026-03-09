@@ -1404,7 +1404,8 @@ async def admin_candidates(
 ):
     """
     지원자 목록 — SQLite. status=active|past|<specific> 필터 지원.
-    cursor>0이면 rowid<cursor 조건 추가 (무한스크롤 페이지네이션).
+    offset/limit 기반 페이지네이션 (cursor=0일 때 offset 사용).
+    cursor>0이면 rowid<cursor 조건 추가 (하위호환 유지).
     보호: X-Admin-Key 필수
     """
     _check_admin(request)
@@ -1458,21 +1459,29 @@ async def admin_candidates(
                 "how_to, tattoo, visa_type"
             )
 
-            # cursor-based pagination: cursor>0이면 rowid<cursor 조건 추가
-            cursor_params = list(params)
             if cursor > 0:
+                # 하위호환: cursor-based pagination
                 cursor_where = f"({where_sql}) AND rowid < ?"
-                cursor_params.append(cursor)
+                query_params = list(params) + [cursor, limit]
+                rows_raw = conn.execute(
+                    f"""SELECT {_COLS}, rowid FROM candidates
+                        WHERE {cursor_where}
+                        ORDER BY rowid DESC
+                        LIMIT ?""",
+                    query_params,
+                ).fetchall()
             else:
-                cursor_where = where_sql
-
-            rows_raw = conn.execute(
-                f"""SELECT {_COLS}, rowid FROM candidates
-                    WHERE {cursor_where}
-                    ORDER BY rowid DESC
-                    LIMIT ?""",
-                cursor_params + [limit],
-            ).fetchall()
+                # offset-based pagination
+                safe_offset = max(0, offset)
+                safe_limit = max(1, min(500, limit))
+                query_params = list(params) + [safe_limit, safe_offset]
+                rows_raw = conn.execute(
+                    f"""SELECT {_COLS}, rowid FROM candidates
+                        WHERE {where_sql}
+                        ORDER BY rowid DESC
+                        LIMIT ? OFFSET ?""",
+                    query_params,
+                ).fetchall()
 
             candidates = []
             last_rowid: Optional[int] = None
@@ -1488,8 +1497,8 @@ async def admin_candidates(
                     d[k] = _sanitize_str(v)
                 candidates.append(d)
 
-            # next_cursor: 다음 페이지 시작점 (마지막 rowid), 더 이상 없으면 None
-            next_cursor: Optional[int] = last_rowid if len(candidates) == limit else None
+            # next_cursor: cursor-based 호환용 (cursor>0 일 때만 의미 있음)
+            next_cursor: Optional[int] = last_rowid if (cursor > 0 and len(candidates) == limit) else None
 
             payload = ok(
                 data={"total": total, "candidates": candidates, "next_cursor": next_cursor},
@@ -3796,6 +3805,200 @@ async def admin_delete_interview(interview_id: int, request: Request):
     conn.commit()
     conn.close()
     return ok(message=f"Interview #{interview_id} deleted")
+
+
+# ── Google Calendar 자동 확정 ──────────────────────────────────────────────────
+
+class InterviewConfirm(BaseModel):
+    candidate_id:     str = Field(..., min_length=1, max_length=50)
+    inquiry_id:       int = Field(...)
+    interview_date:   str = Field(..., min_length=8, max_length=20)
+    interview_time:   str = Field(..., min_length=3, max_length=10)
+    duration_minutes: int = Field(60, ge=15, le=240)
+    notes:            str = Field("", max_length=2000)
+
+
+_GCAL_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+
+def _get_gcal_service():
+    """Google Calendar 서비스 계정 인증 (GOOGLE_SERVICE_ACCOUNT_JSON 환경변수 필요)."""
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError as e:
+        raise RuntimeError(f"Google API 패키지 없음: {e}")
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if not sa_json:
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON 미설정")
+    try:
+        sa_info = json.loads(sa_json)
+    except Exception:
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON JSON 파싱 실패")
+    creds = service_account.Credentials.from_service_account_info(sa_info, scopes=_GCAL_SCOPES)
+    return build("calendar", "v3", credentials=creds)
+
+
+def _create_gcal_event(
+    service, calendar_id: str, summary: str, dt_str: str, time_str: str, duration_min: int
+) -> str:
+    """Google Calendar 이벤트 생성 → Meet link 반환."""
+    naive_dt = datetime.strptime(f"{dt_str}T{time_str}", "%Y-%m-%dT%H:%M")
+    kst = timezone(timedelta(hours=9))
+    start_dt = naive_dt.replace(tzinfo=kst)
+    end_dt = start_dt + timedelta(minutes=duration_min)
+    event = {
+        "summary": summary,
+        "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Seoul"},
+        "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Seoul"},
+        "conferenceData": {
+            "createRequest": {
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+                "requestId": f"bridge-iv-{uuid.uuid4().hex[:16]}",
+            }
+        },
+    }
+    result = service.events().insert(
+        calendarId=calendar_id, body=event, conferenceDataVersion=1
+    ).execute()
+    meet_link = ""
+    for ep in result.get("conferenceData", {}).get("entryPoints", []):
+        if ep.get("entryPointType") == "video":
+            meet_link = ep.get("uri", "")
+            break
+    if not meet_link:
+        meet_link = result.get("hangoutLink", "")
+    return meet_link
+
+
+def _mask_email(email: str) -> str:
+    """PII 마스킹: abc@domain.com → a***@domain.com"""
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    return f"{local[:1]}***@{domain}"
+
+
+@app.post("/api/admin/interview/confirm", status_code=201, tags=["admin"])
+async def admin_confirm_interview(body: InterviewConfirm, request: Request):
+    """Google Calendar 인터뷰 확정: 이벤트 생성 → Meet link → DB 저장 → 이메일 자동 발송."""
+    _check_admin(request)
+    _log_iv = logging.getLogger("bridge.api")
+
+    # 1. 후보자/구인처 조회
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        cand = conn.execute(
+            "SELECT candidate_id, full_name, email FROM candidates WHERE candidate_id=? AND is_deleted=0",
+            (body.candidate_id,),
+        ).fetchone()
+        inq = conn.execute(
+            "SELECT id, school_name, contact_name, email FROM client_inquiries WHERE id=? AND is_deleted=0",
+            (body.inquiry_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not cand:
+        raise HTTPException(404, f"Candidate '{body.candidate_id}' not found")
+    if not inq:
+        raise HTTPException(404, f"Inquiry #{body.inquiry_id} not found")
+
+    candidate_name  = cand["full_name"] or ""
+    candidate_email = cand["email"] or ""
+    employer_name   = inq["school_name"] or inq["contact_name"] or ""
+    employer_email  = inq["email"] or ""
+
+    # 2. Google Calendar 이벤트 생성 (환경변수 미설정 시 graceful fail)
+    calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+    meet_link: str = ""
+    gcal_error: Optional[str] = None
+    try:
+        service   = _get_gcal_service()
+        summary   = f"[BRIDGE Interview] {candidate_name} × {employer_name}"
+        meet_link = _create_gcal_event(
+            service, calendar_id, summary,
+            body.interview_date, body.interview_time, body.duration_minutes,
+        )
+    except RuntimeError as e:
+        gcal_error = str(e)
+        _log_iv.warning("Google Calendar 비활성 (수동 링크 필요): %s", gcal_error)
+    except Exception as e:
+        gcal_error = "Google Calendar API 오류"
+        _log_iv.error("Google Calendar 예외: %s", type(e).__name__)
+
+    # 3. interviews 테이블 INSERT
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        cur = conn.execute(
+            """INSERT INTO interviews
+               (candidate_name, candidate_email, employer_name, employer_email,
+                interview_date, interview_time, meet_link, notes, duration_minutes, status)
+               VALUES (?,?,?,?,?,?,?,?,?,'scheduled')""",
+            (candidate_name, candidate_email, employer_name, employer_email,
+             body.interview_date, body.interview_time, meet_link, body.notes, body.duration_minutes),
+        )
+        interview_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    _log_iv.info(
+        "Interview #%d confirmed: candidate=%s employer=%s meet=%s",
+        interview_id, _mask_email(candidate_email), _mask_email(employer_email),
+        (meet_link[:30] + "...") if len(meet_link) > 30 else meet_link,
+    )
+
+    # 4. 이메일 자동 발송 (실패해도 DB 삽입은 유지)
+    iv_dict = {
+        "candidate_name":  candidate_name,
+        "candidate_email": candidate_email,
+        "employer_name":   employer_name,
+        "employer_email":  employer_email,
+        "interview_date":  body.interview_date,
+        "interview_time":  body.interview_time,
+        "meet_link":       meet_link,
+    }
+    email_errors: list = []
+    for target in ("candidate", "employer"):
+        try:
+            subject, html, to_email = _render_interview_email(iv_dict, target)
+            if to_email:
+                sent = _smtp_send(to_email, subject, html)
+                if sent:
+                    conn2 = sqlite3.connect(str(_ADMIN_DB_PATH))
+                    conn2.execute("PRAGMA busy_timeout = 5000")
+                    if target == "candidate":
+                        conn2.execute(
+                            "UPDATE interviews SET email_sent_candidate=1, candidate_email_sent=1, candidate_email_sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (interview_id,),
+                        )
+                    else:
+                        conn2.execute(
+                            "UPDATE interviews SET email_sent_employer=1, school_email_sent=1, school_email_sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (interview_id,),
+                        )
+                    conn2.commit()
+                    conn2.close()
+        except Exception as e:
+            email_errors.append(f"{target}: {type(e).__name__}")
+
+    return ok(
+        data={
+            "id":           interview_id,
+            "meet_link":    meet_link,
+            "gcal_error":   gcal_error,
+            "email_errors": email_errors,
+        },
+        message=(
+            f"Interview #{interview_id} confirmed"
+            + (f" — GCal: {gcal_error}" if gcal_error else "")
+            + (f" — email errors: {len(email_errors)}" if email_errors else "")
+        ),
+    )
 
 
 # ── File Upload System ─────────────────────────────────────────────────────────

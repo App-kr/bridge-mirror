@@ -5,7 +5,7 @@
  * 3059행 즉시 렌더링, 딜레이 없음
  */
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import {
   AllCommunityModule,
@@ -15,7 +15,6 @@ import {
   GetContextMenuItemsParams,
   MenuItemDef,
   GridReadyEvent,
-  BodyScrollEvent,
 } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-quartz.css'
@@ -30,10 +29,6 @@ interface Props {
   rows: DataRow[]
   onCopyTo: (row: DataRow, cat: CategoryKey) => void
   loading: boolean
-  loadProgress: number
-  hasMore?: boolean
-  loadingMore?: boolean
-  onLoadMore?: () => void
   total?: number
 }
 
@@ -177,23 +172,7 @@ function buildColDefs(): ColDef[] {
 }
 
 /* ─── Main Component ─── */
-export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgress, hasMore, loadingMore, onLoadMore, total }: Props) {
-  const gridRef = useRef<AgGridReact>(null)
-  const loadingMoreRef = useRef(false)
-
-  const onBodyScroll = useCallback((e: BodyScrollEvent) => {
-    if (!onLoadMore || loadingMoreRef.current || !hasMore) return
-    const api = e.api
-    const lastVisible = api.getLastDisplayedRowIndex()
-    const rowCount = api.getDisplayedRowCount()
-    // 하단 30행 이내에 도달하면 추가 로드
-    if (rowCount > 0 && lastVisible >= rowCount - 30) {
-      loadingMoreRef.current = true
-      onLoadMore()
-      // 중복 호출 방지: 500ms 후 해제
-      setTimeout(() => { loadingMoreRef.current = false }, 500)
-    }
-  }, [onLoadMore, hasMore])
+export default function AllCandidatesGrid({ rows, onCopyTo, loading, total }: Props) {
 
   const colDefs = useMemo(() => buildColDefs(), [])
 
@@ -244,13 +223,18 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
       {loading && (
         <div style={{ background: '#eff6ff', borderBottom: '1px solid #bfdbfe', padding: '6px 16px', fontSize: 13, color: '#2563eb', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
-          DB 로딩 중… {loadProgress.toLocaleString()}건 / {rows.length.toLocaleString()}건 표시 중
+          DB 로딩 중...
         </div>
       )}
       {/* 안내 */}
       {!loading && rows.length > 0 && (
         <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '4px 16px', fontSize: 12, color: '#64748b', flexShrink: 0 }}>
-          <b>{rows.length.toLocaleString()}</b>건 표시 중{total && total > rows.length ? ` / 전체 ${total.toLocaleString()}건` : ''}{hasMore ? ' · 스크롤 하단→추가 로드' : ' · 전체 로드 완료'} · 우클릭→탭 복사 · 헤더 클릭→정렬
+          <b>{rows.length.toLocaleString()}</b>건 표시 중{total && total > rows.length ? ` / 전체 ${total.toLocaleString()}건` : ''} · 우클릭→탭 복사 · 헤더 클릭→정렬
+        </div>
+      )}
+      {!loading && rows.length === 0 && (
+        <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 16px', fontSize: 14, color: '#64748b', flexShrink: 0, textAlign: 'center' }}>
+          데이터 없음
         </div>
       )}
       <div
@@ -258,7 +242,6 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
         style={{ flex: 1, width: '100%', minHeight: 0 }}
       >
         <AgGridReact
-          ref={gridRef}
           rowData={rows}
           columnDefs={colDefs}
           defaultColDef={defaultColDef}
@@ -275,20 +258,8 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, loadProgres
           suppressAnimationFrame={false}
           rowBuffer={20}
           domLayout="normal"
-          onBodyScroll={onBodyScroll}
         />
       </div>
-      {/* 무한스크롤 하단 sentinel */}
-      {(loadingMore || (!loading && hasMore)) && (
-        <div style={{ background: '#eff6ff', padding: '8px 16px', fontSize: 13, color: '#2563eb', fontWeight: 700, textAlign: 'center', flexShrink: 0 }}>
-          {loadingMore ? '⟳ 추가 로딩 중...' : '↓ 스크롤하면 추가 데이터 로드'}
-        </div>
-      )}
-      {!loading && !hasMore && rows.length > 0 && (
-        <div style={{ background: '#f0fdf4', padding: '6px 16px', fontSize: 12, color: '#16a34a', fontWeight: 700, textAlign: 'center', flexShrink: 0 }}>
-          ✓ 전체 {rows.length.toLocaleString()}건 로드 완료
-        </div>
-      )}
     </div>
   )
 }

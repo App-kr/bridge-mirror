@@ -37,6 +37,17 @@ interface EmailPreview {
   to_email: string
 }
 
+interface CandidateOption {
+  id: string
+  name: string
+  email: string
+}
+
+interface InquiryOption {
+  id: number
+  name: string
+}
+
 const STATUS_COLORS: Record<string, string> = {
   scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
   completed: 'bg-green-50 text-green-700 border-green-200',
@@ -147,6 +158,7 @@ export default function AdminInterviewsPage() {
   const [showForm, setShowForm] = useState(false)
   const [emailModal, setEmailModal] = useState<{ id: number; target: 'candidate' | 'employer' } | null>(null)
 
+  // Manual creation form
   const [form, setForm] = useState({
     candidate_name: '', candidate_email: '',
     employer_name: '', employer_email: '',
@@ -154,8 +166,29 @@ export default function AdminInterviewsPage() {
     meet_link: '', notes: '', duration_minutes: '60',
     candidate_phone: '', employer_phone: '',
   })
-  const [candidates, setCandidates] = useState<{ id: number; name: string; email: string }[]>([])
+  const [candidates, setCandidates] = useState<CandidateOption[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Google Calendar confirm modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [confirmForm, setConfirmForm] = useState({
+    candidate_id: '',
+    candidate_name: '',
+    inquiry_id: 0,
+    inquiry_name: '',
+    interview_date: '',
+    interview_time: '',
+    duration_minutes: '60',
+    notes: '',
+  })
+  const [confirmCandidateSearch, setConfirmCandidateSearch] = useState('')
+  const [confirmCandidates, setConfirmCandidates] = useState<CandidateOption[]>([])
+  const [inquirySearch, setInquirySearch] = useState('')
+  const [inquiries, setInquiries] = useState<InquiryOption[]>([])
+  const [confirmLoading, setConfirmLoading] = useState(false)
+  const [confirmResult, setConfirmResult] = useState<{
+    id: number; meet_link: string; gcal_error?: string | null
+  } | null>(null)
 
   const fetchInterviews = useCallback(async () => {
     setLoading(true)
@@ -210,6 +243,40 @@ export default function AdminInterviewsPage() {
     }
   }
 
+  const handleConfirm = async () => {
+    if (!confirmForm.candidate_id || !confirmForm.inquiry_id || !confirmForm.interview_date || !confirmForm.interview_time) {
+      setActionMsg('후보자, 구인처, 날짜, 시간은 필수입니다.')
+      return
+    }
+    setConfirmLoading(true)
+    try {
+      const res = await fetch(`${API}/api/admin/interview/confirm`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          candidate_id:     confirmForm.candidate_id,
+          inquiry_id:       confirmForm.inquiry_id,
+          interview_date:   confirmForm.interview_date,
+          interview_time:   confirmForm.interview_time,
+          duration_minutes: parseInt(confirmForm.duration_minutes),
+          notes:            confirmForm.notes,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.detail ?? json.message ?? 'Failed')
+      setConfirmResult({
+        id:         json.data?.id,
+        meet_link:  json.data?.meet_link || '',
+        gcal_error: json.data?.gcal_error ?? null,
+      })
+    } catch (e) {
+      setActionMsg(`확정 오류: ${e instanceof Error ? e.message : 'Failed'}`)
+      setShowConfirmModal(false)
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
   const handleStatus = async (id: number, newStatus: string) => {
     try {
       const res = await fetch(`${API}/api/admin/interviews/${id}`, {
@@ -244,6 +311,11 @@ export default function AdminInterviewsPage() {
         <div className="flex gap-2">
           <button type="button" onClick={fetchInterviews}
             className="text-sm text-blue-600 hover:underline">↻ 새로고침</button>
+          <button type="button"
+            onClick={() => { setShowConfirmModal(true); setConfirmResult(null); setConfirmForm({ candidate_id: '', candidate_name: '', inquiry_id: 0, inquiry_name: '', interview_date: '', interview_time: '', duration_minutes: '60', notes: '' }); setConfirmCandidateSearch(''); setInquirySearch('') }}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
+            ⚡ Google Meet 확정
+          </button>
           <button type="button" onClick={() => setShowForm(!showForm)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
             + New Interview
@@ -258,7 +330,7 @@ export default function AdminInterviewsPage() {
         </div>
       )}
 
-      {/* New Interview Form */}
+      {/* New Interview Form (manual) */}
       {showForm && (
         <div className="card space-y-4">
           <h2 className="font-bold text-gray-900">Schedule New Interview</h2>
@@ -274,7 +346,7 @@ export default function AdminInterviewsPage() {
                   try {
                     const r = await fetch(`${API}/api/admin/candidates?search=${encodeURIComponent(e.target.value)}&limit=5`, { headers: headers() })
                     const j = await r.json()
-                    if (j.success) setCandidates((j.data || []).map((c: Record<string, unknown>) => ({ id: c.id, name: c.name || c.first_name || '', email: c.email || '' })))
+                    if (j.success) setCandidates((j.data?.candidates ?? []).map((c: Record<string, unknown>) => ({ id: String(c.id || ''), name: String(c.full_name || c.name || ''), email: String(c.email || '') })))
                   } catch { setCandidates([]) }
                 } else setCandidates([])
               }} />
@@ -460,6 +532,195 @@ export default function AdminInterviewsPage() {
             fetchInterviews()
           }}
         />
+      )}
+
+      {/* Google Calendar 자동 확정 Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">⚡ Google Meet 인터뷰 자동 확정</h3>
+              <button type="button"
+                onClick={() => { setShowConfirmModal(false); setConfirmResult(null) }}
+                className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {confirmResult ? (
+                /* Success view */
+                <div className="text-center py-8">
+                  <div className="text-5xl mb-4">✅</div>
+                  <p className="font-bold text-gray-900 text-lg">인터뷰 확정 완료!</p>
+                  <p className="text-sm text-gray-500 mt-1">Interview #{confirmResult.id}</p>
+                  {confirmResult.meet_link ? (
+                    <a href={confirmResult.meet_link} target="_blank" rel="noopener noreferrer"
+                      className="inline-block mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">
+                      🔗 Google Meet 참가
+                    </a>
+                  ) : (
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                      <p className="font-semibold">⚠️ Google Calendar 미연동</p>
+                      <p className="mt-1 text-xs">인터뷰는 저장되었습니다. Meet 링크는 나중에 수동으로 추가하세요.</p>
+                      <p className="mt-1 text-xs text-amber-500">설정: GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_CALENDAR_ID 환경변수</p>
+                    </div>
+                  )}
+                  {confirmResult.gcal_error && !confirmResult.meet_link && (
+                    <p className="text-xs text-red-400 mt-2">{confirmResult.gcal_error}</p>
+                  )}
+                </div>
+              ) : (
+                /* Form view */
+                <>
+                  {/* Candidate search */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">후보자 * (이름/이메일 검색)</label>
+                    <input className="input mt-1" placeholder="이름 또는 이메일 입력..."
+                      value={confirmCandidateSearch}
+                      onChange={async (e) => {
+                        setConfirmCandidateSearch(e.target.value)
+                        setConfirmForm(p => ({ ...p, candidate_id: '', candidate_name: '' }))
+                        if (e.target.value.length >= 2) {
+                          try {
+                            const r = await fetch(`${API}/api/admin/candidates?search=${encodeURIComponent(e.target.value)}&limit=5`, { headers: headers() })
+                            const j = await r.json()
+                            if (j.success) setConfirmCandidates((j.data?.candidates ?? []).map((c: Record<string, unknown>) => ({
+                              id: String(c.id || ''),
+                              name: String(c.full_name || c.name || ''),
+                              email: String(c.email || ''),
+                            })))
+                          } catch { setConfirmCandidates([]) }
+                        } else setConfirmCandidates([])
+                      }} />
+                    {confirmCandidates.length > 0 && (
+                      <div className="border border-gray-200 rounded-lg mt-1 bg-white shadow-sm max-h-40 overflow-auto">
+                        {confirmCandidates.map(c => (
+                          <button key={c.id} type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
+                            onClick={() => {
+                              setConfirmForm(p => ({ ...p, candidate_id: c.id, candidate_name: c.name }))
+                              setConfirmCandidateSearch(`${c.name} (${c.email})`)
+                              setConfirmCandidates([])
+                            }}>
+                            {c.name} <span className="text-gray-400">({c.email})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {confirmForm.candidate_id && (
+                      <p className="text-xs text-emerald-600 mt-1">✓ {confirmForm.candidate_name} · ID: {confirmForm.candidate_id}</p>
+                    )}
+                  </div>
+
+                  {/* Inquiry search */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">구인처 (학교) * 검색</label>
+                    <input className="input mt-1" placeholder="학교명 또는 담당자명 입력..."
+                      value={inquirySearch}
+                      onChange={async (e) => {
+                        setInquirySearch(e.target.value)
+                        setConfirmForm(p => ({ ...p, inquiry_id: 0, inquiry_name: '' }))
+                        if (e.target.value.length >= 2) {
+                          try {
+                            const r = await fetch(`${API}/api/admin/inquiries?q=${encodeURIComponent(e.target.value)}&limit=5`, { headers: headers() })
+                            const j = await r.json()
+                            if (j.success) setInquiries((j.data?.inquiries ?? []).map((i: Record<string, unknown>) => ({
+                              id: Number(i.id),
+                              name: String(i.school_name || i.contact_name || ''),
+                            })))
+                          } catch { setInquiries([]) }
+                        } else setInquiries([])
+                      }} />
+                    {inquiries.length > 0 && (
+                      <div className="border border-gray-200 rounded-lg mt-1 bg-white shadow-sm max-h-40 overflow-auto">
+                        {inquiries.map(i => (
+                          <button key={i.id} type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
+                            onClick={() => {
+                              setConfirmForm(p => ({ ...p, inquiry_id: i.id, inquiry_name: i.name }))
+                              setInquirySearch(i.name)
+                              setInquiries([])
+                            }}>
+                            #{i.id} {i.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {confirmForm.inquiry_id > 0 && (
+                      <p className="text-xs text-emerald-600 mt-1">✓ {confirmForm.inquiry_name} · Inquiry #{confirmForm.inquiry_id}</p>
+                    )}
+                  </div>
+
+                  {/* Date / Time */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">날짜 *</label>
+                      <input type="date" className="input mt-1"
+                        value={confirmForm.interview_date}
+                        onChange={e => setConfirmForm(p => ({ ...p, interview_date: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">시간 (KST) *</label>
+                      <input type="time" className="input mt-1"
+                        value={confirmForm.interview_time}
+                        onChange={e => setConfirmForm(p => ({ ...p, interview_time: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">면접 시간</label>
+                    <div className="flex gap-2 mt-1">
+                      {['30', '45', '60'].map(d => (
+                        <button key={d} type="button"
+                          className={`px-4 py-2 rounded-lg text-sm border transition-colors ${confirmForm.duration_minutes === d ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                          onClick={() => setConfirmForm(p => ({ ...p, duration_minutes: d }))}>
+                          {d}분
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">메모</label>
+                    <textarea className="input mt-1" rows={2} placeholder="Optional notes..."
+                      value={confirmForm.notes}
+                      onChange={e => setConfirmForm(p => ({ ...p, notes: e.target.value }))} />
+                  </div>
+
+                  <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500 space-y-1">
+                    <p>📅 Google Calendar 이벤트 + Meet 링크 자동 생성</p>
+                    <p>📧 후보자(영문)·구인처(한국어) 이메일 자동 발송</p>
+                    <p className="text-amber-500">* GOOGLE_SERVICE_ACCOUNT_JSON 미설정 시 이벤트 없이 저장됩니다</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex gap-2 justify-end">
+              {confirmResult ? (
+                <button type="button"
+                  onClick={() => { setShowConfirmModal(false); setConfirmResult(null); fetchInterviews() }}
+                  className="admin-btn admin-btn-save">
+                  확인
+                </button>
+              ) : (
+                <>
+                  <button type="button"
+                    onClick={() => { setShowConfirmModal(false); setConfirmResult(null) }}
+                    className="admin-btn admin-btn-cancel">
+                    ✕ 취소
+                  </button>
+                  <button type="button" onClick={handleConfirm}
+                    disabled={confirmLoading || !confirmForm.candidate_id || !confirmForm.inquiry_id || !confirmForm.interview_date || !confirmForm.interview_time}
+                    className="admin-btn admin-btn-save disabled:opacity-50 disabled:cursor-not-allowed">
+                    {confirmLoading ? '확정 중...' : '⚡ Google Meet 확정'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
