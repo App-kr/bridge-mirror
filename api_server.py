@@ -1963,6 +1963,23 @@ _SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMA
 _SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
 _log_email = logging.getLogger("bridge.email_send")
 
+SMTP_CONFIG = {
+    "naver": {
+        "host": "smtp.naver.com",
+        "port": 587,
+        "user": os.getenv("NAVER_SMTP_USER", ""),
+        "password": os.getenv("NAVER_SMTP_PASS", ""),
+        "limit": 500,
+    },
+    "gmail": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "user": os.getenv("GMAIL_SMTP_USER", os.getenv("BRIDGE_SMTP_USER", "")),
+        "password": os.getenv("GMAIL_SMTP_PASS", os.getenv("BRIDGE_SMTP_PASS", "")),
+        "limit": 100,
+    },
+}
+
 # template_key → candidates 컬럼 매핑
 _TEMPLATE_COL_MAP = {
     "contract_offer":       "email_contract",
@@ -5872,6 +5889,147 @@ async def admin_mail_logs(request: Request, log_type: str = "", limit: int = 100
         return ok(data=[dict(r) for r in rows])
     finally:
         conn.close()
+
+
+# ─── 엔드포인트 1: 발송 현황 ──────────────────────────────────────────────────
+@app.get("/api/admin/mail/stats", tags=["admin"])
+async def get_mail_stats(request: Request):
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        today_count = conn.execute(
+            "SELECT COALESCE(SUM(sent_count), 0) FROM mail_logs WHERE DATE(sent_at) = DATE('now', 'localtime')"
+        ).fetchone()[0]
+        return ok(data={"sent_today": int(today_count), "limit": 500})
+    finally:
+        conn.close()
+
+
+# ─── 엔드포인트 2: 메일 발송 (/send + /send-bulk 동일 핸들러) ────────────────
+async def _handle_mail_send(request: Request):
+    _check_admin(request)
+    import json as _json
+    data = await request.json()
+
+    sender_label: str = data.get("sender", "gmail")
+    recipients: list = data.get("recipients", [])
+    subject: str = data.get("subject", "")
+    body: str = data.get("body_html", data.get("body", ""))
+    personal: bool = data.get("personal_send", data.get("personal", True))
+
+    if not recipients:
+        raise HTTPException(status_code=400, detail="수신자가 없습니다.")
+    if not subject:
+        raise HTTPException(status_code=400, detail="제목을 입력하세요.")
+
+    smtp_key = "naver" if "naver" in sender_label.lower() else "gmail"
+    cfg = SMTP_CONFIG[smtp_key]
+
+    if not cfg["user"] or not cfg["password"]:
+        raise HTTPException(status_code=503, detail=f"{smtp_key.upper()} SMTP 계정이 설정되지 않았습니다.")
+
+    sent = 0
+    failed = 0
+    errors: list = []
+
+    try:
+        server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
+        server.starttls()
+        server.login(cfg["user"], cfg["password"])
+
+        if personal:
+            for email in recipients:
+                try:
+                    msg = MIMEMultipart("alternative")
+                    msg["From"] = cfg["user"]
+                    msg["To"] = email
+                    msg["Subject"] = subject
+                    msg["Reply-To"] = "bridgejobkr@gmail.com"
+                    msg.attach(MIMEText(body, "html", "utf-8"))
+                    server.sendmail(cfg["user"], [email], msg.as_string())
+                    sent += 1
+                    time.sleep(3)
+                except Exception as exc:
+                    failed += 1
+                    errors.append(str(exc))
+        else:
+            batch_size = 100
+            for i in range(0, len(recipients), batch_size):
+                batch = recipients[i:i + batch_size]
+                msg = MIMEMultipart("alternative")
+                msg["From"] = cfg["user"]
+                msg["To"] = cfg["user"]
+                msg["Bcc"] = ", ".join(batch)
+                msg["Subject"] = subject
+                msg["Reply-To"] = "bridgejobkr@gmail.com"
+                msg.attach(MIMEText(body, "html", "utf-8"))
+                try:
+                    server.sendmail(cfg["user"], batch, msg.as_string())
+                    sent += len(batch)
+                    time.sleep(3)
+                except Exception as exc:
+                    failed += len(batch)
+                    errors.append(str(exc))
+
+        server.quit()
+
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=401, detail="SMTP 인증 실패. 계정/비밀번호 확인 필요.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"SMTP 연결 오류: {str(exc)}")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        preview = ", ".join(recipients[:5]) + ("..." if len(recipients) > 5 else "")
+        conn.execute(
+            "INSERT INTO mail_logs (log_type, sent_count, failed_count, status, details) VALUES (?, ?, ?, ?, ?)",
+            ("manual_send", sent, failed, "completed" if failed == 0 else "partial",
+             _json.dumps({"sender": sender_label, "subject": subject, "recipients_preview": preview}, ensure_ascii=False)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return ok(data={"sent": sent, "failed": failed, "errors": errors[:3]})
+
+
+@app.post("/api/admin/mail/send", tags=["admin"])
+async def send_mail(request: Request):
+    return await _handle_mail_send(request)
+
+
+@app.post("/api/admin/mail/send-bulk", tags=["admin"])
+async def send_mail_bulk(request: Request):
+    return await _handle_mail_send(request)
+
+
+# ─── 엔드포인트 3: 템플릿 목록 ───────────────────────────────────────────────
+@app.get("/api/admin/mail/templates", tags=["admin"])
+async def get_mail_templates(request: Request):
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT template_key, subject, body_html FROM email_templates ORDER BY template_key"
+        ).fetchall()
+        templates = [{"name": r["template_key"], "subject": r["subject"], "body": r["body_html"]} for r in rows]
+    except Exception:
+        templates = []
+    finally:
+        conn.close()
+
+    if not templates:
+        templates = [
+            {"name": "arrival_guide",       "subject": "[BRIDGE] Korea Arrival Guide",  "body": "<p>Please find your Korea arrival guide attached.</p>"},
+            {"name": "interview_candidate", "subject": "<BRIDGE> Interview Guide",       "body": "<p>Your interview has been scheduled. Please see details below.</p>"},
+            {"name": "contract_offer",      "subject": "[BRIDGE] Contract Offer",        "body": "<p>We are pleased to offer you the following position.</p>"},
+        ]
+
+    return ok(data={"templates": templates})
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
