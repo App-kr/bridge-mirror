@@ -94,5 +94,40 @@ def main() -> None:
         time.sleep(CHECK_INTERVAL)
 
 
+def register_task_scheduler() -> None:
+    """Windows Task Scheduler에 로그인 시 자동 실행 등록."""
+    import subprocess, sys
+    script = str(Path(__file__).resolve())
+    pythonw = str(Path(sys.executable).parent / "pythonw.exe")
+    task_name = "BridgeRenderMonitor"
+    xml = f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+  <Actions>
+    <Exec>
+      <Command>{pythonw}</Command>
+      <Arguments>"{script}"</Arguments>
+      <WorkingDirectory>{Path(script).parent}</WorkingDirectory>
+    </Exec>
+  </Actions>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings>
+</Task>"""
+    xml_path = Path(__file__).parent / "_task_tmp.xml"
+    xml_path.write_text(xml, encoding="utf-16")
+    result = subprocess.run(
+        ["schtasks", "/Create", "/TN", task_name, "/XML", str(xml_path), "/F"],
+        capture_output=True, text=True,
+    )
+    xml_path.unlink(missing_ok=True)
+    if result.returncode == 0:
+        print(f"Task Scheduler 등록 완료: {task_name}")
+    else:
+        print(f"등록 실패 (관리자 권한 필요):\n{result.stderr}")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--register" in sys.argv:
+        register_task_scheduler()
+    else:
+        main()
