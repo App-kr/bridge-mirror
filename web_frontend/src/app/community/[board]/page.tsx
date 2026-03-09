@@ -941,11 +941,21 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
               >
-                <p className="text-white/50 text-sm mb-3">기타 궁금한 사항은 카카오톡 채널로 문의해주세요.</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex-1 border-t border-white/20" />
+                  <span className="text-gray-400 text-sm italic">Employers only</span>
+                  <div className="flex-1 border-t border-white/20" />
+                </div>
+                <p className="text-white/50 text-sm mb-3">기타사항은 카카오톡 채널로 문의해주세요</p>
                 <a href="http://pf.kakao.com/_tBxhxkK/chat" target="_blank" rel="noopener noreferrer"
                   className="inline-block px-5 py-2.5 bg-[#FEE500] text-[#191919] text-sm font-medium rounded-full hover:bg-[#F5DC00] transition-colors">
                   카카오톡 문의하기
                 </a>
+                <div className="flex items-center gap-3 mt-3">
+                  <div className="flex-1 border-t border-white/20" />
+                  <span className="text-gray-400 text-sm italic">Employers only</span>
+                  <div className="flex-1 border-t border-white/20" />
+                </div>
               </motion.div>
             )}
           </div>
