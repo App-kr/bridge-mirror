@@ -237,69 +237,58 @@ export default function JobDetailModal({
         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
 
         {/* ── 본문 ── */}
-        {rawText ? (
-          <pre style={{
-            fontSize: 14,
-            lineHeight: 1.8,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            color: '#374151',
-            margin: 0,
-            fontFamily: 'inherit',
-          }}>
-            {rawText}
-          </pre>
-        ) : (
-          <>
-            {fields.length > 0 && (
-              <div style={{ borderTop: '1px solid #f3f4f6' }}>
-                {fields.map((f, i) => (
-                  <FieldRow key={i} label={f.label} value={f.value} zebra={i % 2 === 1} />
+        <>
+          {fields.length > 0 && (
+            <div style={{ borderTop: '1px solid #f3f4f6' }}>
+              {fields.map((f, i) => (
+                <FieldRow key={i} label={f.label} value={f.value} zebra={i % 2 === 1} />
+              ))}
+            </div>
+          )}
+          {notes.length > 0 && (
+            <>
+              <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
+              <div
+                style={{
+                  background: '#EFF6FF',
+                  borderLeft: '4px solid #60a5fa',
+                  borderRadius: 8,
+                  padding: '12px 16px',
+                  fontSize: 13,
+                  color: '#1e40af',
+                  lineHeight: 1.7,
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {notes.join('\n')}
+              </div>
+            </>
+          )}
+          {benefits.length > 0 && (
+            <>
+              <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
+                Benefits
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+                {benefits.map((b, i) => (
+                  <div
+                    key={i}
+                    style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
+                  >
+                    <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }}>✓</span>
+                    <span>{b}</span>
+                  </div>
                 ))}
               </div>
-            )}
-            {/* notes — raw_text 없을 때만 */}
-            {notes.length > 0 && (
-              <>
-                <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-                <div
-                  style={{
-                    background: '#EFF6FF',
-                    borderLeft: '4px solid #60a5fa',
-                    borderRadius: 8,
-                    padding: '12px 16px',
-                    fontSize: 13,
-                    color: '#1e40af',
-                    lineHeight: 1.7,
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {notes.join('\n')}
-                </div>
-              </>
-            )}
-            {/* benefits — raw_text 없을 때만 */}
-            {benefits.length > 0 && (
-              <>
-                <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
-                  Benefits
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
-                  {benefits.map((b, i) => (
-                    <div
-                      key={i}
-                      style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
-                    >
-                      <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }}>✓</span>
-                      <span>{b}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        )}
+            </>
+          )}
+          {fields.length === 0 && notes.length === 0 && benefits.length === 0 && (
+            <p style={{ fontSize: 14, color: '#9ca3af', textAlign: 'center', padding: '16px 0' }}>
+              상세 정보를 불러오는 중입니다.
+            </p>
+          )}
+        </>
 
         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
 

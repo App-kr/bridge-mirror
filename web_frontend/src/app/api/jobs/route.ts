@@ -110,6 +110,14 @@ function stripPII(text: string | null): string | null {
   return PII_RE.test(text) ? null : text
 }
 
+function cleanRawText(text: unknown): string | null {
+  if (!text || typeof text !== 'string') return null
+  let t = text.replace(/\([^)]*\)/g, '')
+  t = t.replace(PII_RE, '')
+  t = t.split('\n').filter(l => l.trim()).join('\n')
+  return t.trim() || null
+}
+
 function rowToPublic(row: Record<string, unknown>) {
   const benefits = String(row.benefits ?? '')
   const { date, notes } = convertStartDate(row.start_date)
@@ -130,6 +138,7 @@ function rowToPublic(row: Record<string, unknown>) {
     preferences:             null,
     notes,
     employee_benefits:       benefits ? benefits.split(',').map(b => b.trim()).filter(Boolean) : null,
+    raw_text:                cleanRawText(row.raw_text),
     is_hot:                  Boolean(row.is_hot),
     employment_type:         row.is_part_time ? 'part_time' as const : 'full_time' as const,
     hours_per_day:           row.daily_hours ?? null,

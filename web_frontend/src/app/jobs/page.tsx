@@ -11,6 +11,7 @@ import { motion } from 'framer-motion'
 import JobCard from '@/components/JobCard'
 import JobDetailModal from '@/components/JobDetailModal'
 import { fadeInUp, defaultViewport } from '@/lib/animations'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import type { AgeGroup, PublicJob } from '@/types'
 
 const PER_PAGE = 10
@@ -116,15 +117,22 @@ function parseSalaryMillions(salary: string | null): number {
 }
 
 export default function JobsPage() {
+  const { authed } = useAdminAuth()
   const [allJobs, setAllJobs] = useState<PublicJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [selectedJob, setSelectedJob] = useState<PublicJob | null>(null)
+  const [shuffleSeed, setShuffleSeed] = useState<number | null>(null)
 
   const [search, setSearch] = useState('')
   const [ageFilter, setAgeFilter] = useState('all')
   const [hotOnly, setHotOnly] = useState(false)
+
+  const handleAdminShuffle = useCallback(() => {
+    setShuffleSeed(Math.floor(Math.random() * 999999))
+    setPage(1)
+  }, [])
 
   const hotSet = useMemo(() => {
     const s = new Set<string>()
@@ -157,6 +165,12 @@ export default function JobsPage() {
       .catch(() => setError('Failed to load positions.'))
       .finally(() => setLoading(false))
   }, [])
+
+  // Re-shuffle when admin presses shuffle button
+  useEffect(() => {
+    if (shuffleSeed === null) return
+    setAllJobs(prev => seededShuffle([...prev], shuffleSeed))
+  }, [shuffleSeed])
 
   // Filter
   const filtered = useMemo<PublicJob[]>(() => {
@@ -236,7 +250,7 @@ export default function JobsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            Verified ESL teaching jobs across Korea. Updated daily.
+            Verified ESL teaching jobs across Korea
           </motion.p>
           <motion.div
             className="max-w-xl mx-auto relative"
@@ -309,6 +323,28 @@ export default function JobsPage() {
               }}>
               HOT
             </button>
+            {authed && (
+              <button
+                type="button"
+                onClick={handleAdminShuffle}
+                title="관리자: 랜덤 셔플"
+                style={{
+                  border: '1px solid #7c3aed',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#7c3aed',
+                  background: '#faf5ff',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#ede9fe' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#faf5ff' }}
+              >
+                ⇌ 바꾸기
+              </button>
+            )}
           </div>
         </div>
 
