@@ -369,6 +369,20 @@ app.add_middleware(
 # GZip 압축 — 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# ── DB 인덱스 보장 (무한스크롤 cursor 성능) ─────────────────────────────────
+def _ensure_candidate_indexes() -> None:
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_name ON candidates(full_name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_created ON candidates(created_at)")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+_ensure_candidate_indexes()
+
 # ── Supabase 클라이언트 (지연 초기화) ─────────────────────────────────────────
 _anon_client: Optional["Client"] = None
 _svc_client:  Optional["Client"] = None
@@ -1384,11 +1398,13 @@ async def admin_candidates(
     nationality: Optional[str] = None,
     visa:        Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
-    limit:       int = 9999,
+    limit:       int = 150,
     offset:      int = 0,
+    cursor:      int = 0,   # cursor-based: 마지막으로 받은 rowid (0=처음부터)
 ):
     """
     지원자 목록 — SQLite. status=active|past|<specific> 필터 지원.
+    cursor>0이면 rowid<cursor 조건 추가 (무한스크롤 페이지네이션).
     보호: X-Admin-Key 필수
     """
     _check_admin(request)
@@ -1441,17 +1457,28 @@ async def admin_candidates(
                 "consent, fact_check, photo_url, criminal_record_check, doc_status, "
                 "how_to, tattoo, visa_type"
             )
+
+            # cursor-based pagination: cursor>0이면 rowid<cursor 조건 추가
+            cursor_params = list(params)
+            if cursor > 0:
+                cursor_where = f"({where_sql}) AND rowid < ?"
+                cursor_params.append(cursor)
+            else:
+                cursor_where = where_sql
+
             rows_raw = conn.execute(
-                f"""SELECT {_COLS} FROM candidates
-                    WHERE {where_sql}
-                    ORDER BY created_at DESC
-                    LIMIT ? OFFSET ?""",
-                params + [limit, offset],
+                f"""SELECT {_COLS}, rowid FROM candidates
+                    WHERE {cursor_where}
+                    ORDER BY rowid DESC
+                    LIMIT ?""",
+                cursor_params + [limit],
             ).fetchall()
 
             candidates = []
+            last_rowid: Optional[int] = None
             for r in rows_raw:
                 d = dict(r)
+                last_rowid = d.pop("rowid", None)
                 d["id"] = d.pop("candidate_id", d.get("id"))
                 d.setdefault("admin_notes", d.get("notes", ""))
                 d.setdefault("photo_url", None)
@@ -1461,8 +1488,11 @@ async def admin_candidates(
                     d[k] = _sanitize_str(v)
                 candidates.append(d)
 
+            # next_cursor: 다음 페이지 시작점 (마지막 rowid), 더 이상 없으면 None
+            next_cursor: Optional[int] = last_rowid if len(candidates) == limit else None
+
             payload = ok(
-                data={"total": total, "candidates": candidates},
+                data={"total": total, "candidates": candidates, "next_cursor": next_cursor},
                 message=f"{len(candidates)}명 조회",
             )
             return SafeJSONResponse(content=payload)
