@@ -2,6 +2,16 @@ import Link from 'next/link'
 
 const HUB_CARDS = [
   {
+    slug: 'korea',
+    emoji: '🇰🇷',
+    title: 'Life in Korea',
+    titleKr: '한국 생활 정보',
+    description: 'City guides, living tips, culture, food, healthcare, and everything about life in Korea.',
+    gradient: 'from-rose-50 to-pink-50',
+    hoverBorder: 'hover:border-rose-300',
+    iconBg: 'bg-rose-100',
+  },
+  {
     slug: 'testimonials',
     emoji: '💬',
     title: 'Testimonials',
@@ -37,7 +47,7 @@ export default function CommunityPage() {
       </div>
 
       {/* Hub Cards */}
-      <div className="grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
         {HUB_CARDS.map((card) => (
           <Link
             key={card.slug}
