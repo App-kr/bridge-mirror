@@ -6,8 +6,9 @@
 ## Quick Reference
 - **서비스**: bridgejob.co.kr (ESL 교사 채용)
 - **스택**: FastAPI + Next.js 15 + Supabase + SQLite
-- **빌드**: 35 routes, 0 errors (2026-03-07)
-- **최근 세션**: [worklog-2026-03-07.md](worklog-2026-03-07.md)
+- **빌드**: 36 routes, 0 errors (2026-03-08)
+- **DB**: candidates=3059 | client_inquiries=1227 | jobs=1072 | 5.2MB
+- **최근 세션**: [WORK_LOG_20260308.md](../WORK_LOG_20260308.md)
 
 ---
 

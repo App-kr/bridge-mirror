@@ -181,6 +181,9 @@ export interface PublicJob {
   /** Extracted conditions/notes from start_date e.g. ["F visa only"] */
   notes:                    string[] | null
 
+  /** Original job posting text (internal PII stripped) */
+  raw_text?:                string | null
+
   // ── UI helpers (non-sensitive) ──
   is_hot:                   boolean
   employment_type:          EmploymentType
