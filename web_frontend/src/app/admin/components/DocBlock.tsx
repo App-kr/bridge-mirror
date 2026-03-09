@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 
-/* ── PII 마스킹 ── */
+/* ── PII 마스킹 (공개 API용 — 어드민에서는 사용 안 함) ── */
 export function maskEmail(email: string | null | undefined): string {
   if (!email) return '—'
   const at = email.indexOf('@')
@@ -57,6 +57,8 @@ export interface EmployerApp {
   memo?: string | null
   notes?: string | null
   assigned_to?: string | null
+  raw_text?: string | null        // DB 원본 텍스트 (jobs 테이블)
+  raw_email_body?: string | null  // 원본 이메일 전문 (client_inquiries)
 }
 
 interface DocBlockProps {
@@ -81,10 +83,19 @@ interface DocBlockProps {
   showDivider: boolean
 }
 
-/* 구조화 필드 → 워드뷰 rawText — 항상 실제 DB 필드 우선 */
+/**
+ * buildRawText — 워드뷰 본문 텍스트 결정
+ * 우선순위:
+ *   1. notes (관리자 직접 편집본)
+ *   2. raw_text (DB 원본 텍스트 — 수정 없이 그대로)
+ *   3. 구조화 필드에서 재구성 (fallback)
+ */
 function buildRawText(emp: EmployerApp, province: string, city: string, jobNo: string): string {
-  // notes가 있으면 관리자 직접 편집본 사용
+  // 1. 관리자 직접 편집본
   if (emp.notes && emp.notes.trim()) return emp.notes.trim()
+  // 2. DB 원본 raw_text — 수정 없이 그대로
+  if (emp.raw_text && emp.raw_text.trim()) return emp.raw_text.trim()
+  // 3. 구조화 필드 fallback
   const rows: string[] = []
   if (v(emp.vacancies)) rows.push(`Native Teacher (Numbers can change) : Approx. ${v(emp.vacancies)}`)
   if (v(emp.native_count)) rows.push(`Native Teacher (Numbers can change) : Approx. ${v(emp.native_count)}`)
@@ -313,7 +324,7 @@ export default function DocBlock({
           )}
         </div>
 
-        {/* ══ 4. 본문 (실제 job 내용) ══ */}
+        {/* ══ 4. 본문 (실제 job 내용 — raw_text 원본 우선) ══ */}
         <div style={{ position: 'relative', zIndex: 1 }}>
           {editingRaw ? (
             <textarea
@@ -344,7 +355,7 @@ export default function DocBlock({
           )}
         </div>
 
-        {/* ══ 5. CONTACT 섹션 (두꺼운 구분선 + 2컬럼) ══ */}
+        {/* ══ 5. CONTACT 섹션 (어드민: PII 전체 표시) ══ */}
         <div style={{ marginTop: 18, paddingTop: 12, borderTop: '2.5px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
           <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.15em', display: 'block', marginBottom: 10 }}>CONTACT INFO</span>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px' }}>
@@ -353,7 +364,9 @@ export default function DocBlock({
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem', marginBottom: 4 }}>
                 <span style={{ color: '#64748b', fontWeight: 700, minWidth: 60, flexShrink: 0 }}>업체명</span>
                 <span style={{ color: '#111', fontWeight: 600 }}>
-                  {showPII ? (employer.school_name || employer.name || '—') : maskName(employer.school_name || employer.name)}
+                  {showPII
+                    ? (employer.school_name || employer.name || '—')
+                    : maskName(employer.school_name || employer.name)}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem' }}>
@@ -365,11 +378,15 @@ export default function DocBlock({
             <div>
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem', marginBottom: 4 }}>
                 <span style={{ color: '#64748b', fontWeight: 700, minWidth: 60, flexShrink: 0 }}>이메일</span>
-                <span style={{ color: '#333' }}>{showPII ? (employer.email || '—') : maskEmail(employer.email)}</span>
+                <span style={{ color: '#333' }}>
+                  {showPII ? (employer.email || '—') : maskEmail(employer.email)}
+                </span>
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem' }}>
                 <span style={{ color: '#64748b', fontWeight: 700, minWidth: 60, flexShrink: 0 }}>전화</span>
-                <span style={{ color: '#333' }}>{showPII ? (employer.phone || '—') : maskPhone(employer.phone)}</span>
+                <span style={{ color: '#333' }}>
+                  {showPII ? (employer.phone || '—') : maskPhone(employer.phone)}
+                </span>
               </div>
             </div>
           </div>

@@ -1333,6 +1333,18 @@ def _decrypt_row(row: dict) -> dict:
     return row
 
 
+def _safe_decrypt(val) -> str:
+    """암호화된 필드를 복호화. 실패 시 원본 반환 (에러 숨김)."""
+    if not val or not isinstance(val, str):
+        return val
+    try:
+        if is_encrypted(val):
+            return decrypt_field(val)
+    except Exception:
+        pass
+    return val
+
+
 def _sanitize_str(v):
     """Remove all characters that can break JSON parsing in any browser/runtime."""
     if not isinstance(v, str):
@@ -2994,9 +3006,21 @@ async def admin_search_posts(
 # ── Admin: Applications 관리 ─────────────────────────────────────────────────
 
 @app.get("/api/admin/applications", tags=["admin"])
-async def admin_list_applications(request: Request):
-    """구직자 + 구인자 접수 통합 목록 — SQLite."""
+async def admin_list_applications(
+    request: Request,
+    type: Optional[str] = None,
+    page: int = 1,
+    limit: int = 200,
+):
+    """구직자 + 구인자 접수 통합 목록 — SQLite.
+    type=employer → 구인자만 (구직자 스킵, 성능 향상).
+    page/limit → 페이지네이션 (type=employer 시 적용).
+    """
     _check_admin(request)
+    employer_only = (type == "employer")
+    page = max(1, page)
+    limit = min(max(1, limit), 500)
+    offset = (page - 1) * limit
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
@@ -3004,37 +3028,37 @@ async def admin_list_applications(request: Request):
         try:
             apps: list[dict] = []
 
-            # 구직자 (candidates)
-            cands = conn.execute(
-                "SELECT candidate_id, full_name, email, nationality, mobile_phone, "
-                "current_location, target, target_age, desired_salary, experience, "
-                "start_date, status, created_at, updated_at "
-                "FROM candidates ORDER BY created_at DESC LIMIT 200"
-            ).fetchall()
-            for c in cands:
-                apps.append({
-                    "id": c["candidate_id"], "type": "candidate",
-                    "name": c["full_name"] or "", "email": c["email"] or "",
-                    "nationality": c["nationality"],
-                    "phone": c["mobile_phone"],
-                    "location": c["current_location"],
-                    "target": c["target"],
-                    "target_age": c["target_age"],
-                    "desired_salary": c["desired_salary"],
-                    "experience": c["experience"],
-                    "start_date": c["start_date"],
-                    "status": c["status"] or "Active",
-                    "created_at": c["created_at"] or "",
-                    "updated_at": c["updated_at"],
-                })
+            # 구직자 (candidates) — employer_only 시 스킵
+            if not employer_only:
+                cands = conn.execute(
+                    "SELECT candidate_id, full_name, email, nationality, mobile_phone, "
+                    "current_location, target, target_age, desired_salary, experience, "
+                    "start_date, status, created_at, updated_at "
+                    "FROM candidates ORDER BY created_at DESC LIMIT 200"
+                ).fetchall()
+                for c in cands:
+                    apps.append({
+                        "id": c["candidate_id"], "type": "candidate",
+                        "name": c["full_name"] or "", "email": c["email"] or "",
+                        "nationality": c["nationality"],
+                        "phone": c["mobile_phone"],
+                        "location": c["current_location"],
+                        "target": c["target"],
+                        "target_age": c["target_age"],
+                        "desired_salary": c["desired_salary"],
+                        "experience": c["experience"],
+                        "start_date": c["start_date"],
+                        "status": c["status"] or "Active",
+                        "created_at": c["created_at"] or "",
+                        "updated_at": c["updated_at"],
+                    })
 
-            # 구인자 — jobs 테이블 (원본 워드포맷 데이터)
+            # 구인자 — jobs 테이블 (원본 워드포맷 데이터 + raw_text 포함)
             job_rows = conn.execute(
                 "SELECT id, job_code, seq, location, city, district, region_name, "
                 "start_date, teaching_age, class_size, working_hours, salary_raw, "
                 "teach_hrs_week, vacation, housing, housing_type, housing_detail, "
-                "native_count, benefits, "
-                "internal_notes, status, created_at, source_file "
+                "native_count, benefits, internal_notes, status, created_at, source_file, raw_text "
                 "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
             ).fetchall()
             for j in job_rows:
@@ -3058,8 +3082,9 @@ async def admin_list_applications(request: Request):
                     "housing_detail": j["housing_detail"],
                     "native_count": j["native_count"],
                     "benefits": j["benefits"],
-                    "memo": j["internal_notes"],
+                    "memo": _safe_decrypt(j["internal_notes"]),   # AES-256-GCM 복호화
                     "notes": None,
+                    "raw_text": j["raw_text"] or None,            # 원본 텍스트 (어드민: PII 미제거)
                     "status": j["status"] or "open",
                     "created_at": j["created_at"] or "",
                 })
@@ -3069,17 +3094,22 @@ async def admin_list_applications(request: Request):
                 "SELECT id, school_name, email, contact_name, phone, location, "
                 "start_date, vacancies, teaching_age, schedule, working_hours, "
                 "salary_raw, housing_type, housing_detail, benefits, vacation, "
-                "memo, notes, assigned_to, submitted_at "
+                "memo, notes, assigned_to, submitted_at, raw_email_body "
                 "FROM client_inquiries WHERE is_deleted = 0 ORDER BY submitted_at DESC"
             ).fetchall()
             for inq in inq_rows:
+                # PII 필드 복호화 (AES-256-GCM 저장된 값)
+                dec_email   = _safe_decrypt(inq["email"])
+                dec_phone   = _safe_decrypt(inq["phone"])
+                dec_contact = _safe_decrypt(inq["contact_name"])
+                dec_memo    = _safe_decrypt(inq["memo"])
                 apps.append({
                     "id": f"inq_{inq['id']}", "type": "employer",
                     "name": inq["school_name"] or "",
-                    "email": inq["email"] or "",
+                    "email": dec_email or "",
                     "school_name": inq["school_name"],
-                    "contact_name": inq["contact_name"],
-                    "phone": inq["phone"],
+                    "contact_name": dec_contact,
+                    "phone": dec_phone,
                     "location": inq["location"],
                     "start_date": inq["start_date"],
                     "vacancies": inq["vacancies"],
@@ -3091,14 +3121,27 @@ async def admin_list_applications(request: Request):
                     "housing_detail": inq["housing_detail"],
                     "benefits": inq["benefits"],
                     "vacation": inq["vacation"],
-                    "memo": inq["memo"],
+                    "memo": dec_memo,
                     "notes": inq["notes"],
                     "assigned_to": inq["assigned_to"],
+                    "raw_email_body": inq["raw_email_body"] or None,
+                    "raw_text": None,
                     "status": "open",
                     "created_at": inq["submitted_at"] or "",
                 })
 
             apps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+            # employer_only 시 페이지네이션 적용
+            if employer_only:
+                total = len(apps)
+                page_data = apps[offset: offset + limit]
+                result = ok(data=page_data, message=f"{len(page_data)}건 (전체 {total}건)")
+                result["total"] = total
+                result["page"] = page
+                result["has_more"] = offset + limit < total
+                return result
+
             return ok(data=apps)
         finally:
             conn.close()

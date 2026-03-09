@@ -16,7 +16,8 @@ import MailComposer from './MailComposer'
 const API = API_URL
 
 // ─── 상수 ────────────────────────────────────────────
-const PAGE_BREAK_EVERY = 2 // 워드뷰 페이지 구분선 간격 (2 또는 3)
+const PAGE_BREAK_EVERY = 2  // 워드뷰 페이지 구분선 간격
+const SCROLL_CHUNK = 50     // 무한 스크롤 1회 추가 렌더링 수
 
 type TabKey = 'active' | 'all' | 'blacklist'
 type ViewMode = 'word' | 'excel'
@@ -130,9 +131,22 @@ function extractAgeLabels(age: string | null | undefined): string[] {
   return result
 }
 
-/* ══════ Job 번호 ══════ */
+/* ══════ Job 번호 ══════
+ * 우선순위:
+ *   1. job_code (DB 원본 — "1003", "N1101" 등)
+ *   2. raw_text에서 "Job. XXXX" 파싱 → 4자리 숫자
+ *   3. client_inquiries (inq_ prefix) → N{number}
+ *   4. 기타 fallback
+ */
 function jobNo(app: EmployerApp): string {
   if (v(app.job_code)) return app.job_code as string
+  // raw_text에서 "Job. 1003" 형식 파싱
+  if (app.raw_text) {
+    const m = app.raw_text.match(/Job\.\s*(\d{3,6})/i)
+    if (m) return m[1]
+  }
+  // client_inquiries 신규 접수 → N{숫자}
+  if (app.id.startsWith('inq_')) return `N${app.id.replace('inq_', '')}`
   const src = app.source_file || ''
   if (src.startsWith('BRIDGE_clients')) return `F-${app.id}`
   if (src === 'memo_extract') return `M-${app.id}`
@@ -199,7 +213,8 @@ export default function EmployerManagement() {
 
   const [tab, setTab] = useState<TabKey>('active')
   const [viewMode, setViewMode] = useState<ViewMode>('word')
-  const [showPII, setShowPII] = useState(false)
+  // 어드민 페이지: PII 기본값 ON
+  const [showPII, setShowPII] = useState(true)
 
   // 필터
   const [filterProvince, setFilterProvince] = useState<string[]>([])
@@ -231,6 +246,10 @@ export default function EmployerManagement() {
   const resizeStartX = useRef(0)
   const resizeStartW = useRef(0)
 
+  // 무한 스크롤 (클라이언트 사이드 — 렌더링 가상화)
+  const [visibleCount, setVisibleCount] = useState(SCROLL_CHUNK)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
   const flash = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(null), 3000) }
 
   /* ── Ctrl+F 가로채기 ── */
@@ -250,12 +269,12 @@ export default function EmployerManagement() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
-  /* ── Fetch ── */
+  /* ── Fetch (type=employer → 구인자만, 구직자 스킵) ── */
   const fetchEmployers = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API}/api/admin/applications`, { headers: headers() })
+      const res = await fetch(`${API}/api/admin/applications?type=employer`, { headers: headers() })
       if (!res.ok) {
         if (res.status === 403) { setError('인증 오류. 다시 로그인해주세요.'); return }
         throw new Error('데이터 로딩 실패')
@@ -277,6 +296,7 @@ export default function EmployerManagement() {
         setEmployers(all)
       }
       setOrderChanged(false)
+      setVisibleCount(SCROLL_CHUNK)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed')
     } finally {
@@ -285,6 +305,27 @@ export default function EmployerManagement() {
   }, [headers])
 
   useEffect(() => { if (authed) fetchEmployers() }, [authed, fetchEmployers])
+
+  /* ── 무한 스크롤: IntersectionObserver ── */
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => prev + SCROLL_CHUNK)
+        }
+      },
+      { threshold: 0.1 },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, []) // sentinel은 마운트 후 고정이므로 deps 불필요
+
+  /* ── 필터/탭/검색 변경 시 visibleCount 리셋 ── */
+  useEffect(() => {
+    setVisibleCount(SCROLL_CHUNK)
+  }, [tab, filterProvince, filterCity, filterAge, filterStatus, searchQuery])
 
   /* ── 상태 변경 ── */
   const updateStatus = useCallback(async (id: string, newStatus: string) => {
@@ -421,6 +462,7 @@ export default function EmployerManagement() {
         (e.name || '').toLowerCase().includes(q) ||
         (e.memo || '').toLowerCase().includes(q) ||
         (e.notes || '').toLowerCase().includes(q) ||
+        (e.raw_text || '').toLowerCase().includes(q) ||
         (e.job_code || '').toLowerCase().includes(q) ||
         e.id.toLowerCase().includes(q)
       )
@@ -428,6 +470,12 @@ export default function EmployerManagement() {
 
     return list
   }, [employers, tab, filterProvince, filterCity, filterAge, filterStatus, searchQuery])
+
+  /* ── 렌더링할 visible 슬라이스 ── */
+  const visibleFiltered = useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount],
+  )
 
   /* ── NEW 카운트 ── */
   const newUnconfirmedCount = useMemo(() => {
@@ -512,7 +560,7 @@ export default function EmployerManagement() {
             ref={searchInputRef}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="이름, Job번호, 메모 검색..."
+            placeholder="이름, Job번호, 메모, 본문 검색..."
             className="flex-1 outline-none text-[13px] text-gray-800 bg-transparent"
           />
           {searchQuery && (
@@ -533,7 +581,9 @@ export default function EmployerManagement() {
         <div>
           <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">구인자관리</h1>
           <p className="text-[13px] text-[#86868b] mt-0.5">
-            {hasFilters || searchQuery ? `${filtered.length} / ${employers.length}건` : `${employers.length}건`}
+            {hasFilters || searchQuery
+              ? `${filtered.length} / ${employers.length}건 · 표시 ${Math.min(visibleCount, filtered.length)}건`
+              : `${employers.length}건 · 표시 ${Math.min(visibleCount, filtered.length)}건`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -625,7 +675,7 @@ export default function EmployerManagement() {
 
           <div className="flex-1" />
 
-          {/* PII 토글 */}
+          {/* PII 토글 (기본값 ON) */}
           <label className="flex items-center gap-1.5 text-[12px] text-gray-500 cursor-pointer select-none">
             <input type="checkbox" checked={showPII} onChange={e => setShowPII(e.target.checked)}
               className="w-3.5 h-3.5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
@@ -644,7 +694,12 @@ export default function EmployerManagement() {
 
       {/* ── 에러 / 로딩 ── */}
       {error && <div className="p-4 bg-red-50 text-red-600 text-[13px] rounded-2xl">{error}</div>}
-      {loading && <div className="text-center py-16 text-[#86868b] animate-pulse text-[14px]">로딩 중...</div>}
+      {loading && (
+        <div className="text-center py-16 text-[#86868b] text-[14px]">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-3" />
+          <div className="animate-pulse">로딩 중...</div>
+        </div>
+      )}
 
       {/* ── 콘텐츠 ── */}
       {!loading && !error && (
@@ -655,7 +710,7 @@ export default function EmployerManagement() {
               {filtered.length === 0 && (
                 <div className="text-center py-16 text-[#86868b] text-[14px]">데이터가 없습니다.</div>
               )}
-              {filtered.map((app, idx) => (
+              {visibleFiltered.map((app, visIdx) => (
                 <DocBlock
                   key={app.id}
                   employer={app}
@@ -674,11 +729,25 @@ export default function EmployerManagement() {
                   onMoveTop={() => moveTop(app.id)}
                   onMoveUp={() => moveUp(app.id)}
                   onMoveDown={() => moveDown(app.id)}
-                  isFirst={idx === 0}
-                  isLast={idx === filtered.length - 1}
-                  showDivider={(idx + 1) % PAGE_BREAK_EVERY === 0 && idx < filtered.length - 1}
+                  isFirst={visIdx === 0}
+                  isLast={visIdx === filtered.length - 1}
+                  showDivider={(visIdx + 1) % PAGE_BREAK_EVERY === 0 && visIdx < visibleFiltered.length - 1}
                 />
               ))}
+
+              {/* 무한 스크롤 sentinel */}
+              {visibleCount < filtered.length ? (
+                <div ref={sentinelRef} className="h-10 flex items-center justify-center gap-2 py-4">
+                  <div className="w-4 h-4 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+                  <span className="text-[12px] text-gray-400">{visibleCount} / {filtered.length}건 표시 중...</span>
+                </div>
+              ) : (
+                filtered.length > 0 && (
+                  <div className="text-center py-4 text-[11px] text-gray-300">
+                    — 전체 {filtered.length}건 표시 완료 —
+                  </div>
+                )
+              )}
             </div>
           )}
 
