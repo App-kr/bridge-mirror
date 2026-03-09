@@ -282,15 +282,16 @@ export default function BridgeAdminSheet() {
   const [eSRL, setESRL] = useState<string | null>(null)
   const [eSRV, setESRV] = useState('')
   const [undoStack, setUS] = useState<UndoSnapshot[]>([])
-  const [dbAll, setDbAll] = useState<DataRow[]>([])       // 전체 탭 전용 (DB 원본)
-  const [dbOffset, setDbOffset] = useState(0)             // 현재 페이지 오프셋
+  const [dbAll, setDbAll] = useState<DataRow[]>([])       // DB 원본 (append)
   const [dbTotal, setDbTotal] = useState(0)               // DB 전체 건수
   const [loading, setLoading] = useState(false)
   const [lastSync, setLastSync] = useState('')
   const [newCount, setNewCount] = useState(0)
 
-  // fetch 중복 방지 ref
+  // fetch 제어 refs
   const dbFetchingRef = useRef(false)
+  const dbOffsetRef = useRef(0)        // 다음 로드 시작 offset
+  const allLoadedRef = useRef(false)   // 모두 로드됐으면 true
 
   const eR = useRef<HTMLTextAreaElement>(null)
   const cR = useRef<{ i: number; sx: number; sw: number } | null>(null)
@@ -349,29 +350,31 @@ export default function BridgeAdminSheet() {
     try { localStorage.setItem(SK_DATA, JSON.stringify(data)) } catch { /* ignore */ }
   }, [data, ready])
 
-  /* DB 연동 — offset-based 150건씩 페이지 로드 */
-  const fetchPage = useCallback(async (pageOffset: number) => {
-    if (dbFetchingRef.current) return
+  /* DB 연동 — 150건씩 append 로드 (가상스크롤) */
+  const loadMore = useCallback(async () => {
+    if (dbFetchingRef.current || allLoadedRef.current) return
     dbFetchingRef.current = true
     setLoading(true)
-    setDbAll([])
-
+    const currentOffset = dbOffsetRef.current
     const edits = loadEdits()
     try {
       const res = await fetch(
-        `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${pageOffset}`,
+        `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${currentOffset}`,
         { headers: headers() },
       )
       if (!res.ok) return
       const json = await res.json()
       const rawRows: Record<string, unknown>[] = json.data?.candidates ?? []
       const total: number = json.data?.total ?? 0
-
       setDbTotal(total)
-      const newRows = rawRows.map((c, i) => mapCandidateToRow(c, pageOffset + i, edits))
-      setDbAll(newRows)
-
-      if (pageOffset === 0) {
+      const newRows = rawRows.map((c, i) => mapCandidateToRow(c, currentOffset + i, edits))
+      setDbAll(prev => {
+        const combined = [...prev, ...newRows]
+        dbOffsetRef.current = combined.length
+        return combined
+      })
+      if (rawRows.length < PAGE_SIZE) allLoadedRef.current = true
+      if (currentOffset === 0) {
         const nc = rawRows.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
         setNewCount(nc)
       }
@@ -383,8 +386,8 @@ export default function BridgeAdminSheet() {
   }, [headers])
 
   useEffect(() => {
-    // 초기 로드: offset=0 (1페이지)
-    fetchPage(0)
+    // 초기 로드: 첫 150건
+    loadMore()
     // 60초마다 신규 web_form 폼 제출 감지
     const iv = setInterval(async () => {
       try {
@@ -397,7 +400,8 @@ export default function BridgeAdminSheet() {
       } catch { /* ignore */ }
     }, 60_000)
     return () => clearInterval(iv)
-  }, [fetchPage, headers])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /* Ctrl+Z */
   useEffect(() => {
@@ -450,11 +454,14 @@ export default function BridgeAdminSheet() {
     if (tblRef.current && topRef.current) tblRef.current.scrollLeft = topRef.current.scrollLeft
     syncR.current = false
   }, [])
-  const onBS = useCallback(() => {
+  const onBS = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (syncR.current) return; syncR.current = true
     if (topRef.current && tblRef.current) topRef.current.scrollLeft = tblRef.current.scrollLeft
     syncR.current = false
-  }, [])
+    // 스크롤 하단 200px 이내 → 다음 배치 append
+    const el = e.currentTarget
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) loadMore()
+  }, [loadMore])
 
   /* Derived */
   const visCols = useMemo(() => cols.filter(c => c.v !== false), [cols])
@@ -673,12 +680,12 @@ export default function BridgeAdminSheet() {
             </span>
           )}
           {loading && <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 700 }}>⟳ DB 로딩 중...</span>}
-          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>{dbAll.length.toLocaleString()}건 표시 중 / 전체 {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 · {lastSync}</span>}
+          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>{dbAll.length.toLocaleString()} / 전체 {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 로드됨 · {lastSync}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
           {sel.size > 0 && <button onClick={() => { openMM(dbAll.filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
-          <button onClick={() => { setDbOffset(0); fetchPage(0) }} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
+          <button onClick={() => { dbFetchingRef.current = false; allLoadedRef.current = false; dbOffsetRef.current = 0; setDbAll([]); setTimeout(loadMore, 0) }} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
           <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
           <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
           <button onClick={addN} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>+새후보자</button>
@@ -710,42 +717,15 @@ export default function BridgeAdminSheet() {
         </div>
       </div>
 
-      {/* 전체 탭: AG Grid + 오프셋 페이지네이션 */}
+      {/* 전체 탭: AG Grid + 스크롤 기반 append 로드 */}
       {tab === 'all' && (
-        <>
-          <AllCandidatesGrid
-            rows={dbAll as Record<string, string | number>[]}
-            onCopyTo={mv as (row: Record<string, string | number>, cat: 'active' | 'past' | 'blacklist') => void}
-            loading={loading}
-            total={dbTotal}
-          />
-          {/* 페이지네이션 컨트롤 */}
-          <div style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1', padding: '10px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-            <button
-              onClick={() => {
-                const newOffset = Math.max(0, dbOffset - PAGE_SIZE)
-                setDbOffset(newOffset)
-                fetchPage(newOffset)
-              }}
-              disabled={loading || dbOffset === 0}
-              style={{ padding: '8px 20px', fontSize: 15, border: '2px solid #2563eb', borderRadius: 8, background: dbOffset === 0 ? '#f1f5f9' : '#eff6ff', color: dbOffset === 0 ? '#aaa' : '#2563eb', cursor: dbOffset === 0 ? 'default' : 'pointer', fontWeight: 800 }}
-            >◀ 이전</button>
-            <span style={{ fontSize: 15, fontWeight: 700, minWidth: 200, textAlign: 'center' }}>
-              {loading ? '로딩 중...' : `${(dbOffset + 1).toLocaleString()} ~ ${Math.min(dbOffset + PAGE_SIZE, dbTotal).toLocaleString()} / 전체 ${dbTotal.toLocaleString()}건`}
-            </span>
-            <button
-              onClick={() => {
-                const newOffset = dbOffset + PAGE_SIZE
-                if (newOffset < dbTotal) {
-                  setDbOffset(newOffset)
-                  fetchPage(newOffset)
-                }
-              }}
-              disabled={loading || dbOffset + PAGE_SIZE >= dbTotal}
-              style={{ padding: '8px 20px', fontSize: 15, border: '2px solid #2563eb', borderRadius: 8, background: (dbOffset + PAGE_SIZE >= dbTotal) ? '#f1f5f9' : '#eff6ff', color: (dbOffset + PAGE_SIZE >= dbTotal) ? '#aaa' : '#2563eb', cursor: (dbOffset + PAGE_SIZE >= dbTotal) ? 'default' : 'pointer', fontWeight: 800 }}
-            >다음 ▶</button>
-          </div>
-        </>
+        <AllCandidatesGrid
+          rows={dbAll as Record<string, string | number>[]}
+          onCopyTo={mv as (row: Record<string, string | number>, cat: 'active' | 'past' | 'blacklist') => void}
+          loading={loading}
+          total={dbTotal}
+          onLoadMore={loadMore}
+        />
       )}
 
       {/* 수동 탭: 상단 스크롤바 + 테이블 */}

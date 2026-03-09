@@ -1493,6 +1493,7 @@ async def admin_candidates(
                 d.setdefault("photo_url", None)
                 d.setdefault("thumb_url", None)
                 d.setdefault("target_age", d.get("target", ""))
+                d = _decrypt_row(d)   # PII 복호화 (AES-256-GCM)
                 for k, v in d.items():
                     d[k] = _sanitize_str(v)
                 candidates.append(d)

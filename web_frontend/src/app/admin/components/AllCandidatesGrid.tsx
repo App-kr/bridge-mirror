@@ -15,6 +15,7 @@ import {
   GetContextMenuItemsParams,
   MenuItemDef,
   GridReadyEvent,
+  BodyScrollEvent,
 } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-quartz.css'
@@ -30,6 +31,7 @@ interface Props {
   onCopyTo: (row: DataRow, cat: CategoryKey) => void
   loading: boolean
   total?: number
+  onLoadMore?: () => void
 }
 
 /* ─── Cell renderers ─── */
@@ -172,7 +174,7 @@ function buildColDefs(): ColDef[] {
 }
 
 /* ─── Main Component ─── */
-export default function AllCandidatesGrid({ rows, onCopyTo, loading, total }: Props) {
+export default function AllCandidatesGrid({ rows, onCopyTo, loading, total, onLoadMore }: Props) {
 
   const colDefs = useMemo(() => buildColDefs(), [])
 
@@ -209,6 +211,14 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total }: Pr
     // sizeColumnsToFit 제거 — 48컬럼 전체 너비 재계산 불필요, 정의된 너비 그대로 유지
   }, [])
 
+  const onBodyScroll = useCallback((e: BodyScrollEvent) => {
+    if (!onLoadMore) return
+    const api = e.api
+    const lastRow = api.getLastDisplayedRowIndex()
+    const totalRows = api.getDisplayedRowCount()
+    if (totalRows > 0 && lastRow >= totalRows - 5) onLoadMore()
+  }, [onLoadMore])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rowStyle = useCallback((params: any): Record<string, string | number> | undefined => {
     if (String(params.data?.source ?? '').includes('★NEW')) {
@@ -229,7 +239,7 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total }: Pr
       {/* 안내 */}
       {!loading && rows.length > 0 && (
         <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '4px 16px', fontSize: 12, color: '#64748b', flexShrink: 0 }}>
-          <b>{rows.length.toLocaleString()}</b>건 표시 중{total && total > rows.length ? ` / 전체 ${total.toLocaleString()}건` : ''} · 우클릭→탭 복사 · 헤더 클릭→정렬
+          <b>{rows.length.toLocaleString()}</b> / 전체 {total ? total.toLocaleString() : '?'}건 로드됨 · 스크롤하면 추가 로드 · 우클릭→탭 복사 · 헤더 클릭→정렬
         </div>
       )}
       {!loading && rows.length === 0 && (
@@ -253,6 +263,7 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total }: Pr
           suppressRowClickSelection
           getContextMenuItems={getContextMenuItems}
           onGridReady={onGridReady}
+          onBodyScroll={onBodyScroll}
           getRowStyle={rowStyle}
           animateRows={false}
           suppressAnimationFrame={false}
