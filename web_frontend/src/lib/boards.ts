@@ -49,12 +49,12 @@ export const BOARDS: BoardConfig[] = [
     layout: 'photo-cards',
   },
   {
-    slug: 'visa',
-    label: 'Visa',
-    labelNav: 'Visa',
+    slug: 'visa_type',
+    label: 'Visa Types',
+    labelNav: '비자종류',
     emoji: '🛂',
-    description: 'E-2 visa guides, document requirements, background checks, and immigration procedures.',
-    descriptionKr: '비자 정보',
+    description: 'E-2, D-10, F-4 visa types — requirements, eligibility, and visa change guides.',
+    descriptionKr: '비자 종류별 안내 (E-2, D-10, F-4)',
     accentColor: 'text-emerald-600',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     borderColor: 'hover:border-emerald-400',
@@ -62,6 +62,36 @@ export const BOARDS: BoardConfig[] = [
     layout: 'list',
     notice: '⚠️ Information may change. Always verify with your local immigration office.',
     noticeKr: '⚠️ 정보가 변경될 수 있습니다. 반드시 관할 출입국관리사무소에서 확인하세요.',
+  },
+  {
+    slug: 'visa_related',
+    label: 'Visa Process',
+    labelNav: '비자관련',
+    emoji: '📋',
+    description: 'Visa extension, rejection reasons, background checks, apostille, and country-specific document guides.',
+    descriptionKr: '비자 신청·갱신·서류 절차',
+    accentColor: 'text-teal-600',
+    badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+    borderColor: 'hover:border-teal-400',
+    markdown: true,
+    layout: 'list',
+    notice: '⚠️ Information may change. Always verify with your local immigration office.',
+    noticeKr: '⚠️ 정보가 변경될 수 있습니다. 반드시 관할 출입국관리사무소에서 확인하세요.',
+  },
+  {
+    slug: 'immigration',
+    label: 'Immigration Office',
+    labelNav: '출입국사무소',
+    emoji: '🏛️',
+    description: 'ARC registration, health checks, re-entry permits, Hi Korea portal, and immigration office procedures.',
+    descriptionKr: '외국인등록·건강검진·출입국사무소 안내',
+    accentColor: 'text-cyan-600',
+    badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    borderColor: 'hover:border-cyan-400',
+    markdown: true,
+    layout: 'list',
+    notice: '⚠️ Procedures may vary by region. Confirm directly with your local immigration office.',
+    noticeKr: '⚠️ 지역별로 절차가 다를 수 있습니다. 관할 출입국사무소에 직접 확인하세요.',
   },
   {
     slug: 'support',
@@ -146,7 +176,7 @@ export function isValidBoard(slug: string): boolean {
 }
 
 // 네비게이션 표시 순서
-export const NAV_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr'] as const
+export const NAV_BOARDS = ['about', 'korea', 'visa_type', 'visa_related', 'immigration', 'support', 'support_kr'] as const
 
 // Community 허브에 표시할 보드
 export const COMMUNITY_HUB_BOARDS = ['testimonials', 'support', 'tips'] as const
