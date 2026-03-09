@@ -290,7 +290,7 @@ function EasyDate({
   }
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-1 sm:gap-2">
       <select className="input text-sm" value={y}
         onChange={(e) => update(e.target.value, m, d)}>
         <option value="">Year</option>

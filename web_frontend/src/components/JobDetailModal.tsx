@@ -85,25 +85,10 @@ function FieldRow({
 }) {
   return (
     <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '160px 1fr',
-        gap: '8px',
-        padding: '9px 8px',
-        borderBottom: '1px solid #f3f4f6',
-        background: zebra ? '#fafafa' : '#fff',
-      }}
+      className="flex flex-col sm:flex-row gap-x-2 gap-y-0.5 px-2 py-[9px] border-b border-[#f3f4f6]"
+      style={{ background: zebra ? '#fafafa' : '#fff' }}
     >
-      <span
-        style={{
-          fontSize: 13,
-          color: '#6b7280',
-          textAlign: 'right',
-          paddingRight: 14,
-          lineHeight: 1.6,
-          minWidth: 160,
-        }}
-      >
+      <span className="text-[13px] text-[#6b7280] sm:w-40 sm:shrink-0 sm:text-right sm:pr-3.5 leading-[1.6]">
         {label}
       </span>
       <span style={{ fontSize: 14, color: '#111827', fontWeight: 500, lineHeight: 1.6 }}>
@@ -183,13 +168,12 @@ export default function JobDetailModal({
 
       {/* 모달 본체 */}
       <div
-        className="relative w-full z-10 overflow-y-auto"
+        className="relative w-full z-10 overflow-y-auto px-5 pt-7 pb-7 sm:px-9 sm:pt-8"
         style={{
           background: '#fff',
           maxWidth: 560,
           maxHeight: '80vh',
           borderRadius: 16,
-          padding: '32px 36px 28px',
           boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
         }}
         onClick={e => e.stopPropagation()}
@@ -270,7 +254,7 @@ export default function JobDetailModal({
               <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
                 Benefits
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                 {benefits.map((b, i) => (
                   <div
                     key={i}
