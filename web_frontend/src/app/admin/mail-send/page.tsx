@@ -185,13 +185,35 @@ export default function MailSendPage() {
   return (
     <div className="max-w-[1100px] mx-auto space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight flex items-center gap-2">
             <Mail size={22} className="text-blue-600" />
             메일 발송
           </h1>
           <p className="text-[13px] text-[#86868b] mt-0.5">직접 수신자를 입력하여 메일을 발송합니다</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://mail.naver.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white text-[13px] font-semibold no-underline transition-opacity hover:opacity-85"
+            style={{ background: '#03C75A', boxShadow: '0 2px 6px rgba(3,199,90,0.3)' }}
+          >
+            <img src="https://ssl.pstatic.net/static/mail/icons/favicon/favicon-32x32.png" width={16} height={16} style={{ borderRadius: 3 }} alt="naver" />
+            네이버 메일
+          </a>
+          <a
+            href="https://mail.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[#444] text-[13px] font-semibold no-underline border border-[#ddd] transition-opacity hover:opacity-85"
+            style={{ background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}
+          >
+            <img src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" width={16} height={16} alt="gmail" />
+            Gmail
+          </a>
         </div>
       </div>
 
