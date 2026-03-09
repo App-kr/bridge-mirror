@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf c:*)",
+      "Bash(del /f /s /q c:\\windows*)",
+      "Bash(del /f /s /q c:\\users\\scarlett\\appdata*)",
+      "Bash(format c:*)",
+      "Bash(format d:*)",
+      "Bash(reg delete hklm*)",
+      "Bash(bcdedit*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\guard.py\"",
+        "timeout": 3000
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\task_gate.py\""
+      }
+    ],
+    "Stop": [
+      {
+        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\post_stop.py\""
+      }
+    ]
+  }
+}
