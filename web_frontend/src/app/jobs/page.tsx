@@ -182,8 +182,12 @@ export default function JobsPage() {
 
   // Sort by salary desc, then HOT interleave
   const interleaved = useMemo(() => {
-    const bySalary = (a: PublicJob, b: PublicJob) =>
-      parseSalaryMillions(b.monthly_salary) - parseSalaryMillions(a.monthly_salary)
+    const bySalary = (a: PublicJob, b: PublicJob) => {
+      const aEmpty = !a.raw_text ? 1 : 0
+      const bEmpty = !b.raw_text ? 1 : 0
+      if (aEmpty !== bEmpty) return aEmpty - bEmpty
+      return parseSalaryMillions(b.monthly_salary) - parseSalaryMillions(a.monthly_salary)
+    }
     const regular = filtered.filter((j) => !hotSet.has(j.job_id)).sort(bySalary)
     const hot = filtered.filter((j) => hotSet.has(j.job_id)).sort(bySalary)
     return interleaveHot(regular, hot)

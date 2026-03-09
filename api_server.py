@@ -679,7 +679,7 @@ async def list_jobs(
 
             sql = (
                 "SELECT * FROM jobs WHERE " + " AND ".join(where)
-                + " ORDER BY is_hot DESC, created_at DESC"
+                + " ORDER BY is_hot DESC, CASE WHEN COALESCE(raw_text, '') = '' THEN 1 ELSE 0 END ASC, created_at DESC"
                 + " LIMIT ? OFFSET ?"
             )
             params.extend([limit, offset])
@@ -2865,6 +2865,7 @@ async def admin_reorder_posts(board: str, body: ReorderRequest, request: Request
         conn.commit()
     finally:
         conn.close()
+    _maybe_auto_backup()
     return ok(message=f"Reordered {len(body.items)} posts")
 
 
@@ -2914,6 +2915,7 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
         conn.commit()
     finally:
         conn.close()
+    _maybe_auto_backup()
     return ok(message=f"Post #{post_id} updated")
 
 

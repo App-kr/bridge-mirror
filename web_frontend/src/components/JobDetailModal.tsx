@@ -236,64 +236,68 @@ export default function JobDetailModal({
 
         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
 
-        {/* ── 필드 그리드 ── */}
-        {fields.length > 0 ? (
-          <div style={{ borderTop: '1px solid #f3f4f6' }}>
-            {fields.map((f, i) => (
-              <FieldRow key={i} label={f.label} value={f.value} zebra={i % 2 === 1} />
-            ))}
-          </div>
-        ) : rawText ? (
-          /* 파싱 완전 실패 시 원문 그대로 */
-          <pre
-            style={{
-              fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word', color: '#374151', margin: 0,
-            }}
-          >
+        {/* ── 본문 ── */}
+        {rawText ? (
+          <pre style={{
+            fontSize: 14,
+            lineHeight: 1.8,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            color: '#374151',
+            margin: 0,
+            fontFamily: 'inherit',
+          }}>
             {rawText}
           </pre>
-        ) : null}
-
-        {/* ── 특이사항 박스 ── */}
-        {notes.length > 0 && (
+        ) : (
           <>
-            <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-            <div
-              style={{
-                background: '#EFF6FF',
-                borderLeft: '4px solid #60a5fa',
-                borderRadius: 8,
-                padding: '12px 16px',
-                fontSize: 13,
-                color: '#1e40af',
-                lineHeight: 1.7,
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {notes.join('\n')}
-            </div>
-          </>
-        )}
-
-        {/* ── Benefits 체크리스트 ── */}
-        {benefits.length > 0 && (
-          <>
-            <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
-              Benefits
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
-              {benefits.map((b, i) => (
+            {fields.length > 0 && (
+              <div style={{ borderTop: '1px solid #f3f4f6' }}>
+                {fields.map((f, i) => (
+                  <FieldRow key={i} label={f.label} value={f.value} zebra={i % 2 === 1} />
+                ))}
+              </div>
+            )}
+            {/* notes — raw_text 없을 때만 */}
+            {notes.length > 0 && (
+              <>
+                <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
                 <div
-                  key={i}
-                  style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
+                  style={{
+                    background: '#EFF6FF',
+                    borderLeft: '4px solid #60a5fa',
+                    borderRadius: 8,
+                    padding: '12px 16px',
+                    fontSize: 13,
+                    color: '#1e40af',
+                    lineHeight: 1.7,
+                    whiteSpace: 'pre-wrap',
+                  }}
                 >
-                  <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }}>✓</span>
-                  <span>{b}</span>
+                  {notes.join('\n')}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
+            {/* benefits — raw_text 없을 때만 */}
+            {benefits.length > 0 && (
+              <>
+                <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
+                  Benefits
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+                  {benefits.map((b, i) => (
+                    <div
+                      key={i}
+                      style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
+                    >
+                      <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }}>✓</span>
+                      <span>{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
 
