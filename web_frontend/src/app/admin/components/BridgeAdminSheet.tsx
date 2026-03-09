@@ -19,7 +19,7 @@ interface ColDef { key: string; label: string; w: number; type: ColType; v: bool
 interface StatusRow { id: string; label: string; bg: string; text: string; h: number }
 type DataRow = { id: number; category: string; stage: string; mailStatus: string; photoUrl: string; photoSize: number; [key: string]: string | number }
 interface DataStore { active: DataRow[]; past: DataRow[]; blacklist: DataRow[] }
-interface UndoSnapshot { d: DataStore; s: StatusRow[] }
+interface UndoSnapshot { d: DataStore; s: StatusRow[]; db: DataRow[] }
 interface EditCellState { id: number; key: string }
 interface CtxMenu { x: number; y: number; row: DataRow }
 interface ColMenuState { x: number; y: number; key: string }
@@ -304,13 +304,13 @@ export default function BridgeAdminSheet() {
   const editedCids = useRef<Set<string>>(new Set())
 
   const pushU = useCallback(() => {
-    setUS(p => [...p, { d: JSON.parse(JSON.stringify(data)), s: JSON.parse(JSON.stringify(sRows)) }].slice(-10))
-  }, [data, sRows])
+    setUS(p => [...p, { d: JSON.parse(JSON.stringify(data)), s: JSON.parse(JSON.stringify(sRows)), db: JSON.parse(JSON.stringify(dbAll)) }].slice(-10))
+  }, [data, sRows, dbAll])
 
   const undo = useCallback(() => {
     if (!undoStack.length) return
     const prev = undoStack[undoStack.length - 1]
-    setData(prev.d); setSR(prev.s); setUS(p => p.slice(0, -1))
+    setData(prev.d); setSR(prev.s); if (prev.db) setDbAll(prev.db); setUS(p => p.slice(0, -1))
   }, [undoStack])
 
   /* localStorage — SSR 안전 */
@@ -458,8 +458,8 @@ export default function BridgeAdminSheet() {
 
   /* Derived */
   const visCols = useMemo(() => cols.filter(c => c.v !== false), [cols])
-  // 전체 탭 = DB 원본(dbAll), 나머지 탭 = 수동 관리
-  const allTD = useMemo(() => tab === 'all' ? dbAll : (data[tab as CategoryKey] || []), [tab, data, dbAll])
+  // 전체 탭 = DB 원본(dbAll), 나머지 탭 = dbAll을 category로 필터링
+  const allTD = useMemo(() => tab === 'all' ? dbAll : dbAll.filter(r => r.category === tab), [tab, dbAll])
   const cur = useMemo(() => {
     let it = [...allTD]
     Object.entries(filters).forEach(([k, v]) => { if (v?.size > 0) it = it.filter(r => v.has(String(r[k] || ''))) })
@@ -467,7 +467,12 @@ export default function BridgeAdminSheet() {
     if (sk) it.sort((a, b) => { const av = String(a[sk] || ''), bv = String(b[sk] || ''); return sd === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) })
     return it
   }, [allTD, filters, q, sk, sd])
-  const cnt = useMemo(() => ({ active: data.active.length, past: data.past.length, blacklist: data.blacklist.length, all: dbTotal || dbAll.length }), [data, dbAll, dbTotal])
+  const cnt = useMemo(() => ({
+    active: dbAll.filter(r => r.category === 'active').length,
+    past: dbAll.filter(r => r.category === 'past').length,
+    blacklist: dbAll.filter(r => r.category === 'blacklist').length,
+    all: dbTotal || dbAll.length,
+  }), [dbAll, dbTotal])
   const gFO = useCallback((k: string) => { const v = new Set<string>(); allTD.forEach(r => { const val = String(r[k] || ''); if (val) v.add(val) }); return [...v].sort() }, [allTD])
 
   /* Column resize */
@@ -506,19 +511,14 @@ export default function BridgeAdminSheet() {
   }
   const cE = () => {
     if (!ec) return; pushU()
-    setData(p => {
-      const u: DataStore = { active: [], past: [], blacklist: [] }
-      for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(x => {
-        if (x.id !== ec.id) return x
-        const cid = String(x._cid ?? '')
-        if (cid) {
-          editedCids.current.add(cid)
-          saveEdit(cid, { [ec.key]: ev } as EditOverride)
-        }
-        return { ...x, [ec.key]: ev }
-      })
-      return u
-    })
+    const applyEdit = (x: DataRow) => {
+      if (x.id !== ec.id) return x
+      const cid = String(x._cid ?? '')
+      if (cid) { editedCids.current.add(cid); saveEdit(cid, { [ec.key]: ev } as EditOverride) }
+      return { ...x, [ec.key]: ev }
+    }
+    setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(applyEdit); return u })
+    setDbAll(p => p.map(applyEdit))
     setEc(null)
   }
   useEffect(() => { if (ec && eR.current) eR.current.focus() }, [ec])
@@ -527,7 +527,7 @@ export default function BridgeAdminSheet() {
   const cSE = () => { if (!esId) return; pushU(); setSR(p => p.map(r => r.id === esId ? { ...r, text: esV } : r)); setEsId(null) }
 
   /* Stage / Field / Tag */
-  const upData = (fn: (x: DataRow) => DataRow) => { pushU(); setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(fn); return u }) }
+  const upData = (fn: (x: DataRow) => DataRow) => { pushU(); setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(fn); return u }); setDbAll(p => p.map(fn)) }
   const setSt = (rid: number, s: string) => upData(x => {
     if (x.id !== rid) return x
     const cid = String(x._cid ?? '')
@@ -553,14 +553,11 @@ export default function BridgeAdminSheet() {
   const hC = (e: React.MouseEvent, row: DataRow) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, row }) }
   const mv = (row: DataRow, cat: CategoryKey) => {
     pushU()
-    if (tab === 'all') {
-      // 전체 탭 → 수동 탭으로 복사 (전체 탭에는 유지)
-      const newId = maxId() + 1
-      setData(p => ({ ...p, [cat]: [...p[cat], { ...row, id: newId, category: cat }] }))
-    } else {
-      // 수동 탭 간 이동
-      setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); u[cat] = [...u[cat], { ...row, category: cat }]; return u })
-    }
+    const cid = String(row._cid ?? '')
+    if (cid) saveEdit(cid, { category: cat })
+    // category를 dbAll에서 업데이트 (모든 탭 공통)
+    setDbAll(p => p.map(x => x.id === row.id ? { ...x, category: cat } : x))
+    setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].filter(x => x.id !== row.id); u[cat] = [...u[cat], { ...row, category: cat }]; return u })
     setCtx(null)
   }
   // 전체 탭에서는 삭제 불가 (DB 원본), 수동 탭에서만 삭제
@@ -580,10 +577,17 @@ export default function BridgeAdminSheet() {
 
   /* Add rows */
   const maxId = () => Math.max(...[...data.active, ...data.past, ...data.blacklist, ...dbAll].map(r => r.id), 0)
-  const addN = () => { pushU(); const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey; setData(p => ({ ...p, [tt]: [...p[tt], mkRow(maxId() + 1, tt)] })) }
+  const addN = () => {
+    pushU(); const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
+    const newRow = mkRow(maxId() + 1, tt)
+    setData(p => ({ ...p, [tt]: [...p[tt], newRow] }))
+    setDbAll(p => [...p, newRow])
+  }
   const addRow = (aid: number) => {
     pushU(); const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
-    setData(p => { const u = { ...p }; const a = [...u[tt]]; const i = a.findIndex(r => r.id === aid); a.splice(i + 1, 0, mkRow(maxId() + 1, tt)); u[tt] = a; return u })
+    const newRow = mkRow(maxId() + 1, tt)
+    setData(p => { const u = { ...p }; const a = [...u[tt]]; const i = a.findIndex(r => r.id === aid); a.splice(i + 1, 0, newRow); u[tt] = a; return u })
+    setDbAll(p => { const a = [...p]; const i = a.findIndex(r => r.id === aid); a.splice(i + 1, 0, newRow); return a })
   }
 
   /* Photo */
@@ -673,7 +677,7 @@ export default function BridgeAdminSheet() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
-          {sel.size > 0 && <button onClick={() => { openMM([...data.active, ...data.past, ...data.blacklist].filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
+          {sel.size > 0 && <button onClick={() => { openMM(dbAll.filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
           <button onClick={() => { setDbOffset(0); fetchPage(0) }} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
           <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
           <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
