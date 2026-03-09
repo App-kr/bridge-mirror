@@ -157,6 +157,13 @@ Anti-pattern: 불필요한 에이전트 과다스폰 금지
 - 신규 DB 테이블 → api_server.py init_db()에 CREATE TABLE IF NOT EXISTS 추가
 - 폴더 구조 변경 시 → render.yaml Start Command 동시 업데이트
 
+## Render 빌드 예산 규칙 (PERMANENT)
+- 커밋은 반드시 배치로: 최소 3개 이상 변경사항 묶어서 1회 push
+- 기능 개발 중 WIP 커밋은 git stash 사용, push 금지
+- 월 빌드분 70% 경고 이메일 수신 시 → Auto-Deploy 즉시 OFF
+- 빌드분 소진 시 → 코드 계속 작성하되 04/01 리셋까지 push 금지
+- push 전 항상 확인: "이게 마지막 변경사항인가?" → NO면 stash
+
 ## LOCKED CONSTANTS
 - HERO: 검정배경 + BRIDGE로고 + "A career that changes your life." + 흰색 현수교 케이블 → 절대 수정 금지
 - DB 경로: Q:/Claudework/bridge base/master.db → 절대 이동 금지
