@@ -2658,10 +2658,7 @@ async def admin_matching_history(request: Request, candidate_id: str = ""):
 
 
 # ── Community Board API ──────────────────────────────────────────────────────
-_BOARDS = {
-    "visa", "visa_type", "visa_related", "immigration",
-    "support_kr", "support", "about", "korea", "tips", "testimonials", "information",
-}
+_BOARDS = {"visa", "support_kr", "support", "about", "korea", "tips", "testimonials", "information"}
 _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]
 
 import hashlib, time as _time
@@ -2915,37 +2912,6 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
     finally:
         conn.close()
     return ok(message=f"Post #{post_id} updated")
-
-
-@app.patch("/api/admin/community/{board}/{post_id}/move", tags=["admin"])
-async def admin_move_post(board: str, post_id: int, request: Request):
-    """게시글 게시판 이동 (관리자 전용). body: {"target_board": "visa_type"}"""
-    _check_admin(request)
-    if board not in _BOARDS:
-        raise HTTPException(404, "Board not found")
-    body = await request.json()
-    target = str(body.get("target_board", "")).strip()
-    if target not in _BOARDS:
-        raise HTTPException(400, f"유효하지 않은 대상 게시판: {target}")
-    if target == board:
-        raise HTTPException(400, "현재 게시판과 동일합니다.")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
-            (post_id, board),
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Post not found")
-        conn.execute(
-            "UPDATE community_posts SET board=? WHERE id=? AND board=?",
-            (target, post_id, board),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    return ok(message=f"Post #{post_id} moved to {target}")
 
 
 @app.get("/api/admin/community/posts", tags=["admin"])
@@ -3712,18 +3678,6 @@ _UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
 _log_upload = logging.getLogger("bridge.upload")
 
-# ── S3 스토리지 (boto3) ─────────────────────────────────────────────────────
-# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_S3_BUCKET 환경변수 필요
-# 미설정 시 업로드 엔드포인트에서 RuntimeError → 503 반환 (Fail-Closed)
-from backend.utils.storage import (
-    upload_bytes as s3_upload_bytes,
-    upload_file  as s3_upload_file,
-    get_presigned_url as s3_presigned_url,
-    delete_file  as s3_delete_file,
-    check_s3_connection,
-    StorageError,
-)
-
 # ── 서명 URL (HMAC-SHA256) — 업로드 파일 접근 보호 ──────────────────────────
 _UPLOAD_SIGN_KEY: str = os.getenv("UPLOAD_SIGN_KEY", "").strip()
 _SIGN_EXPIRY: int = 600  # 10분
@@ -3803,26 +3757,15 @@ async def serve_protected_file(
     mime, _ = mimetypes.guess_type(str(file_path))
     media_type = mime or "application/octet-stream"
 
-    # [LOCAL-DISABLED] return _FR(
-    #     path=str(file_path),
-    #     media_type=media_type,
-    #     headers={
-    #         "Cache-Control": "no-store, no-cache, must-revalidate",
-    #         "X-Content-Type-Options": "nosniff",
-    #         "Content-Disposition": f'inline; filename="{file_path.name}"',
-    #     },
-    # )
-    # ── S3 presigned URL 리다이렉트 ────────────────────────────────────────
-    # DB에서 s3_key를 조회하는 것이 이상적이나,
-    # 하위호환: entity_type/entity_id/filename 경로를 s3_key로 사용
-    _s3_key = f"legacy/{entity_type}/{entity_id}/{filename}"
-    try:
-        _presigned = s3_presigned_url(_s3_key, expires=3600)
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=_presigned, status_code=302)
-    except (RuntimeError, StorageError) as _s3_err:
-        _log_upload.error("presigned URL 생성 실패: %s", _s3_err)
-        raise HTTPException(503, "파일 접근 실패 — S3 환경변수를 확인하세요.")
+    return _FR(
+        path=str(file_path),
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'inline; filename="{file_path.name}"',
+        },
+    )
 
 
 @app.get("/api/admin/sign-url", tags=["admin"])
@@ -3982,44 +3925,18 @@ async def upload_file(
         fname = f"{att_id}{ext}"
 
     file_path = entity_dir / fname
-    # [LOCAL-DISABLED] file_path.write_bytes(data)
-
-    # ── S3 업로드 ──────────────────────────────────────────────────────────
-    _s3_folder = f"{dir_name}/{entity_id}"
-    if file_type == "certificate":
-        _s3_folder = f"{dir_name}/{entity_id}/certificates"
-    _s3_category = (
-        "image"    if file_type in ("photo", "community_image") else
-        "resume"   if file_type in ("cv", "cover_letter")       else
-        "video"    if file_type == "video"                       else
-        "any"
-    )
-    try:
-        _s3_result = await s3_upload_bytes(
-            data=data,
-            folder=_s3_folder,
-            filename=file.filename or fname,
-            allowed_category=_s3_category,
-        )
-        s3_key   = _s3_result["s3_key"]
-        file_url = _s3_result["s3_url"]
-    except (RuntimeError, StorageError) as _s3_err:
-        _log_upload.error("S3 업로드 실패: %s", _s3_err)
-        raise HTTPException(503, f"파일 저장 실패: {_s3_err}")
-    # ──────────────────────────────────────────────────────────────────────
+    file_path.write_bytes(data)
 
     # Thumbnail for photos
     thumb_url = None
     if file_type == "photo" and ext in (".jpg", ".jpeg", ".png", ".webp"):
-        # [LOCAL-DISABLED] thumb_path = entity_dir / "photo_thumb.jpg"
-        # [LOCAL-DISABLED] if _make_thumbnail(file_path, thumb_path):
-        # [LOCAL-DISABLED]     thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
-        pass  # S3 썸네일: 별도 서버사이드 Lambda 또는 Pillow → S3 업로드로 구현 예정
+        thumb_path = entity_dir / "photo_thumb.jpg"
+        if _make_thumbnail(file_path, thumb_path):
+            thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
 
-    # Build URL (S3 presigned — 1시간 유효)
-    # [LOCAL-DISABLED] rel = file_path.relative_to(_UPLOAD_BASE)
-    # [LOCAL-DISABLED] file_url = f"/uploads/{rel.as_posix()}"
-    file_url = s3_presigned_url(s3_key, expires=3600)
+    # Build URL
+    rel = file_path.relative_to(_UPLOAD_BASE)
+    file_url = f"/uploads/{rel.as_posix()}"
 
     # Record in Supabase file_uploads table
     try:
@@ -4043,12 +3960,7 @@ async def upload_file(
         # File is saved locally; metadata failure is non-blocking
 
     return ok(
-        data={
-            "file_url":  file_url,   # presigned URL (1시간 유효)
-            "s3_key":    s3_key,     # DB 저장용 키 (전체 URL 아님)
-            "thumb_url": thumb_url,
-            "file_size": len(data),
-        },
+        data={"file_url": file_url, "thumb_url": thumb_url, "file_size": len(data)},
         message="File uploaded successfully.",
     )
 
@@ -4066,25 +3978,12 @@ async def admin_upload_editor_image(
     if not data:
         raise HTTPException(400, "Empty file.")
     ext = _validate_file(data, file.filename or "image.png", "community_image")
-    # [LOCAL-DISABLED] img_dir = _UPLOAD_BASE / "editor"
-    # [LOCAL-DISABLED] img_dir.mkdir(parents=True, exist_ok=True)
-    # [LOCAL-DISABLED] fname = f"{uuid.uuid4().hex[:12]}{ext}"
-    # [LOCAL-DISABLED] file_path = img_dir / fname
-    # [LOCAL-DISABLED] file_path.write_bytes(data)
-    # [LOCAL-DISABLED] file_url = f"/uploads/editor/{fname}"
-    # ── S3 업로드 ──────────────────────────────────────────────────────────
-    try:
-        _editor_result = await s3_upload_bytes(
-            data=data,
-            folder="editor",
-            filename=file.filename or f"image{ext}",
-            allowed_category="image",
-        )
-        file_url = s3_presigned_url(_editor_result["s3_key"], expires=86400)  # 24시간
-    except (RuntimeError, StorageError) as _s3_err:
-        _log_upload.error("에디터 이미지 S3 업로드 실패: %s", _s3_err)
-        raise HTTPException(503, f"이미지 저장 실패: {_s3_err}")
-    # ──────────────────────────────────────────────────────────────────────
+    img_dir = _UPLOAD_BASE / "editor"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid.uuid4().hex[:12]}{ext}"
+    file_path = img_dir / fname
+    file_path.write_bytes(data)
+    file_url = f"/uploads/editor/{fname}"
     return ok(data={"url": file_url}, message="Image uploaded")
 
 
@@ -5834,10 +5733,6 @@ from inbox_api import router as inbox_router
 from gmail_collector import router as gmail_router
 app.include_router(inbox_router)
 app.include_router(gmail_router)
-
-# ── 결제 라우터 등록 (PAYMENT_ENABLED=false → 모든 엔드포인트 503) ──────────
-from backend.routers.payments import router as payments_router
-app.include_router(payments_router)
 
 # ── Static Files Mount 제거 ─────────────────────────────────────────────────
 # /uploads/ 직접 접근은 HMAC 서명 URL (/api/files/) 로 교체됨.

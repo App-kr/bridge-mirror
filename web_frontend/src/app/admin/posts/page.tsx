@@ -32,7 +32,7 @@ import { API_URL } from '@/lib/api'
 
 const API = API_URL
 
-const BOARDS = ['all', 'visa', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials', 'information'] as const
+const BOARDS = ['all', 'visa_type', 'visa_related', 'immigration', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials', 'information'] as const
 
 interface Post {
   id: number
@@ -49,11 +49,27 @@ interface Post {
 
 const boardLabel = (b: string) => {
   const map: Record<string, string> = {
-    visa: 'Visa', support: 'Support(EN)', support_kr: '업무지원(KR)',
+    visa: 'Visa (구)',
+    visa_type: '비자종류', visa_related: '비자관련', immigration: '출입국사무소',
+    support: 'Support(EN)', support_kr: '업무지원(KR)',
     about: 'About', korea: 'Korea', tips: 'Tips', testimonials: 'Testimonials',
-    information: 'Information'
+    information: 'Information',
   }
   return map[b] ?? b
+}
+
+const boardColor = (b: string) => {
+  const map: Record<string, string> = {
+    visa_type:    'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    visa_related: 'bg-teal-50 text-teal-700 border border-teal-200',
+    immigration:  'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    visa:         'bg-gray-50 text-gray-500 border border-gray-200',
+    support_kr:   'bg-orange-50 text-orange-700 border border-orange-200',
+    support:      'bg-blue-50 text-blue-700 border border-blue-200',
+    about:        'bg-violet-50 text-violet-700 border border-violet-200',
+    korea:        'bg-rose-50 text-rose-700 border border-rose-200',
+  }
+  return map[b] ?? 'bg-amber-50 text-amber-700 border border-amber-200'
 }
 
 function getInitialBoard(): string {
@@ -107,7 +123,7 @@ export default function AdminPostsPage() {
 
   // New post form
   const [showForm, setShowForm] = useState(false)
-  const [newBoard, setNewBoard] = useState('visa')
+  const [newBoard, setNewBoard] = useState('visa_type')
   const [newTitle, setNewTitle] = useState('')
   const [newBody, setNewBody] = useState('')
   const [posting, setPosting] = useState(false)
@@ -120,6 +136,8 @@ export default function AdminPostsPage() {
   const [editBody, setEditBody] = useState('')
   const [editBoard, setEditBoard] = useState('')
   const [saving, setSaving] = useState(false)
+  const [movingTo, setMovingTo] = useState('')
+  const [moving, setMoving] = useState(false)
   const [editTab, setEditTab] = useState<'write' | 'preview'>('write')
   const [editContentType, setEditContentType] = useState<'markdown' | 'html'>('markdown')
 
@@ -197,7 +215,7 @@ export default function AdminPostsPage() {
         // 검색어 없으면 기존 방식
         const allPosts: Post[] = []
         const boards = board === 'all'
-          ? ['visa', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials']
+          ? ['visa_type', 'visa_related', 'immigration', 'support', 'support_kr', 'about', 'korea', 'tips', 'testimonials']
           : [board]
 
         for (const b of boards) {
@@ -311,6 +329,27 @@ export default function AdminPostsPage() {
     }
   }
 
+  const handleMoveBoard = async () => {
+    if (!movingTo || movingTo === editBoard || !editId) return
+    setMoving(true)
+    try {
+      const res = await signedFetch(`${API}/api/admin/community/${editBoard}/${editId}/move`, {
+        method: 'PATCH',
+        body: JSON.stringify({ target_board: movingTo }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
+      setActionMsg(`Post #${editId} → ${boardLabel(movingTo)} 이동 완료`)
+      setEditId(null)
+      setMovingTo('')
+      fetchPosts()
+    } catch (e) {
+      setActionMsg(`이동 오류: ${e instanceof Error ? e.message : 'Failed'}`)
+    } finally {
+      setMoving(false)
+    }
+  }
+
   const handleEdit = async () => {
     if (!editTitle.trim()) { setActionMsg('제목을 입력하세요.'); return }
     setSaving(true)
@@ -399,14 +438,7 @@ export default function AdminPostsPage() {
           <div className="text-xs text-gray-400 font-mono w-8 pt-0.5">#{p.id}</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className={`badge text-[10px] ${
-                p.board === 'visa' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                p.board === 'support_kr' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                p.board === 'support' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                p.board === 'about' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
-                p.board === 'korea' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                'bg-amber-50 text-amber-700 border border-amber-200'
-              }`}>{boardLabel(p.board)}</span>
+              <span className={`badge text-[10px] ${boardColor(p.board)}`}>{boardLabel(p.board)}</span>
               {p.pinned === 1 && <span className="badge bg-blue-50 text-blue-600 border border-blue-200 text-[10px]">pinned</span>}
               <span className="font-semibold text-gray-900 truncate">{p.title}</span>
             </div>
@@ -476,8 +508,32 @@ export default function AdminPostsPage() {
                 </div>
               )}
             </div>
+            {/* 게시판 이동 */}
+            <div className="flex items-center gap-2 pt-1 border-t border-yellow-100">
+              <span className="text-xs text-gray-500 shrink-0">게시판 이동:</span>
+              <select
+                value={movingTo || editBoard}
+                onChange={(e) => setMovingTo(e.target.value)}
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              >
+                {BOARDS.filter(b => b !== 'all').map((b) => (
+                  <option key={b} value={b} disabled={b === editBoard}>
+                    {boardLabel(b)}{b === editBoard ? ' (현재)' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleMoveBoard}
+                disabled={moving || !movingTo || movingTo === editBoard}
+                className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-medium hover:bg-teal-700 disabled:opacity-40 transition-colors shrink-0"
+              >
+                {moving ? '이동 중...' : '↗ 이동'}
+              </button>
+            </div>
+
             <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setEditId(null)}
+              <button type="button" onClick={() => { setEditId(null); setMovingTo('') }}
                 className="admin-btn admin-btn-cancel">
                 ✕ 취소
               </button>
