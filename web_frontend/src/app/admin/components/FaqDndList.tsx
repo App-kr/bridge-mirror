@@ -36,6 +36,8 @@ export interface FaqPost {
   sort_order?: number
 }
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
 interface FaqDndListProps {
   posts: FaqPost[]
   board: string
@@ -63,7 +65,7 @@ function SortableRow({
   const [editTitle, setEditTitle] = useState(post.title)
   const [editBody, setEditBody] = useState('')
   const [loadingBody, setLoadingBody] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [deleting, setDeleting] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -99,7 +101,7 @@ function SortableRow({
 
   const handleSave = async () => {
     if (!editTitle.trim()) return
-    setSaving(true)
+    setSaveState('saving')
     setMsg(null)
     try {
       const res = await fetch(`${apiBase}/api/admin/community/${post.board}/${post.id}`, {
@@ -109,12 +111,16 @@ function SortableRow({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
+      setSaveState('saved')
       onTitleUpdated(post.id, editTitle.trim())
-      setEditing(false)
+      setTimeout(() => {
+        setSaveState('idle')
+        setEditing(false)
+      }, 1200)
     } catch (e) {
+      setSaveState('error')
       setMsg(`오류: ${e instanceof Error ? e.message : '저장 실패'}`)
-    } finally {
-      setSaving(false)
+      setTimeout(() => setSaveState('idle'), 3000)
     }
   }
 
@@ -138,6 +144,19 @@ function SortableRow({
     }
   }
 
+  const saveBtnClass: Record<SaveState, string> = {
+    idle:   'bg-blue-600 hover:bg-blue-700',
+    saving: 'bg-yellow-500 animate-pulse cursor-wait',
+    saved:  'bg-green-500',
+    error:  'bg-red-500',
+  }
+  const saveBtnText: Record<SaveState, string> = {
+    idle:   '💾 저장',
+    saving: '저장 중...',
+    saved:  '✓ 저장됨',
+    error:  '✗ 실패',
+  }
+
   return (
     <div ref={setNodeRef} style={style} className="mb-2" {...attributes}>
       {/* 메인 행 */}
@@ -150,7 +169,7 @@ function SortableRow({
             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
         }`}
       >
-        {/* 드래그 핸들 — listeners만 여기에, 자식은 pointer-events-none */}
+        {/* 드래그 핸들 */}
         <span
           {...listeners}
           className={`shrink-0 flex flex-col gap-[3px] p-2 rounded cursor-grab active:cursor-grabbing touch-none text-gray-400 hover:text-gray-600 transition-colors ${
@@ -225,18 +244,19 @@ function SortableRow({
           <div className="flex gap-2 justify-end">
             <button
               type="button"
-              onClick={() => { setEditing(false); setMsg(null) }}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              onClick={() => { setEditing(false); setMsg(null); setSaveState('idle') }}
+              disabled={saveState === 'saving'}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
               취소
             </button>
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !editTitle.trim()}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              disabled={saveState === 'saving' || saveState === 'saved' || !editTitle.trim()}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-medium text-white transition-colors disabled:opacity-70 ${saveBtnClass[saveState]}`}
             >
-              {saving ? '저장 중...' : '💾 저장'}
+              {saveBtnText[saveState]}
             </button>
           </div>
         </div>
@@ -255,7 +275,7 @@ export default function FaqDndList({
   onCancel,
 }: FaqDndListProps) {
   const [items, setItems] = useState<FaqPost[]>(initialPosts)
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [msg, setMsg] = useState<string | null>(null)
   const [orderChanged, setOrderChanged] = useState(false)
 
@@ -286,7 +306,7 @@ export default function FaqDndList({
 
   const handleSaveOrder = useCallback(async (force = false) => {
     if (!force && !orderChanged) return
-    setSaving(true)
+    setSaveState('saving')
     setMsg(null)
     try {
       const reorderItems = items.map((item, idx) => ({
@@ -300,13 +320,17 @@ export default function FaqDndList({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
-      setMsg('순서 저장 완료!')
+      setSaveState('saved')
       setOrderChanged(false)
-      setTimeout(() => { onSaved() }, 800)
+      // 2초간 "✓ 저장됨" 표시 후 onSaved 호출 (깜박임 방지)
+      setTimeout(() => {
+        setSaveState('idle')
+        onSaved()
+      }, 2000)
     } catch (e) {
+      setSaveState('error')
       setMsg(`오류: ${e instanceof Error ? e.message : '저장 실패'}`)
-    } finally {
-      setSaving(false)
+      setTimeout(() => setSaveState('idle'), 3000)
     }
   }, [orderChanged, items, apiBase, board, authHeaders, onSaved])
 
@@ -320,6 +344,19 @@ export default function FaqDndList({
     return () => document.removeEventListener('bridge:saveOrder', handler)
   }, [handleSaveOrder])
 
+  const orderBtnClass: Record<SaveState, string> = {
+    idle:   orderChanged ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 cursor-default',
+    saving: 'bg-yellow-500 text-white animate-pulse cursor-wait',
+    saved:  'bg-green-500 text-white',
+    error:  'bg-red-500 text-white',
+  }
+  const orderBtnText: Record<SaveState, string> = {
+    idle:   '💾 순서 저장',
+    saving: '저장 중...',
+    saved:  '✓ 저장됨',
+    error:  '✗ 실패',
+  }
+
   return (
     <div className="space-y-3">
       {/* 안내 배너 */}
@@ -330,10 +367,11 @@ export default function FaqDndList({
       </div>
 
       {msg && (
-        <div className={`px-4 py-2 rounded-lg text-[12px] font-medium ${
+        <div className={`px-4 py-2 rounded-lg text-[12px] font-medium flex justify-between items-center ${
           msg.startsWith('오류') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'
         }`}>
-          {msg}
+          <span>{msg}</span>
+          <button type="button" onClick={() => setMsg(null)} className="ml-2 opacity-60 hover:opacity-100">×</button>
         </div>
       )}
 
@@ -364,23 +402,20 @@ export default function FaqDndList({
         <button
           type="button"
           onClick={() => handleSaveOrder()}
-          disabled={saving || !orderChanged}
-          className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
-            orderChanged
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-100 text-gray-400 cursor-default'
-          } disabled:opacity-50`}
+          disabled={saveState === 'saving' || saveState === 'saved' || (!orderChanged && saveState === 'idle')}
+          className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all duration-200 disabled:opacity-70 ${orderBtnClass[saveState]}`}
         >
-          {saving ? '저장 중...' : '💾 순서 저장'}
+          {orderBtnText[saveState]}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 rounded-xl text-[13px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+          disabled={saveState === 'saving'}
+          className="px-4 py-2 rounded-xl text-[13px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
         >
           ✕ 닫기
         </button>
-        {orderChanged && (
+        {orderChanged && saveState === 'idle' && (
           <span className="flex items-center text-[11px] text-blue-600 ml-1">● 순서 변경됨</span>
         )}
       </div>
