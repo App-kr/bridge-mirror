@@ -138,7 +138,9 @@
       "Bash(cscript:*)",
       "Bash(cd \"Q:/Claudework/bridge base\" && claude doctor 2>&1)",
       "Bash(echo === DocBlock 상태 드롭다운 ===:*)",
-      "Bash(grep :8000:*)"
+      "Bash(grep :8000:*)",
+      "Bash(rm -rf \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\\\\.next\" && cd \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\" && npm run build 2>&1)",
+      "Bash(where pythonw:*)"
     ]
   }
 }
