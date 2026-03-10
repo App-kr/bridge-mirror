@@ -1,0 +1,176 @@
+{
+  "nodes": [
+    {
+      "id": "1",
+      "type": "text",
+      "text": "🌉 BRIDGE\nbridgejob.co.kr",
+      "x": -60,
+      "y": -60,
+      "width": 180,
+      "height": 80,
+      "color": "4"
+    },
+    {
+      "id": "2",
+      "type": "text",
+      "text": "⚙️ 백엔드\nFastAPI / SQLite\nRender",
+      "x": -400,
+      "y": -200,
+      "width": 180,
+      "height": 80,
+      "color": "6"
+    },
+    {
+      "id": "3",
+      "type": "text",
+      "text": "🖥️ 프론트엔드\nNext.js 14\nVercel",
+      "x": 200,
+      "y": -200,
+      "width": 180,
+      "height": 80,
+      "color": "6"
+    },
+    {
+      "id": "4",
+      "type": "text",
+      "text": "🗄️ DB\nmaster.db\n후보/공고/게시판",
+      "x": -400,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "color": "2"
+    },
+    {
+      "id": "5",
+      "type": "text",
+      "text": "👤 원어민 관리\n/admin/candidates\nSheet 가상스크롤",
+      "x": 200,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "color": "2"
+    },
+    {
+      "id": "6",
+      "type": "text",
+      "text": "🏢 업체 관리\n/admin/applications\nEmployerMgmt",
+      "x": 200,
+      "y": 240,
+      "width": 180,
+      "height": 80,
+      "color": "2"
+    },
+    {
+      "id": "7",
+      "type": "text",
+      "text": "📋 커뮤니티\nFAQ/비자/Korea\n카카오톡 버튼",
+      "x": -400,
+      "y": 240,
+      "width": 180,
+      "height": 80,
+      "color": "2"
+    },
+    {
+      "id": "8",
+      "type": "text",
+      "text": "🤖 자동화\nCraigslist RPA\nBridge Craig",
+      "x": -400,
+      "y": 380,
+      "width": 180,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "9",
+      "type": "text",
+      "text": "🛡️ 백업 시스템\nbridge_backup v3.0\nauto_backup 5분",
+      "x": 200,
+      "y": 380,
+      "width": 180,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "10",
+      "type": "text",
+      "text": "📊 모니터링\nRenderMonitor\nGuardian",
+      "x": -120,
+      "y": 380,
+      "width": 180,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "11",
+      "type": "text",
+      "text": "📝 작업일지\nBRIDGE_백업일지.md\nCLAUDE.md LOCK",
+      "x": -120,
+      "y": -200,
+      "width": 180,
+      "height": 80,
+      "color": "5"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "1",
+      "toNode": "2",
+      "label": "API"
+    },
+    {
+      "id": "e2",
+      "fromNode": "1",
+      "toNode": "3",
+      "label": "UI"
+    },
+    {
+      "id": "e3",
+      "fromNode": "2",
+      "toNode": "4",
+      "label": "read/write"
+    },
+    {
+      "id": "e4",
+      "fromNode": "3",
+      "toNode": "5",
+      "label": "admin"
+    },
+    {
+      "id": "e5",
+      "fromNode": "3",
+      "toNode": "6",
+      "label": "admin"
+    },
+    {
+      "id": "e6",
+      "fromNode": "3",
+      "toNode": "7",
+      "label": "community"
+    },
+    {
+      "id": "e7",
+      "fromNode": "2",
+      "toNode": "8",
+      "label": "자동화"
+    },
+    {
+      "id": "e8",
+      "fromNode": "2",
+      "toNode": "9",
+      "label": "백업"
+    },
+    {
+      "id": "e9",
+      "fromNode": "1",
+      "toNode": "10",
+      "label": "모니터"
+    },
+    {
+      "id": "e10",
+      "fromNode": "1",
+      "toNode": "11",
+      "label": "기록"
+    }
+  ]
+}
