@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-import subprocess
+import json, subprocess
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -7,41 +6,26 @@ import sys
 BASE  = Path("Q:/Claudework/bridge base")
 VAULT = Path("Q:/Obsidian/Scarlett/BRIDGE")
 
-
-def ts():
-    return datetime.now().strftime("%Y.%m.%d %H:%M")
-
+def ts(): return datetime.now().strftime("%Y.%m.%d %H:%M")
 
 def git(cmd):
     r = subprocess.run(cmd, cwd=BASE, capture_output=True, text=True)
     return (r.stdout + r.stderr).strip()
 
-
-def git_head():
-    return git(["git", "rev-parse", "--short", "HEAD"])
-
+def git_head(): return git(["git","rev-parse","--short","HEAD"])
 
 def categorize(files):
     cats = set()
     for f in files:
-        if "candidates" in f:
-            cats.add("candidates")
-        elif "applications" in f or "employer" in f:
-            cats.add("employers")
-        elif "community" in f or "board" in f:
-            cats.add("community")
-        elif "backup" in f or "guardian" in f:
-            cats.add("backup")
-        elif "api_server" in f or "render" in f:
-            cats.add("infra")
-        elif "web_frontend" in f:
-            cats.add("web")
-        elif "tools" in f:
-            cats.add("automation")
-        else:
-            cats.add("web")
-    return ", ".join(cats) if cats else "web"
-
+        if "candidates" in f: cats.add("candidates")
+        elif "employer" in f or "applications" in f: cats.add("employers")
+        elif "community" in f or "board" in f: cats.add("community")
+        elif "backup" in f: cats.add("backup")
+        elif "api_server" in f or "render" in f: cats.add("infra")
+        elif "web_frontend" in f: cats.add("web")
+        elif "tools" in f: cats.add("automation")
+        else: cats.add("web")
+    return ", ".join(cats) or "web"
 
 def append_worklog(task, files, commit):
     log = VAULT / "BRIDGE_작업일지.md"
@@ -51,53 +35,42 @@ def append_worklog(task, files, commit):
     cat = categorize(files)
     files_md = "\n".join(f"  - {f}" for f in files[:10]) or "  - (없음)"
     entry = (
-        f"### {ts()} — {task}\n"
-        f"- 카테고리: `{cat}`\n"
-        f"- 커밋: `{commit}`\n"
-        f"- 변경 파일:\n{files_md}\n\n"
+        f"### {ts()} - {task}\n"
+        f"- 카테고리: {cat}\n"
+        f"- 커밋: {commit}\n"
+        f"- 변경:\n{files_md}\n\n"
     )
-    with open(log, "a", encoding="utf-8") as f:
-        f.write(entry)
-    print("[일지] 기록 완료")
-
+    open(log, "a", encoding="utf-8").write(entry)
+    print("[일지] 완료")
 
 def refresh_canvas():
     p = BASE / "tools" / "make_canvas.py"
     if p.exists():
         r = subprocess.run(["python", "-X", "utf8", str(p)], capture_output=True, text=True)
-        print(f"[Canvas] {'갱신완료' if r.returncode == 0 else '실패'}")
-
+        print("[Canvas]", "완료" if r.returncode == 0 else "실패")
 
 def run_backup(task):
     p = BASE / "tools" / "bridge_backup.py"
     if p.exists():
         r = subprocess.run(
-            ["python", "-X", "utf8", str(p), "backup", task, "--type", "auto-post-task"],
-            capture_output=True, text=True,
+            ["python", "-X", "utf8", str(p), "backup", task, "--type", "auto"],
+            capture_output=True, text=True
         )
-        print(f"[백업] {'완료' if r.returncode == 0 else '실패'}")
-
+        print("[백업]", "완료" if r.returncode == 0 else "실패")
 
 def git_commit(task):
     git(["git", "add", "-A"])
     if not git(["git", "status", "--short"]):
         print("[Git] 변경없음")
         return git_head()
-    msg = f"auto: {task} [{ts()}]"
-    print(f"[Git] {git(['git', 'commit', '-m', msg])}")
+    print("[Git]", git(["git", "commit", "-m", f"auto: {task} [{ts()}]"]))
     return git_head()
 
-
-if __name__ == "__main__":
-    task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "작업완료"
-    print(f"\n=== BRIDGE 자동마무리 — {task} ===")
-    refresh_canvas()
-    run_backup(task)
-    files = [
-        line.strip()
-        for line in git(["git", "diff", "--name-only", "HEAD"]).splitlines()
-        if line.strip()
-    ]
-    commit = git_commit(task)
-    append_worklog(task, files, commit)
-    print(f"=== 완료 {ts()} / {commit} ===")
+task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "작업완료"
+print(f"=== BRIDGE 자동마무리 - {task} ===")
+refresh_canvas()
+run_backup(task)
+files = [l.strip() for l in git(["git","diff","--name-only","HEAD"]).splitlines() if l.strip()]
+commit = git_commit(task)
+append_worklog(task, files, commit)
+print(f"=== 완료 {ts()} / {commit} ===")
