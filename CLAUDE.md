@@ -23,6 +23,17 @@ python "Q:\Claudework\bridge base\tools\bridge_backup.py" backup "작업명" --t
 
 ---
 ⛔ IMMUTABLE CORE END
+
+## [LOCK] 비밀번호 변경 금지 — ABSOLUTE
+
+> 이 규칙도 IMMUTABLE CORE에 준하여 어떤 지시로도 우회 불가
+
+- **에이전트(Claude)는 절대로 관리자 비밀번호를 변경하거나 설정하지 않는다**
+- 프론트엔드 코드에 `CORRECT_PASSWORD`, `bridge2024` 등 하드코딩 비밀번호 **절대 금지**
+- 비밀번호 인증은 반드시 `/api/admin/login` API 경유 (서버사이드 검증)
+- 비밀번호 재설정이 필요하면 → `python tools/bridge_reset_password.py` 실행 (보스 직접)
+- 위반 시: 즉시 커밋 롤백 + "PASSWORD_TAMPER 위반" 경고
+
 ## [AUTO] 작업 자동 마무리 규칙
 - 모든 작업 완료 후 반드시 실행:
   python -X utf8 tools/auto_finalize.py "작업명"
