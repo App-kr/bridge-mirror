@@ -2,34 +2,70 @@
   "permissions": {
     "defaultMode": "acceptEdits",
     "deny": [
-      "Bash(rm -rf /*)",
-      "Bash(rm -rf ~*)",
-      "Bash(rm -rf c:*)",
-      "Bash(del /f /s /q c:\\windows*)",
-      "Bash(del /f /s /q c:\\users\\scarlett\\appdata*)",
-      "Bash(format c:*)",
-      "Bash(format d:*)",
-      "Bash(reg delete hklm*)",
-      "Bash(bcdedit*)"
+      "Bash(rm -rf *)",
+      "Bash(DROP TABLE*)",
+      "Bash(DELETE FROM*)",
+      "Bash(git push --force*)",
+      "Bash(* --force*)"
     ]
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\guard.py\"",
-        "timeout": 3000
-      }
-    ],
-    "TaskCompleted": [
-      {
-        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\task_gate.py\""
-      }
-    ],
-    "Stop": [
-      {
-        "command": "python \"Q:\\Claudework\\bridge base\\.hooks\\post_stop.py\""
-      }
-    ]
-  }
+  "PreToolUse": [
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo [PRE] Tool 실행 전"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": {
+        "tools": [
+          "BashTool"
+        ]
+      },
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo [POST] Bash 완료"
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo [STOP] 작업 완료"
+        }
+      ]
+    }
+  ],
+  "TaskCompleted": [
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo [TASK] 태스크 완료"
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
+        }
+      ]
+    }
+  ]
 }

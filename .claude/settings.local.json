@@ -140,7 +140,8 @@
       "Bash(echo === DocBlock 상태 드롭다운 ===:*)",
       "Bash(grep :8000:*)",
       "Bash(rm -rf \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\\\\.next\" && cd \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\" && npm run build 2>&1)",
-      "Bash(where pythonw:*)"
+      "Bash(where pythonw:*)",
+      "Bash(dir Q:\\\\Claudework\\\\bridge base\\\\tools:*)"
     ]
   }
 }

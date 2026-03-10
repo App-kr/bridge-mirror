@@ -195,5 +195,17 @@ tasks/db_checksum.log — DB 수정 전후 SHA-256
 tasks/pre_snapshot.txt — 작업 전 건수 스냅샷
 tasks/ralph_log.md — Ralph 루프 실행 로그
 
+## Obsidian 자동 기록 규칙
+- 작업일지 경로: `Q:\Claudework\bridge base\docs\obsidian\BRIDGE_작업일지.md`
+- 모든 작업 완료 후 작업일지 하단에 추가 (git commit 전 먼저 업데이트)
+- 기록 형식:
+  ```
+  ### YYYY.MM.DD HH:MM — [작업명]
+  - **내용**: 무엇을 했는가
+  - **변경 파일**: 수정된 주요 파일
+  - **결과**: ✅ 완료 / ⏳ 로컬only / ❌ 실패
+  ```
+- 미완료 작업 목록도 동기화 유지 (완료 시 체크, 신규 발견 시 추가)
+
 ---
-*Bridge CLAUDE.md v4.0 FINAL — 2026-03-08*
+*Bridge CLAUDE.md v4.0 FINAL — 2026-03-10 (Obsidian 기록 규칙 추가)*
