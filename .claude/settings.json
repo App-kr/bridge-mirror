@@ -6,7 +6,8 @@
       "Bash(DROP TABLE*)",
       "Bash(DELETE FROM*)",
       "Bash(git push --force*)",
-      "Bash(* --force*)"
+      "Bash(* --force*)",
+      "Edit(CLAUDE.md IMMUTABLE CORE 섹션 수정)"
     ]
   },
   "PreToolUse": [
