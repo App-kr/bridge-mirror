@@ -85,6 +85,10 @@ mail_log_*.json
 archive/
 tmp_photos/
 
+# ── Local workspace (personal, not shared) ───────────────────
+.gsd/
+context.md
+
 # ── Misc ──────────────────────────────────────────────────────
 *.bak
 *.tmp
