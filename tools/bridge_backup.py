@@ -20,7 +20,7 @@ from pathlib import Path
 # ── 경로 설정
 BASE     = Path(r"Q:\Claudework\bridge base")
 BACKUP   = BASE / "backups"
-LOG_FILE = BASE / "docs" / "obsidian" / "BRIDGE_백업일지.md"
+LOG_FILE = Path(r"Q:\Obsidian\Scarlett\BRIDGE_백업일지.md")
 STATE_F  = BASE / "tools" / "backup_state.json"
 
 # ── 백업 대상 (git-tracked + critical non-tracked)
