@@ -73,7 +73,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python -X utf8 \"Q:\\Claudework\\bridge base\\tools\\auto_finalize.py\" \"$CLAUDE_TOOL_INPUT\""
+          "command": "python -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"$CLAUDE_TASK_TITLE\""
         }
       ]
     }

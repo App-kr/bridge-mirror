@@ -23,6 +23,12 @@ python "Q:\Claudework\bridge base\tools\bridge_backup.py" backup "작업명" --t
 
 ---
 ⛔ IMMUTABLE CORE END
+## [AUTO] 작업 자동 마무리 규칙
+- 모든 작업 완료 후 반드시 실행:
+  python -X utf8 tools/auto_finalize.py "작업명"
+- Canvas 갱신 + 백업 + git commit + Obsidian 일지 자동 처리
+- Task 훅으로 자동 호출됨 (.claude/settings.json)
+
 ---
 
 # ================================================================
