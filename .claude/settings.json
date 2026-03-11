@@ -19,14 +19,21 @@
           "command": "echo [PRE] Tool 실행 전"
         }
       ]
+    },
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
+        }
+      ]
     }
   ],
   "PostToolUse": [
     {
       "matcher": {
-        "tools": [
-          "BashTool"
-        ]
+        "tools": ["BashTool"]
       },
       "hooks": [
         {
@@ -45,6 +52,15 @@
           "command": "echo [STOP] 작업 완료"
         }
       ]
+    },
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"$CLAUDE_TASK_TITLE\""
+        }
+      ]
     }
   ],
   "TaskCompleted": [
@@ -54,26 +70,6 @@
         {
           "type": "command",
           "command": "echo [TASK] 태스크 완료"
-        }
-      ]
-    }
-  ],
-  "hooks": [
-    {
-      "matcher": ".*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
-        }
-      ]
-    },
-    {
-      "matcher": "Task",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"$CLAUDE_TASK_TITLE\""
         }
       ]
     }

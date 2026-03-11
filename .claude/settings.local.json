@@ -141,7 +141,14 @@
       "Bash(grep :8000:*)",
       "Bash(rm -rf \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\\\\.next\" && cd \"Q:\\\\Claudework\\\\bridge base\\\\web_frontend\" && npm run build 2>&1)",
       "Bash(where pythonw:*)",
-      "Bash(dir Q:\\\\Claudework\\\\bridge base\\\\tools:*)"
+      "Bash(dir Q:\\\\Claudework\\\\bridge base\\\\tools:*)",
+      "Bash(cp:*)",
+      "Bash(echo 완료:*)",
+      "Bash(tee:*)",
+      "WebFetch(domain:blog.naver.com)",
+      "WebFetch(domain:rss.blog.naver.com)",
+      "WebFetch(domain:m.blog.naver.com)",
+      "Bash(schtasks /run /tn \"AudioAutoSwitcher\" 2>&1 && timeout /t 2 /nobreak >nul 2>&1 && tasklist | findstr -i \"python wscript\" 2>&1)"
     ]
   }
 }

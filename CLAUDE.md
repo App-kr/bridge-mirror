@@ -14,6 +14,18 @@
 python "Q:\Claudework\bridge base\tools\bridge_backup.py" backup "작업명" --type pre-task
 ```
 
+### [LOCK] ClaudeBlog 작업 전후 Git 백업 — ABSOLUTE MANDATORY
+
+매 작업 시작 전 반드시 실행:
+```bash
+cd Q:\Claudework\ClaudeBlog && git add -A && git commit -m "auto: 작업전백업 [$(date)]"
+```
+작업 종료 후 반드시 실행:
+```bash
+cd Q:\Claudework\ClaudeBlog && git add -A && git commit -m "auto: 작업후백업 [$(date)]"
+```
+이 백업 없이는 어떤 작업도 시작하지 말 것.
+
 ### 규칙
 - 백업 확인 전 파일 수정 도구(Edit/Write/Bash) 실행 금지
 - 백업 실패 시 → 작업 중단, 보스에게 보고 후 수동 백업 확인

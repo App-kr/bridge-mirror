@@ -31,8 +31,96 @@
       "git": "d87eab3",
       "files": 177,
       "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_123057__CLAUDE.md-ClaudeBlog백업규칙추가",
+      "task": "CLAUDE.md-ClaudeBlog백업규칙추가",
+      "ts": "2026.03.11 12:30:58",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_123103__CLAUDE.md-ClaudeBlog백업규칙추가",
+      "task": "CLAUDE.md-ClaudeBlog백업규칙추가",
+      "ts": "2026.03.11 12:31:03",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_141534__publish-btn-win32-focus-fix",
+      "task": "publish-btn-win32-focus-fix",
+      "ts": "2026.03.11 14:15:35",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_141540__publish-btn-win32-focus-fix",
+      "task": "publish-btn-win32-focus-fix",
+      "ts": "2026.03.11 14:15:40",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_182722__publish-btn-escape-fix",
+      "task": "publish-btn-escape-fix",
+      "ts": "2026.03.11 18:27:23",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_182726__publish-btn-escape-fix",
+      "task": "publish-btn-escape-fix",
+      "ts": "2026.03.11 18:27:27",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_191119__스피커테스트수정",
+      "task": "스피커테스트수정",
+      "ts": "2026.03.11 19:11:22",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_191125__스피커테스트수정",
+      "task": "스피커테스트수정",
+      "ts": "2026.03.11 19:11:26",
+      "git": "79f134b",
+      "files": 177,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_193158__오버레이독립프로세스v3",
+      "task": "오버레이독립프로세스v3",
+      "ts": "2026.03.11 19:32:00",
+      "git": "79f134b",
+      "files": 178,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260311_193206__오버레이독립프로세스v3",
+      "task": "오버레이독립프로세스v3",
+      "ts": "2026.03.11 19:32:07",
+      "git": "79f134b",
+      "files": 178,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_073858__오버레이-독립프로세스-분리",
+      "task": "오버레이-독립프로세스-분리",
+      "ts": "2026.03.12 07:38:59",
+      "git": "1752ac4",
+      "files": 183,
+      "db_hash": "217454e567ae"
     }
   ],
-  "last_backup": "2026.03.10 14:23:28",
-  "total_count": 4
+  "last_backup": "2026.03.12 07:38:59",
+  "total_count": 15
 }
