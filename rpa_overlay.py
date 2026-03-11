@@ -7,10 +7,24 @@ import os
 import sys
 import json
 import time
+import subprocess
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
 from pathlib import Path
+
+if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.argv:
+    _pw = Path(sys.executable).with_name("pythonw.exe")
+    if _pw.exists():
+        subprocess.Popen(
+            [str(_pw), os.path.abspath(__file__), "--no-relaunch"] + sys.argv[1:],
+            creationflags=subprocess.DETACHED_PROCESS
+                          | subprocess.CREATE_NEW_PROCESS_GROUP
+                          | subprocess.CREATE_NO_WINDOW,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, close_fds=True,
+        )
+        sys.exit(0)
 
 BASE_DIR          = Path(__file__).parent
 OVERLAY_STATE     = BASE_DIR / "overlay_state.json"

@@ -117,8 +117,16 @@ def _ov_launch(account: str, count: int):
     overlay_script = BASE_DIR / "rpa_overlay.py"
     if overlay_script.exists():
         subprocess.Popen(
-            [pythonw, str(overlay_script)],
-            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+            [pythonw, str(overlay_script), "--account", account, "--total", str(count)],
+            creationflags=(
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_NO_WINDOW
+            ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
         )
 
 
