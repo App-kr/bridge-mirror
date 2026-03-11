@@ -20,7 +20,8 @@ if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.
             [str(_pw), os.path.abspath(__file__), "--no-relaunch"] + sys.argv[1:],
             creationflags=subprocess.DETACHED_PROCESS
                           | subprocess.CREATE_NEW_PROCESS_GROUP
-                          | subprocess.CREATE_NO_WINDOW,
+                          | subprocess.CREATE_NO_WINDOW
+                          | subprocess.CREATE_BREAKAWAY_FROM_JOB,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, close_fds=True,
         )

@@ -9,7 +9,14 @@ if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.
     _pw = sys.executable[:-10] + "pythonw.exe"
     _sp.Popen(
         [_pw, os.path.abspath(__file__), "--no-relaunch"] + sys.argv[1:],
-        creationflags=_sp.CREATE_NO_WINDOW | _sp.DETACHED_PROCESS,
+        creationflags=(
+            _sp.DETACHED_PROCESS
+            | _sp.CREATE_NEW_PROCESS_GROUP
+            | _sp.CREATE_NO_WINDOW
+            | _sp.CREATE_BREAKAWAY_FROM_JOB
+        ),
+        stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+        close_fds=True,
     )
     sys.exit(0)
 
@@ -122,6 +129,7 @@ def _ov_launch(account: str, count: int):
                 subprocess.DETACHED_PROCESS
                 | subprocess.CREATE_NEW_PROCESS_GROUP
                 | subprocess.CREATE_NO_WINDOW
+                | subprocess.CREATE_BREAKAWAY_FROM_JOB
             ),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -399,7 +407,7 @@ def show_popup_and_run():
     )
     root.destroy()
     if answer:
-        threading.Thread(target=run_posting, args=(5,), daemon=True).start()
+        threading.Thread(target=run_posting, args=(5,), daemon=False).start()
 
 
 def run_schedule_loop():
@@ -440,11 +448,11 @@ def main():
                relief="flat", cursor="hand2", width=28)
     tk.Button(root, text="▶  Random 10건 즉시 게시",
               command=lambda: [root.destroy(),
-                               threading.Thread(target=run_posting, args=(10,), daemon=True).start()],
+                               threading.Thread(target=run_posting, args=(10,), daemon=False).start()],
               **btn).pack(pady=(18, 6))
     tk.Button(root, text="▶  Test 1건 테스트",
               command=lambda: [root.destroy(),
-                               threading.Thread(target=run_posting, args=(1,), daemon=True).start()],
+                               threading.Thread(target=run_posting, args=(1,), daemon=False).start()],
               **btn).pack(pady=6)
 
     sched = dict(bg="#7d5a3c", fg="white", font=("Consolas", 10),
