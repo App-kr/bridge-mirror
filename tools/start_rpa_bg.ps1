@@ -115,5 +115,5 @@ Write-Host "  Stop-CraiglistRPA        중지"
 Write-Host "  Start-CraiglistRPA       시작"
 Write-Host "  Restart-CraiglistRPA     재시작"
 Write-Host ""
-Write-Host "CMD 창 닫아도 계속 실행됨" -ForegroundColor Green
-Write-Host "부팅 시 자동 시작 등록됨" -ForegroundColor Green
+Write-Host "CMD closed = RPA keeps running" -ForegroundColor Green
+Write-Host "Auto-start on boot registered" -ForegroundColor Green
