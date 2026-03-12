@@ -1,11 +1,12 @@
-# BRIDGE Craigslist RPA 중단
 $pidFile = "Q:\Claudework\bridge base\craigslist_rpa.pid"
 
 if (Test-Path $pidFile) {
-    $pid = Get-Content $pidFile
-    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-    Remove-Item $pidFile -Force
-    Write-Host "RPA 중단됨 (PID $pid)" -ForegroundColor Yellow
+    $rpaPid = Get-Content $pidFile -ErrorAction SilentlyContinue
+    if ($rpaPid) {
+        Stop-Process -Id $rpaPid -Force -ErrorAction SilentlyContinue
+        Write-Host "RPA stopped (PID $rpaPid)" -ForegroundColor Yellow
+    }
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 } else {
-    Write-Host "실행 중인 RPA 없음" -ForegroundColor Gray
+    Write-Host "No running RPA found" -ForegroundColor Gray
 }
