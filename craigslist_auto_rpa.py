@@ -468,24 +468,30 @@ def main():
                else Path(sys.executable).with_name("pythonw.exe"))
 
     def _spawn_worker(limit: int):
-        """Worker를 완전 독립 프로세스로 실행 후 Launcher 종료"""
-        import uuid as _uuid
-        task_name = f"BridgeCrWorker_{_uuid.uuid4().hex[:8]}"
-        cmd_tr = f'"{pythonw}" "{os.path.abspath(__file__)}" --worker --limit {limit} --no-relaunch'
-        subprocess.run(
-            ['schtasks', '/create', '/f', '/tn', task_name,
-             '/tr', cmd_tr, '/sc', 'once', '/st', '00:00'],
-            creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+        """Worker(pythonw 창없음) + 콘솔모니터(별도 CMD창) 생성 후 Launcher 종료"""
+        DETACHED   = 0x00000008
+        NEW_CON    = 0x00000010  # CREATE_NEW_CONSOLE
+        NO_WIN     = 0x08000000
+
+        monitor = BASE_DIR / "rpa_console_monitor.py"
+        python  = Path(sys.executable).with_name("python.exe")
+
+        # 1) Worker: pythonw.exe, 창 없음, 완전 독립
+        subprocess.Popen(
+            [str(pythonw), os.path.abspath(__file__),
+             "--worker", f"--limit={limit}", "--no-relaunch"],
+            creationflags=DETACHED | NO_WIN,
+            close_fds=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        subprocess.run(
-            ['schtasks', '/run', '/tn', task_name],
-            creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
-        )
-        def _cleanup():
-            time.sleep(30)
-            subprocess.run(['schtasks', '/delete', '/tn', task_name, '/f'],
-                           creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True)
-        threading.Thread(target=_cleanup, daemon=True).start()
+
+        # 2) 콘솔 모니터: python.exe, 별도 CMD 창 (닫아도 Worker 무관)
+        if monitor.exists() and python.exists():
+            subprocess.Popen(
+                ["cmd.exe", "/K", str(python), "-X", "utf8", str(monitor)],
+                creationflags=NEW_CON,
+            )
+
         root.destroy()
         os._exit(0)
 
