@@ -5,23 +5,21 @@ import sys
 
 # ── python.exe → pythonw.exe 자동 재시작 (Job Object 완전 탈출) ──
 if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.argv:
-    import subprocess as _sp, pathlib as _pl
+    import subprocess as _sp, pathlib as _pl, uuid as _uuid, threading as _thr
     _pw = _pl.Path(sys.executable).with_name("pythonw.exe")
     if _pw.exists():
-        _rla_env = os.environ.copy()
-        _rla_env['_RLA_EXE']  = str(_pw)
-        _rla_env['_RLA_ARGS'] = " ".join(
-            ['"' + os.path.abspath(__file__) + '"', "--no-relaunch"] + sys.argv[1:]
-        )
-        _rla_env['_RLA_DIR']  = str(_pl.Path(__file__).parent)
-        _sp.Popen(
-            ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
-             '-Command',
-             '(New-Object -ComObject Shell.Application)'
-             '.ShellExecute($env:_RLA_EXE,$env:_RLA_ARGS,$env:_RLA_DIR,"open",1)'],
-            creationflags=_sp.CREATE_NO_WINDOW, env=_rla_env,
-            stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-        )
+        _task = f"BridgeCrRL_{_uuid.uuid4().hex[:8]}"
+        _cmd  = f'"{_pw}" "{os.path.abspath(__file__)}" --no-relaunch'
+        _sp.run(['schtasks', '/create', '/f', '/tn', _task,
+                 '/tr', _cmd, '/sc', 'once', '/st', '00:00'],
+                creationflags=_sp.CREATE_NO_WINDOW, capture_output=True)
+        _sp.run(['schtasks', '/run', '/tn', _task],
+                creationflags=_sp.CREATE_NO_WINDOW, capture_output=True)
+        def _del_task():
+            import time as _t; _t.sleep(30)
+            _sp.run(['schtasks', '/delete', '/tn', _task, '/f'],
+                    creationflags=_sp.CREATE_NO_WINDOW, capture_output=True)
+        _thr.Thread(target=_del_task, daemon=True).start()
         os._exit(0)
 
 import time
