@@ -3,16 +3,24 @@ import os
 import json
 import sys
 
-# ── python.exe → pythonw.exe 자동 재시작 (Explorer 자식 — CMD 연쇄종료 차단) ──
+# ── python.exe → pythonw.exe 자동 재시작 (Job Object 완전 탈출) ──
 if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.argv:
-    import ctypes as _ct, pathlib as _pl
+    import subprocess as _sp, pathlib as _pl
     _pw = _pl.Path(sys.executable).with_name("pythonw.exe")
     if _pw.exists():
-        _args = " ".join(
+        _rla_env = os.environ.copy()
+        _rla_env['_RLA_EXE']  = str(_pw)
+        _rla_env['_RLA_ARGS'] = " ".join(
             ['"' + os.path.abspath(__file__) + '"', "--no-relaunch"] + sys.argv[1:]
         )
-        _ct.windll.shell32.ShellExecuteW(
-            None, "open", str(_pw), _args, str(_pl.Path(__file__).parent), 0
+        _rla_env['_RLA_DIR']  = str(_pl.Path(__file__).parent)
+        _sp.Popen(
+            ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
+             '-Command',
+             '(New-Object -ComObject Shell.Application)'
+             '.ShellExecute($env:_RLA_EXE,$env:_RLA_ARGS,$env:_RLA_DIR,"open",1)'],
+            creationflags=_sp.CREATE_NO_WINDOW, env=_rla_env,
+            stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
         )
         os._exit(0)
 
@@ -119,10 +127,17 @@ def _ov_launch(account: str, count: int):
               else sys.executable[:-10] + "pythonw.exe"
     overlay_script = BASE_DIR / "rpa_overlay.py"
     if overlay_script.exists():
-        import ctypes as _ct
-        _ov_args = f'"{overlay_script}" --account "{account}" --total {count}'
-        _ct.windll.shell32.ShellExecuteW(
-            None, "open", pythonw, _ov_args, str(BASE_DIR), 0
+        _ov_env = os.environ.copy()
+        _ov_env['_OV_EXE']  = pythonw
+        _ov_env['_OV_ARGS'] = f'"{overlay_script}" --account "{account}" --total {count} --no-relaunch'
+        _ov_env['_OV_DIR']  = str(BASE_DIR)
+        subprocess.Popen(
+            ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
+             '-Command',
+             '(New-Object -ComObject Shell.Application)'
+             '.ShellExecute($env:_OV_EXE,$env:_OV_ARGS,$env:_OV_DIR,"open",1)'],
+            creationflags=subprocess.CREATE_NO_WINDOW, env=_ov_env,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
 
@@ -409,11 +424,17 @@ def _start_schedule(root):
     root.destroy()
     pythonw = sys.executable if sys.executable.lower().endswith("pythonw.exe") \
               else sys.executable[:-10] + "pythonw.exe"
-    import ctypes as _ct2
-    _ct2.windll.shell32.ShellExecuteW(
-        None, "open", pythonw,
-        f'"{os.path.abspath(__file__)}" --schedule --no-relaunch',
-        str(BASE_DIR), 0
+    _sc_env = os.environ.copy()
+    _sc_env['_SC_EXE']  = pythonw
+    _sc_env['_SC_ARGS'] = f'"{os.path.abspath(__file__)}" --schedule --no-relaunch'
+    _sc_env['_SC_DIR']  = str(BASE_DIR)
+    subprocess.Popen(
+        ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
+         '-Command',
+         '(New-Object -ComObject Shell.Application)'
+         '.ShellExecute($env:_SC_EXE,$env:_SC_ARGS,$env:_SC_DIR,"open",1)'],
+        creationflags=subprocess.CREATE_NO_WINDOW, env=_sc_env,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     messagebox.showinfo("스케줄 시작", "매일 오후 4시 자동 실행 등록 완료!")
 

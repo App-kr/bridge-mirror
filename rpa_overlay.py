@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import time
-import ctypes
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
@@ -16,11 +15,20 @@ from pathlib import Path
 if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.argv:
     _pw = Path(sys.executable).with_name("pythonw.exe")
     if _pw.exists():
-        _args = " ".join(
+        import subprocess as _sp
+        _rla_env = os.environ.copy()
+        _rla_env['_RLA_EXE']  = str(_pw)
+        _rla_env['_RLA_ARGS'] = " ".join(
             ['"' + os.path.abspath(__file__) + '"', "--no-relaunch"] + sys.argv[1:]
         )
-        ctypes.windll.shell32.ShellExecuteW(
-            None, "open", str(_pw), _args, str(Path(__file__).parent), 0
+        _rla_env['_RLA_DIR']  = str(Path(__file__).parent)
+        _sp.Popen(
+            ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
+             '-Command',
+             '(New-Object -ComObject Shell.Application)'
+             '.ShellExecute($env:_RLA_EXE,$env:_RLA_ARGS,$env:_RLA_DIR,"open",1)'],
+            creationflags=_sp.CREATE_NO_WINDOW, env=_rla_env,
+            stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
         )
         os._exit(0)
 
