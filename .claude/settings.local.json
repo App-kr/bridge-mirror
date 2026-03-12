@@ -148,7 +148,20 @@
       "WebFetch(domain:blog.naver.com)",
       "WebFetch(domain:rss.blog.naver.com)",
       "WebFetch(domain:m.blog.naver.com)",
-      "Bash(schtasks /run /tn \"AudioAutoSwitcher\" 2>&1 && timeout /t 2 /nobreak >nul 2>&1 && tasklist | findstr -i \"python wscript\" 2>&1)"
+      "Bash(schtasks /run /tn \"AudioAutoSwitcher\" 2>&1 && timeout /t 2 /nobreak >nul 2>&1 && tasklist | findstr -i \"python wscript\" 2>&1)",
+      "Bash(cd '/q/Claudework/bridge base/.claude/skills/excalidraw-diagram/references' && uv run python render_excalidraw.py '/q/Claudework/bridge base/docs/bridge-architecture.excalidraw' 2>&1)",
+      "Bash(dir:*)",
+      "Bash(echo 정리 완료:*)",
+      "Bash(cd \"Q:\\\\Claudework\\\\ClaudeBlog\" && .venv/Scripts/python -X utf8 modules/keyword_researcher.py 2>&1)",
+      "Bash(cd Q:\\\\Claudework\\\\ClaudeBlog:*)",
+      "Bash(cd \"Q:\\\\Claudework\\\\ClaudeBlog\" && .venv/Scripts/python -X utf8 main.py --dry 2>&1)",
+      "Bash(cd \"Q:\\\\Claudework\\\\ClaudeBlog\" && .venv/Scripts/pip install Pillow -q && echo \"INSTALLED\" && .venv/Scripts/python -X utf8 main.py --dry 2>&1)",
+      "Bash(cd \"Q:\\\\Claudework\\\\ClaudeBlog\" && .venv/Scripts/python -X utf8 main.py --now 2>&1)",
+      "Bash(gh auth:*)",
+      "Bash(printf \"protocol=https\\\\nhost=github.com\\\\n\" | git credential fill 2>&1)",
+      "Bash(cd \"Q:/Claudework/ClaudeBlog\" && .venv/Scripts/python -X utf8 -c \"\nimport keyring\ncid = keyring.get_password\\('BridgeBlogNaver', 'client_id'\\)\ncsec = keyring.get_password\\('BridgeBlogNaver', 'client_secret'\\)\nck = keyring.get_password\\('BridgeBlogAuto', 'master_key'\\)\nprint\\('Naver API client_id:', '✅' if cid else '❌ 없음'\\)\nprint\\('Naver API client_secret:', '✅' if csec else '❌ 없음'\\)\nprint\\('secrets.enc master_key:', '✅' if ck else '❌ 없음'\\)\nimport os\nprint\\('naver_cookies.json:', '✅' if os.path.exists\\('logs/naver_cookies.json'\\) else '❌ 없음'\\)\n\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/ClaudeBlog\" && .venv/Scripts/python -c \"\nimport json, time\nfrom selenium import webdriver\nfrom selenium.webdriver.chrome.options import Options\nfrom pathlib import Path\n\nopts = Options\\(\\)\nopts.add_argument\\('--disable-blink-features=AutomationControlled'\\)\nopts.add_experimental_option\\('excludeSwitches', ['enable-automation']\\)\ndriver = webdriver.Chrome\\(options=opts\\)\ndriver.get\\('https://nid.naver.com/nidlogin.login'\\)\nprint\\('네이버 로그인 하세요. 완료 후 엔터...'\\)\ninput\\(\\)\ncookies = driver.get_cookies\\(\\)\nPath\\('logs'\\).mkdir\\(exist_ok=True\\)\nPath\\('logs/naver_cookies.json'\\).write_text\\(json.dumps\\(cookies, ensure_ascii=False, indent=2\\), encoding='utf-8'\\)\nprint\\(f'쿠키 저장 완료: {len\\(cookies\\)}개'\\)\ndriver.quit\\(\\)\n\" 2>&1)",
+      "Bash(cd \"Q:/Claudework/ClaudeBlog\" && .venv/Scripts/python -c \"\nimport json\nfrom pathlib import Path\nPath\\('save_naver_session.py'\\).write_text\\('''\nimport json, time\nfrom selenium import webdriver\nfrom selenium.webdriver.chrome.options import Options\nfrom pathlib import Path\n\nopts = Options\\(\\)\nopts.add_argument\\(\\\\\"--disable-blink-features=AutomationControlled\\\\\"\\)\nopts.add_experimental_option\\(\\\\\"excludeSwitches\\\\\", [\\\\\"enable-automation\\\\\"]\\)\ndriver = webdriver.Chrome\\(options=opts\\)\ndriver.get\\(\\\\\"https://nid.naver.com/nidlogin.login\\\\\"\\)\nprint\\(\\\\\"네이버 로그인 하세요. 완료 후 엔터...\\\\\"\\)\ninput\\(\\)\ncookies = driver.get_cookies\\(\\)\nPath\\(\\\\\"logs\\\\\"\\).mkdir\\(exist_ok=True\\)\nPath\\(\\\\\"logs/naver_cookies.json\\\\\"\\).write_text\\(json.dumps\\(cookies, ensure_ascii=False, indent=2\\), encoding=\\\\\"utf-8\\\\\"\\)\nprint\\(f\\\\\"쿠키 저장 완료: {len\\(cookies\\)}개\\\\\"\\)\ndriver.quit\\(\\)\n''', encoding='utf-8'\\)\nprint\\('save_naver_session.py 생성 완료'\\)\n\" 2>&1)"
     ]
   }
 }

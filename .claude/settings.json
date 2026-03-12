@@ -10,6 +10,17 @@
       "Edit(CLAUDE.md IMMUTABLE CORE 섹션 수정)"
     ]
   },
+  "UserPromptSubmit": [
+    {
+      "matcher": {},
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"Q:\\Claudework\\bridge base\\tools\\start-backup-daemon.ps1\""
+        }
+      ]
+    }
+  ],
   "PreToolUse": [
     {
       "matcher": {},

@@ -1,0 +1,11 @@
+{
+  "status": "done",
+  "account": "test@test.com",
+  "started": "2026-03-12 10:04:34",
+  "total": 1,
+  "done": 1,
+  "success": 1,
+  "current": "완료 (1/1건 성공)",
+  "logs": [],
+  "updated": "2026-03-12T10:04:35.304815"
+}

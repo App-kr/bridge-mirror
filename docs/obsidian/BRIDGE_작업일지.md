@@ -443,3 +443,9 @@ Q:\Claudework\bridge base\
 ---
 
 *이하 신규 작업은 자동으로 추가됩니다*
+
+
+### 2026.03.12 11:00 — 키워드 자동 조사 시스템 구현
+- **내용**: ClaudeBlog에 Naver AC API + Google Trends 기반 키워드 자동 조사 파이프라인 구현
+- **변경 파일**: modules/keyword_researcher.py (신규), modules/keyword_manager.py, modules/main.py, config.json
+- **결과**: ✅ 완료 (로컬 커밋)

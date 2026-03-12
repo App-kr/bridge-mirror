@@ -119,8 +119,136 @@
       "git": "1752ac4",
       "files": 183,
       "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_075225__threads-crawl-obsidian-setup",
+      "task": "threads-crawl-obsidian-setup",
+      "ts": "2026.03.12 07:52:26",
+      "git": "9844384",
+      "files": 183,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_075229__threads-crawl-obsidian-setup",
+      "task": "threads-crawl-obsidian-setup",
+      "ts": "2026.03.12 07:52:30",
+      "git": "9844384",
+      "files": 183,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_083036__excalidraw-diagram-y-adjustment",
+      "task": "excalidraw-diagram-y-adjustment",
+      "ts": "2026.03.12 08:30:37",
+      "git": "9844384",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_083041__excalidraw-diagram-y-adjustment",
+      "task": "excalidraw-diagram-y-adjustment",
+      "ts": "2026.03.12 08:30:41",
+      "git": "9844384",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_091200__Popen→ShellExecuteW교체",
+      "task": "Popen→ShellExecuteW교체",
+      "ts": "2026.03.12 09:12:01",
+      "git": "da47c37",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_091204__Popen→ShellExecuteW교체",
+      "task": "Popen→ShellExecuteW교체",
+      "ts": "2026.03.12 09:12:05",
+      "git": "da47c37",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_095529__블로그자동화_신에디터_발행성공",
+      "task": "블로그자동화_신에디터_발행성공",
+      "ts": "2026.03.12 09:55:30",
+      "git": "74e44c2",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_095721__Job-Object-탈출-오버레이-종료-원인진단",
+      "task": "Job-Object-탈출-오버레이-종료-원인진단",
+      "ts": "2026.03.12 09:57:21",
+      "git": "74e44c2",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_095730__Job-Object-탈출-오버레이-종료-원인진단",
+      "task": "Job-Object-탈출-오버레이-종료-원인진단",
+      "ts": "2026.03.12 09:57:30",
+      "git": "74e44c2",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_104734__키워드자동조사시스템구현",
+      "task": "키워드자동조사시스템구현",
+      "ts": "2026.03.12 10:47:34",
+      "git": "d634043",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_104738__키워드자동조사시스템구현",
+      "task": "키워드자동조사시스템구현",
+      "ts": "2026.03.12 10:47:39",
+      "git": "d634043",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_112332__ClaudeBlog_CLAUDE.md_규칙_추가",
+      "task": "ClaudeBlog CLAUDE.md 규칙 추가",
+      "ts": "2026.03.12 11:23:33",
+      "git": "9edf96c",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_112337__ClaudeBlog_CLAUDE.md_규칙_추가",
+      "task": "ClaudeBlog CLAUDE.md 규칙 추가",
+      "ts": "2026.03.12 11:23:37",
+      "git": "9edf96c",
+      "files": 327,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_120325__세션종료백업",
+      "task": "세션종료백업",
+      "ts": "2026.03.12 12:03:26",
+      "git": "9edf96c",
+      "files": 330,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_122626__RPA_detach_test",
+      "task": "RPA_detach_test",
+      "ts": "2026.03.12 12:26:27",
+      "git": "9fd8add",
+      "files": 332,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_122632__RPA_detach_test",
+      "task": "RPA_detach_test",
+      "ts": "2026.03.12 12:26:32",
+      "git": "9fd8add",
+      "files": 332,
+      "db_hash": "217454e567ae"
     }
   ],
-  "last_backup": "2026.03.12 07:38:59",
-  "total_count": 15
+  "last_backup": "2026.03.12 12:26:33",
+  "total_count": 31
 }
