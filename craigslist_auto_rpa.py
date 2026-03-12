@@ -3,22 +3,18 @@ import os
 import json
 import sys
 
-# ── python.exe → pythonw.exe 자동 재시작 (CMD 창 완전 제거) ──────────
+# ── python.exe → pythonw.exe 자동 재시작 (Explorer 자식 — CMD 연쇄종료 차단) ──
 if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.argv:
-    import subprocess as _sp
-    _pw = sys.executable[:-10] + "pythonw.exe"
-    _sp.Popen(
-        [_pw, os.path.abspath(__file__), "--no-relaunch"] + sys.argv[1:],
-        creationflags=(
-            _sp.DETACHED_PROCESS
-            | _sp.CREATE_NEW_PROCESS_GROUP
-            | _sp.CREATE_NO_WINDOW
-            | _sp.CREATE_BREAKAWAY_FROM_JOB
-        ),
-        stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-        close_fds=True,
-    )
-    sys.exit(0)
+    import ctypes as _ct, pathlib as _pl
+    _pw = _pl.Path(sys.executable).with_name("pythonw.exe")
+    if _pw.exists():
+        _args = " ".join(
+            ['"' + os.path.abspath(__file__) + '"', "--no-relaunch"] + sys.argv[1:]
+        )
+        _ct.windll.shell32.ShellExecuteW(
+            None, "open", str(_pw), _args, str(_pl.Path(__file__).parent), 0
+        )
+        os._exit(0)
 
 import time
 import random
@@ -123,18 +119,10 @@ def _ov_launch(account: str, count: int):
               else sys.executable[:-10] + "pythonw.exe"
     overlay_script = BASE_DIR / "rpa_overlay.py"
     if overlay_script.exists():
-        subprocess.Popen(
-            [pythonw, str(overlay_script), "--account", account, "--total", str(count)],
-            creationflags=(
-                subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-                | subprocess.CREATE_NO_WINDOW
-                | subprocess.CREATE_BREAKAWAY_FROM_JOB
-            ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
+        import ctypes as _ct
+        _ov_args = f'"{overlay_script}" --account "{account}" --total {count}'
+        _ct.windll.shell32.ShellExecuteW(
+            None, "open", pythonw, _ov_args, str(BASE_DIR), 0
         )
 
 
@@ -421,9 +409,11 @@ def _start_schedule(root):
     root.destroy()
     pythonw = sys.executable if sys.executable.lower().endswith("pythonw.exe") \
               else sys.executable[:-10] + "pythonw.exe"
-    subprocess.Popen(
-        [pythonw, os.path.abspath(__file__), "--schedule", "--no-relaunch"],
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+    import ctypes as _ct2
+    _ct2.windll.shell32.ShellExecuteW(
+        None, "open", pythonw,
+        f'"{os.path.abspath(__file__)}" --schedule --no-relaunch',
+        str(BASE_DIR), 0
     )
     messagebox.showinfo("스케줄 시작", "매일 오후 4시 자동 실행 등록 완료!")
 
