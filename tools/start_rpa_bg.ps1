@@ -5,12 +5,12 @@ $rpaPythonPath = "Q:\Claudework\bridge base\craigslist_auto_rpa.py"
 $logPath       = "Q:\Claudework\bridge base\logs\craigslist_rpa.log"
 $errPath       = "Q:\Claudework\bridge base\logs\craigslist_rpa.err"
 $pidFile       = "Q:\Claudework\bridge base\craigslist_rpa.pid"
-$pythonw       = "C:\Python314\pythonw.exe"
+$scriptPath    = "Q:\Claudework\bridge base\start_rpa_background.ps1"
 
 # 로그 디렉토리 생성
 New-Item -ItemType Directory -Path (Split-Path $logPath) -Force | Out-Null
 
-# 이미 실행 중이면 종료
+# 이미 실행 중인 프로세스 종료
 if (Test-Path $pidFile) {
     $oldPid = Get-Content $pidFile -ErrorAction SilentlyContinue
     if ($oldPid) {
@@ -20,38 +20,100 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
 
-# pythonw.exe 확인 (없으면 python.exe 사용)
-if (-not (Test-Path $pythonw)) {
-    $pythonw = (Get-Command python.exe -ErrorAction SilentlyContinue)?.Source
-    if (-not $pythonw) {
-        Write-Host "Python을 찾을 수 없습니다." -ForegroundColor Red
-        exit 1
-    }
+# 재시작용 독립 스크립트 생성
+@"
+`$rpaPythonPath = "$rpaPythonPath"
+`$logPath = "$logPath"
+`$pidFile = "$pidFile"
+
+New-Item -ItemType Directory -Path (Split-Path `$logPath) -Force | Out-Null
+
+if (Test-Path `$pidFile) {
+    `$oldPid = Get-Content `$pidFile
+    Stop-Process -Id `$oldPid -Force -ErrorAction SilentlyContinue
+    Remove-Item `$pidFile -Force -ErrorAction SilentlyContinue
 }
 
-# 백그라운드 워커 실행 (창 없음, 독립 프로세스)
-# -WindowStyle Hidden : 콘솔 창 없음
-# -PassThru           : 프로세스 객체 반환
-# Start-Process 로 실행한 프로세스는 이 PowerShell 세션과 무관하게 생존
-$process = Start-Process -FilePath $pythonw `
-    -ArgumentList "`"$rpaPythonPath`" --worker --limit=10 --no-relaunch" `
-    -WorkingDirectory "Q:\Claudework\bridge base" `
-    -WindowStyle Hidden `
-    -PassThru
+`$process = Start-Process -FilePath "python.exe" ``
+    -ArgumentList `$rpaPythonPath ``
+    -WindowStyle Hidden ``
+    -RedirectStandardOutput `$logPath ``
+    -RedirectStandardError ("`$logPath.err") ``
+    -PassThru ``
+    -NoNewWindow
+`$process.Id | Out-File -FilePath `$pidFile -Force
+Write-Host "Craigslist RPA 시작 (PID: `$(`$process.Id))" -ForegroundColor Green
+"@ | Out-File -FilePath $scriptPath -Encoding UTF8 -Force
 
-# PID 저장
+# 백그라운드 실행 (NoNewWindow + Redirect로 완전 숨김)
+$process = Start-Process -FilePath "python.exe" `
+    -ArgumentList $rpaPythonPath `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $logPath `
+    -RedirectStandardError $errPath `
+    -PassThru `
+    -NoNewWindow
+
 $process.Id | Out-File -FilePath $pidFile -Encoding ASCII -Force
 
-# 콘솔 모니터 실행 (이 창은 닫아도 Worker 무관)
-$monitorPath = "Q:\Claudework\bridge base\rpa_console_monitor.py"
-if (Test-Path $monitorPath) {
-    Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/K python.exe -X utf8 `"$monitorPath`"" `
-        -WorkingDirectory "Q:\Claudework\bridge base"
+# 작업 스케줄러 등록 (부팅 시 자동 시작)
+$taskName = "BRIDGE-Craigslist-RPA"
+schtasks /delete /tn "BRIDGE\$taskName" /f 2>$null
+schtasks /create /tn "BRIDGE\$taskName" `
+    /tr "powershell -NoProfile -ExecutionPolicy Bypass -File '$scriptPath'" `
+    /sc onstart /rl highest /f 2>$null | Out-Null
+
+# PowerShell 프로필에 제어 함수 추가
+$profilePath = $PROFILE
+if (-not (Test-Path $profilePath)) { New-Item -ItemType File -Path $profilePath -Force | Out-Null }
+
+$functions = @"
+
+# BRIDGE Craigslist RPA 제어 함수
+function Stop-CraiglistRPA {
+    `$pidFile = "$pidFile"
+    if (Test-Path `$pidFile) {
+        `$p = Get-Content `$pidFile
+        Stop-Process -Id `$p -Force -ErrorAction SilentlyContinue
+        Remove-Item `$pidFile -Force
+        Write-Host "RPA 중지 (PID `$p)" -ForegroundColor Green
+    } else { Write-Host "실행 중이 아님" -ForegroundColor Red }
 }
 
-Write-Host "BRIDGE Craigslist RPA 백그라운드 시작" -ForegroundColor Green
+function Start-CraiglistRPA {
+    & "$scriptPath"
+}
+
+function Restart-CraiglistRPA {
+    Stop-CraiglistRPA; Start-Sleep 2; Start-CraiglistRPA
+}
+
+function Get-CraiglistRPA-Status {
+    `$pidFile = "$pidFile"
+    if (Test-Path `$pidFile) {
+        `$p = Get-Content `$pidFile
+        `$proc = Get-Process -Id `$p -ErrorAction SilentlyContinue
+        if (`$proc) {
+            Write-Host "실행 중 (PID: `$p  RAM: `$([math]::Round(`$proc.WorkingSet/1MB))MB)" -ForegroundColor Green
+        } else { Write-Host "좀비 PID (파일만 존재)" -ForegroundColor Yellow }
+    } else { Write-Host "실행 중이 아님" -ForegroundColor Red }
+}
+"@
+
+if (-not (Select-String -Path $profilePath -Pattern "Stop-CraiglistRPA" -ErrorAction SilentlyContinue)) {
+    Add-Content -Path $profilePath -Value $functions
+}
+
+Write-Host ""
+Write-Host "BRIDGE Craigslist RPA 백그라운드 시작 완료" -ForegroundColor Green
 Write-Host "PID    : $($process.Id)" -ForegroundColor Cyan
 Write-Host "로그   : $logPath" -ForegroundColor Cyan
-Write-Host "중단   : python Q:\Claudework\bridge base\tools\stop_rpa.ps1" -ForegroundColor Yellow
-Write-Host "CMD 창 종료해도 계속 실행됨" -ForegroundColor Green
+Write-Host ""
+Write-Host "제어 명령:" -ForegroundColor Cyan
+Write-Host "  Get-CraiglistRPA-Status  상태 확인"
+Write-Host "  Stop-CraiglistRPA        중지"
+Write-Host "  Start-CraiglistRPA       시작"
+Write-Host "  Restart-CraiglistRPA     재시작"
+Write-Host ""
+Write-Host "CMD 창 닫아도 계속 실행됨" -ForegroundColor Green
+Write-Host "부팅 시 자동 시작 등록됨" -ForegroundColor Green
