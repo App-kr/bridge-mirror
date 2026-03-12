@@ -1,0 +1,1 @@
+Start-Process python.exe -ArgumentList "`"Q:\Claudework\bridge base\craigslist_auto_rpa.py`"" -WorkingDirectory "Q:\Claudework\bridge base"
