@@ -454,6 +454,41 @@ def main():
         run_schedule_loop()
         return
 
+    # ── Worker 모드: 메뉴 없이 직접 게시 실행 ────────────────────────
+    if "--worker" in sys.argv:
+        try:
+            limit = int(sys.argv[sys.argv.index("--limit") + 1])
+        except (ValueError, IndexError):
+            limit = 10
+        run_posting(limit)
+        return
+
+    # ── Launcher 모드: 메뉴 창 표시 ──────────────────────────────────
+    pythonw = (sys.executable if sys.executable.lower().endswith("pythonw.exe")
+               else Path(sys.executable).with_name("pythonw.exe"))
+
+    def _spawn_worker(limit: int):
+        """Worker를 완전 독립 프로세스로 실행 후 Launcher 종료"""
+        import uuid as _uuid
+        task_name = f"BridgeCrWorker_{_uuid.uuid4().hex[:8]}"
+        cmd_tr = f'"{pythonw}" "{os.path.abspath(__file__)}" --worker --limit {limit} --no-relaunch'
+        subprocess.run(
+            ['schtasks', '/create', '/f', '/tn', task_name,
+             '/tr', cmd_tr, '/sc', 'once', '/st', '00:00'],
+            creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+        )
+        subprocess.run(
+            ['schtasks', '/run', '/tn', task_name],
+            creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+        )
+        def _cleanup():
+            time.sleep(30)
+            subprocess.run(['schtasks', '/delete', '/tn', task_name, '/f'],
+                           creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True)
+        threading.Thread(target=_cleanup, daemon=True).start()
+        root.destroy()
+        os._exit(0)
+
     root = tk.Tk()
     root.title("BRIDGE Craigslist")
     root.configure(bg="#2b2b2b")
@@ -467,12 +502,10 @@ def main():
     btn = dict(bg="#27ae60", fg="white", font=("Consolas", 11, "bold"),
                relief="flat", cursor="hand2", width=28)
     tk.Button(root, text="▶  Random 10건 즉시 게시",
-              command=lambda: [root.destroy(),
-                               threading.Thread(target=run_posting, args=(10,), daemon=False).start()],
+              command=lambda: _spawn_worker(10),
               **btn).pack(pady=(18, 6))
     tk.Button(root, text="▶  Test 1건 테스트",
-              command=lambda: [root.destroy(),
-                               threading.Thread(target=run_posting, args=(1,), daemon=False).start()],
+              command=lambda: _spawn_worker(1),
               **btn).pack(pady=6)
 
     sched = dict(bg="#7d5a3c", fg="white", font=("Consolas", 10),
