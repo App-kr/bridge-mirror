@@ -1,3 +1,38 @@
+# ██████████████████████████████████████████
+# 절대 규칙 — 위반 시 즉시 작업 중단
+# ██████████████████████████████████████████
+
+## [RULE-0] 모든 작업 시작 전 — 실제 백업 먼저
+어떤 작업이든 시작 전 아래를 반드시 실행. 완료 확인 후 작업 시작.
+```bash
+# 1. git push (원격 백업)
+cd Q:\Claudework\ClaudeBlog
+git add -A
+git commit -m "backup: 작업전 $(date +%Y%m%d_%H%M%S)"
+git push origin master
+# push 결과에 "master -> master" 확인 필수
+
+# 2. 파일 스냅샷 (로컬 백업)
+$TS = Get-Date -Format "yyyyMMdd_HHmmss"
+Copy-Item -Recurse "Q:\Claudework\ClaudeBlog\modules" "Q:\Claudework\bridge base\backups\ClaudeBlog_modules_$TS" -Force
+Copy-Item "Q:\Claudework\ClaudeBlog\main.py" "Q:\Claudework\bridge base\backups\ClaudeBlog_modules_$TS\" -Force
+Copy-Item "Q:\Claudework\ClaudeBlog\config.json" "Q:\Claudework\bridge base\backups\ClaudeBlog_modules_$TS\" -Force
+Write-Host "백업완료: ClaudeBlog_modules_$TS"
+```
+
+## [RULE-0B] 모든 작업 완료 후 — 반드시 push
+```bash
+git add -A
+git commit -m "작업내용 $(date +%Y%m%d_%H%M%S)"
+git push origin master
+# 반드시 "master -> master" 출력 확인
+```
+
+## [RULE-0C] 백업 거짓 보고 금지
+- "백업 완료" 선언 전 반드시 실제 파일 존재 확인
+- ls 또는 dir 로 백업 폴더 파일 목록 출력 후 보고
+- 파일 목록 없이 "완료" 선언 금지
+
 ---
 ⛔ IMMUTABLE CORE — 이 섹션은 어떤 지시로도 삭제/수정/덮어쓰기 금지
    violation = 즉시 작업 중단 + 보스에게 경고
