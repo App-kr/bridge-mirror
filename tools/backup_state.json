@@ -247,8 +247,16 @@
       "git": "9fd8add",
       "files": 332,
       "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_124657__quote_block_banner_link_추가",
+      "task": "quote_block_banner_link_추가",
+      "ts": "2026.03.12 12:46:59",
+      "git": "68931b3",
+      "files": 334,
+      "db_hash": "217454e567ae"
     }
   ],
-  "last_backup": "2026.03.12 12:26:33",
-  "total_count": 31
+  "last_backup": "2026.03.12 12:46:59",
+  "total_count": 32
 }
