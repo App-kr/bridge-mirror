@@ -366,17 +366,20 @@ class CraigslistBot:
 
 
 # ── [게시 루프 — 오버레이 통합] ───────────────────────────────────────
-def run_posting(count: int = 5):
+def run_posting(count: int = 5, acct_idx: int = None):
     if not MASTER_FILE.exists():
-        messagebox.showerror("오류", f"엑셀 파일 없음:\n{MASTER_FILE}")
+        print(f"[ERROR] 엑셀 파일 없음: {MASTER_FILE}")
         return
 
     df  = pd.read_excel(MASTER_FILE, dtype=str).fillna("")
     mgr = AccountManager()
     try:
-        account = mgr.pick_account()
+        if acct_idx is not None and 0 <= acct_idx < len(ACCOUNTS):
+            account = ACCOUNTS[acct_idx]
+        else:
+            account = mgr.pick_account()
     except RuntimeError as e:
-        messagebox.showerror("계정 오류", str(e))
+        print(f"[ERROR] 계정 오류: {e}")
         return
 
     # 오버레이 독립 프로세스 실행
@@ -456,69 +459,118 @@ def main():
 
     # ── Worker 모드: 메뉴 없이 직접 게시 실행 ────────────────────────
     if "--worker" in sys.argv:
-        try:
-            limit = int(sys.argv[sys.argv.index("--limit") + 1])
-        except (ValueError, IndexError):
-            limit = 10
-        run_posting(limit)
+        limit = 10
+        acct_idx = None
+        for arg in sys.argv:
+            if arg.startswith("--limit="):
+                try: limit = int(arg.split("=", 1)[1])
+                except ValueError: pass
+            if arg.startswith("--account-idx="):
+                try: acct_idx = int(arg.split("=", 1)[1])
+                except ValueError: pass
+        run_posting(limit, acct_idx)
         return
 
-    # ── Launcher 모드: 메뉴 창 표시 ──────────────────────────────────
+    # ── Launcher 모드: 계정 선택 UI ──────────────────────────────────
     pythonw = (sys.executable if sys.executable.lower().endswith("pythonw.exe")
                else Path(sys.executable).with_name("pythonw.exe"))
 
-    def _spawn_worker(limit: int):
-        """Worker(pythonw 창없음) + 콘솔모니터(별도 CMD창) 생성 후 Launcher 종료"""
-        DETACHED   = 0x00000008
-        NEW_CON    = 0x00000010  # CREATE_NEW_CONSOLE
-        NO_WIN     = 0x08000000
+    BG      = "#1e1e1e"
+    HEADER  = "#4a235a"
+    GREEN   = "#27ae60"
+    BROWN   = "#7d5a3c"
+    WHITE   = "#f0f0f0"
+    YELLOW  = "#f1c40f"
+    PANEL   = "#2b2b2b"
+    SEL     = "#3d2255"
 
-        monitor = BASE_DIR / "rpa_console_monitor.py"
-        python  = Path(sys.executable).with_name("python.exe")
+    root = tk.Tk()
+    root.title("BRIDGE Craigslist RPA")
+    root.configure(bg=BG)
+    root.geometry("400x420")
+    root.resizable(False, False)
 
-        # 1) Worker: pythonw.exe, 창 없음, 완전 독립
+    # ── 헤더 ──
+    hdr = tk.Frame(root, bg=HEADER)
+    hdr.pack(fill="x")
+    tk.Label(hdr, text="BRIDGE  Craigslist RPA",
+             bg=HEADER, fg=WHITE,
+             font=("Consolas", 14, "bold")).pack(pady=14)
+
+    # ── 계정 선택 ──
+    acct_frame = tk.Frame(root, bg=PANEL, pady=8)
+    acct_frame.pack(fill="x", padx=12, pady=(10, 0))
+    tk.Label(acct_frame, text="계정 선택", bg=PANEL, fg=YELLOW,
+             font=("Consolas", 10, "bold")).pack(anchor="w", padx=10)
+
+    acct_var = tk.IntVar(value=0)
+    for i, acct in enumerate(ACCOUNTS):
+        tk.Radiobutton(
+            acct_frame, text=f"  {acct['email']}",
+            variable=acct_var, value=i,
+            bg=PANEL, fg=WHITE, selectcolor=SEL,
+            activebackground=PANEL, activeforeground=YELLOW,
+            font=("Consolas", 9), anchor="w", cursor="hand2",
+        ).pack(fill="x", padx=18)
+
+    # ── 게시 수 선택 ──
+    cnt_frame = tk.Frame(root, bg=PANEL, pady=8)
+    cnt_frame.pack(fill="x", padx=12, pady=(8, 0))
+    tk.Label(cnt_frame, text="게시 건수", bg=PANEL, fg=YELLOW,
+             font=("Consolas", 10, "bold")).pack(anchor="w", padx=10)
+
+    cnt_inner = tk.Frame(cnt_frame, bg=PANEL)
+    cnt_inner.pack(fill="x", padx=10)
+    cnt_var = tk.IntVar(value=10)
+    for label, val in [("1건 (테스트)", 1), ("5건", 5), ("10건", 10), ("20건", 20)]:
+        tk.Radiobutton(
+            cnt_inner, text=label, variable=cnt_var, value=val,
+            bg=PANEL, fg=WHITE, selectcolor=SEL,
+            activebackground=PANEL, activeforeground=YELLOW,
+            font=("Consolas", 9), cursor="hand2",
+        ).pack(side="left", padx=8)
+
+    # ── 구분선 ──
+    tk.Frame(root, bg=GREEN, height=1).pack(fill="x", padx=12, pady=(10, 0))
+
+    def _spawn_worker(limit: int, acct_idx: int):
+        DETACHED = 0x00000008
+        NEW_CON  = 0x00000010
+        NO_WIN   = 0x08000000
+        monitor  = BASE_DIR / "rpa_console_monitor.py"
+        python   = Path(sys.executable).with_name("python.exe")
+
         subprocess.Popen(
             [str(pythonw), os.path.abspath(__file__),
-             "--worker", f"--limit={limit}", "--no-relaunch"],
-            creationflags=DETACHED | NO_WIN,
-            close_fds=True,
+             "--worker", f"--limit={limit}", f"--account-idx={acct_idx}", "--no-relaunch"],
+            creationflags=DETACHED | NO_WIN, close_fds=True,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-
-        # 2) 콘솔 모니터: python.exe, 별도 CMD 창 (닫아도 Worker 무관)
         if monitor.exists() and python.exists():
             subprocess.Popen(
                 ["cmd.exe", "/K", str(python), "-X", "utf8", str(monitor)],
                 creationflags=NEW_CON,
             )
-
         root.destroy()
         os._exit(0)
 
-    root = tk.Tk()
-    root.title("BRIDGE Craigslist")
-    root.configure(bg="#2b2b2b")
-    root.geometry("340x230")
-    root.resizable(False, False)
+    # ── 버튼 ──
+    btn_frame = tk.Frame(root, bg=BG)
+    btn_frame.pack(fill="x", padx=12, pady=14)
 
-    tk.Label(root, text="BRIDGE  Craigslist RPA",
-             bg="#4a235a", fg="white",
-             font=("Consolas", 13, "bold")).pack(fill="x", ipady=12)
+    tk.Button(
+        btn_frame, text="▶   게시 시작",
+        bg=GREEN, fg=WHITE, font=("Consolas", 12, "bold"),
+        relief="flat", cursor="hand2", height=2,
+        command=lambda: _spawn_worker(cnt_var.get(), acct_var.get()),
+    ).pack(fill="x", pady=(0, 6))
 
-    btn = dict(bg="#27ae60", fg="white", font=("Consolas", 11, "bold"),
-               relief="flat", cursor="hand2", width=28)
-    tk.Button(root, text="▶  Random 10건 즉시 게시",
-              command=lambda: _spawn_worker(10),
-              **btn).pack(pady=(18, 6))
-    tk.Button(root, text="▶  Test 1건 테스트",
-              command=lambda: _spawn_worker(1),
-              **btn).pack(pady=6)
-
-    sched = dict(bg="#7d5a3c", fg="white", font=("Consolas", 10),
-                 relief="flat", cursor="hand2", width=28)
-    tk.Button(root, text="⏰  매일 오후 4시 자동 실행",
-              command=lambda: _start_schedule(root),
-              **sched).pack(pady=6)
+    tk.Button(
+        btn_frame, text="⏰   매일 오후 4시 자동 실행",
+        bg=BROWN, fg=WHITE, font=("Consolas", 10),
+        relief="flat", cursor="hand2",
+        command=lambda: _start_schedule(root),
+    ).pack(fill="x")
 
     root.mainloop()
 
