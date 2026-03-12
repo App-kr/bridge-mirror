@@ -22,6 +22,7 @@ if sys.executable.lower().endswith("python.exe") and "--no-relaunch" not in sys.
         _thr.Thread(target=_del_task, daemon=True).start()
         os._exit(0)
 
+import math
 import time
 import random
 import threading
@@ -50,9 +51,12 @@ OVERLAY_STATE     = BASE_DIR / "overlay_state.json"
 OVERLAY_STOP_FLAG = BASE_DIR / "overlay_stop.flag"
 
 # ── [계정 목록] ───────────────────────────────────────────────────────
+# label = UI 표시용 (이메일 절대 노출 금지)
 ACCOUNTS = [
-    {"email": "bridgejobkr@gmail.com", "profile": "CraigslistBridge"},
-    # {"email": "bridgejobkr2@gmail.com", "profile": "CraigslistBridge2"},
+    {"email": "bridgejobkr@gmail.com",  "profile": "CraigslistBridge",  "label": "Bridge · A"},
+    {"email": "bridgejobkr2@gmail.com", "profile": "CraigslistBridge2", "label": "Bridge · B"},
+    {"email": "bridgejobkr3@gmail.com", "profile": "CraigslistBridge3", "label": "Bridge · C"},
+    {"email": "bridgejobkr4@gmail.com", "profile": "CraigslistBridge4", "label": "Bridge · D"},
 ]
 
 # ── [지역명 한→영] ────────────────────────────────────────────────────
