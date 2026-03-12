@@ -217,26 +217,11 @@ Anti-pattern: 불필요한 에이전트 과다스폰 금지
 1. 프론트엔드 수정 → `cd web_frontend && npm run dev` (localhost:3000) 로컬 확인 후 보고
 2. 백엔드 수정 → `uvicorn api_server:app --reload --port 8000` (localhost:8000) 로컬 확인 후 보고
 3. 로컬 확인 없이 push 절대 금지
-4. push는 보스가 "배포해" 명시 시만 (아래 배포 비용 규칙 준수)
 
-## 배포 비용 규칙 (ABSOLUTE — 절대 준수)
-
-### push 금지 조건
-- 단순 텍스트/스타일 수정
-- 기능 1개 추가
-- 버그 1개 수정
-- "일단 확인해보자" 성격의 모든 작업
-
-### push 허용 조건 (배치 기준)
-- 최소 5개 이상 작업 묶음
-- 보스가 명시적으로 "배포해" 라고 할 때만
-- 보안 긴급패치 (이것만 예외)
-
-### 작업 방식
-- 모든 수정 → 로컬에서 git commit (push 금지)
-- 보스가 "오늘 작업 배포해" → 그때 한번에 push
-- push 전 반드시 보고: "현재 X개 작업 묶음, 배포할까요?"
-- 월 빌드분 70% 경고 수신 시 → Auto-Deploy 즉시 OFF
+## Push 규칙 (ABSOLUTE)
+- **모든 커밋 후 즉시 git push** — 예외 없음
+- 커밋과 push는 항상 한 쌍: `git commit -m "..." && git push`
+- 보안 긴급패치 포함 모든 변경사항 즉시 push
 
 ## LOCKED CONSTANTS
 - HERO: 검정배경 + BRIDGE로고 + "A career that changes your life." + 흰색 현수교 케이블 → 절대 수정 금지
