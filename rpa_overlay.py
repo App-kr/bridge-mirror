@@ -8,6 +8,7 @@ import sys
 import json
 import time
 import tkinter as tk
+from datetime import datetime as _dt
 from tkinter import messagebox
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +58,7 @@ class OverlayApp:
 
         self._is_done   = False
         self._auto_close_after = None   # after() id
+        self._started_at = time.time()  # 오버레이 시작 시각
 
         self._build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -162,11 +164,33 @@ class OverlayApp:
             self.log_text.configure(state="disabled")
 
         # 완료 처리
+        # 오버레이 시작 후 최소 15초 또는 launched_at 이후 상태만 인정
         if state.get("status") == "done" and not self._is_done:
-            self._is_done = True
-            self.lbl_status.config(text=f"완료 — {success}/{total}건 성공", fg=C_GREEN)
-            self.btn_stop.config(state="disabled")
-            self._auto_close_after = self.root.after(5000, self.root.destroy)
+            uptime = time.time() - self._started_at
+            # 방어 1: 시작 후 15초 미만이면 스테일 state 가능성 — 무시
+            if uptime < 15:
+                pass
+            # 방어 2: launched_at 타임스탬프가 있으면 그 이후 updated만 인정
+            elif state.get("launched_at"):
+                try:
+                    launched = _dt.fromisoformat(state["launched_at"])
+                    updated  = _dt.fromisoformat(state.get("updated", "2000-01-01"))
+                    if updated >= launched:
+                        self._is_done = True
+                        self.lbl_status.config(text=f"완료 — {success}/{total}건 성공", fg=C_GREEN)
+                        self.btn_stop.config(state="disabled")
+                        self._auto_close_after = self.root.after(5000, self.root.destroy)
+                except Exception:
+                    self._is_done = True
+                    self.lbl_status.config(text=f"완료 — {success}/{total}건 성공", fg=C_GREEN)
+                    self.btn_stop.config(state="disabled")
+                    self._auto_close_after = self.root.after(5000, self.root.destroy)
+            else:
+                # launched_at 없으면 uptime >= 15 인 경우만 처리
+                self._is_done = True
+                self.lbl_status.config(text=f"완료 — {success}/{total}건 성공", fg=C_GREEN)
+                self.btn_stop.config(state="disabled")
+                self._auto_close_after = self.root.after(5000, self.root.destroy)
 
     # ── 액션 ─────────────────────────────────────────────────────────
     def _request_stop(self):

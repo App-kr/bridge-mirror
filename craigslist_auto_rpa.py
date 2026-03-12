@@ -112,16 +112,18 @@ def _ov_write(state: dict):
 def _ov_launch(account: str, count: int):
     """오버레이 프로세스를 DETACHED로 독립 실행"""
     OVERLAY_STOP_FLAG.unlink(missing_ok=True)
+    _now = datetime.now()
     _ov_write({
         "status": "running",
         "account": account,
-        "started": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "started": _now.strftime("%Y-%m-%d %H:%M:%S"),
+        "launched_at": _now.isoformat(),
         "total": count,
         "done": 0,
         "success": 0,
         "current": "준비 중...",
         "logs": [],
-        "updated": datetime.now().isoformat(),
+        "updated": _now.isoformat(),
     })
     pythonw = sys.executable if sys.executable.lower().endswith("pythonw.exe") \
               else sys.executable[:-10] + "pythonw.exe"
