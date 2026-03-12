@@ -110,7 +110,8 @@ def _ov_write(state: dict):
 
 
 def _ov_launch(account: str, count: int):
-    """오버레이 프로세스를 DETACHED로 독립 실행"""
+    """오버레이 프로세스를 Task Scheduler 경유로 실행 — svchost 자식, Job Object 완전 탈출"""
+    import uuid
     OVERLAY_STOP_FLAG.unlink(missing_ok=True)
     _now = datetime.now()
     _ov_write({
@@ -125,22 +126,30 @@ def _ov_launch(account: str, count: int):
         "logs": [],
         "updated": _now.isoformat(),
     })
+    overlay_script = BASE_DIR / "rpa_overlay.py"
+    if not overlay_script.exists():
+        return
     pythonw = sys.executable if sys.executable.lower().endswith("pythonw.exe") \
               else sys.executable[:-10] + "pythonw.exe"
-    overlay_script = BASE_DIR / "rpa_overlay.py"
-    if overlay_script.exists():
-        _ov_env = os.environ.copy()
-        _ov_env['_OV_EXE']  = pythonw
-        _ov_env['_OV_ARGS'] = f'"{overlay_script}" --account "{account}" --total {count} --no-relaunch'
-        _ov_env['_OV_DIR']  = str(BASE_DIR)
-        subprocess.Popen(
-            ['powershell', '-NonInteractive', '-NoProfile', '-WindowStyle', 'Hidden',
-             '-Command',
-             '(New-Object -ComObject Shell.Application)'
-             '.ShellExecute($env:_OV_EXE,$env:_OV_ARGS,$env:_OV_DIR,"open",1)'],
-            creationflags=subprocess.CREATE_NO_WINDOW, env=_ov_env,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    task_name = f"BridgeOverlay_{uuid.uuid4().hex[:8]}"
+    cmd_tr = f'"{pythonw}" "{overlay_script}" --no-relaunch'
+    subprocess.run(
+        ['schtasks', '/create', '/f', '/tn', task_name,
+         '/tr', cmd_tr, '/sc', 'once', '/st', '00:00'],
+        creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+    )
+    subprocess.run(
+        ['schtasks', '/run', '/tn', task_name],
+        creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
+    )
+    # 30초 후 작업 항목 자동 삭제
+    def _cleanup_task():
+        time.sleep(30)
+        subprocess.run(
+            ['schtasks', '/delete', '/tn', task_name, '/f'],
+            creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True,
         )
+    threading.Thread(target=_cleanup_task, daemon=True).start()
 
 
 def _ov_update(done: int, total: int, success: int, current: str, log_msg: str):
