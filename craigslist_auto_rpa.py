@@ -475,107 +475,252 @@ def main():
         run_posting(limit, acct_idx)
         return
 
-    # ── Launcher 모드: 계정 선택 UI ──────────────────────────────────
+    # ── Launcher 모드: Apple-style UI ────────────────────────────────
     pythonw = (sys.executable if sys.executable.lower().endswith("pythonw.exe")
                else Path(sys.executable).with_name("pythonw.exe"))
 
-    BG      = "#1e1e1e"
-    HEADER  = "#4a235a"
-    GREEN   = "#27ae60"
-    BROWN   = "#7d5a3c"
-    WHITE   = "#f0f0f0"
-    YELLOW  = "#f1c40f"
-    PANEL   = "#2b2b2b"
-    SEL     = "#3d2255"
+    # Apple dark palette
+    BG    = "#1C1C1E"
+    CARD  = "#2C2C2E"
+    BLUE  = "#0A84FF"
+    GREEN = "#30D158"
+    RED   = "#FF453A"
+    WHITE = "#FFFFFF"
+    GRAY1 = "#8E8E93"
+    GRAY2 = "#3A3A3C"
+    FONT  = "Segoe UI"
 
+    W, H = 460, 560
     root = tk.Tk()
-    root.title("BRIDGE Craigslist RPA")
+    root.title("BRIDGE RPA")
     root.configure(bg=BG)
-    root.geometry("400x420")
     root.resizable(False, False)
-
-    # ── 헤더 ──
-    hdr = tk.Frame(root, bg=HEADER)
-    hdr.pack(fill="x")
-    tk.Label(hdr, text="BRIDGE  Craigslist RPA",
-             bg=HEADER, fg=WHITE,
-             font=("Consolas", 14, "bold")).pack(pady=14)
-
-    # ── 계정 선택 ──
-    acct_frame = tk.Frame(root, bg=PANEL, pady=8)
-    acct_frame.pack(fill="x", padx=12, pady=(10, 0))
-    tk.Label(acct_frame, text="계정 선택", bg=PANEL, fg=YELLOW,
-             font=("Consolas", 10, "bold")).pack(anchor="w", padx=10)
+    root.update_idletasks()
+    sx = (root.winfo_screenwidth()  - W) // 2
+    sy = (root.winfo_screenheight() - H) // 2
+    root.geometry(f"{W}x{H}+{sx}+{sy}")
 
     acct_var = tk.IntVar(value=0)
-    for i, acct in enumerate(ACCOUNTS):
-        tk.Radiobutton(
-            acct_frame, text=f"  {acct['email']}",
-            variable=acct_var, value=i,
-            bg=PANEL, fg=WHITE, selectcolor=SEL,
-            activebackground=PANEL, activeforeground=YELLOW,
-            font=("Consolas", 9), anchor="w", cursor="hand2",
-        ).pack(fill="x", padx=18)
+    cnt_var  = tk.IntVar(value=10)
 
-    # ── 게시 수 선택 ──
-    cnt_frame = tk.Frame(root, bg=PANEL, pady=8)
-    cnt_frame.pack(fill="x", padx=12, pady=(8, 0))
-    tk.Label(cnt_frame, text="게시 건수", bg=PANEL, fg=YELLOW,
-             font=("Consolas", 10, "bold")).pack(anchor="w", padx=10)
+    PAD = 28
+    main_frame = tk.Frame(root, bg=BG)
+    main_frame.pack(fill="both", expand=True, padx=PAD, pady=22)
 
-    cnt_inner = tk.Frame(cnt_frame, bg=PANEL)
-    cnt_inner.pack(fill="x", padx=10)
-    cnt_var = tk.IntVar(value=10)
-    for label, val in [("1건 (테스트)", 1), ("5건", 5), ("10건", 10), ("20건", 20)]:
-        tk.Radiobutton(
-            cnt_inner, text=label, variable=cnt_var, value=val,
-            bg=PANEL, fg=WHITE, selectcolor=SEL,
-            activebackground=PANEL, activeforeground=YELLOW,
-            font=("Consolas", 9), cursor="hand2",
-        ).pack(side="left", padx=8)
+    # ── Helper: pill-button grid ────────────────────────────────────
+    def make_pill_grid(parent, items, var, cols=2):
+        buttons = []
 
-    # ── 구분선 ──
-    tk.Frame(root, bg=GREEN, height=1).pack(fill="x", padx=12, pady=(10, 0))
+        def refresh():
+            for btn, val in buttons:
+                if var.get() == val:
+                    btn.configure(bg=BLUE, fg=WHITE)
+                else:
+                    btn.configure(bg=CARD, fg=GRAY1)
 
+        def select(val):
+            var.set(val)
+            refresh()
+
+        grid = tk.Frame(parent, bg=BG)
+        grid.pack(fill="x")
+        for i, (lbl, val) in enumerate(items):
+            r, c = divmod(i, cols)
+            btn = tk.Button(
+                grid, text=lbl,
+                bg=CARD, fg=GRAY1,
+                font=(FONT, 10), relief="flat", bd=0,
+                cursor="hand2", pady=10, padx=6,
+                activebackground=BLUE, activeforeground=WHITE,
+                command=lambda v=val: select(v),
+            )
+            btn.grid(row=r, column=c, padx=4, pady=4, sticky="ew")
+            buttons.append((btn, val))
+        for c in range(cols):
+            grid.columnconfigure(c, weight=1)
+        refresh()
+        return buttons, refresh
+
+    # ── Selection screen ─────────────────────────────────────────────
+    def show_selection():
+        for w in main_frame.winfo_children():
+            w.destroy()
+
+        # Header
+        hf = tk.Frame(main_frame, bg=BG)
+        hf.pack(fill="x", pady=(0, 24))
+        tk.Label(hf, text="BRIDGE", bg=BG, fg=WHITE,
+                 font=(FONT, 22, "bold")).pack(side="left")
+        tk.Label(hf, text="  RPA", bg=BG, fg=GRAY1,
+                 font=(FONT, 22)).pack(side="left")
+
+        # Account section
+        tk.Label(main_frame, text="ACCOUNT", bg=BG, fg=GRAY1,
+                 font=(FONT, 10)).pack(anchor="w", pady=(0, 6))
+        make_pill_grid(
+            main_frame,
+            [(a["label"], i) for i, a in enumerate(ACCOUNTS)],
+            acct_var, cols=2,
+        )
+
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=18)
+
+        # Count section
+        tk.Label(main_frame, text="POSTS", bg=BG, fg=GRAY1,
+                 font=(FONT, 10)).pack(anchor="w", pady=(0, 6))
+        make_pill_grid(
+            main_frame,
+            [("1  (test)", 1), ("5", 5), ("10", 10), ("20", 20)],
+            cnt_var, cols=4,
+        )
+
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=18)
+
+        # Buttons
+        tk.Button(
+            main_frame, text="▶  Start Posting",
+            bg=BLUE, fg=WHITE, font=(FONT, 13, "bold"),
+            relief="flat", bd=0, cursor="hand2", pady=14,
+            activebackground="#0060CC", activeforeground=WHITE,
+            command=lambda: _spawn_worker(cnt_var.get(), acct_var.get()),
+        ).pack(fill="x", pady=(0, 8))
+
+        tk.Button(
+            main_frame, text="⏰  Schedule Daily  (4:00 PM)",
+            bg=CARD, fg=GRAY1, font=(FONT, 10),
+            relief="flat", bd=0, cursor="hand2", pady=10,
+            activebackground=GRAY2, activeforeground=WHITE,
+            command=lambda: _start_schedule(root),
+        ).pack(fill="x")
+
+    # ── Working screen ───────────────────────────────────────────────
+    _anim_id = [None]
+    _poll_id = [None]
+
+    def show_working(acct_label: str, total: int):
+        if _anim_id[0]:
+            root.after_cancel(_anim_id[0])
+        if _poll_id[0]:
+            root.after_cancel(_poll_id[0])
+        for w in main_frame.winfo_children():
+            w.destroy()
+
+        # Header
+        hf = tk.Frame(main_frame, bg=BG)
+        hf.pack(fill="x", pady=(0, 4))
+        tk.Label(hf, text="BRIDGE", bg=BG, fg=WHITE,
+                 font=(FONT, 22, "bold")).pack(side="left")
+        tk.Label(hf, text="  RPA", bg=BG, fg=GRAY1,
+                 font=(FONT, 22)).pack(side="left")
+
+        tk.Label(main_frame, text=f"{acct_label}  ·  {total} posts",
+                 bg=BG, fg=GRAY1, font=(FONT, 11)).pack(anchor="w", pady=(2, 20))
+
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=(0, 28))
+
+        # Bouncing dots canvas
+        CW, CH = W - PAD * 2, 56
+        dot_cv = tk.Canvas(main_frame, bg=BG, highlightthickness=0,
+                           width=CW, height=CH)
+        dot_cv.pack()
+
+        DOT_R  = 9
+        N_DOTS = 5
+        SPACING = 32
+        CX = CW // 2
+        CY = CH // 2
+        dot_ids = []
+        for i in range(N_DOTS):
+            dx = CX - (N_DOTS - 1) * SPACING // 2 + i * SPACING
+            oid = dot_cv.create_oval(dx - DOT_R, CY - DOT_R,
+                                     dx + DOT_R, CY + DOT_R,
+                                     fill=BLUE, outline="")
+            dot_ids.append((dx, oid))
+
+        phase = [0.0]
+
+        def animate():
+            phase[0] += 0.18
+            for i, (dx, oid) in enumerate(dot_ids):
+                amp = 10 + 2 * i
+                oy  = math.sin(phase[0] + i * 1.1) * amp
+                dot_cv.coords(oid,
+                              dx - DOT_R, CY - DOT_R + oy,
+                              dx + DOT_R, CY + DOT_R + oy)
+            _anim_id[0] = root.after(35, animate)
+
+        animate()
+
+        # Progress number
+        prog_lbl = tk.Label(main_frame, text=f"0 / {total}",
+                            bg=BG, fg=WHITE, font=(FONT, 36, "bold"))
+        prog_lbl.pack(pady=(20, 2))
+
+        tk.Label(main_frame, text="posts completed",
+                 bg=BG, fg=GRAY1, font=(FONT, 11)).pack()
+
+        curr_lbl = tk.Label(main_frame, text="Starting...",
+                            bg=BG, fg=GRAY1, font=(FONT, 10),
+                            wraplength=W - PAD * 2 - 10)
+        curr_lbl.pack(pady=(8, 0))
+
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=20)
+
+        stop_btn = tk.Button(
+            main_frame, text="Stop",
+            bg=CARD, fg=RED, font=(FONT, 12),
+            relief="flat", bd=0, cursor="hand2", pady=12,
+            activebackground=GRAY2, activeforeground=RED,
+            command=lambda: OVERLAY_STOP_FLAG.touch(),
+        )
+        stop_btn.pack(fill="x")
+
+        # Poll overlay_state.json for progress
+        def poll():
+            try:
+                state   = json.loads(OVERLAY_STATE.read_text(encoding="utf-8"))
+                done    = state.get("done", 0)
+                success = state.get("success", 0)
+                status  = state.get("status", "running")
+                current = state.get("current", "")
+                prog_lbl.configure(text=f"{done} / {total}")
+                if current:
+                    curr_lbl.configure(text=current)
+                if status == "done":
+                    if _anim_id[0]:
+                        root.after_cancel(_anim_id[0])
+                    dot_cv.delete("all")
+                    dot_cv.create_text(CX, CY, text="✓", fill=GREEN,
+                                       font=(FONT, 32, "bold"))
+                    prog_lbl.configure(text=f"{success} / {total}", fg=GREEN)
+                    curr_lbl.configure(text="All done!")
+                    stop_btn.configure(text="Close", fg=WHITE,
+                                       command=lambda: (root.destroy(), os._exit(0)))
+                    return
+            except Exception:
+                pass
+            _poll_id[0] = root.after(2000, poll)
+
+        _poll_id[0] = root.after(3000, poll)
+
+    # ── Spawn worker & switch to working screen ──────────────────────
     def _spawn_worker(limit: int, acct_idx: int):
         DETACHED = 0x00000008
-        NEW_CON  = 0x00000010
         NO_WIN   = 0x08000000
-        monitor  = BASE_DIR / "rpa_console_monitor.py"
-        python   = Path(sys.executable).with_name("python.exe")
-
+        acct_label = (ACCOUNTS[acct_idx]["label"]
+                      if 0 <= acct_idx < len(ACCOUNTS) else "Account")
         subprocess.Popen(
             [str(pythonw), os.path.abspath(__file__),
-             "--worker", f"--limit={limit}", f"--account-idx={acct_idx}", "--no-relaunch"],
+             "--worker", f"--limit={limit}",
+             f"--account-idx={acct_idx}", "--no-relaunch"],
             creationflags=DETACHED | NO_WIN, close_fds=True,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        if monitor.exists() and python.exists():
-            subprocess.Popen(
-                ["cmd.exe", "/K", str(python), "-X", "utf8", str(monitor)],
-                creationflags=NEW_CON,
-            )
-        root.destroy()
-        os._exit(0)
+        show_working(acct_label, limit)
 
-    # ── 버튼 ──
-    btn_frame = tk.Frame(root, bg=BG)
-    btn_frame.pack(fill="x", padx=12, pady=14)
-
-    tk.Button(
-        btn_frame, text="▶   게시 시작",
-        bg=GREEN, fg=WHITE, font=("Consolas", 12, "bold"),
-        relief="flat", cursor="hand2", height=2,
-        command=lambda: _spawn_worker(cnt_var.get(), acct_var.get()),
-    ).pack(fill="x", pady=(0, 6))
-
-    tk.Button(
-        btn_frame, text="⏰   매일 오후 4시 자동 실행",
-        bg=BROWN, fg=WHITE, font=("Consolas", 10),
-        relief="flat", cursor="hand2",
-        command=lambda: _start_schedule(root),
-    ).pack(fill="x")
-
+    show_selection()
     root.mainloop()
 
 
