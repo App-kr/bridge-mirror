@@ -106,3 +106,4 @@ bridge_agent/*.spec
 bridge_agent/*.ico
 !original_candidates/bridge-admin-sheet.jsx
 web_frontend/tsconfig.tsbuildinfo
+.env.scraper
