@@ -283,5 +283,23 @@ tasks/ralph_log.md — Ralph 루프 실행 로그
   ```
 - 미완료 작업 목록도 동기화 유지 (완료 시 체크, 신규 발견 시 추가)
 
+## JSX 미리보기 자동 생성 규칙
+- 프론트엔드 페이지/컴포넌트 신규 생성 또는 수정 완료 시 반드시 실행
+- push 완료 후 마지막 출력으로 아래 형식의 JSX 미리보기 코드를 출력한다
+- 형식 규칙 (claude.ai artifact에서 바로 실행 가능해야 함):
+  - `const { useState, useEffect, useRef } = React;` — import 문 절대 금지
+  - 외부 라이브러리 없이 순수 React + inline style만 사용
+  - CSS 애니메이션(@keyframes)은 JSX 안에 `<style>{css}</style>` 태그로 포함
+  - 반드시 `export default function App()` 로 끝낼 것
+  - 공개 이미지 필요 시 unsplash/wikimedia 공개 URL 사용
+  - 슬라이더 등 조절 UI 포함 권장
+- 출력 형식:
+  ````
+  **Claude 웹 미리보기** — 아래 코드를 claude.ai에 붙여넣고 "이 코드로 React artifact 실행해줘" 라고 하세요.
+  ```jsx
+  [코드]
+  ```
+  ````
+
 ---
 *Bridge CLAUDE.md v4.0 FINAL — 2026-03-10 (Obsidian 기록 규칙 추가)*
