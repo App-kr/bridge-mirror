@@ -1,6 +1,30 @@
 /* ── Custom additions (globals.css 수정 금지 — 추가 스타일은 이 파일에) ── */
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   HERO EARTH PHOTO BACKGROUND — 실사진 지구, 지평선 = 다리 케이블 호 높이
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* img 태그: 지구 지평선(atmosphere)이 다리 arc 하단과 일치 */
+.earth-photo-img {
+  position: absolute;
+  /* top: 40% → 다리 케이블 최저점(y=520/800≈45~65%)과 horizon 정렬 */
+  top: 38%;
+  left: -8%;
+  width: 116%;
+  height: 72%;        /* 38% + 72% = 110%: 하단은 overflow-hidden으로 clip */
+  object-fit: cover;
+  object-position: center top;  /* 이미지 상단(지평선/대기권)을 div 상단에 표시 */
+  opacity: 0.38;
+  will-change: transform;
+  animation: earthRotate 110s linear infinite;
+}
+
+@keyframes earthRotate {
+  from { transform: translateX(0%); }
+  to   { transform: translateX(-8%); }  /* 8% 이동 후 seamless loop */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    HERO TAGLINE — 왼쪽부터 제자리에서 드러나기
    ═══════════════════════════════════════════════════════════════════════════ */
 /* ═══════════════════════════════════════════════════════════════════════════

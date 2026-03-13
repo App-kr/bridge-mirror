@@ -123,7 +123,6 @@ interface Testimonial {
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
-  const earthCanvasRef = useRef<HTMLCanvasElement>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [jobs, setJobs] = useState<PublicJob[]>([])
   const [showBridge, setShowBridge] = useState(false)
@@ -145,120 +144,6 @@ export default function HomePage() {
 
   // Toast
   const [toast, setToast] = useState('')
-
-  // ── Earth background canvas animation ──
-  useEffect(() => {
-    const canvas = earthCanvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const dpr = window.devicePixelRatio || 1
-    let animId: number
-    let rotation = 0
-
-    const resize = () => {
-      const parent = canvas.parentElement
-      if (!parent) return
-      const w = parent.clientWidth
-      const h = parent.clientHeight
-      canvas.width = w * dpr
-      canvas.height = h * dpr
-      canvas.style.width = w + 'px'
-      canvas.style.height = h + 'px'
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    }
-    resize()
-    window.addEventListener('resize', resize)
-
-    const draw = () => {
-      const w = canvas.width / dpr
-      const h = canvas.height / dpr
-      ctx.clearRect(0, 0, w, h)
-
-      const cx = w / 2
-      const cy = h * 0.72
-      const r = Math.min(w * 0.5, h * 0.55)
-
-      ctx.save()
-      ctx.translate(cx, cy)
-
-      // Atmosphere glow (outside sphere)
-      const atmoGrad = ctx.createRadialGradient(0, 0, r * 0.88, 0, 0, r * 1.22)
-      atmoGrad.addColorStop(0, 'rgba(40, 100, 255, 0.0)')
-      atmoGrad.addColorStop(0.5, 'rgba(40, 100, 255, 0.07)')
-      atmoGrad.addColorStop(1, 'rgba(0, 10, 40, 0.0)')
-      ctx.fillStyle = atmoGrad
-      ctx.beginPath()
-      ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Clip to sphere
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(0, 0, r, 0, Math.PI * 2)
-      ctx.clip()
-
-      // Ocean base
-      const oceanGrad = ctx.createRadialGradient(-r * 0.22, -r * 0.22, 0, 0, 0, r)
-      oceanGrad.addColorStop(0, 'rgba(28, 65, 145, 0.75)')
-      oceanGrad.addColorStop(0.55, 'rgba(14, 38, 95, 0.72)')
-      oceanGrad.addColorStop(1, 'rgba(4, 12, 48, 0.68)')
-      ctx.fillStyle = oceanGrad
-      ctx.fillRect(-r, -r, r * 2, r * 2)
-
-      // Rotating continents
-      ctx.rotate(rotation)
-      const continents = [
-        { x: -r * 0.05, y: -r * 0.13, rx: r * 0.36, ry: r * 0.24 },
-        { x: -r * 0.44, y:  r * 0.06, rx: r * 0.19, ry: r * 0.27 },
-        { x:  r * 0.13, y:  r * 0.23, rx: r * 0.17, ry: r * 0.21 },
-        { x:  r * 0.44, y:  r * 0.17, rx: r * 0.15, ry: r * 0.14 },
-        { x: -r * 0.08, y:  r * 0.40, rx: r * 0.24, ry: r * 0.11 },
-      ]
-      continents.forEach(c => {
-        const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, Math.max(c.rx, c.ry))
-        g.addColorStop(0, 'rgba(52, 88, 48, 0.48)')
-        g.addColorStop(0.55, 'rgba(34, 62, 32, 0.26)')
-        g.addColorStop(1, 'rgba(0, 0, 0, 0)')
-        ctx.fillStyle = g
-        ctx.beginPath()
-        ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2)
-        ctx.fill()
-      })
-
-      // Specular highlight (top-left)
-      const specGrad = ctx.createRadialGradient(-r * 0.32, -r * 0.32, 0, -r * 0.32, -r * 0.32, r * 0.85)
-      specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.11)')
-      specGrad.addColorStop(0.4, 'rgba(200, 220, 255, 0.04)')
-      specGrad.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      ctx.fillStyle = specGrad
-      ctx.fillRect(-r, -r, r * 2, r * 2)
-
-      ctx.restore() // end clip
-
-      // Atmospheric rim
-      const rimGrad = ctx.createRadialGradient(0, 0, r * 0.90, 0, 0, r)
-      rimGrad.addColorStop(0, 'rgba(55, 125, 255, 0.0)')
-      rimGrad.addColorStop(0.65, 'rgba(55, 125, 255, 0.13)')
-      rimGrad.addColorStop(1, 'rgba(80, 150, 255, 0.04)')
-      ctx.fillStyle = rimGrad
-      ctx.beginPath()
-      ctx.arc(0, 0, r, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.restore()
-
-      rotation += 0.00055 // full rotation ≈ 95s at 60fps
-      animId = requestAnimationFrame(draw)
-    }
-
-    draw()
-    return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('resize', resize)
-    }
-  }, [])
 
   // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
@@ -412,12 +297,17 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Rotating Earth background ── */}
-        <canvas
-          ref={earthCanvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ zIndex: 0, opacity: 0.88 }}
-        />
+        {/* ── Earth photo background ── */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
+          {/* 실사진 지구: 지평선이 다리 케이블 arc와 같은 높이 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/earth-bg.jpg" alt="" className="earth-photo-img" />
+          {/* 상단 = 우주 검정 유지, 지구는 다리 아래서 은은하게 */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to bottom, #000 0%, #000 22%, rgba(0,0,0,0.82) 40%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.3) 80%, rgba(0,0,0,0.5) 100%)',
+          }} />
+        </div>
 
         {/* ── Twinkling stars — 다리 위쪽 근처, 겹치지 않게 ── */}
         {[
