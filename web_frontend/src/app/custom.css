@@ -4,24 +4,24 @@
    HERO EARTH PHOTO BACKGROUND — 실사진 지구, 지평선 = 다리 케이블 호 높이
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* img 태그: 지구 지평선(atmosphere)이 다리 arc 하단과 일치 */
+/* img 태그: 지구 지평선이 다리 arc와 일치, 자전 애니메이션 */
 .earth-photo-img {
   position: absolute;
-  /* top: 40% → 다리 케이블 최저점(y=520/800≈45~65%)과 horizon 정렬 */
-  top: 38%;
-  left: -8%;
-  width: 116%;
-  height: 72%;        /* 38% + 72% = 110%: 하단은 overflow-hidden으로 clip */
+  top: 34%;
+  left: -10%;
+  width: 120%;
+  height: 74%;
   object-fit: cover;
-  object-position: center top;  /* 이미지 상단(지평선/대기권)을 div 상단에 표시 */
-  opacity: 0.38;
+  object-position: center top;
+  opacity: 0.22;
   will-change: transform;
-  animation: earthRotate 110s linear infinite;
+  animation: earthSpin 140s ease-in-out infinite alternate;
 }
 
-@keyframes earthRotate {
+/* alternate: 140s 동안 0→-9%, 다시 140s 동안 -9%→0 — 자전처럼 보임 */
+@keyframes earthSpin {
   from { transform: translateX(0%); }
-  to   { transform: translateX(-8%); }  /* 8% 이동 후 seamless loop */
+  to   { transform: translateX(-9%); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
