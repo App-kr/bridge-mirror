@@ -51,12 +51,14 @@ OVERLAY_STATE     = BASE_DIR / "overlay_state.json"
 OVERLAY_STOP_FLAG = BASE_DIR / "overlay_stop.flag"
 
 # ── [계정 목록] ───────────────────────────────────────────────────────
-# label = UI 표시용 (이메일 절대 노출 금지)
+# profile = Chrome User Data 하위 프로필 폴더명 (실제 존재 확인 완료)
+# label   = UI 표시용 핸들 (이메일 원문 UI 노출 금지 — CLAUDE.md)
+# schedule= 게시 스케줄 시간대
 ACCOUNTS = [
-    {"email": "bridgejobkr@gmail.com",  "profile": "CraigslistBridge",  "label": "Bridge · A"},
-    {"email": "bridgejobkr2@gmail.com", "profile": "CraigslistBridge2", "label": "Bridge · B"},
-    {"email": "bridgejobkr3@gmail.com", "profile": "CraigslistBridge3", "label": "Bridge · C"},
-    {"email": "bridgejobkr4@gmail.com", "profile": "CraigslistBridge4", "label": "Bridge · D"},
+    {"email": "Coreabridge@gmail.com",    "profile": "Profile 4", "label": "Coreabridge · 1",  "schedule": [1, 7, 13, 19]},
+    {"email": "airelair00@gmail.com",     "profile": "Profile 9", "label": "airelair · 2",     "schedule": [3, 9, 15, 21]},
+    {"email": "ferrari812fast@gmail.com", "profile": "Profile 7", "label": "ferrari812 · 3",   "schedule": [5, 11, 17, 23]},
+    {"email": "bridgejobkr@gmail.com",    "profile": "Profile 3", "label": "bridgejobkr · 4",  "schedule": [2, 8, 14, 20]},
 ]
 
 def _mask_email(email: str) -> str:
