@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 !web_frontend/.env.production
+account*.env
+.env.craig
 
 # ── Credentials & Keys ────────────────────────────────────────
 *.pem
@@ -20,6 +22,7 @@ CREDENTIALS_REFERENCE.md
 master.db.backup_*
 *.sqlite
 *.sqlite3
+data/
 
 # ── Legacy data / CSV dumps ───────────────────────────────────
 *.csv
