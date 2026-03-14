@@ -59,6 +59,19 @@ ACCOUNTS = [
     {"email": "bridgejobkr4@gmail.com", "profile": "CraigslistBridge4", "label": "Bridge · D"},
 ]
 
+def _mask_email(email: str) -> str:
+    """이메일 부분 마스킹 — 운영자 식별 가능, PII 완전노출 방지 (CLAUDE.md 규칙)"""
+    try:
+        local, domain = email.split("@", 1)
+        if len(local) <= 3:
+            masked = local[0] + "*" * (len(local) - 1)
+        else:
+            masked = local[:2] + "*" * (len(local) - 4) + local[-2:]
+        return f"{masked}@{domain}"
+    except Exception:
+        return "****@****"
+
+
 # ── [지역명 한→영] ────────────────────────────────────────────────────
 CITY_MAP = {
     "서울": "Seoul", "부산": "Busan", "대구": "Daegu", "인천": "Incheon",
@@ -154,7 +167,7 @@ def _ov_launch(account: str, count: int):
     threading.Thread(target=_cleanup_task, daemon=True).start()
 
 
-def _ov_update(done: int, total: int, success: int, current: str, log_msg: str):
+def _ov_update(done: int, total: int, success: int, current: str, log_msg: str, step: str = ""):
     """게시 진행 상태 갱신"""
     try:
         state = json.loads(OVERLAY_STATE.read_text(encoding="utf-8"))
@@ -168,7 +181,21 @@ def _ov_update(done: int, total: int, success: int, current: str, log_msg: str):
         "done": done,
         "success": success,
         "current": current,
+        "step": step,
         "logs": logs,
+        "updated": datetime.now().isoformat(),
+    })
+    _ov_write(state)
+
+
+def _ov_step(step_msg: str):
+    """작업 단계만 갱신 (done/success 불변) — 세부 진행 상태 표시용"""
+    try:
+        state = json.loads(OVERLAY_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        state = {}
+    state.update({
+        "step": step_msg,
         "updated": datetime.now().isoformat(),
     })
     _ov_write(state)
@@ -345,27 +372,38 @@ class CraigslistBot:
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait   = WebDriverWait(self.driver, 25)
 
-    def run_post(self, p) -> bool:
+    def run_post(self, p, step_cb=None) -> bool:
+        def _step(msg):
+            if step_cb:
+                step_cb(msg)
+
         ImageWorker.create_logo()
         try:
+            _step("📂 페이지 로딩 중...")
             self.driver.get("https://post.craigslist.org/c/seo")
             self.wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='jo']"))).click()
             self.wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='13']"))).click()
+            _step("✏️ 제목 작성 중...")
             self.wait.until(EC.presence_of_element_located((By.NAME, "PostingTitle"))).send_keys(p["title"])
             self.driver.find_element(By.NAME, "geographic_area").send_keys(p["city"])
+            _step("📝 본문 작성 중...")
             self.driver.find_element(By.NAME, "PostingBody").send_keys(p["body"])
             self.driver.find_element(By.NAME, "compensation").send_keys(p["salary"])
             self.driver.find_element(By.NAME, "company_name").send_keys("BRIDGE")
             self.driver.find_element(By.NAME, "go").click()
+            _step("🖼️ 이미지 업로드 중...")
             f_input = self.wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
             f_input.send_keys(str(TEMP_IMAGE_PATH.resolve()))
             time.sleep(4)
             self.driver.find_element(By.CLASS_NAME, "done").click()
+            _step("🚀 게시 제출 중...")
             self.wait.until(EC.element_to_be_clickable(
                 (By.XPATH, "//button[contains(text(), 'Publish')]")
             )).click()
+            _step("✅ 게시 완료!")
             return True
-        except Exception as e:
+        except Exception:
+            _step("❌ 오류 — 다음 항목으로")
             return False
 
 
@@ -401,9 +439,10 @@ def run_posting(count: int = 5, acct_idx: int = None):
             break
 
         payload = SecurityOrchestrator.generate_payload(df.iloc[idx].to_dict())
-        _ov_update(i, count, success, payload["title"], f"[{i}/{count}] 게시 중: {payload['title'][:40]}")
+        _ov_update(i, count, success, payload["title"],
+                   f"[{i}/{count}] 게시 중: {payload['title'][:40]}", step="⏳ 작성 준비 중...")
 
-        ok = bot.run_post(payload)
+        ok = bot.run_post(payload, step_cb=_ov_step)
         if ok:
             success += 1
             _ov_update(i, count, success, payload["title"], f"✅ Job.{payload['id']} 게시 완료")
@@ -516,20 +555,23 @@ def main():
 
         def refresh():
             sel = acct_var.get()
-            for idx, (outer, inner, num_lbl, tag_lbl) in enumerate(card_frames):
+            for idx, (outer, inner, num_lbl, tag_lbl, email_lbl) in enumerate(card_frames):
                 color = ACCT_COLORS[idx]
                 if sel == idx:
-                    # 선택됨: 색상 배경
+                    # 선택됨: 색상 배경 + 마스킹 이메일 표시
                     outer.configure(bg=color)
                     inner.configure(bg=color)
                     num_lbl.configure(bg=color, fg=WHITE)
                     tag_lbl.configure(bg=color, fg=WHITE)
+                    email_lbl.configure(bg=color, fg=WHITE,
+                                        text=_mask_email(ACCOUNTS[idx]["email"]))
                 else:
                     # 미선택: 어두운 카드 + 왼쪽 컬러 바만
                     outer.configure(bg=color)
                     inner.configure(bg=CARD)
                     num_lbl.configure(bg=CARD, fg=GRAY1)
                     tag_lbl.configure(bg=CARD, fg=GRAY2)
+                    email_lbl.configure(bg=CARD, fg=GRAY2, text="")
 
         def select(val):
             acct_var.set(val)
@@ -548,7 +590,7 @@ def main():
             outer.grid(row=r, column=c, padx=4, pady=4, sticky="ew")
 
             # inner = 카드 본체
-            inner = tk.Frame(outer, bg=CARD, padx=10, pady=10)
+            inner = tk.Frame(outer, bg=CARD, padx=10, pady=8)
             inner.pack(fill="both")
 
             num_lbl = tk.Label(inner, text=num, bg=CARD, fg=GRAY1,
@@ -559,10 +601,15 @@ def main():
                                font=(FONT, 9), anchor="w")
             tag_lbl.pack(fill="x")
 
-            card_frames.append((outer, inner, num_lbl, tag_lbl))
+            # 선택 시 마스킹 이메일 표시
+            email_lbl = tk.Label(inner, text="", bg=CARD, fg=GRAY2,
+                                 font=(FONT, 8), anchor="w")
+            email_lbl.pack(fill="x")
+
+            card_frames.append((outer, inner, num_lbl, tag_lbl, email_lbl))
 
             # 클릭 바인딩 (프레임 + 레이블 모두)
-            for widget in (outer, inner, num_lbl, tag_lbl):
+            for widget in (outer, inner, num_lbl, tag_lbl, email_lbl):
                 widget.bind("<Button-1>", lambda e, v=idx: select(v))
                 widget.configure(cursor="hand2")
 
@@ -726,28 +773,48 @@ def main():
         # Progress number
         prog_lbl = tk.Label(main_frame, text=f"0 / {total}",
                             bg=BG, fg=WHITE, font=(FONT, 36, "bold"))
-        prog_lbl.pack(pady=(20, 2))
+        prog_lbl.pack(pady=(14, 2))
 
         tk.Label(main_frame, text="posts completed",
                  bg=BG, fg=GRAY1, font=(FONT, 11)).pack()
 
-        curr_lbl = tk.Label(main_frame, text="Starting...",
+        # 현재 제목 (공고명)
+        curr_lbl = tk.Label(main_frame, text="시작 중...",
                             bg=BG, fg=GRAY1, font=(FONT, 10),
                             wraplength=W - PAD * 2 - 10)
-        curr_lbl.pack(pady=(8, 0))
+        curr_lbl.pack(pady=(6, 0))
 
-        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=20)
+        # 세부 작업 단계 표시 (페이지 로딩 / 제목 작성 / 본문 작성 등)
+        step_lbl = tk.Label(main_frame, text="⏳ 작성 준비 중...",
+                            bg=BG, fg=acct_color, font=(FONT, 10, "bold"),
+                            wraplength=W - PAD * 2 - 10)
+        step_lbl.pack(pady=(2, 0))
+
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=14)
+
+        # 중단 버튼 — 확인 팝업
+        def _request_stop():
+            if messagebox.askyesno(
+                "중단 확인",
+                "게시를 중단할까요?\n현재 항목 완료 후 중단됩니다.",
+                icon="warning", parent=root,
+            ):
+                OVERLAY_STOP_FLAG.touch()
+                stop_btn.configure(text="⛔  중단 요청됨...", state="disabled",
+                                   fg=GRAY1, cursor="arrow")
 
         stop_btn = tk.Button(
-            main_frame, text="Stop",
+            main_frame, text="⏹  Stop",
             bg=CARD, fg=RED, font=(FONT, 12),
             relief="flat", bd=0, cursor="hand2", pady=12,
             activebackground=GRAY2, activeforeground=RED,
-            command=lambda: OVERLAY_STOP_FLAG.touch(),
+            command=_request_stop,
         )
         stop_btn.pack(fill="x")
 
         # Poll overlay_state.json for progress
+        _done_fired = [False]
+
         def poll():
             try:
                 state   = json.loads(OVERLAY_STATE.read_text(encoding="utf-8"))
@@ -755,23 +822,40 @@ def main():
                 success = state.get("success", 0)
                 status  = state.get("status", "running")
                 current = state.get("current", "")
+                step    = state.get("step", "")
                 prog_lbl.configure(text=f"{done} / {total}")
                 if current:
                     curr_lbl.configure(text=current)
-                if status == "done":
+                if step:
+                    step_lbl.configure(text=step)
+                if status == "done" and not _done_fired[0]:
+                    _done_fired[0] = True
                     if _anim_id[0]:
                         root.after_cancel(_anim_id[0])
                     dot_cv.delete("all")
-                    dot_cv.create_text(CX, CY, text="✓", fill=GREEN,
+                    dot_cv.create_text(CX, CY, text="✓", fill=acct_color,
                                        font=(FONT, 32, "bold"))
-                    prog_lbl.configure(text=f"{success} / {total}", fg=GREEN)
-                    curr_lbl.configure(text="All done!")
-                    stop_btn.configure(text="Close", fg=WHITE,
-                                       command=lambda: (root.destroy(), os._exit(0)))
+                    prog_lbl.configure(text=f"{success} / {total}", fg=acct_color)
+                    curr_lbl.configure(text=f"완료!  성공 {success} / 전체 {total}")
+                    step_lbl.configure(text="")
+                    stop_btn.pack_forget()
+                    # 완료 후 추가 게시 여부 팝업
+                    def _ask_more():
+                        ans = messagebox.askyesno(
+                            "게시 완료",
+                            f"✅  {success}/{total}건 게시 완료!\n\n추가로 게시하시겠습니까?",
+                            icon="question", parent=root,
+                        )
+                        if ans:
+                            show_selection()
+                        else:
+                            root.destroy()
+                            os._exit(0)
+                    root.after(600, _ask_more)
                     return
             except Exception:
                 pass
-            _poll_id[0] = root.after(2000, poll)
+            _poll_id[0] = root.after(1500, poll)
 
         _poll_id[0] = root.after(3000, poll)
 
