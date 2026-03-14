@@ -8,11 +8,13 @@ $env:PYTHONUTF8 = "1"
 $Host.UI.RawUI.WindowTitle = "BRIDGE Craig RPA"
 Clear-Host
 
-Set-Location "K:\BridgeCraig"
+$BASE = "Q:\Claudework\bridge base"
+$PY   = "C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe"
+Set-Location $BASE
 
 # 계정 선택 팝업
 Write-Host "  계정 선택 팝업을 확인하세요..." -ForegroundColor Cyan
-$accountResult = & python -c "from rpa_overlay import ask_account_selection; r = ask_account_selection(); print(r if r is not None else 'DEFAULT')" 2>&1
+$accountResult = & $PY -c "import sys; sys.path.insert(0,'$BASE'); from rpa_overlay import ask_account_selection; r = ask_account_selection(); print(r if r is not None else 'DEFAULT')" 2>&1
 $accountResult = "$accountResult".Trim()
 
 if ($accountResult -eq "CANCEL") {
@@ -44,13 +46,17 @@ Write-Host "  ============================================" -ForegroundColor Cya
 Write-Host ""
 
 $startTime = Get-Date
-$logFile = "K:\BridgeCraig\logs\scheduler.log"
+$logFile = "$BASE\logs\scheduler.log"
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Add-Content -Path $logFile -Value "[$timestamp] RPA MANUAL START ($accountLabel)"
 
 try {
-    $cmd = "python craigslist_auto_rpa.py --headless --limit 10 $accountArg"
-    Invoke-Expression "$cmd 2>&1"
+    if ($accountArg) {
+        & $PY "$BASE\craigslist_auto_rpa.py" --headless --limit 10 --account $accountResult 2>&1
+    } else {
+        & $PY "$BASE\craigslist_auto_rpa.py" --headless --limit 10 2>&1
+    }
+    $cmd = ""  # unused
     $exitCode = $LASTEXITCODE
     $elapsed = [math]::Round(((Get-Date) - $startTime).TotalMinutes, 1)
     $endTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

@@ -1,43 +1,14 @@
 Option Explicit
-Dim sh, fso, base, pythonw
+Dim sh, fso, base, ps1
 Set sh  = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 base = fso.GetParentFolderName(WScript.ScriptFullName)
+ps1  = base & "\scripts\launch_now.ps1"
 
-' python 설치 경로에서 pythonw.exe 자동 탐지
-' NOTE: Python314(C:\Python314)는 encodings 모듈 손상으로 제외 — 2026-03-14
-Dim c(7), i
-c(0) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python313\pythonw.exe"
-c(1) = "C:\Python313\pythonw.exe"
-c(2) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312\pythonw.exe"
-c(3) = "C:\Python312\pythonw.exe"
-c(4) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python311\pythonw.exe"
-c(5) = "C:\Python311\pythonw.exe"
-c(6) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python314\pythonw.exe"
-c(7) = "C:\Python314\pythonw.exe"
-pythonw = ""
-For i = 0 To 7
-    If fso.FileExists(c(i)) Then pythonw = c(i) : Exit For
-Next
-
-' pythonw.exe 못 찾으면 where 명령으로 탐지
-If pythonw = "" Then
-    Dim found
-    found = sh.ExpandEnvironmentStrings("%TEMP%") & "\pw_path.txt"
-    sh.Run "cmd /c where pythonw.exe > """ & found & """", 0, True
-    If fso.FileExists(found) Then
-        Dim ts : Set ts = fso.OpenTextFile(found, 1)
-        If Not ts.AtEndOfStream Then pythonw = Trim(ts.ReadLine())
-        ts.Close
-        fso.DeleteFile found
-    End If
-End If
-
-' pythonw.exe 로 직접 실행 — CMD 창 없음
-If pythonw <> "" Then
-    sh.Run """" & pythonw & """ """ & base & "\craigslist_auto_rpa.py"" --no-relaunch", 0, False
+If fso.FileExists(ps1) Then
+    sh.Run "powershell.exe -ExecutionPolicy Bypass -File """ & ps1 & """", 1, False
 Else
-    MsgBox "pythonw.exe 를 찾을 수 없습니다." & Chr(13) & "Python 이 설치되어 있는지 확인하세요.", 16, "BRIDGE RPA 오류"
+    MsgBox "launch_now.ps1 을 찾을 수 없습니다." & Chr(13) & ps1, 16, "BRIDGE RPA 오류"
 End If
 
 Set sh = Nothing : Set fso = Nothing
