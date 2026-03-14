@@ -144,6 +144,7 @@ export default function HomePage() {
 
   // Toast
   const [toast, setToast] = useState('')
+  const [earthFast, setEarthFast] = useState(false)
 
   // ── Trigger bridge animation (sync with BRIDGE text) ──
   useEffect(() => {
@@ -297,16 +298,13 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Earth photo background ── */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
-          {/* 실사진 지구: 지평선이 다리 케이블 arc와 같은 높이 */}
+        {/* ── Earth Globe — 클릭으로 자전속도 천천히 ↔ 빠르게 토글 ── */}
+        <div
+          className={`earth-globe${earthFast ? ' earth-globe--fast' : ''}`}
+          onClick={() => setEarthFast(prev => !prev)}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/earth-bg.jpg" alt="" className="earth-photo-img" />
-          {/* 상단 = 우주 검정 유지, 지구는 다리 아래서 은은하게 */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(to bottom, #000 0%, #000 22%, rgba(0,0,0,0.82) 40%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.3) 80%, rgba(0,0,0,0.5) 100%)',
-          }} />
+          <img src="/earth-bg.jpg" alt="" className="earth-globe-img" />
         </div>
 
         {/* ── Twinkling stars — 다리 위쪽 근처, 겹치지 않게 ── */}

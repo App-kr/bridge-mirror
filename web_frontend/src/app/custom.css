@@ -1,27 +1,66 @@
 /* ── Custom additions (globals.css 수정 금지 — 추가 스타일은 이 파일에) ── */
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HERO EARTH PHOTO BACKGROUND — 실사진 지구, 지평선 = 다리 케이블 호 높이
+   HERO EARTH GLOBE — 원형 구체 자전 (클릭으로 속도 토글: 천천히 ↔ 빠르게)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* img 태그: 지구 지평선이 다리 arc와 일치, 자전 애니메이션 */
-.earth-photo-img {
-  position: absolute;
-  top: 34%;
-  left: -10%;
-  width: 120%;
-  height: 74%;
-  object-fit: cover;
-  object-position: center top;
-  opacity: 0.22;
-  will-change: transform;
-  animation: earthSpin 140s ease-in-out infinite alternate;
+@keyframes earthGlobeRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* alternate: 140s 동안 0→-9%, 다시 140s 동안 -9%→0 — 자전처럼 보임 */
-@keyframes earthSpin {
-  from { transform: translateX(0%); }
-  to   { transform: translateX(-9%); }
+/* 원형 지구 컨테이너 — 다리 arc 하단에 맞춰 위치 */
+.earth-globe {
+  position: absolute;
+  top: 56%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(260px, 52vw, 620px);
+  height: clamp(260px, 52vw, 620px);
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 0;
+  cursor: pointer;
+  user-select: none;
+  /* 대기권 글로우 */
+  box-shadow:
+    0 0 0 1px rgba(60, 130, 255, 0.06),
+    0 0 60px 25px rgba(30, 80, 220, 0.18),
+    0 0 140px 70px rgba(30, 80, 220, 0.05);
+}
+
+/* 지구 이미지 — 기본 자전속도: 55s */
+.earth-globe-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+  animation: earthGlobeRotate 55s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+  opacity: 0.7;
+}
+
+/* 빠른 자전 모드 (클릭 토글) */
+.earth-globe--fast .earth-globe-img {
+  animation-duration: 6s;
+}
+
+/* 구체 입체감: 광원(왼쪽 위) + 어두운 면(오른쪽 아래) */
+.earth-globe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 33% 27%,
+    rgba(255, 255, 255, 0.13) 0%,
+    rgba(100, 160, 255, 0.04) 38%,
+    transparent 62%
+  );
+  box-shadow: inset -28px -28px 75px rgba(0, 0, 30, 0.62);
+  pointer-events: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
