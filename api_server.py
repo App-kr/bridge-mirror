@@ -2762,60 +2762,52 @@ async def community_list(
 ):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
+    svc = get_svc_client()
+    q = (
+        svc.table('community_posts')
+        .select('id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body')
+        .eq('board', board).eq('is_deleted', 0)
+        .order('pinned', desc=True)
+        .order('sort_order', desc=True)
+        .order('created_at', desc=True)
+        .range(offset, offset + limit - 1)
+    )
+    cq = (
+        svc.table('community_posts')
+        .select('id', count='exact')
+        .eq('board', board).eq('is_deleted', 0)
+    )
     if category:
-        rows = conn.execute(
-            """SELECT id, title, body, author_hash, pinned, views, created_at,
-                      content_type, sort_order, category, substr(body, 1, 200) AS preview
-               FROM community_posts
-               WHERE board=? AND is_deleted=0 AND category=?
-               ORDER BY pinned DESC, sort_order DESC, created_at DESC
-               LIMIT ? OFFSET ?""",
-            (board, category, limit, offset),
-        ).fetchall()
-        total = conn.execute(
-            "SELECT COUNT(*) FROM community_posts WHERE board=? AND is_deleted=0 AND category=?",
-            (board, category),
-        ).fetchone()[0]
-    else:
-        rows = conn.execute(
-            """SELECT id, title, author_hash, pinned, views, created_at,
-                      content_type, sort_order, substr(body, 1, 200) AS preview
-               FROM community_posts
-               WHERE board=? AND is_deleted=0
-               ORDER BY pinned DESC, sort_order DESC, created_at DESC
-               LIMIT ? OFFSET ?""",
-            (board, limit, offset),
-        ).fetchall()
-        total = conn.execute(
-            "SELECT COUNT(*) FROM community_posts WHERE board=? AND is_deleted=0", (board,)
-        ).fetchone()[0]
-    conn.close()
-    return ok(data={"total": total, "posts": [dict(r) for r in rows]})
+        q = q.eq('category', category)
+        cq = cq.eq('category', category)
+    res       = q.execute()
+    count_res = cq.execute()
+    total     = count_res.count or 0
+    posts = []
+    for row in (res.data or []):
+        row['preview'] = (row.get('body', '') or '')[:200]
+        posts.append(row)
+    return ok(data={"total": total, "posts": posts})
 
 
 @app.get("/api/community/{board}/{post_id}", tags=["community"])
 async def community_get(board: str, post_id: int):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute(
-        "UPDATE community_posts SET views=views+1 WHERE id=? AND board=? AND is_deleted=0",
-        (post_id, board),
+    svc = get_svc_client()
+    res = (
+        svc.table('community_posts')
+        .select('id,board,title,body,pinned,views,created_at,content_type')
+        .eq('id', post_id).eq('board', board).eq('is_deleted', 0)
+        .limit(1).execute()
     )
-    conn.commit()
-    row = conn.execute(
-        """SELECT id, board, title, body, pinned, views, created_at, content_type
-           FROM community_posts WHERE id=? AND board=? AND is_deleted=0""",
-        (post_id, board),
-    ).fetchone()
-    conn.close()
-    if not row:
+    if not res.data:
         raise HTTPException(404, "Post not found")
-    return ok(data=dict(row))
+    row = res.data[0]
+    new_views = (row.get('views') or 0) + 1
+    svc.table('community_posts').update({'views': new_views}).eq('id', post_id).execute()
+    row['views'] = new_views
+    return ok(data=row)
 
 
 class CommunityPost(BaseModel):
@@ -2847,14 +2839,20 @@ async def community_create(board: str, post: CommunityPost, request: Request):
     if _pii_check.search(pii_check_body) or _pii_check.search(clean_title):
         raise HTTPException(400, "Phone numbers and email addresses are not allowed in posts.")
 
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    cur = conn.execute(
-        "INSERT INTO community_posts (board, title, body, author_hash, content_type, category) VALUES (?,?,?,?,?,?)",
-        (board, clean_title, clean_body, ip_hash, post.content_type, post.category),
-    )
-    new_id = cur.lastrowid
-    conn.commit()
-    conn.close()
+    svc = get_svc_client()
+    res = svc.table('community_posts').insert({
+        'board':        board,
+        'title':        clean_title,
+        'body':         clean_body,
+        'author_hash':  ip_hash,
+        'content_type': post.content_type,
+        'category':     post.category,
+        'pinned':       0,
+        'views':        0,
+        'is_deleted':   0,
+        'sort_order':   0,
+    }).execute()
+    new_id = res.data[0]['id'] if res.data else None
     return ok(data={"id": new_id}, message="Post created")
 
 
@@ -2863,19 +2861,20 @@ async def community_delete(board: str, post_id: int, request: Request):
     """작성자(IP 해시 일치)만 삭제 가능."""
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    ip_hash = _ip_hash(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    r = conn.execute(
-        "SELECT author_hash FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
-        (post_id, board),
-    ).fetchone()
-    if not r:
-        conn.close(); raise HTTPException(404, "Post not found")
+    ip_hash  = _ip_hash(request)
+    svc      = get_svc_client()
+    res = (
+        svc.table('community_posts')
+        .select('author_hash')
+        .eq('id', post_id).eq('board', board).eq('is_deleted', 0)
+        .limit(1).execute()
+    )
+    if not res.data:
+        raise HTTPException(404, "Post not found")
     is_admin = _ADMIN_KEY and request.headers.get("x-admin-key", "") == _ADMIN_KEY
-    if r[0] != ip_hash and not is_admin:
-        conn.close(); raise HTTPException(403, "Forbidden")
-    conn.execute("UPDATE community_posts SET is_deleted=1 WHERE id=?", (post_id,))
-    conn.commit(); conn.close()
+    if res.data[0]['author_hash'] != ip_hash and not is_admin:
+        raise HTTPException(403, "Forbidden")
+    svc.table('community_posts').update({'is_deleted': 1}).eq('id', post_id).execute()
     return ok(message="Deleted")
 
 
@@ -2889,15 +2888,15 @@ class PinUpdate(BaseModel):
 async def admin_pin_post(post_id: int, body: PinUpdate, request: Request):
     """게시글 고정/해제 (관리자 전용)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    r = conn.execute(
-        "SELECT id FROM community_posts WHERE id=? AND is_deleted=0", (post_id,)
-    ).fetchone()
-    if not r:
-        conn.close(); raise HTTPException(404, "Post not found")
-    conn.execute("UPDATE community_posts SET pinned=? WHERE id=?", (body.pinned, post_id))
-    conn.commit(); conn.close()
+    svc = get_svc_client()
+    res = (
+        svc.table('community_posts')
+        .select('id').eq('id', post_id).eq('is_deleted', 0)
+        .limit(1).execute()
+    )
+    if not res.data:
+        raise HTTPException(404, "Post not found")
+    svc.table('community_posts').update({'pinned': body.pinned}).eq('id', post_id).execute()
     return ok(message=f"Post #{post_id} pinned={body.pinned}")
 
 
@@ -2923,17 +2922,10 @@ async def admin_reorder_posts(board: str, body: ReorderRequest, request: Request
     _check_admin(request)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        for item in body.items:
-            conn.execute(
-                "UPDATE community_posts SET sort_order=? WHERE id=? AND board=? AND is_deleted=0",
-                (item.sort_order, item.id, board),
-            )
-        conn.commit()
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    for item in body.items:
+        svc.table('community_posts').update({'sort_order': item.sort_order}) \
+            .eq('id', item.id).eq('board', board).eq('is_deleted', 0).execute()
     _maybe_auto_backup()
     return ok(message=f"Reordered {len(body.items)} posts")
 
@@ -2946,44 +2938,28 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
         raise HTTPException(404, "Board not found")
 
     _tag_re = re.compile(r'<[^>]+>')
-    updates: list[str] = []
-    params: list = []
+    updates: dict = {}
     if body.title is not None:
-        updates.append("title = ?")
-        params.append(_tag_re.sub('', body.title.strip()))
+        updates['title'] = _tag_re.sub('', body.title.strip())
     if body.body is not None:
-        updates.append("body = ?")
-        if body.content_type == 'html':
-            params.append(_sanitize_html(body.body.strip()))
-        else:
-            params.append(_tag_re.sub('', body.body.strip()))
+        updates['body'] = _sanitize_html(body.body.strip()) if body.content_type == 'html' \
+                          else _tag_re.sub('', body.body.strip())
     if body.content_type is not None:
-        updates.append("content_type = ?")
-        params.append(body.content_type)
+        updates['content_type'] = body.content_type
     if body.category is not None:
-        updates.append("category = ?")
-        params.append(body.category)
-
+        updates['category'] = body.category
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
 
-    params.extend([post_id, board])
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
-            (post_id, board),
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Post not found")
-        conn.execute(
-            f"UPDATE community_posts SET {', '.join(updates)} WHERE id=? AND board=?",
-            params,
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    res = (
+        svc.table('community_posts')
+        .select('id').eq('id', post_id).eq('board', board).eq('is_deleted', 0)
+        .limit(1).execute()
+    )
+    if not res.data:
+        raise HTTPException(404, "Post not found")
+    svc.table('community_posts').update(updates).eq('id', post_id).eq('board', board).execute()
     _maybe_auto_backup()
     return ok(message=f"Post #{post_id} updated")
 
@@ -2994,28 +2970,21 @@ async def admin_move_post(board: str, post_id: int, request: Request):
     _check_admin(request)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    body = await request.json()
+    body   = await request.json()
     target = str(body.get("target_board", "")).strip()
     if target not in _BOARDS:
         raise HTTPException(400, f"유효하지 않은 대상 게시판: {target}")
     if target == board:
         raise HTTPException(400, "현재 게시판과 동일합니다.")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
-            (post_id, board),
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Post not found")
-        conn.execute(
-            "UPDATE community_posts SET board=? WHERE id=? AND board=?",
-            (target, post_id, board),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    res = (
+        svc.table('community_posts')
+        .select('id').eq('id', post_id).eq('board', board).eq('is_deleted', 0)
+        .limit(1).execute()
+    )
+    if not res.data:
+        raise HTTPException(404, "Post not found")
+    svc.table('community_posts').update({'board': target}).eq('id', post_id).eq('board', board).execute()
     return ok(message=f"Post #{post_id} moved to {target}")
 
 
@@ -3028,36 +2997,29 @@ async def admin_search_posts(
 ):
     """관리자 게시글 검색 (전체 보드 대상)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        where_parts = ["is_deleted=0"]
-        params: list = []
-        if board and board != "all":
-            if board not in _BOARDS:
-                raise HTTPException(404, "Board not found")
-            where_parts.append("board=?")
-            params.append(board)
-        if search:
-            where_parts.append("(title LIKE ? OR body LIKE ?)")
-            term = f"%{search}%"
-            params.extend([term, term])
-
-        where = " AND ".join(where_parts)
-        params.append(limit)
-        rows = conn.execute(
-            f"""SELECT id, board, title, author_hash, pinned, views, created_at,
-                       content_type, sort_order, substr(body, 1, 200) AS preview
-                FROM community_posts
-                WHERE {where}
-                ORDER BY pinned DESC, sort_order DESC, created_at DESC
-                LIMIT ?""",
-            params,
-        ).fetchall()
-        return ok(data={"posts": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    q = (
+        svc.table('community_posts')
+        .select('id,board,title,author_hash,pinned,views,created_at,content_type,sort_order,body')
+        .eq('is_deleted', 0)
+        .order('pinned', desc=True)
+        .order('sort_order', desc=True)
+        .order('created_at', desc=True)
+        .limit(limit)
+    )
+    if board and board != "all":
+        if board not in _BOARDS:
+            raise HTTPException(404, "Board not found")
+        q = q.eq('board', board)
+    if search:
+        term = search.strip()
+        q = q.or_(f'title.ilike.%{term}%,body.ilike.%{term}%')
+    res   = q.execute()
+    posts = []
+    for row in (res.data or []):
+        row['preview'] = (row.get('body', '') or '')[:200]
+        posts.append(row)
+    return ok(data={"posts": posts})
 
 
 # ── Admin: Applications 관리 ─────────────────────────────────────────────────
