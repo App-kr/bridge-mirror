@@ -1,66 +1,30 @@
 /* ── Custom additions (globals.css 수정 금지 — 추가 스타일은 이 파일에) ── */
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HERO EARTH GLOBE — 원형 구체 자전 (클릭으로 속도 토글: 천천히 ↔ 빠르게)
+   HERO EARTH — 지구 지평선이 다리 케이블 arc와 자연스럽게 일치
+   우주에서 내려다본 지구 곡선 배경 (main sample 3 구도)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-@keyframes earthGlobeRotate {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* 원형 지구 컨테이너 — 다리 arc 하단에 맞춰 위치 */
-.earth-globe {
+/* 지구 이미지: 하단 60% 영역에서 지평선 곡선이 bridge arc와 맞춤 */
+.earth-photo-img {
   position: absolute;
-  top: 56%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: clamp(260px, 52vw, 620px);
-  height: clamp(260px, 52vw, 620px);
-  border-radius: 50%;
-  overflow: hidden;
-  z-index: 0;
-  cursor: pointer;
-  user-select: none;
-  /* 대기권 글로우 */
-  box-shadow:
-    0 0 0 1px rgba(60, 130, 255, 0.06),
-    0 0 60px 25px rgba(30, 80, 220, 0.18),
-    0 0 140px 70px rgba(30, 80, 220, 0.05);
-}
-
-/* 지구 이미지 — 기본 자전속도: 55s */
-.earth-globe-img {
-  width: 100%;
-  height: 100%;
+  /* 지구 지평선이 다리 arc 높이에 오도록 — 위에서 28% 지점 */
+  top: 28%;
+  left: -8%;
+  width: 116%;
+  height: 80%;
   object-fit: cover;
-  object-position: center center;
-  display: block;
-  animation: earthGlobeRotate 55s linear infinite;
-  transform-origin: center center;
+  /* 지구 지평선 곡선 부분을 중심에 오도록 */
+  object-position: center 30%;
+  opacity: 0.72;
   will-change: transform;
-  opacity: 0.7;
+  /* 지구 자전: 좌우로 천천히 이동 (120s 왕복) */
+  animation: earthPan 120s ease-in-out infinite alternate;
 }
 
-/* 빠른 자전 모드 (클릭 토글) */
-.earth-globe--fast .earth-globe-img {
-  animation-duration: 6s;
-}
-
-/* 구체 입체감: 광원(왼쪽 위) + 어두운 면(오른쪽 아래) */
-.earth-globe::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(
-    ellipse at 33% 27%,
-    rgba(255, 255, 255, 0.13) 0%,
-    rgba(100, 160, 255, 0.04) 38%,
-    transparent 62%
-  );
-  box-shadow: inset -28px -28px 75px rgba(0, 0, 30, 0.62);
-  pointer-events: none;
+@keyframes earthPan {
+  from { transform: translateX(0%) scale(1); }
+  to   { transform: translateX(-7%) scale(1.015); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
