@@ -61,10 +61,10 @@ class RPAOverlay:
         self._remind_timer = None
 
     ACCOUNT_COLORS = {
-        "coreabridge@gmail.com":  "#0d3d0d",   # 선명한 녹색
-        "ferrari812fast@gmail.com": "#3a2810",  # 진한 갈색
-        "airelair00@gmail.com":   "#2a1a3a",    # 진한 보라색
-        "bridgejobkr@gmail.com":  "#3a3a3a",    # 회색
+        "coreabridge@gmail.com":    "#0A84FF",  # 파랑 (account1)
+        "airelair00@gmail.com":     "#30D158",  # 초록 (account2)
+        "ferrari812fast@gmail.com": "#FF9F0A",  # 오렌지 (account3)
+        "bridgejobkr@gmail.com":    "#BF5AF2",  # 보라 (account4)
     }
 
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
@@ -572,14 +572,29 @@ def ask_integrity_password() -> bool:
     return result[0]
 
 
+# 계정 순서: account1→1 / account2→2 / account3→3 / account4→4
+# color 필드는 Apple bright palette (ask_account_selection에서 ACCT_COLORS로 오버라이드됨)
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",   "#1e2e1e"),  # 옅은 녹색
-    ("account3", "ferrari812fast@gmail.com", "#2e2518"),  # 옅은 갈색
-    ("account2", "airelair00@gmail.com",     "#251e2e"),  # 옅은 보라색
-    ("account4", "bridgejobkr@gmail.com",    "#2a2a2a"),  # 옅은 블랙
+    ("account1", "coreabridge@gmail.com",    "#0A84FF"),  # 파랑
+    ("account2", "airelair00@gmail.com",      "#30D158"),  # 초록
+    ("account3", "ferrari812fast@gmail.com",  "#FF9F0A"),  # 오렌지
+    ("account4", "bridgejobkr@gmail.com",     "#BF5AF2"),  # 보라
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"
+
+
+def _mask_email(email: str) -> str:
+    """이메일 부분 마스킹. 운영자 식별 가능, PII 완전노출 방지 (CLAUDE.md)."""
+    try:
+        local, domain = email.split("@", 1)
+        if len(local) <= 3:
+            masked = local[0] + "*" * (len(local) - 1)
+        else:
+            masked = local[:2] + "*" * (len(local) - 4) + local[-2:]
+        return f"{masked}@{domain}"
+    except Exception:
+        return "****@****"
 
 
 def _load_last_runs() -> dict:
@@ -610,89 +625,181 @@ def _time_ago(iso_str: str) -> str:
 
 
 def ask_account_selection():
-    """계정 선택 팝업. 선택된 account_id 반환 (None이면 기본 .env, 'CANCEL'이면 취소)."""
-    result = ["CANCEL"]
+    """계정 선택 팝업 (Apple dark palette + 밝은 계정 색상).
+    Returns: (account_id, limit) tuple, or ("CANCEL", 0) on cancel.
+    """
+    # Apple dark palette
+    BG    = "#1C1C1E"
+    CARD  = "#2C2C2E"
+    WHITE = "#FFFFFF"
+    GRAY1 = "#8E8E93"
+    GRAY2 = "#3A3A3C"
+    RED   = "#FF453A"
+    BLUE  = "#0A84FF"
+    FONT  = "Segoe UI"
+    # 계정별 고유 컬러 (1파랑/2초록/3오렌지/4보라)
+    ACCT_COLORS = ["#0A84FF", "#30D158", "#FF9F0A", "#BF5AF2"]
+
+    W, H = 460, 580
 
     def _build():
         root = tk.Tk()
-        root.title("BRIDGE Craig")
-        root.overrideredirect(True)
+        root.title("BRIDGE RPA")
+        root.configure(bg=BG)
+        root.resizable(False, False)
         root.attributes("-topmost", True)
-        root.configure(bg="#2a2a2a")
+        root.update_idletasks()
+        sx = (root.winfo_screenwidth()  - W) // 2
+        sy = (root.winfo_screenheight() - H) // 2
+        root.geometry(f"{W}x{H}+{sx}+{sy}")
 
-        w, h = 440, 480
-        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        if _HAS_SCREENINFO:
-            try:
-                mons = get_monitors()
-                m = mons[1] if len(mons) >= 2 else mons[0]
-                sw, sh = m.width, m.height
-                ox, oy = m.x, m.y
-            except Exception:
-                ox, oy = 0, 0
-        else:
-            ox, oy = 0, 0
-        root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2}")
+        acct_var = tk.IntVar(value=0)
+        cnt_var  = tk.IntVar(value=10)
+        result   = [("CANCEL", 0)]
 
-        border = tk.Frame(root, bg="#333344", padx=1, pady=1)
-        border.pack(fill="both", expand=True)
-        card = tk.Frame(border, bg="#2a2a2a")
-        card.pack(fill="both", expand=True)
+        PAD = 24
+        main_frame = tk.Frame(root, bg=BG)
+        main_frame.pack(fill="both", expand=True, padx=PAD, pady=20)
 
-        tk.Label(card, text="BRIDGE Craig RPA",
-                 font=tkfont.Font(size=18, weight="bold"),
-                 bg="#2a2a2a", fg="#f0f0f5").pack(pady=(20, 4))
-        tk.Label(card, text="작업할 계정을 선택하세요",
-                 font=tkfont.Font(size=11),
-                 bg="#2a2a2a", fg="#b8b8cc").pack(pady=(0, 12))
+        # ── Header ──────────────────────────────────────────────
+        hf = tk.Frame(main_frame, bg=BG)
+        hf.pack(fill="x", pady=(0, 18))
+        tk.Label(hf, text="BRIDGE", bg=BG, fg=WHITE,
+                 font=(FONT, 22, "bold")).pack(side="left")
+        tk.Label(hf, text="  RPA", bg=BG, fg=GRAY1,
+                 font=(FONT, 22)).pack(side="left")
 
+        # ── ACCOUNT 섹션 ─────────────────────────────────────────
+        tk.Label(main_frame, text="ACCOUNT", bg=BG, fg=GRAY1,
+                 font=(FONT, 10)).pack(anchor="w", pady=(0, 6))
+
+        # 2×2 컬러 카드 그리드
+        card_frames = []
+
+        def refresh_cards():
+            sel = acct_var.get()
+            for idx, (outer, inner, num_lbl, tag_lbl, email_lbl) in enumerate(card_frames):
+                color = ACCT_COLORS[idx]
+                if sel == idx:
+                    outer.configure(bg=color)
+                    inner.configure(bg=color)
+                    num_lbl.configure(bg=color, fg=WHITE)
+                    tag_lbl.configure(bg=color, fg=WHITE)
+                    email_lbl.configure(bg=color, fg=WHITE,
+                                        text=_mask_email(_ACCOUNT_LIST[idx][1]))
+                else:
+                    outer.configure(bg=color)
+                    inner.configure(bg=CARD)
+                    num_lbl.configure(bg=CARD, fg=GRAY1)
+                    tag_lbl.configure(bg=CARD, fg=GRAY2)
+                    email_lbl.configure(bg=CARD, fg=GRAY2, text="")
+
+        def select_acct(val):
+            acct_var.set(val)
+            refresh_cards()
+            start_btn.configure(bg=ACCT_COLORS[val])
+
+        grid_f = tk.Frame(main_frame, bg=BG)
+        grid_f.pack(fill="x")
         last_runs = _load_last_runs()
 
-        for acct_id, email, color in _ACCOUNT_LIST:
-            ago = _time_ago(last_runs.get(email, ""))
-            if email in last_runs:
-                sub_text = f"{ago}"
-            else:
-                sub_text = "아직 사용 안 함"
+        for idx, (acct_id, email, _) in enumerate(_ACCOUNT_LIST):
+            r, c = divmod(idx, 2)
+            color = ACCT_COLORS[idx]
+            ago   = _time_ago(last_runs.get(email, "")) if email in last_runs else "아직 사용 안 함"
 
-            border_frame = tk.Frame(card, bg="#555566", padx=1, pady=1)
-            border_frame.pack(fill="x", padx=16, pady=4)
+            outer = tk.Frame(grid_f, bg=color, padx=4, pady=0)
+            outer.grid(row=r, column=c, padx=4, pady=4, sticky="ew")
 
-            btn_frame = tk.Frame(border_frame, bg=color, padx=14, pady=10, cursor="hand2")
-            btn_frame.pack(fill="both")
+            inner = tk.Frame(outer, bg=CARD, padx=10, pady=8)
+            inner.pack(fill="both")
 
-            lbl_email = tk.Label(btn_frame, text=email,
-                                 font=tkfont.Font(size=12, weight="bold"),
-                                 bg=color, fg="#f0f0f5", anchor="w")
-            lbl_email.pack(fill="x")
+            num_lbl = tk.Label(inner, text=str(idx + 1), bg=CARD, fg=GRAY1,
+                               font=(FONT, 20, "bold"), anchor="w")
+            num_lbl.pack(fill="x")
 
-            lbl_ago = tk.Label(btn_frame, text=sub_text,
-                               font=tkfont.Font(size=9),
-                               bg=color, fg="#aaaaaa", anchor="w")
-            lbl_ago.pack(fill="x", pady=(2, 0))
+            tag_lbl = tk.Label(inner, text=f"{acct_id}  ·  {ago}", bg=CARD, fg=GRAY2,
+                               font=(FONT, 9), anchor="w")
+            tag_lbl.pack(fill="x")
 
-            def _select(aid=acct_id, em=email):
-                result[0] = aid
-                _save_last_run(em)
-                root.destroy()
+            email_lbl = tk.Label(inner, text="", bg=CARD, fg=GRAY2,
+                                 font=(FONT, 8), anchor="w")
+            email_lbl.pack(fill="x")
 
-            for widget in (btn_frame, lbl_email, lbl_ago):
-                widget.bind("<Button-1>", lambda e, f=_select: f())
-                widget.bind("<Enter>", lambda e, bf=btn_frame: bf.configure(bg="#444455"))
-                widget.bind("<Leave>", lambda e, bf=btn_frame, c=color: bf.configure(bg=c))
+            card_frames.append((outer, inner, num_lbl, tag_lbl, email_lbl))
 
-        tk.Frame(card, bg="#2a2a2a", height=20).pack()
-        tk.Frame(card, bg="#333344", height=1).pack(fill="x")
-        tk.Frame(card, bg="#2a2a2a", height=6).pack()
-        cancel_lbl = tk.Label(card, text="나중에 하기(종료)",
-                              font=tkfont.Font(family="Segoe UI", size=12),
-                              bg="#2a2a2a", fg="#f47174", cursor="hand2", pady=10)
+            for widget in (outer, inner, num_lbl, tag_lbl, email_lbl):
+                widget.bind("<Button-1>", lambda e, v=idx: select_acct(v))
+                widget.configure(cursor="hand2")
+
+        for col in range(2):
+            grid_f.columnconfigure(col, weight=1)
+
+        refresh_cards()
+
+        # ── 구분선 ──────────────────────────────────────────────
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=16)
+
+        # ── POSTS 섹션 ───────────────────────────────────────────
+        tk.Label(main_frame, text="POSTS", bg=BG, fg=GRAY1,
+                 font=(FONT, 10)).pack(anchor="w", pady=(0, 6))
+
+        pill_buttons = []
+
+        def refresh_pills():
+            for btn, val in pill_buttons:
+                btn.configure(bg=BLUE if cnt_var.get() == val else CARD,
+                              fg=WHITE if cnt_var.get() == val else GRAY1)
+
+        def select_count(val):
+            cnt_var.set(val)
+            refresh_pills()
+
+        pill_grid = tk.Frame(main_frame, bg=BG)
+        pill_grid.pack(fill="x")
+        for i, (lbl, val) in enumerate([("1  (test)", 1), ("5", 5), ("10", 10), ("20", 20)]):
+            btn = tk.Button(
+                pill_grid, text=lbl, bg=CARD, fg=GRAY1,
+                font=(FONT, 10), relief="flat", bd=0,
+                cursor="hand2", pady=10, padx=6,
+                activebackground=BLUE, activeforeground=WHITE,
+                command=lambda v=val: select_count(v),
+            )
+            btn.grid(row=0, column=i, padx=4, pady=4, sticky="ew")
+            pill_buttons.append((btn, val))
+        for c in range(4):
+            pill_grid.columnconfigure(c, weight=1)
+        refresh_pills()
+
+        # ── 구분선 ──────────────────────────────────────────────
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=16)
+
+        # ── Start 버튼 ───────────────────────────────────────────
+        def _start():
+            acct_id = _ACCOUNT_LIST[acct_var.get()][0]
+            _save_last_run(_ACCOUNT_LIST[acct_var.get()][1])
+            result[0] = (acct_id, cnt_var.get())
+            root.destroy()
+
+        start_btn = tk.Button(
+            main_frame, text="▶  Start Posting",
+            bg=ACCT_COLORS[0], fg=WHITE, font=(FONT, 13, "bold"),
+            relief="flat", bd=0, cursor="hand2", pady=14,
+            activeforeground=WHITE,
+            command=_start,
+        )
+        start_btn.pack(fill="x", pady=(0, 8))
+
+        # ── 나중에 하기 ──────────────────────────────────────────
+        cancel_lbl = tk.Label(main_frame, text="나중에 하기 (종료)",
+                              font=(FONT, 11),
+                              bg=BG, fg=RED, cursor="hand2", pady=10)
         cancel_lbl.pack(fill="x")
         cancel_lbl.bind("<Button-1>", lambda e: root.destroy())
-        cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg="#333344"))
-        cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg="#2a2a2a"))
+        cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(fg="#FF6B6B"))
+        cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(fg=RED))
 
-        # 드래그 이동
+        # ── 드래그 이동 ──────────────────────────────────────────
         def _press(e):
             root._dx, root._dy = e.x_root, e.y_root
         def _move(e):
@@ -700,16 +807,23 @@ def ask_account_selection():
             y = root.winfo_y() + e.y_root - root._dy
             root._dx, root._dy = e.x_root, e.y_root
             root.geometry(f"+{x}+{y}")
-        for dw in (card, border):
-            dw.bind("<ButtonPress-1>", _press)
-            dw.bind("<B1-Motion>", _move)
+        root.bind("<ButtonPress-1>", _press)
+        root.bind("<B1-Motion>", _move)
 
         root.mainloop()
+        return result[0]
 
-    t = threading.Thread(target=_build, daemon=True)
-    t.start()
-    t.join(timeout=300)
-    return result[0]
+    import threading as _threading
+    if _threading.current_thread() is _threading.main_thread():
+        return _build()
+    else:
+        res = [("CANCEL", 0)]
+        def _run():
+            res[0] = _build()
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=300)
+        return res[0]
 
 
 _overlay = RPAOverlay()
