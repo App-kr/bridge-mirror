@@ -1,0 +1,3 @@
+# Bridge 실시간 상태 로그
+# Get-Content -Path "Q:\Claudework\bridge base\tasks\live_status.txt" -Wait -Tail 10
+# ──────────────────────────────────────────────────────

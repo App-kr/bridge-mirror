@@ -287,8 +287,88 @@
       "git": "7bb4184",
       "files": 335,
       "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_135739__BridgeCraig_K_to_Q_migration",
+      "task": "BridgeCraig_K_to_Q_migration",
+      "ts": "2026.03.12 13:57:40",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_143400__exit_popup_연결",
+      "task": "exit_popup_연결",
+      "ts": "2026.03.12 14:34:01",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_143404__exit_popup_연결",
+      "task": "exit_popup_연결",
+      "ts": "2026.03.12 14:34:04",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_153937__전체수동백업",
+      "task": "전체수동백업",
+      "ts": "2026.03.12 15:39:38",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_155042__ClaudeBlog_완전백업_20260312",
+      "task": "ClaudeBlog_완전백업_20260312",
+      "ts": "2026.03.12 15:50:44",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_155048__ClaudeBlog_완전백업_20260312",
+      "task": "ClaudeBlog_완전백업_20260312",
+      "ts": "2026.03.12 15:50:48",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_155342__Craig_RPA_UI_완성",
+      "task": "Craig_RPA_UI_완성",
+      "ts": "2026.03.12 15:53:44",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_155556__CLAUDE.md_RULE-0_추가",
+      "task": "CLAUDE.md RULE-0 추가",
+      "ts": "2026.03.12 15:55:56",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260312_155601__CLAUDE.md_RULE-0_추가",
+      "task": "CLAUDE.md RULE-0 추가",
+      "ts": "2026.03.12 15:56:01",
+      "git": "1d751cc",
+      "files": 335,
+      "db_hash": "217454e567ae"
+    },
+    {
+      "dir": "20260313_090002__final_backup_20260313_090001",
+      "task": "final_backup_20260313_090001",
+      "ts": "2026.03.13 09:00:03",
+      "git": "unknown",
+      "files": 336,
+      "db_hash": "217454e567ae"
     }
   ],
-  "last_backup": "2026.03.12 13:06:42",
-  "total_count": 36
+  "last_backup": "2026.03.13 09:00:03",
+  "total_count": 46
 }

@@ -1,0 +1,87 @@
+=== AudioAutoSwitcher ?úÏä§???ÅÏÑ∏ ===
+
+
+Id               : 
+Arguments        : "Q:\Claudework\bridge base\tools\audio_switcher_run.vbs"
+Execute          : wscript.exe
+WorkingDirectory : 
+PSComputerName   : 
+
+
+
+
+
+Enabled            : True
+EndBoundary        : 
+ExecutionTimeLimit : 
+Id                 : 
+Repetition         : MSFT_TaskRepetitionPattern
+StartBoundary      : 
+Delay              : 
+UserId             : TACO\Scarlett
+PSComputerName     : 
+
+
+
+=== AudioSwitcher ?úÏä§???ÅÏÑ∏ ===
+
+
+Id               : 
+Arguments        : -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "Q:\Claudework\bridge base\tools\start_
+                   audio.ps1"
+Execute          : powershell.exe
+WorkingDirectory : 
+PSComputerName   : 
+
+
+
+
+
+Enabled            : True
+EndBoundary        : 
+ExecutionTimeLimit : 
+Id                 : 
+Repetition         : MSFT_TaskRepetitionPattern
+StartBoundary      : 
+Delay              : 
+UserId             : 
+PSComputerName     : 
+
+
+
+=== BridgeCrRL ?úÏä§???ÅÏÑ∏ ===
+=== audio-toggle.ahk ?¥Ïö© ===
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+Persistent
+
+; ===== Í≤ΩÎ°ú =====
+global gApoDir       := "C:\Program Files\EqualizerAPO\config"
+global gApoConfig    := gApoDir "\config.txt"
+global gVolumeFile   := gApoDir "\volume.txt"
+global gFootstepFile := gApoDir "\footstep-boost.txt"
+global gFlatFile     := gApoDir "\flat.txt"
+global gPsPath       := "Q:\Headset\audio-toggle.ps1"
+
+; ===== ?ÅÌÉú =====
+global gOverlay      := ""
+global gTrayGui      := ""
+global gTrayOn       := false
+global gFootstepOn   := false
+global gEqGui        := ""
+global gTestBackup   := ""
+global gPrevHeadset  := -1
+
+; ===== Ï£ºÌåå??=====
+global gFreqs  := [25,40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000]
+global gFNames := ["25","40","63","100","160","250","400","630","1K","1.6K","2.5K","4K","6.3K","10K","16K"]
+
+; ===== Ï¥àÍ∏∞??=====
+if !FileExist(gVolumeFile)
+    WriteFile(gVolumeFile, "Preamp: -3 dB`n")
+
+if !FileExist(gFlatFile)
+
+=== ÏµúÍ∑º Application ?¥Î≤§???§Î•ò (?§Îäò) ===
+
+=== Windows ?¥Î≤§??Î°úÍ∑∏ ???úÏûë ???§Î•ò ===

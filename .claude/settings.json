@@ -27,7 +27,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "echo [PRE] Tool 실행 전"
+          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" PRE"
         }
       ]
     },
@@ -43,13 +43,11 @@
   ],
   "PostToolUse": [
     {
-      "matcher": {
-        "tools": ["BashTool"]
-      },
+      "matcher": {},
       "hooks": [
         {
           "type": "command",
-          "command": "echo [POST] Bash 완료"
+          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" POST"
         }
       ]
     }
@@ -60,7 +58,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "echo [STOP] 작업 완료"
+          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" STOP"
         }
       ]
     },

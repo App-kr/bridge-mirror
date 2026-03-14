@@ -23,6 +23,7 @@
 | [design-system.md](design-system.md) | UI 디자인 규칙, CSS 클래스, 레이아웃 | 2026-02-28 |
 | [deployment.md](deployment.md) | 배포 설정, nginx, systemd, 환경변수 | 2026-02-28 |
 | [worklog-2026-03-07.md](worklog-2026-03-07.md) | 24시간 작업 기록 — 보안·MailComposer·드래그UX 등 | 2026-03-07 |
+| [worklog-2026-03-13-bridgejob-old.md](worklog-2026-03-13-bridgejob-old.md) | 구 홈페이지(bridgejob.co.kr) 작업 — 그누보드5+카페24 | 2026-03-13 |
 
 ---
 

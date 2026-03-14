@@ -5,24 +5,36 @@
    우주에서 내려다본 지구 곡선 배경 (main sample 3 구도)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* 지구 이미지: 평평하게 늘여 bridge arc 수평과 일치
-   - width: 260% → 지구를 매우 넓게 늘여 지평선 곡률을 완만하게
-   - scaleY(0.48) → 세로 압축으로 지평선을 더 직선에 가깝게
-   - translateY(-30%) → 지평선을 arc 높이(section 중하단)에 배치 */
-.earth-photo-img {
+/* 지구 Y축 자전 — 위치 완전 고정, rotateY로 제자리 스핀
+   - perspective: 2400px → 원근감(구체처럼 보이게)
+   - earth-globe-img: scaleY(0.46) + rotateY(0→-360deg)
+   - 360도 연속 회전 = 지구가 자기 축을 중심으로 자전
+   - 좌우 mask: 양쪽 끝 자연스럽게 소멸 */
+.earth-globe-wrap {
   position: absolute;
-  top: 50%;
+  bottom: -6%;
   left: 50%;
-  width: 260%;
-  height: auto;
-  opacity: 0.78;
-  will-change: transform;
-  animation: earthPan 120s ease-in-out infinite alternate;
+  width: 100vw;
+  transform: translateX(-50%);
+  perspective: 2400px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+  pointer-events: none;
 }
 
-@keyframes earthPan {
-  from { transform: translate(-50%, -30%) scaleY(0.48) scale(1); }
-  to   { transform: translate(-57%, -30%) scaleY(0.48) scale(1.015); }
+.earth-globe-img {
+  display: block;
+  width: 220%;
+  height: auto;
+  margin-left: -60%;
+  opacity: 0.48;
+  backface-visibility: visible;
+  animation: earthGlobeSpin 35s linear infinite;
+}
+
+@keyframes earthGlobeSpin {
+  from { transform: scaleY(0.46) rotateY(0deg); }
+  to   { transform: scaleY(0.46) rotateY(-360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

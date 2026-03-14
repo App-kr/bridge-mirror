@@ -39,6 +39,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
+import undetected_chromedriver as uc
 from selenium import webdriver
 from selenium.common.exceptions import (
     ElementNotInteractableException,
@@ -55,17 +56,18 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ── 경로 설정 ──────────────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).parent
-LOGS_DIR     = BASE_DIR / "logs"
-SHOTS_DIR    = BASE_DIR / "logs" / "screenshots"
-DB_PATH      = BASE_DIR / "master.db"
+TOOLS_DIR    = Path(__file__).parent
+PROJECT_DIR  = TOOLS_DIR.parent          # Q:\Claudework\bridge base
+LOGS_DIR     = TOOLS_DIR / "logs"
+SHOTS_DIR    = TOOLS_DIR / "logs" / "screenshots"
+DB_PATH      = PROJECT_DIR / "master.db"  # 프로젝트 루트 master.db
 
 LOGS_DIR.mkdir(exist_ok=True)
 SHOTS_DIR.mkdir(exist_ok=True)
 
 LOG_FILE = LOGS_DIR / "ad_poster.log"
 
-load_dotenv(dotenv_path=BASE_DIR / ".env")
+load_dotenv(dotenv_path=PROJECT_DIR / ".env")  # 프로젝트 루트 .env
 
 # ── 환경 변수 ──────────────────────────────────────────────────────────────────
 CL_EMAIL    = os.environ.get("CRAIGSLIST_EMAIL",    "").strip()
@@ -252,21 +254,28 @@ Posted by Bridge Recruiting Agency | Korea ESL Specialists
 
 # ── Selenium 드라이버 초기화 ───────────────────────────────────────────────────
 
-def make_driver(headless: bool) -> webdriver.Chrome:
-    opts = ChromeOptions()
+CHROME_BINARY      = r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe"
+# RPA 전용 프로필 — 메인 Chrome과 충돌 없음 / 최초 1회 수동 로그인 후 세션 유지
+CHROME_RPA_PROFILE = str(TOOLS_DIR / ".chrome_rpa_profile")
+
+def make_driver(headless: bool) -> uc.Chrome:
+    """
+    undetected_chromedriver 사용 → Craigslist 봇 감지 우회.
+    RPA 전용 프로필로 세션 쿠키 유지.
+    """
+    opts = uc.ChromeOptions()
     if headless:
         opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1280,900")
-    opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-    opts.add_experimental_option("useAutomationExtension", False)
+    # RPA 전용 프로필 사용 (세션 쿠키 유지 → 로그인 유지)
+    os.makedirs(CHROME_RPA_PROFILE, exist_ok=True)
+    opts.add_argument(f"--user-data-dir={CHROME_RPA_PROFILE}")
 
-    service = ChromeService(ChromeDriverManager().install())
-    driver  = webdriver.Chrome(service=service, options=opts)
-    driver.execute_script(
-        "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
+    driver = uc.Chrome(
+        options=opts,
+        browser_executable_path=CHROME_BINARY if os.path.exists(CHROME_BINARY) else None,
     )
     return driver
 
@@ -308,20 +317,34 @@ def craigslist_login(driver: webdriver.Chrome, log: Logger) -> bool:
         fill(driver, By.ID, "inputEmailHandle", CL_EMAIL)
         fill(driver, By.ID, "inputPassword",    CL_PASSWORD)
         click(driver, By.ID, "login")
-        time.sleep(3)
+        time.sleep(5)  # 로그인 처리 대기 (5초)
 
-        # 로그인 성공 여부 확인 (URL 변화 또는 계정 링크 존재)
-        if "login" not in driver.current_url.lower():
-            log.ok("Craigslist 로그인 성공")
+        cur_url = driver.current_url.lower()
+        log.info(f"로그인 후 URL: {driver.current_url[:80]}")
+
+        # 성공 판정 1: URL에 'login' 없음
+        if "login" not in cur_url:
+            log.ok("Craigslist 로그인 성공 (URL 변경 확인)")
             return True
 
-        # 로그인 후 "My Account" 링크 확인
-        driver.find_element(By.PARTIAL_LINK_TEXT, "account")
-        log.ok("Craigslist 로그인 성공")
-        return True
+        # 성공 판정 2: 계정 메뉴 존재
+        try:
+            driver.find_element(By.PARTIAL_LINK_TEXT, "account")
+            log.ok("Craigslist 로그인 성공 (account 링크 확인)")
+            return True
+        except NoSuchElementException:
+            pass
+
+        # 실패 — 스크린샷 저장해서 원인 파악
+        shot = str(SHOTS_DIR / f"login_fail_{datetime.now().strftime('%H%M%S')}.png")
+        driver.save_screenshot(shot)
+        page_text = driver.find_element(By.TAG_NAME, "body").text[:300]
+        log.error(f"로그인 실패. 스크린샷: {shot}")
+        log.error(f"페이지 내용 일부: {page_text}")
+        return False
 
     except (NoSuchElementException, TimeoutException) as exc:
-        log.error(f"로그인 실패: {exc}")
+        log.error(f"로그인 오류: {exc}")
         return False
 
 

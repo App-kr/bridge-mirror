@@ -1,0 +1,505 @@
+﻿================================================================
+BRIDGE Homepage JSX Preview v2 — claude.ai artifact용
+Date: 2026-03-14
+사용법: 아래 코드 전체를 claude.ai에 붙여넣고
+       "이 코드로 React artifact 실행해줘" 라고 하세요.
+================================================================
+
+const { useState, useEffect, useRef } = React;
+
+const BASE = 'https://bridge-chi-lime.vercel.app';
+
+const AGE_LABELS = { pre_k:'Pre-K', kindergarten:'Kindy', elementary:'Elem', middle:'Middle', high:'High', adult:'Adult' };
+
+const FALLBACK_TESTIMONIALS = [
+  { name:"Sarah M.", country:"USA", text:"BRIDGE found me the perfect school in Seoul. The recruiter was incredibly helpful throughout the entire visa process. I couldn't be more grateful for their dedication and professionalism.", stars:5 },
+  { name:"James T.", country:"Canada", text:"I was skeptical about using a recruiter at first, but BRIDGE delivered exactly what they promised. My contract was completely transparent and the school was fantastic.", stars:5 },
+  { name:"Emily R.", country:"UK", text:"The team at BRIDGE went above and beyond to find me a school that matched my teaching style perfectly. Professional service from start to finish.", stars:5 },
+  { name:"Michael K.", country:"Australia", text:"Professional, responsive, and genuinely caring. BRIDGE is the gold standard for Korea ESL recruitment. I'm now in my third year thanks to them.", stars:5 },
+  { name:"Laura B.", country:"New Zealand", text:"From application to arrival, BRIDGE supported me every step of the way. Couldn't recommend them more highly to anyone considering teaching in Korea.", stars:5 },
+  { name:"David C.", country:"South Africa", text:"BRIDGE's network is absolutely unmatched. I had multiple quality job offers within a week. Truly exceptional service.", stars:5 },
+];
+const FALLBACK_JOBS = [
+  { job_id:'BR-2401', location:'Seoul', teaching_age:['elementary'], working_hours:'Mon-Fri 9-6', monthly_salary:'2.5M KRW', housing:'Housing + Severance', is_hot:false },
+  { job_id:'BR-2402', location:'Busan', teaching_age:['middle'], working_hours:'Mon-Fri 10-7', monthly_salary:'2.8M KRW', housing:'Housing + Flight', is_hot:true },
+  { job_id:'BR-2403', location:'Incheon', teaching_age:['pre_k','kindergarten'], working_hours:'Mon-Fri 9-5', monthly_salary:'2.3M KRW', housing:'Housing + Insurance', is_hot:false },
+  { job_id:'BR-2404', location:'Daegu', teaching_age:['elementary','middle'], working_hours:'Mon-Fri 10-6', monthly_salary:'2.6M KRW', housing:'Housing + Bonus', is_hot:false },
+];
+const FALLBACK_SCHOOLS = [
+  'Busan International Foreign School','Dalton School','Taejon Christian International School',
+  'Busan Foreign School','Gyeonggi English Village','Dulwich College Seoul',
+  'Korea International School','Chadwick International','Gangwon English Camp',
+  'Dwight School Seoul','Yongsan International School of Seoul','Saint Paul Academy',
+  'North London Collegiate School','Seoul Foreign School','Seoul International School',
+];
+const FALLBACK_ACADEMIES = [
+  'Chungdahm Learning','YBM','Warwick Franklin','Poly','Wall Street English',
+  'April','Hillside IYASkola','Sogang SLP','Fast Track Kids','Avalon',
+  'DYB Choisun','Rise Korea','JLS Jungsang','Real Class','Siwon School',
+];
+const NAV_LINKS = ['About us','Korea','Visa','Job Board','Support','업무지원','Community'];
+
+const css = `
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;color:#1d1d1f;background:#fff;}
+
+  /* nav-glass — globals.css 그대로 */
+  nav.nav-glass{
+    position:sticky;top:0;z-index:50;
+    border-bottom:1px solid rgba(0,0,0,0.1);
+    background:rgba(255,255,255,0.72);
+    backdrop-filter:saturate(180%) blur(20px);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+  }
+  .nav-link{
+    padding:6px 12px;font-size:12px;font-weight:400;border-radius:6px;
+    color:#424245;text-decoration:none;transition:all 0.15s;
+  }
+  .nav-link:hover{background:rgba(0,0,0,0.04);color:#1d1d1f;}
+
+  /* custom.css nav-cta overrides */
+  .nav-cta-apply{
+    background:#2563EB;color:#fff;font-weight:600;font-size:13px;
+    padding:8px 20px;border-radius:8px;text-decoration:none;
+    box-shadow:0 2px 8px rgba(37,99,235,0.25);transition:all 0.3s;
+  }
+  .nav-cta-apply:hover{background:#1d4ed8;box-shadow:0 6px 20px rgba(37,99,235,0.4);}
+  .nav-cta-inquiry{
+    background:transparent;color:#1d1d1f;font-weight:600;font-size:13px;
+    padding:8px 20px;border-radius:8px;text-decoration:none;
+    box-shadow:inset 0 0 0 1.5px #d1d1d6;transition:all 0.3s;
+  }
+  .nav-cta-inquiry:hover{background:#1d1d1f;color:#fff;box-shadow:inset 0 0 0 1.5px #1d1d1f;}
+
+  /* earth */
+  @keyframes earthSpin{from{transform:translateX(0%)}to{transform:translateX(-9%)}}
+  .earth-photo-img{
+    position:absolute;top:34%;left:-10%;width:120%;height:74%;
+    object-fit:cover;object-position:center top;opacity:0.22;
+    animation:earthSpin 140s ease-in-out infinite alternate;will-change:transform;
+  }
+
+  /* letter-star tagline — custom.css 그대로 */
+  @keyframes letterTwinkle{
+    0%{opacity:0;color:transparent;text-shadow:0 0 0 transparent}
+    40%{opacity:1;color:#fff;text-shadow:0 0 12px rgba(255,255,255,0.6)}
+    70%{opacity:0.9;color:#d0d0da;text-shadow:0 0 6px rgba(255,255,255,0.25)}
+    100%{opacity:1;color:#a1a1a6;text-shadow:none}
+  }
+  .letter-star{opacity:0;animation:letterTwinkle 0.8s ease-out both;display:inline-block;}
+
+  /* hero stars */
+  @keyframes starTwinkle{
+    0%,100%{opacity:0.1;transform:scale(0.7);box-shadow:0 0 2px 1px rgba(255,255,255,0.2)}
+    50%{opacity:1;transform:scale(1.2);box-shadow:0 0 6px 2px rgba(255,255,255,0.45)}
+  }
+  .hero-star{position:absolute;border-radius:50%;background:white;animation:starTwinkle ease-in-out infinite;}
+
+  /* scroll indicator */
+  @keyframes scrollPulse{0%,100%{opacity:0.4}50%{opacity:1}}
+  .scroll-pulse{animation:scrollPulse 2s ease-in-out infinite;}
+  @keyframes scrollBounce{0%,20%,50%,80%,100%{transform:translateY(0)}40%{transform:translateY(14px)}60%{transform:translateY(7px)}}
+  .scroll-bounce{animation:scrollBounce 2s ease infinite;}
+
+  /* bridge animations — custom.css 그대로 */
+  .bridge-arc,.bridge-tower,.bridge-stay,.bridge-sweep{opacity:0;}
+  .bridge-arc{stroke-dasharray:2200;stroke-dashoffset:2200;}
+  .bridge-active .bridge-arc{opacity:0.35;animation:arcDraw 2.5s ease-out forwards;}
+  @keyframes arcDraw{from{stroke-dashoffset:2200}to{stroke-dashoffset:0}}
+  .bridge-sweep{stroke-dasharray:80 2200;stroke-dashoffset:80;}
+  .bridge-active .bridge-sweep{animation:sweepMove 2.5s ease-out forwards;}
+  @keyframes sweepMove{0%{stroke-dashoffset:80;opacity:0.5}85%{opacity:0.35}100%{stroke-dashoffset:-2200;opacity:0}}
+  .bridge-active .bridge-tower{animation:towerReveal 0.6s ease-out forwards;}
+  @keyframes towerReveal{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:0.45}}
+  .bridge-stay{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);}
+  .bridge-active .bridge-stay{animation:stayDraw 0.8s ease-out forwards;}
+  @keyframes stayDraw{to{stroke-dashoffset:0;opacity:0.12}}
+  .bridge-active .bridge-stay-l1{animation-delay:0.30s}
+  .bridge-active .bridge-stay-l2{animation-delay:0.35s}
+  .bridge-active .bridge-stay-r1{animation-delay:0.30s}
+  .bridge-active .bridge-stay-r2{animation-delay:0.35s}
+  .bridge-active .bridge-arc-group{animation:arcBreath 4s ease-in-out 3s infinite;}
+  @keyframes arcBreath{0%,100%{filter:drop-shadow(0 0 4px rgba(255,255,255,0.1))}50%{filter:drop-shadow(0 0 12px rgba(255,255,255,0.3))}}
+
+  /* testimonial glass — custom.css 그대로 */
+  .testimonial-glass{
+    background:rgba(255,255,255,0.04);backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px;padding:24px;display:flex;flex-direction:column;
+    justify-content:space-between;min-height:260px;transition:all 0.3s;
+  }
+  .testimonial-glass:hover{
+    border-color:rgba(41,151,255,0.15);background:rgba(255,255,255,0.08);
+    box-shadow:0 8px 32px rgba(41,151,255,0.06);transform:translateY(-4px);
+  }
+
+  /* shimmer card — custom.css 그대로 */
+  .shimmer-card{
+    position:relative;border-radius:16px;overflow:hidden;
+    background:#141414;border:1px solid rgba(255,255,255,0.06);
+    padding:24px;transition:all 0.3s;cursor:pointer;display:block;text-decoration:none;
+  }
+  .shimmer-card:hover{
+    background:#1a1a1a;transform:translateY(-4px) scale(1.02);
+    box-shadow:0 8px 32px rgba(41,151,255,0.12);
+  }
+
+  /* marquee — globals.css 그대로 (-50%, 2벌) */
+  @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+  .marquee-track{display:flex;width:max-content;animation:marquee linear infinite;will-change:transform;}
+  .marquee-track:hover{animation-play-state:paused;}
+  .marquee-track--slow{animation-duration:55s;}
+  .marquee-track--mid{animation-duration:28s;}
+
+  /* fade-in for sections (IntersectionObserver로 제어) */
+  .fade-section{opacity:0;transform:translateY(24px);transition:opacity 0.7s ease, transform 0.7s ease;}
+  .fade-section.visible{opacity:1;transform:translateY(0);}
+`;
+
+export default function App() {
+  const [showBridge, setShowBridge] = useState(false);
+  const [showTagline, setShowTagline] = useState(false);
+  const [testimonials, setTestimonials] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [schools, setSchools] = useState(FALLBACK_SCHOOLS);
+  const [academies, setAcademies] = useState(FALLBACK_ACADEMIES);
+  const [heroStyle, setHeroStyle] = useState({ opacity: 1, transform: 'scale(1)' });
+  const heroRef = useRef(null);
+  const sectionRefs = useRef([]);
+
+  // Bridge + tagline 등장
+  useEffect(() => {
+    const t1 = setTimeout(() => setShowBridge(true), 50);
+    const t2 = setTimeout(() => setShowTagline(true), 50);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // 실제 API — testimonials
+  useEffect(() => {
+    fetch(`${BASE}/api/testimonials?limit=6&random=1`)
+      .then(r => r.json())
+      .then(d => {
+        if (d?.success && d.data?.testimonials?.length > 0) {
+          setTestimonials(d.data.testimonials.map(t => ({
+            text: t.review_text, stars: t.rating, name: t.name, country: t.country,
+          })));
+        } else { setTestimonials(FALLBACK_TESTIMONIALS); }
+      })
+      .catch(() => setTestimonials(FALLBACK_TESTIMONIALS));
+  }, []);
+
+  // 실제 API — jobs
+  useEffect(() => {
+    fetch(`${BASE}/api/jobs?limit=20`)
+      .then(r => r.json())
+      .then(d => {
+        const all = d?.data ?? [];
+        setJobs(all.length > 0 ? all.slice(0, 4) : FALLBACK_JOBS);
+      })
+      .catch(() => setJobs(FALLBACK_JOBS));
+  }, []);
+
+  // 실제 API — partners
+  useEffect(() => {
+    fetch(`${BASE}/api/partners`)
+      .then(r => r.json())
+      .then(d => {
+        const partners = d?.data?.partners ?? [];
+        if (partners.length > 0) {
+          const acs = partners.filter(p => p.category === 'academy').map(p => p.name);
+          const scs = partners.filter(p => p.category === 'school').map(p => p.name);
+          if (acs.length > 0) setAcademies(acs);
+          if (scs.length > 0) setSchools(scs);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Hero parallax (scroll → opacity + scale)
+  useEffect(() => {
+    const onScroll = () => {
+      if (!heroRef.current) return;
+      const rect = heroRef.current.getBoundingClientRect();
+      const h = heroRef.current.offsetHeight;
+      const progress = Math.max(0, Math.min(1, -rect.top / (h * 0.6)));
+      setHeroStyle({
+        opacity: 1 - progress,
+        transform: `scale(${1 - progress * 0.05})`,
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // 섹션 fade-in (IntersectionObserver)
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) e.target.classList.add('visible');
+      }),
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    );
+    sectionRefs.current.forEach(el => el && obs.observe(el));
+    return () => obs.disconnect();
+  }, [testimonials, jobs]);
+
+  const addRef = el => { if (el && !sectionRefs.current.includes(el)) sectionRefs.current.push(el); };
+  const formatAge = ages => ages.map(a => AGE_LABELS[a] || a).join(' · ');
+
+  return (
+    <div style={{ fontFamily:"'Pretendard Variable',Pretendard,-apple-system,sans-serif", overflowX:'hidden' }}>
+      <style>{css}</style>
+
+      {/* ── NAVBAR ── */}
+      <nav className="nav-glass">
+        <div style={{ maxWidth:1200, margin:'0 auto', padding:'0 16px', height:58, display:'flex', alignItems:'center' }}>
+          <span style={{ fontSize:21, fontWeight:600, letterSpacing:0, color:'#1d1d1f', marginRight:'auto', cursor:'pointer' }}>BRIDGE</span>
+          <div style={{ display:'flex', alignItems:'stretch', height:'100%', gap:0 }}>
+            {NAV_LINKS.map(l => <a key={l} href="#" className="nav-link">{l}</a>)}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginLeft:12 }}>
+            <a href="#" className="nav-cta-apply">Apply</a>
+            <a href="#" className="nav-cta-inquiry">원어민채용의뢰</a>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── HERO ── */}
+      <section ref={heroRef} style={{ position:'relative', height:'85vh', minHeight:500, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'#000' }}>
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #000 0%, #0a0a0a 50%, #000 100%)' }} />
+
+        {/* 지구 사진 — 실제 사이트 파일 */}
+        <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none', zIndex:0 }}>
+          <img className="earth-photo-img" src={`${BASE}/earth-bg.jpg`} alt="" />
+          <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #000 0%, #000 22%, rgba(0,0,0,0.82) 40%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.3) 80%, rgba(0,0,0,0.5) 100%)' }} />
+        </div>
+
+        {/* 별 */}
+        {[
+          {top:'15%',left:'5%',sz:2.5,dl:0,dr:1.8},{top:'22%',left:'85%',sz:3.5,dl:0.6,dr:1.5},
+          {top:'10%',left:'50%',sz:2,dl:0.3,dr:2.0},{top:'28%',left:'30%',sz:3,dl:1.0,dr:1.6},
+          {top:'18%',left:'70%',sz:2.8,dl:0.4,dr:1.9},{top:'30%',left:'10%',sz:2.2,dl:0.8,dr:1.7},
+          {top:'12%',left:'92%',sz:3.2,dl:1.2,dr:1.4},
+        ].map((s,i) => (
+          <div key={i} className="hero-star" style={{ top:s.top, left:s.left, width:s.sz, height:s.sz, animationDelay:`${s.dl}s`, animationDuration:`${s.dr}s`, zIndex:1 }} />
+        ))}
+
+        {/* 현수교 SVG */}
+        <div className={showBridge?'bridge-active':''} style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none', zIndex:0 }}>
+          <svg viewBox="0 0 1400 800" style={{ position:'absolute', width:'100%', height:'100%' }} preserveAspectRatio="xMidYMid slice" fill="none">
+            <defs>
+              <filter id="cableGlow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              <filter id="sweepGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              <mask id="taperMask">
+                <linearGradient id="taperGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stopColor="white" stopOpacity="0"/>
+                  <stop offset="0.12" stopColor="white" stopOpacity="0.25"/>
+                  <stop offset="0.5" stopColor="white" stopOpacity="1"/>
+                  <stop offset="0.88" stopColor="white" stopOpacity="0.25"/>
+                  <stop offset="1" stopColor="white" stopOpacity="0"/>
+                </linearGradient>
+                <rect x="0" y="0" width="1400" height="800" fill="url(#taperGrad)"/>
+              </mask>
+              <linearGradient id="postSweep" gradientUnits="userSpaceOnUse" x1="-700" y1="400" x2="0" y2="400">
+                <stop offset="0" stopColor="white" stopOpacity="0"/>
+                <stop offset="0.5" stopColor="white" stopOpacity="0.35"/>
+                <stop offset="1" stopColor="white" stopOpacity="0"/>
+                <animate attributeName="x1" values="-700;1400" dur="3.5s" repeatCount="indefinite" begin="3s"/>
+                <animate attributeName="x2" values="0;2100" dur="3.5s" repeatCount="indefinite" begin="3s"/>
+              </linearGradient>
+            </defs>
+            <g className="bridge-arc-group">
+              <path d="M 0 520 Q 700 180, 1400 520" className="bridge-arc" stroke="white" strokeWidth={0.8} strokeLinecap="round" filter="url(#cableGlow)"/>
+              <path d="M 0 520 Q 700 180, 1400 520" className="bridge-arc" stroke="white" strokeWidth={2.5} strokeLinecap="round" mask="url(#taperMask)" filter="url(#cableGlow)"/>
+            </g>
+            <path d="M 0 520 Q 700 180, 1400 520" className="bridge-sweep" stroke="rgba(255,255,255,0.5)" strokeWidth={3} strokeLinecap="round" filter="url(#sweepGlow)"/>
+            <line x1={420} y1={520} x2={420} y2={280} className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round"/>
+            <line x1={980} y1={520} x2={980} y2={280} className="bridge-tower" stroke="white" strokeWidth={2} strokeLinecap="round"/>
+            <line x1={420} y1={280} x2={280} y2={410} className="bridge-stay bridge-stay-l1" stroke="white" strokeWidth={0.8} strokeLinecap="round" style={{'--len':'191'}}/>
+            <line x1={420} y1={280} x2={200} y2={465} className="bridge-stay bridge-stay-l2" stroke="white" strokeWidth={0.8} strokeLinecap="round" style={{'--len':'287'}}/>
+            <line x1={980} y1={280} x2={1120} y2={410} className="bridge-stay bridge-stay-r1" stroke="white" strokeWidth={0.8} strokeLinecap="round" style={{'--len':'191'}}/>
+            <line x1={980} y1={280} x2={1200} y2={465} className="bridge-stay bridge-stay-r2" stroke="white" strokeWidth={0.8} strokeLinecap="round" style={{'--len':'287'}}/>
+            <path d="M 0 520 Q 700 180, 1400 520" stroke="url(#postSweep)" strokeWidth={4} strokeLinecap="round" opacity={0.5} filter="url(#cableGlow)"/>
+          </svg>
+        </div>
+
+        {/* BRIDGE 텍스트 — parallax */}
+        <div style={{ position:'relative', zIndex:10, textAlign:'center', padding:'0 16px', ...heroStyle }}>
+          <h1 style={{ fontSize:'clamp(70px,14vw,180px)', fontWeight:600, color:'white', lineHeight:1, letterSpacing:'-0.02em', marginBottom:24 }}>
+            BRIDGE
+          </h1>
+          <p style={{ fontSize:'clamp(18px,2.5vw,28px)', fontWeight:300, letterSpacing:'-0.01em' }}>
+            {'A career that changes your life'.split('').map((c,i) => (
+              <span key={i} className={showTagline?'letter-star':''}
+                style={{ opacity:showTagline?undefined:0, animationDelay:showTagline?`${i*0.025}s`:undefined, display:'inline-block', minWidth:c===' '?'0.3em':undefined }}>
+                {c}
+              </span>
+            ))}
+          </p>
+        </div>
+
+        {/* 스크롤 인디케이터 */}
+        <div style={{ position:'absolute', bottom:32, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:12, zIndex:10 }}>
+          <span className="scroll-pulse" style={{ fontSize:12, letterSpacing:'0.3em', textTransform:'uppercase', color:'#636366', fontWeight:600 }}>Scroll</span>
+          <div className="scroll-bounce">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#636366">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TESTIMONIALS ── */}
+      {testimonials.length > 0 && (
+        <section style={{ background:'#000', padding:'96px 16px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ maxWidth:1120, margin:'0 auto' }}>
+            <div ref={addRef} className="fade-section" style={{ textAlign:'center', marginBottom:64 }}>
+              <p style={{ color:'#2997ff', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.2em', marginBottom:12 }}>Testimonials</p>
+              <h2 style={{ fontSize:'clamp(28px,4vw,42px)', fontWeight:700, color:'white', letterSpacing:'-0.02em' }}>Hear from Our Teachers</h2>
+            </div>
+            <div ref={addRef} className="fade-section" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:20 }}>
+              {testimonials.slice(0,6).map((t,i) => (
+                <div key={i} className="testimonial-glass">
+                  <div>
+                    <span style={{ color:'rgba(41,151,255,0.4)', fontSize:36, fontFamily:'serif', lineHeight:1, display:'block', marginBottom:12 }}>"</span>
+                    <p style={{ color:'#d1d1d6', fontSize:14, lineHeight:1.7 }}>{t.text}</p>
+                  </div>
+                  <div style={{ marginTop:16, paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div style={{ display:'flex', gap:2 }}>
+                      {[0,1,2,3,4].map(s => (
+                        <svg key={s} width="14" height="14" viewBox="0 0 20 20" fill={s<t.stars?'#facc15':'#3f3f46'}>
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                      ))}
+                    </div>
+                    <p style={{ color:'#86868b', fontSize:12, fontWeight:600 }}>{t.name} · {t.country}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ textAlign:'center', marginTop:40 }}>
+              <a href="#" style={{ fontSize:14, fontWeight:500, color:'rgba(255,255,255,0.5)', textDecoration:'underline', textUnderlineOffset:4 }}>See more reviews →</a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── FEATURED POSITIONS ── */}
+      {jobs.length > 0 && (
+        <section style={{ background:'#0a0a0a', padding:'96px 16px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ maxWidth:1120, margin:'0 auto' }}>
+            <div ref={addRef} className="fade-section" style={{ textAlign:'center', marginBottom:64 }}>
+              <p style={{ color:'#2997ff', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.2em', marginBottom:12 }}>Opportunities</p>
+              <h2 style={{ fontSize:'clamp(28px,4vw,42px)', fontWeight:700, color:'white', letterSpacing:'-0.02em' }}>Featured Positions</h2>
+            </div>
+            <div ref={addRef} className="fade-section" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
+              {jobs.slice(0,4).map((job,i) => (
+                <a key={job.job_id} href="#" className="shimmer-card">
+                  <div style={{ marginBottom:20 }}>
+                    <span style={{ display:'inline-block', fontSize:11, fontWeight:600, padding:'4px 12px', borderRadius:20, background:'rgba(255,255,255,0.08)', color:'#a1a1a6', marginBottom:8 }}>{job.location??'Korea'}</span>
+                    {job.is_hot && <span style={{ marginLeft:8, fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20, background:'rgba(239,68,68,0.2)', color:'#f87171', textTransform:'uppercase', verticalAlign:'middle' }}>Hot</span>}
+                    <p style={{ color:'#2997ff', fontSize:12, fontWeight:700, letterSpacing:'0.05em', marginTop:4 }}>Job #{job.job_id}</p>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {job.teaching_age?.length>0 && (
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:13 }}>
+                        <span style={{ color:'#636366', fontWeight:500, flexShrink:0 }}>Student Age</span>
+                        <span style={{ color:'#a1a1a6', textAlign:'right' }}>{formatAge(job.teaching_age)}</span>
+                      </div>
+                    )}
+                    {job.working_hours && (
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:13 }}>
+                        <span style={{ color:'#636366', fontWeight:500, flexShrink:0 }}>Hours</span>
+                        <span style={{ color:'#a1a1a6', textAlign:'right' }}>{job.working_hours}</span>
+                      </div>
+                    )}
+                    {job.monthly_salary && (
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:13 }}>
+                        <span style={{ color:'#636366', fontWeight:500, flexShrink:0 }}>Salary</span>
+                        <span style={{ color:'#a1a1a6', textAlign:'right' }}>{job.monthly_salary}</span>
+                      </div>
+                    )}
+                    {job.housing && (
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:13 }}>
+                        <span style={{ color:'#636366', fontWeight:500, flexShrink:0 }}>Benefits</span>
+                        <span style={{ color:'#a1a1a6', textAlign:'right' }}>{job.housing}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(255,255,255,0.06)', textAlign:'right' }}>
+                    <span style={{ fontSize:12, fontWeight:600, color:'#2997ff' }}>View details →</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+            <div style={{ textAlign:'center', marginTop:48 }}>
+              <a href="#" style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'14px 32px', fontSize:14, fontWeight:600, border:'1px solid rgba(255,255,255,0.15)', color:'white', borderRadius:999, textDecoration:'none' }}>View all positions →</a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── PARTNER MARQUEE ── */}
+      <section style={{ background:'#111111', padding:'56px 0', overflow:'hidden', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+        {/* Row 1 — Schools (55s, 2벌, -50%) */}
+        <div style={{ marginBottom:16 }}>
+          <p style={{ fontSize:11, fontWeight:600, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', letterSpacing:'0.15em', textAlign:'center', marginBottom:12 }}>Schools &amp; Institutions</p>
+          <div style={{ overflow:'hidden' }}>
+            <div className="marquee-track marquee-track--slow" style={{ display:'flex' }}>
+              {[...schools,...schools].map((n,i) => (
+                <span key={i} style={{ flexShrink:0, padding:'0 32px', fontSize:13.6, fontWeight:600, whiteSpace:'nowrap', color:'rgba(255,255,255,0.5)', letterSpacing:'0.05em' }}>{n}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Row 2 — Academies (28s, 2벌, -50%) */}
+        <div>
+          <p style={{ fontSize:11, fontWeight:600, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', letterSpacing:'0.15em', textAlign:'center', marginBottom:12 }}>Our Partner</p>
+          <div style={{ overflow:'hidden' }}>
+            <div className="marquee-track marquee-track--mid" style={{ display:'flex' }}>
+              {[...academies,...academies].map((n,i) => (
+                <span key={i} style={{ flexShrink:0, padding:'0 32px', fontSize:13.6, fontWeight:600, whiteSpace:'nowrap', color:'rgba(255,255,255,0.5)', letterSpacing:'0.05em' }}>{n}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ── */}
+      <section style={{ padding:'80px 16px', borderTop:'1px solid rgba(255,255,255,0.06)', background:'linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)' }}>
+        <div ref={addRef} className="fade-section" style={{ maxWidth:700, margin:'0 auto', textAlign:'center' }}>
+          <h2 style={{ fontSize:'clamp(32px,5vw,56px)', fontWeight:600, color:'white', letterSpacing:'-0.02em', lineHeight:1.1, marginBottom:20 }}>Start Your Journey</h2>
+          <p style={{ color:'rgba(255,255,255,0.6)', fontSize:17, lineHeight:1.6, maxWidth:480, margin:'0 auto 48px' }}>
+            Whether you're a teacher or an employer, we'll find the perfect match.
+          </p>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:16, justifyContent:'center' }}>
+            <a href="#" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'16px 40px', fontSize:16, fontWeight:600, borderRadius:8, background:'#2563EB', color:'white', textDecoration:'none', minWidth:220, boxShadow:'0 8px 30px rgba(37,99,235,0.45)' }}>I'm a Teacher</a>
+            <a href="#" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'16px 40px', fontSize:16, fontWeight:600, borderRadius:8, border:'2px solid white', color:'white', textDecoration:'none', minWidth:220, background:'transparent' }}>I'm Hiring</a>
+          </div>
+          <p style={{ marginTop:40, color:'rgba(255,255,255,0.3)', fontSize:14 }}>bridgejobkr@gmail.com</p>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ background:'#f5f5f7', borderTop:'1px solid #e5e7eb' }}>
+        <div style={{ maxWidth:1200, margin:'0 auto', padding:'32px 16px' }}>
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', justifyContent:'space-between', gap:16, fontSize:12, color:'#6e6e73' }}>
+            <div><span style={{ fontWeight:600, color:'#1d1d1f' }}>BRIDGE</span> — Korea ESL Recruitment Platform</div>
+            <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+              {['About us','Korea','Visa','Job Board'].map(l => (
+                <a key={l} href="#" style={{ color:'#6e6e73', textDecoration:'none' }}>{l}</a>
+              ))}
+              <span>|</span>
+              <a href="#" style={{ color:'#6e6e73', textDecoration:'none' }}>Apply</a>
+              <a href="#" style={{ color:'#6e6e73', textDecoration:'none' }}>Hire</a>
+            </div>
+          </div>
+          <div style={{ textAlign:'center', fontSize:11, color:'#86868b', marginTop:24 }}>
+            © 2026 BRIDGE Recruitment · bridgejob.co.kr
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
