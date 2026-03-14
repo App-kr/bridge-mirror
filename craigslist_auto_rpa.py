@@ -490,7 +490,10 @@ def main():
     GRAY2 = "#3A3A3C"
     FONT  = "Segoe UI"
 
-    W, H = 460, 560
+    # 계정별 고유 색상 (1→파랑, 2→초록, 3→오렌지, 4→보라)
+    ACCT_COLORS = ["#0A84FF", "#30D158", "#FF9F0A", "#BF5AF2"]
+
+    W, H = 460, 580
     root = tk.Tk()
     root.title("BRIDGE RPA")
     root.configure(bg=BG)
@@ -507,8 +510,69 @@ def main():
     main_frame = tk.Frame(root, bg=BG)
     main_frame.pack(fill="both", expand=True, padx=PAD, pady=22)
 
-    # ── Helper: pill-button grid ────────────────────────────────────
-    def make_pill_grid(parent, items, var, cols=2):
+    # ── Helper: 계정 컬러 카드 그리드 ──────────────────────────────
+    def make_account_cards(parent):
+        card_frames = []
+
+        def refresh():
+            sel = acct_var.get()
+            for idx, (outer, inner, num_lbl, tag_lbl) in enumerate(card_frames):
+                color = ACCT_COLORS[idx]
+                if sel == idx:
+                    # 선택됨: 색상 배경
+                    outer.configure(bg=color)
+                    inner.configure(bg=color)
+                    num_lbl.configure(bg=color, fg=WHITE)
+                    tag_lbl.configure(bg=color, fg=WHITE)
+                else:
+                    # 미선택: 어두운 카드 + 왼쪽 컬러 바만
+                    outer.configure(bg=color)
+                    inner.configure(bg=CARD)
+                    num_lbl.configure(bg=CARD, fg=GRAY1)
+                    tag_lbl.configure(bg=CARD, fg=GRAY2)
+
+        def select(val):
+            acct_var.set(val)
+            refresh()
+
+        grid = tk.Frame(parent, bg=BG)
+        grid.pack(fill="x")
+        for idx, acct in enumerate(ACCOUNTS):
+            r, c = divmod(idx, 2)
+            color = ACCT_COLORS[idx]
+            num   = str(idx + 1)
+            label = acct["label"]
+
+            # outer = 컬러 테두리(왼쪽 4px 바 역할)
+            outer = tk.Frame(grid, bg=color, padx=4, pady=0)
+            outer.grid(row=r, column=c, padx=4, pady=4, sticky="ew")
+
+            # inner = 카드 본체
+            inner = tk.Frame(outer, bg=CARD, padx=10, pady=10)
+            inner.pack(fill="both")
+
+            num_lbl = tk.Label(inner, text=num, bg=CARD, fg=GRAY1,
+                               font=(FONT, 20, "bold"), anchor="w")
+            num_lbl.pack(fill="x")
+
+            tag_lbl = tk.Label(inner, text=label, bg=CARD, fg=GRAY2,
+                               font=(FONT, 9), anchor="w")
+            tag_lbl.pack(fill="x")
+
+            card_frames.append((outer, inner, num_lbl, tag_lbl))
+
+            # 클릭 바인딩 (프레임 + 레이블 모두)
+            for widget in (outer, inner, num_lbl, tag_lbl):
+                widget.bind("<Button-1>", lambda e, v=idx: select(v))
+                widget.configure(cursor="hand2")
+
+        for col in range(2):
+            grid.columnconfigure(col, weight=1)
+
+        refresh()
+
+    # ── Helper: pill-button grid (게시 수 선택용) ───────────────────
+    def make_pill_grid(parent, items, var, cols=4):
         buttons = []
 
         def refresh():
@@ -548,22 +612,18 @@ def main():
 
         # Header
         hf = tk.Frame(main_frame, bg=BG)
-        hf.pack(fill="x", pady=(0, 24))
+        hf.pack(fill="x", pady=(0, 20))
         tk.Label(hf, text="BRIDGE", bg=BG, fg=WHITE,
                  font=(FONT, 22, "bold")).pack(side="left")
         tk.Label(hf, text="  RPA", bg=BG, fg=GRAY1,
                  font=(FONT, 22)).pack(side="left")
 
-        # Account section
+        # Account section — 컬러 카드
         tk.Label(main_frame, text="ACCOUNT", bg=BG, fg=GRAY1,
                  font=(FONT, 10)).pack(anchor="w", pady=(0, 6))
-        make_pill_grid(
-            main_frame,
-            [(a["label"], i) for i, a in enumerate(ACCOUNTS)],
-            acct_var, cols=2,
-        )
+        make_account_cards(main_frame)
 
-        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=18)
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=16)
 
         # Count section
         tk.Label(main_frame, text="POSTS", bg=BG, fg=GRAY1,
@@ -574,16 +634,26 @@ def main():
             cnt_var, cols=4,
         )
 
-        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=18)
+        tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=16)
 
-        # Buttons
-        tk.Button(
+        # Start 버튼 — 선택된 계정 색상으로
+        def _start():
+            color = ACCT_COLORS[acct_var.get()]
+            _spawn_worker(cnt_var.get(), acct_var.get())
+
+        start_btn = tk.Button(
             main_frame, text="▶  Start Posting",
-            bg=BLUE, fg=WHITE, font=(FONT, 13, "bold"),
+            bg=ACCT_COLORS[acct_var.get()], fg=WHITE, font=(FONT, 13, "bold"),
             relief="flat", bd=0, cursor="hand2", pady=14,
-            activebackground="#0060CC", activeforeground=WHITE,
-            command=lambda: _spawn_worker(cnt_var.get(), acct_var.get()),
-        ).pack(fill="x", pady=(0, 8))
+            activeforeground=WHITE,
+            command=_start,
+        )
+        start_btn.pack(fill="x", pady=(0, 8))
+
+        # 계정 선택 시 버튼 색상도 갱신
+        def _on_acct_change(*_):
+            start_btn.configure(bg=ACCT_COLORS[acct_var.get()])
+        acct_var.trace_add("write", _on_acct_change)
 
         tk.Button(
             main_frame, text="⏰  Schedule Daily  (4:00 PM)",
@@ -597,7 +667,8 @@ def main():
     _anim_id = [None]
     _poll_id = [None]
 
-    def show_working(acct_label: str, total: int):
+    def show_working(acct_label: str, total: int, acct_idx: int = 0):
+        acct_color = ACCT_COLORS[acct_idx] if 0 <= acct_idx < len(ACCT_COLORS) else BLUE
         if _anim_id[0]:
             root.after_cancel(_anim_id[0])
         if _poll_id[0]:
@@ -605,16 +676,17 @@ def main():
         for w in main_frame.winfo_children():
             w.destroy()
 
-        # Header
+        # Header — 계정 색상 왼쪽 바
         hf = tk.Frame(main_frame, bg=BG)
         hf.pack(fill="x", pady=(0, 4))
+        tk.Frame(hf, bg=acct_color, width=5).pack(side="left", fill="y", padx=(0, 10))
         tk.Label(hf, text="BRIDGE", bg=BG, fg=WHITE,
                  font=(FONT, 22, "bold")).pack(side="left")
         tk.Label(hf, text="  RPA", bg=BG, fg=GRAY1,
                  font=(FONT, 22)).pack(side="left")
 
         tk.Label(main_frame, text=f"{acct_label}  ·  {total} posts",
-                 bg=BG, fg=GRAY1, font=(FONT, 11)).pack(anchor="w", pady=(2, 20))
+                 bg=BG, fg=acct_color, font=(FONT, 11, "bold")).pack(anchor="w", pady=(2, 20))
 
         tk.Frame(main_frame, bg=GRAY2, height=1).pack(fill="x", pady=(0, 28))
 
@@ -634,7 +706,7 @@ def main():
             dx = CX - (N_DOTS - 1) * SPACING // 2 + i * SPACING
             oid = dot_cv.create_oval(dx - DOT_R, CY - DOT_R,
                                      dx + DOT_R, CY + DOT_R,
-                                     fill=BLUE, outline="")
+                                     fill=acct_color, outline="")
             dot_ids.append((dx, oid))
 
         phase = [0.0]
@@ -718,7 +790,7 @@ def main():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        show_working(acct_label, limit)
+        show_working(acct_label, limit, acct_idx)
 
     show_selection()
     root.mainloop()
