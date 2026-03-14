@@ -12,29 +12,27 @@
    - 좌우 mask: 양쪽 끝 자연스럽게 소멸 */
 .earth-globe-wrap {
   position: absolute;
-  bottom: -6%;
+  top: 50%;
   left: 50%;
-  width: 100vw;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   perspective: 2400px;
+  pointer-events: none;
   -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
   mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
-  pointer-events: none;
 }
 
 .earth-globe-img {
   display: block;
-  width: 220%;
+  width: 80vw;
   height: auto;
-  margin-left: -60%;
-  opacity: 0.48;
+  opacity: 0.5;
   backface-visibility: visible;
   animation: earthGlobeSpin 35s linear infinite;
 }
 
 @keyframes earthGlobeSpin {
-  from { transform: scaleY(0.46) rotateY(0deg); }
-  to   { transform: scaleY(0.46) rotateY(-360deg); }
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(-360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -20,6 +20,7 @@ import {
   defaultViewport,
 } from '@/lib/animations'
 import { useEditMode } from '@/components/EditModeBar'
+import EarthGlobe from '@/components/EarthGlobe'
 import { RefreshCw } from 'lucide-react'
 import { seededShuffle } from '@/lib/seededShuffle'
 import { TESTIMONIALS, type TestimonialEntry } from '@/data/testimonials'
@@ -297,16 +298,13 @@ export default function HomePage() {
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
-        {/* ── Earth — Y축 자전 (위치 고정, rotateY로 제자리 회전) ── */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
-          <div className="earth-globe-wrap">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/earth.jpg" alt="" className="earth-globe-img" />
-          </div>
-          {/* 상단 우주 블랙 유지 + 하단 지구와 자연스럽게 블렌딩 */}
+        {/* ── Earth — 3D 구체 상반구 (z:0, 다리 아래) ── */}
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+          <EarthGlobe />
+          {/* 상단 블랙 유지 + 하단 자연스럽게 블렌딩 */}
           <div style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(to bottom, #000 0%, #000 28%, rgba(0,0,0,0.55) 42%, rgba(0,0,0,0.08) 52%, rgba(0,0,0,0.12) 72%, rgba(0,0,0,0.55) 88%, #000 100%)',
+            background: 'linear-gradient(to bottom, #000 0%, #000 10%, rgba(0,0,0,0.25) 32%, rgba(0,0,0,0) 48%, rgba(0,0,0,0.2) 65%, rgba(0,0,0,0.65) 82%, #000 100%)',
           }} />
         </div>
 
