@@ -37,12 +37,12 @@ export default function CommunityPage() {
       </div>
 
       {/* Hub Cards */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-center gap-6 max-w-2xl mx-auto">
         {HUB_CARDS.map((card) => (
           <Link
             key={card.slug}
             href={`/community/${card.slug}`}
-            className={`group relative flex flex-col items-center text-center rounded-3xl border border-gray-200 ${card.hoverBorder} bg-gradient-to-b ${card.gradient} p-8 sm:p-10 transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}
+            className={`group relative flex flex-col items-center text-center rounded-3xl border border-gray-200 ${card.hoverBorder} bg-gradient-to-b ${card.gradient} p-8 sm:p-10 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 flex-1`}
           >
             {/* Icon */}
             <div className={`${card.iconBg} w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110`}>
