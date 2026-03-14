@@ -5,15 +5,16 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 base = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' python 설치 경로에서 pythonw.exe 자동 탐지
+' NOTE: Python314(C:\Python314)는 encodings 모듈 손상으로 제외 — 2026-03-14
 Dim c(7), i
-c(0) = "C:\Python314\pythonw.exe"
+c(0) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python313\pythonw.exe"
 c(1) = "C:\Python313\pythonw.exe"
-c(2) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python314\pythonw.exe"
-c(3) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python313\pythonw.exe"
-c(4) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312\pythonw.exe"
-c(5) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python311\pythonw.exe"
-c(6) = "C:\Python312\pythonw.exe"
-c(7) = "C:\Python311\pythonw.exe"
+c(2) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312\pythonw.exe"
+c(3) = "C:\Python312\pythonw.exe"
+c(4) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python311\pythonw.exe"
+c(5) = "C:\Python311\pythonw.exe"
+c(6) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python314\pythonw.exe"
+c(7) = "C:\Python314\pythonw.exe"
 pythonw = ""
 For i = 0 To 7
     If fso.FileExists(c(i)) Then pythonw = c(i) : Exit For
