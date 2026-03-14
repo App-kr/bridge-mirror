@@ -1925,13 +1925,8 @@ async def admin_confirm_all_new(request: Request):
 async def admin_list_email_templates(request: Request):
     """이메일 템플릿 목록."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute("SELECT * FROM email_templates ORDER BY template_key").fetchall()
-        return ok(data=[dict(r) for r in rows])
-    finally:
-        conn.close()
+    res = get_svc_client().table('email_templates').select('*').order('template_key').execute()
+    return ok(data=(res.data or []))
 
 
 @app.put("/api/admin/email-templates/{template_key}", tags=["admin"])
@@ -1939,34 +1934,21 @@ async def admin_update_email_template(template_key: str, request: Request, body:
     """이메일 템플릿 수정/생성."""
     _check_admin(request)
     now_iso = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    try:
-        conn.execute(
-            """INSERT INTO email_templates (template_key, subject, body_html, updated_at)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(template_key) DO UPDATE SET
-                 subject = excluded.subject,
-                 body_html = excluded.body_html,
-                 updated_at = excluded.updated_at""",
-            (template_key, body.get("subject", ""), body.get("body_html", ""), now_iso),
-        )
-        conn.commit()
-        return ok(message=f"템플릿 '{template_key}' 저장 완료")
-    finally:
-        conn.close()
+    get_svc_client().table('email_templates').upsert({
+        'template_key': template_key,
+        'subject':      body.get("subject", ""),
+        'body_html':    body.get("body_html", ""),
+        'updated_at':   now_iso,
+    }, on_conflict='template_key').execute()
+    return ok(message=f"템플릿 '{template_key}' 저장 완료")
 
 
 @app.get("/api/admin/guide-links", tags=["admin"])
 async def admin_list_guide_links(request: Request):
     """가이드 링크 목록."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute("SELECT * FROM guide_links ORDER BY link_key").fetchall()
-        return ok(data=[dict(r) for r in rows])
-    finally:
-        conn.close()
+    res = get_svc_client().table('guide_links').select('*').order('link_key').execute()
+    return ok(data=(res.data or []))
 
 
 @app.put("/api/admin/guide-links/{link_key}", tags=["admin"])
@@ -1974,21 +1956,13 @@ async def admin_update_guide_link(link_key: str, request: Request, body: dict):
     """가이드 링크 수정/생성."""
     _check_admin(request)
     now_iso = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    try:
-        conn.execute(
-            """INSERT INTO guide_links (link_key, url, label, updated_at)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(link_key) DO UPDATE SET
-                 url = excluded.url,
-                 label = excluded.label,
-                 updated_at = excluded.updated_at""",
-            (link_key, body.get("url", ""), body.get("label", ""), now_iso),
-        )
-        conn.commit()
-        return ok(message=f"링크 '{link_key}' 저장 완료")
-    finally:
-        conn.close()
+    get_svc_client().table('guide_links').upsert({
+        'link_key':   link_key,
+        'url':        body.get("url", ""),
+        'label':      body.get("label", ""),
+        'updated_at': now_iso,
+    }, on_conflict='link_key').execute()
+    return ok(message=f"링크 '{link_key}' 저장 완료")
 
 
 # ── Email Sending API ────────────────────────────────────────────────────────
@@ -2190,11 +2164,11 @@ def _mask_email_for_log(email: str) -> str:
     return f"{local[:3]}***@{domain}"
 
 
-def _load_guide_links(conn: sqlite3.Connection) -> dict:
-    """guide_links 테이블에서 link_key→url 딕셔너리 로드."""
+def _load_guide_links() -> dict:
+    """guide_links Supabase에서 link_key→url 딕셔너리 로드."""
     try:
-        rows = conn.execute("SELECT link_key, url FROM guide_links").fetchall()
-        return {r[0]: r[1] for r in rows}
+        res = get_svc_client().table('guide_links').select('link_key,url').execute()
+        return {r['link_key']: r['url'] for r in (res.data or [])}
     except Exception:
         return {}
 
@@ -2299,17 +2273,16 @@ async def admin_send_email(candidate_id: str, request: Request, body: SendEmailB
             subject = body.custom_subject
             html = body.custom_body
         else:
-            tpl = conn.execute(
-                "SELECT subject, body_html FROM email_templates WHERE template_key = ?",
-                (body.template_key,)
-            ).fetchone()
+            _tpl_res = get_svc_client().table('email_templates').select('subject,body_html') \
+                .eq('template_key', body.template_key).limit(1).execute()
+            tpl = _tpl_res.data[0] if _tpl_res.data else None
             if not tpl:
                 raise HTTPException(status_code=404, detail=f"템플릿 '{body.template_key}'을 찾을 수 없습니다.")
             subject = body.custom_subject or tpl["subject"]
             html = body.custom_body or tpl["body_html"]
 
         # 변수 치환
-        guide_links = _load_guide_links(conn)
+        guide_links = _load_guide_links()
         html = _substitute_vars(html, c, guide_links)
         subject = _substitute_vars(subject, c, guide_links)
 
@@ -2345,14 +2318,13 @@ async def admin_bulk_send(request: Request, body: BulkSendBody):
     conn.row_factory = sqlite3.Row
     try:
         # 템플릿 로드
-        tpl = conn.execute(
-            "SELECT subject, body_html FROM email_templates WHERE template_key = ?",
-            (body.template_key,)
-        ).fetchone()
+        _tpl_res = get_svc_client().table('email_templates').select('subject,body_html') \
+            .eq('template_key', body.template_key).limit(1).execute()
+        tpl = _tpl_res.data[0] if _tpl_res.data else None
         if not tpl:
             raise HTTPException(status_code=404, detail=f"템플릿 '{body.template_key}'을 찾을 수 없습니다.")
 
-        guide_links = _load_guide_links(conn)
+        guide_links = _load_guide_links()
         results = []
 
         for cid in body.candidate_ids:
@@ -2417,9 +2389,9 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
     conn.row_factory = sqlite3.Row
     try:
         # candidate_profile 템플릿 로드
-        tpl = conn.execute(
-            "SELECT subject, body_html FROM email_templates WHERE template_key = 'candidate_profile'"
-        ).fetchone()
+        _tpl_res = get_svc_client().table('email_templates').select('subject,body_html') \
+            .eq('template_key', 'candidate_profile').limit(1).execute()
+        tpl = _tpl_res.data[0] if _tpl_res.data else None
         if not tpl:
             raise HTTPException(status_code=404, detail="candidate_profile 템플릿이 없습니다.")
 
@@ -2437,7 +2409,7 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
             raise HTTPException(status_code=400, detail="유효한 후보자가 없습니다.")
 
         # 템플릿에 프로필 카드 삽입
-        guide_links = _load_guide_links(conn)
+        guide_links = _load_guide_links()
         html = tpl["body_html"].replace("{{profile_cards}}", cards_html)
         subject = tpl["subject"]
 
@@ -2647,9 +2619,9 @@ async def admin_matching_send_profile(request: Request, body: ProfileBroadcastBo
         card_html = _build_profile_card(cand_d)
 
         # 템플릿 로드
-        tpl = conn.execute(
-            "SELECT subject, body_html FROM email_templates WHERE template_key = 'profile_broadcast'"
-        ).fetchone()
+        _tpl_res = get_svc_client().table('email_templates').select('subject,body_html') \
+            .eq('template_key', 'profile_broadcast').limit(1).execute()
+        tpl = _tpl_res.data[0] if _tpl_res.data else None
         if not tpl:
             raise HTTPException(status_code=404, detail="profile_broadcast template not found")
 
@@ -4893,85 +4865,53 @@ class BoardUpdate(BaseModel):
 async def admin_list_boards(request: Request):
     """게시판 목록 (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT * FROM boards ORDER BY sort_order, id"
-        ).fetchall()
-        return ok(data={"boards": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    res = get_svc_client().table('boards').select('*').order('sort_order').order('id').execute()
+    return ok(data={"boards": res.data or []})
 
 
 @app.post("/api/admin/boards", status_code=201, tags=["admin"])
 async def admin_create_board(body: BoardCreate, request: Request):
     """게시판 추가 (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        existing = conn.execute("SELECT id FROM boards WHERE id=?", (body.id,)).fetchone()
-        if existing:
-            raise HTTPException(409, f"Board '{body.id}' already exists")
-        conn.execute(
-            "INSERT INTO boards (id, label, label_kr, display_mode) VALUES (?,?,?,?)",
-            (body.id, body.label, body.label_kr, body.display_mode),
-        )
-        conn.commit()
-        return ok(data={"id": body.id}, message="Board created")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    existing = svc.table('boards').select('id').eq('id', body.id).limit(1).execute()
+    if existing.data:
+        raise HTTPException(409, f"Board '{body.id}' already exists")
+    svc.table('boards').insert({
+        'id': body.id, 'label': body.label,
+        'label_kr': body.label_kr, 'display_mode': body.display_mode,
+    }).execute()
+    return ok(data={"id": body.id}, message="Board created")
 
 
 @app.put("/api/admin/boards/{board_id}", tags=["admin"])
 async def admin_update_board(board_id: str, body: BoardUpdate, request: Request):
     """게시판 설정 변경 (관리자)."""
     _check_admin(request)
-    updates: list[str] = []
-    params: list = []
-    if body.label is not None:
-        updates.append("label=?"); params.append(body.label)
-    if body.label_kr is not None:
-        updates.append("label_kr=?"); params.append(body.label_kr)
-    if body.display_mode is not None:
-        updates.append("display_mode=?"); params.append(body.display_mode)
-    if body.sort_order is not None:
-        updates.append("sort_order=?"); params.append(body.sort_order)
-    if body.is_hidden is not None:
-        updates.append("is_hidden=?"); params.append(body.is_hidden)
+    updates: dict = {}
+    if body.label        is not None: updates['label']        = body.label
+    if body.label_kr     is not None: updates['label_kr']     = body.label_kr
+    if body.display_mode is not None: updates['display_mode'] = body.display_mode
+    if body.sort_order   is not None: updates['sort_order']   = body.sort_order
+    if body.is_hidden    is not None: updates['is_hidden']    = body.is_hidden
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
-    params.append(board_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM boards WHERE id=?", (board_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Board not found")
-        conn.execute(f"UPDATE boards SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Board '{board_id}' updated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('boards').select('id').eq('id', board_id).limit(1).execute().data:
+        raise HTTPException(404, "Board not found")
+    svc.table('boards').update(updates).eq('id', board_id).execute()
+    return ok(message=f"Board '{board_id}' updated")
 
 
 @app.delete("/api/admin/boards/{board_id}", tags=["admin"])
 async def admin_delete_board(board_id: str, request: Request):
     """게시판 숨김 (soft delete: is_hidden=1)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM boards WHERE id=?", (board_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Board not found")
-        conn.execute("UPDATE boards SET is_hidden=1 WHERE id=?", (board_id,))
-        conn.commit()
-        return ok(message=f"Board '{board_id}' hidden")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('boards').select('id').eq('id', board_id).limit(1).execute().data:
+        raise HTTPException(404, "Board not found")
+    svc.table('boards').update({'is_hidden': 1}).eq('id', board_id).execute()
+    return ok(message=f"Board '{board_id}' hidden")
 
 
 # ── Admin: Banners 관리 ───────────────────────────────────────────────────────
@@ -5017,83 +4957,51 @@ class BannerUpdate(BaseModel):
 async def admin_list_banners(request: Request):
     """배너 목록 (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT * FROM banners ORDER BY sort_order, id"
-        ).fetchall()
-        return ok(data={"banners": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    res = get_svc_client().table('banners').select('*').order('sort_order').order('id').execute()
+    return ok(data={"banners": res.data or []})
 
 
 @app.post("/api/admin/banners", status_code=201, tags=["admin"])
 async def admin_create_banner(body: BannerCreate, request: Request):
     """배너 추가 (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        cur = conn.execute(
-            "INSERT INTO banners (image_url, link_url, position, is_active, sort_order) VALUES (?,?,?,?,?)",
-            (body.image_url, body.link_url, body.position, body.is_active, body.sort_order),
-        )
-        new_id = cur.lastrowid
-        conn.commit()
-        return ok(data={"id": new_id}, message="Banner created")
-    finally:
-        conn.close()
+    res = get_svc_client().table('banners').insert({
+        'image_url': body.image_url, 'link_url': body.link_url,
+        'position':  body.position,  'is_active': body.is_active,
+        'sort_order': body.sort_order,
+    }).execute()
+    new_id = res.data[0]['id'] if res.data else None
+    return ok(data={"id": new_id}, message="Banner created")
 
 
 @app.put("/api/admin/banners/{banner_id}", tags=["admin"])
 async def admin_update_banner(banner_id: int, body: BannerUpdate, request: Request):
     """배너 수정 (관리자)."""
     _check_admin(request)
-    updates: list[str] = []
-    params: list = []
-    if body.image_url is not None:
-        updates.append("image_url=?"); params.append(body.image_url)
-    if body.link_url is not None:
-        updates.append("link_url=?"); params.append(body.link_url)
-    if body.position is not None:
-        updates.append("position=?"); params.append(body.position)
-    if body.is_active is not None:
-        updates.append("is_active=?"); params.append(body.is_active)
-    if body.sort_order is not None:
-        updates.append("sort_order=?"); params.append(body.sort_order)
+    updates: dict = {}
+    if body.image_url  is not None: updates['image_url']  = body.image_url
+    if body.link_url   is not None: updates['link_url']   = body.link_url
+    if body.position   is not None: updates['position']   = body.position
+    if body.is_active  is not None: updates['is_active']  = body.is_active
+    if body.sort_order is not None: updates['sort_order'] = body.sort_order
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
-    params.append(banner_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM banners WHERE id=?", (banner_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Banner not found")
-        conn.execute(f"UPDATE banners SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Banner #{banner_id} updated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('banners').select('id').eq('id', banner_id).limit(1).execute().data:
+        raise HTTPException(404, "Banner not found")
+    svc.table('banners').update(updates).eq('id', banner_id).execute()
+    return ok(message=f"Banner #{banner_id} updated")
 
 
 @app.delete("/api/admin/banners/{banner_id}", tags=["admin"])
 async def admin_delete_banner(banner_id: int, request: Request):
     """배너 비활성화 (soft delete: is_active=0)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute("SELECT id FROM banners WHERE id=?", (banner_id,)).fetchone()
-        if not r:
-            raise HTTPException(404, "Banner not found")
-        conn.execute("UPDATE banners SET is_active=0 WHERE id=?", (banner_id,))
-        conn.commit()
-        return ok(message=f"Banner #{banner_id} deactivated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('banners').select('id').eq('id', banner_id).limit(1).execute().data:
+        raise HTTPException(404, "Banner not found")
+    svc.table('banners').update({'is_active': 0}).eq('id', banner_id).execute()
+    return ok(message=f"Banner #{banner_id} deactivated")
 
 
 # ── Admin: Posts PUT/DELETE alias ─────────────────────────────────────────────
@@ -5235,106 +5143,65 @@ class PartnerUpdate(BaseModel):
 @app.get("/api/partners", tags=["public"])
 async def public_list_partners():
     """공개 파트너 목록 (활성 파트너만)."""
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT id, name, category, logo_url, website, sort_order "
-            "FROM site_partners WHERE is_active=1 AND is_deleted=0 ORDER BY sort_order, name"
-        ).fetchall()
-        return ok(data={"partners": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    res = get_svc_client().table('site_partners') \
+        .select('id,name,category,logo_url,website,sort_order') \
+        .eq('is_active', 1).eq('is_deleted', 0) \
+        .order('sort_order').order('name').execute()
+    return ok(data={"partners": res.data or []})
 
 
 @app.get("/api/admin/partners", tags=["admin"])
 async def admin_list_partners(request: Request):
     """파트너 목록 (관리자 — 비활성 포함)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT * FROM site_partners WHERE is_deleted=0 ORDER BY sort_order, name"
-        ).fetchall()
-        return ok(data={"partners": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    res = get_svc_client().table('site_partners') \
+        .select('*').eq('is_deleted', 0) \
+        .order('sort_order').order('name').execute()
+    return ok(data={"partners": res.data or []})
 
 
 @app.post("/api/admin/partners", status_code=201, tags=["admin"])
 async def admin_create_partner(body: PartnerCreate, request: Request):
     """파트너 추가 (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        conn.execute(
-            "INSERT INTO site_partners (name, category, logo_url, website, sort_order) VALUES (?,?,?,?,?)",
-            (body.name, body.category, body.logo_url, body.website, body.sort_order or 0),
-        )
-        conn.commit()
-        return ok(message="Partner created")
-    finally:
-        conn.close()
+    res = get_svc_client().table('site_partners').insert({
+        'name': body.name, 'category': body.category,
+        'logo_url': body.logo_url, 'website': body.website,
+        'sort_order': body.sort_order or 0,
+    }).execute()
+    new_id = res.data[0]['id'] if res.data else None
+    return ok(data={"id": new_id}, message="Partner created")
 
 
 @app.put("/api/admin/partners/{partner_id}", tags=["admin"])
 async def admin_update_partner(partner_id: int, body: PartnerUpdate, request: Request):
     """파트너 수정 (관리자)."""
     _check_admin(request)
-    updates: list[str] = []
-    params: list = []
-    if body.name is not None:
-        updates.append("name=?"); params.append(body.name)
-    if body.category is not None:
-        updates.append("category=?"); params.append(body.category)
-    if body.logo_url is not None:
-        updates.append("logo_url=?"); params.append(body.logo_url)
-    if body.website is not None:
-        updates.append("website=?"); params.append(body.website)
-    if body.sort_order is not None:
-        updates.append("sort_order=?"); params.append(body.sort_order)
-    if body.is_active is not None:
-        updates.append("is_active=?"); params.append(body.is_active)
+    updates: dict = {}
+    if body.name       is not None: updates['name']       = body.name
+    if body.category   is not None: updates['category']   = body.category
+    if body.logo_url   is not None: updates['logo_url']   = body.logo_url
+    if body.website    is not None: updates['website']    = body.website
+    if body.sort_order is not None: updates['sort_order'] = body.sort_order
+    if body.is_active  is not None: updates['is_active']  = body.is_active
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
-    updates.append("updated_at=CURRENT_TIMESTAMP")
-    params.append(partner_id)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM site_partners WHERE id=? AND is_deleted=0", (partner_id,)
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Partner not found")
-        conn.execute(f"UPDATE site_partners SET {', '.join(updates)} WHERE id=?", params)
-        conn.commit()
-        return ok(message=f"Partner #{partner_id} updated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('site_partners').select('id').eq('id', partner_id).eq('is_deleted', 0).limit(1).execute().data:
+        raise HTTPException(404, "Partner not found")
+    svc.table('site_partners').update(updates).eq('id', partner_id).execute()
+    return ok(message=f"Partner #{partner_id} updated")
 
 
 @app.delete("/api/admin/partners/{partner_id}", tags=["admin"])
 async def admin_delete_partner(partner_id: int, request: Request):
     """파트너 삭제 — soft delete (관리자)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        r = conn.execute(
-            "SELECT id FROM site_partners WHERE id=? AND is_deleted=0", (partner_id,)
-        ).fetchone()
-        if not r:
-            raise HTTPException(404, "Partner not found")
-        conn.execute("UPDATE site_partners SET is_deleted=1 WHERE id=?", (partner_id,))
-        conn.commit()
-        return ok(message=f"Partner #{partner_id} deleted")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    if not svc.table('site_partners').select('id').eq('id', partner_id).eq('is_deleted', 0).limit(1).execute().data:
+        raise HTTPException(404, "Partner not found")
+    svc.table('site_partners').update({'is_deleted': 1}).eq('id', partner_id).execute()
+    return ok(message=f"Partner #{partner_id} deleted")
 
 
 @app.put("/api/admin/partners/reorder", tags=["admin"])
@@ -5348,21 +5215,14 @@ async def admin_reorder_partners(request: Request):
     order_list = body.get("order", [])
     if not order_list:
         raise HTTPException(400, "order 필드가 비어있습니다.")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        for item in order_list:
-            pid = item.get("id")
-            so = item.get("sort_order")
-            if pid is not None and so is not None:
-                conn.execute(
-                    "UPDATE site_partners SET sort_order=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND is_deleted=0",
-                    (so, pid)
-                )
-        conn.commit()
-        return ok(message="Partner order updated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    for item in order_list:
+        pid = item.get("id")
+        so  = item.get("sort_order")
+        if pid is not None and so is not None:
+            svc.table('site_partners').update({'sort_order': so}) \
+                .eq('id', pid).eq('is_deleted', 0).execute()
+    return ok(message="Partner order updated")
 
 
 # ── Admin: Site Settings 관리 ─────────────────────────────────────────────────
@@ -5414,30 +5274,18 @@ _ensure_site_settings_table()
 @app.get("/api/settings", tags=["public"])
 async def public_get_settings():
     """공개 사이트 설정 (footer 등)."""
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
-        settings = {r["key"]: r["value"] for r in rows}
-        return ok(data={"settings": settings})
-    finally:
-        conn.close()
+    res = get_svc_client().table('site_settings').select('key,value').execute()
+    settings = {r['key']: r['value'] for r in (res.data or [])}
+    return ok(data={"settings": settings})
 
 
 @app.get("/api/admin/settings", tags=["admin"])
 async def admin_get_settings(request: Request):
     """관리자 사이트 설정 조회."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute("SELECT key, value, updated_at FROM site_settings").fetchall()
-        settings = {r["key"]: {"value": r["value"], "updated_at": r["updated_at"]} for r in rows}
-        return ok(data={"settings": settings})
-    finally:
-        conn.close()
+    res = get_svc_client().table('site_settings').select('key,value,updated_at').execute()
+    settings = {r['key']: {"value": r['value'], "updated_at": r.get('updated_at')} for r in (res.data or [])}
+    return ok(data={"settings": settings})
 
 
 @app.put("/api/admin/settings", tags=["admin"])
@@ -5451,19 +5299,11 @@ async def admin_update_settings(request: Request):
     settings = body.get("settings", {})
     if not settings:
         raise HTTPException(400, "settings 필드가 비어있습니다.")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        for key, value in settings.items():
-            conn.execute(
-                "INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
-                (str(key), str(value))
-            )
-        conn.commit()
-        return ok(message="Settings updated")
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    rows = [{'key': str(k), 'value': str(v), 'updated_at': now_iso} for k, v in settings.items()]
+    svc.table('site_settings').upsert(rows, on_conflict='key').execute()
+    return ok(message="Settings updated")
 
 
 # ── 방문 추적 (Visit Tracking) ────────────────────────────────────────────────
@@ -5672,21 +5512,22 @@ async def testimonials_list(
     random: int = 0,
 ):
     """공개 리뷰 목록. random=1이면 랜덤 순서."""
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.row_factory = sqlite3.Row
-    try:
-        total = conn.execute(
-            "SELECT COUNT(*) FROM testimonials WHERE is_visible=1 AND is_deleted=0"
-        ).fetchone()[0]
-        order = "RANDOM()" if random else "sort_order DESC, id DESC"
-        rows = conn.execute(
-            f"SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE is_visible=1 AND is_deleted=0 ORDER BY {order} LIMIT ? OFFSET ?",
-            (limit, offset),
-        ).fetchall()
-        return ok(data={"total": total, "testimonials": [dict(r) for r in rows]})
-    finally:
-        conn.close()
+    svc = get_svc_client()
+    count_res = svc.table('testimonials').select('id', count='exact') \
+        .eq('is_visible', 1).eq('is_deleted', 0).execute()
+    total = count_res.count or 0
+    q = svc.table('testimonials') \
+        .select('id,name,country,photo_url,rating,review_text,sort_order,created_at') \
+        .eq('is_visible', 1).eq('is_deleted', 0) \
+        .range(offset, offset + limit - 1)
+    if not random:
+        q = q.order('sort_order', desc=True).order('id', desc=True)
+    res = q.execute()
+    data = res.data or []
+    if random and data:
+        import random as _random
+        _random.shuffle(data)
+    return ok(data={"total": total, "testimonials": data})
 
 
 @app.post("/api/testimonials", status_code=201, tags=["testimonials"])
@@ -5694,83 +5535,55 @@ async def testimonials_create(request: Request):
     """새 리뷰 추가 (Admin)."""
     _check_admin(request)
     body = await request.json()
-    name = (body.get("name") or "").strip()
-    country = (body.get("country") or "").strip()
+    name        = (body.get("name") or "").strip()
+    country     = (body.get("country") or "").strip()
     review_text = (body.get("review_text") or "").strip()
     if not name or not review_text:
         err("name and review_text are required", 400)
-    rating = int(body.get("rating", 5))
+    rating    = int(body.get("rating", 5))
     photo_url = body.get("photo_url") or None
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    try:
-        cur = conn.execute(
-            "INSERT INTO testimonials (name,country,photo_url,rating,review_text,sort_order,is_visible,is_deleted,created_at,updated_at) VALUES (?,?,?,?,?,0,1,0,?,?)",
-            (name, country, photo_url, rating, review_text, now, now),
-        )
-        conn.commit()
-        return ok(data={"id": cur.lastrowid}, message="Testimonial created")
-    finally:
-        conn.close()
+    now_iso   = datetime.now(timezone.utc).isoformat()
+    res = get_svc_client().table('testimonials').insert({
+        'name': name, 'country': country, 'photo_url': photo_url,
+        'rating': rating, 'review_text': review_text,
+        'sort_order': 0, 'is_visible': 1, 'is_deleted': 0,
+        'created_at': now_iso, 'updated_at': now_iso,
+    }).execute()
+    new_id = res.data[0]['id'] if res.data else None
+    return ok(data={"id": new_id}, message="Testimonial created")
 
 
 @app.put("/api/testimonials/{tid}", tags=["testimonials"])
 async def testimonials_update(tid: int, request: Request):
     """리뷰 수정 (Admin)."""
     _check_admin(request)
-    body = await request.json()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    fields = []
-    values = []
-    for key in ("name", "country", "photo_url", "rating", "review_text", "is_visible"):
-        if key in body:
-            fields.append(f"{key}=?")
-            values.append(body[key])
-    if not fields:
+    body    = await request.json()
+    updates = {k: body[k] for k in ("name","country","photo_url","rating","review_text","is_visible") if k in body}
+    if not updates:
         err("No fields to update", 400)
-    fields.append("updated_at=?")
-    values.append(now)
-    values.append(tid)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    try:
-        conn.execute(f"UPDATE testimonials SET {','.join(fields)} WHERE id=? AND is_deleted=0", values)
-        conn.commit()
-        return ok(message="Testimonial updated")
-    finally:
-        conn.close()
+    updates['updated_at'] = datetime.now(timezone.utc).isoformat()
+    get_svc_client().table('testimonials').update(updates).eq('id', tid).eq('is_deleted', 0).execute()
+    return ok(message="Testimonial updated")
 
 
 @app.delete("/api/testimonials/{tid}", tags=["testimonials"])
 async def testimonials_delete(tid: int, request: Request):
     """리뷰 soft-delete (Admin)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    try:
-        conn.execute("UPDATE testimonials SET is_deleted=1 WHERE id=?", (tid,))
-        conn.commit()
-        return ok(message="Testimonial deleted")
-    finally:
-        conn.close()
+    get_svc_client().table('testimonials').update({'is_deleted': 1}).eq('id', tid).execute()
+    return ok(message="Testimonial deleted")
 
 
 @app.patch("/api/testimonials/reorder", tags=["testimonials"])
 async def testimonials_reorder(request: Request):
     """리뷰 순서 변경 (Admin)."""
     _check_admin(request)
-    body = await request.json()
+    body  = await request.json()
     items = body.get("items", [])
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    try:
-        for item in items:
-            conn.execute("UPDATE testimonials SET sort_order=? WHERE id=?", (item["sort_order"], item["id"]))
-        conn.commit()
-        return ok(message="Reorder saved")
-    finally:
-        conn.close()
+    svc   = get_svc_client()
+    for item in items:
+        svc.table('testimonials').update({'sort_order': item["sort_order"]}).eq('id', item["id"]).execute()
+    return ok(message="Reorder saved")
 
 
 # ── Secure Download Links System ──────────────────────────────────────────────
