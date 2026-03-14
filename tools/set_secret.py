@@ -49,7 +49,27 @@ def main():
         sys.exit(1)
 
     print(f"🔑 {key} 값 입력 (입력값은 화면에 표시되지 않습니다)")
-    value = getpass.getpass(prompt="값: ")
+    # Windows CMD/PowerShell 호환: msvcrt 방식 우선 시도
+    try:
+        import msvcrt
+        sys.stdout.write("값: ")
+        sys.stdout.flush()
+        chars = []
+        while True:
+            c = msvcrt.getwch()
+            if c in ('\r', '\n'):
+                sys.stdout.write('\n')
+                break
+            elif c == '\x08':  # backspace
+                if chars:
+                    chars.pop()
+            elif c == '\x03':  # ctrl+c
+                sys.exit(0)
+            else:
+                chars.append(c)
+        value = ''.join(chars)
+    except ImportError:
+        value = getpass.getpass(prompt="값: ")
 
     if not value.strip():
         print("❌ 값이 비어있습니다. 취소됨.")
