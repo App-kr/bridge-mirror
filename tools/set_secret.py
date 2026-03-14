@@ -1,6 +1,6 @@
 """
-set_secret.py — .env 보안 입력 도구
-입력 시 값이 화면에 표시되지 않음 (getpass 방식)
+set_secret.py — .env 보안 입력 도구 (팝업 다이얼로그)
+입력값이 화면에 표시되지 않음
 
 사용법:
   python tools/set_secret.py SUPABASE_URL
@@ -8,19 +8,18 @@ set_secret.py — .env 보안 입력 도구
   python tools/set_secret.py  (← 키 이름 없이 실행하면 직접 입력)
 """
 import sys
-import getpass
 import re
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 from pathlib import Path
 
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
 def set_env_key(key: str, value: str):
-    """기존 .env에서 해당 키의 값을 교체. 없으면 파일 끝에 추가."""
     if not ENV_PATH.exists():
         ENV_PATH.write_text(f"{key}={value}\n", encoding="utf-8")
-        print(f"✅ {key} 저장 완료 (새 파일 생성)")
-        return
+        return f"{key} 저장 완료 (새 파일 생성)"
 
     text = ENV_PATH.read_text(encoding="utf-8")
     pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
@@ -28,54 +27,46 @@ def set_env_key(key: str, value: str):
     if pattern.search(text):
         new_text = pattern.sub(f"{key}={value}", text)
         ENV_PATH.write_text(new_text, encoding="utf-8")
-        print(f"✅ {key} 업데이트 완료")
+        return f"{key} 업데이트 완료"
     else:
-        # 파일 끝에 추가
         if not text.endswith("\n"):
             text += "\n"
         text += f"{key}={value}\n"
         ENV_PATH.write_text(text, encoding="utf-8")
-        print(f"✅ {key} 추가 완료")
+        return f"{key} 추가 완료"
 
 
 def main():
-    if len(sys.argv) >= 2:
-        key = sys.argv[1].strip()
-    else:
-        key = input("키 이름 입력 (예: SUPABASE_SERVICE_KEY): ").strip()
+    key = sys.argv[1].strip() if len(sys.argv) >= 2 else ""
+
+    root = tk.Tk()
+    root.withdraw()  # 메인 창 숨기기
+    root.attributes("-topmost", True)
 
     if not key:
-        print("❌ 키 이름이 비어있습니다.")
+        key = simpledialog.askstring(
+            "set_secret", "키 이름 입력\n(예: SUPABASE_SERVICE_KEY)",
+            parent=root
+        )
+        if not key or not key.strip():
+            messagebox.showerror("취소", "키 이름이 비어있습니다.")
+            sys.exit(1)
+        key = key.strip()
+
+    value = simpledialog.askstring(
+        "set_secret",
+        f"{key}\n\n값을 입력하세요 (입력값은 *** 로 표시됩니다)",
+        show="*",
+        parent=root
+    )
+
+    if not value or not value.strip():
+        messagebox.showerror("취소", "값이 비어있습니다. 취소됨.")
         sys.exit(1)
 
-    print(f"🔑 {key} 값 입력 (입력값은 화면에 표시되지 않습니다)")
-    # Windows CMD/PowerShell 호환: msvcrt 방식 우선 시도
-    try:
-        import msvcrt
-        sys.stdout.write("값: ")
-        sys.stdout.flush()
-        chars = []
-        while True:
-            c = msvcrt.getwch()
-            if c in ('\r', '\n'):
-                sys.stdout.write('\n')
-                break
-            elif c == '\x08':  # backspace
-                if chars:
-                    chars.pop()
-            elif c == '\x03':  # ctrl+c
-                sys.exit(0)
-            else:
-                chars.append(c)
-        value = ''.join(chars)
-    except ImportError:
-        value = getpass.getpass(prompt="값: ")
-
-    if not value.strip():
-        print("❌ 값이 비어있습니다. 취소됨.")
-        sys.exit(1)
-
-    set_env_key(key, value.strip())
+    msg = set_env_key(key, value.strip())
+    messagebox.showinfo("완료", f"✅ {msg}")
+    print(f"✅ {msg}")
 
 
 if __name__ == "__main__":
