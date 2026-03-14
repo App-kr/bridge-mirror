@@ -5,26 +5,24 @@
    우주에서 내려다본 지구 곡선 배경 (main sample 3 구도)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* 지구 이미지: 하단 60% 영역에서 지평선 곡선이 bridge arc와 맞춤 */
+/* 지구 이미지: 평평하게 늘여 bridge arc 수평과 일치
+   - width: 260% → 지구를 매우 넓게 늘여 지평선 곡률을 완만하게
+   - scaleY(0.48) → 세로 압축으로 지평선을 더 직선에 가깝게
+   - translateY(-30%) → 지평선을 arc 높이(section 중하단)에 배치 */
 .earth-photo-img {
   position: absolute;
-  /* 지구 지평선이 다리 arc 높이에 오도록 — 위에서 28% 지점 */
-  top: 28%;
-  left: -8%;
-  width: 116%;
-  height: 80%;
-  object-fit: cover;
-  /* 지구 지평선 곡선 부분을 중심에 오도록 */
-  object-position: center 30%;
-  opacity: 0.72;
+  top: 50%;
+  left: 50%;
+  width: 260%;
+  height: auto;
+  opacity: 0.78;
   will-change: transform;
-  /* 지구 자전: 좌우로 천천히 이동 (120s 왕복) */
   animation: earthPan 120s ease-in-out infinite alternate;
 }
 
 @keyframes earthPan {
-  from { transform: translateX(0%) scale(1); }
-  to   { transform: translateX(-7%) scale(1.015); }
+  from { transform: translate(-50%, -30%) scaleY(0.48) scale(1); }
+  to   { transform: translate(-57%, -30%) scaleY(0.48) scale(1.015); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
