@@ -533,8 +533,44 @@ def _type_slow(el, text: str):
         time.sleep(random.uniform(0.04, 0.10))
 
 
+def _find_chrome_binary() -> str | None:
+    """Chrome 바이너리 경로 자동 탐색 (비표준 경로 포함)."""
+    import winreg
+    # 레지스트리 우선 (설치 경로가 어디든 확실히 탐색)
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            key = winreg.OpenKey(hive,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
+            val, _ = winreg.QueryValueEx(key, "")
+            winreg.CloseKey(key)
+            if val and Path(val).exists():
+                return val
+        except Exception:
+            pass
+    # 표준 경로 폴백
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
+        r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            return str(c)
+    return None
+
+
 def build_driver(headless: bool = False) -> webdriver.Chrome:
     opts = Options()
+
+    # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
+    chrome_bin = _find_chrome_binary()
+    if chrome_bin:
+        opts.binary_location = chrome_bin
+        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+    else:
+        print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
         # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
