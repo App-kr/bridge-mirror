@@ -38,7 +38,7 @@ def stop_requested() -> bool:
 class RPAOverlay:
 
     BG     = "#1c1c1e"
-    CARD   = "#252527"      # header — slightly lighter
+    CARD   = "#252527"      # header default
     TEXT1  = "#ffffff"
     TEXT2  = "#aeaeb2"
     BLUE   = "#0a84ff"
@@ -49,6 +49,14 @@ class RPAOverlay:
     X_GRAY = "#636366"
     BAR_BG = "#3a3a3c"
     GOLD   = "#ffd60a"
+
+    # 계정별 헤더 색상 (뚜렷하게 구별되는 4가지)
+    _HEADER_COLORS = {
+        "coreabridge@gmail.com":    "#163520",   # 짙은 숲초록
+        "airelair00@gmail.com":     "#220f3c",   # 짙은 보라
+        "ferrari812fast@gmail.com": "#351c04",   # 짙은 호박색
+        "bridgejobkr@gmail.com":    "#0c2044",   # 짙은 네이비
+    }
 
     _STATUS_CYCLE = [
         "작업준비중", "로그인중", "카테고리선택중",
@@ -69,6 +77,7 @@ class RPAOverlay:
         self._remind_timer     = None
         self._email            = ""
         self._bot_t            = 0.0
+        self._card_color       = "#252527"
 
     # ── Public API ────────────────────────────
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
@@ -77,6 +86,7 @@ class RPAOverlay:
         self._progress_var = [current, total]
         self._email        = email
         self._bot_t        = 0.0
+        self._card_color   = self._HEADER_COLORS.get(email.lower(), self.CARD)
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
@@ -162,45 +172,44 @@ class RPAOverlay:
     # ── WORKING window ────────────────────────
     def _build_working(self):
         _stop_event.clear()
-        root, card = self._make_window(580, 390)
+        CC = self._card_color          # 계정별 헤더 색
+        root, card = self._make_window(520, 360)
 
-        # ══ HEADER (CARD 배경) ══════════════════
-        header = tk.Frame(card, bg=self.CARD)
+        # ══ HEADER (계정 색 배경) ═══════════════
+        header = tk.Frame(card, bg=CC)
         header.pack(fill="x")
 
         # 닫기 버튼 (헤더 우상단)
-        bar = tk.Frame(header, bg=self.CARD, height=26)
+        bar = tk.Frame(header, bg=CC, height=26)
         bar.pack(fill="x")
         bar.pack_propagate(False)
         xb = tk.Label(bar, text="\u2715", font=self._fn(10),
-                      bg=self.CARD, fg=self.X_GRAY, cursor="hand2")
+                      bg=CC, fg=self.X_GRAY, cursor="hand2")
         xb.pack(side="right", padx=(0, 10), pady=(4, 0))
         xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
         xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
         xb.bind("<Button-1>", lambda e: self._dismiss_and_remind())
 
         # 봇 + 타이틀
-        bot_row = tk.Frame(header, bg=self.CARD)
-        bot_row.pack(padx=22, pady=(4, 18), anchor="w")
+        bot_row = tk.Frame(header, bg=CC)
+        bot_row.pack(padx=20, pady=(4, 16), anchor="w")
 
         bot_c = tk.Canvas(bot_row, width=64, height=80,
-                          bg=self.CARD, highlightthickness=0)
-        bot_c.pack(side="left", padx=(0, 18))
+                          bg=CC, highlightthickness=0)
+        bot_c.pack(side="left", padx=(0, 16))
         self._draw_bot(bot_c, root)
 
-        info_col = tk.Frame(bot_row, bg=self.CARD)
+        info_col = tk.Frame(bot_row, bg=CC)
         info_col.pack(side="left", anchor="w")
 
         tk.Label(info_col, text="Craig RPA",
                  font=self._fn(17, "bold"),
-                 bg=self.CARD, fg=self.TEXT1, anchor="w").pack(anchor="w")
-        tk.Label(info_col, text="광고 자동게시 진행중",
-                 font=self._fn(10),
-                 bg=self.CARD, fg=self.TEXT2, anchor="w").pack(anchor="w", pady=(3, 0))
+                 bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w")
+
         if self._email:
             tk.Label(info_col, text=self._email,
-                     font=self._fn(9),
-                     bg=self.CARD, fg=self.X_GRAY, anchor="w").pack(anchor="w", pady=(4, 0))
+                     font=self._fn(11),
+                     bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w", pady=(6, 0))
 
         # ══ SEPARATOR ══════════════════════════
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
@@ -208,11 +217,11 @@ class RPAOverlay:
         # ══ BODY (BG 배경) ══════════════════════
         cur, tot = self._progress_var or [0, 0]
         body = tk.Frame(card, bg=self.BG)
-        body.pack(fill="x", padx=22, pady=(14, 10))
+        body.pack(fill="x", padx=20, pady=(12, 8))
 
         # % · 상태 · 카운트 행
         pct_row = tk.Frame(body, bg=self.BG)
-        pct_row.pack(fill="x", pady=(0, 9))
+        pct_row.pack(fill="x", pady=(0, 8))
 
         self._prog_pct_label = tk.Label(
             pct_row, text=self._pct_text(cur, tot),
@@ -232,8 +241,8 @@ class RPAOverlay:
             font=self._fn(10), bg=self.BG, fg=self.TEXT2)
         self._prog_count_label.pack(side="right")
 
-        # Pill 프로그레스 바
-        BAR_W, BAR_H = 536, 10
+        # Pill 프로그레스 바 (520 - 2border - 40pad = 478)
+        BAR_W, BAR_H = 478, 10
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
@@ -242,7 +251,7 @@ class RPAOverlay:
 
         # 개인정보 경고
         warn_row = tk.Frame(card, bg=self.BG)
-        warn_row.pack(pady=(12, 0), padx=22, anchor="w")
+        warn_row.pack(pady=(10, 0), padx=20, anchor="w")
         tk.Label(warn_row, text="\u26a0",
                  font=self._fn(12), bg=self.BG, fg=self.GOLD).pack(side="left", padx=(0, 6))
         tk.Label(warn_row, text="개인정보 확인 필수",
@@ -420,7 +429,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(536, 10, cur, tot)
+            self._draw_pill_bar(478, 10, cur, tot)
         except Exception:
             pass
 
