@@ -77,6 +77,51 @@ class RPAOverlay:
         self._remind_timer     = None
         self._email            = ""
         self._bot_t            = 0.0
+        self._restore_monitor  = None
+
+    # ── Restore flag monitor ───────────────────
+    def _start_restore_monitor(self):
+        """launcher 재실행 감지용 — 0.8초마다 .overlay_restore.flag 체크."""
+        import time as _time
+
+        _flag = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
+
+        def _watch():
+            while self._is_working:
+                try:
+                    if _flag.exists():
+                        _flag.unlink(missing_ok=True)
+                        if self._root is not None:
+                            # 창이 살아있으면 앞으로 가져오기
+                            try:
+                                self._root.after(0, self._bring_to_front)
+                            except Exception:
+                                pass
+                        else:
+                            # 창이 닫혀있으면(dismiss) 즉시 복원
+                            self._stop_remind()
+                            self._re_show_working()
+                except Exception:
+                    pass
+                _time.sleep(0.8)
+
+        self._restore_monitor = threading.Thread(target=_watch, daemon=True)
+        self._restore_monitor.start()
+
+    def _bring_to_front(self):
+        """tkinter 스레드에서 창 앞으로."""
+        try:
+            if self._root and self._root.winfo_exists():
+                self._root.attributes("-topmost", True)
+                self._root.lift()
+                self._root.focus_force()
+                self._root.after(
+                    1200,
+                    lambda: self._root.attributes("-topmost", False)
+                    if self._root and self._root.winfo_exists() else None
+                )
+        except Exception:
+            pass
 
     # ── Public API ────────────────────────────
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
@@ -92,6 +137,7 @@ class RPAOverlay:
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
+        self._start_restore_monitor()  # restore flag 감시 시작
 
     def update_progress(self, current: int, total: int):
         self._progress_var = [current, total]
