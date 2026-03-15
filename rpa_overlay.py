@@ -1071,19 +1071,23 @@ def ask_account_selection():
 def ask_already_running(acct_key: str = ""):
     """같은 계정 RPA 중복 실행 감지 시 알림 팝업 + 기존 작업창 앞으로 포커스."""
 
-    # ── 기존 오버레이 창 복원 ─────────────────────────────────────────────
+    # ── 기존 오버레이 창 복원 (같은 프로세스 내일 때만 동작) ──────────────
+    # 별도 프로세스(launcher 재실행)에서는 .overlay_restore.flag 파일로 복원
     try:
         if _overlay._is_working:
             if _overlay._root is not None:
-                # 창이 살아있으면 → 앞으로 가져오기
                 try:
                     _overlay._root.lift()
                     _overlay._root.attributes("-topmost", True)
                     _overlay._root.focus_force()
+                    _overlay._root.after(
+                        1000,
+                        lambda: _overlay._root.attributes("-topmost", False)
+                        if _overlay._root and _overlay._root.winfo_exists() else None
+                    )
                 except Exception:
                     pass
             else:
-                # 창이 닫혀있으면 (30초 dismiss 상태) → 즉시 재표시 (진행률 유지)
                 _overlay._stop_remind()
                 _overlay._re_show_working()
     except Exception:

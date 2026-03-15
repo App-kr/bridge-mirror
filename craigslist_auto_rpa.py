@@ -1557,6 +1557,16 @@ def main():
                     _log_event("info", "—", "user_stop", "User requested stop via overlay")
                     break
 
+                # launcher 재실행 감지 → 오버레이 창 복원
+                _restore_flag = BASE_DIR / "logs" / ".overlay_restore.flag"
+                if _HAS_OVERLAY and _restore_flag.exists():
+                    try:
+                        _restore_flag.unlink(missing_ok=True)
+                        show_working(current=posted, total=len(ad_list), email=CL_EMAIL)
+                        print("[OVERLAY] 창 복원 완료")
+                    except Exception:
+                        pass
+
                 jcode = job["job_code"]
                 print(f"\n{'='*55}")
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")

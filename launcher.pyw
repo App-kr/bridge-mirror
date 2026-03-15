@@ -34,7 +34,13 @@ for _lf in _lock_dir.glob(".rpa_*.lock"):
         pass
 
 if _running_acct:
-    # 이미 실행 중 → 기존 작업창 복원 + 안내 팝업
+    # 이미 실행 중 → restore flag 생성 (craigslist_auto_rpa.py가 감지하여 창 복원)
+    _restore_flag = _lock_dir / ".overlay_restore.flag"
+    try:
+        _restore_flag.write_text(_running_acct, encoding="utf-8")
+    except Exception:
+        pass
+    # 안내 팝업
     from rpa_overlay import ask_already_running
     ask_already_running(_running_acct)
     sys.exit(0)
