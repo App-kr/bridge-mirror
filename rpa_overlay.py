@@ -274,18 +274,39 @@ class RPAOverlay:
         tk.Label(warn_row, text="개인정보 확인 필수",
                  font=self._fn(12, "bold"), bg=self.BG, fg=self.TEXT1).pack(side="left")
 
-        # 스페이서
-        tk.Frame(card, bg=self.BG).pack(fill="both", expand=True)
+        # 스페이서 (최소)
+        tk.Frame(card, bg=self.BG, height=8).pack(fill="x")
 
         # ══ BUTTONS ════════════════════════════
-        tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
+        # 구분선 (짙게)
+        tk.Frame(card, bg="#9a9aaa", height=2).pack(fill="x")
         btn_row = tk.Frame(card, bg=self.BG)
         btn_row.pack(fill="x")
-        self._action_inline(btn_row, "닫기", "normal", self.BLUE,
-                            lambda: self._dismiss_and_remind(), "left")
-        tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
-        self._action_inline(btn_row, "중단하기", "normal", self.RED,
-                            lambda: self._confirm_stop_popup(root), "left")
+
+        # 닫기 버튼 (파란 배경)
+        _CLOSE_BG  = "#e4eef8"
+        _CLOSE_HOV = "#ccdcf0"
+        close_btn = tk.Label(btn_row, text="닫기",
+                             font=tkfont.Font(family="Malgun Gothic", size=15),
+                             bg=_CLOSE_BG, fg=self.BLUE, pady=16, cursor="hand2")
+        close_btn.pack(side="left", expand=True, fill="both")
+        close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
+        close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
+        close_btn.bind("<Leave>", lambda e: close_btn.configure(bg=_CLOSE_BG))
+
+        # 버튼 구분선 (짙게)
+        tk.Frame(btn_row, bg="#9a9aaa", width=2).pack(side="left", fill="y")
+
+        # 중단하기 버튼 (빨간 배경)
+        _STOP_BG  = "#fde8e8"
+        _STOP_HOV = "#f8cece"
+        stop_btn = tk.Label(btn_row, text="중단하기",
+                            font=tkfont.Font(family="Malgun Gothic", size=15),
+                            bg=_STOP_BG, fg=self.RED, pady=16, cursor="hand2")
+        stop_btn.pack(side="left", expand=True, fill="both")
+        stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
+        stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
+        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
 
         # 애니메이션
         self._start_status_blink(root)
@@ -519,11 +540,14 @@ class RPAOverlay:
             except Exception: pass
 
         def _do_stop_after():
-            """현재 작업 완료 후 중단 — stop_event만 set."""
+            """현재 작업 완료 후 중단 — 실행창 닫고 stop_event set. 완료 후 show_complete 호출됨."""
             _stop_event.set()
             self._stop_remind()
             try: popup.destroy()
             except Exception: pass
+            try: parent_root.destroy()
+            except Exception: pass
+            self._root = None
 
         force_btn = tk.Label(btn_row, text="그만하기",
                              font=self._fn(13, "bold"),
