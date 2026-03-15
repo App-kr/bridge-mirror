@@ -52,9 +52,9 @@ class RPAOverlay:
 
     # 계정별 전체 창 색상 (BG, CARD)
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#e8d8c0", "#f5ece0"),  # 옅은 갈색
+        "coreabridge@gmail.com":    ("#c8dcc8", "#e0ede0"),  # 옅은 초록
         "airelair00@gmail.com":     ("#d8d0e8", "#ece8f5"),  # 옅은 보라
-        "ferrari812fast@gmail.com": ("#c8dcc8", "#e0ede0"),  # 옅은 초록
+        "ferrari812fast@gmail.com": ("#e8d8c0", "#f5ece0"),  # 옅은 갈색
         "bridgejobkr@gmail.com":    ("#d4d4d4", "#e8e8e8"),  # 옅은 회색
     }
 
@@ -806,9 +806,9 @@ def ask_integrity_password() -> bool:
 
 # ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#e8d8c0"),  # 옅은 갈색
+    ("account1", "coreabridge@gmail.com",    "#c8dcc8"),  # 옅은 초록
     ("account2", "airelair00@gmail.com",      "#d8d0e8"),  # 옅은 보라
-    ("account3", "ferrari812fast@gmail.com",  "#c8dcc8"),  # 옅은 초록
+    ("account3", "ferrari812fast@gmail.com",  "#e8d8c0"),  # 옅은 갈색
     ("account4", "bridgejobkr@gmail.com",     "#d4d4d4"),  # 옅은 회색
 ]
 
@@ -1044,16 +1044,21 @@ def ask_account_selection():
 def ask_already_running(acct_key: str = ""):
     """같은 계정 RPA 중복 실행 감지 시 알림 팝업 + 기존 작업창 앞으로 포커스."""
 
-    # ── 기존 오버레이 창 포커스 ─────────────────────────────────────────────
+    # ── 기존 오버레이 창 복원 ─────────────────────────────────────────────
     try:
-        import ctypes as _ct
-        _hwnd_file = Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt"
-        if _hwnd_file.exists():
-            hwnd = int(_hwnd_file.read_text(encoding="utf-8").strip())
-            if hwnd:
-                _ct.windll.user32.ShowWindow(hwnd, 9)        # SW_RESTORE
-                _ct.windll.user32.SetForegroundWindow(hwnd)
-                _ct.windll.user32.BringWindowToTop(hwnd)
+        if _overlay._is_working:
+            if _overlay._root is not None:
+                # 창이 살아있으면 → 앞으로 가져오기
+                try:
+                    _overlay._root.lift()
+                    _overlay._root.attributes("-topmost", True)
+                    _overlay._root.focus_force()
+                except Exception:
+                    pass
+            else:
+                # 창이 닫혀있으면 (30초 dismiss 상태) → 즉시 재표시 (진행률 유지)
+                _overlay._stop_remind()
+                _overlay._re_show_working()
     except Exception:
         pass
 
@@ -1117,13 +1122,14 @@ def ask_already_running(acct_key: str = ""):
             name_part = _em.split("@")[0]
             break
 
+    _status_msg = "작업 창을 복원하고 앞으로 가져왔습니다." if _overlay._is_working else "작업 창을 앞으로 가져왔습니다."
     tk.Label(card, text="이미 작업 중 🤖",
              font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
              bg=acct_color, fg="#1d1d1f").pack(pady=(20, 4))
     tk.Label(card, text=f"[ {name_part} ] 계정이 현재 작업 중입니다.",
              font=tkfont.Font(family="Malgun Gothic", size=11),
              bg=acct_color, fg="#444450").pack()
-    tk.Label(card, text="작업 창을 앞으로 가져왔습니다.",
+    tk.Label(card, text=_status_msg,
              font=tkfont.Font(family="Malgun Gothic", size=10),
              bg=acct_color, fg="#666670").pack(pady=(3, 0))
 
