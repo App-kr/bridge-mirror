@@ -1,9 +1,11 @@
 """
 BRIDGE RPA Launcher
 ===================
+전역 중복 실행 방지: 어떤 계정이든 이미 실행 중이면 기존 창 복원 후 종료.
 CMD 창 없이 계정 선택 팝업 표시 → 백엔드 독립 실행.
 실행: pythonw.exe launcher.pyw  (콘솔 없음)
 """
+import ctypes
 import os
 import sys
 import subprocess
@@ -12,6 +14,32 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
 
+# ── 전역 중복 실행 체크 ────────────────────────────────────────────────────
+# 어떤 계정이든 실행 중인 lock 파일이 있으면 → 기존 창 복원 후 즉시 종료
+_lock_dir = BASE / "logs"
+_lock_dir.mkdir(parents=True, exist_ok=True)
+
+_running_acct = None
+for _lf in _lock_dir.glob(".rpa_*.lock"):
+    try:
+        _pid = int(_lf.read_text(encoding="utf-8").strip())
+        _h = ctypes.windll.kernel32.OpenProcess(0x400, False, _pid)
+        if _h:
+            ctypes.windll.kernel32.CloseHandle(_h)
+            _running_acct = _lf.stem.replace(".rpa_", "")
+            break
+        else:
+            _lf.unlink(missing_ok=True)  # 죽은 프로세스 lock 정리
+    except Exception:
+        pass
+
+if _running_acct:
+    # 이미 실행 중 → 기존 작업창 복원 + 안내 팝업
+    from rpa_overlay import ask_already_running
+    ask_already_running(_running_acct)
+    sys.exit(0)
+
+# ── 계정 선택 팝업 ────────────────────────────────────────────────────────
 from rpa_overlay import ask_account_selection
 
 result = ask_account_selection()

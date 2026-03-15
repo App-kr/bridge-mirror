@@ -288,7 +288,7 @@ class RPAOverlay:
         _CLOSE_HOV = "#ccdcf0"
         close_btn = tk.Label(btn_row, text="닫기",
                              font=tkfont.Font(family="Malgun Gothic", size=15),
-                             bg=_CLOSE_BG, fg=self.BLUE, pady=16, cursor="hand2")
+                             bg=_CLOSE_BG, fg=self.BLUE, pady=(14, 0), cursor="hand2")
         close_btn.pack(side="left", expand=True, fill="both")
         close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
@@ -302,7 +302,7 @@ class RPAOverlay:
         _STOP_HOV = "#f8cece"
         stop_btn = tk.Label(btn_row, text="중단하기",
                             font=tkfont.Font(family="Malgun Gothic", size=15),
-                            bg=_STOP_BG, fg=self.RED, pady=16, cursor="hand2")
+                            bg=_STOP_BG, fg=self.RED, pady=(14, 0), cursor="hand2")
         stop_btn.pack(side="left", expand=True, fill="both")
         stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
@@ -690,7 +690,7 @@ class RPAOverlay:
             except Exception:
                 pass
         root.overrideredirect(True)
-        root.attributes("-topmost", True)
+        root.attributes("-topmost", True)   # 처음 표시 시에만 앞으로
         root.attributes("-alpha", 0.0)
         root.configure(bg=self.BG)
 
@@ -704,7 +704,7 @@ class RPAOverlay:
                 pass
         root.geometry(f"{w}x{h}+{mx + (mw - w) // 2}+{my + (mh - h) // 2}")
 
-        border = tk.Frame(root, bg=self.SEP, padx=1, pady=1)
+        border = tk.Frame(root, bg=self.SEP, padx=1, pady=(1, 0))
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=self.BG)
         card.pack(fill="both", expand=True)
@@ -717,6 +717,9 @@ class RPAOverlay:
                 root.after(16, lambda: _fade(a + 0.07))
             else:
                 root.attributes("-alpha", 1.0)
+                # 페이드 완료 후 topmost 해제 — 이후 뒤에서 작업 가능
+                root.after(100, lambda: root.attributes("-topmost", False)
+                           if root.winfo_exists() else None)
 
         root.after(10, _fade)
         return root, card
