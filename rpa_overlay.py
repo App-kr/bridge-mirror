@@ -228,12 +228,9 @@ class RPAOverlay:
         CC = self.CARD                 # 계정별 헤더 색
         root, card = self._make_window(380, 360)
 
-        # HWND 저장 (중복실행 감지 시 창 포커스용)
+        # 숨겨진 title 설정 — FindWindowW로 HWND 직접 검색용
         try:
-            root.update_idletasks()
-            _hwnd_store = Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt"
-            _hwnd_store.parent.mkdir(parents=True, exist_ok=True)
-            _hwnd_store.write_text(str(root.winfo_id()), encoding="utf-8")
+            root.title("CraigRPA_Working")
         except Exception:
             pass
 
@@ -1113,34 +1110,40 @@ def ask_account_selection():
     return result[0]
 
 
+# ── Win32 직접 창 포커스 헬퍼 ────────────────────────────────────────────────
+def _win32_focus_working():
+    """FindWindowW("CraigRPA_Working")로 작업창 HWND를 찾아서 앞으로 가져온다.
+    창이 없으면(dismiss 상태) restore flag 파일을 생성해 monitor 스레드에 알린다."""
+    import ctypes as _ct
+    _TITLE = "CraigRPA_Working"
+    hwnd = _ct.windll.user32.FindWindowW(None, _TITLE)
+    if hwnd:
+        # Alt 키 트릭으로 SetForegroundWindow 권한 확보
+        _ct.windll.user32.keybd_event(0x12, 0, 0, 0)   # Alt down
+        _ct.windll.user32.keybd_event(0x12, 0, 2, 0)   # Alt up
+        _ct.windll.user32.ShowWindow(hwnd, 9)           # SW_RESTORE
+        _ct.windll.user32.SetForegroundWindow(hwnd)
+        _ct.windll.user32.BringWindowToTop(hwnd)
+        return True
+    else:
+        # 창이 dismiss된 경우 → restore flag로 monitor 스레드에 복원 요청
+        try:
+            _rf = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
+            _rf.parent.mkdir(parents=True, exist_ok=True)
+            _rf.write_text("restore", encoding="utf-8")
+        except Exception:
+            pass
+        return False
+
+
 # ── Already-running popup ─────────────────────────────────────────────────────
 def ask_already_running(acct_key: str = ""):
     """같은 계정 RPA 중복 실행 감지 시 알림 팝업 + 기존 작업창 앞으로 포커스."""
 
-    # ── 기존 오버레이 창 복원 (같은 프로세스 내일 때만 동작) ──────────────
-    # 별도 프로세스(launcher 재실행)에서는 .overlay_restore.flag 파일로 복원
-    try:
-        if _overlay._is_working:
-            if _overlay._root is not None:
-                try:
-                    _overlay._root.lift()
-                    _overlay._root.attributes("-topmost", True)
-                    _overlay._root.focus_force()
-                    _overlay._root.after(
-                        1000,
-                        lambda: _overlay._root.attributes("-topmost", False)
-                        if _overlay._root and _overlay._root.winfo_exists() else None
-                    )
-                except Exception:
-                    pass
-            else:
-                _overlay._stop_remind()
-                _overlay._re_show_working()
-    except Exception:
-        pass
+    # ── 작업창 즉시 가져오기 (팝업 표시 전) ──────────────────────────────
+    _found = _win32_focus_working()
 
     # ── 안내 팝업 ────────────────────────────────────────────────────────────
-    # 계정별 색상 가져오기
     acct_color = "#f5f5f7"
     for _aid, _em, _c in _ACCOUNT_LIST:
         if _aid == acct_key or _em.split("@")[0] == acct_key:
@@ -1155,11 +1158,11 @@ def ask_already_running(acct_key: str = ""):
         except Exception:
             pass
     root.overrideredirect(True)
-    root.attributes("-topmost", True)
+    root.attributes("-topmost", False)   # 팝업이 작업창을 덮지 않도록
     root.configure(bg=acct_color)
 
-    w, h = 380, 180
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    ox, oy = 0, 0
     if _HAS_SCREENINFO:
         try:
             mons = get_monitors()
@@ -1167,9 +1170,8 @@ def ask_already_running(acct_key: str = ""):
             sw, sh = m.width, m.height
             ox, oy = m.x, m.y
         except Exception:
-            ox, oy = 0, 0
-    else:
-        ox, oy = 0, 0
+            pass
+    w, h = 340, 160
     root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2 - 80}")
     root.attributes("-alpha", 0.0)
 
@@ -1182,7 +1184,6 @@ def ask_already_running(acct_key: str = ""):
                 root.attributes("-alpha", 1.0)
     root.after(10, _fade)
 
-    # 테두리: acct_color를 80% 어둡게
     _bc = "#{:02x}{:02x}{:02x}".format(
         max(0, int(int(acct_color[1:3], 16) * 0.80)),
         max(0, int(int(acct_color[3:5], 16) * 0.80)),
@@ -1192,37 +1193,43 @@ def ask_already_running(acct_key: str = ""):
     card = tk.Frame(border, bg=acct_color)
     card.pack(fill="both", expand=True)
 
-    # 제목
     name_part = acct_key.replace("account", "") if acct_key.startswith("account") else acct_key
     for _aid, _em, _c in _ACCOUNT_LIST:
         if _aid == acct_key:
             name_part = _em.split("@")[0]
             break
 
-    _status_msg = "작업 창을 복원하고 앞으로 가져왔습니다." if _overlay._is_working else "작업 창을 앞으로 가져왔습니다."
+    _msg = "작업 창을 앞으로 가져왔습니다." if _found else "잠시 후 작업 창이 복원됩니다."
     tk.Label(card, text="이미 작업 중 🤖",
-             font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
-             bg=acct_color, fg="#1d1d1f").pack(pady=(20, 4))
-    tk.Label(card, text=f"[ {name_part} ] 계정이 현재 작업 중입니다.",
-             font=tkfont.Font(family="Malgun Gothic", size=11),
-             bg=acct_color, fg="#444450").pack()
-    tk.Label(card, text=_status_msg,
+             font=tkfont.Font(family="Malgun Gothic", size=14, weight="bold"),
+             bg=acct_color, fg="#1d1d1f").pack(pady=(16, 3))
+    tk.Label(card, text=f"[ {name_part} ] 작업이 진행 중입니다.",
              font=tkfont.Font(family="Malgun Gothic", size=10),
-             bg=acct_color, fg="#666670").pack(pady=(3, 0))
+             bg=acct_color, fg="#444450").pack()
+    tk.Label(card, text=_msg,
+             font=tkfont.Font(family="Malgun Gothic", size=9),
+             bg=acct_color, fg="#666670").pack(pady=(2, 0))
 
-    # 구분선: acct_color 75% 어둡게
     _sc = "#{:02x}{:02x}{:02x}".format(
         max(0, int(int(acct_color[1:3], 16) * 0.75)),
         max(0, int(int(acct_color[3:5], 16) * 0.75)),
         max(0, int(int(acct_color[5:7], 16) * 0.75)))
-    tk.Frame(card, bg=_sc, height=1).pack(fill="x", pady=(16, 0))
-    ok_btn = tk.Label(card, text="확인",
-                      font=tkfont.Font(family="Malgun Gothic", size=13),
-                      bg=acct_color, fg="#0071e3", pady=10, cursor="hand2")
-    ok_btn.pack(fill="x")
-    ok_btn.bind("<Button-1>", lambda e: root.destroy())
+    tk.Frame(card, bg=_sc, height=1).pack(fill="x", pady=(12, 0))
 
-    # 드래그
+    def _close():
+        try:
+            root.destroy()
+        except Exception:
+            pass
+        # 팝업 닫힌 후 작업창 다시 앞으로
+        _win32_focus_working()
+
+    ok_btn = tk.Label(card, text="확인",
+                      font=tkfont.Font(family="Malgun Gothic", size=12),
+                      bg=acct_color, fg="#0071e3", pady=8, cursor="hand2")
+    ok_btn.pack(fill="x")
+    ok_btn.bind("<Button-1>", lambda e: _close())
+
     def _press(e): root._dx, root._dy = e.x_root, e.y_root
     def _move(e):
         x = root.winfo_x() + e.x_root - root._dx
@@ -1233,7 +1240,7 @@ def ask_already_running(acct_key: str = ""):
         dw.bind("<ButtonPress-1>", _press)
         dw.bind("<B1-Motion>", _move)
 
-    root.after(6000, lambda: root.destroy() if root.winfo_exists() else None)
+    root.after(4000, lambda: _close() if root.winfo_exists() else None)
     root.mainloop()
 
 
