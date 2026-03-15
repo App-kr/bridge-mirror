@@ -1,8 +1,8 @@
 """
-BRIDGE RPA Overlay — iOS Alert Style
-=====================================
-Apple HIG 기반. 보더 없는 플로팅 카드 + 드롭 섀도.
-애니메이션 V 체크마크. iOS 텍스트 액션 버튼.
+BRIDGE RPA Overlay — iOS Dark Style v2
+========================================
+Apple iOS HIG 기반. 600px 넓이. 상태 블링크 + pill 프로그레스 바.
+귀여운 중단 확인 팝업. 개인정보 확인 필수 고딕 경고.
 """
 
 import json
@@ -36,55 +36,68 @@ def stop_requested() -> bool:
 
 class RPAOverlay:
 
-    BG = "#2a2a2a"
-    TEXT1 = "#f0f0f5"
-    TEXT2 = "#b8b8cc"
-    BLUE = "#6cb4ee"
-    RED = "#f47174"
-    GREEN = "#78dba0"
-    SEP = "#333344"
-    HOVER = "#2a2a3c"
-    X_GRAY = "#66667a"
-    BORDER = "#888899"
-    BAR_BG = "#333344"
-    _TRANS = "#010203"
+    BG     = "#1c1c1e"
+    TEXT1  = "#ffffff"
+    TEXT2  = "#aeaeb2"
+    BLUE   = "#0a84ff"
+    RED    = "#ff453a"
+    GREEN  = "#30d158"
+    SEP    = "#38383a"
+    HOVER  = "#3a3a3c"
+    X_GRAY = "#636366"
+    BAR_BG = "#3a3a3c"
+
+    _STATUS_CYCLE = [
+        "작업준비중", "로그인중", "카테고리선택중",
+        "제목작성중", "폼입력중", "이미지업로드중", "게시중",
+    ]
 
     def __init__(self):
         self._root = None
         self._thread = None
         self._ready = threading.Event()
-        self._progress_var = None   # (current, total) 표시용
-        self._prog_bar = None
-        self._prog_label = None
-        self._prog_pct = None
+        self._progress_var = [0, 0]
+        self._prog_bar_canvas = None
+        self._prog_pct_label = None
+        self._prog_count_label = None
+        self._status_label = None
+        self._status_text = ""
         self._is_working = False
         self._remind_timer = None
-
-    ACCOUNT_COLORS = {
-        "coreabridge@gmail.com":    "#0d3d0d",
-        "ferrari812fast@gmail.com": "#3a2810",
-        "airelair00@gmail.com":     "#2a1a3a",
-        "bridgejobkr@gmail.com":    "#3a3a3a",
-    }
+        self._email = ""
 
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
         self.close()
         self._is_working = True
         self._progress_var = [current, total]
         self._email = email
-        if email.lower() in self.ACCOUNT_COLORS:
-            self.BG = self.ACCOUNT_COLORS[email.lower()]
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
 
     def update_progress(self, current: int, total: int):
         self._progress_var = [current, total]
-        if self._root and self._prog_bar and self._prog_label:
+        if self._root:
             try:
-                self._root.after(0, lambda: self._refresh_bar(current, total))
+                self._root.after(0, lambda: self._refresh_progress(current, total))
             except Exception:
                 pass
+
+    def update_status(self, text: str):
+        """외부에서 상태 텍스트 직접 설정 (자동 순환 중단)."""
+        self._status_text = text
+        if self._root and self._status_label:
+            try:
+                self._root.after(0, lambda: self._set_status_text(text))
+            except Exception:
+                pass
+
+    def _set_status_text(self, text: str):
+        try:
+            if self._status_label and self._status_label.winfo_exists():
+                self._status_label.configure(text=text, fg=self.BLUE)
+        except Exception:
+            pass
 
     def show_complete(self, posted_count: int = 0):
         self._is_working = False
@@ -144,96 +157,256 @@ class RPAOverlay:
     # ── WORKING ──────────────────────────────
     def _build_working(self):
         _stop_event.clear()
-        root, card = self._make_window(480, 370)
+        root, card = self._make_window(600, 360)
 
         bar = self._top_bar(card, root)
 
-        spinner = tk.Canvas(card, width=44, height=44,
+        # ── 스피너 + 타이틀 ──
+        title_row = tk.Frame(card, bg=self.BG)
+        title_row.pack(pady=(14, 6), padx=28, anchor="w")
+
+        spinner = tk.Canvas(title_row, width=36, height=36,
                             bg=self.BG, highlightthickness=0)
-        spinner.pack(pady=(4, 10))
+        spinner.pack(side="left", padx=(0, 14))
         self._draw_spinner(spinner, root)
 
-        title = tk.Label(card, text="Craig 작업중",
-                         font=self._fn(18, "bold"),
-                         bg=self.BG, fg=self.TEXT1)
-        title.pack()
+        title_col = tk.Frame(title_row, bg=self.BG)
+        title_col.pack(side="left")
+        tk.Label(title_col, text="Craig 작업중",
+                 font=self._fn(16, "bold"),
+                 bg=self.BG, fg=self.TEXT1, anchor="w").pack(anchor="w")
 
         if self._email:
-            acct_lbl = tk.Label(card, text=self._email,
-                                font=self._fn(9), bg=self.BG, fg=self.TEXT2)
-            acct_lbl.pack(pady=(2, 0))
+            tk.Label(title_col, text=self._email,
+                     font=self._fn(9), bg=self.BG, fg=self.TEXT2, anchor="w").pack(
+                         anchor="w", pady=(2, 0))
 
-        # ── 진행률 바 ──
+        # ── 진행률 섹션 ──
         cur, tot = self._progress_var or [0, 0]
+        prog_section = tk.Frame(card, bg=self.BG)
+        prog_section.pack(fill="x", padx=28, pady=(8, 6))
 
-        self._prog_label = tk.Label(
-            card, text=self._prog_text(cur, tot),
-            font=self._fn(11), bg=self.BG, fg=self.TEXT2)
-        self._prog_label.pack(pady=(6, 4))
+        # % 레이블 · 상태 텍스트 · 카운트
+        pct_row = tk.Frame(prog_section, bg=self.BG)
+        pct_row.pack(fill="x", pady=(0, 8))
 
-        bar_frame = tk.Frame(card, bg=self.BAR_BG, height=6, width=340)
-        bar_frame.pack(pady=(0, 2))
-        bar_frame.pack_propagate(False)
+        self._prog_pct_label = tk.Label(
+            pct_row, text=self._pct_text(cur, tot),
+            font=self._fn(15, "bold"), bg=self.BG, fg=self.TEXT1)
+        self._prog_pct_label.pack(side="left")
 
-        self._prog_bar = tk.Frame(bar_frame, bg=self.GREEN, height=6,
-                                  width=self._bar_width(cur, tot, 340))
-        self._prog_bar.place(x=0, y=0, height=6)
+        tk.Label(pct_row, text="  ·  ",
+                 font=self._fn(11), bg=self.BG, fg=self.TEXT2).pack(side="left")
 
-        # 펄스 글로우 (게이지 끝부분 빛남)
-        self._pulse_canvas = tk.Canvas(bar_frame, width=12, height=6,
-                                       bg=self.BAR_BG, highlightthickness=0)
-        self._pulse_dir = 1
-        self._pulse_alpha = 0.0
-        self._start_pulse(root)
+        self._status_label = tk.Label(
+            pct_row, text=self._STATUS_CYCLE[0],
+            font=self._fn(11), bg=self.BG, fg=self.BLUE)
+        self._status_label.pack(side="left")
 
-        self._prog_pct = tk.Label(
-            card, text=self._pct_text(cur, tot),
+        self._prog_count_label = tk.Label(
+            pct_row, text=self._prog_text(cur, tot),
             font=self._fn(10), bg=self.BG, fg=self.TEXT2)
-        self._prog_pct.pack(pady=(0, 4))
+        self._prog_count_label.pack(side="right")
 
-        sub = tk.Label(card, text="인터넷 창을 건들지 마세요",
-                       font=self._fn(13, "bold"), bg=self.BG, fg="#ffffff")
-        sub.pack(pady=(2, 6))
+        # Pill 프로그레스 바
+        BAR_W, BAR_H = 544, 10
+        self._prog_bar_canvas = tk.Canvas(
+            prog_section, width=BAR_W, height=BAR_H,
+            bg=self.BG, highlightthickness=0)
+        self._prog_bar_canvas.pack()
+        self._draw_pill_bar(BAR_W, BAR_H, cur, tot)
 
-        # 게임 OK 라인
-        game_row = tk.Frame(card, bg=self.BG)
-        game_row.pack(pady=(0, 8))
-        gun = tk.Canvas(game_row, width=24, height=18,
-                        bg=self.BG, highlightthickness=0)
-        gun.pack(side="left", padx=(0, 4))
-        self._draw_gun(gun)
-        game_lbl = tk.Label(game_row, text="게임은 해도 됩니다!",
-                            font=self._fn(11), bg=self.BG, fg=self.GREEN)
-        game_lbl.pack(side="left")
+        # ── 개인정보 확인 필수 ──
+        warn_row = tk.Frame(card, bg=self.BG)
+        warn_row.pack(pady=(10, 0), padx=28, anchor="w")
+        tk.Label(warn_row, text="⚠",
+                 font=self._fn(12), bg=self.BG, fg="#ffd60a").pack(side="left", padx=(0, 6))
+        tk.Label(warn_row, text="개인정보 확인 필수",
+                 font=self._fn(12, "bold"), bg=self.BG, fg="#ffffff").pack(side="left")
 
-        tk.Frame(card, bg=self.BG, height=16).pack()
+        # 버튼을 아래로 밀기
+        tk.Frame(card, bg=self.BG).pack(fill="both", expand=True)
+
         self._sep(card)
         btn_row = tk.Frame(card, bg=self.BG)
         btn_row.pack(fill="x")
         self._action_inline(btn_row, "닫기", "normal", self.BLUE,
                             lambda: self._dismiss_and_remind(), "left")
         tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
-
-        def _confirm_stop():
-            from tkinter import messagebox as _mb
-            if _mb.askyesno(
-                "중단 확인",
-                "게시를 중단하시겠습니까?\n현재 건 완료 후 중단됩니다.",
-                icon="warning",
-            ):
-                _stop_event.set()
-                self._stop_remind()
-                root.destroy()
-
         self._action_inline(btn_row, "중단하기", "normal", self.RED,
-                            _confirm_stop, "left")
+                            lambda: self._confirm_stop_popup(root), "left")
 
-        self._drag(root, bar, spinner, title, sub, game_row, game_lbl)
+        # 애니메이션
+        self._start_status_blink(root)
+        self._start_pulse_bar(root)
+
+        self._drag(root, bar, title_row, warn_row, prog_section)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
+
+    # ── Pill progress bar ──────────────────────
+    def _draw_pill_bar(self, bar_w, bar_h, cur, tot):
+        """iOS 스타일 pill 프로그레스 바."""
+        c = self._prog_bar_canvas
+        if not c:
+            return
+        try:
+            if not c.winfo_exists():
+                return
+        except Exception:
+            return
+        c.delete("all")
+        r = bar_h  # cap circle diameter = bar height
+
+        # 배경 pill
+        c.create_rectangle(r // 2, 0, bar_w - r // 2, bar_h,
+                           fill=self.BAR_BG, outline="")
+        c.create_oval(0, 0, r, bar_h, fill=self.BAR_BG, outline="")
+        c.create_oval(bar_w - r, 0, bar_w, bar_h, fill=self.BAR_BG, outline="")
+
+        # 녹색 채움
+        pct = 0.0 if tot <= 0 else min(1.0, cur / tot)
+        fill_px = int(pct * bar_w)
+
+        if fill_px > 0:
+            c.create_oval(0, 0, r, bar_h, fill=self.GREEN, outline="")
+            right_x = min(fill_px, bar_w - r // 2)
+            if right_x > r // 2:
+                c.create_rectangle(r // 2, 0, right_x, bar_h,
+                                   fill=self.GREEN, outline="")
+            if fill_px >= bar_w - r // 2:
+                c.create_oval(bar_w - r, 0, bar_w, bar_h,
+                              fill=self.GREEN, outline="")
+
+    # ── Status blink animation ────────────────
+    def _start_status_blink(self, root):
+        """상태 레이블 깜박이면서 순환 (0.7초 주기)."""
+        tick = [0]
+        visible = [True]
+
+        def _blink():
+            if not root.winfo_exists():
+                return
+            visible[0] = not visible[0]
+            try:
+                if self._status_label and self._status_label.winfo_exists():
+                    if visible[0]:
+                        tick[0] += 1
+                        txt = (self._status_text if self._status_text
+                               else self._STATUS_CYCLE[(tick[0] // 2) % len(self._STATUS_CYCLE)])
+                        self._status_label.configure(text=txt, fg=self.BLUE)
+                    else:
+                        self._status_label.configure(fg="#2a4a6a")
+            except Exception:
+                pass
+            root.after(700, _blink)
+
+        _blink()
+
+    def _start_pulse_bar(self, root):
+        """프로그레스 바 0.5초마다 갱신."""
+        def _pulse():
+            if not root.winfo_exists():
+                return
+            cur, tot = self._progress_var or [0, 0]
+            self._refresh_progress(cur, tot)
+            root.after(500, _pulse)
+        _pulse()
+
+    def _refresh_progress(self, cur, tot):
+        try:
+            if self._prog_pct_label and self._prog_pct_label.winfo_exists():
+                self._prog_pct_label.configure(text=self._pct_text(cur, tot))
+            if self._prog_count_label and self._prog_count_label.winfo_exists():
+                self._prog_count_label.configure(text=self._prog_text(cur, tot))
+            self._draw_pill_bar(544, 10, cur, tot)
+        except Exception:
+            pass
+
+    # ── Stop confirmation popup ───────────────
+    def _confirm_stop_popup(self, parent_root):
+        """iOS 스타일 귀여운 중단 확인 팝업."""
+        popup = tk.Toplevel(parent_root)
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.configure(bg=self.BG)
+
+        pw, ph = 380, 240
+        px = parent_root.winfo_x() + (600 - pw) // 2
+        py = parent_root.winfo_y() + (360 - ph) // 2
+        popup.geometry(f"{pw}x{ph}+{px}+{py}")
+        popup.attributes("-alpha", 0.0)
+
+        def _fade(a=0.0):
+            if popup.winfo_exists():
+                if a < 1.0:
+                    popup.attributes("-alpha", a)
+                    popup.after(16, lambda: _fade(a + 0.12))
+                else:
+                    popup.attributes("-alpha", 1.0)
+        popup.after(10, _fade)
+
+        border = tk.Frame(popup, bg=self.SEP, padx=1, pady=1)
+        border.pack(fill="both", expand=True)
+        inner = tk.Frame(border, bg=self.BG)
+        inner.pack(fill="both", expand=True)
+
+        tk.Label(inner, text="🤖",
+                 font=tkfont.Font(family="Segoe UI Emoji", size=30),
+                 bg=self.BG).pack(pady=(18, 6))
+        tk.Label(inner, text="Claude가 중단을 요청합니다",
+                 font=self._fn(13, "bold"),
+                 bg=self.BG, fg=self.TEXT1).pack()
+        tk.Label(inner, text="현재 건 완료 후 자동으로 중단됩니다.",
+                 font=self._fn(10),
+                 bg=self.BG, fg=self.TEXT2).pack(pady=(4, 0))
+
+        tk.Frame(inner, bg=self.BG).pack(fill="both", expand=True)
+        tk.Frame(inner, bg=self.SEP, height=1).pack(fill="x")
+
+        btn_row = tk.Frame(inner, bg=self.BG)
+        btn_row.pack(fill="x")
+
+        def _do_stop():
+            _stop_event.set()
+            self._stop_remind()
+            try:
+                popup.destroy()
+            except Exception:
+                pass
+            try:
+                parent_root.destroy()
+            except Exception:
+                pass
+
+        def _cancel():
+            try:
+                popup.destroy()
+            except Exception:
+                pass
+
+        cont_btn = tk.Label(btn_row, text="계속하기",
+                            font=self._fn(13, "bold"),
+                            bg=self.BG, fg=self.BLUE,
+                            pady=14, cursor="hand2")
+        cont_btn.pack(side="left", expand=True, fill="both")
+        cont_btn.bind("<Button-1>", lambda e: _cancel())
+        cont_btn.bind("<Enter>", lambda e: cont_btn.configure(bg=self.HOVER))
+        cont_btn.bind("<Leave>", lambda e: cont_btn.configure(bg=self.BG))
+
+        tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+
+        stop_btn = tk.Label(btn_row, text="중단하기",
+                            font=self._fn(13, "bold"),
+                            bg=self.BG, fg=self.RED,
+                            pady=14, cursor="hand2")
+        stop_btn.pack(side="left", expand=True, fill="both")
+        stop_btn.bind("<Button-1>", lambda e: _do_stop())
+        stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=self.HOVER))
+        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=self.BG))
 
     # ── COMPLETE ─────────────────────────────
     def _build_complete(self, count: int):
@@ -287,64 +460,11 @@ class RPAOverlay:
             return "0%"
         return f"{int(cur / tot * 100)}%"
 
-    @staticmethod
-    def _bar_width(cur, tot, max_w):
-        if tot <= 0:
-            return 0
-        return max(0, min(max_w, int(cur / tot * max_w)))
-
-    def _refresh_bar(self, cur, tot):
-        try:
-            if self._prog_label and self._prog_label.winfo_exists():
-                self._prog_label.configure(text=self._prog_text(cur, tot))
-            w = self._bar_width(cur, tot, 340)
-            if self._prog_bar and self._prog_bar.winfo_exists():
-                self._prog_bar.place(x=0, y=0, height=6, width=w)
-            if self._prog_pct and self._prog_pct.winfo_exists():
-                self._prog_pct.configure(text=self._pct_text(cur, tot))
-            if self._pulse_canvas and self._pulse_canvas.winfo_exists():
-                self._pulse_canvas.place(x=max(0, w - 12), y=0, height=6)
-        except Exception:
-            pass
-
-    def _start_pulse(self, root):
-        """게이지 끝부분 글로우 펄스 애니메이션."""
-        def _pulse():
-            if not root.winfo_exists():
-                return
-            self._pulse_alpha += 0.08 * self._pulse_dir
-            if self._pulse_alpha >= 1.0:
-                self._pulse_alpha = 1.0
-                self._pulse_dir = -1
-            elif self._pulse_alpha <= 0.0:
-                self._pulse_alpha = 0.0
-                self._pulse_dir = 1
-            # 밝기 보간: BAR_BG → 밝은 녹색
-            bg_r, bg_g, bg_b = 0x33, 0x33, 0x44
-            hi_r, hi_g, hi_b = 0x90, 0xf0, 0xb8
-            a = self._pulse_alpha
-            r = int(bg_r + (hi_r - bg_r) * a)
-            g = int(bg_g + (hi_g - bg_g) * a)
-            b = int(bg_b + (hi_b - bg_b) * a)
-            color = f"#{r:02x}{g:02x}{b:02x}"
-            try:
-                self._pulse_canvas.configure(bg=color)
-                cur, tot = self._progress_var or [0, 0]
-                w = self._bar_width(cur, tot, 340)
-                if w > 0:
-                    self._pulse_canvas.place(x=max(0, w - 12), y=0, height=6)
-                else:
-                    self._pulse_canvas.place_forget()
-            except Exception:
-                pass
-            root.after(50, _pulse)
-        _pulse()
-
     # ── Drawing ──────────────────────────────
     def _draw_spinner(self, c, root):
         """Apple activity indicator (rotating bars)."""
-        cx, cy = 22, 22
-        r_in, r_out = 7, 15
+        cx, cy = 18, 18
+        r_in, r_out = 5, 12
         n = 12
         self._si = 0
 
@@ -400,20 +520,6 @@ class RPAOverlay:
 
         root.after(300, _anim)
 
-    def _draw_gun(self, c):
-        """Small pistol icon."""
-        g = "#78dba0"
-        # Barrel
-        c.create_rectangle(10, 4, 23, 8, fill=g, outline="")
-        # Body
-        c.create_rectangle(3, 4, 14, 12, fill=g, outline="")
-        # Handle
-        c.create_polygon(5, 12, 9, 12, 10, 17, 4, 17,
-                         fill=g, outline="")
-        # Trigger guard
-        c.create_line(9, 12, 12, 12, 12, 14, 9, 14,
-                      fill=g, width=1.5)
-
     # ── UI Components ────────────────────────
     def _top_bar(self, parent, root):
         bar = tk.Frame(parent, bg=self.BG, height=28)
@@ -453,7 +559,7 @@ class RPAOverlay:
 
     # ── Window ───────────────────────────────
     def _make_window(self, w, h):
-        """Clean white floating card."""
+        """iOS dark floating card."""
         root = tk.Tk()
         self._root = root
         root.overrideredirect(True)
@@ -471,12 +577,11 @@ class RPAOverlay:
                 pass
         root.geometry(f"{w}x{h}+{mx + (mw - w) // 2}+{my + (mh - h) // 2}")
 
-        border = tk.Frame(root, bg=self.BORDER, padx=1, pady=1)
+        border = tk.Frame(root, bg=self.SEP, padx=1, pady=1)
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=self.BG)
         card.pack(fill="both", expand=True)
 
-        # Fade in
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
@@ -491,7 +596,7 @@ class RPAOverlay:
 
     def _fn(self, size, weight="normal"):
         scaled = int(size * 1.2)
-        return tkfont.Font(size=scaled, weight=weight)
+        return tkfont.Font(family="Malgun Gothic", size=scaled, weight=weight)
 
     def _drag(self, root, *widgets):
         def _press(e):
@@ -660,6 +765,8 @@ def ask_account_selection():
         else:
             ox, oy = 0, 0
         root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2}")
+        root.lift()
+        root.focus_force()
 
         border = tk.Frame(root, bg="#333344", padx=1, pady=1)
         border.pack(fill="both", expand=True)
@@ -716,25 +823,22 @@ def ask_account_selection():
                  font=tkfont.Font(family="Segoe UI", size=10),
                  bg="#2a2a2a", fg="#b8b8cc").pack(side="left")
 
+        cnt_btns = []
+
+        def _pick(v):
+            cnt_var.set(v)
+            for b, bv in cnt_btns:
+                b.configure(bg="#6cb4ee" if bv == v else "#3a3a4a",
+                            fg="#ffffff" if bv == v else "#b8b8cc")
+
         for lbl, val in [("1(테스트)", 1), ("5", 5), ("10", 10), ("20", 20)]:
-            def _pick(v=val):
-                cnt_var.set(v)
-                for b, bv in cnt_btns:
-                    b.configure(bg="#6cb4ee" if bv == v else "#3a3a4a",
-                                fg="#ffffff" if bv == v else "#b8b8cc")
             b = tk.Button(cnt_row, text=lbl, bg="#3a3a4a", fg="#b8b8cc",
                           font=tkfont.Font(family="Segoe UI", size=9),
                           relief="flat", bd=0, cursor="hand2", padx=8, pady=4,
-                          command=_pick)
+                          command=lambda v=val: _pick(v))
             b.pack(side="left", padx=3)
+            cnt_btns.append((b, val))
 
-        # cnt_btns 참조를 위한 재구성
-        cnt_btns = []
-        for w2 in cnt_row.winfo_children():
-            if isinstance(w2, tk.Button):
-                for lbl2, val2 in [("1(테스트)", 1), ("5", 5), ("10", 10), ("20", 20)]:
-                    if w2.cget("text") == lbl2:
-                        cnt_btns.append((w2, val2))
         # 기본값 10 강조
         for b, bv in cnt_btns:
             if bv == 10:
@@ -778,4 +882,5 @@ _overlay = RPAOverlay()
 show_working = _overlay.show_working
 show_complete = _overlay.show_complete
 update_progress = _overlay.update_progress
+update_status = _overlay.update_status
 close = _overlay.close

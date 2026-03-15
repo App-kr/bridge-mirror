@@ -1490,7 +1490,7 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, close as overlay_close, wants_more, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
     except ImportError:
         _HAS_OVERLAY = False
@@ -1505,6 +1505,8 @@ def main():
         posted = 0
 
         try:
+            if _HAS_OVERLAY:
+                update_status("로그인중")
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
@@ -1521,6 +1523,8 @@ def main():
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
 
                 try:
+                    if _HAS_OVERLAY:
+                        update_status(f"게시중 ({i}/{len(ad_list)})")
                     url = cl_post(driver, title, body, job)
                     ss  = take_screenshot(driver, jcode)
 
