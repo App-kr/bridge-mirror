@@ -109,12 +109,24 @@ class RPAOverlay:
         self._restore_monitor.start()
 
     def _bring_to_front(self):
-        """tkinter 스레드에서 창 앞으로."""
+        """tkinter 스레드에서 창 앞으로 (AttachThreadInput 강제 포커스)."""
         try:
             if self._root and self._root.winfo_exists():
+                import ctypes as _ct2
+                _hwnd = self._root.winfo_id()
+                _fg   = _ct2.windll.user32.GetForegroundWindow()
+                _fg_tid  = _ct2.windll.user32.GetWindowThreadProcessId(_fg, None)
+                _tgt_tid = _ct2.windll.user32.GetWindowThreadProcessId(_hwnd, None)
+                if _fg_tid and _tgt_tid and _fg_tid != _tgt_tid:
+                    _ct2.windll.user32.AttachThreadInput(_fg_tid, _tgt_tid, True)
                 self._root.attributes("-topmost", True)
                 self._root.lift()
                 self._root.focus_force()
+                _ct2.windll.user32.ShowWindow(_hwnd, 9)
+                _ct2.windll.user32.BringWindowToTop(_hwnd)
+                _ct2.windll.user32.SetForegroundWindow(_hwnd)
+                if _fg_tid and _tgt_tid and _fg_tid != _tgt_tid:
+                    _ct2.windll.user32.AttachThreadInput(_fg_tid, _tgt_tid, False)
                 self._root.after(
                     1200,
                     lambda: self._root.attributes("-topmost", False)
@@ -357,6 +369,18 @@ class RPAOverlay:
 
         self._drag(root, header, bar, bot_row, bot_c, info_col, warn_row)
         self._ready.set()
+
+        # HWND 파일 저장 — 다른 프로세스(launcher)가 창 복원 시 직접 사용
+        def _save_hwnd():
+            try:
+                _hwnd = root.winfo_id()
+                _hwnd_file = Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt"
+                _hwnd_file.parent.mkdir(parents=True, exist_ok=True)
+                _hwnd_file.write_text(str(_hwnd), encoding="utf-8")
+            except Exception:
+                pass
+        root.after(200, _save_hwnd)
+
         try:
             root.mainloop()
         except Exception:
@@ -1112,7 +1136,7 @@ def ask_account_selection():
 
 # ── Win32 직접 창 포커스 헬퍼 ────────────────────────────────────────────────
 def _win32_focus_working():
-    """lock 파일의 PID → EnumWindows로 실제 창을 찾아 앞으로 가져온다.
+    """lock 파일의 PID → HWND 파일 or EnumWindows로 실제 창을 찾아 앞으로 가져온다.
     창이 없으면(dismiss 상태) restore flag로 monitor 스레드에 복원 요청."""
     import ctypes as _ct
     from ctypes.wintypes import HWND, DWORD, BOOL, LPARAM
@@ -1132,7 +1156,7 @@ def _win32_focus_working():
                 if _code.value == _STILL_ACTIVE:
                     _pids.append(_pid)
                 else:
-                    _lf.unlink(missing_ok=True)  # 좀비 lock 정리
+                    _lf.unlink(missing_ok=True)
             else:
                 _lf.unlink(missing_ok=True)
         except Exception:
@@ -1141,7 +1165,35 @@ def _win32_focus_working():
     if not _pids:
         return False
 
-    # ── EnumWindows: 해당 PID가 소유한 visible 창 열거 ─────────────────
+    def _bring_hwnd(hwnd):
+        """AttachThreadInput 방식으로 교차-프로세스 창 활성화 (가장 신뢰할 수 있음)."""
+        try:
+            _fg = _ct.windll.user32.GetForegroundWindow()
+            _fg_tid = _ct.windll.user32.GetWindowThreadProcessId(_fg, None)
+            _tgt_tid = _ct.windll.user32.GetWindowThreadProcessId(hwnd, None)
+            if _fg_tid and _tgt_tid and _fg_tid != _tgt_tid:
+                _ct.windll.user32.AttachThreadInput(_fg_tid, _tgt_tid, True)
+            _ct.windll.user32.ShowWindow(hwnd, 9)        # SW_RESTORE
+            _ct.windll.user32.BringWindowToTop(hwnd)
+            _ct.windll.user32.SetForegroundWindow(hwnd)
+            if _fg_tid and _tgt_tid and _fg_tid != _tgt_tid:
+                _ct.windll.user32.AttachThreadInput(_fg_tid, _tgt_tid, False)
+        except Exception:
+            pass
+
+    # ── 방법1: HWND 파일에서 직접 읽기 (가장 신뢰할 수 있음) ──────────
+    _hwnd_file = _lock_dir / ".overlay_hwnd.txt"
+    if _hwnd_file.exists():
+        try:
+            _saved_hwnd = int(_hwnd_file.read_text(encoding="utf-8").strip())
+            if (_ct.windll.user32.IsWindow(_saved_hwnd)
+                    and _ct.windll.user32.IsWindowVisible(_saved_hwnd)):
+                _bring_hwnd(_saved_hwnd)
+                return True
+        except Exception:
+            pass
+
+    # ── 방법2: EnumWindows 폴백 ────────────────────────────────────────
     _found_hwnds = []
     _EnumProc = _ct.WINFUNCTYPE(BOOL, HWND, LPARAM)
 
@@ -1156,15 +1208,7 @@ def _win32_focus_working():
 
     if _found_hwnds:
         for _hwnd in _found_hwnds:
-            try:
-                # Alt 트릭: SetForegroundWindow 권한 우회
-                _ct.windll.user32.keybd_event(0x12, 0, 0, 0)   # Alt down
-                _ct.windll.user32.keybd_event(0x12, 0, 2, 0)   # Alt up
-                _ct.windll.user32.ShowWindow(_hwnd, 9)           # SW_RESTORE
-                _ct.windll.user32.SetForegroundWindow(_hwnd)
-                _ct.windll.user32.BringWindowToTop(_hwnd)
-            except Exception:
-                pass
+            _bring_hwnd(_hwnd)
         return True
     else:
         # 창이 없음(dismiss 상태) → restore flag로 monitor 스레드에 복원 요청
