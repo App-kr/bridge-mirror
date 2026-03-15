@@ -85,8 +85,28 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - Free tier: 15분 무트래픽 sleep, SQLite ephemeral(master.db 로컬 전용)
 → 상세: CLAUDE.md 섹션 10
 
+## HERO 3D 지구 확정 설정 (2026-03-14 영구 기억)
+- **컴포넌트**: `web_frontend/src/components/EarthGlobe.tsx`
+- **텍스처**: `/earth-map.jpg` (NASA Blue Marble, 로컬 public)
+- **구체**: `R=7`, `yOffset=-6.9`, `scale.x=1.28` (X축만 넓게)
+- **카메라**: `position(0,0,6)`, `fov=42`
+- **기울기**: `tiltGroup.rotation.x=-0.45` (적도 정면) — Group으로 분리
+- **자전**: `earth.rotation.y += 0.0014` (tiltGroup 내부만 회전)
+- **초기방향**: `rotation.y=1.8` (아프리카·유럽·아시아)
+- **투명도**: `opacity=0.32`
+- **좌우 페이드**: `maskImage` 20%~80% (canvas div에 직접)
+- **조명**: AmbientLight 0.72 + DirectionalLight(4,1,6) 1.2
+- **핵심**: tiltGroup(기울기+위치) / earth(자전만) 분리 필수 — 섞으면 축 틀어짐
+
 ## Team Names (영국식 영문 이름)
 - **Scarlett** — 대표 (User)
 - **Violet** — 운영부장
 - 이름 규칙: 영국식 영어 이름으로 통일
 - **MARK 사용 금지**
+
+## Python 실행 규칙 (2026-03-14 확정)
+- `C:\Python314` — 환경 깨짐, 사용 금지
+- **항상 사용**: `C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe`
+- D 드라이브 Python 접근 금지
+- C 드라이브는 실행 파일(Python 등) 용도만 — 아티팩트/메모리 저장 금지
+- **모든 저장 파일은 Q:\Claudework\bridge base 내부에만**
