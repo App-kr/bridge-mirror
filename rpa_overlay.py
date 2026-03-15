@@ -50,12 +50,12 @@ class RPAOverlay:
     BAR_BG = "#3a3a3c"
     GOLD   = "#ffd60a"
 
-    # 계정별 헤더 색상 (뚜렷하게 구별되는 4가지)
-    _HEADER_COLORS = {
-        "coreabridge@gmail.com":    "#163520",   # 짙은 숲초록
-        "airelair00@gmail.com":     "#220f3c",   # 짙은 보라
-        "ferrari812fast@gmail.com": "#351c04",   # 짙은 호박색
-        "bridgejobkr@gmail.com":    "#0c2044",   # 짙은 네이비
+    # 계정별 전체 창 색상 (BG, CARD) — 옅은 색감
+    _WINDOW_COLORS = {
+        "coreabridge@gmail.com":    ("#1a2820", "#20301e"),  # 옅은 초록
+        "airelair00@gmail.com":     ("#201830", "#28203c"),  # 연보라
+        "ferrari812fast@gmail.com": ("#28201a", "#302820"),  # 옅은 갈색
+        "bridgejobkr@gmail.com":    ("#222222", "#2c2c2c"),  # 옅은 회색
     }
 
     _STATUS_CYCLE = [
@@ -77,16 +77,18 @@ class RPAOverlay:
         self._remind_timer     = None
         self._email            = ""
         self._bot_t            = 0.0
-        self._card_color       = "#252527"
 
     # ── Public API ────────────────────────────
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
         self.close()
         self._is_working   = True
         self._progress_var = [current, total]
-        self._email        = email
-        self._bot_t        = 0.0
-        self._card_color   = self._HEADER_COLORS.get(email.lower(), self.CARD)
+        self._email   = email
+        self._bot_t   = 0.0
+        bg_c, card_c  = self._WINDOW_COLORS.get(email.lower(),
+                            (self.__class__.BG, self.__class__.CARD))
+        self.BG   = bg_c
+        self.CARD = card_c
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
@@ -172,8 +174,8 @@ class RPAOverlay:
     # ── WORKING window ────────────────────────
     def _build_working(self):
         _stop_event.clear()
-        CC = self._card_color          # 계정별 헤더 색
-        root, card = self._make_window(520, 360)
+        CC = self.CARD                 # 계정별 헤더 색
+        root, card = self._make_window(460, 360)
 
         # ══ HEADER (계정 색 배경) ═══════════════
         header = tk.Frame(card, bg=CC)
@@ -241,8 +243,8 @@ class RPAOverlay:
             font=self._fn(10), bg=self.BG, fg=self.TEXT2)
         self._prog_count_label.pack(side="right")
 
-        # Pill 프로그레스 바 (520 - 2border - 40pad = 478)
-        BAR_W, BAR_H = 478, 10
+        # Pill 프로그레스 바 (460 - 2border - 40pad = 418)
+        BAR_W, BAR_H = 418, 10
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
@@ -429,7 +431,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(478, 10, cur, tot)
+            self._draw_pill_bar(418, 10, cur, tot)
         except Exception:
             pass
 
