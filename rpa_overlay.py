@@ -1,7 +1,7 @@
 """
-BRIDGE RPA Overlay — iOS Dark v3 (Apple Aesthetic)
-===================================================
-두-톤 헤더(CARD #252527) + BG 바디(#1c1c1e).
+BRIDGE RPA Overlay — Apple Light v4
+=====================================
+두-톤 헤더(CARD #ffffff) + BG 바디(#f5f5f7).
 귀여운 로봇 캐릭터 애니메이션 (눈 글로우 · 안테나 흔들림 · LED 깜박임).
 Pill 프로그레스 바. 상태 블링크.
 """
@@ -37,25 +37,25 @@ def stop_requested() -> bool:
 
 class RPAOverlay:
 
-    BG     = "#1c1c1e"
-    CARD   = "#252527"      # header default
-    TEXT1  = "#ffffff"
-    TEXT2  = "#aeaeb2"
-    BLUE   = "#0a84ff"
-    RED    = "#ff453a"
-    GREEN  = "#30d158"
-    SEP    = "#38383a"
-    HOVER  = "#3a3a3c"
-    X_GRAY = "#636366"
-    BAR_BG = "#3a3a3c"
-    GOLD   = "#ffd60a"
+    BG     = "#f5f5f7"
+    CARD   = "#ffffff"      # header default
+    TEXT1  = "#1d1d1f"
+    TEXT2  = "#6e6e73"
+    BLUE   = "#0071e3"
+    RED    = "#ff3b30"
+    GREEN  = "#34c759"
+    SEP    = "#d2d2d7"
+    HOVER  = "#e8e8ed"
+    X_GRAY = "#86868b"
+    BAR_BG = "#e5e5ea"
+    GOLD   = "#ff9500"
 
-    # 계정별 전체 창 색상 (BG, CARD) — 옅은 색감
+    # 계정별 전체 창 색상 (BG, CARD) — 파스텔 라이트
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#1a2820", "#20301e"),  # 옅은 초록
-        "airelair00@gmail.com":     ("#201830", "#28203c"),  # 연보라
-        "ferrari812fast@gmail.com": ("#28201a", "#302820"),  # 옅은 갈색
-        "bridgejobkr@gmail.com":    ("#222222", "#2c2c2c"),  # 옅은 회색
+        "coreabridge@gmail.com":    ("#eef6f0", "#f7fbf8"),  # 옅은 초록
+        "airelair00@gmail.com":     ("#f0ecf8", "#f8f5fc"),  # 연보라
+        "ferrari812fast@gmail.com": ("#fdf4ec", "#fffaf5"),  # 옅은 갈색
+        "bridgejobkr@gmail.com":    ("#f5f5f7", "#fafafa"),  # 옅은 회색
     }
 
     _STATUS_CYCLE = [
@@ -298,16 +298,16 @@ class RPAOverlay:
 
             # ── Eye glow (0.55 → 1.0) ──
             glow   = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(t * 2.4))
-            e_fill = self._lerp_color("#003478", "#0a84ff", glow)
-            e_hi   = self._lerp_color("#1a4a88", "#5ab8ff", glow)
+            e_fill = self._lerp_color("#1a60b8", "#0071e3", glow)
+            e_hi   = self._lerp_color("#4a90d8", "#64b5ff", glow)
 
             # ── Head shadow ──
             c.create_oval(8, 13, 58, 53,
-                          fill="#0e0e10", outline="", tags="bot")
+                          fill="#d8d8dc", outline="", tags="bot")
 
             # ── Head ──
             c.create_oval(6, 10, 58, 52,
-                          fill="#2c2c2e", outline="#48484a", width=1.5, tags="bot")
+                          fill="#e8e8ed", outline="#c7c7cc", width=1.5, tags="bot")
 
             # ── Left eye ──
             c.create_oval(14, 22, 28, 36, fill=e_fill,  outline="", tags="bot")
@@ -329,7 +329,7 @@ class RPAOverlay:
 
             # ── Antenna pole ──
             c.create_line(32, 10, 32, 3 + ant_off,
-                          fill="#636366", width=2, tags="bot")
+                          fill="#8e8e93", width=2, tags="bot")
             # Antenna ball
             c.create_oval(27, -2 + ant_off, 37, 8 + ant_off,
                           fill=self.GOLD, outline="", tags="bot")
@@ -338,7 +338,7 @@ class RPAOverlay:
 
             # ── Torso ──
             c.create_rectangle(18, 53, 46, 66,
-                               fill="#2c2c2e", outline="#48484a", width=1, tags="bot")
+                               fill="#e8e8ed", outline="#c7c7cc", width=1, tags="bot")
             # Chest LED
             led_bright = 0.5 + 0.5 * math.sin(t * 3.6)
             led_col    = self._lerp_color("#1a5e2a", self.GREEN, led_bright)
@@ -409,7 +409,7 @@ class RPAOverlay:
                                else self._STATUS_CYCLE[(tick[0] // 2) % len(self._STATUS_CYCLE)])
                         self._status_label.configure(text=txt, fg=self.BLUE)
                     else:
-                        self._status_label.configure(fg="#1e3a5a")
+                        self._status_label.configure(fg=self.BG)
             except Exception:
                 pass
             root.after(700, _blink)
@@ -519,7 +519,7 @@ class RPAOverlay:
         chk.pack(pady=(4, 8))
         self._draw_check_animated(chk, root)
 
-        title = tk.Label(card, text=f"\u2728 광고 {count}건 완료",
+        title = tk.Label(card, text=f"{count}건 완료",
                          font=self._fn(17, "bold"),
                          bg=self.BG, fg=self.TEXT1)
         title.pack()
@@ -684,30 +684,32 @@ def ask_integrity_password() -> bool:
     root.title("보안 확인")
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    root.configure(bg="#2a2a2a")
+    root.configure(bg="#f5f5f7")
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     w, h = 360, 200
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
 
-    border = tk.Frame(root, bg="#333344", padx=1, pady=1)
+    border = tk.Frame(root, bg="#d2d2d7", padx=1, pady=1)
     border.pack(fill="both", expand=True)
-    card = tk.Frame(border, bg="#2a2a2a")
+    card = tk.Frame(border, bg="#ffffff")
     card.pack(fill="both", expand=True)
 
     tk.Label(card, text="파일 변조 감지",
-             font=tkfont.Font(size=16, weight="bold"),
-             bg="#2a2a2a", fg="#f47174").pack(pady=(20, 6))
+             font=tkfont.Font(family="Malgun Gothic", size=16, weight="bold"),
+             bg="#ffffff", fg="#ff3b30").pack(pady=(20, 6))
     tk.Label(card, text="리셋 비밀번호를 입력하세요",
-             font=tkfont.Font(size=11),
-             bg="#2a2a2a", fg="#b8b8cc").pack(pady=(0, 10))
+             font=tkfont.Font(family="Malgun Gothic", size=11),
+             bg="#ffffff", fg="#6e6e73").pack(pady=(0, 10))
 
-    entry = tk.Entry(card, show="*", font=tkfont.Font(size=14),
-                     justify="center", width=15)
+    entry = tk.Entry(card, show="*", font=tkfont.Font(family="Malgun Gothic", size=14),
+                     justify="center", width=15,
+                     relief="flat", bd=1, highlightthickness=1,
+                     highlightbackground="#d2d2d7", highlightcolor="#0071e3")
     entry.pack(pady=(0, 10))
     entry.focus_set()
 
-    msg = tk.Label(card, text="", font=tkfont.Font(size=10),
-                   bg="#2a2a2a", fg="#f47174")
+    msg = tk.Label(card, text="", font=tkfont.Font(family="Malgun Gothic", size=10),
+                   bg="#ffffff", fg="#ff3b30")
     msg.pack()
 
     def _submit(event=None):
@@ -723,18 +725,22 @@ def ask_integrity_password() -> bool:
 
     entry.bind("<Return>", _submit)
 
-    tk.Frame(card, bg="#333344", height=1).pack(fill="x", pady=(10, 0))
-    btn_row = tk.Frame(card, bg="#2a2a2a")
+    tk.Frame(card, bg="#d2d2d7", height=1).pack(fill="x", pady=(10, 0))
+    btn_row = tk.Frame(card, bg="#ffffff")
     btn_row.pack(fill="x")
-    ok_lbl = tk.Label(btn_row, text="확인", font=tkfont.Font(size=13),
-                      bg="#2a2a2a", fg="#6cb4ee", pady=10, cursor="hand2")
+    ok_lbl = tk.Label(btn_row, text="확인", font=tkfont.Font(family="Malgun Gothic", size=13),
+                      bg="#ffffff", fg="#0071e3", pady=10, cursor="hand2")
     ok_lbl.pack(side="left", expand=True, fill="both")
     ok_lbl.bind("<Button-1>", lambda e: _submit())
-    tk.Frame(btn_row, bg="#333344", width=1).pack(side="left", fill="y")
-    cancel_lbl = tk.Label(btn_row, text="취소", font=tkfont.Font(size=13),
-                          bg="#2a2a2a", fg="#f47174", pady=10, cursor="hand2")
+    ok_lbl.bind("<Enter>", lambda e: ok_lbl.configure(bg="#e8e8ed"))
+    ok_lbl.bind("<Leave>", lambda e: ok_lbl.configure(bg="#ffffff"))
+    tk.Frame(btn_row, bg="#d2d2d7", width=1).pack(side="left", fill="y")
+    cancel_lbl = tk.Label(btn_row, text="취소", font=tkfont.Font(family="Malgun Gothic", size=13),
+                          bg="#ffffff", fg="#ff3b30", pady=10, cursor="hand2")
     cancel_lbl.pack(side="left", expand=True, fill="both")
     cancel_lbl.bind("<Button-1>", lambda e: _cancel())
+    cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg="#e8e8ed"))
+    cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg="#ffffff"))
 
     def _press(e):
         root._dx, root._dy = e.x_root, e.y_root
@@ -753,10 +759,10 @@ def ask_integrity_password() -> bool:
 
 # ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#1e2e1e"),
-    ("account2", "airelair00@gmail.com",      "#251e2e"),
-    ("account3", "ferrari812fast@gmail.com",  "#2e2518"),
-    ("account4", "bridgejobkr@gmail.com",     "#2a2a2a"),
+    ("account1", "coreabridge@gmail.com",    "#eef6f0"),  # 옅은 초록
+    ("account2", "airelair00@gmail.com",      "#f0ecf8"),  # 연보라
+    ("account3", "ferrari812fast@gmail.com",  "#fdf4ec"),  # 옅은 갈색
+    ("account4", "bridgejobkr@gmail.com",     "#f5f5f7"),  # 옅은 회색
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"
@@ -806,11 +812,20 @@ def ask_account_selection():
     result = [("CANCEL", 0)]
 
     def _build():
+        _BG   = "#f5f5f7"
+        _CARD = "#ffffff"
+        _SEP  = "#d2d2d7"
+        _T1   = "#1d1d1f"
+        _T2   = "#6e6e73"
+        _BLUE = "#0071e3"
+        _RED  = "#ff3b30"
+        _HOV  = "#e8e8ed"
+
         root = tk.Tk()
         root.title("BRIDGE Craig")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
-        root.configure(bg="#2a2a2a")
+        root.configure(bg=_BG)
 
         w, h = 440, 540
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
@@ -828,17 +843,17 @@ def ask_account_selection():
         root.lift()
         root.focus_force()
 
-        border = tk.Frame(root, bg="#333344", padx=1, pady=1)
+        border = tk.Frame(root, bg=_SEP, padx=1, pady=1)
         border.pack(fill="both", expand=True)
-        card = tk.Frame(border, bg="#2a2a2a")
+        card = tk.Frame(border, bg=_CARD)
         card.pack(fill="both", expand=True)
 
         tk.Label(card, text="BRIDGE Craig RPA",
-                 font=tkfont.Font(family="Segoe UI", size=18, weight="bold"),
-                 bg="#2a2a2a", fg="#f0f0f5").pack(pady=(20, 2))
+                 font=tkfont.Font(family="Malgun Gothic", size=18, weight="bold"),
+                 bg=_CARD, fg=_T1).pack(pady=(20, 2))
         tk.Label(card, text="작업할 계정을 선택하세요",
-                 font=tkfont.Font(family="Segoe UI", size=10),
-                 bg="#2a2a2a", fg="#b8b8cc").pack(pady=(0, 10))
+                 font=tkfont.Font(family="Malgun Gothic", size=10),
+                 bg=_CARD, fg=_T2).pack(pady=(0, 10))
 
         last_runs = _load_last_runs()
         cnt_var   = tk.IntVar(value=10)
@@ -847,20 +862,20 @@ def ask_account_selection():
             ago = (_time_ago(last_runs[email]) if email in last_runs
                    else "아직 사용 안 함")
 
-            border_frame = tk.Frame(card, bg="#444455", padx=1, pady=1)
+            border_frame = tk.Frame(card, bg=_SEP, padx=1, pady=1)
             border_frame.pack(fill="x", padx=16, pady=3)
 
             btn_frame = tk.Frame(border_frame, bg=color, padx=14, pady=10, cursor="hand2")
             btn_frame.pack(fill="both")
 
             lbl_email = tk.Label(btn_frame, text=_mask_email(email),
-                                 font=tkfont.Font(family="Segoe UI", size=12, weight="bold"),
-                                 bg=color, fg="#f0f0f5", anchor="w")
+                                 font=tkfont.Font(family="Malgun Gothic", size=12, weight="bold"),
+                                 bg=color, fg=_T1, anchor="w")
             lbl_email.pack(fill="x")
 
             lbl_ago = tk.Label(btn_frame, text=ago,
-                               font=tkfont.Font(family="Segoe UI", size=9),
-                               bg=color, fg="#aaaaaa", anchor="w")
+                               font=tkfont.Font(family="Malgun Gothic", size=9),
+                               bg=color, fg=_T2, anchor="w")
             lbl_ago.pack(fill="x", pady=(2, 0))
 
             def _select(aid=acct_id, em=email):
@@ -868,7 +883,7 @@ def ask_account_selection():
                 _save_last_run(em)
                 root.destroy()
 
-            hover_color = "#3a3a4a"
+            hover_color = _HOV
             for widget in (btn_frame, lbl_email, lbl_ago):
                 widget.bind("<Button-1>", lambda e, f=_select: f())
                 widget.bind("<Enter>",
@@ -876,24 +891,24 @@ def ask_account_selection():
                 widget.bind("<Leave>",
                             lambda e, bf=btn_frame, c=color: bf.configure(bg=c))
 
-        tk.Frame(card, bg="#333344", height=1).pack(fill="x", padx=16, pady=(12, 0))
-        cnt_row = tk.Frame(card, bg="#2a2a2a")
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=16, pady=(12, 0))
+        cnt_row = tk.Frame(card, bg=_CARD)
         cnt_row.pack(fill="x", padx=16, pady=6)
         tk.Label(cnt_row, text="게시 수:",
-                 font=tkfont.Font(family="Segoe UI", size=10),
-                 bg="#2a2a2a", fg="#b8b8cc").pack(side="left")
+                 font=tkfont.Font(family="Malgun Gothic", size=10),
+                 bg=_CARD, fg=_T2).pack(side="left")
 
         cnt_btns = []
 
         def _pick(v):
             cnt_var.set(v)
             for b, bv in cnt_btns:
-                b.configure(bg="#6cb4ee" if bv == v else "#3a3a4a",
-                            fg="#ffffff" if bv == v else "#b8b8cc")
+                b.configure(bg=_BLUE if bv == v else _HOV,
+                            fg="#ffffff" if bv == v else _T2)
 
         for lbl, val in [("1(테스트)", 1), ("5", 5), ("10", 10), ("20", 20)]:
-            b = tk.Button(cnt_row, text=lbl, bg="#3a3a4a", fg="#b8b8cc",
-                          font=tkfont.Font(family="Segoe UI", size=9),
+            b = tk.Button(cnt_row, text=lbl, bg=_HOV, fg=_T2,
+                          font=tkfont.Font(family="Malgun Gothic", size=9),
                           relief="flat", bd=0, cursor="hand2", padx=8, pady=4,
                           command=lambda v=val: _pick(v))
             b.pack(side="left", padx=3)
@@ -901,16 +916,16 @@ def ask_account_selection():
 
         for b, bv in cnt_btns:
             if bv == 10:
-                b.configure(bg="#6cb4ee", fg="#ffffff")
+                b.configure(bg=_BLUE, fg="#ffffff")
 
-        tk.Frame(card, bg="#333344", height=1).pack(fill="x")
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
         cancel_lbl = tk.Label(card, text="나중에 하기 (종료)",
-                              font=tkfont.Font(family="Segoe UI", size=12),
-                              bg="#2a2a2a", fg="#f47174", cursor="hand2", pady=10)
+                              font=tkfont.Font(family="Malgun Gothic", size=12),
+                              bg=_CARD, fg=_RED, cursor="hand2", pady=10)
         cancel_lbl.pack(fill="x")
         cancel_lbl.bind("<Button-1>", lambda e: root.destroy())
-        cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg="#333344"))
-        cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg="#2a2a2a"))
+        cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg=_HOV))
+        cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg=_CARD))
 
         def _press(e):
             root._dx, root._dy = e.x_root, e.y_root
