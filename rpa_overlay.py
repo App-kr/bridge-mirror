@@ -50,12 +50,12 @@ class RPAOverlay:
     BAR_BG = "#e5e5ea"
     GOLD   = "#ff9500"
 
-    # 계정별 전체 창 색상 (BG, CARD) — 파스텔 라이트
+    # 계정별 전체 창 색상 (BG, CARD) — 선명한 파스텔
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#eef6f0", "#f7fbf8"),  # 옅은 초록
-        "airelair00@gmail.com":     ("#f0ecf8", "#f8f5fc"),  # 연보라
-        "ferrari812fast@gmail.com": ("#fdf4ec", "#fffaf5"),  # 옅은 갈색
-        "bridgejobkr@gmail.com":    ("#f5f5f7", "#fafafa"),  # 옅은 회색
+        "coreabridge@gmail.com":    ("#c4ecd0", "#e4f8ea"),  # 선명 민트
+        "airelair00@gmail.com":     ("#d4ccf0", "#e8e4fc"),  # 선명 라벤더
+        "ferrari812fast@gmail.com": ("#fde4b0", "#fff4d4"),  # 선명 앰버
+        "bridgejobkr@gmail.com":    ("#b8e4f8", "#d8f0fc"),  # 선명 하늘
     }
 
     _STATUS_CYCLE = [
@@ -145,6 +145,11 @@ class RPAOverlay:
                 pass
             self._root = None
         self._ready.clear()
+        # HWND 파일 정리 (중복실행 포커스용)
+        try:
+            (Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt").unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def _dismiss_and_remind(self):
         if self._root:
@@ -176,6 +181,15 @@ class RPAOverlay:
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
         root, card = self._make_window(460, 360)
+
+        # HWND 저장 (중복실행 감지 시 창 포커스용)
+        try:
+            root.update_idletasks()
+            _hwnd_store = Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt"
+            _hwnd_store.parent.mkdir(parents=True, exist_ok=True)
+            _hwnd_store.write_text(str(root.winfo_id()), encoding="utf-8")
+        except Exception:
+            pass
 
         # ══ HEADER (계정 색 배경) ═══════════════
         header = tk.Frame(card, bg=CC)
@@ -771,10 +785,10 @@ def ask_integrity_password() -> bool:
 
 # ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#eef6f0"),  # 옅은 초록
-    ("account2", "airelair00@gmail.com",      "#f0ecf8"),  # 연보라
-    ("account3", "ferrari812fast@gmail.com",  "#fdf4ec"),  # 옅은 갈색
-    ("account4", "bridgejobkr@gmail.com",     "#f5f5f7"),  # 옅은 회색
+    ("account1", "coreabridge@gmail.com",    "#a5d6a7"),  # 선명 민트그린 (Material Green 200)
+    ("account2", "airelair00@gmail.com",      "#b39ddb"),  # 선명 라벤더 (Material DeepPurple 200)
+    ("account3", "ferrari812fast@gmail.com",  "#ffcc80"),  # 선명 앰버 (Material Orange 200)
+    ("account4", "bridgejobkr@gmail.com",     "#81d4fa"),  # 선명 하늘 (Material LightBlue 200)
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"
@@ -845,7 +859,7 @@ def ask_account_selection():
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
 
-        w, h = 440, 540
+        w, h = 460, 560
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
@@ -867,47 +881,84 @@ def ask_account_selection():
         card.pack(fill="both", expand=True)
 
         tk.Label(card, text="BRIDGE Craig RPA",
-                 font=tkfont.Font(family="Malgun Gothic", size=18, weight="bold"),
-                 bg=_CARD, fg=_T1).pack(pady=(20, 2))
+                 font=tkfont.Font(family="Malgun Gothic", size=19, weight="bold"),
+                 bg=_CARD, fg=_T1).pack(pady=(22, 2))
         tk.Label(card, text="작업할 계정을 선택하세요",
-                 font=tkfont.Font(family="Malgun Gothic", size=10),
-                 bg=_CARD, fg=_T2).pack(pady=(0, 10))
+                 font=tkfont.Font(family="Malgun Gothic", size=11),
+                 bg=_CARD, fg=_T2).pack(pady=(0, 12))
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=16, pady=(0, 4))
 
         last_runs = _load_last_runs()
         cnt_var   = tk.IntVar(value=10)
 
-        for acct_id, email, color in _ACCOUNT_LIST:
-            ago = (_time_ago(last_runs[email]) if email in last_runs
-                   else "아직 사용 안 함")
+        def _darken(hex_color, factor=0.82):
+            """hex 색상을 factor 비율로 어둡게."""
+            r = int(int(hex_color[1:3], 16) * factor)
+            g = int(int(hex_color[3:5], 16) * factor)
+            b = int(int(hex_color[5:7], 16) * factor)
+            return "#{:02x}{:02x}{:02x}".format(
+                min(r, 255), min(g, 255), min(b, 255))
 
-            border_frame = tk.Frame(card, bg=_SEP, padx=1, pady=1)
-            border_frame.pack(fill="x", padx=16, pady=3)
+        for idx, (acct_id, email, color) in enumerate(_ACCOUNT_LIST, 1):
+            ago       = (_time_ago(last_runs[email]) if email in last_runs
+                         else "아직 사용 안 함")
+            name      = email.split("@")[0]          # @gmail.com 제거
+            hover_c   = _darken(color)               # 호버시 선명한 어두운 버전
+            accent_c  = _darken(color, 0.68)         # 왼쪽 악센트 바 색
 
-            btn_frame = tk.Frame(border_frame, bg=color, padx=14, pady=10, cursor="hand2")
-            btn_frame.pack(fill="both")
+            # ── 카드 래퍼 (테두리) ────────────────────
+            wrap = tk.Frame(card, bg=_SEP, padx=1, pady=1)
+            wrap.pack(fill="x", padx=16, pady=4)
 
-            lbl_email = tk.Label(btn_frame, text=_mask_email(email),
-                                 font=tkfont.Font(family="Malgun Gothic", size=12, weight="bold"),
-                                 bg=color, fg=_T1, anchor="w")
-            lbl_email.pack(fill="x")
+            # ── 버튼 본체 ─────────────────────────────
+            btn = tk.Frame(wrap, bg=color, cursor="hand2")
+            btn.pack(fill="both")
 
-            lbl_ago = tk.Label(btn_frame, text=ago,
+            # 왼쪽 악센트 바
+            accent = tk.Frame(btn, bg=accent_c, width=6)
+            accent.pack(side="left", fill="y")
+            accent.pack_propagate(False)
+
+            # 콘텐츠 영역
+            body = tk.Frame(btn, bg=color, padx=14, pady=13)
+            body.pack(side="left", fill="both", expand=True)
+
+            lbl_name = tk.Label(body,
+                                text=name,
+                                font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
+                                bg=color, fg=_T1, anchor="w")
+            lbl_name.pack(fill="x")
+
+            lbl_ago = tk.Label(body,
+                               text=ago,
                                font=tkfont.Font(family="Malgun Gothic", size=9),
-                               bg=color, fg=_T2, anchor="w")
-            lbl_ago.pack(fill="x", pady=(2, 0))
+                               bg=color, fg="#555560", anchor="w")
+            lbl_ago.pack(fill="x", pady=(3, 0))
+
+            # 오른쪽 화살표
+            arrow = tk.Label(btn, text="›",
+                             font=tkfont.Font(family="Malgun Gothic", size=20),
+                             bg=color, fg=accent_c, padx=14, cursor="hand2")
+            arrow.pack(side="right", fill="y")
 
             def _select(aid=acct_id, em=email):
                 result[0] = (aid, cnt_var.get())
                 _save_last_run(em)
                 root.destroy()
 
-            hover_color = _HOV
-            for widget in (btn_frame, lbl_email, lbl_ago):
-                widget.bind("<Button-1>", lambda e, f=_select: f())
-                widget.bind("<Enter>",
-                            lambda e, bf=btn_frame, hc=hover_color: bf.configure(bg=hc))
-                widget.bind("<Leave>",
-                            lambda e, bf=btn_frame, c=color: bf.configure(bg=c))
+            # 호버 대상 위젯 (악센트 바 제외 — 악센트는 고정색 유지)
+            _bg_widgets = (btn, body, lbl_name, lbl_ago, arrow)
+            for w in _bg_widgets + (accent,):
+                w.bind("<Button-1>", lambda e, f=_select: f())
+            for w in _bg_widgets:
+                w.bind("<Enter>",
+                       lambda e, ws=_bg_widgets, hc=hover_c: [x.configure(bg=hc) for x in ws])
+                w.bind("<Leave>",
+                       lambda e, ws=_bg_widgets, c=color: [x.configure(bg=c) for x in ws])
+            accent.bind("<Enter>",
+                        lambda e, ws=_bg_widgets, hc=hover_c: [x.configure(bg=hc) for x in ws])
+            accent.bind("<Leave>",
+                        lambda e, ws=_bg_widgets, c=color: [x.configure(bg=c) for x in ws])
 
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=16, pady=(12, 0))
         cnt_row = tk.Frame(card, bg=_CARD)
@@ -970,7 +1021,29 @@ def ask_account_selection():
 
 # ── Already-running popup ─────────────────────────────────────────────────────
 def ask_already_running(acct_key: str = ""):
-    """같은 계정 RPA 중복 실행 감지 시 알림 팝업 (5초 자동 닫힘)."""
+    """같은 계정 RPA 중복 실행 감지 시 알림 팝업 + 기존 작업창 앞으로 포커스."""
+
+    # ── 기존 오버레이 창 포커스 ─────────────────────────────────────────────
+    try:
+        import ctypes as _ct
+        _hwnd_file = Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt"
+        if _hwnd_file.exists():
+            hwnd = int(_hwnd_file.read_text(encoding="utf-8").strip())
+            if hwnd:
+                _ct.windll.user32.ShowWindow(hwnd, 9)        # SW_RESTORE
+                _ct.windll.user32.SetForegroundWindow(hwnd)
+                _ct.windll.user32.BringWindowToTop(hwnd)
+    except Exception:
+        pass
+
+    # ── 안내 팝업 ────────────────────────────────────────────────────────────
+    # 계정별 색상 가져오기
+    acct_color = "#f5f5f7"
+    for _aid, _em, _c in _ACCOUNT_LIST:
+        if _aid == acct_key or _em.split("@")[0] == acct_key:
+            acct_color = _c
+            break
+
     root = tk.Tk()
     _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
     if _ico.exists():
@@ -980,10 +1053,21 @@ def ask_already_running(acct_key: str = ""):
             pass
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    root.configure(bg="#f5f5f7")
-    w, h = 360, 170
+    root.configure(bg=acct_color)
+
+    w, h = 380, 180
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-    root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+    if _HAS_SCREENINFO:
+        try:
+            mons = get_monitors()
+            m = mons[1] if len(mons) >= 2 else mons[0]
+            sw, sh = m.width, m.height
+            ox, oy = m.x, m.y
+        except Exception:
+            ox, oy = 0, 0
+    else:
+        ox, oy = 0, 0
+    root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2 - 80}")
     root.attributes("-alpha", 0.0)
 
     def _fade(a=0.0):
@@ -995,30 +1079,57 @@ def ask_already_running(acct_key: str = ""):
                 root.attributes("-alpha", 1.0)
     root.after(10, _fade)
 
-    border = tk.Frame(root, bg="#d2d2d7", padx=1, pady=1)
+    # 테두리: acct_color를 80% 어둡게
+    _bc = "#{:02x}{:02x}{:02x}".format(
+        max(0, int(int(acct_color[1:3], 16) * 0.80)),
+        max(0, int(int(acct_color[3:5], 16) * 0.80)),
+        max(0, int(int(acct_color[5:7], 16) * 0.80)))
+    border = tk.Frame(root, bg=_bc, padx=1, pady=1)
     border.pack(fill="both", expand=True)
-    card = tk.Frame(border, bg="#ffffff")
+    card = tk.Frame(border, bg=acct_color)
     card.pack(fill="both", expand=True)
 
-    tk.Label(card, text="이미 실행 중",
-             font=tkfont.Font(family="Malgun Gothic", size=16, weight="bold"),
-             bg="#ffffff", fg="#ff3b30").pack(pady=(22, 6))
-    msg = (f"{acct_key} 계정 RPA가 이미 실행 중입니다" if acct_key
-           else "RPA가 이미 실행 중입니다")
-    tk.Label(card, text=msg,
-             font=tkfont.Font(family="Malgun Gothic", size=11),
-             bg="#ffffff", fg="#6e6e73").pack(pady=(0, 12))
+    # 제목
+    name_part = acct_key.replace("account", "") if acct_key.startswith("account") else acct_key
+    for _aid, _em, _c in _ACCOUNT_LIST:
+        if _aid == acct_key:
+            name_part = _em.split("@")[0]
+            break
 
-    tk.Frame(card, bg="#d2d2d7", height=1).pack(fill="x")
+    tk.Label(card, text="이미 작업 중 🤖",
+             font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
+             bg=acct_color, fg="#1d1d1f").pack(pady=(20, 4))
+    tk.Label(card, text=f"[ {name_part} ] 계정이 현재 작업 중입니다.",
+             font=tkfont.Font(family="Malgun Gothic", size=11),
+             bg=acct_color, fg="#444450").pack()
+    tk.Label(card, text="작업 창을 앞으로 가져왔습니다.",
+             font=tkfont.Font(family="Malgun Gothic", size=10),
+             bg=acct_color, fg="#666670").pack(pady=(3, 0))
+
+    # 구분선: acct_color 75% 어둡게
+    _sc = "#{:02x}{:02x}{:02x}".format(
+        max(0, int(int(acct_color[1:3], 16) * 0.75)),
+        max(0, int(int(acct_color[3:5], 16) * 0.75)),
+        max(0, int(int(acct_color[5:7], 16) * 0.75)))
+    tk.Frame(card, bg=_sc, height=1).pack(fill="x", pady=(16, 0))
     ok_btn = tk.Label(card, text="확인",
                       font=tkfont.Font(family="Malgun Gothic", size=13),
-                      bg="#ffffff", fg="#0071e3", pady=12, cursor="hand2")
+                      bg=acct_color, fg="#0071e3", pady=10, cursor="hand2")
     ok_btn.pack(fill="x")
     ok_btn.bind("<Button-1>", lambda e: root.destroy())
-    ok_btn.bind("<Enter>", lambda e: ok_btn.configure(bg="#e8e8ed"))
-    ok_btn.bind("<Leave>", lambda e: ok_btn.configure(bg="#ffffff"))
 
-    root.after(5000, lambda: root.destroy() if root.winfo_exists() else None)
+    # 드래그
+    def _press(e): root._dx, root._dy = e.x_root, e.y_root
+    def _move(e):
+        x = root.winfo_x() + e.x_root - root._dx
+        y = root.winfo_y() + e.y_root - root._dy
+        root._dx, root._dy = e.x_root, e.y_root
+        root.geometry(f"+{x}+{y}")
+    for dw in (card, border):
+        dw.bind("<ButtonPress-1>", _press)
+        dw.bind("<B1-Motion>", _move)
+
+    root.after(6000, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
 
 
