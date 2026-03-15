@@ -1,8 +1,9 @@
 """
-BRIDGE RPA Overlay — iOS Dark Style v2
-========================================
-Apple iOS HIG 기반. 600px 넓이. 상태 블링크 + pill 프로그레스 바.
-귀여운 중단 확인 팝업. 개인정보 확인 필수 고딕 경고.
+BRIDGE RPA Overlay — iOS Dark v3 (Apple Aesthetic)
+===================================================
+두-톤 헤더(CARD #252527) + BG 바디(#1c1c1e).
+귀여운 로봇 캐릭터 애니메이션 (눈 글로우 · 안테나 흔들림 · LED 깜박임).
+Pill 프로그레스 바. 상태 블링크.
 """
 
 import json
@@ -37,6 +38,7 @@ def stop_requested() -> bool:
 class RPAOverlay:
 
     BG     = "#1c1c1e"
+    CARD   = "#252527"      # header — slightly lighter
     TEXT1  = "#ffffff"
     TEXT2  = "#aeaeb2"
     BLUE   = "#0a84ff"
@@ -46,6 +48,7 @@ class RPAOverlay:
     HOVER  = "#3a3a3c"
     X_GRAY = "#636366"
     BAR_BG = "#3a3a3c"
+    GOLD   = "#ffd60a"
 
     _STATUS_CYCLE = [
         "작업준비중", "로그인중", "카테고리선택중",
@@ -53,24 +56,27 @@ class RPAOverlay:
     ]
 
     def __init__(self):
-        self._root = None
-        self._thread = None
-        self._ready = threading.Event()
-        self._progress_var = [0, 0]
-        self._prog_bar_canvas = None
-        self._prog_pct_label = None
+        self._root             = None
+        self._thread           = None
+        self._ready            = threading.Event()
+        self._progress_var     = [0, 0]
+        self._prog_bar_canvas  = None
+        self._prog_pct_label   = None
         self._prog_count_label = None
-        self._status_label = None
-        self._status_text = ""
-        self._is_working = False
-        self._remind_timer = None
-        self._email = ""
+        self._status_label     = None
+        self._status_text      = ""
+        self._is_working       = False
+        self._remind_timer     = None
+        self._email            = ""
+        self._bot_t            = 0.0
 
+    # ── Public API ────────────────────────────
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
         self.close()
-        self._is_working = True
+        self._is_working   = True
         self._progress_var = [current, total]
-        self._email = email
+        self._email        = email
+        self._bot_t        = 0.0
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
@@ -84,7 +90,7 @@ class RPAOverlay:
                 pass
 
     def update_status(self, text: str):
-        """외부에서 상태 텍스트 직접 설정 (자동 순환 중단)."""
+        """외부에서 상태 텍스트 직접 설정."""
         self._status_text = text
         if self._root and self._status_label:
             try:
@@ -129,7 +135,6 @@ class RPAOverlay:
         self._ready.clear()
 
     def _dismiss_and_remind(self):
-        """닫기 누르면 창만 닫고, 30초 후 다시 팝업."""
         if self._root:
             try:
                 self._root.destroy()
@@ -154,41 +159,60 @@ class RPAOverlay:
             self._remind_timer.cancel()
             self._remind_timer = None
 
-    # ── WORKING ──────────────────────────────
+    # ── WORKING window ────────────────────────
     def _build_working(self):
         _stop_event.clear()
-        root, card = self._make_window(600, 360)
+        root, card = self._make_window(580, 390)
 
-        bar = self._top_bar(card, root)
+        # ══ HEADER (CARD 배경) ══════════════════
+        header = tk.Frame(card, bg=self.CARD)
+        header.pack(fill="x")
 
-        # ── 스피너 + 타이틀 ──
-        title_row = tk.Frame(card, bg=self.BG)
-        title_row.pack(pady=(14, 6), padx=28, anchor="w")
+        # 닫기 버튼 (헤더 우상단)
+        bar = tk.Frame(header, bg=self.CARD, height=26)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
+                      bg=self.CARD, fg=self.X_GRAY, cursor="hand2")
+        xb.pack(side="right", padx=(0, 10), pady=(4, 0))
+        xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
+        xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
+        xb.bind("<Button-1>", lambda e: self._dismiss_and_remind())
 
-        spinner = tk.Canvas(title_row, width=36, height=36,
-                            bg=self.BG, highlightthickness=0)
-        spinner.pack(side="left", padx=(0, 14))
-        self._draw_spinner(spinner, root)
+        # 봇 + 타이틀
+        bot_row = tk.Frame(header, bg=self.CARD)
+        bot_row.pack(padx=22, pady=(4, 18), anchor="w")
 
-        title_col = tk.Frame(title_row, bg=self.BG)
-        title_col.pack(side="left")
-        tk.Label(title_col, text="Craig 작업중",
-                 font=self._fn(16, "bold"),
-                 bg=self.BG, fg=self.TEXT1, anchor="w").pack(anchor="w")
+        bot_c = tk.Canvas(bot_row, width=64, height=80,
+                          bg=self.CARD, highlightthickness=0)
+        bot_c.pack(side="left", padx=(0, 18))
+        self._draw_bot(bot_c, root)
 
+        info_col = tk.Frame(bot_row, bg=self.CARD)
+        info_col.pack(side="left", anchor="w")
+
+        tk.Label(info_col, text="Craig RPA",
+                 font=self._fn(17, "bold"),
+                 bg=self.CARD, fg=self.TEXT1, anchor="w").pack(anchor="w")
+        tk.Label(info_col, text="광고 자동게시 진행중",
+                 font=self._fn(10),
+                 bg=self.CARD, fg=self.TEXT2, anchor="w").pack(anchor="w", pady=(3, 0))
         if self._email:
-            tk.Label(title_col, text=self._email,
-                     font=self._fn(9), bg=self.BG, fg=self.TEXT2, anchor="w").pack(
-                         anchor="w", pady=(2, 0))
+            tk.Label(info_col, text=self._email,
+                     font=self._fn(9),
+                     bg=self.CARD, fg=self.X_GRAY, anchor="w").pack(anchor="w", pady=(4, 0))
 
-        # ── 진행률 섹션 ──
+        # ══ SEPARATOR ══════════════════════════
+        tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
+
+        # ══ BODY (BG 배경) ══════════════════════
         cur, tot = self._progress_var or [0, 0]
-        prog_section = tk.Frame(card, bg=self.BG)
-        prog_section.pack(fill="x", padx=28, pady=(8, 6))
+        body = tk.Frame(card, bg=self.BG)
+        body.pack(fill="x", padx=22, pady=(14, 10))
 
-        # % 레이블 · 상태 텍스트 · 카운트
-        pct_row = tk.Frame(prog_section, bg=self.BG)
-        pct_row.pack(fill="x", pady=(0, 8))
+        # % · 상태 · 카운트 행
+        pct_row = tk.Frame(body, bg=self.BG)
+        pct_row.pack(fill="x", pady=(0, 9))
 
         self._prog_pct_label = tk.Label(
             pct_row, text=self._pct_text(cur, tot),
@@ -196,11 +220,11 @@ class RPAOverlay:
         self._prog_pct_label.pack(side="left")
 
         tk.Label(pct_row, text="  ·  ",
-                 font=self._fn(11), bg=self.BG, fg=self.TEXT2).pack(side="left")
+                 font=self._fn(10), bg=self.BG, fg=self.TEXT2).pack(side="left")
 
         self._status_label = tk.Label(
             pct_row, text=self._STATUS_CYCLE[0],
-            font=self._fn(11), bg=self.BG, fg=self.BLUE)
+            font=self._fn(10), bg=self.BG, fg=self.BLUE)
         self._status_label.pack(side="left")
 
         self._prog_count_label = tk.Label(
@@ -209,25 +233,26 @@ class RPAOverlay:
         self._prog_count_label.pack(side="right")
 
         # Pill 프로그레스 바
-        BAR_W, BAR_H = 544, 10
+        BAR_W, BAR_H = 536, 10
         self._prog_bar_canvas = tk.Canvas(
-            prog_section, width=BAR_W, height=BAR_H,
+            body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
         self._prog_bar_canvas.pack()
         self._draw_pill_bar(BAR_W, BAR_H, cur, tot)
 
-        # ── 개인정보 확인 필수 ──
+        # 개인정보 경고
         warn_row = tk.Frame(card, bg=self.BG)
-        warn_row.pack(pady=(10, 0), padx=28, anchor="w")
-        tk.Label(warn_row, text="⚠",
-                 font=self._fn(12), bg=self.BG, fg="#ffd60a").pack(side="left", padx=(0, 6))
+        warn_row.pack(pady=(12, 0), padx=22, anchor="w")
+        tk.Label(warn_row, text="\u26a0",
+                 font=self._fn(12), bg=self.BG, fg=self.GOLD).pack(side="left", padx=(0, 6))
         tk.Label(warn_row, text="개인정보 확인 필수",
-                 font=self._fn(12, "bold"), bg=self.BG, fg="#ffffff").pack(side="left")
+                 font=self._fn(12, "bold"), bg=self.BG, fg=self.TEXT1).pack(side="left")
 
-        # 버튼을 아래로 밀기
+        # 스페이서
         tk.Frame(card, bg=self.BG).pack(fill="both", expand=True)
 
-        self._sep(card)
+        # ══ BUTTONS ════════════════════════════
+        tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
         btn_row = tk.Frame(card, bg=self.BG)
         btn_row.pack(fill="x")
         self._action_inline(btn_row, "닫기", "normal", self.BLUE,
@@ -240,16 +265,93 @@ class RPAOverlay:
         self._start_status_blink(root)
         self._start_pulse_bar(root)
 
-        self._drag(root, bar, title_row, warn_row, prog_section)
+        self._drag(root, header, bar, bot_row, bot_c, info_col, warn_row)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
 
+    # ── Cute Robot animation ──────────────────
+    def _draw_bot(self, c, root):
+        """64×80 귀여운 로봇. 눈 글로우, 안테나 흔들림, 가슴 LED."""
+        # Bot drawing runs on the tkinter thread — safe to access self._bot_t
+        def _tick():
+            if not root.winfo_exists():
+                return
+            c.delete("bot")
+            t = self._bot_t
+
+            # ── Antenna oscillation ──
+            ant_off = int(2.2 * math.sin(t * 1.5))
+
+            # ── Eye glow (0.55 → 1.0) ──
+            glow   = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(t * 2.4))
+            e_fill = self._lerp_color("#003478", "#0a84ff", glow)
+            e_hi   = self._lerp_color("#1a4a88", "#5ab8ff", glow)
+
+            # ── Head shadow ──
+            c.create_oval(8, 13, 58, 53,
+                          fill="#0e0e10", outline="", tags="bot")
+
+            # ── Head ──
+            c.create_oval(6, 10, 58, 52,
+                          fill="#2c2c2e", outline="#48484a", width=1.5, tags="bot")
+
+            # ── Left eye ──
+            c.create_oval(14, 22, 28, 36, fill=e_fill,  outline="", tags="bot")
+            c.create_oval(15, 23, 24, 31, fill=e_hi,    outline="", tags="bot")
+            c.create_oval(15, 23, 19, 27, fill="#c8e8ff", outline="", tags="bot")  # shine
+
+            # ── Right eye ──
+            c.create_oval(36, 22, 50, 36, fill=e_fill,  outline="", tags="bot")
+            c.create_oval(37, 23, 46, 31, fill=e_hi,    outline="", tags="bot")
+            c.create_oval(37, 23, 41, 27, fill="#c8e8ff", outline="", tags="bot")
+
+            # ── Smile ──
+            c.create_arc(18, 34, 46, 52, start=210, extent=120,
+                         style="arc", outline=self.GREEN, width=2.5, tags="bot")
+
+            # ── Cheeks (cute blush) ──
+            c.create_oval( 7, 33, 15, 39, fill="#ff6b8a", outline="", stipple="gray50", tags="bot")
+            c.create_oval(49, 33, 57, 39, fill="#ff6b8a", outline="", stipple="gray50", tags="bot")
+
+            # ── Antenna pole ──
+            c.create_line(32, 10, 32, 3 + ant_off,
+                          fill="#636366", width=2, tags="bot")
+            # Antenna ball
+            c.create_oval(27, -2 + ant_off, 37, 8 + ant_off,
+                          fill=self.GOLD, outline="", tags="bot")
+            c.create_oval(28, -1 + ant_off, 32, 3 + ant_off,
+                          fill="#ffe880", outline="", tags="bot")  # shine
+
+            # ── Torso ──
+            c.create_rectangle(18, 53, 46, 66,
+                               fill="#2c2c2e", outline="#48484a", width=1, tags="bot")
+            # Chest LED
+            led_bright = 0.5 + 0.5 * math.sin(t * 3.6)
+            led_col    = self._lerp_color("#1a5e2a", self.GREEN, led_bright)
+            c.create_oval(28, 56, 36, 63, fill=led_col,  outline="", tags="bot")
+            if led_bright > 0.7:
+                c.create_oval(29, 57, 33, 60, fill="#90ffa0", outline="", tags="bot")
+
+            self._bot_t += 0.08
+            root.after(80, _tick)
+
+        _tick()
+
+    @staticmethod
+    def _lerp_color(c1: str, c2: str, t: float) -> str:
+        r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+        r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+        t = max(0.0, min(1.0, t))
+        return "#{:02x}{:02x}{:02x}".format(
+            int(r1 + (r2 - r1) * t),
+            int(g1 + (g2 - g1) * t),
+            int(b1 + (b2 - b1) * t))
+
     # ── Pill progress bar ──────────────────────
     def _draw_pill_bar(self, bar_w, bar_h, cur, tot):
-        """iOS 스타일 pill 프로그레스 바."""
         c = self._prog_bar_canvas
         if not c:
             return
@@ -259,16 +361,14 @@ class RPAOverlay:
         except Exception:
             return
         c.delete("all")
-        r = bar_h  # cap circle diameter = bar height
+        r = bar_h
 
-        # 배경 pill
         c.create_rectangle(r // 2, 0, bar_w - r // 2, bar_h,
                            fill=self.BAR_BG, outline="")
         c.create_oval(0, 0, r, bar_h, fill=self.BAR_BG, outline="")
         c.create_oval(bar_w - r, 0, bar_w, bar_h, fill=self.BAR_BG, outline="")
 
-        # 녹색 채움
-        pct = 0.0 if tot <= 0 else min(1.0, cur / tot)
+        pct     = 0.0 if tot <= 0 else min(1.0, cur / tot)
         fill_px = int(pct * bar_w)
 
         if fill_px > 0:
@@ -281,10 +381,9 @@ class RPAOverlay:
                 c.create_oval(bar_w - r, 0, bar_w, bar_h,
                               fill=self.GREEN, outline="")
 
-    # ── Status blink animation ────────────────
+    # ── Status blink ──────────────────────────
     def _start_status_blink(self, root):
-        """상태 레이블 깜박이면서 순환 (0.7초 주기)."""
-        tick = [0]
+        tick    = [0]
         visible = [True]
 
         def _blink():
@@ -299,7 +398,7 @@ class RPAOverlay:
                                else self._STATUS_CYCLE[(tick[0] // 2) % len(self._STATUS_CYCLE)])
                         self._status_label.configure(text=txt, fg=self.BLUE)
                     else:
-                        self._status_label.configure(fg="#2a4a6a")
+                        self._status_label.configure(fg="#1e3a5a")
             except Exception:
                 pass
             root.after(700, _blink)
@@ -307,7 +406,6 @@ class RPAOverlay:
         _blink()
 
     def _start_pulse_bar(self, root):
-        """프로그레스 바 0.5초마다 갱신."""
         def _pulse():
             if not root.winfo_exists():
                 return
@@ -322,21 +420,20 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(544, 10, cur, tot)
+            self._draw_pill_bar(536, 10, cur, tot)
         except Exception:
             pass
 
     # ── Stop confirmation popup ───────────────
     def _confirm_stop_popup(self, parent_root):
-        """iOS 스타일 귀여운 중단 확인 팝업."""
         popup = tk.Toplevel(parent_root)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
         popup.configure(bg=self.BG)
 
-        pw, ph = 380, 240
-        px = parent_root.winfo_x() + (600 - pw) // 2
-        py = parent_root.winfo_y() + (360 - ph) // 2
+        pw, ph = 380, 250
+        px = parent_root.winfo_x() + (580 - pw) // 2
+        py = parent_root.winfo_y() + (390 - ph) // 2
         popup.geometry(f"{pw}x{ph}+{px}+{py}")
         popup.attributes("-alpha", 0.0)
 
@@ -354,7 +451,7 @@ class RPAOverlay:
         inner = tk.Frame(border, bg=self.BG)
         inner.pack(fill="both", expand=True)
 
-        tk.Label(inner, text="🤖",
+        tk.Label(inner, text="\U0001f916",
                  font=tkfont.Font(family="Segoe UI Emoji", size=30),
                  bg=self.BG).pack(pady=(18, 6))
         tk.Label(inner, text="Claude가 중단을 요청합니다",
@@ -373,25 +470,18 @@ class RPAOverlay:
         def _do_stop():
             _stop_event.set()
             self._stop_remind()
-            try:
-                popup.destroy()
-            except Exception:
-                pass
-            try:
-                parent_root.destroy()
-            except Exception:
-                pass
+            try: popup.destroy()
+            except Exception: pass
+            try: parent_root.destroy()
+            except Exception: pass
 
         def _cancel():
-            try:
-                popup.destroy()
-            except Exception:
-                pass
+            try: popup.destroy()
+            except Exception: pass
 
         cont_btn = tk.Label(btn_row, text="계속하기",
                             font=self._fn(13, "bold"),
-                            bg=self.BG, fg=self.BLUE,
-                            pady=14, cursor="hand2")
+                            bg=self.BG, fg=self.BLUE, pady=14, cursor="hand2")
         cont_btn.pack(side="left", expand=True, fill="both")
         cont_btn.bind("<Button-1>", lambda e: _cancel())
         cont_btn.bind("<Enter>", lambda e: cont_btn.configure(bg=self.HOVER))
@@ -401,14 +491,13 @@ class RPAOverlay:
 
         stop_btn = tk.Label(btn_row, text="중단하기",
                             font=self._fn(13, "bold"),
-                            bg=self.BG, fg=self.RED,
-                            pady=14, cursor="hand2")
+                            bg=self.BG, fg=self.RED, pady=14, cursor="hand2")
         stop_btn.pack(side="left", expand=True, fill="both")
         stop_btn.bind("<Button-1>", lambda e: _do_stop())
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=self.HOVER))
         stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=self.BG))
 
-    # ── COMPLETE ─────────────────────────────
+    # ── COMPLETE window ───────────────────────
     def _build_complete(self, count: int):
         root, card = self._make_window(420, 300)
 
@@ -419,8 +508,8 @@ class RPAOverlay:
         chk.pack(pady=(4, 8))
         self._draw_check_animated(chk, root)
 
-        title = tk.Label(card, text=f"광고 {count}건 완료",
-                         font=self._fn(18, "bold"),
+        title = tk.Label(card, text=f"\u2728 광고 {count}건 완료",
+                         font=self._fn(17, "bold"),
                          bg=self.BG, fg=self.TEXT1)
         title.pack()
 
@@ -461,38 +550,8 @@ class RPAOverlay:
         return f"{int(cur / tot * 100)}%"
 
     # ── Drawing ──────────────────────────────
-    def _draw_spinner(self, c, root):
-        """Apple activity indicator (rotating bars)."""
-        cx, cy = 18, 18
-        r_in, r_out = 5, 12
-        n = 12
-        self._si = 0
-
-        def _tick():
-            if not root.winfo_exists():
-                return
-            c.delete("sp")
-            for i in range(n):
-                a = 2 * math.pi * i / n - math.pi / 2
-                x1 = cx + r_in * math.cos(a)
-                y1 = cy + r_in * math.sin(a)
-                x2 = cx + r_out * math.cos(a)
-                y2 = cy + r_out * math.sin(a)
-                d = (i - self._si) % n
-                g = 80 + int(d * 140 / n)
-                c.create_line(x1, y1, x2, y2,
-                              fill=f"#{g:02x}{g:02x}{g:02x}",
-                              width=2.5, capstyle="round", tags="sp")
-            self._si = (self._si + 1) % n
-            root.after(80, _tick)
-
-        _tick()
-
     def _draw_check_animated(self, c, root):
-        """Animated V checkmark — two-stroke draw."""
-        p1 = (10, 22)
-        p2 = (24, 40)
-        p3 = (52, 8)
+        p1 = (10, 22); p2 = (24, 40); p3 = (52, 8)
         s1, s2 = 8, 10
 
         def _anim(step=0):
@@ -502,18 +561,14 @@ class RPAOverlay:
                 t = step / s1
                 c.delete("v1")
                 c.create_line(p1[0], p1[1],
-                              p1[0] + (p2[0] - p1[0]) * t,
-                              p1[1] + (p2[1] - p1[1]) * t,
-                              fill=self.GREEN, width=4,
-                              capstyle="round", tags="v1")
+                              p1[0] + (p2[0]-p1[0])*t, p1[1] + (p2[1]-p1[1])*t,
+                              fill=self.GREEN, width=4, capstyle="round", tags="v1")
             elif step <= s1 + s2:
                 t = (step - s1) / s2
                 c.delete("v2")
                 c.create_line(p2[0], p2[1],
-                              p2[0] + (p3[0] - p2[0]) * t,
-                              p2[1] + (p3[1] - p2[1]) * t,
-                              fill=self.GREEN, width=4,
-                              capstyle="round", tags="v2")
+                              p2[0] + (p3[0]-p2[0])*t, p2[1] + (p3[1]-p2[1])*t,
+                              fill=self.GREEN, width=4, capstyle="round", tags="v2")
             else:
                 return
             root.after(30, lambda: _anim(step + 1))
@@ -525,7 +580,6 @@ class RPAOverlay:
         bar = tk.Frame(parent, bg=self.BG, height=28)
         bar.pack(fill="x")
         bar.pack_propagate(False)
-
         xb = tk.Label(bar, text="\u2715", font=self._fn(10),
                       bg=self.BG, fg=self.X_GRAY, cursor="hand2")
         xb.pack(side="right", padx=(0, 6), pady=(4, 0))
@@ -540,8 +594,7 @@ class RPAOverlay:
     def _action(self, parent, text, weight, cmd):
         btn = tk.Label(parent, text=text,
                        font=self._fn(15, weight),
-                       bg=self.BG, fg=self.BLUE,
-                       pady=12, cursor="hand2")
+                       bg=self.BG, fg=self.BLUE, pady=12, cursor="hand2")
         btn.pack(fill="x")
         btn.bind("<Enter>", lambda e: btn.configure(bg=self.HOVER))
         btn.bind("<Leave>", lambda e: btn.configure(bg=self.BG))
@@ -550,8 +603,7 @@ class RPAOverlay:
     def _action_inline(self, parent, text, weight, color, cmd, side):
         btn = tk.Label(parent, text=text,
                        font=tkfont.Font(family="Malgun Gothic", size=15, weight=weight),
-                       bg=self.BG, fg=color,
-                       pady=18, padx=24, cursor="hand2")
+                       bg=self.BG, fg=color, pady=18, padx=24, cursor="hand2")
         btn.pack(side=side, expand=True, fill="both")
         btn.bind("<Enter>", lambda e: btn.configure(bg=self.HOVER))
         btn.bind("<Leave>", lambda e: btn.configure(bg=self.BG))
@@ -559,7 +611,6 @@ class RPAOverlay:
 
     # ── Window ───────────────────────────────
     def _make_window(self, w, h):
-        """iOS dark floating card."""
         root = tk.Tk()
         self._root = root
         root.overrideredirect(True)
@@ -571,7 +622,7 @@ class RPAOverlay:
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m = mons[1] if len(mons) >= 2 else mons[0]
+                m    = mons[1] if len(mons) >= 2 else mons[0]
                 mx, my, mw, mh = m.x, m.y, m.width, m.height
             except Exception:
                 pass
@@ -595,8 +646,8 @@ class RPAOverlay:
         return root, card
 
     def _fn(self, size, weight="normal"):
-        scaled = int(size * 1.2)
-        return tkfont.Font(family="Malgun Gothic", size=scaled, weight=weight)
+        return tkfont.Font(family="Malgun Gothic",
+                           size=int(size * 1.2), weight=weight)
 
     def _drag(self, root, *widgets):
         def _press(e):
@@ -613,6 +664,7 @@ class RPAOverlay:
             w.bind("<B1-Motion>", _move)
 
 
+# ── Integrity check popup ─────────────────────────────────────────────────────
 def ask_integrity_password() -> bool:
     """변조 감지 시 비밀번호 입력 팝업. 1234 입력 시 True 반환. 메인 스레드에서 실행."""
     result = [False]
@@ -673,7 +725,6 @@ def ask_integrity_password() -> bool:
     cancel_lbl.pack(side="left", expand=True, fill="both")
     cancel_lbl.bind("<Button-1>", lambda e: _cancel())
 
-    # 드래그 이동
     def _press(e):
         root._dx, root._dy = e.x_root, e.y_root
     def _move(e):
@@ -689,18 +740,18 @@ def ask_integrity_password() -> bool:
     return result[0]
 
 
+# ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#1e2e1e"),  # 옅은 녹색
-    ("account2", "airelair00@gmail.com",      "#251e2e"),  # 옅은 보라색
-    ("account3", "ferrari812fast@gmail.com",  "#2e2518"),  # 옅은 갈색
-    ("account4", "bridgejobkr@gmail.com",     "#2a2a2a"),  # 옅은 블랙
+    ("account1", "coreabridge@gmail.com",    "#1e2e1e"),
+    ("account2", "airelair00@gmail.com",      "#251e2e"),
+    ("account3", "ferrari812fast@gmail.com",  "#2e2518"),
+    ("account4", "bridgejobkr@gmail.com",     "#2a2a2a"),
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"
 
 
 def _mask_email(email: str) -> str:
-    """이메일 부분 마스킹. 운영자 식별 가능, PII 완전노출 방지 (CLAUDE.md)."""
     try:
         local, domain = email.split("@", 1)
         if len(local) <= 3:
@@ -723,26 +774,24 @@ def _save_last_run(email: str):
     data = _load_last_runs()
     data[email] = datetime.now().isoformat()
     _LAST_RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _LAST_RUN_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _LAST_RUN_FILE.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _time_ago(iso_str: str) -> str:
     try:
-        last = datetime.fromisoformat(iso_str)
-        diff = datetime.now() - last
+        last  = datetime.fromisoformat(iso_str)
+        diff  = datetime.now() - last
         hours = int(diff.total_seconds() // 3600)
-        mins = int((diff.total_seconds() % 3600) // 60)
-        if hours > 0:
-            return f"{hours}시간 {mins}분 전"
-        return f"{mins}분 전"
+        mins  = int((diff.total_seconds() % 3600) // 60)
+        return f"{hours}시간 {mins}분 전" if hours > 0 else f"{mins}분 전"
     except Exception:
         return "기록 없음"
 
 
+# ── Account selection popup ───────────────────────────────────────────────────
 def ask_account_selection():
-    """계정 선택 팝업 (K: 드라이브 스타일).
-    Returns: (account_id, limit) tuple, or ("CANCEL", 0) on cancel.
-    """
+    """계정 선택 팝업.  Returns: (account_id, limit) or ("CANCEL", 0)."""
     result = [("CANCEL", 0)]
 
     def _build():
@@ -757,7 +806,7 @@ def ask_account_selection():
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m = mons[1] if len(mons) >= 2 else mons[0]
+                m    = mons[1] if len(mons) >= 2 else mons[0]
                 sw, sh = m.width, m.height
                 ox, oy = m.x, m.y
             except Exception:
@@ -773,7 +822,6 @@ def ask_account_selection():
         card = tk.Frame(border, bg="#2a2a2a")
         card.pack(fill="both", expand=True)
 
-        # ── 헤더 ──
         tk.Label(card, text="BRIDGE Craig RPA",
                  font=tkfont.Font(family="Segoe UI", size=18, weight="bold"),
                  bg="#2a2a2a", fg="#f0f0f5").pack(pady=(20, 2))
@@ -781,12 +829,12 @@ def ask_account_selection():
                  font=tkfont.Font(family="Segoe UI", size=10),
                  bg="#2a2a2a", fg="#b8b8cc").pack(pady=(0, 10))
 
-        # ── 계정 카드 ──
         last_runs = _load_last_runs()
-        cnt_var = tk.IntVar(value=10)
+        cnt_var   = tk.IntVar(value=10)
 
         for acct_id, email, color in _ACCOUNT_LIST:
-            ago = _time_ago(last_runs.get(email, "")) if email in last_runs else "아직 사용 안 함"
+            ago = (_time_ago(last_runs[email]) if email in last_runs
+                   else "아직 사용 안 함")
 
             border_frame = tk.Frame(card, bg="#444455", padx=1, pady=1)
             border_frame.pack(fill="x", padx=16, pady=3)
@@ -812,10 +860,11 @@ def ask_account_selection():
             hover_color = "#3a3a4a"
             for widget in (btn_frame, lbl_email, lbl_ago):
                 widget.bind("<Button-1>", lambda e, f=_select: f())
-                widget.bind("<Enter>", lambda e, bf=btn_frame, hc=hover_color: bf.configure(bg=hc))
-                widget.bind("<Leave>", lambda e, bf=btn_frame, c=color: bf.configure(bg=c))
+                widget.bind("<Enter>",
+                            lambda e, bf=btn_frame, hc=hover_color: bf.configure(bg=hc))
+                widget.bind("<Leave>",
+                            lambda e, bf=btn_frame, c=color: bf.configure(bg=c))
 
-        # ── 게시 횟수 ──
         tk.Frame(card, bg="#333344", height=1).pack(fill="x", padx=16, pady=(12, 0))
         cnt_row = tk.Frame(card, bg="#2a2a2a")
         cnt_row.pack(fill="x", padx=16, pady=6)
@@ -839,12 +888,10 @@ def ask_account_selection():
             b.pack(side="left", padx=3)
             cnt_btns.append((b, val))
 
-        # 기본값 10 강조
         for b, bv in cnt_btns:
             if bv == 10:
                 b.configure(bg="#6cb4ee", fg="#ffffff")
 
-        # ── 나중에 하기 ──
         tk.Frame(card, bg="#333344", height=1).pack(fill="x")
         cancel_lbl = tk.Label(card, text="나중에 하기 (종료)",
                               font=tkfont.Font(family="Segoe UI", size=12),
@@ -854,7 +901,6 @@ def ask_account_selection():
         cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg="#333344"))
         cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg="#2a2a2a"))
 
-        # ── 드래그 이동 ──
         def _press(e):
             root._dx, root._dy = e.x_root, e.y_root
         def _move(e):
@@ -878,9 +924,10 @@ def ask_account_selection():
     return result[0]
 
 
-_overlay = RPAOverlay()
-show_working = _overlay.show_working
-show_complete = _overlay.show_complete
+# ── Module-level exports ──────────────────────────────────────────────────────
+_overlay       = RPAOverlay()
+show_working   = _overlay.show_working
+show_complete  = _overlay.show_complete
 update_progress = _overlay.update_progress
-update_status = _overlay.update_status
-close = _overlay.close
+update_status  = _overlay.update_status
+close          = _overlay.close

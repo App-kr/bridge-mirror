@@ -69,7 +69,7 @@ $lnk.TargetPath       = "wscript.exe"
 $lnk.Arguments        = "`"$VBS`""
 $lnk.WorkingDirectory = $BASE
 $lnk.Description      = "BRIDGE Craig RPA"
-$lnk.IconLocation     = "C:\Windows\System32\shell32.dll,145"
+$lnk.IconLocation     = "Q:\Claudework\bridge base\images\craig_icon.ico,0"
 $lnk.Save()
 Write-Host "SHORTCUT: $lnkPath"
 
