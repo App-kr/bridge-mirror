@@ -1112,24 +1112,59 @@ def ask_account_selection():
 
 # ── Win32 직접 창 포커스 헬퍼 ────────────────────────────────────────────────
 def _win32_focus_working():
-    """FindWindowW("CraigRPA_Working")로 작업창 HWND를 찾아서 앞으로 가져온다.
-    창이 없으면(dismiss 상태) restore flag 파일을 생성해 monitor 스레드에 알린다."""
+    """lock 파일의 PID → EnumWindows로 실제 창을 찾아 앞으로 가져온다.
+    창이 없으면(dismiss 상태) restore flag로 monitor 스레드에 복원 요청."""
     import ctypes as _ct
-    _TITLE = "CraigRPA_Working"
-    hwnd = _ct.windll.user32.FindWindowW(None, _TITLE)
-    if hwnd:
-        # Alt 키 트릭으로 SetForegroundWindow 권한 확보
-        _ct.windll.user32.keybd_event(0x12, 0, 0, 0)   # Alt down
-        _ct.windll.user32.keybd_event(0x12, 0, 2, 0)   # Alt up
-        _ct.windll.user32.ShowWindow(hwnd, 9)           # SW_RESTORE
-        _ct.windll.user32.SetForegroundWindow(hwnd)
-        _ct.windll.user32.BringWindowToTop(hwnd)
+    from ctypes.wintypes import HWND, DWORD, BOOL, LPARAM
+
+    # ── lock 파일에서 PID 수집 ──────────────────────────────────────────
+    _lock_dir = Path(__file__).resolve().parent / "logs"
+    _pids = []
+    for _lf in _lock_dir.glob(".rpa_*.lock"):
+        try:
+            _pid = int(_lf.read_text(encoding="utf-8").strip())
+            # PID 생존 확인
+            _h = _ct.windll.kernel32.OpenProcess(0x400, False, _pid)
+            if _h:
+                _ct.windll.kernel32.CloseHandle(_h)
+                _pids.append(_pid)
+            else:
+                _lf.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    if not _pids:
+        return False
+
+    # ── EnumWindows: 해당 PID가 소유한 visible 창 열거 ─────────────────
+    _found_hwnds = []
+    _EnumProc = _ct.WINFUNCTYPE(BOOL, HWND, LPARAM)
+
+    def _cb(hwnd, _):
+        _pid_out = DWORD()
+        _ct.windll.user32.GetWindowThreadProcessId(hwnd, _ct.byref(_pid_out))
+        if _pid_out.value in _pids and _ct.windll.user32.IsWindowVisible(hwnd):
+            _found_hwnds.append(hwnd)
+        return True
+
+    _ct.windll.user32.EnumWindows(_EnumProc(_cb), 0)
+
+    if _found_hwnds:
+        for _hwnd in _found_hwnds:
+            try:
+                # Alt 트릭: SetForegroundWindow 권한 우회
+                _ct.windll.user32.keybd_event(0x12, 0, 0, 0)   # Alt down
+                _ct.windll.user32.keybd_event(0x12, 0, 2, 0)   # Alt up
+                _ct.windll.user32.ShowWindow(_hwnd, 9)           # SW_RESTORE
+                _ct.windll.user32.SetForegroundWindow(_hwnd)
+                _ct.windll.user32.BringWindowToTop(_hwnd)
+            except Exception:
+                pass
         return True
     else:
-        # 창이 dismiss된 경우 → restore flag로 monitor 스레드에 복원 요청
+        # 창이 없음(dismiss 상태) → restore flag로 monitor 스레드에 복원 요청
         try:
-            _rf = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
-            _rf.parent.mkdir(parents=True, exist_ok=True)
+            _rf = _lock_dir / ".overlay_restore.flag"
             _rf.write_text("restore", encoding="utf-8")
         except Exception:
             pass
