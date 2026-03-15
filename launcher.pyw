@@ -19,19 +19,37 @@ sys.path.insert(0, str(BASE))
 _lock_dir = BASE / "logs"
 _lock_dir.mkdir(parents=True, exist_ok=True)
 
+_STILL_ACTIVE = 259  # Windows STILL_ACTIVE 상수
+
+def _is_pid_alive(pid: int) -> bool:
+    """GetExitCodeProcess로 프로세스가 실제로 살아있는지 확인."""
+    try:
+        import ctypes as _ct
+        PROCESS_QUERY_LIMITED = 0x1000
+        _h = _ct.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED, False, pid)
+        if not _h:
+            return False
+        _code = _ct.c_ulong(0)
+        _ct.windll.kernel32.GetExitCodeProcess(_h, _ct.byref(_code))
+        _ct.windll.kernel32.CloseHandle(_h)
+        return _code.value == _STILL_ACTIVE
+    except Exception:
+        return False
+
 _running_acct = None
 for _lf in _lock_dir.glob(".rpa_*.lock"):
     try:
         _pid = int(_lf.read_text(encoding="utf-8").strip())
-        _h = ctypes.windll.kernel32.OpenProcess(0x400, False, _pid)
-        if _h:
-            ctypes.windll.kernel32.CloseHandle(_h)
+        if _is_pid_alive(_pid):
             _running_acct = _lf.stem.replace(".rpa_", "")
             break
         else:
-            _lf.unlink(missing_ok=True)  # 죽은 프로세스 lock 정리
+            _lf.unlink(missing_ok=True)  # 좀비 lock 파일 정리
     except Exception:
-        pass
+        try:
+            _lf.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 if _running_acct:
     # 이미 실행 중 → restore flag 생성 (craigslist_auto_rpa.py가 감지하여 창 복원)

@@ -1117,17 +1117,22 @@ def _win32_focus_working():
     import ctypes as _ct
     from ctypes.wintypes import HWND, DWORD, BOOL, LPARAM
 
-    # ── lock 파일에서 PID 수집 ──────────────────────────────────────────
+    # ── lock 파일에서 살아있는 PID 수집 ────────────────────────────────
+    _STILL_ACTIVE = 259
     _lock_dir = Path(__file__).resolve().parent / "logs"
     _pids = []
     for _lf in _lock_dir.glob(".rpa_*.lock"):
         try:
             _pid = int(_lf.read_text(encoding="utf-8").strip())
-            # PID 생존 확인
-            _h = _ct.windll.kernel32.OpenProcess(0x400, False, _pid)
+            _h = _ct.windll.kernel32.OpenProcess(0x1000, False, _pid)
             if _h:
+                _code = _ct.c_ulong(0)
+                _ct.windll.kernel32.GetExitCodeProcess(_h, _ct.byref(_code))
                 _ct.windll.kernel32.CloseHandle(_h)
-                _pids.append(_pid)
+                if _code.value == _STILL_ACTIVE:
+                    _pids.append(_pid)
+                else:
+                    _lf.unlink(missing_ok=True)  # 좀비 lock 정리
             else:
                 _lf.unlink(missing_ok=True)
         except Exception:
