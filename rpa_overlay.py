@@ -50,12 +50,12 @@ class RPAOverlay:
     BAR_BG = "#e5e5ea"
     GOLD   = "#ff9500"
 
-    # 계정별 전체 창 색상 (BG, CARD) — 선명한 파스텔
+    # 계정별 전체 창 색상 (BG, CARD)
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#c4ecd0", "#e4f8ea"),  # 선명 민트
-        "airelair00@gmail.com":     ("#d4ccf0", "#e8e4fc"),  # 선명 라벤더
-        "ferrari812fast@gmail.com": ("#fde4b0", "#fff4d4"),  # 선명 앰버
-        "bridgejobkr@gmail.com":    ("#b8e4f8", "#d8f0fc"),  # 선명 하늘
+        "coreabridge@gmail.com":    ("#e8d8c0", "#f5ece0"),  # 옅은 갈색
+        "airelair00@gmail.com":     ("#d8d0e8", "#ece8f5"),  # 옅은 보라
+        "ferrari812fast@gmail.com": ("#c8dcc8", "#e0ede0"),  # 옅은 초록
+        "bridgejobkr@gmail.com":    ("#d4d4d4", "#e8e8e8"),  # 옅은 회색
     }
 
     _STATUS_CYCLE = [
@@ -180,7 +180,7 @@ class RPAOverlay:
     def _build_working(self):
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(460, 360)
+        root, card = self._make_window(380, 360)
 
         # HWND 저장 (중복실행 감지 시 창 포커스용)
         try:
@@ -223,7 +223,8 @@ class RPAOverlay:
                  bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w")
 
         if self._email:
-            tk.Label(info_col, text=self._email,
+            _display_email = self._email.split("@")[0] if "@" in self._email else self._email
+            tk.Label(info_col, text=_display_email,
                      font=self._fn(11),
                      bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w", pady=(6, 0))
 
@@ -257,8 +258,8 @@ class RPAOverlay:
             font=self._fn(10), bg=self.BG, fg=self.TEXT2)
         self._prog_count_label.pack(side="right")
 
-        # Pill 프로그레스 바 (460 - 2border - 40pad = 418)
-        BAR_W, BAR_H = 418, 10
+        # Pill 프로그레스 바 (380 - 2border - 40pad = 338)
+        BAR_W, BAR_H = 338, 10
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
@@ -445,7 +446,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(418, 10, cur, tot)
+            self._draw_pill_bar(338, 10, cur, tot)
         except Exception:
             pass
 
@@ -456,9 +457,9 @@ class RPAOverlay:
         popup.attributes("-topmost", True)
         popup.configure(bg=self.BG)
 
-        pw, ph = 380, 250
-        px = parent_root.winfo_x() + (580 - pw) // 2
-        py = parent_root.winfo_y() + (390 - ph) // 2
+        pw, ph = 340, 260
+        px = parent_root.winfo_x() + (380 - pw) // 2
+        py = parent_root.winfo_y() + (360 - ph) // 2
         popup.geometry(f"{pw}x{ph}+{px}+{py}")
         popup.attributes("-alpha", 0.0)
 
@@ -476,13 +477,13 @@ class RPAOverlay:
         inner = tk.Frame(border, bg=self.BG)
         inner.pack(fill="both", expand=True)
 
-        tk.Label(inner, text="\U0001f916",
-                 font=tkfont.Font(family="Segoe UI Emoji", size=30),
-                 bg=self.BG).pack(pady=(18, 6))
-        tk.Label(inner, text="Claude가 중단을 요청합니다",
+        tk.Label(inner, text="\u26d4",
+                 font=tkfont.Font(family="Segoe UI Emoji", size=28),
+                 bg=self.BG, fg=self.RED).pack(pady=(16, 4))
+        tk.Label(inner, text="Boss요청으로 작업 중단",
                  font=self._fn(13, "bold"),
                  bg=self.BG, fg=self.TEXT1).pack()
-        tk.Label(inner, text="현재 건 완료 후 자동으로 중단됩니다.",
+        tk.Label(inner, text="작업중인 경우 완료 후 중단됩니다",
                  font=self._fn(10),
                  bg=self.BG, fg=self.TEXT2).pack(pady=(4, 0))
 
@@ -492,7 +493,24 @@ class RPAOverlay:
         btn_row = tk.Frame(inner, bg=self.BG)
         btn_row.pack(fill="x")
 
-        def _do_stop():
+        def _do_force_stop():
+            """즉시 강제 종료 — lock 파일에서 PID 읽어서 프로세스 kill."""
+            import subprocess as _sp
+            try:
+                lock_dir = Path(__file__).resolve().parent / "logs"
+                for _lf in lock_dir.glob(".rpa_*.lock"):
+                    try:
+                        _pid = int(_lf.read_text(encoding="utf-8").strip())
+                        _sp.call(
+                            ["taskkill", "/F", "/PID", str(_pid)],
+                            creationflags=0x08000000,
+                            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                        )
+                        _lf.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             _stop_event.set()
             self._stop_remind()
             try: popup.destroy()
@@ -500,27 +518,30 @@ class RPAOverlay:
             try: parent_root.destroy()
             except Exception: pass
 
-        def _cancel():
+        def _do_stop_after():
+            """현재 작업 완료 후 중단 — stop_event만 set."""
+            _stop_event.set()
+            self._stop_remind()
             try: popup.destroy()
             except Exception: pass
 
-        cont_btn = tk.Label(btn_row, text="계속하기",
-                            font=self._fn(13, "bold"),
-                            bg=self.BG, fg=self.BLUE, pady=14, cursor="hand2")
-        cont_btn.pack(side="left", expand=True, fill="both")
-        cont_btn.bind("<Button-1>", lambda e: _cancel())
-        cont_btn.bind("<Enter>", lambda e: cont_btn.configure(bg=self.HOVER))
-        cont_btn.bind("<Leave>", lambda e: cont_btn.configure(bg=self.BG))
+        force_btn = tk.Label(btn_row, text="그만하기",
+                             font=self._fn(13, "bold"),
+                             bg=self.BG, fg=self.RED, pady=14, cursor="hand2")
+        force_btn.pack(side="left", expand=True, fill="both")
+        force_btn.bind("<Button-1>", lambda e: _do_force_stop())
+        force_btn.bind("<Enter>", lambda e: force_btn.configure(bg=self.HOVER))
+        force_btn.bind("<Leave>", lambda e: force_btn.configure(bg=self.BG))
 
         tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        stop_btn = tk.Label(btn_row, text="중단하기",
-                            font=self._fn(13, "bold"),
-                            bg=self.BG, fg=self.RED, pady=14, cursor="hand2")
-        stop_btn.pack(side="left", expand=True, fill="both")
-        stop_btn.bind("<Button-1>", lambda e: _do_stop())
-        stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=self.HOVER))
-        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=self.BG))
+        after_btn = tk.Label(btn_row, text="작업 후 중단",
+                             font=self._fn(13, "bold"),
+                             bg=self.BG, fg=self.BLUE, pady=14, cursor="hand2")
+        after_btn.pack(side="left", expand=True, fill="both")
+        after_btn.bind("<Button-1>", lambda e: _do_stop_after())
+        after_btn.bind("<Enter>", lambda e: after_btn.configure(bg=self.HOVER))
+        after_btn.bind("<Leave>", lambda e: after_btn.configure(bg=self.BG))
 
     # ── COMPLETE window ───────────────────────
     def _build_complete(self, count: int):
@@ -785,10 +806,10 @@ def ask_integrity_password() -> bool:
 
 # ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#a5d6a7"),  # 선명 민트그린 (Material Green 200)
-    ("account2", "airelair00@gmail.com",      "#b39ddb"),  # 선명 라벤더 (Material DeepPurple 200)
-    ("account3", "ferrari812fast@gmail.com",  "#ffcc80"),  # 선명 앰버 (Material Orange 200)
-    ("account4", "bridgejobkr@gmail.com",     "#81d4fa"),  # 선명 하늘 (Material LightBlue 200)
+    ("account1", "coreabridge@gmail.com",    "#e8d8c0"),  # 옅은 갈색
+    ("account2", "airelair00@gmail.com",      "#d8d0e8"),  # 옅은 보라
+    ("account3", "ferrari812fast@gmail.com",  "#c8dcc8"),  # 옅은 초록
+    ("account4", "bridgejobkr@gmail.com",     "#d4d4d4"),  # 옅은 회색
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"
@@ -859,7 +880,7 @@ def ask_account_selection():
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
 
-        w, h = 460, 560
+        w, h = 380, 560
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
