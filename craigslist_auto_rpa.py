@@ -1314,6 +1314,43 @@ def main():
             print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
         return
 
+    # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
+    if not args.account and not args.dry_run and not args.generate and not args.diagnose:
+        try:
+            from rpa_overlay import ask_account_selection
+            account_id, selected_limit = ask_account_selection()
+        except Exception as e:
+            print(f"[ERROR] 계정 선택 팝업 실패: {e}")
+            sys.exit(1)
+        if account_id == "CANCEL":
+            print("취소됨.")
+            sys.exit(0)
+        args.account = account_id
+        args.limit   = selected_limit
+
+    # ── 중복 실행 방지 (per-account 잠금 파일 체크) ──────────────────────────
+    if not args.dry_run and not args.generate and not args.diagnose:
+        acct_key  = args.account or "default"
+        acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
+        if acct_lock.exists():
+            try:
+                import ctypes as _ct
+                pid = int(acct_lock.read_text().strip())
+                h   = _ct.windll.kernel32.OpenProcess(0x400, False, pid)
+                if h:
+                    _ct.windll.kernel32.CloseHandle(h)
+                    print(f"[WARN] {acct_key} 계정 RPA 이미 실행 중 (PID={pid}) — 중복 실행 차단")
+                    try:
+                        from rpa_overlay import ask_already_running
+                        ask_already_running(acct_key)
+                    except Exception:
+                        pass
+                    sys.exit(0)
+                else:
+                    acct_lock.unlink(missing_ok=True)
+            except Exception:
+                acct_lock.unlink(missing_ok=True)
+
     # ── 계정별 .env 재로딩 (--account 지정 시) ──
     if args.account:
         _load_account_env(args.account)
@@ -1482,11 +1519,13 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
-    # ── 잠금 파일 (중복 실행 방지) ──
+    # ── 잠금 파일 (중복 실행 방지, per-account) ──
     import atexit
+    acct_key  = args.account or "default"
+    acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
-    atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
+    acct_lock.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:

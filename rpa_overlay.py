@@ -624,6 +624,12 @@ class RPAOverlay:
     def _make_window(self, w, h):
         root = tk.Tk()
         self._root = root
+        _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+        if _ico.exists():
+            try:
+                root.iconbitmap(str(_ico))
+            except Exception:
+                pass
         root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.attributes("-alpha", 0.0)
@@ -681,6 +687,12 @@ def ask_integrity_password() -> bool:
     result = [False]
 
     root = tk.Tk()
+    _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+    if _ico.exists():
+        try:
+            root.iconbitmap(str(_ico))
+        except Exception:
+            pass
     root.title("보안 확인")
     root.overrideredirect(True)
     root.attributes("-topmost", True)
@@ -822,6 +834,12 @@ def ask_account_selection():
         _HOV  = "#e8e8ed"
 
         root = tk.Tk()
+        _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+        if _ico.exists():
+            try:
+                root.iconbitmap(str(_ico))
+            except Exception:
+                pass
         root.title("BRIDGE Craig")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
@@ -948,6 +966,60 @@ def ask_account_selection():
         t.start()
         t.join(timeout=300)
     return result[0]
+
+
+# ── Already-running popup ─────────────────────────────────────────────────────
+def ask_already_running(acct_key: str = ""):
+    """같은 계정 RPA 중복 실행 감지 시 알림 팝업 (5초 자동 닫힘)."""
+    root = tk.Tk()
+    _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+    if _ico.exists():
+        try:
+            root.iconbitmap(str(_ico))
+        except Exception:
+            pass
+    root.overrideredirect(True)
+    root.attributes("-topmost", True)
+    root.configure(bg="#f5f5f7")
+    w, h = 360, 170
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+    root.attributes("-alpha", 0.0)
+
+    def _fade(a=0.0):
+        if root.winfo_exists():
+            if a < 1.0:
+                root.attributes("-alpha", a)
+                root.after(16, lambda: _fade(a + 0.1))
+            else:
+                root.attributes("-alpha", 1.0)
+    root.after(10, _fade)
+
+    border = tk.Frame(root, bg="#d2d2d7", padx=1, pady=1)
+    border.pack(fill="both", expand=True)
+    card = tk.Frame(border, bg="#ffffff")
+    card.pack(fill="both", expand=True)
+
+    tk.Label(card, text="이미 실행 중",
+             font=tkfont.Font(family="Malgun Gothic", size=16, weight="bold"),
+             bg="#ffffff", fg="#ff3b30").pack(pady=(22, 6))
+    msg = (f"{acct_key} 계정 RPA가 이미 실행 중입니다" if acct_key
+           else "RPA가 이미 실행 중입니다")
+    tk.Label(card, text=msg,
+             font=tkfont.Font(family="Malgun Gothic", size=11),
+             bg="#ffffff", fg="#6e6e73").pack(pady=(0, 12))
+
+    tk.Frame(card, bg="#d2d2d7", height=1).pack(fill="x")
+    ok_btn = tk.Label(card, text="확인",
+                      font=tkfont.Font(family="Malgun Gothic", size=13),
+                      bg="#ffffff", fg="#0071e3", pady=12, cursor="hand2")
+    ok_btn.pack(fill="x")
+    ok_btn.bind("<Button-1>", lambda e: root.destroy())
+    ok_btn.bind("<Enter>", lambda e: ok_btn.configure(bg="#e8e8ed"))
+    ok_btn.bind("<Leave>", lambda e: ok_btn.configure(bg="#ffffff"))
+
+    root.after(5000, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
 
 
 # ── Module-level exports ──────────────────────────────────────────────────────
