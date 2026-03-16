@@ -609,6 +609,112 @@ async def cmd_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ 체크 실패: {str(e)[:300]}")
 
 
+async def cmd_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """배포 승인."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    state_file = PROJECT_ROOT / "logs" / "deploy_request.json"
+    if not state_file.exists():
+        await update.message.reply_text("⚠️ 대기 중인 배포 요청 없음")
+        return
+
+    try:
+        import json as _json
+        state = _json.loads(state_file.read_text(encoding="utf-8"))
+        if state.get("status") != "pending":
+            await update.message.reply_text(
+                f"⚠️ 이미 처리된 요청 (상태: {state.get('status')})"
+            )
+            return
+
+        username = update.effective_user.username or update.effective_user.first_name or "Scarlett"
+        state["status"] = "approved"
+        state["approver"] = username
+        state["approved_at"] = datetime.now(timezone.utc).isoformat()
+        state_file.write_text(_json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+        info = state.get("info", {})
+        branch = info.get("branch", "main")
+        latest = info.get("latest_msg", "")[:80]
+        await update.message.reply_text(
+            f"✅ <b>배포 승인!</b>\n"
+            f"브랜치: {branch}\n"
+            f"커밋: {latest}\n\n"
+            f"push를 진행합니다... 잠시 후 Render/Vercel에서 배포 시작됩니다.",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"에러: {e}")
+
+
+async def cmd_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """배포 거부."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    state_file = PROJECT_ROOT / "logs" / "deploy_request.json"
+    if not state_file.exists():
+        await update.message.reply_text("⚠️ 대기 중인 배포 요청 없음")
+        return
+
+    try:
+        import json as _json
+        state = _json.loads(state_file.read_text(encoding="utf-8"))
+        if state.get("status") != "pending":
+            await update.message.reply_text(
+                f"⚠️ 이미 처리된 요청 (상태: {state.get('status')})"
+            )
+            return
+
+        reason = " ".join(context.args) if context.args else "거부됨"
+        username = update.effective_user.username or update.effective_user.first_name or "Scarlett"
+        state["status"] = "rejected"
+        state["reason"] = reason
+        state["rejected_by"] = username
+        state["rejected_at"] = datetime.now(timezone.utc).isoformat()
+        state_file.write_text(_json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+        await update.message.reply_text(
+            f"❌ <b>배포 차단</b>\n"
+            f"사유: {reason}\n\n"
+            f"push가 취소됩니다. 수정 후 다시 push하면 새 승인 요청이 전송됩니다.",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"에러: {e}")
+
+
+async def cmd_deploy_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """현재 배포 요청 상태 확인."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    state_file = PROJECT_ROOT / "logs" / "deploy_request.json"
+    if not state_file.exists():
+        await update.message.reply_text("대기 중인 배포 요청 없음")
+        return
+
+    try:
+        import json as _json
+        state = _json.loads(state_file.read_text(encoding="utf-8"))
+        status = state.get("status", "unknown")
+        info = state.get("info", {})
+        created = state.get("created_at", "")[:19].replace("T", " ")
+        latest = info.get("latest_msg", "")[:60]
+        cnt = info.get("commit_count", 0)
+        emoji = {"pending": "⏳", "approved": "✅", "rejected": "❌"}.get(status, "❓")
+        await update.message.reply_text(
+            f"{emoji} 배포 상태: <b>{status}</b>\n"
+            f"커밋 {cnt}개: {latest}\n"
+            f"요청시각: {created}\n\n"
+            f"/yes — 승인 | /no — 거부",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"에러: {e}")
+
+
 async def cmd_rollback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """마지막 커밋 롤백 + 강제 push (재배포 트리거)."""
     if not _check_auth(update.effective_chat.id):
@@ -800,6 +906,9 @@ async def post_init(application: Application):
         BotCommand("inbox", "최근 수신 이메일"),
         BotCommand("resolve", "에러 해결 처리"),
         BotCommand("check", "즉시 Gmail 체크"),
+        BotCommand("yes", "배포 승인 ✅"),
+        BotCommand("no", "배포 거부 ❌"),
+        BotCommand("deploy", "배포 요청 상태 확인"),
         BotCommand("rollback", "마지막 커밋 롤백+재배포"),
         BotCommand("gitlog", "최근 커밋 로그"),
     ]
@@ -859,6 +968,9 @@ def main():
     app.add_handler(CommandHandler("inbox", cmd_inbox))
     app.add_handler(CommandHandler("resolve", cmd_resolve))
     app.add_handler(CommandHandler("check", cmd_check))
+    app.add_handler(CommandHandler("yes", cmd_yes))
+    app.add_handler(CommandHandler("no", cmd_no))
+    app.add_handler(CommandHandler("deploy", cmd_deploy_status))
     app.add_handler(CommandHandler("rollback", cmd_rollback))
     app.add_handler(CommandHandler("gitlog", cmd_gitlog))
 
