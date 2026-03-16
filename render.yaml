@@ -7,13 +7,10 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn api_server:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120 --max-requests 1000 --max-requests-jitter 50 --preload"
     healthCheckPath: /health
+    # ⚠️ 반드시 Render 대시보드에서도 Auto-Deploy = OFF 설정 필요
+    # 실제 배포 트리거는 .github/workflows/deploy-backend.yml 이 담당
     autoDeploy: false
     branch: main
-    buildFilter:
-      paths:
-        - api_server.py
-        - requirements.txt
-        - render.yaml
     envVars:
       - key: ENV
         value: production
