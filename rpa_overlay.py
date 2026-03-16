@@ -379,14 +379,10 @@ class RPAOverlay:
         tk.Label(warn_row, text="개인정보 확인 필수",
                  font=self._fn(12, "bold"), bg=self.BG, fg=self.TEXT1).pack(side="left")
 
-        # 스페이서 (최소)
-        tk.Frame(card, bg=self.BG, height=8).pack(fill="x")
-
-        # ══ BUTTONS ════════════════════════════
-        # 구분선 (짙게)
-        tk.Frame(card, bg="#9a9aaa", height=2).pack(fill="x")
+        # ══ BUTTONS (하단 고정) ═══════════════════
         btn_row = tk.Frame(card, bg=self.BG)
-        btn_row.pack(fill="x")
+        btn_row.pack(fill="x", side="bottom")
+        tk.Frame(card, bg="#9a9aaa", height=2).pack(fill="x", side="bottom")
 
         # 닫기 버튼 (파란 배경)
         _CLOSE_BG  = "#e4eef8"
