@@ -287,7 +287,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(380, 210)
+        root, card = self._make_window(320, 210)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         # 숨겨진 title 설정 — FindWindowW로 HWND 직접 검색용
@@ -363,8 +363,8 @@ class RPAOverlay:
             font=self._fn(10), bg=self.BG, fg=self.TEXT2)
         self._prog_count_label.pack(side="right")
 
-        # Pill 프로그레스 바 (380 - 2border - 40pad = 338)
-        BAR_W, BAR_H = 338, 10
+        # Pill 프로그레스 바 (320 - 2border - 40pad = 278)
+        BAR_W, BAR_H = 278, 10
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
@@ -445,7 +445,7 @@ class RPAOverlay:
                     # 화면 밖 방지: 주 모니터 중앙으로 재배치
                     sw = root.winfo_screenwidth()
                     sh = root.winfo_screenheight()
-                    w, h = 380, 210
+                    w, h = 320, 210
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
@@ -631,7 +631,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(338, 10, cur, tot)
+            self._draw_pill_bar(278, 10, cur, tot)
         except Exception:
             pass
 
@@ -642,9 +642,9 @@ class RPAOverlay:
         popup.attributes("-topmost", True)
         popup.configure(bg=self.BG)
 
-        pw, ph = 340, 260
-        px = parent_root.winfo_x() + (380 - pw) // 2
-        py = parent_root.winfo_y() + (360 - ph) // 2
+        pw, ph = 300, 220
+        px = parent_root.winfo_x() + (320 - pw) // 2
+        py = parent_root.winfo_y() + (210 - ph) // 2
         popup.geometry(f"{pw}x{ph}+{px}+{py}")
         popup.attributes("-alpha", 0.0)
 
@@ -733,23 +733,23 @@ class RPAOverlay:
 
     # ── COMPLETE window ───────────────────────
     def _build_complete(self, count: int):
-        root, card = self._make_window(420, 300)
+        root, card = self._make_window(320, 250)
 
         bar = self._top_bar(card, root)
 
-        chk = tk.Canvas(card, width=60, height=50,
+        chk = tk.Canvas(card, width=54, height=46,
                         bg=self.BG, highlightthickness=0)
-        chk.pack(pady=(4, 8))
+        chk.pack(pady=(2, 6))
         self._draw_check_animated(chk, root)
 
-        title = tk.Label(card, text=f"{count}건 완료",
-                         font=self._fn(17, "bold"),
+        title = tk.Label(card, text=f"✓  {count}건 완료!",
+                         font=self._fn(16, "bold"),
                          bg=self.BG, fg=self.TEXT1)
         title.pack()
 
-        sub = tk.Label(card, text="개인정보 노출이 없는지 확인해 주세요",
-                       font=self._fn(12), bg=self.BG, fg=self.TEXT2)
-        sub.pack(pady=(4, 16))
+        sub = tk.Label(card, text="개인정보 노출이 없는지 확인해 주세요 ⚠",
+                       font=self._fn(10), bg=self.BG, fg=self.TEXT2)
+        sub.pack(pady=(3, 12))
 
         self._sep(card)
 
@@ -757,7 +757,7 @@ class RPAOverlay:
             _post_more_event.set()
             root.destroy()
 
-        self._action(card, "5개 더 올리기", "bold", _more)
+        self._action(card, "5개 더 올리기  ›", "bold", _more)
         self._sep(card)
         self._action(card, "닫기", "normal", lambda: root.destroy())
 
@@ -924,7 +924,7 @@ def ask_integrity_password() -> bool:
     root.attributes("-topmost", True)
     root.configure(bg="#f5f5f7")
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-    w, h = 360, 200
+    w, h = 300, 185
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
 
     border = tk.Frame(root, bg="#d2d2d7", padx=1, pady=1)
@@ -932,15 +932,15 @@ def ask_integrity_password() -> bool:
     card = tk.Frame(border, bg="#ffffff")
     card.pack(fill="both", expand=True)
 
-    tk.Label(card, text="파일 변조 감지",
-             font=tkfont.Font(family="Malgun Gothic", size=16, weight="bold"),
-             bg="#ffffff", fg="#ff3b30").pack(pady=(20, 6))
+    tk.Label(card, text="🔒  파일 변조 감지",
+             font=tkfont.Font(family="Malgun Gothic", size=14, weight="bold"),
+             bg="#ffffff", fg="#ff3b30").pack(pady=(16, 4))
     tk.Label(card, text="리셋 비밀번호를 입력하세요",
-             font=tkfont.Font(family="Malgun Gothic", size=11),
-             bg="#ffffff", fg="#6e6e73").pack(pady=(0, 10))
+             font=tkfont.Font(family="Malgun Gothic", size=10),
+             bg="#ffffff", fg="#6e6e73").pack(pady=(0, 8))
 
-    entry = tk.Entry(card, show="*", font=tkfont.Font(family="Malgun Gothic", size=14),
-                     justify="center", width=15,
+    entry = tk.Entry(card, show="*", font=tkfont.Font(family="Malgun Gothic", size=13),
+                     justify="center", width=13,
                      relief="flat", bd=1, highlightthickness=1,
                      highlightbackground="#d2d2d7", highlightcolor="#0071e3")
     entry.pack(pady=(0, 10))
@@ -1071,7 +1071,7 @@ def ask_account_selection():
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
 
-        w, h = 380, 560
+        w, h = 340, 510
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
@@ -1092,13 +1092,13 @@ def ask_account_selection():
         card = tk.Frame(border, bg=_CARD)
         card.pack(fill="both", expand=True)
 
-        tk.Label(card, text="BRIDGE Craig RPA",
-                 font=tkfont.Font(family="Malgun Gothic", size=19, weight="bold"),
-                 bg=_CARD, fg=_T1).pack(pady=(22, 2))
-        tk.Label(card, text="작업할 계정을 선택하세요",
-                 font=tkfont.Font(family="Malgun Gothic", size=11),
-                 bg=_CARD, fg=_T2).pack(pady=(0, 12))
-        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=16, pady=(0, 4))
+        tk.Label(card, text="✦  BRIDGE Craig RPA",
+                 font=tkfont.Font(family="Malgun Gothic", size=16, weight="bold"),
+                 bg=_CARD, fg=_T1).pack(pady=(18, 2))
+        tk.Label(card, text="계정을 선택해 주세요",
+                 font=tkfont.Font(family="Malgun Gothic", size=10),
+                 bg=_CARD, fg=_T2).pack(pady=(0, 10))
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12, pady=(0, 3))
 
         last_runs = _load_last_runs()
         cnt_var   = tk.IntVar(value=10)
@@ -1120,24 +1120,24 @@ def ask_account_selection():
 
             # ── 카드 래퍼 (테두리) ────────────────────
             wrap = tk.Frame(card, bg=_SEP, padx=1, pady=1)
-            wrap.pack(fill="x", padx=16, pady=4)
+            wrap.pack(fill="x", padx=12, pady=3)
 
             # ── 버튼 본체 ─────────────────────────────
             btn = tk.Frame(wrap, bg=color, cursor="hand2")
             btn.pack(fill="both")
 
             # 왼쪽 악센트 바
-            accent = tk.Frame(btn, bg=accent_c, width=6)
+            accent = tk.Frame(btn, bg=accent_c, width=5)
             accent.pack(side="left", fill="y")
             accent.pack_propagate(False)
 
             # 콘텐츠 영역
-            body = tk.Frame(btn, bg=color, padx=14, pady=13)
+            body = tk.Frame(btn, bg=color, padx=12, pady=11)
             body.pack(side="left", fill="both", expand=True)
 
             lbl_name = tk.Label(body,
                                 text=name,
-                                font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
+                                font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
                                 bg=color, fg=_T1, anchor="w")
             lbl_name.pack(fill="x")
 
@@ -1145,7 +1145,7 @@ def ask_account_selection():
                                text=ago,
                                font=tkfont.Font(family="Malgun Gothic", size=9),
                                bg=color, fg="#555560", anchor="w")
-            lbl_ago.pack(fill="x", pady=(3, 0))
+            lbl_ago.pack(fill="x", pady=(2, 0))
 
             # 오른쪽 화살표
             arrow = tk.Label(btn, text="›",
@@ -1172,9 +1172,9 @@ def ask_account_selection():
             accent.bind("<Leave>",
                         lambda e, ws=_bg_widgets, c=color: [x.configure(bg=c) for x in ws])
 
-        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=16, pady=(12, 0))
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12, pady=(10, 0))
         cnt_row = tk.Frame(card, bg=_CARD)
-        cnt_row.pack(fill="x", padx=16, pady=6)
+        cnt_row.pack(fill="x", padx=12, pady=5)
         tk.Label(cnt_row, text="게시 수:",
                  font=tkfont.Font(family="Malgun Gothic", size=10),
                  bg=_CARD, fg=_T2).pack(side="left")
@@ -1356,7 +1356,7 @@ def ask_already_running(acct_key: str = ""):
             ox, oy = m.x, m.y
         except Exception:
             pass
-    w, h = 340, 160
+    w, h = 300, 148
     root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2 - 80}")
     root.attributes("-alpha", 0.0)
 
@@ -1385,9 +1385,9 @@ def ask_already_running(acct_key: str = ""):
             break
 
     _msg = "작업 창을 앞으로 가져왔습니다." if _found else "잠시 후 작업 창이 복원됩니다."
-    tk.Label(card, text="이미 작업 중 🤖",
-             font=tkfont.Font(family="Malgun Gothic", size=14, weight="bold"),
-             bg=acct_color, fg="#1d1d1f").pack(pady=(16, 3))
+    tk.Label(card, text="이미 작업 중 ✦",
+             font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+             bg=acct_color, fg="#1d1d1f").pack(pady=(13, 3))
     tk.Label(card, text=f"[ {name_part} ] 작업이 진행 중입니다.",
              font=tkfont.Font(family="Malgun Gothic", size=10),
              bg=acct_color, fg="#444450").pack()
