@@ -86,7 +86,7 @@ function SortablePostWrapper({
 }: {
   id: number
   disabled?: boolean
-  children: React.ReactNode
+  children: (dragHandle: React.ReactNode) => React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id, disabled })
@@ -96,15 +96,27 @@ function SortablePostWrapper({
     opacity: isDragging ? 0.45 : 1,
     zIndex: isDragging ? 999 : undefined,
   }
+
+  const dragHandle = disabled ? null : (
+    <span
+      {...listeners}
+      className="shrink-0 self-center flex flex-col gap-[3px] px-1.5 py-2 rounded cursor-grab active:cursor-grabbing touch-none text-gray-300 hover:text-gray-500 transition-colors"
+      title="드래그하여 순서 변경"
+    >
+      <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
+      <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
+      <span className="pointer-events-none block w-4 h-0.5 bg-current rounded" />
+    </span>
+  )
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
-      className={`touch-none select-none ${disabled ? '' : 'cursor-grab active:cursor-grabbing'} ${isDragging ? 'shadow-xl ring-2 ring-blue-400 rounded-xl' : ''}`}
+      className={`select-none ${isDragging ? 'shadow-xl ring-2 ring-blue-400 rounded-xl' : ''}`}
     >
-      {children}
+      {children(dragHandle)}
     </div>
   )
 }
@@ -425,12 +437,13 @@ export default function AdminPostsPage() {
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   /* ── 개별 게시물 카드 ── */
-  const renderPost = (p: Post) => {
+  const renderPost = (p: Post, dragHandle?: React.ReactNode) => {
     const key = `${p.board}-${p.id}`
     const isEditing = editId === p.id && editBoard === p.board
     return (
       <>
         <div className={`card !py-3 flex items-start gap-3 ${p.pinned === 1 ? 'border-l-4 !border-l-blue-500' : ''}`}>
+          {dragHandle}
           <input type="checkbox" checked={selected.has(key)}
             onChange={() => toggleSelect(key)}
             onPointerDown={(e) => e.stopPropagation()}
@@ -724,7 +737,7 @@ export default function AdminPostsPage() {
               <SortableContext items={displayPosts.map(p => p.id)} strategy={verticalListSortingStrategy}>
                 {displayPosts.map((p) => (
                   <SortablePostWrapper key={`${p.board}-${p.id}`} id={p.id} disabled={editId === p.id}>
-                    {renderPost(p)}
+                    {(dragHandle) => renderPost(p, dragHandle)}
                   </SortablePostWrapper>
                 ))}
               </SortableContext>
