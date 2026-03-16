@@ -8,11 +8,14 @@ const PURIFY_CONFIG = {
     'ul', 'ol', 'li', 'a', 'img', 'strong', 'em', 'b', 'i', 'u',
     'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'div', 'span', 'blockquote', 'code', 'pre', 'sub', 'sup',
+    'style', 'section', 'article', 'header', 'footer', 'nav',
+    'figure', 'figcaption', 'details', 'summary', 'small',
   ],
   ALLOWED_ATTR: [
     'href', 'src', 'alt', 'class', 'style', 'target', 'rel',
-    'width', 'height', 'colspan', 'rowspan',
+    'width', 'height', 'colspan', 'rowspan', 'id',
   ],
+  FORCE_BODY: true,
 }
 
 export default function HtmlPreview({ html }: { html: string }) {
