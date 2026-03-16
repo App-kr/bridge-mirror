@@ -79,11 +79,10 @@ class RPAOverlay:
         self._bot_t            = 0.0
         self._restore_monitor  = None
 
-    # ── Restore flag monitor ───────────────────
+    # ── Restore flag monitor (안전망) ──────────
     def _start_restore_monitor(self):
-        """launcher 재실행 감지용 — 1초마다 체크.
-        창이 살아있는 경우: _build_working() 내 _check_restore()가 tkinter 스레드에서 직접 처리.
-        창이 닫혀있는 경우(dismiss): _re_show_working() 호출로 창 재생성."""
+        """안전망 모니터 — withdraw 방식에서 _check_restore()가 주 담당.
+        self._root가 None인 비정상 케이스만 여기서 처리."""
         import time as _time
 
         _flag = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
@@ -92,9 +91,7 @@ class RPAOverlay:
             while self._is_working:
                 try:
                     if _flag.exists() and self._root is None:
-                        # 창이 dismiss 상태 — 재생성
                         _flag.unlink(missing_ok=True)
-                        self._stop_remind()
                         self._re_show_working()
                 except Exception:
                     pass
@@ -205,21 +202,48 @@ class RPAOverlay:
             pass
 
     def _dismiss_and_remind(self):
-        if self._root:
-            try:
-                self._root.destroy()
-            except Exception:
-                pass
-            self._root = None
+        """닫기/X 버튼 — destroy 없이 withdraw(숨기기). tkinter 인터프리터 유지.
+        _check_restore()가 400ms마다 flag 감시 → deiconify()로 즉시 복원 가능."""
+        try:
+            if self._root and self._root.winfo_exists():
+                self._root.withdraw()          # 숨기기 (destroy 아님)
+                if self._is_working:
+                    # 30초 후 tkinter 이벤트 루프에서 자동 복원 (크로스스레드 없음)
+                    self._root.after(30000, self._deiconify_working)
+        except Exception:
+            pass
         self._ready.clear()
-        if self._is_working:
-            self._remind_timer = threading.Timer(30.0, self._re_show_working)
-            self._remind_timer.daemon = True
-            self._remind_timer.start()
 
-    def _re_show_working(self):
+    def _deiconify_working(self):
+        """숨겨진 작업창 복원 — tkinter 이벤트 루프 내부에서 호출됨."""
         if not self._is_working:
             return
+        try:
+            if self._root and self._root.winfo_exists():
+                self._root.deiconify()
+                self._root.attributes("-topmost", True)
+                self._root.lift()
+                self._root.focus_force()
+                self._root.after(
+                    1500,
+                    lambda: self._root.attributes("-topmost", False)
+                    if self._root and self._root.winfo_exists() else None,
+                )
+        except Exception:
+            pass
+
+    def _re_show_working(self):
+        """안전망: self._root가 None인 비정상 케이스 전용 (withdraw 방식 이후 거의 미사용)."""
+        if not self._is_working:
+            return
+        # withdraw된 경우 — deiconify로 복원
+        if self._root and self._root.winfo_exists():
+            try:
+                self._root.after(0, self._deiconify_working)
+            except Exception:
+                pass
+            return
+        # root가 완전히 없는 경우만 새 Tk() 생성
         self._thread = threading.Thread(target=self._build_working, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
@@ -387,7 +411,8 @@ class RPAOverlay:
             try:
                 if _restore_flag.exists():
                     _restore_flag.unlink(missing_ok=True)
-                    root.attributes("-topmost", True)
+                    root.deiconify()                    # withdraw 상태면 재표시
+                    root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
                     root.focus_force()
                     root.after(1500, lambda: root.attributes("-topmost", False)
