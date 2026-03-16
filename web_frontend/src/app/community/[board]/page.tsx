@@ -20,7 +20,7 @@ import {
 } from '@/lib/animations'
 import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBar'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import SplitEditor, { type PostData } from '@/components/admin/SplitEditor'
+import SplitEditor, { type PostData, type ContentType } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
 import { useDragReorder } from '@/hooks/useDragReorder'
 import {
@@ -441,7 +441,7 @@ export default function BoardPage() {
 
   // Unified editor state
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editorInitialData, setEditorInitialData] = useState<{ title: string; content: string }>({ title: '', content: '' })
+  const [editorInitialData, setEditorInitialData] = useState<{ title: string; content: string; contentType?: ContentType }>({ title: '', content: '' })
   const [editorPreviewType, setEditorPreviewType] = useState<'faq' | 'list' | 'card' | 'testimonial'>('list')
   const [editorCtx, setEditorCtx] = useState<{
     type: 'post-create' | 'post-edit' | 'faq-new' | 'faq-edit'
@@ -510,7 +510,8 @@ export default function BoardPage() {
       const res = await fetch(`${API}/api/community/${board}/${post.id}`)
       const j = await res.json()
       if (j.success) {
-        setEditorInitialData({ title: j.data.title ?? post.title, content: j.data.body ?? '' })
+        const ct: ContentType = j.data.content_type === 'html' ? 'html' : 'markdown'
+        setEditorInitialData({ title: j.data.title ?? post.title, content: j.data.body ?? '', contentType: ct })
       } else {
         setEditorInitialData({ title: post.title, content: post.preview ?? '' })
       }
