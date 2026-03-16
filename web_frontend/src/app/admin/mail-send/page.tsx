@@ -67,7 +67,6 @@ const BODY_FOOTER = `<p>Kind Regards,<br/>
 This email is intended for the designated recipient only. If you are not the intended recipient, or even if you are an English instructor who previously handled resume management but no longer holds that responsibility, please reply requesting removal from our mailing list and delete this email immediately.
 </p>`
 
-const DEFAULT_BODY = `${BODY_HEADER}\n\n${BODY_FOOTER}`
 
 export default function MailSendPage() {
   const { adminKey, authed, login, signedFetch, waking } = useAdminAuth()
@@ -420,9 +419,9 @@ export default function MailSendPage() {
             />
           </div>
 
-          {/* Body */}
+          {/* Body — 분할 뷰 (에디터 + 실시간 미리보기) */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">본문 (HTML)</label>
               <div className="flex items-center gap-2">
                 <button
@@ -439,19 +438,58 @@ export default function MailSendPage() {
                 <button
                   type="button"
                   onClick={() => setShowPreview(!showPreview)}
-                  className="text-[12px] text-blue-600 hover:underline font-medium"
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                    showPreview
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'bg-[#f5f5f7] border-[#d2d2d7] text-[#555] hover:bg-[#e8e8ed]'
+                  }`}
                 >
-                  {showPreview ? 'HTML 편집' : '미리보기'}
+                  {showPreview ? '◧ 분할보기 ON' : '◧ 분할보기'}
                 </button>
               </div>
             </div>
+
             {showPreview ? (
-              <div
-                className="w-full min-h-[280px] px-4 py-3 rounded-xl border border-[#d2d2d7] bg-[#fafafa] text-[13px] prose prose-sm max-w-none overflow-y-auto"
-                style={{ fontFamily: font, fontSize: '14px' }}
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }}
-              />
+              /* ── 분할 뷰 ── */
+              <div className="grid grid-cols-2 gap-3" style={{ minHeight: 420 }}>
+                {/* 좌: HTML 에디터 */}
+                <div className="flex flex-col">
+                  <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#ff5f56] inline-block" />
+                    HTML 편집
+                  </div>
+                  <textarea
+                    value={bodyHtml}
+                    onChange={e => setBodyHtml(e.target.value)}
+                    className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
+                    style={{ minHeight: 400 }}
+                    spellCheck={false}
+                  />
+                </div>
+                {/* 우: 실시간 미리보기 */}
+                <div className="flex flex-col">
+                  <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#27c93f] inline-block" />
+                    실시간 미리보기
+                  </div>
+                  <div
+                    className="flex-1 rounded-xl border border-[#d2d2d7] overflow-y-auto"
+                    style={{ minHeight: 400, background: '#f6f6f6' }}
+                  >
+                    {/* 이메일 외곽 래퍼 */}
+                    <div style={{ maxWidth: 600, margin: '16px auto', background: '#fff', borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.10)', padding: '24px 32px', fontFamily: font, fontSize: 14, lineHeight: 1.7, color: '#222' }}>
+                      {subject && (
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #eee' }}>
+                          <strong>제목:</strong> {subject}
+                        </div>
+                      )}
+                      <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
+              /* ── 단독 에디터 ── */
               <textarea
                 value={bodyHtml}
                 onChange={e => setBodyHtml(e.target.value)}

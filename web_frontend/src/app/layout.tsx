@@ -13,6 +13,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://bridgejob.co.kr'),
   title: 'BRIDGE | ESL Teaching Jobs in Korea',
   description: "Korea's #1 ESL recruitment platform — 원어민 영어강사 채용 전문",
   keywords: ['원어민 강사', 'ESL Korea', 'teaching jobs Korea', 'BRIDGE 채용'],

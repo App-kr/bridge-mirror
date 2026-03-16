@@ -26,7 +26,6 @@ import { seededShuffle } from '@/lib/seededShuffle'
 import { TESTIMONIALS, type TestimonialEntry } from '@/data/testimonials'
 import type { PublicJob, AgeGroup } from '@/types'
 import { API_URL } from '@/lib/api'
-const API = ''
 
 // ── Fallback testimonials (subset of static pool) ──
 const FALLBACK_TESTIMONIALS: TestimonialEntry[] = TESTIMONIALS.slice(0, 4)
@@ -214,7 +213,7 @@ export default function HomePage() {
 
   // ── Fetch featured jobs (monthly-seeded shuffle) ──
   useEffect(() => {
-    fetch(`${API}/api/jobs?limit=20`)
+    fetch(`/api/jobs?limit=20`)
       .then(r => r.json())
       .then(d => {
         const all: PublicJob[] = d?.data ?? []
@@ -230,7 +229,7 @@ export default function HomePage() {
 
   // ── Fetch partners from API ──
   useEffect(() => {
-    fetch(`${API}/api/partners`)
+    fetch(`${API_URL}/api/partners`)
       .then(r => r.json())
       .then(d => {
         const partners = d?.data?.partners ?? []

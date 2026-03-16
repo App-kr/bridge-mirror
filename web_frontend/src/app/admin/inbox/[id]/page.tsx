@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
@@ -137,7 +138,7 @@ export default function InboxDetailPage() {
     <div className="space-y-6">
 
       {/* Back link */}
-      <a href="/admin/inbox" className="text-sm text-blue-600 hover:underline">← 수신함으로 돌아가기</a>
+      <Link href="/admin/inbox" className="text-sm text-blue-600 hover:underline">← 수신함으로 돌아가기</Link>
 
       {loading ? (
         <div className="text-center py-32 text-gray-400 animate-pulse">로딩 중...</div>

@@ -40,7 +40,7 @@ export default function EarthGlobe() {
       '/earth-map.jpg',  // NASA Blue Marble — 고해상도, 대륙색 선명
       (tex) => { mat.map = tex; mat.needsUpdate = true },
       undefined,
-      (e) => console.error('[EarthGlobe] texture error:', e)
+      () => { /* texture load failed — earth renders without map */ }
     )
 
     // ── Group 구조: 기울기(tilt) 고정 / 자전(spin)은 내부 earth만 ──

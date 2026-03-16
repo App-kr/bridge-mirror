@@ -52,7 +52,7 @@ const SQLI_PATTERNS = [
 
 // ── Report queue (debounce) ────────────────────────────────────────────────
 
-let _reportQueue: SecurityEvent[] = []
+const _reportQueue: SecurityEvent[] = []
 let _reportTimer: ReturnType<typeof setTimeout> | null = null
 
 export function reportThreat(event: SecurityEvent): void {
