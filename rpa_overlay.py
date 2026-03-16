@@ -287,7 +287,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(380, 360)
+        root, card = self._make_window(380, 210)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         # 숨겨진 title 설정 — FindWindowW로 HWND 직접 검색용
@@ -301,7 +301,7 @@ class RPAOverlay:
         header.pack(fill="x")
 
         # 닫기 버튼 (헤더 우상단)
-        bar = tk.Frame(header, bg=CC, height=26)
+        bar = tk.Frame(header, bg=CC, height=24)
         bar.pack(fill="x")
         bar.pack_propagate(False)
         xb = tk.Label(bar, text="\u2715", font=self._fn(10),
@@ -311,27 +311,27 @@ class RPAOverlay:
         xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
         xb.bind("<Button-1>", lambda e: self._dismiss_and_remind())
 
-        # 봇 + 타이틀
+        # 스피너 + 타이틀
         bot_row = tk.Frame(header, bg=CC)
-        bot_row.pack(padx=20, pady=(4, 16), anchor="w")
+        bot_row.pack(padx=20, pady=(2, 10), anchor="w")
 
-        bot_c = tk.Canvas(bot_row, width=64, height=80,
-                          bg=CC, highlightthickness=0)
-        bot_c.pack(side="left", padx=(0, 16))
-        self._draw_bot(bot_c, root)
+        spin_c = tk.Canvas(bot_row, width=44, height=44,
+                           bg=CC, highlightthickness=0)
+        spin_c.pack(side="left", padx=(0, 14))
+        self._draw_spinner(spin_c, root)
 
         info_col = tk.Frame(bot_row, bg=CC)
         info_col.pack(side="left", anchor="w")
 
         tk.Label(info_col, text="Craig RPA",
-                 font=self._fn(17, "bold"),
+                 font=self._fn(16, "bold"),
                  bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w")
 
         if self._email:
             _display_email = self._email.split("@")[0] if "@" in self._email else self._email
             tk.Label(info_col, text=_display_email,
-                     font=self._fn(11),
-                     bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w", pady=(6, 0))
+                     font=self._fn(10),
+                     bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w", pady=(4, 0))
 
         # ══ SEPARATOR ══════════════════════════
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
@@ -339,11 +339,11 @@ class RPAOverlay:
         # ══ BODY (BG 배경) ══════════════════════
         cur, tot = self._progress_var or [0, 0]
         body = tk.Frame(card, bg=self.BG)
-        body.pack(fill="x", padx=20, pady=(12, 8))
+        body.pack(fill="x", padx=20, pady=(8, 4))
 
         # % · 상태 · 카운트 행
         pct_row = tk.Frame(body, bg=self.BG)
-        pct_row.pack(fill="x", pady=(0, 8))
+        pct_row.pack(fill="x", pady=(0, 6))
 
         self._prog_pct_label = tk.Label(
             pct_row, text=self._pct_text(cur, tot),
@@ -373,11 +373,11 @@ class RPAOverlay:
 
         # 개인정보 경고
         warn_row = tk.Frame(card, bg=self.BG)
-        warn_row.pack(pady=(10, 0), padx=20, anchor="w")
+        warn_row.pack(pady=(6, 0), padx=20, anchor="w")
         tk.Label(warn_row, text="\u26a0",
-                 font=self._fn(12), bg=self.BG, fg=self.GOLD).pack(side="left", padx=(0, 6))
+                 font=self._fn(11), bg=self.BG, fg=self.GOLD).pack(side="left", padx=(0, 6))
         tk.Label(warn_row, text="개인정보 확인 필수",
-                 font=self._fn(12, "bold"), bg=self.BG, fg=self.TEXT1).pack(side="left")
+                 font=self._fn(11, "bold"), bg=self.BG, fg=self.TEXT1).pack(side="left")
 
         # ══ BUTTONS (하단 고정) ═══════════════════
         btn_row = tk.Frame(card, bg=self.BG)
@@ -388,9 +388,9 @@ class RPAOverlay:
         _CLOSE_BG  = "#e4eef8"
         _CLOSE_HOV = "#ccdcf0"
         close_btn = tk.Label(btn_row, text="닫기",
-                             font=tkfont.Font(family="Malgun Gothic", size=15),
+                             font=tkfont.Font(family="Malgun Gothic", size=14),
                              bg=_CLOSE_BG, fg=self.BLUE, cursor="hand2")
-        close_btn.pack(side="left", expand=True, fill="both", ipady=7)
+        close_btn.pack(side="left", expand=True, fill="both", ipady=6)
         close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
         close_btn.bind("<Leave>", lambda e: close_btn.configure(bg=_CLOSE_BG))
@@ -402,9 +402,9 @@ class RPAOverlay:
         _STOP_BG  = "#fde8e8"
         _STOP_HOV = "#f8cece"
         stop_btn = tk.Label(btn_row, text="중단하기",
-                            font=tkfont.Font(family="Malgun Gothic", size=15),
+                            font=tkfont.Font(family="Malgun Gothic", size=14),
                             bg=_STOP_BG, fg=self.RED, cursor="hand2")
-        stop_btn.pack(side="left", expand=True, fill="both", ipady=7)
+        stop_btn.pack(side="left", expand=True, fill="both", ipady=6)
         stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
         stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
@@ -413,7 +413,7 @@ class RPAOverlay:
         self._start_status_blink(root)
         self._start_pulse_bar(root)
 
-        self._drag(root, header, bar, bot_row, bot_c, info_col, warn_row)
+        self._drag(root, header, bar, bot_row, spin_c, info_col, warn_row)
         _log_overlay("_build_working: ready.set() 직전 — UI 완성")
         self._ready.set()
 
@@ -445,7 +445,7 @@ class RPAOverlay:
                     # 화면 밖 방지: 주 모니터 중앙으로 재배치
                     sw = root.winfo_screenwidth()
                     sh = root.winfo_screenheight()
-                    w, h = 380, 360
+                    w, h = 380, 210
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
@@ -465,6 +465,25 @@ class RPAOverlay:
             pass
 
     # ── Cute Robot animation ──────────────────
+    def _draw_spinner(self, c, root, size=44):
+        """원형 스피너 — 회전하는 호."""
+        cx = cy = size // 2
+        r = size // 2 - 5
+
+        def _tick(angle=0):
+            if not root.winfo_exists():
+                return
+            c.delete("spin")
+            c.create_oval(cx - r, cy - r, cx + r, cy + r,
+                          outline=self.BAR_BG, width=5, tags="spin")
+            c.create_arc(cx - r, cy - r, cx + r, cy + r,
+                         start=angle, extent=130,
+                         outline=self.BLUE, width=5,
+                         style="arc", tags="spin")
+            root.after(25, lambda: _tick((angle + 9) % 360))
+
+        _tick()
+
     def _draw_bot(self, c, root):
         """64×80 귀여운 로봇. 눈 글로우, 안테나 흔들림, 가슴 LED."""
         # Bot drawing runs on the tkinter thread — safe to access self._bot_t
