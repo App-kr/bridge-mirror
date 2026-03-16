@@ -587,7 +587,12 @@ async def root():
 @app.get("/health", tags=["health"])
 async def health_check():
     """Render / 외부 모니터링용 헬스체크"""
-    return {"status": "ok", "version": "v2.3.1", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "ok",
+        "version": "v2.3.2",
+        "db": str(_ADMIN_DB_PATH),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ── Render 슬립 방지 — 10분마다 self-ping ──────────────────────────────────────
@@ -988,7 +993,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ── Admin: ad_posts 대시보드 ──────────────────────────────────────────────────
 _ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db"))))
 # Render 디스크 마운트 경로(/data) 자동 생성 — 없으면 sqlite3 연결 불가
-_ADMIN_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+try:
+    _ADMIN_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+except OSError as _mkdir_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] DB 경로 디렉터리 생성 실패 (계속 진행): %s", _mkdir_err)
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
 
@@ -4525,11 +4533,11 @@ _DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
 
 # 제출 백업 디렉터리 (Render: /data/backups/auto, 로컬: ./backups/auto)
 _BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR", str(Path(__file__).resolve().parent / "backups" / "auto")))
-_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+os.makedirs(str(_BACKUP_DIR), exist_ok=True)  # Python 3.14 pathlib mkdir 버그 우회
 
 # 카운터 영속화 파일 (재시작 후에도 유지)
 _CHANGE_COUNT_FILE = Path(__file__).resolve().parent / "backups" / "change_count.txt"
-_CHANGE_COUNT_FILE.parent.mkdir(parents=True, exist_ok=True)
+os.makedirs(str(_CHANGE_COUNT_FILE.parent), exist_ok=True)  # Python 3.14 pathlib mkdir 버그 우회
 
 def _load_change_count() -> int:
     try:
@@ -6353,14 +6361,22 @@ async def get_mail_templates(request: Request):
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
-from inbox_api import router as inbox_router
-from gmail_collector import router as gmail_router
-app.include_router(inbox_router)
-app.include_router(gmail_router)
+try:
+    from inbox_api import router as inbox_router
+    from gmail_collector import router as gmail_router
+    app.include_router(inbox_router)
+    app.include_router(gmail_router)
+    logging.getLogger("bridge.api").info("[STARTUP] inbox/gmail 라우터 등록 완료")
+except Exception as _inbox_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] inbox/gmail 라우터 로드 실패 (계속 진행): %s", _inbox_err)
 
 # ── 결제 라우터 등록 (PAYMENT_ENABLED=false → 모든 엔드포인트 503) ──────────
-from backend.routers.payments import router as payments_router
-app.include_router(payments_router)
+try:
+    from backend.routers.payments import router as payments_router
+    app.include_router(payments_router)
+    logging.getLogger("bridge.api").info("[STARTUP] payments 라우터 등록 완료")
+except Exception as _pay_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] payments 라우터 로드 실패 (계속 진행): %s", _pay_err)
 
 # ── Static Files Mount 제거 ─────────────────────────────────────────────────
 # /uploads/ 직접 접근은 HMAC 서명 URL (/api/files/) 로 교체됨.

@@ -66,6 +66,10 @@ Desktop.ini
 screenshots/
 images/
 
+# ── Temp / scratch files ──────────────────────────────────
+openapi_tmp.json
+*.tmp.json
+
 # ── Logs ──────────────────────────────────────────────────────
 logs/
 *.log

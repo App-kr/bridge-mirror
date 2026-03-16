@@ -1,7 +1,6 @@
-import json, subprocess
+import json, subprocess, sys
 from datetime import datetime
 from pathlib import Path
-import sys
 
 BASE  = Path("Q:/Claudework/bridge base")
 VAULT = Path("Q:/Obsidian/Scarlett/BRIDGE")
@@ -46,14 +45,14 @@ def append_worklog(task, files, commit):
 def refresh_canvas():
     p = BASE / "tools" / "make_canvas.py"
     if p.exists():
-        r = subprocess.run(["python", "-X", "utf8", str(p)], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, "-X", "utf8", str(p)], capture_output=True, text=True)
         print("[Canvas]", "완료" if r.returncode == 0 else "실패")
 
 def run_backup(task):
     p = BASE / "tools" / "bridge_backup.py"
     if p.exists():
         r = subprocess.run(
-            ["python", "-X", "utf8", str(p), "backup", task, "--type", "auto"],
+            [sys.executable, "-X", "utf8", str(p), "backup", task, "--type", "auto"],
             capture_output=True, text=True
         )
         print("[백업]", "완료" if r.returncode == 0 else "실패")

@@ -30,16 +30,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" PRE"
-        }
-      ]
-    },
-    {
-      "matcher": {},
-      "hooks": [
-        {
-          "type": "command",
-          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
+          "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\pre_hook.bat\""
         }
       ]
     }
@@ -50,7 +41,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" POST"
+          "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\post_hook.bat\""
         }
       ]
     }
@@ -61,16 +52,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" STOP"
-        }
-      ]
-    },
-    {
-      "matcher": {},
-      "hooks": [
-        {
-          "type": "command",
-          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\auto_finalize.py\""
+          "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\stop_hook.bat\""
         }
       ]
     }

@@ -132,6 +132,20 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - settings.json에 `"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}` 추가됨 (2026-03-16)
 - Delegate Mode: Shift+Tab으로 활성화
 
+## ClaudeBlog 블로그 자동화 설정 (2026-03-16 확정)
+- **경로**: `Q:\Claudework\ClaudeBlog`
+- **실행 방법**: `Q:\Claudework\ClaudeBlog\실행.vbs` 더블클릭 (콘솔창 없음)
+- **바탕화면 아이콘**: `바탕화면_아이콘_만들기.bat` 실행하면 생성됨
+- **venv**: `.venv\Scripts\pythonw.exe` (app.py 실행 전용)
+- **config**: `config.json` — Gemini 키 4개(스칼렛/바이올렛/세번째/네번째), 모델=gemini-2.5-flash
+- **쿠키**: `logs/naver_cookies.json` — 절대경로 필수 (`_BASE_DIR` 기준)
+- **네이버 계정**: `bridgejobkr` / blog_id=`bridgejob`
+- **GUI 앱**: `app.py` (tkinter) — 쿠키저장/건조실행/지금발행/스케줄 버튼
+- **시크릿**: `modules/secret_loader.py` → Windows Credential Manager `BridgeBlogAuto/master_key`
+- **중요**: 테스트 실행 남발 금지 — 네이버 보안 블락 유발함. 실제 발행만 실행.
+- **글 구조**: 글↔사진 교차 (글-사진-글-사진-...) + 마지막에 배너사진(카카오링크)
+- **인용구**: ENTER+BACKSPACE로 탈출 (ENTER+ENTER 아님)
+
 ## Python 실행 규칙 (2026-03-14 확정)
 - `C:\Python314` — 환경 깨짐, 사용 금지
 - **항상 사용**: `C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe`

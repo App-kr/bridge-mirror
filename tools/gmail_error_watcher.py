@@ -102,11 +102,15 @@ def get_conn() -> sqlite3.Connection:
             created_at       TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS tg_alert_subscribers (
-            chat_id    INTEGER PRIMARY KEY,
-            username   TEXT,
-            added_at   TEXT NOT NULL,
-            active     INTEGER DEFAULT 1
+            chat_id      INTEGER PRIMARY KEY,
+            username     TEXT,
+            added_at     TEXT NOT NULL,
+            active       INTEGER DEFAULT 1,
+            min_severity TEXT DEFAULT 'critical'
         );
+        -- 기존 컬럼 없으면 추가 (마이그레이션)
+        CREATE TEMPORARY TABLE IF NOT EXISTS _dummy_check (x);
+        DROP TABLE IF EXISTS _dummy_check;
         CREATE INDEX IF NOT EXISTS idx_inbox_error   ON inbox_emails(is_error);
         CREATE INDEX IF NOT EXISTS idx_inbox_created ON inbox_emails(created_at);
         CREATE INDEX IF NOT EXISTS idx_inbox_uid     ON inbox_emails(imap_uid);
@@ -170,7 +174,9 @@ _ERROR_LABEL = {
     "general":            "일반 메일",
 }
 
-_SEVERITY_EMOJI = {"critical": "🚨", "warning": "⚠️", "info": "✅"}
+_SEVERITY_EMOJI  = {"critical": "🚨", "warning": "⚠️", "info": "✅"}
+_SEVERITY_LABEL  = {"critical": "🔴 긴급", "warning": "🟡 중요", "info": "🟢 일반"}
+_SEVERITY_RANK   = {"critical": 3, "warning": 2, "info": 1}  # 높을수록 중요
 
 
 def classify(from_addr: str, subject: str, body: str) -> tuple[str, str, bool]:
@@ -266,31 +272,44 @@ def tg_send(chat_id: int, text: str) -> bool:
 
 
 def build_alert(row: dict) -> str:
-    emoji = _SEVERITY_EMOJI.get(row.get("severity", "info"), "🔔")
-    label = _ERROR_LABEL.get(row.get("error_type", ""), "알림")
-    preview = (row.get("body_preview") or "").strip()[:500]
+    sev    = row.get("severity", "info")
+    emoji  = _SEVERITY_EMOJI.get(sev, "🔔")
+    slabel = _SEVERITY_LABEL.get(sev, "🟢 일반")
+    label  = _ERROR_LABEL.get(row.get("error_type", ""), "알림")
+    preview = (row.get("body_preview") or "").strip()[:400]
     rid = row.get("id", "?")
     return (
-        f"{emoji} <b>{label}</b>\n"
+        f"{emoji} [{slabel}] <b>{label}</b>\n"
         f"━━━━━━━━━━━━━━━━━\n"
-        f"📧 <b>발신:</b> {row.get('from_addr','')}\n"
-        f"📝 <b>제목:</b> {row.get('subject','')}\n"
-        f"⏰ <b>수신:</b> {row.get('received_at','')}\n"
+        f"📧 {row.get('from_addr','')}\n"
+        f"📝 {row.get('subject','')}\n"
+        f"⏰ {row.get('received_at','')}\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"{preview}\n"
-        f"━━━━━━━━━━━━━━━━━\n"
         f"<code>/resolve {rid}</code>  |  <code>/errors</code>"
     )
 
 
-def notify_all(conn: sqlite3.Connection, text: str) -> int:
+def notify_all(conn: sqlite3.Connection, text: str, severity: str = "info") -> int:
+    """severity 이상인 구독자에게만 전송."""
+    sev_rank = _SEVERITY_RANK.get(severity, 1)
     subs = conn.execute(
-        "SELECT chat_id FROM tg_alert_subscribers WHERE active=1"
+        "SELECT chat_id, min_severity FROM tg_alert_subscribers WHERE active=1"
     ).fetchall()
     if not subs:
         log.warning("구독자 없음 — 봇에서 /alerts on 실행 필요")
         return 0
-    return sum(1 for r in subs if tg_send(r["chat_id"], text))
+    sent = 0
+    for r in subs:
+        min_sev = r["min_severity"] if r["min_severity"] else "critical"
+        min_rank = _SEVERITY_RANK.get(min_sev, 3)
+        if sev_rank >= min_rank:
+            if tg_send(r["chat_id"], text):
+                sent += 1
+        else:
+            log.info("중요도 필터 — chat_id=%d 건너뜀 (메시지=%s < 설정=%s)",
+                     r["chat_id"], severity, min_sev)
+    return sent
 
 
 # ── IMAP 연결 ──────────────────────────────────────────────────────────────────
@@ -399,8 +418,9 @@ def process_message(
             "SELECT * FROM inbox_emails WHERE imap_uid=?", (uid,)
         ).fetchone()
         if saved:
-            text = build_alert(dict(saved))
-            sent = notify_all(conn, text)
+            saved_dict = dict(saved)
+            text = build_alert(saved_dict)
+            sent = notify_all(conn, text, severity=saved_dict.get("severity", "info"))
             if sent > 0:
                 conn.execute(
                     "UPDATE inbox_emails SET notified_tg=1 WHERE imap_uid=?", (uid,)

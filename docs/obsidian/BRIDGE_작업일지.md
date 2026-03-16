@@ -449,3 +449,4 @@ Q:\Claudework\bridge base\
 - **내용**: ClaudeBlog에 Naver AC API + Google Trends 기반 키워드 자동 조사 파이프라인 구현
 - **변경 파일**: modules/keyword_researcher.py (신규), modules/keyword_manager.py, modules/main.py, config.json
 - **결과**: ✅ 완료 (로컬 커밋)
+n### 2026.03.17 07:34 — ClaudeBlog 자동화 완전 수정n- **내용**: 인용구 탈출(Escape+Tab×2), 스케줄 시간→날짜 순서, 제목 입력 안정화n- **변경 파일**: modules/naver_uploader.py, modules/content_generator.pyn- **결과**: ✅ 완료 — 실제 발행 성공 확인 (원어민강사 채용, 2026-03-18 09:30 예약)n- **해결된 이슈**: 인용구 in_quote=False 5개, 스케줄 시간먼저 설정 성공

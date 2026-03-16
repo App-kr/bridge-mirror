@@ -208,35 +208,53 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Unauthorized.")
         return
 
-    _get_session(update.effective_chat.id)
+    try:
+        _get_session(update.effective_chat.id)
+    except Exception:
+        pass
     await update.message.reply_text(
-        "BRIDGE Agent Bot\n"
-        "━━━━━━━━━━━━━━━━\n"
-        "텍스트로 지시 → 에이전트 실행\n"
-        "사진 보내기 → AI 분석 + 수행\n\n"
-        f"Provider: {config.provider}\n"
-        f"Model: {config.model}\n"
-        f"Agent: team-lead\n\n"
-        "/help 로 명령어 확인"
+        "👋 BRIDGE Bot 시작!\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🔔 이 봇이 하는 일:\n"
+        "• Gmail 에러 이메일 실시간 감지 → 즉시 알림\n"
+        "• git push 전 배포 승인 요청\n"
+        "• 텔레그램으로 직접 배포 승인/거부/롤백\n\n"
+        "📌 주요 명령어:\n"
+        "/check   — Gmail 즉시 확인\n"
+        "/errors  — 에러 목록\n"
+        "/deploy  — 배포 상태\n"
+        "/yes     — 배포 승인\n"
+        "/no      — 배포 거부\n"
+        "/rollback — 긴급 롤백\n\n"
+        "💬 자연어로 말해도 됩니다\n"
+        "\"에러 보여줘\" \"메일 체크\" \"배포 승인\" 등\n\n"
+        "/help — 전체 명령어 목록"
     )
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "명령어 목록\n"
-        "━━━━━━━━━━━━━━━━\n"
-        "/agent X   — 에이전트 전환\n"
-        "  team-lead | security-check\n"
-        "  feature-dev | qa-test\n"
-        "/team      — 팀리더 모드\n"
-        "/agents    — 목록 보기\n"
-        "/model X   — 모델 변경\n"
-        "/new       — 새 대화\n"
-        "/status    — 서버 상태\n"
-        "/build     — npm run build\n"
-        "/git       — git status\n"
-        "/tokens    — 사용량\n"
-        "\n사진/파일 보내면 분석합니다."
+        "📋 BRIDGE Bot 명령어\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📬 Gmail 모니터\n"
+        "/check   — 지금 즉시 미읽음 메일 수 확인\n"
+        "/inbox   — 최근 수신 이메일 목록 (기본10개)\n"
+        "/errors  — 미해결 에러 이메일만 보기\n"
+        "/resolve [ID] — 에러 해결 완료 표시\n"
+        "/alerts  — 실시간 에러 알림 구독 ON/OFF\n"
+        "\n🚀 배포 관리\n"
+        "/deploy  — 현재 배포 요청 상태 확인\n"
+        "/yes     — 대기중인 push 배포 승인 (진행됨)\n"
+        "/no      — 대기중인 push 배포 거부 (차단됨)\n"
+        "/rollback — 마지막 커밋 취소+재배포 (긴급복구)\n"
+        "/gitlog  — 최근 커밋 기록 보기\n"
+        "\n💻 서버\n"
+        "/status  — API(8000)/Frontend(3000) 서버 상태\n"
+        "/git     — git 변경 파일 목록\n"
+        "/build   — Next.js 빌드 실행\n"
+        "\n💬 자연어도 됩니다\n"
+        "\"에러 보여줘\" / \"메일 체크해\" / \"롤백해\"\n"
+        "\"배포 승인\" / \"상태 어때\" 등으로도 사용 가능"
     )
 
 
@@ -460,19 +478,19 @@ async def cmd_errors(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     if not rows:
-        await update.message.reply_text("✅ 미해결 에러 없음")
+        await update.message.reply_text("✅ 미해결 에러 없음\n모든 에러가 처리되었습니다.")
         return
 
     SEVERITY_EMOJI = {"critical": "🚨", "warning": "⚠️", "info": "ℹ️"}
-    lines = [f"🔴 미해결 에러 {len(rows)}건:"]
+    lines = [f"🔴 미해결 에러 {len(rows)}건:\n(처리 완료시 /resolve [ID] 입력)"]
     for r in rows:
         emoji = SEVERITY_EMOJI.get(r["severity"], "🔔")
         subject_short = (r["subject"] or "")[:40]
         lines.append(
             f"\n{emoji} ID:{r['id']} [{r['error_type']}]\n"
-            f"   {r['from_addr'][:35]}\n"
-            f"   {subject_short}\n"
-            f"   /resolve {r['id']}"
+            f"   발신: {r['from_addr'][:35]}\n"
+            f"   제목: {subject_short}\n"
+            f"   → /resolve {r['id']} 로 해결 처리"
         )
     await _send_long(update, "\n".join(lines))
 
@@ -501,13 +519,13 @@ async def cmd_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not rows:
         await update.message.reply_text(
-            "수신 이메일 없음\n\n"
-            "Gmail 워처가 실행 중인지 확인:\n"
-            "python tools/gmail_error_watcher.py"
+            "📭 수신 이메일 없음\n\n"
+            "Gmail 워처가 이메일을 수집하면 여기에 표시됩니다.\n"
+            "워처 상태 확인: /check"
         )
         return
 
-    lines = [f"📬 최근 이메일 {len(rows)}건:"]
+    lines = [f"📬 최근 이메일 {len(rows)}건:\n(🚨=에러 이메일, 📧=일반 이메일)"]
     for r in rows:
         err_tag = "🚨" if r["is_error"] else "📧"
         subject_short = (r["subject"] or "")[:45]
@@ -595,15 +613,17 @@ async def cmd_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ).fetchone()[0]
         conn.close()
 
+        status_msg = "✅ 에러 없음" if unresolved == 0 else f"🚨 에러 {unresolved}건 확인 필요"
         await update.message.reply_text(
             f"📬 Gmail 체크 완료\n"
             f"━━━━━━━━━━━━━━━━━\n"
             f"📥 미읽음: {len(uids)}건\n"
             f"🗄 수집된 전체: {total_mail}건\n"
-            f"🚨 미해결 에러: {unresolved}건\n"
+            f"🚨 미해결 에러: {unresolved}건 → {status_msg}\n"
             f"━━━━━━━━━━━━━━━━━\n"
-            f"워처 실행 중이면 자동 처리됩니다.\n"
-            f"/errors — 에러 목록 | /inbox — 전체 목록"
+            f"Gmail 워처가 실행 중이면 새 에러 이메일 도착시 자동 알림.\n\n"
+            f"/errors — 에러 목록 보기\n"
+            f"/inbox  — 전체 수신함 보기"
         )
     except Exception as e:
         await update.message.reply_text(f"❌ 체크 실패: {str(e)[:300]}")
@@ -641,7 +661,10 @@ async def cmd_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ <b>배포 승인!</b>\n"
             f"브랜치: {branch}\n"
             f"커밋: {latest}\n\n"
-            f"push를 진행합니다... 잠시 후 Render/Vercel에서 배포 시작됩니다.",
+            f"➡️ git push가 진행됩니다.\n"
+            f"➡️ Render(백엔드) + Vercel(프론트) 자동 배포 시작.\n"
+            f"➡️ 보통 2~5분 후 사이트 반영됩니다.\n\n"
+            f"⚠️ 배포 후 에러 이메일 오면 자동 알림 전송됩니다.",
             parse_mode="HTML"
         )
     except Exception as e:
@@ -676,9 +699,11 @@ async def cmd_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state_file.write_text(_json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
         await update.message.reply_text(
-            f"❌ <b>배포 차단</b>\n"
+            f"❌ <b>배포 차단됨</b>\n"
             f"사유: {reason}\n\n"
-            f"push가 취소됩니다. 수정 후 다시 push하면 새 승인 요청이 전송됩니다.",
+            f"➡️ git push가 중단됩니다.\n"
+            f"➡️ 코드가 서버에 반영되지 않습니다.\n"
+            f"➡️ 수정 후 다시 push하면 새 승인 요청이 옵니다.",
             parse_mode="HTML"
         )
     except Exception as e:
@@ -692,7 +717,10 @@ async def cmd_deploy_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     state_file = PROJECT_ROOT / "logs" / "deploy_request.json"
     if not state_file.exists():
-        await update.message.reply_text("대기 중인 배포 요청 없음")
+        await update.message.reply_text(
+            "⏸ 대기 중인 배포 요청 없음\n\n"
+            "git push 실행 시 자동으로 승인 요청이 전송됩니다."
+        )
         return
 
     try:
@@ -704,11 +732,16 @@ async def cmd_deploy_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         latest = info.get("latest_msg", "")[:60]
         cnt = info.get("commit_count", 0)
         emoji = {"pending": "⏳", "approved": "✅", "rejected": "❌"}.get(status, "❓")
+        desc = {
+            "pending": "승인 대기 중\n→ /yes: push 진행됨 (Render/Vercel 배포)\n→ /no: push 취소됨 (배포 안됨)",
+            "approved": "이미 승인됨 — push가 진행되었습니다",
+            "rejected": "거부됨 — push가 취소되었습니다",
+        }.get(status, "")
         await update.message.reply_text(
             f"{emoji} 배포 상태: <b>{status}</b>\n"
             f"커밋 {cnt}개: {latest}\n"
             f"요청시각: {created}\n\n"
-            f"/yes — 승인 | /no — 거부",
+            f"{desc}",
             parse_mode="HTML"
         )
     except Exception as e:
@@ -721,7 +754,12 @@ async def cmd_rollback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_chat_action(ChatAction.TYPING)
-    await update.message.reply_text("⚠️ 롤백 실행 중... (git revert HEAD + push)")
+    await update.message.reply_text(
+        "⚠️ 롤백 실행 중...\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "git revert HEAD → 마지막 커밋을 되돌리는 새 커밋 생성\n"
+        "git push → 서버에 반영 → Render/Vercel 자동 재배포"
+    )
 
     try:
         # 현재 HEAD 확인
@@ -766,6 +804,130 @@ async def cmd_rollback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ 에러: {e}")
 
 
+async def cmd_priority(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """알림 최소 중요도 설정."""
+    if not _check_auth(update.effective_chat.id):
+        return
+    chat_id = update.effective_chat.id
+
+    LEVELS = {
+        "all":      ("info",     "🟢 전체 — 모든 알림"),
+        "중요":     ("warning",  "🟡 중요 이상 — 긴급+중요"),
+        "warning":  ("warning",  "🟡 중요 이상 — 긴급+중요"),
+        "긴급":     ("critical", "🔴 긴급만 — Render실패·결제실패·API소진"),
+        "critical": ("critical", "🔴 긴급만 — Render실패·결제실패·API소진"),
+    }
+
+    conn = _mail_conn()
+    _ensure_mail_tables(conn)
+
+    # min_severity 컬럼 없으면 추가
+    try:
+        conn.execute("ALTER TABLE tg_alert_subscribers ADD COLUMN min_severity TEXT DEFAULT 'critical'")
+        conn.commit()
+    except Exception:
+        pass
+
+    if not context.args:
+        row = conn.execute(
+            "SELECT min_severity FROM tg_alert_subscribers WHERE chat_id=?", (chat_id,)
+        ).fetchone()
+        conn.close()
+        cur = (row["min_severity"] if row else "critical") or "critical"
+        cur_label = {"info": "🟢 전체", "warning": "🟡 중요 이상", "critical": "🔴 긴급만"}.get(cur, cur)
+        await update.message.reply_text(
+            f"🔔 현재 알림 설정: <b>{cur_label}</b>\n\n"
+            f"변경하려면:\n"
+            f"/priority all      — 🟢 전체 (push알림 포함 모든 것)\n"
+            f"/priority 중요     — 🟡 긴급+중요만 (권장)\n"
+            f"/priority 긴급     — 🔴 긴급만 (Render실패·결제·API소진)\n\n"
+            f"중요도 기준:\n"
+            f"🔴 긴급 — Render/Vercel 실패, API크레딧소진, 결제실패\n"
+            f"🟡 중요 — GitHub보안, Supabase경고\n"
+            f"🟢 일반 — 배포성공, 일반메일, push알림",
+            parse_mode="HTML"
+        )
+        return
+
+    key = context.args[0].lower()
+    if key not in LEVELS:
+        await update.message.reply_text("사용법: /priority all | /priority 중요 | /priority 긴급")
+        conn.close()
+        return
+
+    sev, label = LEVELS[key]
+    conn.execute(
+        "UPDATE tg_alert_subscribers SET min_severity=? WHERE chat_id=?", (sev, chat_id)
+    )
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(
+        f"✅ 알림 설정 변경됨: <b>{label}</b>\n\n"
+        f"이제 이 중요도 이상의 알림만 전송됩니다.",
+        parse_mode="HTML"
+    )
+
+
+async def cmd_gate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """배포 게이트 ON/OFF 토글."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    import json as _json
+    gate_file = PROJECT_ROOT / "logs" / "gate_state.json"
+    gate_file.parent.mkdir(exist_ok=True)
+
+    # 현재 상태 읽기
+    try:
+        state = _json.loads(gate_file.read_text(encoding="utf-8"))
+        enabled = state.get("enabled", False)
+    except Exception:
+        enabled = False
+        state = {}
+
+    args = context.args
+
+    if not args:
+        # 현재 상태만 표시
+        emoji = "🔴" if enabled else "🟢"
+        status = "ON (승인 필요)" if enabled else "OFF (자동 통과)"
+        await update.message.reply_text(
+            f"🚦 배포 게이트 현재 상태: {emoji} <b>{status}</b>\n\n"
+            f"{'⚠️ git push 시 텔레그램 승인 요청이 전송됩니다.' if enabled else '✅ git push 시 자동으로 통과됩니다. (알림은 옴)'}\n\n"
+            f"/gate on  — 게이트 활성화 (실제 배포 전 사용)\n"
+            f"/gate off — 게이트 비활성화 (Claude Code 작업 중 사용)",
+            parse_mode="HTML"
+        )
+        return
+
+    action = args[0].lower()
+    if action == "on":
+        state["enabled"] = True
+        state["changed_at"] = datetime.now(timezone.utc).isoformat()
+        gate_file.write_text(_json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        await update.message.reply_text(
+            "🔴 <b>배포 게이트 ON</b>\n\n"
+            "이제 git push 시 텔레그램으로 승인 요청이 전송됩니다.\n"
+            "→ /yes: push 진행 (Render/Vercel 배포)\n"
+            "→ /no: push 차단\n\n"
+            "Claude Code 작업 완료 후 /gate off 로 다시 끄세요.",
+            parse_mode="HTML"
+        )
+    elif action == "off":
+        state["enabled"] = False
+        state["changed_at"] = datetime.now(timezone.utc).isoformat()
+        gate_file.write_text(_json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        await update.message.reply_text(
+            "🟢 <b>배포 게이트 OFF</b>\n\n"
+            "이제 git push 시 자동으로 통과됩니다.\n"
+            "(push 알림은 계속 전송됩니다)\n\n"
+            "실제 배포 전에는 /gate on 으로 켜세요.",
+            parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text("사용법: /gate on | /gate off | /gate")
+
+
 async def cmd_gitlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """최근 커밋 로그 확인."""
     if not _check_auth(update.effective_chat.id):
@@ -785,6 +947,62 @@ async def cmd_gitlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Message Handlers ──────────────────────────────────────────
 
+async def _try_keyword_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    """자연어 키워드 → 명령 매핑 (Claude API 없이 동작)."""
+    t = text.lower().strip()
+
+    # 배포 승인/거부
+    if any(k in t for k in ["yes", "승인", "배포 승인", "배포해", "배포하자", "배포 ok", "배포ok"]):
+        await cmd_yes(update, context)
+        return True
+    if any(k in t for k in ["no", "거부", "배포 거부", "배포 취소", "배포 안해", "취소"]):
+        await cmd_no(update, context)
+        return True
+
+    # 롤백
+    if any(k in t for k in ["롤백", "rollback", "되돌려", "되돌리기", "복구"]):
+        await cmd_rollback(update, context)
+        return True
+
+    # 에러
+    if any(k in t for k in ["에러", "오류", "error", "에러 보여", "에러 목록"]):
+        await cmd_errors(update, context)
+        return True
+
+    # 이메일/수신함
+    if any(k in t for k in ["메일 체크", "이메일 체크", "메일 확인", "check", "체크"]):
+        await cmd_check(update, context)
+        return True
+    if any(k in t for k in ["메일", "이메일", "inbox", "수신함", "받은 메일"]):
+        await cmd_inbox(update, context)
+        return True
+
+    # git
+    if any(k in t for k in ["git 로그", "커밋 로그", "커밋 기록", "gitlog"]):
+        await cmd_gitlog(update, context)
+        return True
+    if any(k in t for k in ["git", "깃 상태", "변경 파일"]):
+        await cmd_git(update, context)
+        return True
+
+    # 빌드
+    if any(k in t for k in ["빌드", "build", "빌드해", "빌드 해줘"]):
+        await cmd_build(update, context)
+        return True
+
+    # 배포 상태
+    if any(k in t for k in ["배포 상태", "배포 요청", "deploy"]):
+        await cmd_deploy_status(update, context)
+        return True
+
+    # 서버 상태
+    if any(k in t for k in ["상태", "status", "서버", "서버 상태", "어때"]):
+        await cmd_status(update, context)
+        return True
+
+    return False
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _check_auth(update.effective_chat.id):
         return
@@ -795,6 +1013,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"TEXT from {update.effective_chat.id}: {text[:50]}")
     await update.message.reply_chat_action(ChatAction.TYPING)
 
+    # 키워드 매칭 먼저 시도 (Claude API 없이 동작)
+    if await _try_keyword_cmd(update, context, text):
+        return
+
+    # Claude AI 대화 시도
     try:
         session = _get_session(update.effective_chat.id)
         orch: Orchestrator = session["orchestrator"]
@@ -808,8 +1031,32 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError as e:
         await update.message.reply_text(f"설정 필요:\n{e}")
     except Exception as e:
+        err_str = str(e)
         logger.error(f"Chat error: {e}", exc_info=True)
-        await update.message.reply_text(f"에러: {str(e)[:500]}")
+        # API 크레딧 부족 시 친절한 안내
+        if "credit balance" in err_str or "credits" in err_str.lower() or "402" in err_str:
+            await update.message.reply_text(
+                "⚠️ Anthropic API 크레딧 부족\n"
+                "anthropic.com/billing 에서 충전 필요\n\n"
+                "지금은 명령어로 운영 가능합니다:\n\n"
+                "📬 메일\n"
+                "/check — 메일 체크\n"
+                "/errors — 에러 목록\n"
+                "/inbox — 수신함\n\n"
+                "🚀 배포\n"
+                "/deploy — 배포 상태\n"
+                "/yes — 배포 승인\n"
+                "/no — 배포 거부\n"
+                "/rollback — 긴급 롤백\n\n"
+                "💻 서버\n"
+                "/status — 서버 상태\n"
+                "/git — git 상태\n"
+                "/gitlog — 커밋 로그\n\n"
+                "💬 자연어도 됩니다\n"
+                "\"에러 보여줘\" / \"메일 체크\" / \"상태 어때\" 등"
+            )
+        else:
+            await update.message.reply_text(f"❌ 에러: {str(e)[:500]}")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -911,6 +1158,7 @@ async def post_init(application: Application):
         BotCommand("deploy", "배포 요청 상태 확인"),
         BotCommand("rollback", "마지막 커밋 롤백+재배포"),
         BotCommand("gitlog", "최근 커밋 로그"),
+        BotCommand("priority", "알림 중요도 설정 (all/중요/긴급)"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Bot commands registered.")
@@ -973,6 +1221,7 @@ def main():
     app.add_handler(CommandHandler("deploy", cmd_deploy_status))
     app.add_handler(CommandHandler("rollback", cmd_rollback))
     app.add_handler(CommandHandler("gitlog", cmd_gitlog))
+    app.add_handler(CommandHandler("priority", cmd_priority))
 
     # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
