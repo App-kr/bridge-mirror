@@ -425,8 +425,8 @@ export default function SplitEditor({
                 </div>
               </div>
 
-              <span className="ml-auto text-xs text-zinc-600">
-                {content.length.toLocaleString()}
+              <span className="ml-auto text-xs text-zinc-500">
+                {content.length.toLocaleString()} chars
               </span>
             </div>
 
@@ -457,7 +457,6 @@ export default function SplitEditor({
                   isFaq ? 'Answer...' :
                   contentType === 'html' ? '<p>Write HTML here...</p>' : 'Write in markdown...'
                 }
-                maxLength={10000}
                 className="w-full h-full bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-4 py-3 text-sm font-mono resize-none placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed"
                 style={{ minHeight: '200px' }}
               />

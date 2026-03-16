@@ -2800,7 +2800,7 @@ async def community_get(board: str, post_id: int):
 
 class CommunityPost(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
-    body:  str = Field(..., min_length=10, max_length=10000)
+    body:  str = Field(..., min_length=10, max_length=200000)
     content_type: str = Field("markdown", pattern=r"^(markdown|html)$")
     category: Optional[str] = Field(None, max_length=50)
 
@@ -2890,7 +2890,7 @@ async def admin_pin_post(post_id: int, body: PinUpdate, request: Request):
 
 class PostEdit(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=200)
-    body:  Optional[str] = Field(None, min_length=10, max_length=10000)
+    body:  Optional[str] = Field(None, min_length=10, max_length=200000)
     content_type: Optional[str] = Field(None, pattern=r"^(markdown|html)$")
     category: Optional[str] = Field(None, max_length=50)
 
@@ -5251,7 +5251,7 @@ async def admin_delete_banner(banner_id: int, request: Request):
 
 class PostUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=200)
-    body:  Optional[str] = Field(None, min_length=10, max_length=10000)
+    body:  Optional[str] = Field(None, min_length=10, max_length=200000)
     board: Optional[str] = None
 
 
