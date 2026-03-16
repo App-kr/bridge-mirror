@@ -2,6 +2,7 @@
 BRIDGE Agent Telegram Bot
 ==========================
 폰에서 사진/텍스트로 지시 → 에이전트 실행 → 결과 회신
+Gmail 에러 실시간 알림 + 수신함 조회
 
 실행: python -m telegram_agent
 설정: .env에 TELEGRAM_BOT_TOKEN + ANTHROPIC_API_KEY
@@ -18,13 +19,21 @@ BRIDGE Agent Telegram Bot
   /status     — 서버 상태
   /build      — npm run build
   /git        — git status
+  --- Gmail 에러 모니터 ---
+  /alerts     — 에러 알림 구독 ON/OFF
+  /errors     — 미해결 에러 목록
+  /inbox [n]  — 최근 수신 이메일 (기본 10)
+  /resolve ID — 에러 해결 처리
+  /check      — 즉시 Gmail 체크 (수동)
 """
 
 import asyncio
 import logging
 import os
+import sqlite3
 import subprocess
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -77,6 +86,51 @@ if _allowed_env:
 
 PHOTOS_DIR = PROJECT_ROOT / "tmp_photos"
 PHOTOS_DIR.mkdir(exist_ok=True)
+
+# ── Gmail DB 헬퍼 ──────────────────────────────────────────────────────────────
+_MAIL_DB_PATH = PROJECT_ROOT / os.getenv("BRIDGE_DB_PATH", "master.db")
+if not _MAIL_DB_PATH.is_absolute():
+    _MAIL_DB_PATH = PROJECT_ROOT / "master.db"
+
+
+def _mail_conn() -> sqlite3.Connection:
+    """master.db 연결 (inbox_emails 조회용)."""
+    conn = sqlite3.connect(str(_MAIL_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _ensure_mail_tables(conn: sqlite3.Connection):
+    """inbox_emails, tg_alert_subscribers 테이블 보장."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS inbox_emails (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            gmail_message_id TEXT UNIQUE NOT NULL,
+            subject          TEXT,
+            from_name        TEXT,
+            from_addr        TEXT,
+            received_at      TEXT,
+            category         TEXT DEFAULT 'general',
+            is_error         INTEGER DEFAULT 0,
+            error_type       TEXT,
+            severity         TEXT DEFAULT 'info',
+            body_preview     TEXT,
+            full_body        TEXT,
+            labels           TEXT,
+            notified_tg      INTEGER DEFAULT 0,
+            resolved         INTEGER DEFAULT 0,
+            resolved_note    TEXT,
+            created_at       TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tg_alert_subscribers (
+            chat_id    INTEGER PRIMARY KEY,
+            username   TEXT,
+            added_at   TEXT NOT NULL,
+            active     INTEGER DEFAULT 1
+        );
+    """)
+    conn.commit()
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -331,6 +385,208 @@ async def cmd_git(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"에러: {e}")
 
 
+# ── Gmail 에러 모니터 명령어 ───────────────────────────────────
+
+async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """에러 알림 구독 ON/OFF."""
+    if not _check_auth(update.effective_chat.id):
+        return
+    chat_id = update.effective_chat.id
+    username = update.effective_user.username or update.effective_user.first_name or str(chat_id)
+    args = context.args
+
+    conn = _mail_conn()
+    _ensure_mail_tables(conn)
+
+    existing = conn.execute(
+        "SELECT active FROM tg_alert_subscribers WHERE chat_id=?", (chat_id,)
+    ).fetchone()
+
+    if args and args[0].lower() == "off":
+        if existing:
+            conn.execute(
+                "UPDATE tg_alert_subscribers SET active=0 WHERE chat_id=?", (chat_id,)
+            )
+            conn.commit()
+        conn.close()
+        await update.message.reply_text("🔕 에러 알림 구독 해제됨\n다시 받으려면: /alerts on")
+        return
+
+    # ON (기본)
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        conn.execute(
+            "UPDATE tg_alert_subscribers SET active=1, username=? WHERE chat_id=?",
+            (username, chat_id)
+        )
+    else:
+        conn.execute(
+            "INSERT INTO tg_alert_subscribers (chat_id, username, added_at, active) VALUES (?,?,?,1)",
+            (chat_id, username, now)
+        )
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"🔔 에러 알림 구독 완료!\n"
+        f"Chat ID: {chat_id}\n\n"
+        f"Render/Vercel 배포 실패, API 크레딧 소진 등\n"
+        f"에러 이메일 도착 시 즉시 알림을 받습니다.\n\n"
+        f"/alerts off  — 구독 해제"
+    )
+
+
+async def cmd_errors(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """미해결 에러 이메일 목록."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    limit = 10
+    if context.args:
+        try:
+            limit = min(int(context.args[0]), 30)
+        except ValueError:
+            pass
+
+    conn = _mail_conn()
+    _ensure_mail_tables(conn)
+    rows = conn.execute(
+        """SELECT id, error_type, severity, from_addr, subject, received_at
+           FROM inbox_emails
+           WHERE is_error=1 AND resolved=0
+           ORDER BY created_at DESC LIMIT ?""",
+        (limit,)
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text("✅ 미해결 에러 없음")
+        return
+
+    SEVERITY_EMOJI = {"critical": "🚨", "warning": "⚠️", "info": "ℹ️"}
+    lines = [f"🔴 미해결 에러 {len(rows)}건:"]
+    for r in rows:
+        emoji = SEVERITY_EMOJI.get(r["severity"], "🔔")
+        subject_short = (r["subject"] or "")[:40]
+        lines.append(
+            f"\n{emoji} ID:{r['id']} [{r['error_type']}]\n"
+            f"   {r['from_addr'][:35]}\n"
+            f"   {subject_short}\n"
+            f"   /resolve {r['id']}"
+        )
+    await _send_long(update, "\n".join(lines))
+
+
+async def cmd_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """최근 수신 이메일 목록."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    limit = 10
+    if context.args:
+        try:
+            limit = min(int(context.args[0]), 30)
+        except ValueError:
+            pass
+
+    conn = _mail_conn()
+    _ensure_mail_tables(conn)
+    rows = conn.execute(
+        """SELECT id, category, severity, is_error, from_addr, subject, received_at
+           FROM inbox_emails
+           ORDER BY created_at DESC LIMIT ?""",
+        (limit,)
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text(
+            "수신 이메일 없음\n\n"
+            "Gmail 워처가 실행 중인지 확인:\n"
+            "python tools/gmail_error_watcher.py"
+        )
+        return
+
+    lines = [f"📬 최근 이메일 {len(rows)}건:"]
+    for r in rows:
+        err_tag = "🚨" if r["is_error"] else "📧"
+        subject_short = (r["subject"] or "")[:45]
+        from_short = (r["from_addr"] or "")[:35]
+        lines.append(f"\n{err_tag} [{r['category']}] ID:{r['id']}\n   {from_short}\n   {subject_short}")
+    await _send_long(update, "\n".join(lines))
+
+
+async def cmd_resolve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """에러 해결 처리."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    if not context.args:
+        await update.message.reply_text("사용법: /resolve <ID> [메모]\n예) /resolve 5 Render 재배포 완료")
+        return
+
+    try:
+        error_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("ID는 숫자여야 합니다.")
+        return
+
+    note = " ".join(context.args[1:]) if len(context.args) > 1 else "수동 해결 처리"
+
+    conn = _mail_conn()
+    _ensure_mail_tables(conn)
+    row = conn.execute(
+        "SELECT id, subject, error_type FROM inbox_emails WHERE id=?", (error_id,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        await update.message.reply_text(f"ID {error_id} 없음")
+        return
+
+    conn.execute(
+        "UPDATE inbox_emails SET resolved=1, resolved_note=? WHERE id=?",
+        (note, error_id)
+    )
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"✅ 해결 처리 완료\n"
+        f"ID: {error_id}\n"
+        f"제목: {row['subject']}\n"
+        f"메모: {note}"
+    )
+
+
+async def cmd_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """즉시 Gmail 체크 (워처와 별개로 수동 조회)."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    await update.message.reply_chat_action(ChatAction.TYPING)
+    await update.message.reply_text("Gmail 체크 중...")
+
+    try:
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from tools.gmail_error_watcher import get_gmail_service, check_once
+        service = get_gmail_service()
+        stats = check_once(service)
+        await update.message.reply_text(
+            f"Gmail 체크 완료\n"
+            f"총 조회: {stats['total']}건\n"
+            f"신규 수집: {stats['new']}건\n"
+            f"에러 발견: {stats['errors']}건\n"
+            f"알림 전송: {stats['notified']}건"
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"Gmail 체크 실패: {str(e)[:300]}\n\n"
+            f"GMAIL_CREDENTIALS_JSON 환경변수 확인 필요"
+        )
+
+
 # ── Message Handlers ──────────────────────────────────────────
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -449,6 +705,11 @@ async def post_init(application: Application):
         BotCommand("build", "npm run build"),
         BotCommand("git", "git status"),
         BotCommand("tokens", "토큰 사용량"),
+        BotCommand("alerts", "에러 알림 구독 ON/OFF"),
+        BotCommand("errors", "미해결 에러 목록"),
+        BotCommand("inbox", "최근 수신 이메일"),
+        BotCommand("resolve", "에러 해결 처리"),
+        BotCommand("check", "즉시 Gmail 체크"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Bot commands registered.")
@@ -500,6 +761,12 @@ def main():
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("build", cmd_build))
     app.add_handler(CommandHandler("git", cmd_git))
+    # Gmail 에러 모니터
+    app.add_handler(CommandHandler("alerts", cmd_alerts))
+    app.add_handler(CommandHandler("errors", cmd_errors))
+    app.add_handler(CommandHandler("inbox", cmd_inbox))
+    app.add_handler(CommandHandler("resolve", cmd_resolve))
+    app.add_handler(CommandHandler("check", cmd_check))
 
     # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
