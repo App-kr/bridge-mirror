@@ -102,7 +102,7 @@ export default function NewPostForm({ board, boardLabel, accentClass }: Props) {
                 : "Write your post here…"}
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              maxLength={10000}
+              maxLength={200000}
             />
           ) : (
             <div className="h-64 overflow-y-auto rounded-xl border border-[#d2d2d7] bg-[#f5f5f7] px-4 py-3">
@@ -111,7 +111,7 @@ export default function NewPostForm({ board, boardLabel, accentClass }: Props) {
               )}
             </div>
           )}
-          <div className="text-right text-xs text-[#86868b] mt-1">{body.length}/10,000</div>
+          <div className="text-right text-xs text-[#86868b] mt-1">{body.length}/200,000</div>
         </div>
 
         {(state === 'error' || errorMsg) && (

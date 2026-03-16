@@ -653,8 +653,8 @@ export default function AdminPostsPage() {
                 <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
                   className="w-full h-48 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
                   placeholder={newContentType === 'html' ? '<p>HTML 내용을 입력하세요...</p>' : '## 제목\n\n본문 내용을 입력하세요...'}
-                  maxLength={10000} />
-                <div className="text-right text-xs text-gray-400 mt-1">{newBody.length}/10,000</div>
+                  maxLength={200000} />
+                <div className="text-right text-xs text-gray-400 mt-1">{newBody.length}/200,000</div>
               </>
             ) : (
               <div className="w-full min-h-[192px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
