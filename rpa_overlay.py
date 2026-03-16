@@ -329,7 +329,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(320, 210)
+        root, card = self._make_window(320, 250)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         # 작업표시줄 / Alt+Tab 표시 제목
@@ -487,7 +487,7 @@ class RPAOverlay:
                     # 화면 밖 방지: 주 모니터 중앙으로 재배치
                     sw = root.winfo_screenwidth()
                     sh = root.winfo_screenheight()
-                    w, h = 320, 210
+                    w, h = 320, 250
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
@@ -706,7 +706,7 @@ class RPAOverlay:
 
         pw, ph = 300, 220
         px = parent_root.winfo_x() + (320 - pw) // 2
-        py = parent_root.winfo_y() + (210 - ph) // 2
+        py = parent_root.winfo_y() + (250 - ph) // 2
         popup.geometry(f"{pw}x{ph}+{px}+{py}")
         popup.attributes("-alpha", 0.0)
 
