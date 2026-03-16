@@ -393,8 +393,8 @@ class RPAOverlay:
         _CLOSE_HOV = "#ccdcf0"
         close_btn = tk.Label(btn_row, text="닫기",
                              font=tkfont.Font(family="Malgun Gothic", size=15),
-                             bg=_CLOSE_BG, fg=self.BLUE, pady=(14, 0), cursor="hand2")
-        close_btn.pack(side="left", expand=True, fill="both")
+                             bg=_CLOSE_BG, fg=self.BLUE, cursor="hand2")
+        close_btn.pack(side="left", expand=True, fill="both", ipady=7)
         close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
         close_btn.bind("<Leave>", lambda e: close_btn.configure(bg=_CLOSE_BG))
@@ -407,8 +407,8 @@ class RPAOverlay:
         _STOP_HOV = "#f8cece"
         stop_btn = tk.Label(btn_row, text="중단하기",
                             font=tkfont.Font(family="Malgun Gothic", size=15),
-                            bg=_STOP_BG, fg=self.RED, pady=(14, 0), cursor="hand2")
-        stop_btn.pack(side="left", expand=True, fill="both")
+                            bg=_STOP_BG, fg=self.RED, cursor="hand2")
+        stop_btn.pack(side="left", expand=True, fill="both", ipady=7)
         stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
         stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
@@ -853,7 +853,7 @@ class RPAOverlay:
                 pass
         root.geometry(f"{w}x{h}+{mx + (mw - w) // 2}+{my + (mh - h) // 2}")
 
-        border = tk.Frame(root, bg=self.SEP, padx=1, pady=(1, 0))
+        border = tk.Frame(root, bg=self.SEP, padx=1, pady=0)
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=self.BG)
         card.pack(fill="both", expand=True)
