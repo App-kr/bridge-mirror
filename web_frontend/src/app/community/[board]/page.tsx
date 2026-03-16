@@ -680,7 +680,8 @@ export default function BoardPage() {
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || j.error || `Error ${res.status}`)
+        const msg = Array.isArray(j.detail) ? j.detail.map((e: {msg:string}) => e.msg).join(', ') : (j.detail || j.error || `Error ${res.status}`)
+        throw new Error(msg)
       }
       setEditorOpen(false)
       refreshPosts()
@@ -691,7 +692,8 @@ export default function BoardPage() {
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || j.error || `Error ${res.status}`)
+        const msg = Array.isArray(j.detail) ? j.detail.map((e: {msg:string}) => e.msg).join(', ') : (j.detail || j.error || `Error ${res.status}`)
+        throw new Error(msg)
       }
       setEditorOpen(false)
       refreshPosts()
