@@ -560,31 +560,121 @@ async def cmd_resolve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """즉시 Gmail 체크 (워처와 별개로 수동 조회)."""
+    """IMAP으로 즉시 Gmail 체크."""
     if not _check_auth(update.effective_chat.id):
         return
 
     await update.message.reply_chat_action(ChatAction.TYPING)
-    await update.message.reply_text("Gmail 체크 중...")
+    await update.message.reply_text("📬 Gmail IMAP 체크 중...")
 
     try:
-        import sys
-        sys.path.insert(0, str(PROJECT_ROOT))
-        from tools.gmail_error_watcher import get_gmail_service, check_once
-        service = get_gmail_service()
-        stats = check_once(service)
+        import imaplib
+        import email as _email
+        import email.header as _eh
+
+        gmail_user = os.getenv("GMAIL_USER", "")
+        gmail_pass = os.getenv("GMAIL_APP_PASSWORD", "")
+        if not gmail_user or not gmail_pass:
+            await update.message.reply_text(
+                "❌ GMAIL_USER 또는 GMAIL_APP_PASSWORD 미설정\n.env 확인 필요"
+            )
+            return
+
+        imap = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        imap.login(gmail_user, gmail_pass)
+        imap.select("INBOX")
+        _, data = imap.uid("search", None, "UNSEEN")
+        uids = data[0].split() if data[0] else []
+        imap.logout()
+
+        conn = _mail_conn()
+        _ensure_mail_tables(conn)
+        total_mail = conn.execute("SELECT COUNT(*) FROM inbox_emails").fetchone()[0]
+        unresolved = conn.execute(
+            "SELECT COUNT(*) FROM inbox_emails WHERE is_error=1 AND resolved=0"
+        ).fetchone()[0]
+        conn.close()
+
         await update.message.reply_text(
-            f"Gmail 체크 완료\n"
-            f"총 조회: {stats['total']}건\n"
-            f"신규 수집: {stats['new']}건\n"
-            f"에러 발견: {stats['errors']}건\n"
-            f"알림 전송: {stats['notified']}건"
+            f"📬 Gmail 체크 완료\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"📥 미읽음: {len(uids)}건\n"
+            f"🗄 수집된 전체: {total_mail}건\n"
+            f"🚨 미해결 에러: {unresolved}건\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"워처 실행 중이면 자동 처리됩니다.\n"
+            f"/errors — 에러 목록 | /inbox — 전체 목록"
         )
     except Exception as e:
-        await update.message.reply_text(
-            f"Gmail 체크 실패: {str(e)[:300]}\n\n"
-            f"GMAIL_CREDENTIALS_JSON 환경변수 확인 필요"
+        await update.message.reply_text(f"❌ 체크 실패: {str(e)[:300]}")
+
+
+async def cmd_rollback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """마지막 커밋 롤백 + 강제 push (재배포 트리거)."""
+    if not _check_auth(update.effective_chat.id):
+        return
+
+    await update.message.reply_chat_action(ChatAction.TYPING)
+    await update.message.reply_text("⚠️ 롤백 실행 중... (git revert HEAD + push)")
+
+    try:
+        # 현재 HEAD 확인
+        r = subprocess.run(
+            ["git", "log", "--oneline", "-3"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(config.project_root),
         )
+        log_lines = r.stdout.strip()
+
+        # revert
+        r = subprocess.run(
+            ["git", "revert", "--no-edit", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(config.project_root),
+        )
+        if r.returncode != 0:
+            await update.message.reply_text(
+                f"❌ revert 실패:\n{(r.stderr or r.stdout)[-800:]}"
+            )
+            return
+
+        # push
+        r = subprocess.run(
+            ["git", "push"],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(config.project_root),
+        )
+        if r.returncode == 0:
+            await update.message.reply_text(
+                f"✅ 롤백 완료 — 재배포 시작됨\n\n"
+                f"되돌린 커밋:\n{log_lines}\n\n"
+                f"Render/Vercel에서 자동 재배포 진행 중."
+            )
+        else:
+            await update.message.reply_text(
+                f"⚠️ revert 성공, push 실패:\n{r.stderr[-500:]}"
+            )
+    except subprocess.TimeoutExpired:
+        await update.message.reply_text("❌ 타임아웃")
+    except Exception as e:
+        await update.message.reply_text(f"❌ 에러: {e}")
+
+
+async def cmd_gitlog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """최근 커밋 로그 확인."""
+    if not _check_auth(update.effective_chat.id):
+        return
+    try:
+        n = int(context.args[0]) if context.args else 5
+        n = min(n, 15)
+        r = subprocess.run(
+            ["git", "log", "--oneline", f"-{n}"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(config.project_root),
+        )
+        await _send_long(update, f"📋 최근 커밋 {n}개:\n\n{r.stdout or '없음'}")
+    except Exception as e:
+        await update.message.reply_text(f"에러: {e}")
 
 
 # ── Message Handlers ──────────────────────────────────────────
@@ -710,6 +800,8 @@ async def post_init(application: Application):
         BotCommand("inbox", "최근 수신 이메일"),
         BotCommand("resolve", "에러 해결 처리"),
         BotCommand("check", "즉시 Gmail 체크"),
+        BotCommand("rollback", "마지막 커밋 롤백+재배포"),
+        BotCommand("gitlog", "최근 커밋 로그"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Bot commands registered.")
@@ -767,6 +859,8 @@ def main():
     app.add_handler(CommandHandler("inbox", cmd_inbox))
     app.add_handler(CommandHandler("resolve", cmd_resolve))
     app.add_handler(CommandHandler("check", cmd_check))
+    app.add_handler(CommandHandler("rollback", cmd_rollback))
+    app.add_handler(CommandHandler("gitlog", cmd_gitlog))
 
     # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
