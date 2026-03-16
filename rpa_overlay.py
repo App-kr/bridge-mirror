@@ -10,10 +10,24 @@ import json
 import math
 import threading
 import tkinter as tk
+import traceback
 from datetime import datetime
 from pathlib import Path
 from tkinter import font as tkfont
 import winsound
+
+
+def _log_overlay(msg: str):
+    """크래쉬/이벤트 진단 로그 → logs/overlay_debug.log"""
+    try:
+        import time as _t
+        _p = Path(__file__).resolve().parent / "logs" / "overlay_debug.log"
+        _p.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%H:%M:%S")
+        with _p.open("a", encoding="utf-8") as _f:
+            _f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
 
 try:
     from screeninfo import get_monitors
@@ -129,6 +143,7 @@ class RPAOverlay:
 
     # ── Public API ────────────────────────────
     def show_working(self, current: int = 0, total: int = 0, email: str = ""):
+        _log_overlay(f"show_working called email={email} total={total}")
         self.close()
         self._is_working   = True
         self._progress_var = [current, total]
@@ -138,9 +153,21 @@ class RPAOverlay:
                             (self.__class__.BG, self.__class__.CARD))
         self.BG   = bg_c
         self.CARD = card_c
-        self._thread = threading.Thread(target=self._build_working, daemon=True)
+
+        def _safe_build():
+            try:
+                self._build_working()
+            except Exception as _exc:
+                _log_overlay(f"_build_working CRASH: {_exc}\n{traceback.format_exc()}")
+                try:
+                    self._ready.set()
+                except Exception:
+                    pass
+
+        self._thread = threading.Thread(target=_safe_build, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
+        _log_overlay(f"show_working ready wait done, is_working={self._is_working}")
         self._start_restore_monitor()  # restore flag 감시 시작
 
     def update_progress(self, current: int, total: int):
@@ -204,14 +231,16 @@ class RPAOverlay:
     def _dismiss_and_remind(self):
         """닫기/X 버튼 — destroy 없이 withdraw(숨기기). tkinter 인터프리터 유지.
         _check_restore()가 400ms마다 flag 감시 → deiconify()로 즉시 복원 가능."""
+        _log_overlay("_dismiss_and_remind: withdraw 호출")
         try:
             if self._root and self._root.winfo_exists():
                 self._root.withdraw()          # 숨기기 (destroy 아님)
+                _log_overlay(f"_dismiss_and_remind: withdraw 완료 state={self._root.state()}")
                 if self._is_working:
                     # 30초 후 tkinter 이벤트 루프에서 자동 복원 (크로스스레드 없음)
                     self._root.after(30000, self._deiconify_working)
-        except Exception:
-            pass
+        except Exception as _e:
+            _log_overlay(f"_dismiss_and_remind ERROR: {_e}")
         self._ready.clear()
 
     def _deiconify_working(self):
@@ -255,9 +284,11 @@ class RPAOverlay:
 
     # ── WORKING window ────────────────────────
     def _build_working(self):
+        _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
         root, card = self._make_window(380, 360)
+        _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         # 숨겨진 title 설정 — FindWindowW로 HWND 직접 검색용
         try:
@@ -387,6 +418,7 @@ class RPAOverlay:
         self._start_pulse_bar(root)
 
         self._drag(root, header, bar, bot_row, bot_c, info_col, warn_row)
+        _log_overlay("_build_working: ready.set() 직전 — UI 완성")
         self._ready.set()
 
         # HWND 파일 저장 — launcher 직접 포커스용
@@ -407,18 +439,26 @@ class RPAOverlay:
 
         def _check_restore():
             if not root.winfo_exists():
+                _log_overlay("_check_restore: root 소멸 — 감시 종료")
                 return
             try:
                 if _restore_flag.exists():
                     _restore_flag.unlink(missing_ok=True)
+                    _log_overlay(f"_check_restore: flag 감지! state={root.state()}")
                     root.deiconify()                    # withdraw 상태면 재표시
+                    # 화면 밖 방지: 주 모니터 중앙으로 재배치
+                    sw = root.winfo_screenwidth()
+                    sh = root.winfo_screenheight()
+                    w, h = 380, 360
+                    root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
                     root.focus_force()
-                    root.after(1500, lambda: root.attributes("-topmost", False)
+                    _log_overlay("_check_restore: deiconify+topmost 완료")
+                    root.after(2000, lambda: root.attributes("-topmost", False)
                                if root.winfo_exists() else None)
-            except Exception:
-                pass
+            except Exception as _e:
+                _log_overlay(f"_check_restore ERROR: {_e}")
             root.after(400, _check_restore)
 
         root.after(400, _check_restore)
