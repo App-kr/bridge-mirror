@@ -1,7 +1,7 @@
 """
 배포 게이트 — git push 전 승인 대기
 ========================================
-1단계: 터미널에서 30초 대기 (터미널 앞에 있으면 즉시 처리)
+1단계: 터미널에서 3분(180초) 대기 (터미널 앞에 있으면 즉시 처리)
 2단계: 응답 없으면 텔레그램으로 알림 후 대기
 
 예시:
@@ -32,7 +32,7 @@ load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DB_PATH         = PROJECT_ROOT / "master.db"
 STATE_FILE      = PROJECT_ROOT / "logs" / "deploy_request.json"
-TERMINAL_TIMEOUT = int(os.getenv("DEPLOY_TERMINAL_TIMEOUT", "30"))   # 터미널 대기 (초)
+TERMINAL_TIMEOUT = int(os.getenv("DEPLOY_TERMINAL_TIMEOUT", "180"))  # 터미널 대기 (초, 기본 3분)
 TG_TIMEOUT       = int(os.getenv("DEPLOY_TG_TIMEOUT", "600"))        # 텔레 대기 (초)
 TERMINAL_NAME    = os.getenv("TERMINAL_NAME", "Claude Code")
 
