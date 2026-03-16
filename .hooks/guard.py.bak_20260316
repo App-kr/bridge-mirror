@@ -8,7 +8,7 @@ stdin으로 JSON 수신 → hookSpecificOutput 반환 (Claude Code 최신 형식
   2026-03-09 — deprecated {decision} 형식 → hookSpecificOutput 형식으로 교체
                WRITE_OPS 체크 cmd_lower 통일
 """
-import sys, json, re
+import sys, json
 
 def approve():
     print(json.dumps({
@@ -48,30 +48,12 @@ BLOCK = [
     ("> /dev/sda",                             "디스크 직접 쓰기"),
     ("reg delete hklm",                        "시스템 레지스트리 삭제"),
     ("bcdedit",                                "부트설정 변경"),
-    # ── 크리덴셜 노출 차단 (2026-03-16 추가) ──
-    ("printenv",                               "환경변수 전체 덤프"),
-    ("--dangerously-skip-permissions",         "권한 우회 시도"),
-]
-
-# ── 크리덴셜 노출 정규식 차단 ─────────────────────
-BLOCK_RE = [
-    (r"\benv\b\s*$",                           "env 단독 실행 (환경변수 덤프)"),
-    (r"cat\s+.*\.env",                         ".env 파일 직접 읽기"),
-    (r"echo\s+\$[A-Z_]*KEY",                   "KEY 환경변수 출력"),
-    (r"echo\s+\$[A-Z_]*TOKEN",                 "TOKEN 환경변수 출력"),
-    (r"echo\s+\$[A-Z_]*SECRET",                "SECRET 환경변수 출력"),
-    (r"curl.*\|\s*bash",                       "pipe-to-shell (curl|bash)"),
-    (r"wget.*\|\s*sh",                         "pipe-to-shell (wget|sh)"),
 ]
 
 cmd_lower = cmd.lower().replace("\\\\", "\\")
 
 for pattern, reason in BLOCK:
     if pattern in cmd_lower:
-        block(reason)
-
-for pattern, reason in BLOCK_RE:
-    if re.search(pattern, cmd_lower):
         block(reason)
 
 # ── Q드라이브 외부 쓰기 차단 ────────────────────
