@@ -104,6 +104,34 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - 이름 규칙: 영국식 영어 이름으로 통일
 - **MARK 사용 금지**
 
+## 보안 레이어 현황 (2026-03-16 확정)
+| 레이어 | 파일 | 상태 |
+|---|---|---|
+| 1 | `.hooks/guard.py` | ✅ 크리덴셜 차단 패턴 추가 완료 |
+| 2 | `.hooks/task_gate.py` | ✅ DB integrity + PII 검증 |
+| 3 | `.hooks/post_stop.py` | ⚠️ git 명령 정상, bash→powershell 교체 다음 세션 |
+| 4 | `.env` 분리 | ✅ |
+| 5 | AES-256-GCM | ✅ security_vault.py |
+| 6 | Trail of Bits | ❌ 미설치 |
+
+## 플러그인 관련 중요 사항
+- `/plugin marketplace add` — Claude Code에 **존재하지 않는 명령어**
+- Trail of Bits, superpowers, context7 → **MCP 서버 방식**으로 설치해야 함
+- `/simplify` — 내장 명령어 아님, 수동 코드 분석으로 대체
+- context7 MCP: `npx @upstash/context7-mcp` 방식으로 설치
+
+## api_server.py 코드 이슈 (2026-03-16 분석)
+- L446/470: `target_age` 중복 필드 (CandidateApply) — L446 사문화
+- L34+2708: `import hashlib` 중복
+- L1969~1972, 3948, 6045~: 파일 중간 분산 import
+
+## bridge_backup.py 이슈 (2026-03-16 분석)
+- `register_hook()` (L328~): 구버전 flat hooks 포맷 — 직접 호출 금지, settings.json 손상 가능
+
+## Agent Teams 활성화
+- settings.json에 `"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}` 추가됨 (2026-03-16)
+- Delegate Mode: Shift+Tab으로 활성화
+
 ## Python 실행 규칙 (2026-03-14 확정)
 - `C:\Python314` — 환경 깨짐, 사용 금지
 - **항상 사용**: `C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe`
