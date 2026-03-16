@@ -83,6 +83,7 @@ const REGION_OPTIONS = [
 
 const STATUS_OPTIONS = [
   { label: 'All', value: '' },
+  { label: '⏳ 검토 대기', value: 'pending_review' },
   { label: 'Open', value: 'open' },
   { label: 'Closed', value: 'closed' },
   { label: 'Filled', value: 'filled' },
@@ -152,6 +153,7 @@ function StatusBadge({ status }: { status: string }) {
     hold: 'bg-amber-100 text-amber-700',
     cancelled: 'bg-red-100 text-red-600',
     new: 'bg-purple-100 text-purple-700',
+    pending_review: 'bg-orange-100 text-orange-700',
   }
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide ${colors[status] || 'bg-gray-100 text-gray-500'}`}>
@@ -591,6 +593,10 @@ export default function AdminJobsPage() {
   const [showRegForm, setShowRegForm] = useState(false)
   const [rawTextJob, setRawTextJob] = useState<AdminJob | null>(null)
 
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
+
   const flash = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(null), 3000) }
 
   /* ── Fetch (서버사이드 페이지네이션) ── */
@@ -622,7 +628,17 @@ export default function AdminJobsPage() {
     }
   }, [signedFetch, statusFilter, regionFilter, search, page])
 
+  /* ── Pending count ── */
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const res = await signedFetch(`${API}/api/admin/jobs/v2?status=pending_review&limit=1&offset=0`)
+      const json = await res.json()
+      if (json.success && json.data) setPendingCount(json.data.total ?? 0)
+    } catch { /* ignore */ }
+  }, [signedFetch])
+
   useEffect(() => { if (authed) fetchJobs() }, [authed, fetchJobs])
+  useEffect(() => { if (authed) fetchPendingCount() }, [authed, fetchPendingCount])
   useEffect(() => { setPage(1) }, [search, statusFilter, regionFilter])
 
   /* ── Pagination (서버 total 기준) ── */
@@ -682,6 +698,40 @@ export default function AdminJobsPage() {
     } catch { flash('Registration failed') }
   }, [signedFetch, fetchJobs])
 
+  const approveJob = useCallback(async (job: AdminJob) => {
+    try {
+      const res = await signedFetch(`${API}/api/admin/jobs/${job.id}/approve`, { method: 'PUT', body: '{}' })
+      const json = await res.json()
+      if (json.success) {
+        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'open' } : j))
+        setPendingCount(prev => Math.max(0, prev - 1))
+        flash(`✅ ${job.job_code} 승인 → 공개`)
+      } else {
+        flash(`오류: ${json.message || json.detail}`)
+      }
+    } catch { flash('Network error') }
+  }, [signedFetch])
+
+  const syncSheets = useCallback(async () => {
+    setSyncLoading(true)
+    setSyncResult(null)
+    try {
+      const res = await signedFetch(`${API}/api/admin/sync/google-sheets`, {
+        method: 'POST', body: JSON.stringify({ mode: 'jobs' }),
+      })
+      const json = await res.json()
+      if (json.success && json.data?.jobs) {
+        const r = json.data.jobs
+        setSyncResult(`추가 ${r.added} · 수정 ${r.updated} · 스킵 ${r.skipped} · 오류 ${r.errors}`)
+        fetchJobs()
+        fetchPendingCount()
+      } else {
+        setSyncResult(`오류: ${json.message || json.detail || '알 수 없는 오류'}`)
+      }
+    } catch { setSyncResult('Network error') }
+    finally { setSyncLoading(false); setTimeout(() => setSyncResult(null), 8000) }
+  }, [signedFetch, fetchJobs, fetchPendingCount])
+
   const handleDocAction = useCallback((job: AdminJob, action: string) => {
     if (action === 'close') setExpandedId(null)
     else if (action === 'toggle-status') toggleStatus(job)
@@ -702,10 +752,24 @@ export default function AdminJobsPage() {
             Total {total} &middot; Page {page}/{totalPages}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {pendingCount > 0 && (
+            <button type="button" onClick={() => setStatusFilter('pending_review')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] bg-orange-50 text-orange-700 border border-orange-200 rounded-lg font-semibold hover:bg-orange-100 transition-colors">
+              ⏳ 검토 대기
+              <span className="bg-orange-500 text-white text-[11px] rounded-full w-5 h-5 flex items-center justify-center font-bold">{pendingCount}</span>
+            </button>
+          )}
           {actionMsg && (
             <div className="text-[12px] font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">{actionMsg}</div>
           )}
+          {syncResult && (
+            <div className="text-[12px] font-medium text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg">{syncResult}</div>
+          )}
+          <button type="button" onClick={syncSheets} disabled={syncLoading}
+            className="px-4 py-2 text-[13px] rounded-xl bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+            {syncLoading ? '동기화 중...' : '🔄 구글시트 동기화'}
+          </button>
           <button type="button" onClick={() => setShowRegForm(true)}
             className="px-4 py-2 text-[13px] rounded-xl bg-[#0071E3] text-white font-medium hover:bg-[#0066CC] transition-colors shadow-sm">
             + New Job
@@ -798,6 +862,15 @@ export default function AdminJobsPage() {
                     <div className="flex items-center gap-1.5 ml-auto">
                       {!!job.is_hot && <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-semibold border border-red-100">HOT</span>}
                       <StatusBadge status={job.status || 'open'} />
+                      {job.status === 'pending_review' && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); approveJob(job) }}
+                          className="px-2.5 py-1 text-[11px] bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors"
+                        >
+                          ✅ 승인
+                        </button>
+                      )}
                     </div>
 
                     {/* Expand arrow */}

@@ -942,6 +942,13 @@ async def inquiry(request: Request, body: ClientInquiry):
             # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
             threading.Thread(target=_backup_on_submit, args=("inquiry",), daemon=True).start()
 
+            # 자동 채용공고 생성 (status='pending_review') — 실패해도 접수 완료
+            threading.Thread(
+                target=_auto_create_job_from_inquiry,
+                args=(new_id, body.school_name),
+                daemon=True
+            ).start()
+
             return ok(
                 data={"id": new_id},
                 message="문의가 접수되었습니다. 빠른 시일 내에 연락드리겠습니다."
@@ -4544,6 +4551,234 @@ def _backup_on_submit(source: str = "") -> None:
         _log_bk.error("암호화 백업 실패 (접수는 완료됨): %s", e)
 
 
+# ── 자동 채용공고 생성 Helper (inquiry 접수 시 background thread 호출) ────────
+
+def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
+    """inquiry 접수 직후 background에서 job 레코드 자동 생성 (status=pending_review)"""
+    import logging as _log_auto
+    _log = _log_auto.getLogger("bridge.auto_job")
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            inq = conn.execute("SELECT * FROM client_inquiries WHERE id = ?", (inquiry_id,)).fetchone()
+            if not inq:
+                return
+            notes = inq["notes"] or ""
+            if "JOB_REGISTERED" in notes:
+                return  # 이미 등록됨
+
+            # job_code 생성
+            max_row = conn.execute("SELECT MAX(id) FROM jobs").fetchone()
+            new_seq = (max_row[0] or 0) + 1
+            job_code = f"Job.{new_seq + 1000}"
+
+            # 급여 파싱
+            salary_raw = inq["salary_raw"] or ""
+            salary_nums = re.findall(r"[\d,.]+", salary_raw.replace(",", ""))
+            salary_min = float(salary_nums[0]) if salary_nums else None
+            salary_max = float(salary_nums[-1]) if len(salary_nums) > 1 else salary_min
+
+            # 근무시간 파싱
+            wh = inq["working_hours"] or inq["schedule"] or ""
+            daily_hours = None
+            time_match = re.search(r"(\d{1,2}):?(\d{2})\s*[~\-]\s*(\d{1,2}):?(\d{2})", wh)
+            if time_match:
+                h1 = int(time_match.group(1)) + int(time_match.group(2)) / 60
+                h2 = int(time_match.group(3)) + int(time_match.group(4)) / 60
+                daily_hours = round(h2 - h1, 2) if h2 > h1 else None
+
+            loc = inq["location"] or ""
+            city = loc.split(",")[0].split(" ")[0].strip() if loc else ""
+
+            conn.execute(
+                """INSERT INTO jobs (job_code, seq, location, city, start_date, teaching_age,
+                   working_hours, daily_hours, salary_min, salary_max, salary_raw,
+                   vacation, housing, benefits, status, is_hot, is_deleted, created_at)
+                   VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 0, 0, ?)""",
+                (
+                    job_code, loc, city, inq["start_date"], inq["teaching_age"],
+                    wh, daily_hours, salary_min, salary_max, salary_raw,
+                    inq["vacation"], inq["housing_detail"] or inq["housing_type"],
+                    inq["benefits"], datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            new_notes = f"{notes}\nJOB_REGISTERED:{job_code}".strip()
+            conn.execute("UPDATE client_inquiries SET notes = ? WHERE id = ?", (new_notes, inquiry_id))
+            conn.commit()
+            _log.info("자동 job 생성 완료: %s (inquiry #%d)", job_code, inquiry_id)
+
+            # 관리자 알림 이메일 (실패 무시)
+            try:
+                if _EMAIL_OK:
+                    from email_templates import send_new_job_pending_alert
+                    _admin_email = os.getenv("GMAIL_USER", "bridgejobkr@gmail.com")
+                    send_new_job_pending_alert(_admin_email, school_name, inquiry_id, job_code)
+            except Exception as _em:
+                _log.warning("관리자 알림 이메일 실패 (무시): %s", _em)
+
+        finally:
+            conn.close()
+    except Exception as e:
+        _log.error("_auto_create_job_from_inquiry 실패: %s", e, exc_info=True)
+
+
+# ── Admin: 채용공고 승인 (pending_review → open) ─────────────────────────────
+
+@app.put("/api/admin/jobs/{job_id}/approve", tags=["admin"])
+async def admin_approve_job(job_id: int, request: Request):
+    """pending_review 상태 공고를 open으로 승인"""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute("SELECT status FROM jobs WHERE id = ? AND is_deleted = 0", (job_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "공고를 찾을 수 없습니다.")
+        if row[0] == "open":
+            return ok(message="이미 공개 상태입니다.", data={"job_id": job_id, "status": "open"})
+        conn.execute(
+            "UPDATE jobs SET status = 'open', internal_notes = COALESCE(internal_notes, '') || ? WHERE id = ?",
+            (f"\nAPPROVED:{datetime.now(timezone.utc).isoformat()}", job_id),
+        )
+        conn.commit()
+        _maybe_auto_backup()
+        return ok(message="공고가 승인되어 공개됩니다.", data={"job_id": job_id, "status": "open"})
+    finally:
+        conn.close()
+
+
+# ── Admin: Google Sheets 동기화 ───────────────────────────────────────────────
+
+@app.post("/api/admin/sync/google-sheets", tags=["admin"])
+async def admin_sync_google_sheets(request: Request, body: dict = None):
+    """Google Sheets → DB 동기화 (candidates / jobs / all)"""
+    _check_admin(request)
+    if body is None:
+        body = {}
+    mode = body.get("mode", "all")
+    dry_run = bool(body.get("dry_run", False))
+
+    try:
+        from tools.sync_google_sheets import run_sync
+        result = run_sync(mode=mode, dry_run=dry_run)
+        return ok(data=result, message=f"동기화 완료 (mode={mode}, dry_run={dry_run})")
+    except ImportError:
+        raise HTTPException(503, "sync_google_sheets 모듈을 찾을 수 없습니다. tools/sync_google_sheets.py 확인 필요.")
+    except Exception as e:
+        import logging as _log_sync
+        _log_sync.getLogger("bridge.sync").error("Google Sheets 동기화 실패: %s", e, exc_info=True)
+        raise HTTPException(500, f"동기화 실패: {str(e)}")
+
+
+# ── Admin: Google Forms Webhook 수신 ─────────────────────────────────────────
+
+@app.post("/api/admin/sync/incoming", tags=["admin"])
+async def admin_sync_incoming(request: Request):
+    """Google Apps Script에서 form 제출 시 webhook 수신 (HMAC 검증 필수)"""
+    import hmac as _hmac_mod
+    import hashlib as _hs
+
+    # Rate Limit: IP당 분당 30건
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
+        raise HTTPException(429, "Too many webhook requests")
+
+    _WEBHOOK_SECRET = os.getenv("BRIDGE_WEBHOOK_SECRET", "")
+    sig_header = request.headers.get("x-bridge-signature", "")
+
+    body_bytes = await request.body()
+
+    # HMAC-SHA256 검증 (Fail-Closed: 시크릿 미설정 시 차단)
+    if not _WEBHOOK_SECRET:
+        raise HTTPException(503, "Webhook secret not configured")
+    expected = _hmac_mod.new(_WEBHOOK_SECRET.encode(), body_bytes, _hs.sha256).hexdigest()
+    if not _hmac_mod.compare_digest(sig_header, expected):
+        raise HTTPException(403, "Invalid signature")
+
+    try:
+        import json as _json
+        payload = _json.loads(body_bytes)
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+
+    data_type = payload.get("type", "")
+    data = payload.get("data", {})
+
+    if data_type == "job":
+        # 고용주 폼 제출 → client_inquiries upsert (PII 암호화)
+        _PII_FIELDS = {"phone", "email", "contact_name", "business_registration", "school_location", "memo"}
+        for field in _PII_FIELDS:
+            if field in data and data[field]:
+                data[field] = _encrypt_if_needed(str(data[field]))
+        data["source"] = "google_form_webhook"
+        data["inbox_status"] = "new"
+        data.setdefault("submitted_at", datetime.now(timezone.utc).isoformat())
+
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            allowed = {
+                "school_name", "location", "teaching_age", "working_hours", "salary_raw",
+                "start_date", "vacation", "housing_type", "benefits", "source",
+                "inbox_status", "submitted_at",
+                "phone", "email", "contact_name",  # 암호화됨
+            }
+            clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+            cols = ", ".join(clean.keys())
+            placeholders = ", ".join("?" * len(clean))
+            cur = conn.execute(
+                f"INSERT INTO client_inquiries ({cols}) VALUES ({placeholders})",
+                list(clean.values()),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+        finally:
+            conn.close()
+
+        # 자동 job 생성 (background)
+        threading.Thread(
+            target=_auto_create_job_from_inquiry,
+            args=(new_id, data.get("school_name", "")),
+            daemon=True
+        ).start()
+        return ok(data={"id": new_id, "type": "job"}, message="채용의뢰 접수 완료")
+
+    elif data_type == "candidate":
+        # 교사 지원 폼 제출 → candidates upsert (PII 암호화)
+        _CAND_PII = {"email", "phone", "full_name", "date_of_birth", "address", "passport_number"}
+        for field in _CAND_PII:
+            if field in data and data[field]:
+                data[field] = _encrypt_if_needed(str(data[field]))
+        data["source"] = "google_form_webhook"
+        data.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            allowed = {
+                "full_name", "email", "phone", "nationality", "teaching_age",
+                "visa_type", "start_date", "source", "created_at",
+            }
+            clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+            if not clean:
+                raise HTTPException(400, "유효한 후보자 데이터가 없습니다.")
+            cols = ", ".join(clean.keys())
+            placeholders = ", ".join("?" * len(clean))
+            cur = conn.execute(
+                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
+                list(clean.values()),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+        finally:
+            conn.close()
+        return ok(data={"id": new_id, "type": "candidate"}, message="후보자 접수 완료")
+
+    else:
+        raise HTTPException(400, f"알 수 없는 type: {data_type!r}")
+
+
 # ── Admin: Create Job from Inquiry ─────────────────────────────────────────────
 
 @app.post("/api/admin/jobs/create-from-inquiry/{inquiry_id}", tags=["admin"])
@@ -4669,7 +4904,7 @@ _JOB_WRITABLE = {
     "visa_sponsorship", "f_visa_welcome", "kyopo_welcome",
     "degree_requirement", "korea_resident_only",
     "raw_text", "raw_source", "parse_confidence", "parse_warnings",
-    "internal_notes", "recruiter_memo",
+    "internal_notes",
 }
 
 

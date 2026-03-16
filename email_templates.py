@@ -282,3 +282,42 @@ def send_employer_confirmation(to_email: str, school_name: str, contact_name: st
     </html>
     """
     return _send_email(to_email, subject, html)
+
+
+# ── 새 채용의뢰 접수 → 관리자 알림 ──────────────────────────────────────────
+
+def send_new_job_pending_alert(admin_email: str, school_name: str, inquiry_id: int, job_code: str) -> bool:
+    """새 채용의뢰 접수 시 관리자에게 검토 요청 이메일"""
+    subject = f"[BRIDGE] 새 채용의뢰 접수 — {school_name} 검토 필요"
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.7;">
+      <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #1d1d1f;">
+        <h1 style="margin: 0; font-size: 24px; color: #1d1d1f; font-weight: 700;">BRIDGE</h1>
+        <p style="margin: 4px 0 0; font-size: 13px; color: #6e6e73;">Admin Notification</p>
+      </div>
+      <div style="padding: 30px 0;">
+        <p>새 채용의뢰가 접수되었습니다. 검토 후 승인해주세요.</p>
+        <div style="background: #f0f9ff; border-left: 4px solid #0071e3; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+          <p style="margin: 0 0 8px; font-weight: 600; color: #1d1d1f;">접수 정보</p>
+          <p style="margin: 0; font-size: 14px; color: #374151;">
+            학교명: <strong>{school_name}</strong><br>
+            문의 ID: #{inquiry_id}<br>
+            공고 코드: {job_code}<br>
+            상태: <span style="color: #d97706; font-weight: 600;">검토 대기 (pending_review)</span>
+          </p>
+        </div>
+        <a href="https://bridge-chi-lime.vercel.app/admin/jobs?status=pending_review"
+           style="display: inline-block; background: #1d1d1f; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 8px;">
+          어드민에서 검토하기 →
+        </a>
+      </div>
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center; font-size: 12px; color: #86868b;">
+        <p>The BRIDGE Team · <a href="https://bridgejob.co.kr" style="color: #0071e3;">bridgejob.co.kr</a></p>
+      </div>
+    </body>
+    </html>
+    """
+    return _send_email(admin_email, subject, html)
