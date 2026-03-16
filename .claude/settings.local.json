@@ -525,7 +525,32 @@
       "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://bridge-n7hk.onrender.com/health'' -UseBasicParsing | Select-Object -ExpandProperty Content\")",
       "Bash(powershell -Command \"Get-ChildItem ''Q:\\\\Claudework\\\\bridge base\\\\.github'' -Recurse -Name\")",
       "Bash(python -X utf8 tools/auto_finalize.py:*)",
-      "Bash(\"C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"테스트\")"
+      "Bash(\"C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"테스트\")",
+      "Bash(cmd /c echo %PATH%)",
+      "Bash(powershell -Command \"Select-String -Path ''Q:\\\\Claudework\\\\bridge base\\\\api_server.py'' -Pattern ''def _check_admin'' | ForEach-Object { ''Line '' + $_LineNumber + '': '' + $_Line.Trim\\(\\) }\")",
+      "Bash(cmd //c \"echo %PATH%\")",
+      "Bash(cmd //c \"where bash 2>&1\")",
+      "Bash(cmd //c \"reg query \"\"HKLM\\\\SYSTEM\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment\"\" /v PATH 2>&1\")",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://bridge-n7hk.onrender.com/'' -UseBasicParsing | Select-Object -ExpandProperty Content\")",
+      "Bash(powershell.exe -NoProfile -Command \"Set-Location ''Q:\\\\Claudework\\\\bridge base''; git push origin main\")",
+      "Bash(git -C \"Q:/Claudework/bridge base\" config --list --show-origin)",
+      "Bash(powershell -Command \"Test-Path ''Q:\\\\Claudework\\\\bridge base\\\\__init__.py''; Test-Path ''Q:\\\\Claudework\\\\bridge base\\\\tools\\\\__init__.py''\")",
+      "Bash(git -C \"Q:/Claudework/bridge base\" log --oneline -5)",
+      "Bash(git -C \"Q:/Claudework/bridge base\" show --stat a52d0dd)",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://bridge-n7hk.onrender.com/api/jobs?limit=1'' -UseBasicParsing -Headers @{''x-admin-key''=''test''} | Select-Object StatusCode\")",
+      "Bash(\"C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe\" -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(powershell.exe -NoProfile -Command \"Set-Location ''Q:\\\\Claudework\\\\bridge base''; git log --oneline origin/main..HEAD\")",
+      "Bash(powershell.exe -NoProfile -Command \"Set-Location ''Q:\\\\Claudework\\\\bridge base''; git show a52d0dd --stat\")",
+      "Bash(git -C \"Q:/Claudework/bridge base\" diff api_server.py)",
+      "Bash(powershell.exe -NoProfile -Command \"Set-Location ''Q:\\\\Claudework\\\\bridge base''; git show a52d0dd:.github/workflows/deploy-backend.yml\")",
+      "Bash(powershell.exe -NoProfile -Command \"\nSet-Location ''Q:\\\\Claudework\\\\bridge base''\n\n# 1. 두 커밋을 soft reset \\(파일 변경은 유지, 커밋만 취소\\)\ngit reset --soft origin/main\n\n# 2. workflow 파일만 스테이징에서 제외\ngit restore --staged ''.github/workflows/deploy-backend.yml''\n\n# 3. 나머지 전체 재커밋\ngit commit -m ''fix: Python 3.14 pathlib mkdir 버그 우회 + 자동백업 설정 업데이트 \\(workflow 파일 제외\\)''\n\nWrite-Host ''COMMIT_DONE''\n\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Content ''Q:\\\\Claudework\\\\bridge base\\\\.claude\\\\settings.json'' | ConvertFrom-Json | ConvertTo-Json -Depth 5\")",
+      "Bash(Select-String -Pattern \"Stop|stop|hook|bash\" -Context 2)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Content ''Q:\\\\Claudework\\\\bridge base\\\\.claude\\\\settings.local.json'' | Select-String -Pattern ''Stop|bash|stop_hook'' -Context 1\")",
+      "Bash(powershell.exe -NoProfile -Command \"\\(Get-Content ''Q:\\\\Claudework\\\\bridge base\\\\.claude\\\\settings.local.json'' -Raw\\) -match ''\"\"Stop\"\"'' | Out-String\")",
+      "Bash(powershell.exe -NoProfile -Command \"Select-String -Path ''Q:\\\\Claudework\\\\bridge base\\\\tools\\\\bridge_backup.py'' -Pattern ''bash''\")",
+      "Bash(powershell.exe -NoProfile -Command \"Select-String -Path ''Q:\\\\Claudework\\\\bridge base\\\\tools\\\\start-backup-daemon.ps1'' -Pattern ''bash'' 2>&1\")",
+      "Bash(powershell.exe -NoProfile -Command:*)"
     ]
   }
 }
