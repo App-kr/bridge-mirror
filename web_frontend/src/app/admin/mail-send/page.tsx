@@ -18,6 +18,7 @@ const API = API_URL
 const DRAFT_KEY    = 'bridge_mail_draft'
 const HEADER_KEY   = 'bridge_mail_header'
 const FOOTER_KEY   = 'bridge_mail_footer'
+const BODY_DEFAULT_KEY = 'bridge_mail_body_default'
 
 function loadSaved(key: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback
@@ -80,6 +81,9 @@ export default function MailSendPage() {
   const [recipientText, setRecipientText] = useState('')
   const [subject, setSubject] = useState('')
   const [bodyHtml, setBodyHtml] = useState(() => {
+    // 전체 본문 저장값 우선, 없으면 헤더+푸터 조합
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(BODY_DEFAULT_KEY) : null
+    if (saved) return saved
     const h = loadSaved(HEADER_KEY, BODY_HEADER)
     const f = loadSaved(FOOTER_KEY, BODY_FOOTER)
     return `${h}\n\n${f}`
@@ -97,6 +101,7 @@ export default function MailSendPage() {
   const [customFooter, setCustomFooter] = useState(() => loadSaved(FOOTER_KEY, BODY_FOOTER))
   const [showDefaults, setShowDefaults] = useState(false)
   const [defaultsSaved, setDefaultsSaved] = useState(false)
+  const [bodySaved, setBodySaved] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const templateMenuRef = useRef<HTMLDivElement>(null)
@@ -143,6 +148,13 @@ export default function MailSendPage() {
       setSubject(t.subject)
       setBodyHtml(`${customHeader}\n\n${t.body_html}\n\n${customFooter}`)
     }
+  }
+
+  // 현재 본문을 기본값으로 저장
+  const saveBodyAsDefault = () => {
+    localStorage.setItem(BODY_DEFAULT_KEY, bodyHtml)
+    setBodySaved(true)
+    setTimeout(() => setBodySaved(false), 2500)
   }
 
   // 기본값(헤더/서명) 저장
@@ -412,13 +424,26 @@ export default function MailSendPage() {
           <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">본문 (HTML)</label>
-              <button
-                type="button"
-                onClick={() => setShowPreview(!showPreview)}
-                className="text-[12px] text-blue-600 hover:underline font-medium"
-              >
-                {showPreview ? 'HTML 편집' : '미리보기'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveBodyAsDefault}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                    bodySaved
+                      ? 'bg-green-50 border-green-300 text-green-700'
+                      : 'bg-[#f5f5f7] border-[#d2d2d7] text-[#555] hover:bg-[#e8e8ed]'
+                  }`}
+                >
+                  {bodySaved ? '✅ 저장됨' : '📌 기본값 저장'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="text-[12px] text-blue-600 hover:underline font-medium"
+                >
+                  {showPreview ? 'HTML 편집' : '미리보기'}
+                </button>
+              </div>
             </div>
             {showPreview ? (
               <div
