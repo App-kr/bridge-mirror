@@ -440,14 +440,14 @@ class RPAOverlay:
         # 버튼 구분선 (짙게)
         tk.Frame(btn_row, bg="#9a9aaa", width=2).pack(side="left", fill="y")
 
-        # 중단하기 버튼 (빨간 배경)
+        # 그만하기 버튼 (빨간 배경) — 팝업 없이 직접 중단
         _STOP_BG  = "#fde8e8"
         _STOP_HOV = "#f8cece"
-        stop_btn = tk.Label(btn_row, text="중단하기",
+        stop_btn = tk.Label(btn_row, text="그만하기",
                             font=tkfont.Font(family="Malgun Gothic", size=14),
                             bg=_STOP_BG, fg=self.RED, cursor="hand2")
         stop_btn.pack(side="left", expand=True, fill="both", ipady=6)
-        stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
+        stop_btn.bind("<Button-1>", lambda e: self._do_direct_stop(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
         stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
 
@@ -676,6 +676,26 @@ class RPAOverlay:
             self._draw_pill_bar(278, 10, cur, tot)
         except Exception:
             pass
+
+    # ── Direct stop (그만하기 버튼 직접 호출) ─────
+    def _do_direct_stop(self, root):
+        """그만하기 버튼 직접 클릭 — stop_event 설정 + graceful flag 파일 + 창 닫기."""
+        # 1. 같은 프로세스 내 RPA 루프에 중단 신호
+        _stop_event.set()
+        # 2. 크로스 프로세스 대비 graceful flag 파일 기록
+        try:
+            _sflag = Path(__file__).resolve().parent / "logs" / ".rpa_stop_graceful.flag"
+            _sflag.parent.mkdir(parents=True, exist_ok=True)
+            _sflag.write_text("stop", encoding="utf-8")
+        except Exception:
+            pass
+        self._stop_remind()
+        self._is_working = False
+        try:
+            root.destroy()
+        except Exception:
+            pass
+        self._root = None
 
     # ── Stop confirmation popup ───────────────
     def _confirm_stop_popup(self, parent_root):
@@ -1404,7 +1424,7 @@ def ask_already_running(acct_key: str = ""):
             ox, oy = m.x, m.y
         except Exception:
             pass
-    w, h = 300, 148
+    w, h = 300, 205
     root.geometry(f"{w}x{h}+{ox + (sw - w) // 2}+{oy + (sh - h) // 2 - 80}")
     root.attributes("-alpha", 0.0)
 
@@ -1457,11 +1477,82 @@ def ask_already_running(acct_key: str = ""):
         # 팝업 닫힌 후 작업창 다시 앞으로
         _win32_focus_working()
 
-    ok_btn = tk.Label(card, text="확인",
-                      font=tkfont.Font(family="Malgun Gothic", size=12),
-                      bg=acct_color, fg="#0071e3", pady=8, cursor="hand2")
+    def _do_graceful_stop():
+        """현재 작업 완료 후 중단 — flag 파일 방식 (크로스 프로세스)"""
+        try:
+            _sflag = Path(__file__).resolve().parent / "logs" / ".rpa_stop_graceful.flag"
+            _sflag.parent.mkdir(parents=True, exist_ok=True)
+            _sflag.write_text("stop", encoding="utf-8")
+        except Exception:
+            pass
+        _stop_event.set()
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    def _do_force_stop():
+        """즉시 강제 종료 — lock 파일 PID taskkill (크로스 프로세스)"""
+        import subprocess as _sp2
+        try:
+            lock_dir = Path(__file__).resolve().parent / "logs"
+            for _lf in lock_dir.glob(".rpa_*.lock"):
+                try:
+                    _pid = int(_lf.read_text(encoding="utf-8").strip())
+                    _sp2.call(
+                        ["taskkill", "/F", "/PID", str(_pid)],
+                        creationflags=0x08000000,
+                        stdout=_sp2.DEVNULL, stderr=_sp2.DEVNULL,
+                    )
+                    _lf.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        _stop_event.set()
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    # ── hover 색 (acct_color보다 살짝 어둡게) ──────────────────────────────
+    _hov_c = "#{:02x}{:02x}{:02x}".format(
+        max(0, int(int(acct_color[1:3], 16) * 0.88)),
+        max(0, int(int(acct_color[3:5], 16) * 0.88)),
+        max(0, int(int(acct_color[5:7], 16) * 0.88)))
+
+    # ── 중단 버튼 행 (작업 후 중단 | 그만하기) ─────────────────────────────
+    stop_row = tk.Frame(card, bg=acct_color)
+    stop_row.pack(fill="x")
+
+    after_btn = tk.Label(stop_row, text="작업 후 중단",
+                         font=tkfont.Font(family="Malgun Gothic", size=11),
+                         bg=acct_color, fg="#0071e3", pady=8, cursor="hand2")
+    after_btn.pack(side="left", expand=True, fill="both")
+    after_btn.bind("<Button-1>", lambda e: _do_graceful_stop())
+    after_btn.bind("<Enter>", lambda e: after_btn.configure(bg=_hov_c))
+    after_btn.bind("<Leave>", lambda e: after_btn.configure(bg=acct_color))
+
+    tk.Frame(stop_row, bg=_sc, width=1).pack(side="left", fill="y")
+
+    force_btn = tk.Label(stop_row, text="그만하기",
+                         font=tkfont.Font(family="Malgun Gothic", size=11, weight="bold"),
+                         bg=acct_color, fg="#ff3b30", pady=8, cursor="hand2")
+    force_btn.pack(side="left", expand=True, fill="both")
+    force_btn.bind("<Button-1>", lambda e: _do_force_stop())
+    force_btn.bind("<Enter>", lambda e: force_btn.configure(bg=_hov_c))
+    force_btn.bind("<Leave>", lambda e: force_btn.configure(bg=acct_color))
+
+    # ── 확인 (계속) ─────────────────────────────────────────────────────────
+    tk.Frame(card, bg=_sc, height=1).pack(fill="x")
+
+    ok_btn = tk.Label(card, text="확인 (계속)",
+                      font=tkfont.Font(family="Malgun Gothic", size=11),
+                      bg=acct_color, fg="#6e6e73", pady=7, cursor="hand2")
     ok_btn.pack(fill="x")
     ok_btn.bind("<Button-1>", lambda e: _close())
+    ok_btn.bind("<Enter>", lambda e: ok_btn.configure(bg=_hov_c))
+    ok_btn.bind("<Leave>", lambda e: ok_btn.configure(bg=acct_color))
 
     def _press(e): root._dx, root._dy = e.x_root, e.y_root
     def _move(e):
@@ -1473,7 +1564,7 @@ def ask_already_running(acct_key: str = ""):
         dw.bind("<ButtonPress-1>", _press)
         dw.bind("<B1-Motion>", _move)
 
-    root.after(4000, lambda: _close() if root.winfo_exists() else None)
+    root.after(8000, lambda: _close() if root.winfo_exists() else None)
     root.mainloop()
 
 
