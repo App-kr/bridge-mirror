@@ -3988,14 +3988,37 @@ _log_upload = logging.getLogger("bridge.upload")
 # ── S3 스토리지 (boto3) ─────────────────────────────────────────────────────
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_S3_BUCKET 환경변수 필요
 # 미설정 시 업로드 엔드포인트에서 RuntimeError → 503 반환 (Fail-Closed)
-from backend.utils.storage import (
-    upload_bytes as s3_upload_bytes,
-    upload_file  as s3_upload_file,
-    get_presigned_url as s3_presigned_url,
-    delete_file  as s3_delete_file,
-    check_s3_connection,
-    StorageError,
-)
+try:
+    from backend.utils.storage import (
+        upload_bytes as s3_upload_bytes,
+        upload_file  as s3_upload_file,
+        get_presigned_url as s3_presigned_url,
+        delete_file  as s3_delete_file,
+        check_s3_connection,
+        StorageError,
+    )
+    _S3_OK = True
+except Exception as _s3_exc:
+    _S3_OK = False
+    logging.getLogger("bridge.api").warning("[S3] storage 모듈 로드 실패 (파일업로드 비활성화): %s", _s3_exc)
+
+    class StorageError(Exception):
+        pass
+
+    async def s3_upload_bytes(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
+
+    async def s3_upload_file(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
+
+    def get_presigned_url(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정")
+
+    def delete_file(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정")
+
+    def check_s3_connection():
+        return False
 
 # ── 서명 URL (HMAC-SHA256) — 업로드 파일 접근 보호 ──────────────────────────
 _UPLOAD_SIGN_KEY: str = os.getenv("UPLOAD_SIGN_KEY", "").strip()
