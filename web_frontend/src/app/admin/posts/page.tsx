@@ -206,20 +206,19 @@ export default function AdminPostsPage() {
         const params = new URLSearchParams({ search: search.trim(), limit: '200' })
         if (board !== 'all') params.set('board', board)
         const res = await fetch(`${API}/api/admin/community/posts?${params}`, { headers: headers() })
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         if (res.status === 403) {
-        const errBody = await res.json().catch(() => ({}))
-        if (errBody.error?.includes?.('Access denied')) {
-          setError('일시적으로 차단되었습니다. 자동 재시도 중...')
-          const k = localStorage.getItem('bridge_admin_key') || ''
-          await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
-          setTimeout(() => window.location.reload(), 3000)
+          if (json.error?.includes?.('Access denied')) {
+            setError('일시적으로 차단되었습니다. 자동 재시도 중...')
+            const k = localStorage.getItem('bridge_admin_key') || ''
+            await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
+            setTimeout(() => window.location.reload(), 3000)
+            return
+          }
+          setError('관리자 키가 올바르지 않습니다. 다시 로그인해주세요.')
+          localStorage.removeItem('bridge_admin_key')
           return
         }
-        setError('관리자 키가 올바르지 않습니다. 다시 로그인해주세요.')
-        localStorage.removeItem('bridge_admin_key')
-        return
-      }
         if (json.success && json.data?.posts) {
           setPosts(json.data.posts)
         }
@@ -512,7 +511,7 @@ export default function AdminPostsPage() {
               {editTab === 'write' ? (
                 <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
                   className="w-full h-40 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                  maxLength={10000} />
+                  maxLength={200000} />
               ) : (
                 <div className="w-full min-h-[160px] rounded-lg border border-gray-200 bg-white px-4 py-4 overflow-auto">
                   {editBody.trim() ? (
@@ -677,7 +676,10 @@ export default function AdminPostsPage() {
       {/* Board filter */}
       <div className="flex gap-2 flex-wrap">
         {BOARDS.map((b) => (
-          <button key={b} type="button" onClick={() => { setLocalPosts(null); setBoard(b) }}
+          <button key={b} type="button" onClick={() => {
+              if (editId !== null && !confirm('수정 중인 내용이 사라집니다. 탭을 이동할까요?')) return
+              setEditId(null); setLocalPosts(null); setBoard(b)
+            }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
               board === b ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}>
@@ -714,11 +716,11 @@ export default function AdminPostsPage() {
         </div>
       )}
 
-      {loading ? (
+      {loading && editId === null ? (
         <div className="text-center py-16 text-gray-400 animate-pulse">로딩 중...</div>
-      ) : error ? (
+      ) : error && editId === null ? (
         <div className="text-center py-16 text-red-500">{error}</div>
-      ) : posts.length === 0 ? (
+      ) : posts.length === 0 && editId === null ? (
         <div className="text-center py-16 text-gray-400">게시물이 없습니다.</div>
       ) : (
         <div className="space-y-2">
