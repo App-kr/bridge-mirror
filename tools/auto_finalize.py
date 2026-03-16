@@ -59,6 +59,12 @@ def run_backup(task):
 
 def git_commit(task):
     git(["git", "add", "-A"])
+    # PAT에 workflow scope 없음 → .github/workflows/ 는 자동커밋에서 항상 제외
+    # (workflow 파일은 GitHub 웹UI 또는 workflow scope PAT로 별도 push)
+    wf_unstaged = git(["git", "restore", "--staged", ".github/"])
+    if wf_unstaged is not None:
+        # restore 실패(구버전 git) 시 reset fallback
+        git(["git", "reset", "HEAD", "--", ".github/"])
     if not git(["git", "status", "--short"]):
         print("[Git] 변경없음")
         return git_head()
