@@ -61,7 +61,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" STOP"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" STOP"
         }
       ]
     },
