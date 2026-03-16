@@ -200,6 +200,13 @@ _PII_BLOCKED_KEYS: frozenset[str] = frozenset({
     "criminal_record", "criminal_record_check",
     "health_info",
     "employer_id", "internal_notes",
+    # 카카오 / SNS (필드 미존재해도 미래 대비 차단)
+    "kakaotalk", "kakao_id", "kakao", "kakao_link",
+    "sns", "social_media", "instagram", "facebook", "twitter", "linkedin",
+    # 메모 (관리자 전용 내부 필드)
+    "memo", "memo_kr", "memo_en", "recruiter_memo",
+    # 추가 연락처 계열
+    "mobile_phone", "phone_number", "contact_phone",
 })
 
 # 값 수준 정규식 마스킹 — 블록키를 통과한 문자열에 잔류 PII가 있을 경우 대비
@@ -2543,7 +2550,7 @@ async def admin_matching_employers(request: Request, candidate_id: str):
         ).fetchone()
         if not cand:
             raise HTTPException(status_code=404, detail="Candidate not found")
-        cand = dict(cand)
+        cand = _decrypt_row(dict(cand))
 
         area_prefs = cand.get("area_prefs", "") or ""
         target = cand.get("target", "") or ""
@@ -3046,9 +3053,9 @@ async def admin_list_applications(
                 for c in cands:
                     apps.append({
                         "id": c["candidate_id"], "type": "candidate",
-                        "name": c["full_name"] or "", "email": c["email"] or "",
+                        "name": _safe_decrypt(c["full_name"]) or "", "email": _safe_decrypt(c["email"]) or "",
                         "nationality": c["nationality"],
-                        "phone": c["mobile_phone"],
+                        "phone": _safe_decrypt(c["mobile_phone"]),
                         "location": c["current_location"],
                         "target": c["target"],
                         "target_age": c["target_age"],
