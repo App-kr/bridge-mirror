@@ -2807,7 +2807,7 @@ async def community_get(board: str, post_id: int):
 
 class CommunityPost(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
-    body:  str = Field(..., min_length=10, max_length=200000)
+    body:  str = Field(..., min_length=10, max_length=200000)  # HTML 게시물 지원 (200k)
     content_type: str = Field("markdown", pattern=r"^(markdown|html)$")
     category: Optional[str] = Field(None, max_length=50)
 
