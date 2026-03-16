@@ -39,6 +39,48 @@ _post_more_event = threading.Event()
 _stop_event = threading.Event()
 
 
+def _make_rpa_photoimage(root, size=32):
+    """파란 원형 배경 + 흰색 R — tkinter 아이콘용 PhotoImage 생성."""
+    import math as _math
+    _R = [
+        [1,1,1,1,0],
+        [1,0,0,0,1],
+        [1,0,0,0,1],
+        [1,1,1,1,0],
+        [1,0,1,0,0],
+        [1,0,0,1,0],
+        [1,0,0,0,1],
+    ]
+    cx, cy = size / 2 - 0.5, size / 2 - 0.5
+    radius = size / 2 - 1.5
+    ox, oy, scale = 8, 5, 3
+    r_pix = set()
+    for ry, row in enumerate(_R):
+        for rx, p in enumerate(row):
+            if p:
+                for dy in range(scale):
+                    for dx in range(scale):
+                        r_pix.add((ox + rx*scale + dx, oy + ry*scale + dy))
+    BLUE = "#0071e3"
+    WHITE = "#ffffff"
+    BG = "#00000000"  # transparent (tkinter uses empty string for transparent in row data)
+    rows = []
+    for y in range(size):
+        row_parts = []
+        for x in range(size):
+            dist = _math.sqrt((x - cx)**2 + (y - cy)**2)
+            if dist > radius:
+                row_parts.append(WHITE)   # 투명 대신 흰색 테두리
+            elif (x, y) in r_pix:
+                row_parts.append(WHITE)
+            else:
+                row_parts.append(BLUE)
+        rows.append("{" + " ".join(row_parts) + "}")
+    img = tk.PhotoImage(width=size, height=size)
+    img.put(" ".join(rows))
+    return img
+
+
 def wants_more() -> bool:
     result = _post_more_event.is_set()
     _post_more_event.clear()
@@ -290,9 +332,9 @@ class RPAOverlay:
         root, card = self._make_window(320, 210)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
-        # 숨겨진 title 설정 — FindWindowW로 HWND 직접 검색용
+        # 작업표시줄 / Alt+Tab 표시 제목
         try:
-            root.title("CraigRPA_Working")
+            root.title("Craig RPA — 작업중")
         except Exception:
             pass
 
@@ -853,6 +895,12 @@ class RPAOverlay:
                 root.iconbitmap(str(_ico))
             except Exception:
                 pass
+        try:
+            _img = _make_rpa_photoimage(root)
+            root.iconphoto(True, _img)
+            root._rpa_icon = _img   # GC 방지
+        except Exception:
+            pass
         root.overrideredirect(True)
         root.attributes("-topmost", True)   # 처음 표시 시에만 앞으로
         root.attributes("-alpha", 0.0)
@@ -919,7 +967,7 @@ def ask_integrity_password() -> bool:
             root.iconbitmap(str(_ico))
         except Exception:
             pass
-    root.title("보안 확인")
+    root.title("Craig RPA — 보안 확인")
     root.overrideredirect(True)
     root.attributes("-topmost", True)
     root.configure(bg="#f5f5f7")
@@ -1066,7 +1114,7 @@ def ask_account_selection():
                 root.iconbitmap(str(_ico))
             except Exception:
                 pass
-        root.title("BRIDGE Craig")
+        root.title("Craig RPA — 계정 선택")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
