@@ -81,7 +81,9 @@ class RPAOverlay:
 
     # ── Restore flag monitor ───────────────────
     def _start_restore_monitor(self):
-        """launcher 재실행 감지용 — 0.8초마다 .overlay_restore.flag 체크."""
+        """launcher 재실행 감지용 — 1초마다 체크.
+        창이 살아있는 경우: _build_working() 내 _check_restore()가 tkinter 스레드에서 직접 처리.
+        창이 닫혀있는 경우(dismiss): _re_show_working() 호출로 창 재생성."""
         import time as _time
 
         _flag = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
@@ -89,21 +91,14 @@ class RPAOverlay:
         def _watch():
             while self._is_working:
                 try:
-                    if _flag.exists():
+                    if _flag.exists() and self._root is None:
+                        # 창이 dismiss 상태 — 재생성
                         _flag.unlink(missing_ok=True)
-                        if self._root is not None:
-                            # 창이 살아있으면 앞으로 가져오기
-                            try:
-                                self._root.after(0, self._bring_to_front)
-                            except Exception:
-                                pass
-                        else:
-                            # 창이 닫혀있으면(dismiss) 즉시 복원
-                            self._stop_remind()
-                            self._re_show_working()
+                        self._stop_remind()
+                        self._re_show_working()
                 except Exception:
                     pass
-                _time.sleep(0.8)
+                _time.sleep(1.0)
 
         self._restore_monitor = threading.Thread(target=_watch, daemon=True)
         self._restore_monitor.start()
@@ -370,7 +365,7 @@ class RPAOverlay:
         self._drag(root, header, bar, bot_row, bot_c, info_col, warn_row)
         self._ready.set()
 
-        # HWND 파일 저장 — 다른 프로세스(launcher)가 창 복원 시 직접 사용
+        # HWND 파일 저장 — launcher 직접 포커스용
         def _save_hwnd():
             try:
                 _hwnd = root.winfo_id()
@@ -380,6 +375,28 @@ class RPAOverlay:
             except Exception:
                 pass
         root.after(200, _save_hwnd)
+
+        # ── 복원 플래그 감시 (tkinter 이벤트 루프 내부 — 크로스스레드 없음) ──
+        # attributes("-topmost", True)는 Win32 WM이 강제 적용 → SetForegroundWindow
+        # 권한 문제 완전 회피. 이것이 작업창 복원의 확실한 경로.
+        _restore_flag = Path(__file__).resolve().parent / "logs" / ".overlay_restore.flag"
+
+        def _check_restore():
+            if not root.winfo_exists():
+                return
+            try:
+                if _restore_flag.exists():
+                    _restore_flag.unlink(missing_ok=True)
+                    root.attributes("-topmost", True)
+                    root.lift()
+                    root.focus_force()
+                    root.after(1500, lambda: root.attributes("-topmost", False)
+                               if root.winfo_exists() else None)
+            except Exception:
+                pass
+            root.after(400, _check_restore)
+
+        root.after(400, _check_restore)
 
         try:
             root.mainloop()
@@ -1181,7 +1198,16 @@ def _win32_focus_working():
         except Exception:
             pass
 
-    # ── 방법1: HWND 파일에서 직접 읽기 (가장 신뢰할 수 있음) ──────────
+    # ── 항상 restore flag 기록 (tkinter _check_restore()가 가장 확실) ──
+    # _check_restore()는 tkinter 이벤트 루프 내부에서 attributes(-topmost, True) 사용
+    # Win32 SetForegroundWindow 권한 제한 없이 무조건 동작
+    _rf = _lock_dir / ".overlay_restore.flag"
+    try:
+        _rf.write_text("restore", encoding="utf-8")
+    except Exception:
+        pass
+
+    # ── 방법1: HWND 파일 직접 읽기 (즉각 Win32 응답 시도) ──────────────
     _hwnd_file = _lock_dir / ".overlay_hwnd.txt"
     if _hwnd_file.exists():
         try:
@@ -1210,14 +1236,9 @@ def _win32_focus_working():
         for _hwnd in _found_hwnds:
             _bring_hwnd(_hwnd)
         return True
-    else:
-        # 창이 없음(dismiss 상태) → restore flag로 monitor 스레드에 복원 요청
-        try:
-            _rf = _lock_dir / ".overlay_restore.flag"
-            _rf.write_text("restore", encoding="utf-8")
-        except Exception:
-            pass
-        return False
+
+    # 창이 없음(dismiss) → restore flag로 monitor 스레드가 _re_show_working() 호출
+    return False
 
 
 # ── Already-running popup ─────────────────────────────────────────────────────
