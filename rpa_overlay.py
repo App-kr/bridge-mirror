@@ -106,12 +106,12 @@ class RPAOverlay:
     BAR_BG = "#e5e5ea"
     GOLD   = "#ff9500"
 
-    # 계정별 전체 창 색상 (BG, CARD)
+    # 계정별 전체 창 색상 (BG, CARD) — 2026 fresh palette
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#c8dcc8", "#e0ede0"),  # 옅은 초록
-        "airelair00@gmail.com":     ("#d8d0e8", "#ece8f5"),  # 옅은 보라
-        "ferrari812fast@gmail.com": ("#e8d8c0", "#f5ece0"),  # 옅은 갈색
-        "bridgejobkr@gmail.com":    ("#d4d4d4", "#e8e8e8"),  # 옅은 회색
+        "coreabridge@gmail.com":    ("#b8d4b8", "#d2ebd2"),  # 선명한 세이지 그린
+        "airelair00@gmail.com":     ("#c4b8e8", "#dbd4f5"),  # 선명한 라벤더
+        "ferrari812fast@gmail.com": ("#e0c89c", "#f2e2c0"),  # 선명한 앰버
+        "bridgejobkr@gmail.com":    ("#c8c8c8", "#e0e0e0"),  # 선명한 뉴트럴
     }
 
     _STATUS_CYCLE = [
@@ -330,7 +330,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(340, 262)
+        root, card = self._make_window(360, 322)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         try:
@@ -343,36 +343,36 @@ class RPAOverlay:
         header.pack(fill="x")
 
         # X 닫기 — 우상단
-        bar = tk.Frame(header, bg=CC, height=22)
+        bar = tk.Frame(header, bg=CC, height=24)
         bar.pack(fill="x")
         bar.pack_propagate(False)
-        xb = tk.Label(bar, text="\u2715", font=self._fn(9),
+        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
                       bg=CC, fg=self.X_GRAY, cursor="hand2")
-        xb.pack(side="right", padx=(0, 10), pady=(4, 0))
+        xb.pack(side="right", padx=(0, 12), pady=(5, 0))
         xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
         xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
         xb.bind("<Button-1>", lambda e: self._dismiss_and_remind())
 
-        # 스피너(34px) + 타이틀 + 계정명
+        # 스피너(32px) + 타이틀 + 계정명 — 2026 style
         bot_row = tk.Frame(header, bg=CC)
-        bot_row.pack(padx=18, pady=(2, 12), anchor="w")
+        bot_row.pack(padx=20, pady=(2, 14), anchor="w")
 
-        spin_c = tk.Canvas(bot_row, width=34, height=34,
+        spin_c = tk.Canvas(bot_row, width=32, height=32,
                            bg=CC, highlightthickness=0)
-        spin_c.pack(side="left", padx=(0, 12))
-        self._draw_spinner(spin_c, root, size=34)
+        spin_c.pack(side="left", padx=(0, 13))
+        self._draw_spinner(spin_c, root, size=32)
 
         info_col = tk.Frame(bot_row, bg=CC)
         info_col.pack(side="left", anchor="w")
 
-        tk.Label(info_col, text="Craig RPA",
-                 font=self._fn(15, "bold"),
+        tk.Label(info_col, text="RPA",
+                 font=self._fn(16, "bold"),
                  bg=CC, fg=self.TEXT1, anchor="w").pack(anchor="w")
 
         if self._email:
             _display_email = self._email.split("@")[0] if "@" in self._email else self._email
             tk.Label(info_col, text=_display_email,
-                     font=tkfont.Font(family="Malgun Gothic", size=9),
+                     font=tkfont.Font(family="Malgun Gothic", size=10),
                      bg=CC, fg=self.TEXT2, anchor="w").pack(anchor="w", pady=(3, 0))
 
         # ══ SEPARATOR ══════════════════════════
@@ -381,26 +381,26 @@ class RPAOverlay:
         # ══ BODY ═══════════════════════════════
         cur, tot = self._progress_var or [0, 0]
         body = tk.Frame(card, bg=self.BG)
-        body.pack(fill="x", padx=20, pady=(12, 0))
+        body.pack(fill="x", padx=20, pady=(14, 0))
 
-        # 상단 행: 큰 % (좌) + 카운트 (우)
+        # 상단 행: 큰 % (좌) + 카운트 (우) — 2026: 더 큰 숫자
         pct_row = tk.Frame(body, bg=self.BG)
-        pct_row.pack(fill="x", pady=(0, 8))
+        pct_row.pack(fill="x", pady=(0, 10))
 
         self._prog_pct_label = tk.Label(
             pct_row, text=self._pct_text(cur, tot),
-            font=tkfont.Font(family="Malgun Gothic", size=24, weight="bold"),
+            font=tkfont.Font(family="Malgun Gothic", size=30, weight="bold"),
             bg=self.BG, fg=self.TEXT1)
         self._prog_pct_label.pack(side="left")
 
         self._prog_count_label = tk.Label(
             pct_row, text=self._prog_text(cur, tot),
-            font=tkfont.Font(family="Malgun Gothic", size=10),
+            font=tkfont.Font(family="Malgun Gothic", size=11),
             bg=self.BG, fg=self.TEXT2)
-        self._prog_count_label.pack(side="right", anchor="s", pady=(0, 4))
+        self._prog_count_label.pack(side="right", anchor="s", pady=(0, 6))
 
-        # Pill 프로그레스 바 — 340-2border-40pad = 298
-        BAR_W, BAR_H = 298, 14
+        # Pill 프로그레스 바 — 360-2border-40pad = 318
+        BAR_W, BAR_H = 318, 16
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
@@ -409,60 +409,58 @@ class RPAOverlay:
 
         # 상태 행: ● dot + 텍스트 (바 아래)
         status_row = tk.Frame(body, bg=self.BG)
-        status_row.pack(fill="x", pady=(7, 0))
+        status_row.pack(fill="x", pady=(9, 0))
 
         self._status_dot_label = tk.Label(
             status_row, text="●",
-            font=tkfont.Font(family="Malgun Gothic", size=8),
+            font=tkfont.Font(family="Malgun Gothic", size=9),
             bg=self.BG, fg=self.BLUE)
-        self._status_dot_label.pack(side="left", padx=(0, 5))
+        self._status_dot_label.pack(side="left", padx=(0, 6))
 
         self._status_label = tk.Label(
             status_row, text=self._STATUS_CYCLE[0],
-            font=tkfont.Font(family="Malgun Gothic", size=10),
+            font=tkfont.Font(family="Malgun Gothic", size=11),
             bg=self.BG, fg=self.BLUE)
         self._status_label.pack(side="left")
 
-        # 개인정보 경고 배지 (warm pill)
-        warn_wrap = tk.Frame(card, bg=self.BG)
-        warn_wrap.pack(fill="x", padx=16, pady=(10, 6))
-
-        warn_badge = tk.Frame(warn_wrap, bg="#fff4da", padx=10, pady=6)
-        warn_badge.pack(fill="x")
-
-        _accent = tk.Frame(warn_badge, bg=self.GOLD, width=3)
-        _accent.pack(side="left", fill="y", padx=(0, 8))
-
-        tk.Label(warn_badge, text="\u26a0\u2002개인정보 확인 필수",
-                 font=tkfont.Font(family="Malgun Gothic", size=10, weight="bold"),
-                 bg="#fff4da", fg="#7a5500", anchor="w").pack(side="left")
+        # ══ 개인정보 경고 (2026 inline minimal) ══════
+        warn_row = tk.Frame(card, bg=self.BG)
+        warn_row.pack(fill="x", padx=20, pady=(10, 2))
+        warn_icon = tk.Label(warn_row, text="\u26a0",
+                             font=tkfont.Font(family="Segoe UI Emoji", size=11),
+                             bg=self.BG, fg=self.GOLD)
+        warn_icon.pack(side="left", padx=(0, 7))
+        warn_lbl = tk.Label(warn_row, text="개인정보 확인 필수",
+                            font=tkfont.Font(family="Malgun Gothic", size=10, weight="bold"),
+                            bg=self.BG, fg="#8a6200")
+        warn_lbl.pack(side="left")
 
         # ══ BUTTONS (하단 고정) ═══════════════════
         btn_row = tk.Frame(card, bg=self.BG)
         btn_row.pack(fill="x", side="bottom")
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x", side="bottom")
 
-        # 닫기
-        _CLOSE_BG  = "#eaf2fd"
-        _CLOSE_HOV = "#d0e5f8"
+        # 닫기 — 2026: 더 큰 hit area
+        _CLOSE_BG  = "#e8f0fe"
+        _CLOSE_HOV = "#ccddf8"
         close_btn = tk.Label(btn_row, text="닫기",
-                             font=tkfont.Font(family="Malgun Gothic", size=13),
+                             font=tkfont.Font(family="Malgun Gothic", size=14),
                              bg=_CLOSE_BG, fg=self.BLUE, cursor="hand2")
-        close_btn.pack(side="left", expand=True, fill="both", ipady=9)
+        close_btn.pack(side="left", expand=True, fill="both", ipady=12)
         close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
         close_btn.bind("<Leave>", lambda e: close_btn.configure(bg=_CLOSE_BG))
 
         tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        # 그만하기
-        _STOP_BG  = "#fdeaea"
-        _STOP_HOV = "#f8d0d0"
+        # 그만하기 — 2026: 더 두드러지는 빨강
+        _STOP_BG  = "#fce8e8"
+        _STOP_HOV = "#f6cccc"
         stop_btn = tk.Label(btn_row, text="그만하기",
-                            font=tkfont.Font(family="Malgun Gothic", size=13),
+                            font=tkfont.Font(family="Malgun Gothic", size=14),
                             bg=_STOP_BG, fg=self.RED, cursor="hand2")
-        stop_btn.pack(side="left", expand=True, fill="both", ipady=9)
-        stop_btn.bind("<Button-1>", lambda e: self._do_direct_stop(root))
+        stop_btn.pack(side="left", expand=True, fill="both", ipady=12)
+        stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
         stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
 
@@ -470,7 +468,7 @@ class RPAOverlay:
         self._start_status_blink(root)
         self._start_pulse_bar(root)
 
-        self._drag(root, header, bar, bot_row, spin_c, info_col, warn_wrap, warn_badge)
+        self._drag(root, header, bar, bot_row, spin_c, info_col, warn_row, warn_icon, warn_lbl)
         _log_overlay("_build_working: ready.set() 직전 — UI 완성")
         self._ready.set()
 
@@ -502,7 +500,7 @@ class RPAOverlay:
                     # 화면 밖 방지: 주 모니터 중앙으로 재배치
                     sw = root.winfo_screenwidth()
                     sh = root.winfo_screenheight()
-                    w, h = 340, 262
+                    w, h = 360, 322
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
@@ -692,7 +690,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(298, 14, cur, tot)
+            self._draw_pill_bar(318, 16, cur, tot)
         except Exception:
             pass
 

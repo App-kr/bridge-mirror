@@ -47,7 +47,8 @@ if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
-LOCK_FILE = BASE_DIR / "logs" / ".rpa_running.lock"
+LOCK_FILE           = BASE_DIR / "logs" / ".rpa_running.lock"
+_STOP_GRACEFUL_FLAG = BASE_DIR / "logs" / ".rpa_stop_graceful.flag"
 # 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
 _IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -1552,7 +1553,13 @@ def main():
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
-                if _HAS_OVERLAY and stop_requested():
+                _graceful_hit = _STOP_GRACEFUL_FLAG.exists()
+                if _graceful_hit:
+                    try:
+                        _STOP_GRACEFUL_FLAG.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                if (_HAS_OVERLAY and stop_requested()) or _graceful_hit:
                     print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
                     _log_event("info", "—", "user_stop", "User requested stop via overlay")
                     break

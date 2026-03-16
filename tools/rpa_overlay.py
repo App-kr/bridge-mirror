@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 _post_more_event = threading.Event()
+_stop_event      = threading.Event()
 
 
 def wants_more() -> bool:
@@ -19,26 +20,41 @@ def wants_more() -> bool:
     return result
 
 
+def stop_requested() -> bool:
+    """RPA 루프가 호출 — 그만하기/X 버튼 눌리면 True 반환 후 플래그 초기화."""
+    result = _stop_event.is_set()
+    _stop_event.clear()
+    return result
+
+
 class RPAOverlay:
 
-    BG = "#ffffff"
+    BG    = "#ffffff"
     TEXT1 = "#1d1d1f"
     TEXT2 = "#86868b"
-    BLUE = "#007aff"
+    BLUE  = "#007aff"
     GREEN = "#34c759"
-    SEP = "#e5e5ea"
+    RED   = "#ff3b30"
+    SEP   = "#e5e5ea"
     HOVER = "#f2f2f7"
+    HOVER_RED = "#fff1f0"
     X_GRAY = "#c7c7cc"
     _TRANS = "#010203"
 
     def __init__(self):
-        self._root = None
-        self._thread = None
-        self._ready = threading.Event()
+        self._root           = None
+        self._thread         = None
+        self._ready          = threading.Event()
+        self._progress_label = None   # update_progress() 가 업데이트할 라벨
 
-    def show_working(self):
+    def show_working(self, current: int = 0, total: int = 0, email: str = ""):
         self.close()
-        self._thread = threading.Thread(target=self._build_working, daemon=True)
+        _stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._build_working,
+            args=(current, total, email),
+            daemon=True,
+        )
         self._thread.start()
         self._ready.wait(timeout=3)
 
@@ -50,6 +66,19 @@ class RPAOverlay:
         self._thread.start()
         self._ready.wait(timeout=3)
 
+    def update_progress(self, current: int, total: int):
+        """RPA 루프가 게시 완료마다 호출 — 진행 라벨 갱신."""
+        if self._root and self._progress_label:
+            try:
+                self._root.after(
+                    0,
+                    lambda: self._progress_label.configure(
+                        text=f"{current} / {total} 완료"
+                    ) if self._progress_label.winfo_exists() else None
+                )
+            except Exception:
+                pass
+
     def close(self):
         if self._root:
             try:
@@ -57,13 +86,23 @@ class RPAOverlay:
             except Exception:
                 pass
             self._root = None
+        self._progress_label = None
         self._ready.clear()
 
-    # ── WORKING ──────────────────────────────
-    def _build_working(self):
-        root, card = self._make_window(340, 250)
+    # ── 그만하기 공통 액션 (작업중 창 전용) ──────────────────────────────
+    def _do_stop(self, root):
+        """그만하기/X 클릭 → RPA 중단 신호 + 창 닫기."""
+        _stop_event.set()
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
-        bar = self._top_bar(card, root)
+    # ── WORKING ──────────────────────────────────────────────────────────
+    def _build_working(self, current: int, total: int, email: str):
+        root, card = self._make_window(340, 290)
+
+        bar = self._top_bar_stop(card, root)   # X → 그만하기
 
         spinner = tk.Canvas(card, width=44, height=44,
                             bg=self.BG, highlightthickness=0)
@@ -77,11 +116,24 @@ class RPAOverlay:
 
         sub = tk.Label(card, text="인터넷 창을 건들지 마세요",
                        font=self._fn(12), bg=self.BG, fg=self.TEXT2)
-        sub.pack(pady=(4, 8))
+        sub.pack(pady=(4, 4))
+
+        # 진행 카운터
+        prog_text = f"{current} / {total} 완료" if total else "준비 중..."
+        prog = tk.Label(card, text=prog_text,
+                        font=self._fn(11), bg=self.BG, fg=self.TEXT2)
+        prog.pack(pady=(0, 4))
+        self._progress_label = prog
+
+        # 이메일 표시 (있을 때만)
+        if email:
+            acct = tk.Label(card, text=email,
+                            font=self._fn(10), bg=self.BG, fg=self.X_GRAY)
+            acct.pack(pady=(0, 6))
 
         # 게임 OK 라인
         game_row = tk.Frame(card, bg=self.BG)
-        game_row.pack(pady=(0, 12))
+        game_row.pack(pady=(0, 10))
         gun = tk.Canvas(game_row, width=24, height=18,
                         bg=self.BG, highlightthickness=0)
         gun.pack(side="left", padx=(0, 4))
@@ -91,16 +143,16 @@ class RPAOverlay:
         game_lbl.pack(side="left")
 
         self._sep(card)
-        self._action(card, "닫기", "normal", lambda: root.destroy())
+        self._action_stop(card, "그만하기", lambda: self._do_stop(root))
 
-        self._drag(root, bar, spinner, title, sub, game_row, game_lbl)
+        self._drag(root, bar, spinner, title, sub, prog, game_row, game_lbl)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
 
-    # ── COMPLETE ─────────────────────────────
+    # ── COMPLETE ─────────────────────────────────────────────────────────
     def _build_complete(self, count: int):
         root, card = self._make_window(340, 300)
 
@@ -139,7 +191,7 @@ class RPAOverlay:
         except Exception:
             pass
 
-    # ── Drawing ──────────────────────────────
+    # ── Drawing ──────────────────────────────────────────────────────────
     def _draw_spinner(self, c, root):
         """Apple activity indicator (rotating bars)."""
         cx, cy = 22, 22
@@ -202,19 +254,14 @@ class RPAOverlay:
     def _draw_gun(self, c):
         """Small pistol icon."""
         g = "#34c759"
-        # Barrel
         c.create_rectangle(10, 4, 23, 8, fill=g, outline="")
-        # Body
         c.create_rectangle(3, 4, 14, 12, fill=g, outline="")
-        # Handle
-        c.create_polygon(5, 12, 9, 12, 10, 17, 4, 17,
-                         fill=g, outline="")
-        # Trigger guard
-        c.create_line(9, 12, 12, 12, 12, 14, 9, 14,
-                      fill=g, width=1.5)
+        c.create_polygon(5, 12, 9, 12, 10, 17, 4, 17, fill=g, outline="")
+        c.create_line(9, 12, 12, 12, 12, 14, 9, 14, fill=g, width=1.5)
 
-    # ── UI Components ────────────────────────
+    # ── UI Components ─────────────────────────────────────────────────────
     def _top_bar(self, parent, root):
+        """완료 창용 X — 창만 닫음."""
         bar = tk.Frame(parent, bg=self.BG, height=28)
         bar.pack(fill="x")
         bar.pack_propagate(False)
@@ -227,10 +274,25 @@ class RPAOverlay:
         xb.bind("<Button-1>", lambda e: root.destroy())
         return bar
 
+    def _top_bar_stop(self, parent, root):
+        """작업중 창용 X — RPA 중단 + 창 닫기."""
+        bar = tk.Frame(parent, bg=self.BG, height=28)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+
+        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
+                      bg=self.BG, fg=self.X_GRAY, cursor="hand2")
+        xb.pack(side="right", padx=(0, 6), pady=(4, 0))
+        xb.bind("<Enter>", lambda e: xb.configure(fg=self.RED))
+        xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
+        xb.bind("<Button-1>", lambda e: self._do_stop(root))
+        return bar
+
     def _sep(self, parent):
         tk.Frame(parent, bg=self.SEP, height=1).pack(fill="x")
 
     def _action(self, parent, text, weight, cmd):
+        """일반 파란색 버튼."""
         btn = tk.Label(parent, text=text,
                        font=self._fn(15, weight),
                        bg=self.BG, fg=self.BLUE,
@@ -240,7 +302,18 @@ class RPAOverlay:
         btn.bind("<Leave>", lambda e: btn.configure(bg=self.BG))
         btn.bind("<Button-1>", lambda e: cmd())
 
-    # ── Window ───────────────────────────────
+    def _action_stop(self, parent, text, cmd):
+        """그만하기 — 빨간색 버튼."""
+        btn = tk.Label(parent, text=text,
+                       font=self._fn(15, "bold"),
+                       bg=self.BG, fg=self.RED,
+                       pady=12, cursor="hand2")
+        btn.pack(fill="x")
+        btn.bind("<Enter>", lambda e: btn.configure(bg=self.HOVER_RED))
+        btn.bind("<Leave>", lambda e: btn.configure(bg=self.BG))
+        btn.bind("<Button-1>", lambda e: cmd())
+
+    # ── Window ────────────────────────────────────────────────────────────
     def _make_window(self, w, h):
         """Clean white floating card."""
         root = tk.Tk()
@@ -256,7 +329,6 @@ class RPAOverlay:
         card = tk.Frame(root, bg=self.BG)
         card.pack(fill="both", expand=True)
 
-        # Fade in
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
@@ -291,6 +363,7 @@ class RPAOverlay:
 
 
 _overlay = RPAOverlay()
-show_working = _overlay.show_working
-show_complete = _overlay.show_complete
-close = _overlay.close
+show_working     = _overlay.show_working
+show_complete    = _overlay.show_complete
+update_progress  = _overlay.update_progress
+close            = _overlay.close
