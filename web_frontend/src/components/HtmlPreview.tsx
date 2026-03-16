@@ -8,7 +8,7 @@ const PURIFY_CONFIG = {
     'ul', 'ol', 'li', 'a', 'img', 'strong', 'em', 'b', 'i', 'u',
     'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'div', 'span', 'blockquote', 'code', 'pre', 'sub', 'sup',
-    'section', 'article', 'header', 'footer', 'nav',
+    'section', 'article', 'header', 'footer', 'nav', 'main',
     'figure', 'figcaption', 'details', 'summary', 'small',
   ],
   ALLOWED_ATTR: [
@@ -40,21 +40,48 @@ const BASE_CSS = `
 `
 
 export default function HtmlPreview({ html }: { html: string }) {
-  // <style> 블록을 DOMPurify 실행 전에 추출 (관리자 신뢰 콘텐츠)
+  // 1. <link> 태그 추출 (Google Fonts 등)
+  const fontLinks: Array<{ href: string; rel: string; crossOrigin?: string }> = []
+  const htmlNoLinks = html.replace(/<link\s([^>]*)>/gi, (_, attrs: string) => {
+    const href = attrs.match(/href="([^"]+)"/)?.[1] ?? ''
+    const rel  = attrs.match(/rel="([^"]+)"/)?.[1] ?? ''
+    if (href && (rel.includes('stylesheet') || rel.includes('preconnect'))) {
+      fontLinks.push({
+        href,
+        rel,
+        crossOrigin: attrs.includes('crossorigin') ? 'anonymous' : undefined,
+      })
+    }
+    return ''
+  })
+
+  // 2. <style> 블록 추출 (DOMPurify 이전에 분리 — 관리자 신뢰 콘텐츠)
   const styleBlocks: string[] = []
-  const htmlWithoutStyles = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
+  const htmlNoStyles = htmlNoLinks.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
     styleBlocks.push(css)
     return ''
   })
 
-  const clean = DOMPurify.sanitize(htmlWithoutStyles, PURIFY_CONFIG)
+  // 3. 전체 HTML 문서라면 <body> 내용만 추출
+  const bodyMatch = htmlNoStyles.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+  const contentHtml = bodyMatch ? bodyMatch[1] : htmlNoStyles
+
+  // 4. DOMPurify 정제
+  const clean = DOMPurify.sanitize(contentHtml, PURIFY_CONFIG)
 
   return (
     <>
+      {/* Google Fonts 등 외부 폰트 로드 */}
+      {fontLinks.map((l, i) => (
+        <link key={i} rel={l.rel} href={l.href} crossOrigin={l.crossOrigin as 'anonymous' | undefined} />
+      ))}
+      {/* 기본 prose 스타일 */}
       <style>{BASE_CSS}</style>
+      {/* 게시물에 포함된 커스텀 CSS */}
       {styleBlocks.map((css, i) => (
         <style key={i}>{css}</style>
       ))}
+      {/* 본문 */}
       <div className="prose-bridge" dangerouslySetInnerHTML={{ __html: clean }} />
     </>
   )
