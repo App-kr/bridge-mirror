@@ -178,7 +178,10 @@ def main():
             if set_default_device(PC_SPEAKER_ID):
                 log(f'[초기화] 헤드폰 없음 → PC 스피커로 초기 설정')
     elif hp:
-        log(f'[초기화] 헤드폰 감지: {prev_devices[hp]} → 헤드폰 유지')
+        log(f'[초기화] 헤드폰 감지: {prev_devices[hp]} → 부팅 시 PC 스피커 강제 설정')
+        if PC_SPEAKER_ID in prev_ids:
+            if set_default_device(PC_SPEAKER_ID):
+                log(f'[초기화] ✅ PC 스피커로 강제 설정 완료')
 
     while True:
         time.sleep(POLL_INTERVAL)
