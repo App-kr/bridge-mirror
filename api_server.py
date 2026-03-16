@@ -980,6 +980,15 @@ _ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
 
+# SQLite WAL 모드 활성화 (다중 스레드 동시 읽기/쓰기 성능 향상)
+try:
+    _wal_conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    _wal_conn.execute("PRAGMA journal_mode = WAL")
+    _wal_conn.execute("PRAGMA synchronous = NORMAL")
+    _wal_conn.close()
+except Exception:
+    pass
+
 if not _ADMIN_KEY:
     import logging as _log_adm
     _log_adm.getLogger("bridge.api").warning(
@@ -4569,11 +4578,6 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             if "JOB_REGISTERED" in notes:
                 return  # 이미 등록됨
 
-            # job_code 생성
-            max_row = conn.execute("SELECT MAX(id) FROM jobs").fetchone()
-            new_seq = (max_row[0] or 0) + 1
-            job_code = f"Job.{new_seq + 1000}"
-
             # 급여 파싱
             salary_raw = inq["salary_raw"] or ""
             salary_nums = re.findall(r"[\d,.]+", salary_raw.replace(",", ""))
@@ -4592,18 +4596,22 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             loc = inq["location"] or ""
             city = loc.split(",")[0].split(" ")[0].strip() if loc else ""
 
-            conn.execute(
-                """INSERT INTO jobs (job_code, seq, location, city, start_date, teaching_age,
+            # job_code: INSERT 후 lastrowid로 생성 (race condition 방지)
+            cur = conn.execute(
+                """INSERT INTO jobs (seq, location, city, start_date, teaching_age,
                    working_hours, daily_hours, salary_min, salary_max, salary_raw,
                    vacation, housing, benefits, status, is_hot, is_deleted, created_at)
-                   VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 0, 0, ?)""",
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 0, 0, ?)""",
                 (
-                    job_code, loc, city, inq["start_date"], inq["teaching_age"],
+                    loc, city, inq["start_date"], inq["teaching_age"],
                     wh, daily_hours, salary_min, salary_max, salary_raw,
                     inq["vacation"], inq["housing_detail"] or inq["housing_type"],
                     inq["benefits"], datetime.now(timezone.utc).isoformat(),
                 ),
             )
+            new_row_id = cur.lastrowid
+            job_code = f"Job.{new_row_id + 1000}"
+            conn.execute("UPDATE jobs SET job_code = ? WHERE id = ?", (job_code, new_row_id))
             new_notes = f"{notes}\nJOB_REGISTERED:{job_code}".strip()
             conn.execute("UPDATE client_inquiries SET notes = ? WHERE id = ?", (new_notes, inquiry_id))
             conn.commit()
