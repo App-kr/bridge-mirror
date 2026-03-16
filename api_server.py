@@ -587,7 +587,7 @@ async def root():
 @app.get("/health", tags=["health"])
 async def health_check():
     """Render / 외부 모니터링용 헬스체크"""
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "ok", "version": "v2.3.1", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 # ── Render 슬립 방지 — 10분마다 self-ping ──────────────────────────────────────
