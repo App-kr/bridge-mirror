@@ -1,5 +1,5 @@
 """
-BRIDGE API Server  v2.2
+BRIDGE API Server  v2.3
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 
@@ -388,7 +388,10 @@ def _ensure_candidate_indexes() -> None:
     except Exception:
         pass
 
-_ensure_candidate_indexes()
+try:
+    _ensure_candidate_indexes()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_candidate_indexes 스킵: %s", _e)
 
 # ── Supabase 클라이언트 (지연 초기화) ─────────────────────────────────────────
 _anon_client: Optional["Client"] = None
@@ -984,6 +987,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Admin: ad_posts 대시보드 ──────────────────────────────────────────────────
 _ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db"))))
+# Render 디스크 마운트 경로(/data) 자동 생성 — 없으면 sqlite3 연결 불가
+_ADMIN_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
 
@@ -1014,7 +1019,10 @@ def _ensure_access_logs():
     except Exception:
         pass
 
-_ensure_access_logs()
+try:
+    _ensure_access_logs()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_access_logs 스킵: %s", _e)
 
 
 def _log_unauthorized_access(request: Request):
@@ -3279,7 +3287,10 @@ def _ensure_interviews_schema():
     conn.close()
 
 
-_ensure_interviews_schema()
+try:
+    _ensure_interviews_schema()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_interviews_schema 스킵: %s", _e)
 
 
 def _ensure_community_schema():
@@ -3299,7 +3310,10 @@ def _ensure_community_schema():
     conn.close()
 
 
-_ensure_community_schema()
+try:
+    _ensure_community_schema()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_community_schema 스킵: %s", _e)
 
 
 # ── HTML Sanitizer (allowlist 기반) ──────────────────────────────────────────
@@ -3549,8 +3563,14 @@ def _ensure_profile_sends_schema():
     conn.close()
 
 
-_ensure_interview_templates()
-_ensure_profile_sends_schema()
+try:
+    _ensure_interview_templates()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_interview_templates 스킵: %s", _e)
+try:
+    _ensure_profile_sends_schema()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_profile_sends_schema 스킵: %s", _e)
 
 
 class InterviewCreate(BaseModel):
@@ -5093,7 +5113,10 @@ def _ensure_boards_table():
     conn.commit()
     conn.close()
 
-_ensure_boards_table()
+try:
+    _ensure_boards_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_boards_table 스킵: %s", _e)
 
 
 class BoardCreate(BaseModel):
@@ -5184,7 +5207,10 @@ def _ensure_banners_table():
     conn.commit()
     conn.close()
 
-_ensure_banners_table()
+try:
+    _ensure_banners_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_banners_table 스킵: %s", _e)
 
 
 class BannerCreate(BaseModel):
@@ -5370,7 +5396,10 @@ def _ensure_site_partners_table():
         conn.commit()
     conn.close()
 
-_ensure_site_partners_table()
+try:
+    _ensure_site_partners_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_site_partners_table 스킵: %s", _e)
 
 
 class PartnerCreate(BaseModel):
@@ -5518,7 +5547,10 @@ def _ensure_site_settings_table():
     conn.commit()
     conn.close()
 
-_ensure_site_settings_table()
+try:
+    _ensure_site_settings_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_site_settings_table 스킵: %s", _e)
 
 
 @app.get("/api/settings", tags=["public"])
@@ -5586,7 +5618,10 @@ def _ensure_site_visits_table():
     conn.commit()
     conn.close()
 
-_ensure_site_visits_table()
+try:
+    _ensure_site_visits_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_site_visits_table 스킵: %s", _e)
 
 
 def _classify_channel(referrer: str) -> str:
@@ -5885,7 +5920,10 @@ def _ensure_download_links_schema():
     conn.close()
 
 
-_ensure_download_links_schema()
+try:
+    _ensure_download_links_schema()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_download_links_schema 스킵: %s", _e)
 
 
 @app.post("/api/admin/download-links", tags=["admin"])
