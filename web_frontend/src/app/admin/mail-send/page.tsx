@@ -15,7 +15,14 @@ import { API_URL } from '@/lib/api'
 import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, ChevronDown } from 'lucide-react'
 
 const API = API_URL
-const DRAFT_KEY = 'bridge_mail_draft'
+const DRAFT_KEY    = 'bridge_mail_draft'
+const HEADER_KEY   = 'bridge_mail_header'
+const FOOTER_KEY   = 'bridge_mail_footer'
+
+function loadSaved(key: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  return localStorage.getItem(key) || fallback
+}
 
 interface Template {
   template_key: string
@@ -72,7 +79,11 @@ export default function MailSendPage() {
   const [sender, setSender] = useState<string>(SENDERS[0].value)
   const [recipientText, setRecipientText] = useState('')
   const [subject, setSubject] = useState('')
-  const [bodyHtml, setBodyHtml] = useState(DEFAULT_BODY)
+  const [bodyHtml, setBodyHtml] = useState(() => {
+    const h = loadSaved(HEADER_KEY, BODY_HEADER)
+    const f = loadSaved(FOOTER_KEY, BODY_FOOTER)
+    return `${h}\n\n${f}`
+  })
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<SendResult | null>(null)
@@ -80,6 +91,12 @@ export default function MailSendPage() {
   const [showPreview, setShowPreview] = useState(false)
   const [personalSend, setPersonalSend] = useState(false)
   const [font, setFont] = useState(FONTS[0].value)
+
+  // 기본값 설정 (localStorage에서 로드)
+  const [customHeader, setCustomHeader] = useState(() => loadSaved(HEADER_KEY, BODY_HEADER))
+  const [customFooter, setCustomFooter] = useState(() => loadSaved(FOOTER_KEY, BODY_FOOTER))
+  const [showDefaults, setShowDefaults] = useState(false)
+  const [defaultsSaved, setDefaultsSaved] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const templateMenuRef = useRef<HTMLDivElement>(null)
@@ -124,8 +141,18 @@ export default function MailSendPage() {
     const t = templates.find(tp => tp.template_key === key)
     if (t) {
       setSubject(t.subject)
-      setBodyHtml(`${BODY_HEADER}\n\n${t.body_html}\n\n${BODY_FOOTER}`)
+      setBodyHtml(`${customHeader}\n\n${t.body_html}\n\n${customFooter}`)
     }
+  }
+
+  // 기본값(헤더/서명) 저장
+  const saveDefaults = () => {
+    localStorage.setItem(HEADER_KEY, customHeader)
+    localStorage.setItem(FOOTER_KEY, customFooter)
+    setDefaultsSaved(true)
+    setTimeout(() => setDefaultsSaved(false), 2500)
+    // 현재 본문도 새 기본값으로 리셋
+    setBodyHtml(`${customHeader}\n\n${customFooter}`)
   }
 
   // Save draft to localStorage
@@ -461,6 +488,48 @@ export default function MailSendPage() {
               <p>• OFF: 일반 대량 발송 모드</p>
               <p>• 개인정보 노출 방지를 위해 중요 메일은 ON 권장</p>
             </div>
+          </div>
+
+          {/* ── 기본값 설정 ── */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowDefaults(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-[13px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
+            >
+              <span>⚙️ 기본 서명 · 헤더 설정</span>
+              <span className="text-[11px] text-[#86868b]">{showDefaults ? '▲' : '▼'}</span>
+            </button>
+            {showDefaults && (
+              <div className="px-4 pb-4 space-y-3 border-t border-[#f0f0f0]">
+                <div className="pt-3">
+                  <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">편지 시작 (Header)</label>
+                  <textarea
+                    value={customHeader}
+                    onChange={e => setCustomHeader(e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">서명 · 법적고지 (Footer)</label>
+                  <textarea
+                    value={customFooter}
+                    onChange={e => setCustomFooter(e.target.value)}
+                    rows={8}
+                    className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveDefaults}
+                  className="w-full py-2 rounded-xl bg-[#1d1d1f] text-white text-[13px] font-semibold hover:bg-[#424245] transition-colors"
+                >
+                  {defaultsSaved ? '✅ 저장됨!' : '💾 기본값으로 저장'}
+                </button>
+                <p className="text-[11px] text-[#86868b]">저장하면 이 브라우저에서 항상 이 서명이 기본으로 적용됩니다.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
