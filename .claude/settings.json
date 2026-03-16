@@ -30,7 +30,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" PRE"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" PRE"
         }
       ]
     },
@@ -39,7 +39,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\bridge_backup.py\" --pre-hook \"$CLAUDE_TOOL_NAME\""
         }
       ]
     }
@@ -50,7 +50,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"C:\\Python314\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" POST"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\status_writer.py\" POST"
         }
       ]
     }
@@ -70,7 +70,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python -X utf8 \"Q:/Claudework/bridge base/tools/auto_finalize.py\" \"$CLAUDE_TASK_TITLE\""
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\auto_finalize.py\""
         }
       ]
     }
