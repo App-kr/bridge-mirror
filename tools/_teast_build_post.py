@@ -63,11 +63,40 @@ def clean_start_date(sd: str) -> str:
     return cleaned if cleaned else "ASAP"
 
 
+DIVIDER = "_" * 52
+
+INTRO_TEXT = """BRIDGE places qualified teachers in reputable schools, academies, English villages, and companies nationwide.
+
+1. Eligibility
+Native English speakers from US, Canada, UK, Ireland, Australia, New Zealand, South Africa.
+F-visa holders with a degree from an English-speaking country are also welcome.
+Overseas teachers who have completed all required documents are welcome.
+A cheerful, responsible teacher who values reliability and shows genuine passion for education.
+
+2. Required Documents
+Updated résumé (CV) reflecting your latest experience.
+Cover letter that genuinely represents who you are as a teacher.
+Recent, bright photo with a clear front-facing smile.
+1–3 minute self-introduction video (no download links).
+``SOUTH AFRICANS MUST CURRENTLY RESIDE IN SOUTH KOREA (There are far too many issues).
+https://tinyurl.com/bridgekr
+""" + DIVIDER
+
+FOOTER_TEXT = "https://tinyurl.com/bridgekr\n" + DIVIDER
+
+
+def _fmt_m(val: float) -> str:
+    """2.6 → '2,60m', 3.1 → '3,10m'"""
+    whole = int(val)
+    frac = int(round((val - whole) * 100))
+    return f"{whole},{frac:02d}m"
+
+
 def format_salary(smin, smax) -> str:
     if smin and smax and abs(smin - smax) > 0.05:
-        return f"{smin:.2f}m - {smax:.2f}m KRW"
+        return f"{_fmt_m(smin)} - {_fmt_m(smax)} KRW"
     if smin:
-        return f"{smin:.2f}m KRW"
+        return f"{_fmt_m(smin)} KRW"
     return "Negotiable"
 
 
@@ -103,7 +132,7 @@ def select_jobs(limit: int = 8) -> list[dict]:
 
 
 def build_description(jobs: list[dict]) -> str:
-    lines = []
+    blocks = []
     for j in jobs:
         code = j["job_code"].replace("Job.", "Job. ")
         loc  = (j["location"] or j["city"] or "Korea").strip()
@@ -127,21 +156,22 @@ def build_description(jobs: list[dict]) -> str:
             block.append(f"`Class size : {cls}")
         if wh:
             block.append(f"`Working Hours : {wh}")
-        if twh:
-            block.append(f"`Average Teaching Hours per Week : {twh}")
-        block.append(f"`Monthly Salary : {sal}")
+        block.append(f"``Monthly Salary : {sal}")
         if vac:
             block.append(f"`Vacation : {vac}")
         if house:
             block.append(f"`Housing: {house}")
+        if twh:
+            block.append(f"`Average Teaching Hours per Week : {twh}")
         if nat:
             block.append(f"`Native Teacher (Numbers can change) : {nat}")
         if ben:
             block.append(f"`Employee Benefits : {ben}")
-        block.append("_" * 52)
-        lines.append("\n".join(block))
+        block.append(DIVIDER)
+        blocks.append("\n".join(block))
 
-    return "\n".join(lines)
+    jobs_text = "\n".join(blocks)
+    return f"{INTRO_TEXT}\n{jobs_text}\n{FOOTER_TEXT}"
 
 
 def get_magic_link() -> str:

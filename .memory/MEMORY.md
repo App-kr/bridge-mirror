@@ -162,6 +162,15 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **글자수 기준**: 1500자 이상 (순수 한글, 공백 제외)
 - **태그 분포**: 필수 5개(브릿지/원어민채용/원어민에이전시/브릿지에이전시/영어선생님고용) + 서이추/서이추환영 마지막 고정
 
+## 광고 키워드 규칙 (2026-03-17 확정)
+- **"광고"** = Teast 구인공고 포스팅 작업을 의미
+- 실행 스크립트: `Q:\Claudework\bridge base\tools\_teast_build_post.py`
+- 스케줄러: `Q:\Claudework\bridge base\scripts\teast_monthly.py --once --live`
+- 배치파일: `Q:\Claudework\bridge base\scripts\teast_post.bat`
+- 바탕화면 바로가기: `C:\Users\Scarlett\Desktop\광고 올리기.lnk`
+- 예약 작업: `TeastPost30Day` — 매 30일마다 09:00 자동실행 (다음: 2026-04-16)
+- `--show` 플래그로 포스팅 내용 미리보기 가능 (실제 포스팅 안 함)
+
 ## Python 실행 규칙 (2026-03-14 확정)
 - `C:\Python314` — 환경 깨짐, 사용 금지
 - **항상 사용**: `C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe`
