@@ -1,0 +1,289 @@
+﻿Shared strings count: 4708
+
+============================================================
+Sheet: xl/worksheets/sheet1.xml
+============================================================
+A=?대찓??二쇱냼 | B=Full name | C=Photo | D=No | E=ARC holders | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Start date | L=Target | M=Area prefs | N=Reference | O=Experience | P=Employment | Q=Job prefs  | R=Interview | S=Apply | T=Current salary | U=Desired salary | V=Interview time | W=Degree | X=Major | Y=Certification | Z=Documents | AA=Health Information | AB=Personal Considerations | AC=piercings  | AD=Dependents Pets | AE=Marital Status | AF=Housing | AG=Religion | AH=E visa | AI=KakaoTalk | AJ=Mobile Phone | AK=Criminal Record | AL=Criminal Record in Korea | AM=Passport | AN=Agreement | AO=Facts | AP=How to | AQ=??꾩뒪?ы봽 | AR=梨꾩슜泥?| AS=?꾧툑 | AT=媛쒖떆??| AU=?숇컯 | AV=鍮꾩슜 | AW=泥섎━ | AX=怨쇨굅硫붾え | AY=52??| AZ=Column 52 | BA=Column 53 | BB=Column 54
+A=?명꽣酉곧윍μ닔吏?대━ 5073 /鍮꾨컮5524 |留덊룷ECC 留덊룷?쇱씠利? 5531 ?섎? 援щ줈?쇰씪 |5533 媛뺣궓二쇰땲??LEC ?먮뜑釉? 5541怨쇱쿇???| B=55 | Z=5541 怨쇱쿇
+A=?쒖븞?뱼??쇱＜?덉뼱5541 / LEC 二쇰땲???먮뜑釉?533 
+A=泥닿껐: ?ㅻ퉬4918 4524 /?댁슫?먯궗 4583/?ㅻ━ 4763 /?쇰（4676/由щ퉬??4291 /?쒖큹?꾪뙆 4681/由щ튃?ㅽ꽩 4793 /?섎?4638 /???4921/由ы??뚯떆 4891 / 由щ퉬??933/?깅룞鍮꾨컮4929/slp怨듬뜒4922/???053/LEC4975 5223/怨좊뜒?쇱씠利?689 5378 /釉붾（諛?215/李곕━4915 5521 /?쒓컯5273 /?댁슫?먯궗5319/?섎?5209/
+A=硫붿씪 | B=?대쫫 | C=?ъ쭊 | D=踰덊샇 | E=62 | F=援?쟻 | G=諛곌꼍 | H=?섏씠 | I=?깅퀎 | J=?꾩옱 | K=?쒖옉 | L=???| M=吏??| N=?덊띁?곗뒪/洹쇰Т泥섑솗??| O=寃쎈젰 | P=?쒓뎅 | Q=?좏샇?ы빆/由ы겕猷⑦꽣?명꽣酉?| R=吏?먰븳怨??명꽣酉곗슂泥?| S=?ъ??섏젣??吏꾪뻾 | T=?꾧툒 | U=?щ쭩 | V=?쒓컙 | W=?숈쐞 | X=?꾧났 | Y=?먭꺽 | Z=?쒕쪟 | AA=嫄닿컯 | AB=???| AC=?쇱뼱 | AD=媛議?| AE=寃고샎 | AF=?숈냼 | AG=醫낃탳 | AH=鍮꾩옄 | AI=移댄넚 | AJ=踰덊샇 | AK=踰붿즲 | AL=援?쾾 | AM=?ш텒 | AN=?뺣낫 | AO=?ъ떎 | AP=寃쎈줈 | AQ=???| AR=梨꾩슜 | AS=?꾧툑 | AT=媛쒖떆 | AU=?숇컯 | AV=鍮꾩슜 | AW=泥섎━ | AX=怨쇨굅
+A=sag@gmail.com | B=sagats maire owjdhv | C=1261.0 | E=?덉쓬 | F=誘멸뎅 | G=諛깆씤 | H=91.0 | I=?ъ꽦 | J=?쒖슱 | K=26.03.09 | L=?좎큹 | M=寃쎄린 | N=I don't have a pleasant relationship with the employer after my pay kept being unfairly deducted | O=6??| P=?먯옣?덈떎 | Q=??궗??| R=116 | T=3.5milion won | U=3.6-4mil. F visa requires a certain taxable salary to renew it. My previous jobs paid me within this range. Even the winter and summer camps paid more than 4 million. | V=7pm Monday-Friday | W=?앹궗 | X=?щ━??| Y=?먭꺽利쓃 | Z=CRC??| AA=嫄닿컯 | AB=而ㅻ쾭媛??| AC=而ㅻ쾭媛??| AD=怨좎뼇??| AE=誘명샎 | AF=異붽?湲?| AG=臾닿탳 | AH=E湲곕줉??| AI=asdhkln | AJ=4.8940941E7 | AK=?좏슚 | AL=?놁쓬 | AM=F visa | AN=?숈쓽 | AO=?덉쓬 | AP=移쒓뎄異붿쿇 | AQ=26.02.12 | AR=?섏??꾪봽?곸뼱 | AS=290.0 | AT=26.03.01 | AU=?붿꽭?쒓났 | AV=150.0
+A=mka547@gmail.com | B=Thobness Mhlongo | C=1561.0 | E=2026.03.25 | F=?댁쭏?쒕뱶 | G=?쇳떞 | H=92.0 | I=?⑥꽦 | J=李쎌썝 | K=26.03.01 | L=?깆씤 | M=寃쎌긽 | N=25.03.01?섏＜珥?01036援먯옣留먮쭖?ㅽ븰援먯닔以??꾨땲??| O=3??| P=?먯옣?덈떎 | Q=源붾걫?쒖씤??諛앹쓬,?쒖썝?쒖썝?댁＜湲??≪뀡?섍린/?숈썝?留덉?留됱뿉 | R=2602)?섏??대━-?쒕챸?덈떎媛罹붿뒳/?됯퀬?뺣씪?댁쫰, | S=?섏뿬媛꾩뿉?대윴?좊뱾??異⑸?異⑹꽌紐낇븯怨좊떎瑜멸굅?덉쑝?덇퉴?먮떎瑜몃뜲媛꾨떎?섎굹遊?| T=2.5- | U=2.8 ??Based on my current salary of 2.5 and my scheduled EPIK renewal increase to 2.7. Additionally, relocation to a larger city involves higher living costs, and my experience supports this adjustment. | V=Monday - Friday 10 o'clock KST | W=?뺤떛 | X=援먯쑁 | Y=援먯궗?먭꺽?뚰뵆 | Z=?덉쓬 | AA=嫄닿컯 | AB=?놁쓬 | AC=159 | AF=?숈냼?щ쭩 | AG=?щ━ | AH=E湲곕줉??| AI=doud8w2 | AJ=010 596417 | AK=CRC??| AL=?놁쓬 | AM=?좏슚 | AN=?숈쓽 | AO=?덉쓬 | AP=移쒓뎄異붿쿇 | AQ=26.01.27 | AR=?⑹씤??뒪 | AS=280.0 | AT=26.03.01 | AU=?숈냼?쒓났 | AV=150.0
+A=sagatsa@gmail.com | B=sagats maire owjdhv | C=4894.0 | E=?덉쓬 | F=?곴뎅 | G=鍮꾧났媛?| H=94.0 | I=?ъ꽦 | J=?쒖슱 | K=26.03.09 | L=珥덉쨷 | M=?섎룄 | N=I don't have a pleasant relationship with the employer after my pay kept being unfairly deducted | O=6??| P=?먯옣?덈떎 | Q=??궗??| R=116 | T=3.5milion won | U=3.6-4mil. F visa requires a certain taxable salary to renew it. My previous jobs paid me within this range. Even the winter and summer camps paid more than 4 million. | V=7pm Monday-Friday | W=?앹궗 | X=?щ━??| Y=?뚰뵆 | Z=CRC??| AA=嫄닿컯 | AB=而ㅻ쾭媛??| AC=而ㅻ쾭媛??| AD=媛뺤븘吏 | AE=誘명샎 | AF=異붽?湲?| AG=臾닿탳 | AH=E湲곕줉??| AI=SagLen | AJ=1.0440417E7 | AK=?좏슚 | AL=?놁쓬 | AM=F visa | AN=?숈쓽 | AO=?덉쓬 | AP=移쒓뎄異붿쿇 | AQ=26.02.12
+A=mhlobeka547@gmail.com | B=Thobness Mhlongo | C=5364.0 | E=2026.03.25 | F=?⑥븘怨?| G=?묒씤 | H=94.0 | I=?ъ꽦 | J=?섏＜ | K=26.03.01 | L=臾닿? | M=臾닿? | N=25.03.01?섏＜珥?01036援먯옣留먮쭖?ㅽ븰援먯닔以??꾨땲??| O=3??| P=?먯옣?덈떎 | Q=源붾걫?쒖씤??諛앹쓬,?쒖썝?쒖썝?댁＜湲??≪뀡?섍린/?숈썝?留덉?留됱뿉 | R=2602)?섏??대━-?쒕챸?덈떎媛罹붿뒳/?됯퀬?뺣씪?댁쫰, | S=?섏뿬媛꾩뿉?대윴?좊뱾??異⑸?異⑹꽌紐낇븯怨좊떎瑜멸굅?덉쑝?덇퉴?먮떎瑜몃뜲媛꾨떎?섎굹遊?| T=2.5- | U=2.8 ??Based on my current salary of 2.5 and my scheduled EPIK renewal increase to 2.7. Additionally, relocation to a larger city involves higher living costs, and my experience supports this adjustment. | V=Monday - Friday 10 o'clock KST | W=?뺤떛 | X=援먯쑁 | Y=援먯궗?먭꺽?뚰뵆 | Z=?덉쓬 | AA=嫄닿컯 | AB=?놁쓬 | AC=179 | AD=?꾧린 | AE=湲고샎 | AF=?숈냼?щ쭩 | AG=?щ━ | AH=E湲곕줉??| AI=Thoka94 | AJ=010 596417 | AK=CRC??| AL=?놁쓬 | AM=?좏슚 | AN=?숈쓽 | AO=?덉쓬 | AP=移쒓뎄異붿쿇 | AQ=26.01.27
+============================================================
+Sheet: xl/worksheets/sheet2.xml
+============================================================
+A=吏??| B=??| C=58 | D=硫붿씪 | E=?곕씫泥?| F=???| G=?뵶 | H=吏??| I=湲곕낯 ?댁슜/怨듭쑀?ы빆 | J=諛⑺븰 | K=硫붾え/?뱀씠?ы빆 | L=湲고?/硫붿씪
+A=媛뺤썝 | B=媛뺣쫱 | C=釉뚮씪?대뜑?숈썝 | D=pennyron@gmail.com,andner@gmail.com | E=110 | F=?좎큹 | G=194 | K=吏쒖쬆?섎뒗?щ엺
+A=?쒖슱 | B=媛뺣룞 | C=?꾨옖)?ㅼ쫰?숈썝 | D=po965@hanmail.net | E=033-63-943
+010-648-64 | F=?좎튂 | G=200 | H=?몃룄 | I=9;40-7
+2.3-
+A=遺??| B=?댁슫 | C=?꾨옖)?섎컮留?| D=cng1379@naver.com | E=033-62-1379
+010-33-004 | F=珥덉쨷 | G=200 | H=?몃룄 | I=9;30-5;30
+2.3-- | J=208 | K=李⑺븳?щ엺
+A=寃쎌긽 | B=李쎌썝 | C=?꾨옖)?щ━肄ν꽣?숈썝 | D=486@gmail.com | E=211 | F=珥덇퀬 | G=212 | K=吏곸뾽?먭씀諛붾?| L=486@gma.com
+A=寃쎄린 | B=?깅궓 | C=?꾨옖)?먯궗由?| D=info@hcho.org | E=217 | F=?좎쨷 | G=218 | I=sada@sada.org媛숈씠?섎굹遊?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=鍮꾩뿉? | E=0507-1423-0553 | F=?좎쨷 | G=223 | L=parkyd31@be-edu.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?뺢뎄,?移섑봽??쒖뒪/??댁뼱?몃낯??| E=217 | F=?좎쨷 | G=225 | K=?먮??덉씠??| L=recruit@francisparker.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)YBMNET?쇱꽦 | D=217 | F=?좎쨷 | G=228 | L=jiheek8@ybm365.co.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?쇱씠利덉삩?쇱씤 | D=217 | F=?좎쨷 | G=二쇱쓽 | H=231 | I=janicekim@risekorea.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨찓?섏뼱?숈썝 | D=admin@noumena.co.kr | E=02-583-0164
+010-4077-0165 | F=怨좊벑 | G=236 | H=?명꽣酉?| I=1-10?듭닔???쒓컙遺곷??섏슦吏뺥룷3.0-5.0
+14.30-21.30
+14.30-22.00TTH&quot;
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=由щ쿋瑜댄????ㅼ뭡?쇱뒪 而щ━吏 ?꾨옪 | D=admin@Libertas-scholars.org | E=0507-1480-0260 | F=怨좊벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?명븳?꾩뭅?곕? | D=SeHann@SeHann.com | E=02-3453-3422 | F=怨좊벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=硫붿씠而ㅼ뒪?댄븰??| D=makersaca@gmail.com | E=246 | F=怨좎꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=誘명궎湲濡쒕툕 ??궪 | D=mikielts@daum.net | E=010-3474-2837 | F=怨좎꽦 | G=250 | H=Round | I=9-6(30??5?쒓컙)??5
+2.2--?곷떞?묒쓽諛붿씠?ㅻ줈吏??앸Ъ???곴뎅留?怨쇰ぉ蹂?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=踰좏뀒?묒뒪?댄븰??| D=info@veteransedu.net | E=246 | F=怨좎꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?곴뎅臾명솕??| D=sy@ukcentre.co.kr | E=246 | F=怨좎꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?곗뿏鍮꾩뿉?耳?댁뀡?댄븰??| D=tnbeducation7@gmail.com | E=246 | F=怨좎꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨씪?꾩뒪?ㅼ빻?ㅽ똿 | D=cfo.primestone@gmail.com | E=246 | F=怨좎꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=PSU?먮??쇳꽣 | D=info@sntedu.org | E=246 | F=怨좎꽦
+A=寃쎄린?⑤? | B=遺泥?| C=?ㅼ뒪?ㅼ븘移대뜲誘?| D=keystoneacademy0@gmail.com | E=032-351-3511 | F=珥덉쨷 | G=Fvisa | H=?뺣났 | I=12-9(??20?쒓컙) 誘???2.5-3.0?댁긽媛round
+?숈냼or50
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=???GK湲濡쒕쾶?먮? | D=gkglobaledu@gmail.com | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移섏뿉?댄뵆?ъ뒪?낆떆 | D=dohyuncho@naver.com | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=紐⑥뒪?몄뼱?숈썝 | D=fire11c@naver.com | E=02-508-4732 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=釉붾（?ㅽ봽?숈뼱?숈썝 | D=bluekeyprep@gmail.com | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쒖슱?꾩뭅?곕? ?移?| D=hr@seoulacademy.org,recruit@seoulacademy.org | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾩씠鍮꾨뜑??| D=ibthetop@gmail.com | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?먮?紐⑥뒪??| D=admin@edumost.co.kr | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?섎━?몄삤?덉뒪荑⑥퐫由ъ븘 | D=korea@eliteopenschool.org | E=272 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=而щ━吏??꾩뭅?곕? ?쒖슱 | D=289 | E=0507-1493-7931 | F=以묎퀬 | G=290 | L=admin@ca-seoul.org
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?덈뱶?⑥뼱?숈썝 | D=272 | F=以묎퀬 | G=292 | L=webzin@hanmail.net
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=amcstudy | D=amcthink@gmail.com | E=02-544-5124 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=PIF ?移섎낯??| D=pifedu@naver.com | E=0507-1402-7229 | F=以묎퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=媛뺣궓 ?꾨┰?곸뼱 | D=phillipeng@naver.com | E=301 | F=以묐벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=IEEA湲濡쒕쾶PEAP | D=admin@ieea.or.kr | E=304 | F=以묒꽦
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=媛뺣궓 612?댄븰 | D=vita@612.co.kr | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=媛뺣궓 釉뚮━?곗떆 | D=info@britishcentre.co.kr | E=釉뚮━?곗떆 | F=?깆씤 | G=50.0 | I=10-5;40/2;20-9;10濡쒗뀒?댁뀡2媛쒖썡2.3-?숈냼or40
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?⑹뒪醫낅줈 | D=312 | E=0507-1404-8151 | F=?깆씤 | G=313 | I=?먯씠?꾩떆?쇳븯怨좎엳?ㅻ텋踰뺤씪?섎룄
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=???吏?먮툕 ??궪 | D=sylee@unionnec.co.kr | E=0507-1403-1105 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?됱떆?ㅼ꽌?몃???| D=jkim@lexiskorea.com | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=由щ뜑?ㅼ뿞鍮꾩뿉??| D=webmaster@leadersmba.com | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=諛뺤퐫移섏큹 ????| D=jillian@parkcoach.com,Justin@parkcoach.com | E=010-3363-3504 | F=?깆씤 | G=324 | I=6;50-3;50/8-5/9-6/1-10?먮떖濡쒗뀒?댁뀡
+2.2-2.5-- | J=325 | L=02-1577-7432,Jbadillo2018@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=踰뚮━痢??쇱꽦?쇳꽣 | D=sslc@berlitz.co.kr | E=02-3453-4266 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=踰좊━???GMAT | D=dubcojol@naver.com | E=veritas133care@gmail.com | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾪겕硫??꾩뭅?곕? SAT | D=acme@acmeacademy.co.kr | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?좊줈?곗엵湲由ъ떆 | D=arrowenglish@naver.com | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?ㅻ뵒?꾨옪 | D=146 | F=?깆씤 | G=337 | L=webmaster@andyprep.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?먯뒪?쇱씠?쇨탳?≪썝,援먯쑁?쇳꽣 | D=hrteam@spep.co.kr,hrteam2@spep.co.kr | E=146 | F=?깆씤 | G=340 | I=08.00-20.00/3,5K (40man)
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?댁븣??醫낅줈?꾩씠?섏툩 | D=cs@ielts.co.kr | E=釉뚮━?곗돩 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=議곗씠?쒕뱶 ?됯?由ъ떆?쇱슫吏 媛뺣궓 | D=joylandwork@gmail.com  | E=146 | F=?깆씤 | G=346 | I=1/16-20TR???붿떆??紐꿒F12;30-21;05TT13;30-22;00 W13;00-19;00 2?꾧꼍?쩹r?몃젅?대떇媛?μ옄 2.3-3.0 ?숈냼or50
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=移댁씪猷명봽??| D=348 | E=02-545-0056 | F=?깆씤 | G=349 | I=caelumprep@caelumprep.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?좏궧?ㅽ뙚 | D=talkingspot@naver.com | E=?ъ뾽媛,湲곗뾽異쒓컯 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쇱뒪?먯엵湲由ъ돩 | D=personalenglish2010@gmail.com | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쇱뒪?몃윭??| D=first@1stlearning.co.kr | E=02-517-7840 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?댁븘移대뜲誘?| D=hagwon@paulacademy.net  | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨┛?쒗뵆?댄븰??| D=146 | F=?깆씤 | G=361 | L=pse@pse-english.co.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=C&amp;C?멸뎅?닿탳?≪썝 | D=146 | F=?깆씤 | G=363 | L=jeo-ej@hanmail.net
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=EnglishNow(?멸뎅?? | D=geborgenheitnow@gmail.com | E=010-7613-1312 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=IDP ?먮? | D=ielts.korea@idp.com | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=IEN Institute  | D=370 | E=02-3471-9911
+010-7220-2491?좎닕?곷???| F=?깆씤 | G=二쇱쓽 | H=x | I=?됱깮援먯쑁??,?뚯넄,?꾧났,寃쎈젰9-6(20-30)??5?묒쓽?쒕쾲?먯궗?⑷??섏슦吏뺥룷??.8- | J=373 | K=怨꾩빟?쒕떖?쇨퀬?붽뎄 | L=syshin@ienkorea.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=踰뚮━痢?愿묓솕臾??쇱꽦 | D=markkelly@berlitz.co.kr | E=377 | F=?좉퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=ACA ?ㅻ룄踰?| D=marc@andovercollegiate.com | E=064-794-8700
+010-3497-1982誘멸뎅?먯옣?곸뼱濡?| F=?좉퀬 | G=381 | I=dus3292@naver.com | J=382 | K=?쒖＜吏?먯엳??
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=GIA留덉씠?щ줈??洹몃젅?댁뒪?명꽣?댁뀛?먯븘移대뜲??| D=jacoblim@giamicro.com, | E=02-546-5300梨꾩슜
+02-546-9646 | F=?좉퀬 | G=386 | I=08.30-17.00
+2.3- | J=387 | L=scharlierobinson@gmail.com,
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=洹몃옒癒몃옪??| D=grammarlabs@naver.com | E=02-557-9812 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移?SNT | D=211 | F=珥덇퀬 | G=392 | I=14.10-22.00 MT,TFS | J=393 | L=stephen.zucconi@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移섎쭏洹몃꽬 | D=211 | F=珥덇퀬 | G=395 | L=dc.magnet.jennifer@gmail.com,dc.magnet.director@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移섏꽑寃쎌뼱?숈썝 | D=211 | F=珥덇퀬 | G=397 | L=skengrecruit@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移섑듅紐⑹궗愿?숈썝 | D=211 | F=珥덇퀬 | G=399 | L=askkhs@naver.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?移쁓SINT?쒖슱?ㅼ퐳?쇱뒪?명꽣?댁뀛??| D=info@seoulscholars.org | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?ㅽ??꾨옪?댄븰??| D=403 | E=?ㅽ뙵?먮룞李⑤떒
+?먯뼱誘쇱븘?덉븞?대떎 | F=珥덇퀬 | G=404 | I=starprep@starprep.co.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?⑥뿉?쇱틦?덉뼵 | D=211 | F=珥덇퀬 | G=406 | L=admissions@sierracanyonseoul.org
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?뺢뎄???먯뒪?묓봽??| D=hrd@intimesin.com,hrd3@intimesin.com | E=211 | F=珥덇퀬 | G=409 | L=,hrteam@step.co.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?먯엫?섏씠?곸뼱蹂몄썝 | D=aimhigh-english@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?곴뎅?먮??숈썝 | D=seoulinfo@beckorea.com | E=釉뚮━?곗떆 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?먯븘移대뜲誘??댄븰??| D=oneacademy.korea@gmail.com | E=02-501-5590 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?뚮쭅?곸뼱?숈썝 | D=ebbbbbb@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?ㅼ꽑?앹쁺?닿탳???꾧끝?쇳꽣 | D=pbh0585@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?뺤쁺 JY ?댄븰 | D=kijungnam@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?щ젅踰꾩뒪蹂몄궗 Creverse | D=fhr@cmsedu.co.kr,ycpark@creverse.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=BCM誘쇰퀝泥?| D=bcm.teacher.recruit@gmail.com,bcm.jenniecho@gmail.com | E=211 | F=珥덇퀬 | G=427 | L=zoekwon2061@gmail.com,
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=SM?뚮㉧??| D=211 | F=珥덇퀬 | G=429 | L=smpamus@naver.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)泥?떞?먯씠?꾨┫Aptive?먮?  | D=431 | E=010-3085-0234 | F=珥덇퀬 | G=二쇱쓽 | H=432 | I= 10-7?????뷀쑕臾?1?쒓컙-1;30遺꼃4-5 ?ы븿2.8-3.0 ?꾨낫?덉뒪?곕큺20%(1-2?붿?湲? | J=433 | L=源吏?쒖떎??
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?섎━?몄뼱?숈썝 | D=apgujung@eliteprep.com,eliteapgujung.hr@gmail.com | E=02-3444-6886 | F=珥덈벑 | G=吏㏃? | H=439 | I=2;30-8;30(30)2.2-2.4/5/5/???숈냼
+
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=媛뺣궓援щ┰援?젣援먯쑁??| D=christineko@gangnam.go.kr | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=硫뷀?META?됯??댄븰 | D=metaenglishedu@gmail.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=釉뚮┸鍮꾩엵湲由ъ떆?쇱꽦蹂?
+?곴뎅 | D=445 | E=0507-1359-7802 | F=珥덈벑 | G=446 | L=speakoutkids@therapy.net
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?ㅼ??퇣wat | D=swat6777@naver.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?⑦듉, 由щ뵫???洹몃줈??| D=sp.directoreunice@gmail.com | E=437 | F=珥덈벑 | G=451 | I=M-F 14.00-19.00 S 10.00-13.00 / 3.0
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?섏븻?쁋nL | D=jeonmi1991@gmail.com | E=010-4445-3647 | F=珥덈벑 | G=455 | H=援?궡 | I=1-9??/5??-3
+2.6-3.0?섏슦吏뺥룷蹂댁쬆湲덇?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?좎뿉?ㅼ뵪USC?댄븰 | D=jassiemin@nate.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?댄뵾?잾P.U | D=epu.english@gmail.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?몄궗?댄듃 ?移?| D=ensight1787@gmail.com | E=437 | F=珥덈벑 | G=463 | I=?먯옣媛쒖씤jakyum.kim91@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쒖씠?꾨옪?댄븰??| D=joshlee3@hanmail.net | E=02-6959-2040 | F=珥덈벑 | G=467 | I=1-9(3?쒓컙x2)50遺꾨쭏?ㅽ쑕?앺븯?곗쭠?ы븿2.8-4.0   jprep@jprep.co.kr | J=468 | L=jpjprep@jprep.co,
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=泥?떞 ?쇱븻??P&amp;E | D=pne.english@gmail.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?섎뵒?꾪뵆?ъ뒪 泥?떞釉뚮옖移?| D=channel@pongler.com,hr@pongler.com | E=437 | F=珥덈벑 | G=473 | K=?섎뵒???곴???由щ뵫?꾨씪誘몄뒪=?명꽣?뚰겕
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?щ젅?ㅽ듃?덉씤 | D=437 | F=珥덈벑 | G=475 | L=info@forestlane.org
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?뺤뒪DUX?移?| D=dux3349@gmail.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?뺤뒪DUX蹂몄궗 | D=duxfc@naver.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?좎븘?퀾I留덉씪?ㅽ넠 ?移?| D=midaechi@gmail.com,mi.allenchoi@gmail.com | E=02-563-2400
+010-5275-4517???
+010-3601-2674?쒖큹?먯옣
+010-3188-2213
+ | F=珥덈벑 | G=483 | I=MF12;30-21;05 TT13;30-22;00 W13;00-19;00 2?꾧꼍?쩹r?몃젅?대떇媛?μ옄 2.3-3.0 ?숈냼or50
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?뺤긽JLS?移쁇Q  | D=insa@gojls.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)DYB理쒖꽑?щ젅?ㅻ?移섎낯??| D=leslie@dybedu.com | E=437 | F=珥덈벑
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)YBMPine蹂몄궗 | D=danny@ybm.co.kr | E=437 | F=珥덈벑 | G=490 | K=PSA
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?먯씠?먮젅嫄곗뵪由ы띁釉붾┃ | D=437 | F=珥덈벑 | G=492 | I=13-22 | J=493 | L=master@a1-legacy.co.kr,
+a1legackr@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쇳쁽 ??⑥씠 | D=funway4@gmail.com | E=010-4480-7238 | F=珥덈벑 | G=二쇱쓽 | H=??| I=13.30-18.30(250~)or13.30-20.30(340~) | J=499 | K=?뷀뀒?쇰Ъ?쇰㈃ ?밸뒗怨?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=耳?댁뿏?먯뒪?먮??移섏큹以묐벑2愿 KNS | D=prettyghil.kate@gmail.com,fantapodo80@naver.com,knsele@naver.com,fkamal@naver.com,daijoubujung@knsedu.co.kr | E=02-508-0921
+010-3048-2045湲명븯寃쎌큹?깃??됱젙遺??
+010 4789 1269以묐벑?먯옣
+ | F=珥덈벑 | G=二쇱쓽 | H=?묒쓽 | I=2;30-10(24)2.2-2.5?숈냼or50
+諛⑺븰X, 怨듯쑕?쇨렐臾?| J=505 | K=?좎슂洹쇰Т
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)泥?떞?댄븰 蹂몄궗 | D=rcconsulting@creverse-fc.com | E=437 | F=珥덈벑 | G=二쇱쓽 | H=508 | L=,job@chungdahm.com,facultylink@chungdahm.com,
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)泥?떞?먯씠?꾨┫?移섏옞??| D=daechiaprilhiring@gmail.com | E=437 | F=珥덈벑 | G=二쇱쓽
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?몄쐢???移?| D=twinkle.daechiapplications@gmail.com,twinkle.austinteacher@gmail.com | E=
+010-9821-5152遺?ъ옣 | F=珥덈벑 | G=二쇱쓽 | H=514 | I=1-9 ?숈냼(70)2.7 | J=515 | L=twinkle.andy01@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?대━poly留덇렇???移?| D=cdi.mb.dan@gmail.com,polyrandd@gmail.com | E=437 | F=珥덈벑 | G=二쇱쓽 | H=518 | I=11.30-20.30
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=媛뺣궓 J&amp;T?곸뼱?꾨Ц | D=169 | F=珥덉쨷 | G=520 | L=jntenglish@hanmail.net
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=洹몃줈???移섎━??| D=sp.angelapark@gmail.com | E=02-555-5009
+010-7193-7418?덉젮?쇰???| F=珥덉쨷 | G=524 | I=1-9or1;30-9;30(24-25H)?좉꺽二?0;30-2;30(?묒쓽)?ъ꽦???쇨꺼x?ы븿2.3-4.0-
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?ㅻ땲?섎옪?댄븰??| D=info@thedaniellab.com | E=169 | F=珥덉쨷
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾧끝?ㅼ??퍾waton | D=swatoninternational@gmail.com | E=169 | F=珥덉쨷 | G=529 | I=F媛??珥앹쭅??0紐?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=??ъ뼱?숈썝 | D=169 | F=珥덉쨷 | G=531 | L=duke33333@naver.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?됱뒪源?곸뼱LKE | D=lexkim@lexkimenglish.com,taylor.lexkim@gmail.com,msgereckeLKE@gmail.com,baileelotus@gmail.com | E=169 | F=珥덉쨷 | G=534 | L=mgerec32@gmail.com,msgereckelke@gmail.com,msgereckeLKE@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=由щ뜑?ㅼ뼱??| D=LeadersLearning@gmail.com,simkyounghee@gmail.com | E=169 | F=珥덉쨷 | G=537 | I=?移섎텇?밸???
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=裕ㅼ뿞?곸뼱?숈썝 ?멸끝 | D=joyahn0218@naver.com | E=169 | F=珥덉쨷
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쇰낫?댄븰??| D=samboh0034@naver.com | E=169 | F=珥덉쨷
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?뺢뎄??100CLASSICS | D=169 | F=珥덉쨷 | G=543 | I=hrd2@intimesin.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?μ뒪?щ뱶 ?꾩뭅?곕? | D=169 | F=珥덉쨷 | G=545 | L=officlal.oxfordacademy@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?쒕꽕?쒖뒪 泥?떞愿 | D=genesis.academy.01@gmail.com | E=0507-1303-9680 | F=珥덉쨷
+A=寃쎄린?⑤? | B=?섏썝 | C=沅뚯꽑?몃ℓ?ㅼ뭡鍮꾪뀒鍮꾪뵾karlwitte | D=gowoon860712@naver.com | E=437 | F=珥덈벑 | G=Fvisa | H=552 | K=援먯뒿?뚯씤??
+A=寃쎄린?⑤? | B=?섏썝 | C=?뷀븯?ㅼ쁺??| D=thehadaedu@naver.com | E=437 | F=珥덈벑 | G=Fvisa
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=泥댁씠?ㅼ븘移대뜲誘?| D=556 | E=0507-1369-4311 | F=珥덉쨷 | G=557 | L=chasemedia@naver.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)?뺤긽JLS蹂몄궗 | D=cpo@gojls.com,sbjee@gojls.com,jae_heelee@gojls.com,auddkg@gojls.com | E=169 | F=珥덉쨷 | G=560 | I=?쒖뼹?먮?
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)DYB理쒖꽑?移?| D=dyb.peterelliott@gmail.com,dybitcenter@gmail.com | E=02-562-0579梨꾩슜?대떦
+?≫뙆?移섏쨷怨꾨텇?뱀닔吏?섏썝?쇱궛?덉뼇?숉깂 | F=珥덉쨷 | G=564 | I=13.00-22.00 
+
+2.3-2.5/50留?| J=565 | K=?쒗띁?ㅺ컳?댁슫??
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)EIE蹂몄궗 | D=567 | E=02-1599-0572 | F=珥덉쨷 | G=560 | I=?쒖뼹?먮? | J=568 | L=wjlee@eie.co.kr
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=CES 泥?떞 | D=cesinkorea2@gmail.com | E=泥?떞(珥덉쨷02-512-7450)?쇱꽦(?좎큹02-515-7450) | F=珥덉쨷 | G=572 | I=MWF13.00-19.00 TTH14.00-20.00
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=SD?곸뼱?숈썝 | D=574 | E=0507-1412-4041 | F=珥덉쨷 | G=575 | L=sdperfect@naver.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=SLI?쒖슱?댄븰??| D=169 | F=珥덉쨷 | G=577 | L=info@sli2018.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=W?먮? | D=579 | E=梨꾩슜?낆껜濡쒕컮?먮벏 | F=珥덉쨷 | G=580 | L=wjaskim@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣궓 | C=?꾨옖)泥?떞?먯씠?꾨┫ ?멸끝 | D=169 | F=珥덉쨷 | G=二쇱쓽 | H=582 | I=12.00-20.00 / 2.8+housing | J=583 | L=haley.segok@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?쒖씪?멸뎅?댄븰??| D=miracle3131@hanmail.net | E=146 | F=?깆씤
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=So To Speak | D=sotospeak.seoul@gmail.com | E=0507-1422-2292 | F=?깆씤 | G=589 | I=?먯옣?먯뼱誘?
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=諛뺣??섏쁺?댄븰??| D=pbhedu1234@naver.com   | E=211 | F=珥덇퀬
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=媛뺣룞 SKIE ?곸뼱 | D=437 | F=珥덈벑 | G=?멸낸 | H=round | I=8;40-5;30 留뚮쭔留?
+2.4-2.5
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=釉뚮젅?대툕?됯?由ъ떆 | D=yohvnn@gmail.com,management@braveenglish.kr,braveenglishseoul@gmail.com | E=010-2330-4120???
+0507-1426-4119 | F=珥덉쨷 | G=?멸낸 | H=599 | I=寃??ъ꽦5遊?????-8(24)60-120遺꼡5,3.3-3.6?숈냼(?붿꽭援?궡return+?댁궗吏??寃吏꾨퉬+?앹씪蹂대꼫???꾨즺蹂??ш퀎?쎈낫
+/4紐낃렐臾?| J=600 | K=total 18 days
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?섑뵾???곸뼱 | D=youngsuec@naver.com | E=169 | F=珥덉쨷 | G=?멸낸
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?꾨옖)?뺤뒪DUX怨좊뜒 | D=eyk1014@naver.com | E=02-426-6513
+010-2718-6513 | F=珥덉쨷 | G=?멸낸 | H=泥ル떖40
+留됰떖30 | I=2.30-9.30(1.50遺껩x3C??.30X1c+1.30X1c
+F?멸뎅?멸퉴吏??1???쇱옄?좊∼寃뚯젙??2.3-2.6??났泥ル떖40留됰떖30?숈냼(60吏묒쓣援ы빐二쇰땲源??뱀뿰?덈낫利앷툑???댁빞二? | J=438 | K=吏㏃?
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?꾨옖)由ы??띿뒪媛뺣룞怨좊뜒 | D=littlefox0561@gmail.com,littlefox01@naver.com | E=169 | F=珥덉쨷 | G=?멸낸 | H=610 | L=Littlefoxmisaht@gmail.com
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?꾨옖)?꾨컻濡?媛뺣룞 | D=renee.davison@avalon.co.kr | E=169 | F=珥덉쨷 | G=?멸낸
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?꾨옖)?뺤긽JLS媛뺣룞 | D=shlee@gojls.com | E=169 | F=珥덉쨷 | G=?멸낸
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=?꾨옖)泥?떞?먯씠?꾨┫媛뺣룞 | D=cdgangdong@naver.com | E=169 | F=珥덉쨷
+A=?쒖슱?⑤룞 | B=媛뺣룞 | C=肄붾엺?곗삤 | D=618 | E=jobinkorea2022@gmail.com,coramdeo9961@gmail.com | F=珥덉쨷 | G=二쇱쓽 | H=援?궡 | I=MBTI媛쒖씤?깊뼢?뚯뒪?몃벑?댁긽?쒓납
+ 1-9 援?궡 2.2-2.7 蹂댁쬆湲?40 | J=620 | K=諛고썑?곕씫 | L=coramdeojobs2018@gmail.com
+A=媛뺤썝 | B=媛뺣쫱 | C=?좎쿇?뀁뼱?숈썝  | D=julieb8484@naver.com | E=010-3345-1555?먯옣 | F=珥덉꽦 | G=200 | H=?몃룄 | I=1-8.30(20-25),?숈냼(35)珥덇낵2留?怨꾩빟湲곌컙24.6-24/8? | J=627 | K=?④린,湲됱뿬???닿?誘멸린??
+A=媛뺤썝 | B=媛뺣쫱 | C=?꾨옖)?뺤긽JLS媛뺣쫱 | D=jinnykim@edujls.com | E=033-655-0579
+010-3297-2522 | F=珥덉쨷 | G=631 | H=吏㏃?
+?몃룄 | I=12(10遺?곗쑀湲됯탳?↔?)9-3;30or1-6  2.4-?숈냼or蹂댁쬆湲??붿꽭
+A=?쒖슱遺곷룞 | B=媛뺣턿 | C=?섏쑀 ?곸뼱留덉쓣 | D=636 | E=Seanl4008@gmail.com
+010-2615-4700 | F=?좎쨷 | G=200 | H=?몃룄 | I=?닿?5/5,9-6
+2.2-2.4 | J=638 | K=2022.12?먯뾽 | L=toad6702@naver.com
+A=?쒖슱遺곷룞 | B=媛뺣턿 | C=吏?ㅻ퉬GnB 誘몄븘?댁슃 | D=msspecial@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱遺곷룞 | B=媛뺣턿 | C=?꾨옖)EIE媛뺣턿誘몄븘 | D=eie24@naver.com | E=169 | F=珥덉쨷 | G=?멸낸
+A=遺??| B=媛뺤꽌 | C=紐낆??쒕땲?ㅼ뼱?숈썝 | D=mickealy3@gmail.com | E=169 | F=珥덉쨷 | G=647 | K=遺덊솗??
+A=遺??| B=媛뺤꽌 | C=?ㅽ뵾?ъ뾽?댄븰??| E=051-292-9992 | F=珥덉쨷 | G=650 | L=sperkup9992@naver.com
+A=遺??| B=媛뺤꽌 | C=?꾨옖)EIE紐낆? | D=choieun0524@naver.com | E=169 | F=珥덉쨷
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=GSIS媛뺤꽌?명꽣?댁뀛??| D=georgegsis7@gmail.com,m.broom_gic@gemsedu.com,sungj@gsis.sc.kr | E=217 | F=?좎쨷
+A=寃쎄린?⑤? | B=怨쇱쿇 | C=怨쇱쿇紐ы뀒?뚮━GCMP | D=gcmp.korea@gmail.com | E=110 | F=?좎큹 | G=Fvisa
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?뺤씠議캜JY 留덇끝 | D=cyjsenior@hanmail.net | E=272 | F=以묎퀬
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=鍮꾩빱諛띿쁺?댄븰??留덇끝 | D=becoming.english9@gmail.com | E=146 | F=?깆씤
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?꾩씠由곗씤?ㅽ떚?쒗듃 | D=your.last.teacher.irene@gmail.com | E=010-2767-1441 | F=?깆씤
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?≫넚?곸뼱 媛뺤꽌 | D=talktalkacademy.g@gmail.com | E=02-6953-2431 | F=?깆씤
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?ㅽ깲?ㅻ뱶?숈썝 | D=standardenglish@naver.com | E=211 | F=珥덇퀬
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?꾩씠湲濡쒕쾶IGLA | D=jaclyn_edu@naver.com | E=437 | F=珥덈벑 | G=?멸낸 | H=673 | K=援먰룷
+A=寃쎄린?⑤? | B=?덉뼇 | C=?먯씠誘몄쓽?됯?由ъ돩鍮뚮━吏 | E=010-2782-3834?먯옣
+031-381-1895
+ | F=珥덈벑 | G=Fvisa | H=677 | I=二??쇱썡?붿닔紐?-9.20(25-30)
+2.5二쇰쭚?ъ뿬??0?쇨꺼10?쇱썡?몃쭔40 | J=678 | L=amy8732@hanmali.net
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?몃??댄븰??媛뺤꽌 | D=437 | F=珥덈벑 | G=?멸낸 | H=680 | L=johnkim@hafs.hs.kr
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?꾨옖)EIE媛뺤꽌?쇱갹 | D=wem8805@daum.net | E=02-6261-7070
+010 9498 8805 | F=珥덈벑 | G=?멸낸 | H=?몃룄 | I=1-8(25) ?숈냼(50)2.3-2.6 | J=438 | K=吏㏃?
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=留곴뎄??媛뺤꽌 | D=icoolet@naver.com | E=010-2274-5070 | F=珥덉쨷 | G=?멸낸 | H=?몃룄 | I=1;30-8;05/1;30-9??-10??.2
+
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?뚮㉧?ㅼ쁺??留덇끝 | D=segimedu@naver.com | E=169 | F=珥덉쨷 | G=?멸낸
+A=?쒖슱?⑥꽌 | B=媛뺤꽌 | C=?꾨옖)?뺤뒪DUX留덇끝 | D=duxmg@naver.com | E=169 | F=珥덉쨷
+A=?숆탳怨좊벑 | B=媛뺤썝 | C=誘쇱”?ш? 誘쇱궗怨?| D=sgscross@minjok.hs.kr | E=235 | F=怨좊벑 | G=696 | I=3.7-5.5
+A=?숆탳珥덈벑 | B=媛뺤썝 | C=異섏쿇?쇱쑁珥덈벑?숆탳 | D=pitterpatter78@hotmail.com,whaeun.eng@gmail.com | E=437 | F=珥덈벑 | G=700 | H=130留?| I=8;40-4;40/9-5(24HR)
+2.3-- | J=諛⑺븰 | K=1 month for in summer, 1 month for in Winter | L=Pitterpetter78@hanmail.net
+A=寃쎄린?⑤? | B=?ㅼ궛 | C=?먯씠踰좎뒪?몄쁺?섑븰??| D=min0618000young@naver.com,xibest1@naver.com | E=蹂댁뒿?숈썝01032776720 | F=珥덈벑 | G=Fvisa
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=?꾨옖)泥?떞?먯씠?꾨┫嫄곗젣 | D=zazangi1@naver.com, | E=055-635-3553
+010-4877-3116 | F=?좎쨷 | G=二쇱쓽 | H=?몃룄 | I=10-7F+?쒓뎅?멸???.2-2.4?몃룄?숈냼留?| J=714 | L=rivergreji@gmail.com
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=?좊땲?붾뱶 | D=uniworldkorea@gmail.com | E=437 | F=珥덈벑 | G=717 | I=14.40-21.50 /2.5-2.9.
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=?꾨옖)由ы??띿뒪?듭쁺 | D=littlefoxcho@naver.com | E=437 | F=珥덈벑
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=?댄겢???댄븰??| D=dudrnr516@naver.com | E=010-7178-9712 | F=珥덉쨷 | G=200 | H=?몃룄 | I=723 | L=brendon09@hanmail.net
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=二쎈┝ ?뚮㉧??| D=kjy810512@naver.com | E=169 | F=珥덉쨷
+A=寃쎈궓 | B=嫄곗젣?듭쁺 | C=?꾨옖)?뺤긽JLS嫄곗젣 | D=hdm9742@gmail.com | E=507-1387-0267
+010-6755-0595 | F=珥덉쨷 | G=729 | I=1.30-9.40(30) 5/5+????.3-2.8?몃룄 ?숈냼留?
+A=寃쎈궓 | B=嫄곗갹 | C=臾명씗?좊━??| D=jgmltjs@naver.com | E=169 | F=珥덉쨷 | G=?멸낸
+A=寃쎈궓 | B=嫄곗갹 | C=?꾨옖)泥?떞 嫄곗갹 | D=joeluck1963@gmail.com | E=055-945-0985
+010-3888-5803 | F=珥덉쨷 | G=二쇱쓽 | H=120.0 | I=1;40-8;40(26)  2.3-2.7?몃룄(120)援?궡?댁궗20,?숈냼留?
+A=?숆탳怨좊벑 | B=寃쎄린 | C=?덉뼇?멸뎅?닿퀬?깊븰援?| D=aflhs.position@yahoo.com | E=235 | F=怨좊벑
+A=?숆탳怨좊벑 | B=寃쎄린 | C=?섏솗 寃쎄린?멸퀬 | D=potsdampia@gafl.hs.kr | E=235 | F=怨좊벑 | G=741 | I=07.40-16.30/16-20hr/2.8-3.4(50)
+A=?숆탳援?젣 | B=寃쎄린 | C=?ъ쿇?좎젙湲濡쒕쾶?숆탳 | D=jobs@globalyujung.org,yj3161@hanmail.net | E=217 | F=?좎쨷
+A=?숆탳援?젣 | B=寃쎄린 | C=?댁쿇援?갑?댄븰(援곗궗KDLI) | D=englishkdli@gmail.com | E=146 | F=?깆씤
+A=?숆탳援?젣 | B=寃쎄린 | C=?깅궓遺꾨떦 KIS?쒓뎅?멸뎅??| D=hr@kis.or.kr | E=377 | F=?좉퀬
+A=?숆탳援?젣 | B=寃쎄린 | C=?⑹씤 ?꾨젅?ㅼ씤?곕궡?붾꼸PIA | D=admin@phileo.or.kr | E=377 | F=?좉퀬
+A=?숆탳援?젣 | B=寃쎄린 | C=媛?됱껌?ш뎅?쒖쨷?숆탳 | D=resume@cheongshim.com | E=031-589-8900
+031-589-8802 | F=以묎퀬 | G=754 | I=8-5?ъ꽦1?ш꺼2?ъ뿰遊?800-4000 | J=諛⑺븰 | K=?ъ꽦1?ш꺼2??
+A=?숆탳援?젣 | B=寃쎄린 | C=怨쇱쿇WCA 罹먮굹??| D=administration@wcacanada.com | E=211 | F=珥덇퀬 | G=758 | I=08.00-16.00  2.4-3.8 | J=759 | L=12w
+A=?숆탳援?젣 | B=寃쎄린 | C=?섏썝?멸뎅?명븰援?| D=info@gsis.sc.kr | E=211 | F=珥덇퀬
+A=?숆탳援?젣 | B=寃쎄린 | C=?⑹씤 留덉슫?댁껜由ъ븘移대뜲誘?| D=admission@mcacademy.net | E=211 | F=珥덇퀬 | G=764 | I=07.40-16.30(3,0) 10week
+A=?숆탳援?젣 | B=寃쎄린 | C=?⑹씤 ?섏??섏씠?ㅽ듉 援?젣??덊븰援?| D=fps@fayston.org,fps@faystonsuji.org | E=211 | F=珥덇퀬
+A=?숆탳援?젣 | B=寃쎄린 | C=?뚯＜踰좎꽭??援?젣 ???| D=kkyo@yonsei.ac.kr | E=211 | F=珥덇퀬
+A=?숆탳援?젣 | B=寃쎄린 | C=?숉깂 ?몄씤?명뤃 | D=admins@stpaulsuwon.com | E=070-4770-3737
+031-893-3300諛뺤?吏꾧탳臾대???| F=珥덈벑 | G=772 | I=7;40-4;40 ?ъ꽦由??ъ뜽癒몄틺?꾩갭?ъ꽦?쒖쑀湲?遺遺꾩쟻媛?κ꺼2二쇰큵1二?.5-3.5??났60+60 3?숇뀈?덈８?곗쿂 | J=諛⑺븰 | K=2 weeks for winter / 2 months for summer / 1 weeks spring | L=eddie@stpaulscholars.com,eunjin@stpaulschoolars.com,
+A=?숆탳援?젣 | B=寃쎄린 | C=?⑹씤 鍮꾨퉬?섏쁺援?뎅???숆탳 | D=jcb0691@naver.com | E=031-333-0502 | F=珥덉꽦
+A=?숆탳援?젣 | B=寃쎄린 | C=?쒖슱援?젣?숆탳 SIS?깅궓 | D=admissions@siskorea.org,mssec@siskorea.org | E=essec@siskorea.org | F=珥덉쨷
+A=?숆탳援?젣 | B=寃쎄린 | C=?쒖슱援?젣?숆탳 SIS 怨?| D=hssec@siskorea.org | E=235 | F=怨좊벑
+A=?숆탳???| B=寃쎄린 | C=怨좎뼇 ?쒓뎅??났? | D=kauapply@kau.ac.kr | E=146 | F=?깆씤 | G=786 | I=援먯쑁?앹궗
+A=?숆탳???| B=寃쎄린 | C=?섏썝???| D=intl.college@suwon.ac.kr | E=?뚯넄 | F=?깆씤
+A=?숆탳???| B=寃쎄린 | C=?꾩궛 ?좊Ц???| D=chpark@sunmoon.ac.kr | E=146 | F=?깆씤
+A=?숆탳???| B=寃쎄린 | C=?덉궛 ?쒖쿇?λ??? | D=youngaepark.aoe@gmail.com | E=?꾩궛援먯쑁泥?씤媛 由ы겕猷⑦꽩媛..??| F=?깆씤
+A=?숆탳???| B=寃쎄린 | C=?덉뼇 ?由쇰???| D=global@daelim.ac.kr | E=146 | F=?깆씤 | G=797 | I=2,7-2,8
+A=?숆탳???| B=寃쎄린 | C=?⑹씤 媛뺣궓???| D=tas9989@gmail.com | E=146 | F=?깆씤
+A=寃쎄린?⑤? | B=?⑹씤 | C=二쎌쟾 ?쒖씠??| D=jtopacademy@gmail.com | E=211 | F=珥덇퀬 | G=Fvisa
+============================================================
+Sheet: xl/worksheets/sheet3.xml
+============================================================
+A=??꾩뒪?ы봽 | B=?대찓??二쇱냼 | C=How to | D=Attach your files | E=Full name | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Educational Background  | L=Major | M=Certification | N=E visa | O=ARC holders | P=Passport | Q=Criminal Record | R=Document Status  | S=Start date | T=Target | U=Area prefs | V=Job prefs (Notes) | W=Experience | X=Employment | Y=Reference | Z=Current salary | AA=Desired salary | AB=Marital Status   | AC=Dependents Pets  | AD=Housing | AE=Personal Considerations  | AF=Religion | AG=Health Information  | AH=Criminal Record Check  | AI=Interview time | AJ=KakaoTalk | AK=Mobile Phone | AL=Agreement | AM=Facts | AN=硫붾え
+A=46058.71172070602 | B=tlaleak@gmail.com | C=ESL Cafe | D=https://drive.google.com/open?id=13PnLd0BUMKIpcbLZkKFXIV971jjfLj9O | E=Tlaleng Amelia Nthathakane: Amelia  | F=South Africa | G=Black or African American | H=34899.0 | I=Female | J=Seongnam | K=Bachelor?셲 degree from one of the 7 eligible countries | L=BA Strategic Corporate Communications  | M=TEFL | N=Recorded | O=F6 26/12/18 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=Already have a valid visa | S=46113.0 | T=Pre-K ~ Kindergarten, Elementary school level, Middle school level | U=Metropollitan city, Medium size city | W=over 4 year | X=Do not know | Y=Jyeollae | Z=2.7 | AA=2.9 base salary ( I have 4 years of experience) | AB=Married | AC=I am coming alone | AD=I am willing to pay monthly for better housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=9:30 - 12:00 KST | AJ=Amelia_n | AK=01042085768 | AL=I Agree | AM=Yes
+A=46062.726372627316 | B=hlumyn1@gmail.com | C=Facebook | D=https://drive.google.com/open?id=1O3LhVvomsC1iCLNy8Hl9PgwgClSZ3vq5, https://drive.google.com/open?id=1HNFN7XVyBOu6U-GCUWDIwr0XKTiS5h_9, https://drive.google.com/open?id=1YbTOi6F_udgjd6TATTAqBECTjwXR4xcn | E=Siyahluma Noqobo; Uma | F=South Africa | G=Black or African American | H=35554.0 | I=Male | J=Donghae/Gangwondo | K=Bachelor?셲 degree from one of the 7 eligible countries | L=Immunohaematology  | M=TEFL | N=Recorded | O=16/04/2026 | P=Valid for more than 2 years | Q=Holding a visa and recently left Korea | R=Already have a valid visa | S=46113.0 | T=Elementary school level, Middle school level, High school level, Adults | U=Metropollitan city, Medium size city, Small city, No preference | W=6 months to 1 year | X=I will inform them very soon | Y=Donghae-si little Dnd. My current employer wants me to renew my contract.  | Z=2.5 krw | AA=2.7krw with housing due to my experience  | AB=Single or Coming Alone | AC=Other pets | AD=I would like to use the school provided housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=18:00-18:30 KST , 13:00-14:10 KST | AJ=Uma_ | AK=01051692360 | AL=I Agree | AM=Yes
+A=46063.43357912037 | B=caeb@esl.ninja | C=Other | D=https://drive.google.com/open?id=1FLkQCJgFWrwCcraxU9A87unfe5WBsdow | E=Caleb Jack Cook | F=USA | G=White or European | H=26989.0 | I=Male | J=Gyeongnam | K=Master | L=Education; Interdisciplinary Studies | M=on the process | N=Recorded | O=F6; 2026.12.18 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=All documents completed (Criminal check + Degree apostilled) | S=46072.0 | T=Elementary school level, Middle school level | U=No preference | V=I am only filling this out for Job. 1403 seen on Craigslist (https://seoul.craigslist.org/edu/d/tongyeong-geoje-march-elem-vacation/7908076943.html); I am only looking for work in Gyeongnam as close to Jinju as possible. | W=over 20 year, Overseas full-time teaching experience only | X=Not working in Korea | Y=I am not working now. | Z=4.0 million won | AA=more than 3.0; I cannot take less. | AB=Married | AC=I am coming alone | AD=I have housing so no support is needed | AE=Zero tattoos or piercings | AF=Irreligious | AG=I have not | AH=clean record | AI=Send email to set anything up. My current schedule has too many unknowns and other commitments.  | AJ=calebjcook | AK=010.7288.5740 | AL=I Agree | AM=Yes
+A=46064.49076298611 | B=nohulasibisi0@gmail.com | C=ESL Cafe | D=https://drive.google.com/open?id=1G_VJ7-CQWIPPXBR8kG8LLBDZS5b-aL0R, https://drive.google.com/open?id=1leKJuyFY4O8eKojAjxvCNWKzilvF1WmV | E=Sibisi Tholakele Nokuthula; Thuli  | F=South Africa | G=Prefer not to disclose | H=36744.0 | I=Female | J=Gimpo-si, Gyeonggi-do | K=Bachelor?셲 degree from one of the 7 eligible countries | L=Social Science  | M=TEFL | N=Recorded | O=E2 27/01/08 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=Already have a valid visa | S=46083.0 | T=Elementary school level, Middle school level | U=Metropollitan city | V=Na | W=over 2 year | X=The school is aware | Y=Chungdahm April, Unya81-5021 | Z=2.6 Lee | AA=2.8 ore | AB=Single or Coming Alone | AC=I am coming alone | AD=I would like to use the school provided housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=M-F 09:30- 13:00 | AJ=ThuliSibisi | AK=010 8111 6234 | AL=I Agree | AM=Yes
+============================================================
+Sheet: xl/worksheets/sheet4.xml
+============================================================
+A=?대찓??二쇱냼 | B=Full name | C=Photo | D=No | E=5 | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Start date | L=Target | M=Area prefs | N=Reference | O=Experience | P=Employment | Q=Job prefs  | R=Apply | S=19 | T=Current salary | U=Desired salary | V=Interview time | W=23 | X=Major | Y=Certification | Z=Documents | AA=Basic health  | AB=Situation | AC=Pet | AD=Tattoos | AE=Piercings | AF=Marital | AG=Housing | AH=Religion | AI=E visa | AJ=KakaoTalk | AK=Mobile Phone | AL=Criminal Record | AM=38 | AN=Passport | AO=Agreement | AP=Facts | AQ=How to | AR=4542 | AS=Attach your files | AT=梨꾩슜泥?| AU=?꾧툑 | AV=媛쒖떆??| AW=?숇컯 | AX=鍮꾩슜 | AY=泥섎━
+A=硫붿씪 | B=?대쫫 | C=?ъ쭊 | D=踰덊샇 | E=62 | F=援?쟻 | G=諛곌꼍 | H=?섏씠 | I=?깅퀎 | J=?꾩옱 | K=?쒖옉 | L=???| M=吏??| N=?덊띁?곗뒪/洹쇰Т泥섑솗??| O=寃쎈젰 | P=?쒓뎅 | Q=?좏샇?ы빆/由ы겕猷⑦꽣?명꽣酉?| R=吏?먰븳怨??명꽣酉곗슂泥?| S=?ъ??섏젣??吏꾪뻾 | T=?꾧툒 | U=?щ쭩 | V=?쒓컙 | W=?숈쐞 | X=?꾧났 | Y=?먭꺽 | Z=?쒕쪟 | AA=嫄닿컯 | AB=媛議?| AC=?숇Ъ | AD=???| AE=?쇱뼱 | AF=寃고샎 | AG=?숈냼 | AH=醫낃탳 | AI=鍮꾩옄 | AJ=移댄넚 | AK=踰덊샇 | AL=踰붿즲 | AM=留뚮즺 | AN=?뺣낫 | AO=?ъ떎 | AP=寃쎈줈 | AQ=?쒖텧 | AR=泥⑤? | AS=梨꾩슜 | AT=?꾧툑 | AU=媛쒖떆 | AV=?숇컯 | AW=鍮꾩슜 | AX=泥섎━
+A=Nittecook@gmail.com | B=Nicollette Aureillia Cook  | C=4293.0 | E=E2 2025/10/15 | F=誘멸뎅 | G=?묒씤 | H=88.0 | I=?ъ꽦 | J=泥?＜ | K=25.10.20 | L=臾닿? | M=遺?곕컮??| N=泥?＜?ν꽣2309-2510//01093788021(1/3愿?곗묶)?깆떎?ㅼ옒?섍퀬?먮쭔25.8.20?먯옣
+泥?떞2008-2302 ?대뵒泥?떞?? | O=5.0 | P=?먯옣?덈떎 | Q=?щ??놁쓬,議곗슜??遺덈쭔?덈뒗?몄긽?吏移쒖씤??
+?щ컡寃뚭?瑜댁튂湲?媛쒓컻?몄뿉吏묒쨷?섍린,?대옒?ㅻ８留ㅻ땲吏뺤옄?좎엳??/?댁뒋?덉쑝硫댁씠?좎갼怨??섏?留욎떠蹂닿린,?뺥솗?쒕Ц?쒖갼湲?/遺덈쾿?녿뒗怨녹씠硫대떎李몄쓣?섏엳??/?곗묶?몄뿉ADMIN?덈Т?≪씪?녿뒗怨? | R=4667 | T=2.9-20 | U=3.1~ | V=9am-11am on weekdays | W=?숈궗 | X=IT | Y=?뚰뵆 | Z=鍮꾩옄O | AA=嫄닿컯 | AB=?숇Ъ | AC=2 cats | AD=而ㅻ쾭媛??| AE=?④?媛??| AF=?깃? | AG=?숈냼?щ쭩 | AH=?놁쓬 | AI=Yes | AJ=Aureillia | AK=010-7248-8473  | AL=?꾨즺 | AM=4679 | AN=異⑸텇 | AO=I Agree | AP=?뺤긽 | AQ=?섏씠?ㅻ턿 | AR=4682 | AS=https://drive.google.com/open?id=1vq30rmwUGwvAMCt3MwaqYP1bQuEQO8sP
+A=sydneffour@gmail.com | B=Sydney Baffour | C=4165.0 | E=105 | F=誘멸뎅 | G=?묒씤 | H=98.0 | I=?ъ꽦 | J=?댁쇅 | K=25.11- | L=臾닿? | M=?쒖슱寃쎄린?몄쿇 | N=131 | O=?놁쓬 | P=?먯옣?덈떎 | Q=?숆탳留뚭렐臾댄븯怨좎떢???곗꽭?怨듬?,?쒓뎅?닿났遺以??먯떊媛??쒗꽣留곷떎?묓븯寃뚰빐遊?諛앹??몄긽,諛붿씠釉뚯쥕????뷀븯?붾뜲湲띿젙?곸씤?먮굦?댁삩???ㅽ뵾?뱀퐫移섑빐遊먯꽌?대뼡諛⑹떇?쇰줈?닿껐?댁빞?섎뒗吏?뚭퀬?덈떎/?곕쑜?섍쾶留욎븘二쇨린// | R=??由щ뜑??JLS, | S=0.0 | U=2,3  | V=10am - 12pm KST | W=?숈궗 | X=寃쎌젣 | Y=?뚰뵆 | Z=以鍮꾩셿猷?| AA=嫄닿컯 | AB=?놁쓬 | AC=no pets | AD=?놁쓬 | AE=?④?媛??| AF=?깃? | AG=?숈냼?щ쭩 | AH=?щ━ | AI=No | AJ=sydneyssi | AK=n/a | AL=理쒖쥌 | AM=4679 | AN=異⑸텇 | AO=I Agree | AP=?뺤긽 | AQ=湲고? | AR=4699 | AS=https://drive.google.com/open?id=1i45KWS2xnr-PoH-SAczKbFA4Wpdyq-4G
+A=justin.nett@gmail.com | B=Justin Alec Burnett | C=4355.0 | E=105 | F=誘멸뎅 | G=96.0 | I=?⑥꽦 | J=誘멸뎅 | K=25.11- | L=?좎쨷 | M=?쒖슱?깅룞愿묒쭊?숇?媛뺣궓 | N=4703 | O=NO | P=4704 | Q=遺?쒕윭?댁씤??誘몄냼媛留롮쓬,諛앹쓬,?쒓뎅?몃뱾留롮씠留뚮굹遊먯꽌醫뗭븯??/怨듭떇?곸?X?뚰봽??쒖뒪肄?寃쎈젰?놁쓬//?⑤룞??0?댁감?대씪?쒗뿬?꾪빐遊?/?섎뱶?뚰궧媛???좎닔?덈떎//?뚯븙?깃???/?꾩튂-?깅룞,?숇?臾?愿묒쭊// | R=媛議?移쒓뎄?쒖슱 | S=153 | U=2.5- | V=45909.0 | W=?숈궗 | X=?섎쪟?붿옄??| Y=?뚰뵆 | Z=以鍮꾩셿猷?| AA=嫄닿컯 | AB=?놁쓬 | AC=?놁쓬 | AD=?놁쓬 | AE=?놁쓬 | AF=?깃? | AG=?숈냼?щ쭩 | AH=?놁쓬 | AI=NO | AJ=9.254700396E9 | AL=?꾨즺 | AM=4707 | AQ=?덊뵾

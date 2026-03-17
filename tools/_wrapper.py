@@ -1,0 +1,1 @@
+import sys; sys.stdout = open("Q:/Claudework/bridge base/tools/_out.txt", "w", encoding="utf-8"); exec(open("Q:/Claudework/bridge base/tools/_tmp_extract3.py", encoding="utf-8-sig").read())

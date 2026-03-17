@@ -1,0 +1,288 @@
+Shared strings count: 4708
+
+============================================================
+Sheet: xl/worksheets/sheet1.xml
+============================================================
+A=이메일 주소 | B=Full name | C=Photo | D=No | E=ARC holders | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Start date | L=Target | M=Area prefs | N=Reference | O=Experience | P=Employment | Q=Job prefs  | R=Interview | S=Apply | T=Current salary | U=Desired salary | V=Interview time | W=Degree | X=Major | Y=Certification | Z=Documents | AA=Health Information | AB=Personal Considerations | AC=piercings  | AD=Dependents Pets | AE=Marital Status | AF=Housing | AG=Religion | AH=E visa | AI=KakaoTalk | AJ=Mobile Phone | AK=Criminal Record | AL=Criminal Record in Korea | AM=Passport | AN=Agreement | AO=Facts | AP=How to | AQ=타임스탬프 | AR=채용처 | AS=임금 | AT=개시월 | AU=숙박 | AV=비용 | AW=처리 | AX=과거메모 | AY=52열 | AZ=Column 52 | BA=Column 53 | BB=Column 54
+A=인터뷰🔥수지폴리 5073 /비바5524 |마포ECC 마포라이즈, 5531 엘란 구로라라 |5533 강남주니어 LEC 에더블/ 5541과천와튼 | B=55 | Z=5541 과천
+A=제안📢와튼주니어5541 / LEC 주니어 에더블5533 
+A=체결: 키비4918 4524 /해운힐사 4583/설리 4763 /일루4676/리비어 4291 /서초프파 4681/리빙스턴 4793 /엘란4638 /듀포 4921/리틀소시 4891 / 리비어4933/성동비바4929/slp공덕4922/듀포5053/LEC4975 5223/고덕라이즈4689 5378 /블루밍5215/찰리4915 5521 /태강5273 /해운힐사5319/엘란5209/
+A=메일 | B=이름 | C=사진 | D=번호 | E=62 | F=국적 | G=배경 | H=나이 | I=성별 | J=현재 | K=시작 | L=대상 | M=지역 | N=레퍼런스/근무처확인 | O=경력 | P=한국 | Q=선호사항/리크루터인터뷰 | R=지원한곳/인터뷰요청 | S=포지션제안/진행 | T=현급 | U=희망 | V=시간 | W=학위 | X=전공 | Y=자격 | Z=서류 | AA=건강 | AB=타투 | AC=피어 | AD=가족 | AE=결혼 | AF=숙소 | AG=종교 | AH=비자 | AI=카톡 | AJ=번호 | AK=범죄 | AL=국범 | AM=여권 | AN=정보 | AO=사실 | AP=경로 | AQ=타임 | AR=채용 | AS=임금 | AT=개시 | AU=숙박 | AV=비용 | AW=처리 | AX=과거
+A=sag@gmail.com | B=sagats maire owjdhv | C=1261.0 | E=있음 | F=미국 | G=백인 | H=91.0 | I=여성 | J=서울 | K=26.03.09 | L=유초 | M=경기 | N=I don't have a pleasant relationship with the employer after my pay kept being unfairly deducted | O=6년 | P=원장안다 | Q=역사학 | R=116 | T=3.5milion won | U=3.6-4mil. F visa requires a certain taxable salary to renew it. My previous jobs paid me within this range. Even the winter and summer camps paid more than 4 million. | V=7pm Monday-Friday | W=석사 | X=심리학 | Y=자격증X | Z=CRC완 | AA=건강 | AB=커버가능 | AC=커버가능 | AD=고양이 | AE=미혼 | AF=추가금 | AG=무교 | AH=E기록ㅇ | AI=asdhkln | AJ=4.8940941E7 | AK=유효 | AL=없음 | AM=F visa | AN=동의 | AO=있음 | AP=친구추천 | AQ=26.02.12 | AR=수지랄프영어 | AS=290.0 | AT=26.03.01 | AU=월세제공 | AV=150.0
+A=mka547@gmail.com | B=Thobness Mhlongo | C=1561.0 | E=2026.03.25 | F=뉴질랜드 | G=라틴 | H=92.0 | I=남성 | J=창원 | K=26.03.01 | L=성인 | M=경상 | N=25.03.01나주초?01036교장말많네학교수준은아니다 | O=3년 | P=원장안다 | Q=깔끔한인상,밝음,시원시원해주기,액션하기/학원은마지막에 | R=2602)수지폴리-서명했다가캔슬/평고덕라이즈, | S=하여간에이런애들은대충대충서명하고다른거있으니까또다른데간다하나봄 | T=2.5- | U=2.8 – Based on my current salary of 2.5 and my scheduled EPIK renewal increase to 2.7. Additionally, relocation to a larger city involves higher living costs, and my experience supports this adjustment. | V=Monday - Friday 10 o'clock KST | W=정싱 | X=교육 | Y=교사자격테플 | Z=있음 | AA=건강 | AB=없음 | AC=159 | AF=숙소희망 | AG=크리 | AH=E기록ㅇ | AI=doud8w2 | AJ=010 596417 | AK=CRC완 | AL=없음 | AM=유효 | AN=동의 | AO=있음 | AP=친구추천 | AQ=26.01.27 | AR=용인폭스 | AS=280.0 | AT=26.03.01 | AU=숙소제공 | AV=150.0
+A=sagatsa@gmail.com | B=sagats maire owjdhv | C=4894.0 | E=있음 | F=영국 | G=비공개 | H=94.0 | I=여성 | J=서울 | K=26.03.09 | L=초중 | M=수도 | N=I don't have a pleasant relationship with the employer after my pay kept being unfairly deducted | O=6년 | P=원장안다 | Q=역사학 | R=116 | T=3.5milion won | U=3.6-4mil. F visa requires a certain taxable salary to renew it. My previous jobs paid me within this range. Even the winter and summer camps paid more than 4 million. | V=7pm Monday-Friday | W=석사 | X=심리학 | Y=테플 | Z=CRC완 | AA=건강 | AB=커버가능 | AC=커버가능 | AD=강아지 | AE=미혼 | AF=추가금 | AG=무교 | AH=E기록ㅇ | AI=SagLen | AJ=1.0440417E7 | AK=유효 | AL=없음 | AM=F visa | AN=동의 | AO=있음 | AP=친구추천 | AQ=26.02.12
+A=mhlobeka547@gmail.com | B=Thobness Mhlongo | C=5364.0 | E=2026.03.25 | F=남아공 | G=흑인 | H=94.0 | I=여성 | J=나주 | K=26.03.01 | L=무관 | M=무관 | N=25.03.01나주초?01036교장말많네학교수준은아니다 | O=3년 | P=원장안다 | Q=깔끔한인상,밝음,시원시원해주기,액션하기/학원은마지막에 | R=2602)수지폴리-서명했다가캔슬/평고덕라이즈, | S=하여간에이런애들은대충대충서명하고다른거있으니까또다른데간다하나봄 | T=2.5- | U=2.8 – Based on my current salary of 2.5 and my scheduled EPIK renewal increase to 2.7. Additionally, relocation to a larger city involves higher living costs, and my experience supports this adjustment. | V=Monday - Friday 10 o'clock KST | W=정싱 | X=교육 | Y=교사자격테플 | Z=있음 | AA=건강 | AB=없음 | AC=179 | AD=아기 | AE=기혼 | AF=숙소희망 | AG=크리 | AH=E기록ㅇ | AI=Thoka94 | AJ=010 596417 | AK=CRC완 | AL=없음 | AM=유효 | AN=동의 | AO=있음 | AP=친구추천 | AQ=26.01.27
+============================================================
+Sheet: xl/worksheets/sheet2.xml
+============================================================
+A=지역 | B=이 | C=58 | D=메일 | E=연락처 | F=대상 | G=🔴 | H=지원 | I=기본 내용/공유사항 | J=방학 | K=메모/특이사항 | L=기타/메일
+A=강원 | B=강릉 | C=브라이더학원 | D=pennyron@gmail.com,andner@gmail.com | E=110 | F=유초 | G=194 | K=짜증나는사람
+A=서울 | B=강동 | C=프랜)키즈학원 | D=po965@hanmail.net | E=033-63-943
+010-648-64 | F=유치 | G=200 | H=편도 | I=9;40-7
+2.3-
+A=부산 | B=해운 | C=프랜)하바마 | D=cng1379@naver.com | E=033-62-1379
+010-33-004 | F=초중 | G=200 | H=편도 | I=9;30-5;30
+2.3-- | J=208 | K=착한사람
+A=경상 | B=창원 | C=프랜)헬리콥터학원 | D=486@gmail.com | E=211 | F=초고 | G=212 | K=직업자꾸바뀜 | L=486@gma.com
+A=경기 | B=성남 | C=프랜)힐사리 | D=info@hcho.org | E=217 | F=유중 | G=218 | I=sada@sada.org같이하나봄
+A=서울남동 | B=강남 | C=비에듀 | E=0507-1423-0553 | F=유중 | G=223 | L=parkyd31@be-edu.com
+A=서울남동 | B=강남 | C=압구,대치프란시스/와이어트본사 | E=217 | F=유중 | G=225 | K=에듀레이션 | L=recruit@francisparker.kr
+A=서울남동 | B=강남 | C=프랜)YBMNET삼성 | D=217 | F=유중 | G=228 | L=jiheek8@ybm365.co.kr
+A=서울남동 | B=강남 | C=프랜)라이즈온라인 | D=217 | F=유중 | G=주의 | H=231 | I=janicekim@risekorea.com
+A=서울남동 | B=강남 | C=누메나어학원 | D=admin@noumena.co.kr | E=02-583-0164
+010-4077-0165 | F=고등 | G=236 | H=인터뷰 | I=1-10통수업2시간북미하우징포3.0-5.0
+14.30-21.30
+14.30-22.00TTH&quot;
+A=서울남동 | B=강남 | C=리베르타스 스칼라스 컬리지 프랩 | D=admin@Libertas-scholars.org | E=0507-1480-0260 | F=고등
+A=서울남동 | B=강남 | C=세한아카데미 | D=SeHann@SeHann.com | E=02-3453-3422 | F=고등
+A=서울남동 | B=강남 | C=메이커스어학원 | D=makersaca@gmail.com | E=246 | F=고성
+A=서울남동 | B=강남 | C=미키글로브 역삼 | D=mikielts@daum.net | E=010-3474-2837 | F=고성 | G=250 | H=Round | I=9-6(30실25시간)휴15
+2.2--상담협의바이오로직,생물학,영국만 과목별
+A=서울남동 | B=강남 | C=베테랑스어학원 | D=info@veteransedu.net | E=246 | F=고성
+A=서울남동 | B=강남 | C=영국문화원 | D=sy@ukcentre.co.kr | E=246 | F=고성
+A=서울남동 | B=강남 | C=티엔비에듀케이션어학원 | D=tnbeducation7@gmail.com | E=246 | F=고성
+A=서울남동 | B=강남 | C=프라임스톤컨설팅 | D=cfo.primestone@gmail.com | E=246 | F=고성
+A=서울남동 | B=강남 | C=PSU에듀센터 | D=info@sntedu.org | E=246 | F=고성
+A=경기남부 | B=부천 | C=키스톤아카데미 | D=keystoneacademy0@gmail.com | E=032-351-3511 | F=초중 | G=Fvisa | H=왕복 | I=12-9(월120시간) 미,영 2.5-3.0이상가round
+숙소or50
+A=서울남동 | B=강남 | C=대원 GK글로벌에듀 | D=gkglobaledu@gmail.com | E=272 | F=중고
+A=서울남동 | B=강남 | C=대치에이플러스입시 | D=dohyuncho@naver.com | E=272 | F=중고
+A=서울남동 | B=강남 | C=모스트어학원 | D=fire11c@naver.com | E=02-508-4732 | F=중고
+A=서울남동 | B=강남 | C=블루키프렙어학원 | D=bluekeyprep@gmail.com | E=272 | F=중고
+A=서울남동 | B=강남 | C=서울아카데미 대치 | D=hr@seoulacademy.org,recruit@seoulacademy.org | E=272 | F=중고
+A=서울남동 | B=강남 | C=아이비더탑 | D=ibthetop@gmail.com | E=272 | F=중고
+A=서울남동 | B=강남 | C=에듀모스트 | D=admin@edumost.co.kr | E=272 | F=중고
+A=서울남동 | B=강남 | C=엘리트오픈스쿨코리아 | D=korea@eliteopenschool.org | E=272 | F=중고
+A=서울남동 | B=강남 | C=컬리짓 아카데미 서울 | D=289 | E=0507-1493-7931 | F=중고 | G=290 | L=admin@ca-seoul.org
+A=서울남동 | B=강남 | C=허드슨어학원 | D=272 | F=중고 | G=292 | L=webzin@hanmail.net
+A=서울남동 | B=강남 | C=amcstudy | D=amcthink@gmail.com | E=02-544-5124 | F=중고
+A=서울남동 | B=강남 | C=PIF 대치본원 | D=pifedu@naver.com | E=0507-1402-7229 | F=중고
+A=서울남동 | B=강남 | C=강남 필립영어 | D=phillipeng@naver.com | E=301 | F=중등
+A=서울남동 | B=강남 | C=IEEA글로벌PEAP | D=admin@ieea.or.kr | E=304 | F=중성
+A=서울남동 | B=강남 | C=강남 612어학 | D=vita@612.co.kr | E=146 | F=성인
+A=서울남동 | B=강남 | C=강남 브리티시 | D=info@britishcentre.co.kr | E=브리티시 | F=성인 | G=50.0 | I=10-5;40/2;20-9;10로테이션2개월2.3-숙소or40
+A=서울남동 | B=강남 | C=랩스종로 | D=312 | E=0507-1404-8151 | F=성인 | G=313 | I=에이전시일하고있네불법일수도
+A=서울남동 | B=강남 | C=랭귀지큐브 역삼 | D=sylee@unionnec.co.kr | E=0507-1403-1105 | F=성인
+A=서울남동 | B=강남 | C=렉시스서울부산 | D=jkim@lexiskorea.com | E=146 | F=성인
+A=서울남동 | B=강남 | C=리더스엠비에이 | D=webmaster@leadersmba.com | E=146 | F=성인
+A=서울남동 | B=강남 | C=박코치초 등/성 | D=jillian@parkcoach.com,Justin@parkcoach.com | E=010-3363-3504 | F=성인 | G=324 | I=6;50-3;50/8-5/9-6/1-10두달로테이션
+2.2-2.5-- | J=325 | L=02-1577-7432,Jbadillo2018@gmail.com
+A=서울남동 | B=강남 | C=벌리츠 삼성센터 | D=sslc@berlitz.co.kr | E=02-3453-4266 | F=성인
+A=서울남동 | B=강남 | C=베리타스 GMAT | D=dubcojol@naver.com | E=veritas133care@gmail.com | F=성인
+A=서울남동 | B=강남 | C=아크메 아카데미 SAT | D=acme@acmeacademy.co.kr | E=146 | F=성인
+A=서울남동 | B=강남 | C=애로우잉글리시 | D=arrowenglish@naver.com | E=146 | F=성인
+A=서울남동 | B=강남 | C=앤디프랩 | D=146 | F=성인 | G=337 | L=webmaster@andyprep.com
+A=서울남동 | B=강남 | C=에스피이피교육원,교육센터 | D=hrteam@spep.co.kr,hrteam2@spep.co.kr | E=146 | F=성인 | G=340 | I=08.00-20.00/3,5K (40man)
+A=서울남동 | B=강남 | C=이알피 종로아이엘츠 | D=cs@ielts.co.kr | E=브리티쉬 | F=성인
+A=서울남동 | B=강남 | C=조이랜드 잉글리시라운지 강남 | D=joylandwork@gmail.com  | E=146 | F=성인 | G=346 | I=1/16-20TR후2월시작3명MF12;30-21;05TT13;30-22;00 W13;00-19;00 2년경력or트레이닝가능자 2.3-3.0 숙소or50
+A=서울남동 | B=강남 | C=카일룸프렙 | D=348 | E=02-545-0056 | F=성인 | G=349 | I=caelumprep@caelumprep.com
+A=서울남동 | B=강남 | C=토킹스팟 | D=talkingspot@naver.com | E=사업가,기업출강 | F=성인
+A=서울남동 | B=강남 | C=퍼스널잉글리쉬 | D=personalenglish2010@gmail.com | E=146 | F=성인
+A=서울남동 | B=강남 | C=퍼스트러닝 | D=first@1stlearning.co.kr | E=02-517-7840 | F=성인
+A=서울남동 | B=강남 | C=폴아카데미 | D=hagwon@paulacademy.net  | E=146 | F=성인
+A=서울남동 | B=강남 | C=프린서플어학원 | D=146 | F=성인 | G=361 | L=pse@pse-english.co.kr
+A=서울남동 | B=강남 | C=C&amp;C외국어교육원 | D=146 | F=성인 | G=363 | L=jeo-ej@hanmail.net
+A=서울남동 | B=강남 | C=EnglishNow(외국인) | D=geborgenheitnow@gmail.com | E=010-7613-1312 | F=성인
+A=서울남동 | B=강남 | C=IDP 에듀 | D=ielts.korea@idp.com | E=146 | F=성인
+A=서울남동 | B=강남 | C=IEN Institute  | D=370 | E=02-3471-9911
+010-7220-2491신숙영부장 | F=성인 | G=주의 | H=x | I=평생교육셀타,테솔,전공,경력9-6(20-30)휴15협의한번에사용가하우징포함2.8- | J=373 | K=계약서달라고요구 | L=syshin@ienkorea.com
+A=서울남동 | B=강남 | C=벌리츠 광화문,삼성 | D=markkelly@berlitz.co.kr | E=377 | F=유고
+A=서울남동 | B=강남 | C=ACA 앤도버 | D=marc@andovercollegiate.com | E=064-794-8700
+010-3497-1982미국원장영어로 | F=유고 | G=381 | I=dus3292@naver.com | J=382 | K=제주지점있음
+A=서울남동 | B=강남 | C=GIA마이크로랩 그레이스인터내셔널아카데이 | D=jacoblim@giamicro.com, | E=02-546-5300채용
+02-546-9646 | F=유고 | G=386 | I=08.30-17.00
+2.3- | J=387 | L=scharlierobinson@gmail.com,
+A=서울남동 | B=강남 | C=그래머랩스 | D=grammarlabs@naver.com | E=02-557-9812 | F=초고
+A=서울남동 | B=강남 | C=대치 SNT | D=211 | F=초고 | G=392 | I=14.10-22.00 MT,TFS | J=393 | L=stephen.zucconi@gmail.com
+A=서울남동 | B=강남 | C=대치마그넷 | D=211 | F=초고 | G=395 | L=dc.magnet.jennifer@gmail.com,dc.magnet.director@gmail.com
+A=서울남동 | B=강남 | C=대치선경어학원 | D=211 | F=초고 | G=397 | L=skengrecruit@gmail.com
+A=서울남동 | B=강남 | C=대치특목사관학원 | D=211 | F=초고 | G=399 | L=askkhs@naver.com
+A=서울남동 | B=강남 | C=대치SSINT서울스콜라스인터내셔널 | D=info@seoulscholars.org | E=211 | F=초고
+A=서울남동 | B=강남 | C=스타프랩어학원 | D=403 | E=스팸자동차단
+원어민아예안쓴다 | F=초고 | G=404 | I=starprep@starprep.co.kr
+A=서울남동 | B=강남 | C=씨에라캐니언 | D=211 | F=초고 | G=406 | L=admissions@sierracanyonseoul.org
+A=서울남동 | B=강남 | C=압구정 원스탑프렙 | D=hrd@intimesin.com,hrd3@intimesin.com | E=211 | F=초고 | G=409 | L=,hrteam@step.co.kr
+A=서울남동 | B=강남 | C=에임하이영어본원 | D=aimhigh-english@naver.com | E=211 | F=초고
+A=서울남동 | B=강남 | C=영국에듀학원 | D=seoulinfo@beckorea.com | E=브리티시 | F=초고
+A=서울남동 | B=강남 | C=원아카데미 어학원 | D=oneacademy.korea@gmail.com | E=02-501-5590 | F=초고
+A=서울남동 | B=강남 | C=윌링영어학원 | D=ebbbbbb@naver.com | E=211 | F=초고
+A=서울남동 | B=강남 | C=윤선생영어교실 도곡센터 | D=pbh0585@naver.com | E=211 | F=초고
+A=서울남동 | B=강남 | C=정영 JY 어학 | D=kijungnam@naver.com | E=211 | F=초고
+A=서울남동 | B=강남 | C=크레버스본사 Creverse | D=fhr@cmsedu.co.kr,ycpark@creverse.com | E=211 | F=초고
+A=서울남동 | B=강남 | C=BCM민병철 | D=bcm.teacher.recruit@gmail.com,bcm.jenniecho@gmail.com | E=211 | F=초고 | G=427 | L=zoekwon2061@gmail.com,
+A=서울남동 | B=강남 | C=SM파머스 | D=211 | F=초고 | G=429 | L=smpamus@naver.com
+A=서울남동 | B=강남 | C=프랜)청담에이프릴Aptive에듀  | D=431 | E=010-3085-0234 | F=초고 | G=주의 | H=432 | I= 10-7화-토 월휴무 1시간-1;30분X4-5 포함2.8-3.0 년보너스연봉20%(1-2월지급) | J=433 | L=김지혜실장
+A=서울남동 | B=강남 | C=엘리트어학원 | D=apgujung@eliteprep.com,eliteapgujung.hr@gmail.com | E=02-3444-6886 | F=초등 | G=짧은 | H=439 | I=2;30-8;30(30)2.2-2.4/5/5/싴2숙소
+
+A=서울남동 | B=강남 | C=강남구립국제교육원 | D=christineko@gangnam.go.kr | E=437 | F=초등
+A=서울남동 | B=강남 | C=메타META잉글어학 | D=metaenglishedu@gmail.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=브릿비잉글리시삼성본
+영국 | D=445 | E=0507-1359-7802 | F=초등 | G=446 | L=speakoutkids@therapy.net
+A=서울남동 | B=강남 | C=스와트Swat | D=swat6777@naver.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=써튼, 리딩타운,그로튼 | D=sp.directoreunice@gmail.com | E=437 | F=초등 | G=451 | I=M-F 14.00-19.00 S 10.00-13.00 / 3.0
+A=서울남동 | B=강남 | C=엘앤엘LnL | D=jeonmi1991@gmail.com | E=010-4445-3647 | F=초등 | G=455 | H=국내 | I=1-9휴5/5싴2-3
+2.6-3.0하우징포보증금가
+A=서울남동 | B=강남 | C=유에스씨USC어학 | D=jassiemin@nate.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=이피유EP.U | D=epu.english@gmail.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=인사이트 대치 | D=ensight1787@gmail.com | E=437 | F=초등 | G=463 | I=원장개인jakyum.kim91@gmail.com
+A=서울남동 | B=강남 | C=제이프랩어학원 | D=joshlee3@hanmail.net | E=02-6959-2040 | F=초등 | G=467 | I=1-9(3시간x2)50분마다휴식하우징포함2.8-4.0   jprep@jprep.co.kr | J=468 | L=jpjprep@jprep.co,
+A=서울남동 | B=강남 | C=청담 피앤이 P&amp;E | D=pne.english@gmail.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=페디아플러스 청담브랜치 | D=channel@pongler.com,hr@pongler.com | E=437 | F=초등 | G=473 | K=페디아=퐁글러=리딩프라미스=인터파크
+A=서울남동 | B=강남 | C=포레스트레인 | D=437 | F=초등 | G=475 | L=info@forestlane.org
+A=서울남동 | B=강남 | C=프랜)덕스DUX대치 | D=dux3349@gmail.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=프랜)덕스DUX본사 | D=duxfc@naver.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=프랜)엠아이MI마일스톤 대치 | D=midaechi@gmail.com,mi.allenchoi@gmail.com | E=02-563-2400
+010-5275-4517대표
+010-3601-2674서초원장
+010-3188-2213
+ | F=초등 | G=483 | I=MF12;30-21;05 TT13;30-22;00 W13;00-19;00 2년경력or트레이닝가능자 2.3-3.0 숙소or50
+A=서울남동 | B=강남 | C=프랜)정상JLS대치HQ  | D=insa@gojls.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=프랜)DYB최선크레오대치본원 | D=leslie@dybedu.com | E=437 | F=초등
+A=서울남동 | B=강남 | C=프랜)YBMPine본사 | D=danny@ybm.co.kr | E=437 | F=초등 | G=490 | K=PSA
+A=서울남동 | B=강남 | C=에이원레거씨리퍼블릭 | D=437 | F=초등 | G=492 | I=13-22 | J=493 | L=master@a1-legacy.co.kr,
+a1legackr@gmail.com
+A=서울남동 | B=강남 | C=논현 펀웨이 | D=funway4@gmail.com | E=010-4480-7238 | F=초등 | G=주의 | H=ㅇ | I=13.30-18.30(250~)or13.30-20.30(340~) | J=499 | K=디테일물으면 씹는곳
+A=서울남동 | B=강남 | C=케이엔에스에듀대치초중등2관 KNS | D=prettyghil.kate@gmail.com,fantapodo80@naver.com,knsele@naver.com,fkamal@naver.com,daijoubujung@knsedu.co.kr | E=02-508-0921
+010-3048-2045길하경초등관행정부장
+010 4789 1269중등원장
+ | F=초등 | G=주의 | H=협의 | I=2;30-10(24)2.2-2.5숙소or50
+방학X, 공휴일근무 | J=505 | K=토요근무
+A=서울남동 | B=강남 | C=프랜)청담어학 본사 | D=rcconsulting@creverse-fc.com | E=437 | F=초등 | G=주의 | H=508 | L=,job@chungdahm.com,facultylink@chungdahm.com,
+A=서울남동 | B=강남 | C=프랜)청담에이프릴대치잠실 | D=daechiaprilhiring@gmail.com | E=437 | F=초등 | G=주의
+A=서울남동 | B=강남 | C=프랜)트윈클 대치 | D=twinkle.daechiapplications@gmail.com,twinkle.austinteacher@gmail.com | E=
+010-9821-5152부사장 | F=초등 | G=주의 | H=514 | I=1-9 숙소(70)2.7 | J=515 | L=twinkle.andy01@gmail.com
+A=서울남동 | B=강남 | C=프랜)폴리poly마그넷 대치 | D=cdi.mb.dan@gmail.com,polyrandd@gmail.com | E=437 | F=초등 | G=주의 | H=518 | I=11.30-20.30
+A=서울남동 | B=강남 | C=강남 J&amp;T영어전문 | D=169 | F=초중 | G=520 | L=jntenglish@hanmail.net
+A=서울남동 | B=강남 | C=그로튼,대치리딩 | D=sp.angelapark@gmail.com | E=02-555-5009
+010-7193-7418안젤라부원 | F=초중 | G=524 | I=1-9or1;30-9;30(24-25H)토격주10;30-2;30(협의)여성휴2일겨x포함2.3-4.0-
+A=서울남동 | B=강남 | C=다니엘랩어학원 | D=info@thedaniellab.com | E=169 | F=초중
+A=서울남동 | B=강남 | C=도곡스와튼Swaton | D=swatoninternational@gmail.com | E=169 | F=초중 | G=529 | I=F가능/총직원10명
+A=서울남동 | B=강남 | C=듀크어학원 | D=169 | F=초중 | G=531 | L=duke33333@naver.com
+A=서울남동 | B=강남 | C=렉스김영어LKE | D=lexkim@lexkimenglish.com,taylor.lexkim@gmail.com,msgereckeLKE@gmail.com,baileelotus@gmail.com | E=169 | F=초중 | G=534 | L=mgerec32@gmail.com,msgereckelke@gmail.com,msgereckeLKE@gmail.com
+A=서울남동 | B=강남 | C=리더스어학 | D=LeadersLearning@gmail.com,simkyounghee@gmail.com | E=169 | F=초중 | G=537 | I=대치분당부산
+A=서울남동 | B=강남 | C=뮤엠영어학원 세곡 | D=joyahn0218@naver.com | E=169 | F=초중
+A=서울남동 | B=강남 | C=삼보어학원 | D=samboh0034@naver.com | E=169 | F=초중
+A=서울남동 | B=강남 | C=압구정 100CLASSICS | D=169 | F=초중 | G=543 | I=hrd2@intimesin.com
+A=서울남동 | B=강남 | C=옥스포드 아카데미 | D=169 | F=초중 | G=545 | L=officlal.oxfordacademy@gmail.com
+A=서울남동 | B=강남 | C=제네시스 청담관 | D=genesis.academy.01@gmail.com | E=0507-1303-9680 | F=초중
+A=경기남부 | B=수원 | C=권선호매실칼비테비피karlwitte | D=gowoon860712@naver.com | E=437 | F=초등 | G=Fvisa | H=552 | K=교습소인듯
+A=경기남부 | B=수원 | C=더하다영어 | D=thehadaedu@naver.com | E=437 | F=초등 | G=Fvisa
+A=서울남동 | B=강남 | C=체이스아카데미 | D=556 | E=0507-1369-4311 | F=초중 | G=557 | L=chasemedia@naver.com
+A=서울남동 | B=강남 | C=프랜)정상JLS본사 | D=cpo@gojls.com,sbjee@gojls.com,jae_heelee@gojls.com,auddkg@gojls.com | E=169 | F=초중 | G=560 | I=한얼에듀
+A=서울남동 | B=강남 | C=프랜)DYB최선대치 | D=dyb.peterelliott@gmail.com,dybitcenter@gmail.com | E=02-562-0579채용담당
+송파대치중계분당수지수원일산안양동탄 | F=초중 | G=564 | I=13.00-22.00 
+2.3-2.5/50만 | J=565 | K=랜퍼스같이운영
+A=서울남동 | B=강남 | C=프랜)EIE본사 | D=567 | E=02-1599-0572 | F=초중 | G=560 | I=한얼에듀 | J=568 | L=wjlee@eie.co.kr
+A=서울남동 | B=강남 | C=CES 청담 | D=cesinkorea2@gmail.com | E=청담(초중02-512-7450)삼성(유초02-515-7450) | F=초중 | G=572 | I=MWF13.00-19.00 TTH14.00-20.00
+A=서울남동 | B=강남 | C=SD영어학원 | D=574 | E=0507-1412-4041 | F=초중 | G=575 | L=sdperfect@naver.com
+A=서울남동 | B=강남 | C=SLI서울어학원 | D=169 | F=초중 | G=577 | L=info@sli2018.com
+A=서울남동 | B=강남 | C=W에듀 | D=579 | E=채용업체로바뀐듯 | F=초중 | G=580 | L=wjaskim@gmail.com
+A=서울남동 | B=강남 | C=프랜)청담에이프릴 세곡 | D=169 | F=초중 | G=주의 | H=582 | I=12.00-20.00 / 2.8+housing | J=583 | L=haley.segok@gmail.com
+A=서울남동 | B=강동 | C=한일외국어학원 | D=miracle3131@hanmail.net | E=146 | F=성인
+A=서울남동 | B=강동 | C=So To Speak | D=sotospeak.seoul@gmail.com | E=0507-1422-2292 | F=성인 | G=589 | I=원장원어민
+A=서울남동 | B=강동 | C=박부휘영어학원 | D=pbhedu1234@naver.com   | E=211 | F=초고
+A=서울남동 | B=강동 | C=강동 SKIE 영어 | D=437 | F=초등 | G=외곽 | H=round | I=8;40-5;30 만만만 
+2.4-2.5
+A=서울남동 | B=강동 | C=브레이브잉글리시 | D=yohvnn@gmail.com,management@braveenglish.kr,braveenglishseoul@gmail.com | E=010-2330-4120대표
+0507-1426-4119 | F=초중 | G=외곽 | H=599 | I=겨5여성5봄5싴3일1-8(24)60-120분x5,3.3-3.6숙소(월세국내return+이사지원,검진비+생일보너스+완료보+재계약보
+/4명근무 | J=600 | K=total 18 days
+A=서울남동 | B=강동 | C=엘피스 영어 | D=youngsuec@naver.com | E=169 | F=초중 | G=외곽
+A=서울남동 | B=강동 | C=프랜)덕스DUX고덕 | D=eyk1014@naver.com | E=02-426-6513
+010-2718-6513 | F=초중 | G=외곽 | H=첫달40
+막달30 | I=2.30-9.30(1.50분Cx3C수2.30X1c+1.30X1c
+F외국인까지휴11일7일자유롭게정함,2.3-2.6항공첫달40막달30숙소(60집을구해주니까 당연히보증금도 내야죠) | J=438 | K=짧은
+A=서울남동 | B=강동 | C=프랜)리틀팍스강동고덕 | D=littlefox0561@gmail.com,littlefox01@naver.com | E=169 | F=초중 | G=외곽 | H=610 | L=Littlefoxmisaht@gmail.com
+A=서울남동 | B=강동 | C=프랜)아발론 강동 | D=renee.davison@avalon.co.kr | E=169 | F=초중 | G=외곽
+A=서울남동 | B=강동 | C=프랜)정상JLS강동 | D=shlee@gojls.com | E=169 | F=초중 | G=외곽
+A=서울남동 | B=강동 | C=프랜)청담에이프릴강동 | D=cdgangdong@naver.com | E=169 | F=초중
+A=서울남동 | B=강동 | C=코람데오 | D=618 | E=jobinkorea2022@gmail.com,coramdeo9961@gmail.com | F=초중 | G=주의 | H=국내 | I=MBTI개인성향테스트등이상한곳
+ 1-9 국내 2.2-2.7 보증금+40 | J=620 | K=배후연락 | L=coramdeojobs2018@gmail.com
+A=강원 | B=강릉 | C=유천숲어학원  | D=julieb8484@naver.com | E=010-3345-1555원장 | F=초성 | G=200 | H=편도 | I=1-8.30(20-25),숙소(35)초과2만,계약기간24.6-24/8? | J=627 | K=단기,급여성,휴가미기재
+A=강원 | B=강릉 | C=프랜)정상JLS강릉 | D=jinnykim@edujls.com | E=033-655-0579
+010-3297-2522 | F=초중 | G=631 | H=짧은
+편도 | I=12(10부터유급교육가)9-3;30or1-6  2.4-숙소or보증금+월세
+A=서울북동 | B=강북 | C=수유 영어마을 | D=636 | E=Seanl4008@gmail.com
+010-2615-4700 | F=유중 | G=200 | H=편도 | I=휴가5/5,9-6
+2.2-2.4 | J=638 | K=2022.12폐업 | L=toad6702@naver.com
+A=서울북동 | B=강북 | C=지앤비GnB 미아뉴욕 | D=msspecial@naver.com | E=211 | F=초고
+A=서울북동 | B=강북 | C=프랜)EIE강북미아 | D=eie24@naver.com | E=169 | F=초중 | G=외곽
+A=부산 | B=강서 | C=명지제니스어학원 | D=mickealy3@gmail.com | E=169 | F=초중 | G=647 | K=불확실
+A=부산 | B=강서 | C=스피크업어학원 | E=051-292-9992 | F=초중 | G=650 | L=sperkup9992@naver.com
+A=부산 | B=강서 | C=프랜)EIE명지 | D=choieun0524@naver.com | E=169 | F=초중
+A=서울남서 | B=강서 | C=GSIS강서인터내셔널 | D=georgegsis7@gmail.com,m.broom_gic@gemsedu.com,sungj@gsis.sc.kr | E=217 | F=유중
+A=경기남부 | B=과천 | C=과천몬테소리GCMP | D=gcmp.korea@gmail.com | E=110 | F=유초 | G=Fvisa
+A=서울남서 | B=강서 | C=정이조CJY 마곡 | D=cyjsenior@hanmail.net | E=272 | F=중고
+A=서울남서 | B=강서 | C=비커밍영어학원 마곡 | D=becoming.english9@gmail.com | E=146 | F=성인
+A=서울남서 | B=강서 | C=아이린인스티튜트 | D=your.last.teacher.irene@gmail.com | E=010-2767-1441 | F=성인
+A=서울남서 | B=강서 | C=톡톡영어 강서 | D=talktalkacademy.g@gmail.com | E=02-6953-2431 | F=성인
+A=서울남서 | B=강서 | C=스탠다드학원 | D=standardenglish@naver.com | E=211 | F=초고
+A=서울남서 | B=강서 | C=아이글로벌IGLA | D=jaclyn_edu@naver.com | E=437 | F=초등 | G=외곽 | H=673 | K=교포
+A=경기남부 | B=안양 | C=에이미의잉글리쉬빌리지 | E=010-2782-3834원장
+031-381-1895
+ | F=초등 | G=Fvisa | H=677 | I=주4일월화수목2-9.20(25-30)
+2.5주말포여성10일겨10일월세만40 | J=678 | L=amy8732@hanmali.net
+A=서울남서 | B=강서 | C=외대어학원 강서 | D=437 | F=초등 | G=외곽 | H=680 | L=johnkim@hafs.hs.kr
+A=서울남서 | B=강서 | C=프랜)EIE강서염창 | D=wem8805@daum.net | E=02-6261-7070
+010 9498 8805 | F=초등 | G=외곽 | H=편도 | I=1-8(25) 숙소(50)2.3-2.6 | J=438 | K=짧은
+A=서울남서 | B=강서 | C=링구아 강서 | D=icoolet@naver.com | E=010-2274-5070 | F=초중 | G=외곽 | H=편도 | I=1;30-8;05/1;30-9휴8-10일2.2
+
+A=서울남서 | B=강서 | C=파머스영어 마곡 | D=segimedu@naver.com | E=169 | F=초중 | G=외곽
+A=서울남서 | B=강서 | C=프랜)덕스DUX마곡 | D=duxmg@naver.com | E=169 | F=초중
+A=학교고등 | B=강원 | C=민족사관 민사고 | D=sgscross@minjok.hs.kr | E=235 | F=고등 | G=696 | I=3.7-5.5
+A=학교초등 | B=강원 | C=춘천삼육초등학교 | D=pitterpatter78@hotmail.com,whaeun.eng@gmail.com | E=437 | F=초등 | G=700 | H=130만 | I=8;40-4;40/9-5(24HR)
+2.3-- | J=방학 | K=1 month for in summer, 1 month for in Winter | L=Pitterpetter78@hanmail.net
+A=경기남부 | B=오산 | C=자이베스트영수학원 | D=min0618000young@naver.com,xibest1@naver.com | E=보습학원01032776720 | F=초등 | G=Fvisa
+A=경남 | B=거제통영 | C=프랜)청담에이프릴거제 | D=zazangi1@naver.com, | E=055-635-3553
+010-4877-3116 | F=유중 | G=주의 | H=편도 | I=10-7F+한국인가능2.2-2.4편도숙소만 | J=714 | L=rivergreji@gmail.com
+A=경남 | B=거제통영 | C=유니월드 | D=uniworldkorea@gmail.com | E=437 | F=초등 | G=717 | I=14.40-21.50 /2.5-2.9.
+A=경남 | B=거제통영 | C=프랜)리틀팍스통영 | D=littlefoxcho@naver.com | E=437 | F=초등
+A=경남 | B=거제통영 | C=이클락 어학원 | D=dudrnr516@naver.com | E=010-7178-9712 | F=초중 | G=200 | H=편도 | I=723 | L=brendon09@hanmail.net
+A=경남 | B=거제통영 | C=죽림 파머스 | D=kjy810512@naver.com | E=169 | F=초중
+A=경남 | B=거제통영 | C=프랜)정상JLS거제 | D=hdm9742@gmail.com | E=507-1387-0267
+010-6755-0595 | F=초중 | G=729 | I=1.30-9.40(30) 5/5+싴1일2.3-2.8편도 숙소만
+A=경남 | B=거창 | C=문희선리얼 | D=jgmltjs@naver.com | E=169 | F=초중 | G=외곽
+A=경남 | B=거창 | C=프랜)청담 거창 | D=joeluck1963@gmail.com | E=055-945-0985
+010-3888-5803 | F=초중 | G=주의 | H=120.0 | I=1;40-8;40(26)  2.3-2.7편도(120)국내이사20,숙소만
+A=학교고등 | B=경기 | C=안양외국어고등학교 | D=aflhs.position@yahoo.com | E=235 | F=고등
+A=학교고등 | B=경기 | C=의왕 경기외고 | D=potsdampia@gafl.hs.kr | E=235 | F=고등 | G=741 | I=07.40-16.30/16-20hr/2.8-3.4(50)
+A=학교국제 | B=경기 | C=포천유정글로벌학교 | D=jobs@globalyujung.org,yj3161@hanmail.net | E=217 | F=유중
+A=학교국제 | B=경기 | C=이천국방어학(군사KDLI) | D=englishkdli@gmail.com | E=146 | F=성인
+A=학교국제 | B=경기 | C=성남분당 KIS한국외국인 | D=hr@kis.or.kr | E=377 | F=유고
+A=학교국제 | B=경기 | C=용인 필레오인터내셔널PIA | D=admin@phileo.or.kr | E=377 | F=유고
+A=학교국제 | B=경기 | C=가평청심국제중학교 | D=resume@cheongshim.com | E=031-589-8900
+031-589-8802 | F=중고 | G=754 | I=8-5여성1달겨2달연봉3800-4000 | J=방학 | K=여성1달겨2달
+A=학교국제 | B=경기 | C=과천WCA 캐나다 | D=administration@wcacanada.com | E=211 | F=초고 | G=758 | I=08.00-16.00  2.4-3.8 | J=759 | L=12w
+A=학교국제 | B=경기 | C=수원외국인학교 | D=info@gsis.sc.kr | E=211 | F=초고
+A=학교국제 | B=경기 | C=용인 마운틴체리아카데미 | D=admission@mcacademy.net | E=211 | F=초고 | G=764 | I=07.40-16.30(3,0) 10week
+A=학교국제 | B=경기 | C=용인 수지페이스튼 국제대안학교 | D=fps@fayston.org,fps@faystonsuji.org | E=211 | F=초고
+A=학교국제 | B=경기 | C=파주베세토 국제 대안 | D=kkyo@yonsei.ac.kr | E=211 | F=초고
+A=학교국제 | B=경기 | C=동탄 세인트폴 | D=admins@stpaulsuwon.com | E=070-4770-3737
+031-893-3300박은진교무부장 | F=초등 | G=772 | I=7;40-4;40 여성름2달썸머캠프참여성시유급,부분적가능겨2주봄1주2.5-3.5항공60+60 3학년홈룸티처 | J=방학 | K=2 weeks for winter / 2 months for summer / 1 weeks spring | L=eddie@stpaulscholars.com,eunjin@stpaulschoolars.com,
+A=학교국제 | B=경기 | C=용인 비비엘영국국제 학교 | D=jcb0691@naver.com | E=031-333-0502 | F=초성
+A=학교국제 | B=경기 | C=서울국제학교 SIS성남 | D=admissions@siskorea.org,mssec@siskorea.org | E=essec@siskorea.org | F=초중
+A=학교국제 | B=경기 | C=서울국제학교 SIS 고 | D=hssec@siskorea.org | E=235 | F=고등
+A=학교대학 | B=경기 | C=고양 한국항공대 | D=kauapply@kau.ac.kr | E=146 | F=성인 | G=786 | I=교육석사
+A=학교대학 | B=경기 | C=수원대학 | D=intl.college@suwon.ac.kr | E=테솔 | F=성인
+A=학교대학 | B=경기 | C=아산 선문대학 | D=chpark@sunmoon.ac.kr | E=146 | F=성인
+A=학교대학 | B=경기 | C=안산 순천향대학  | D=youngaepark.aoe@gmail.com | E=아산교육청인가 리크루턴가..흠 | F=성인
+A=학교대학 | B=경기 | C=안양 대림대학 | D=global@daelim.ac.kr | E=146 | F=성인 | G=797 | I=2,7-2,8
+A=학교대학 | B=경기 | C=용인 강남대학 | D=tas9989@gmail.com | E=146 | F=성인
+A=경기남부 | B=용인 | C=죽전 제이탑 | D=jtopacademy@gmail.com | E=211 | F=초고 | G=Fvisa
+============================================================
+Sheet: xl/worksheets/sheet3.xml
+============================================================
+A=타임스탬프 | B=이메일 주소 | C=How to | D=Attach your files | E=Full name | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Educational Background  | L=Major | M=Certification | N=E visa | O=ARC holders | P=Passport | Q=Criminal Record | R=Document Status  | S=Start date | T=Target | U=Area prefs | V=Job prefs (Notes) | W=Experience | X=Employment | Y=Reference | Z=Current salary | AA=Desired salary | AB=Marital Status   | AC=Dependents Pets  | AD=Housing | AE=Personal Considerations  | AF=Religion | AG=Health Information  | AH=Criminal Record Check  | AI=Interview time | AJ=KakaoTalk | AK=Mobile Phone | AL=Agreement | AM=Facts | AN=메모
+A=46058.71172070602 | B=tlaleak@gmail.com | C=ESL Cafe | D=https://drive.google.com/open?id=13PnLd0BUMKIpcbLZkKFXIV971jjfLj9O | E=Tlaleng Amelia Nthathakane: Amelia  | F=South Africa | G=Black or African American | H=34899.0 | I=Female | J=Seongnam | K=Bachelor’s degree from one of the 7 eligible countries | L=BA Strategic Corporate Communications  | M=TEFL | N=Recorded | O=F6 26/12/18 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=Already have a valid visa | S=46113.0 | T=Pre-K ~ Kindergarten, Elementary school level, Middle school level | U=Metropollitan city, Medium size city | W=over 4 year | X=Do not know | Y=Jyeollae | Z=2.7 | AA=2.9 base salary ( I have 4 years of experience) | AB=Married | AC=I am coming alone | AD=I am willing to pay monthly for better housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=9:30 - 12:00 KST | AJ=Amelia_n | AK=01042085768 | AL=I Agree | AM=Yes
+A=46062.726372627316 | B=hlumyn1@gmail.com | C=Facebook | D=https://drive.google.com/open?id=1O3LhVvomsC1iCLNy8Hl9PgwgClSZ3vq5, https://drive.google.com/open?id=1HNFN7XVyBOu6U-GCUWDIwr0XKTiS5h_9, https://drive.google.com/open?id=1YbTOi6F_udgjd6TATTAqBECTjwXR4xcn | E=Siyahluma Noqobo; Uma | F=South Africa | G=Black or African American | H=35554.0 | I=Male | J=Donghae/Gangwondo | K=Bachelor’s degree from one of the 7 eligible countries | L=Immunohaematology  | M=TEFL | N=Recorded | O=16/04/2026 | P=Valid for more than 2 years | Q=Holding a visa and recently left Korea | R=Already have a valid visa | S=46113.0 | T=Elementary school level, Middle school level, High school level, Adults | U=Metropollitan city, Medium size city, Small city, No preference | W=6 months to 1 year | X=I will inform them very soon | Y=Donghae-si little Dnd. My current employer wants me to renew my contract.  | Z=2.5 krw | AA=2.7krw with housing due to my experience  | AB=Single or Coming Alone | AC=Other pets | AD=I would like to use the school provided housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=18:00-18:30 KST , 13:00-14:10 KST | AJ=Uma_ | AK=01051692360 | AL=I Agree | AM=Yes
+A=46063.43357912037 | B=caeb@esl.ninja | C=Other | D=https://drive.google.com/open?id=1FLkQCJgFWrwCcraxU9A87unfe5WBsdow | E=Caleb Jack Cook | F=USA | G=White or European | H=26989.0 | I=Male | J=Gyeongnam | K=Master | L=Education; Interdisciplinary Studies | M=on the process | N=Recorded | O=F6; 2026.12.18 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=All documents completed (Criminal check + Degree apostilled) | S=46072.0 | T=Elementary school level, Middle school level | U=No preference | V=I am only filling this out for Job. 1403 seen on Craigslist (https://seoul.craigslist.org/edu/d/tongyeong-geoje-march-elem-vacation/7908076943.html); I am only looking for work in Gyeongnam as close to Jinju as possible. | W=over 20 year, Overseas full-time teaching experience only | X=Not working in Korea | Y=I am not working now. | Z=4.0 million won | AA=more than 3.0; I cannot take less. | AB=Married | AC=I am coming alone | AD=I have housing so no support is needed | AE=Zero tattoos or piercings | AF=Irreligious | AG=I have not | AH=clean record | AI=Send email to set anything up. My current schedule has too many unknowns and other commitments.  | AJ=calebjcook | AK=010.7288.5740 | AL=I Agree | AM=Yes
+A=46064.49076298611 | B=nohulasibisi0@gmail.com | C=ESL Cafe | D=https://drive.google.com/open?id=1G_VJ7-CQWIPPXBR8kG8LLBDZS5b-aL0R, https://drive.google.com/open?id=1leKJuyFY4O8eKojAjxvCNWKzilvF1WmV | E=Sibisi Tholakele Nokuthula; Thuli  | F=South Africa | G=Prefer not to disclose | H=36744.0 | I=Female | J=Gimpo-si, Gyeonggi-do | K=Bachelor’s degree from one of the 7 eligible countries | L=Social Science  | M=TEFL | N=Recorded | O=E2 27/01/08 | P=Valid for more than 2 years | Q=Issued and apostille completed | R=Already have a valid visa | S=46083.0 | T=Elementary school level, Middle school level | U=Metropollitan city | V=Na | W=over 2 year | X=The school is aware | Y=Chungdahm April, Unya81-5021 | Z=2.6 Lee | AA=2.8 ore | AB=Single or Coming Alone | AC=I am coming alone | AD=I would like to use the school provided housing | AE=Zero tattoos or piercings | AF=Christianity | AG=I have not | AH=clean record | AI=M-F 09:30- 13:00 | AJ=ThuliSibisi | AK=010 8111 6234 | AL=I Agree | AM=Yes
+============================================================
+Sheet: xl/worksheets/sheet4.xml
+============================================================
+A=이메일 주소 | B=Full name | C=Photo | D=No | E=5 | F=Nationality | G=Family Ancestry Background  | H=Date of Birth | I=Gender | J=Current Location | K=Start date | L=Target | M=Area prefs | N=Reference | O=Experience | P=Employment | Q=Job prefs  | R=Apply | S=19 | T=Current salary | U=Desired salary | V=Interview time | W=23 | X=Major | Y=Certification | Z=Documents | AA=Basic health  | AB=Situation | AC=Pet | AD=Tattoos | AE=Piercings | AF=Marital | AG=Housing | AH=Religion | AI=E visa | AJ=KakaoTalk | AK=Mobile Phone | AL=Criminal Record | AM=38 | AN=Passport | AO=Agreement | AP=Facts | AQ=How to | AR=4542 | AS=Attach your files | AT=채용처 | AU=임금 | AV=개시월 | AW=숙박 | AX=비용 | AY=처리
+A=메일 | B=이름 | C=사진 | D=번호 | E=62 | F=국적 | G=배경 | H=나이 | I=성별 | J=현재 | K=시작 | L=대상 | M=지역 | N=레퍼런스/근무처확인 | O=경력 | P=한국 | Q=선호사항/리크루터인터뷰 | R=지원한곳/인터뷰요청 | S=포지션제안/진행 | T=현급 | U=희망 | V=시간 | W=학위 | X=전공 | Y=자격 | Z=서류 | AA=건강 | AB=가족 | AC=동물 | AD=타투 | AE=피어 | AF=결혼 | AG=숙소 | AH=종교 | AI=비자 | AJ=카톡 | AK=번호 | AL=범죄 | AM=만료 | AN=정보 | AO=사실 | AP=경로 | AQ=제출 | AR=첨부 | AS=채용 | AT=임금 | AU=개시 | AV=숙박 | AW=비용 | AX=처리
+A=Nittecook@gmail.com | B=Nicollette Aureillia Cook  | C=4293.0 | E=E2 2025/10/15 | F=미국 | G=흑인 | H=88.0 | I=여성 | J=청주 | K=25.10.20 | L=무관 | M=부산바다 | N=청주닥터2309-2510//01093788021(1/3관티칭)성실다잘하고원만25.8.20원장
+청담2008-2302 어디청담?? | O=5.0 | P=원장안다 | Q=재미없음,조용함,불만있는인상?지친인상,
+재밌게가르치기,개개인에집중하기,클래스룸매니징자신있음//이슈있으면이유찾고,수준맞춰보기,정확한문제찾기//불법없는곳이면다참을수있음//티칭외에ADMIN너무잡일없는곳/ | R=4667 | T=2.9-20 | U=3.1~ | V=9am-11am on weekdays | W=학사 | X=IT | Y=테플 | Z=비자O | AA=건강 | AB=동물 | AC=2 cats | AD=커버가능 | AE=숨김가능 | AF=싱글 | AG=숙소희망 | AH=없음 | AI=Yes | AJ=Aureillia | AK=010-7248-8473  | AL=완료 | AM=4679 | AN=충분 | AO=I Agree | AP=정상 | AQ=페이스북 | AR=4682 | AS=https://drive.google.com/open?id=1vq30rmwUGwvAMCt3MwaqYP1bQuEQO8sP
+A=sydneffour@gmail.com | B=Sydney Baffour | C=4165.0 | E=105 | F=미국 | G=흑인 | H=98.0 | I=여성 | J=해외 | K=25.11- | L=무관 | M=서울경기인천 | N=131 | O=없음 | P=원장안다 | Q=학교만근무하고싶다-연세대공부,한국어공부중/자신감,튜터링다양하게해봄,밝은인상,바이브좋음,대화하는데긍정적인느낌이온다/스피킹코치해봐서어떤방식으로해결해야하는지알고있다/따뜻하게맞아주기// | R=노)리더스,JLS, | S=0.0 | U=2,3  | V=10am - 12pm KST | W=학사 | X=경제 | Y=테플 | Z=준비완료 | AA=건강 | AB=없음 | AC=no pets | AD=없음 | AE=숨김가능 | AF=싱글 | AG=숙소희망 | AH=크리 | AI=No | AJ=sydneyssi | AK=n/a | AL=최종 | AM=4679 | AN=충분 | AO=I Agree | AP=정상 | AQ=기타 | AR=4699 | AS=https://drive.google.com/open?id=1i45KWS2xnr-PoH-SAczKbFA4Wpdyq-4G
+A=justin.nett@gmail.com | B=Justin Alec Burnett | C=4355.0 | E=105 | F=미국 | G=96.0 | I=남성 | J=미국 | K=25.11- | L=유중 | M=서울성동광진동대강남 | N=4703 | O=NO | P=4704 | Q=부드러운인상,미소가많음,밝음,한국인들많이만나봐서좋았다//공식적은X샌프란시스코/경력없음//남동생10살차이라서헬프해봄//하드워킹가능,할수있다//음악등가능//위치-성동,동대문,광진// | R=가족,친구서울 | S=153 | U=2.5- | V=45909.0 | W=학사 | X=의류디자인 | Y=테플 | Z=준비완료 | AA=건강 | AB=없음 | AC=없음 | AD=없음 | AE=없음 | AF=싱글 | AG=숙소희망 | AH=없음 | AI=NO | AJ=9.254700396E9 | AL=완료 | AM=4707 | AQ=홈피
