@@ -222,6 +222,12 @@ export default function MailSendPage() {
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-4">
+      <style>{`
+        @keyframes templateGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.7), 0 2px 8px rgba(245,158,11,0.3); }
+          50% { box-shadow: 0 0 0 5px rgba(251,191,36,0.2), 0 2px 14px rgba(245,158,11,0.5); }
+        }
+      `}</style>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -239,7 +245,7 @@ export default function MailSendPage() {
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white text-[13px] font-semibold no-underline transition-opacity hover:opacity-85"
             style={{ background: '#03C75A', boxShadow: '0 2px 6px rgba(3,199,90,0.3)' }}
           >
-            <img src="https://ssl.pstatic.net/static/mail/icons/favicon/favicon-32x32.png" width={16} height={16} style={{ borderRadius: 3 }} alt="naver" />
+            <span style={{ width: 16, height: 16, background: 'rgba(255,255,255,0.3)', borderRadius: 3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: '#fff', flexShrink: 0 }}>N</span>
             네이버 메일
           </a>
           <a
@@ -288,10 +294,16 @@ export default function MailSendPage() {
           <button
             type="button"
             onClick={() => setShowTemplateMenu(v => !v)}
-            className="flex items-center gap-1 px-4 py-1.5 bg-white border border-[#c8d6f0] text-[#555] text-[13px] font-semibold rounded-md hover:bg-[#e8eef8] transition-colors"
+            className="flex items-center gap-1 px-4 py-1.5 text-[13px] font-bold rounded-md transition-colors"
+            style={{
+              background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+              color: '#fff',
+              border: '1px solid #d97706',
+              animation: 'templateGlow 1.8s ease-in-out infinite',
+            }}
           >
             <FileText size={13} />
-            템플릿
+            템플릿 ✨
             <ChevronDown size={12} />
           </button>
           {showTemplateMenu && (
