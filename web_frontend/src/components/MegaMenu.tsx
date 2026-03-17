@@ -17,7 +17,6 @@ interface SubItem { href: string; label: string; labelKr?: string }
 const DROPDOWNS: Record<string, SubItem[]> = {
   '/community/about': [
     { href: '/community/about', label: 'About BRIDGE', labelKr: '회사 소개' },
-    { href: '/community/about#process', label: 'How It Works', labelKr: '채용 프로세스' },
   ],
   '/community/information': [
     { href: '/community/information', label: 'Team', labelKr: '팀 소개' },
