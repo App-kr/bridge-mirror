@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BRIDGE — Prompt Generator</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Inter', 'Segoe UI', sans-serif;
+  background: #0d0d0d;
+  color: #e8e8e8;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── SIDEBAR ─────────────────────────────── */
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #141414;
+  border-right: 1px solid #272727;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-inner {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-inner::-webkit-scrollbar { display: none; }
+
+.logo-wrap {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid #272727;
+}
+.logo-name {
+  font-size: 16px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: #fff;
+}
+.logo-desc {
+  font-size: 13px; color: #999; margin-top: 4px; letter-spacing: 0.02em;
+}
+
+.s-section { padding: 16px 18px; border-bottom: 1px solid #1e1e1e; }
+.s-label {
+  font-size: 12px; font-weight: 700; color: #777;
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;
+}
+
+/* Target */
+.t-group { display: flex; flex-direction: column; gap: 3px; }
+.t-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 7px;
+  cursor: pointer; color: #888; transition: all .12s;
+  user-select: none; font-size: 15px;
+}
+.t-item:hover { background: #1c1c1c; color: #ccc; }
+.t-item.on { background: #222; color: #fff; }
+.t-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #3a3a3a; flex-shrink: 0; transition: background .12s;
+}
+.t-item.on .t-dot { background: #fff; }
+.t-item.on-early .t-dot { background: #f59e0b; }
+.t-item.on-early { color: #fff; }
+.t-item.on-middle .t-dot { background: #3b82f6; }
+.t-item.on-middle { color: #fff; }
+
+/* Count */
+.count-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+.count-n { font-size: 42px; font-weight: 200; color: #fff; line-height: 1; }
+.count-unit { font-size: 14px; color: #888; }
+input[type=range] {
+  width: 100%; -webkit-appearance: none;
+  height: 3px; background: #333; border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.1);
+}
+
+/* Generate — big colorful button */
+.gen-btn {
+  display: block; width: calc(100% - 36px);
+  margin: 16px 18px;
+  padding: 15px 0;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  font-size: 15px; font-weight: 800;
+  border: none; border-radius: 10px; cursor: pointer;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: all .15s;
+  box-shadow: 0 4px 20px rgba(99,102,241,.35);
+}
+.gen-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  box-shadow: 0 6px 24px rgba(99,102,241,.5);
+  transform: translateY(-1px);
+}
+.gen-btn:active { transform: scale(.98); box-shadow: none; }
+.gen-btn.loading {
+  opacity: .6; pointer-events: none;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+}
+
+/* Services — visible buttons */
+.svc-list { display: flex; flex-direction: column; gap: 4px; }
+.svc-item {
+  display: flex; align-items: center;
+  padding: 9px 11px; border-radius: 7px;
+  font-size: 14px; font-weight: 600; color: #bbb;
+  text-decoration: none; cursor: pointer;
+  transition: all .12s; gap: 10px;
+  border: 1px solid #2a2a2a; background: #181818;
+}
+.svc-item:hover { color: #fff; border-color: #444; background: #222; }
+.svc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.svc-imagefx .svc-dot { background: #4285f4; }
+.svc-midjourney .svc-dot { background: #bbb; }
+.svc-dalle .svc-dot { background: #10a37f; }
+.svc-ideogram .svc-dot { background: #a855f7; }
+
+/* Advanced */
+.adv-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 10px; border-radius: 7px; cursor: pointer;
+  font-size: 14px; color: #999; transition: all .12s;
+  background: none; border: none; width: 100%;
+}
+.adv-toggle:hover { color: #ddd; background: #1c1c1c; }
+.adv-toggle span { font-size: 11px; }
+.adv-body { display: none; margin-top: 8px; }
+.adv-body.open { display: block; }
+.adv-field { margin-bottom: 10px; }
+.adv-field-label { font-size: 13px; color: #999; margin-bottom: 5px; }
+select.adv-select {
+  width: 100%; padding: 8px 10px;
+  background: #1a1a1a; color: #ddd;
+  border: 1px solid #333; border-radius: 6px;
+  font-size: 13px; outline: none; cursor: pointer;
+}
+select.adv-select:focus { border-color: #555; }
+
+/* Bottom */
+.sidebar-bottom { padding: 16px 18px; border-top: 1px solid #222; margin-top: auto; }
+.copy-all-btn {
+  display: block; width: 100%; padding: 10px;
+  background: #1c1c1c; color: #ccc;
+  border: 1px solid #333; border-radius: 7px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all .12s;
+  margin-bottom: 16px;
+}
+.copy-all-btn:hover { color: #fff; border-color: #555; background: #252525; }
+
+.stats-row { display: flex; gap: 12px; }
+.stat-item { flex: 1; }
+.stat-n { font-size: 20px; font-weight: 300; color: #ddd; }
+.stat-d { font-size: 12px; color: #666; margin-top: 2px; }
+
+/* ── MAIN ─────────────────────────────────── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #0d0d0d; }
+
+.topbar {
+  height: 50px; border-bottom: 1px solid #1e1e1e;
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 12px; flex-shrink: 0;
+}
+.topbar-label { font-size: 14px; color: #999; }
+.topbar-badge {
+  font-size: 13px; color: #bbb;
+  background: #1a1a1a; border: 1px solid #2e2e2e;
+  padding: 2px 10px; border-radius: 9px;
+}
+.topbar-spacer { flex: 1; }
+.topbar-hint { font-size: 13px; color: #666; }
+
+.output {
+  flex: 1; overflow-y: auto;
+  padding: 18px 22px; display: flex; flex-direction: column; gap: 12px;
+}
+.output::-webkit-scrollbar { width: 4px; }
+.output::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 2px; }
+
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+}
+.empty-state p:first-child { font-size: 17px; color: #555; font-weight: 600; }
+.empty-state p:last-child { font-size: 14px; color: #3a3a3a; }
+
+/* ── PROMPT CARD ──────────────────────────── */
+.pcard {
+  background: #141414; border: 1px solid #272727;
+  border-radius: 10px; overflow: hidden;
+  animation: up .22s ease both; border-left-width: 3px;
+}
+.pcard.early { border-left-color: #f59e0b; }
+.pcard.middle { border-left-color: #3b82f6; }
+@keyframes up {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.pcard-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid #1e1e1e;
+}
+.pcard-idx { font-size: 14px; color: #777; font-weight: 700; width: 22px; flex-shrink: 0; }
+.pcard-info { flex: 1; min-width: 0; }
+.pcard-place {
+  font-size: 15px; font-weight: 700; color: #f0f0f0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pcard-sub { font-size: 13px; color: #999; margin-top: 2px; }
+.badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; padding: 4px 9px; border-radius: 5px; flex-shrink: 0;
+}
+.badge.early { background: rgba(245,158,11,.18); color: #fbbf24; }
+.badge.middle { background: rgba(59,130,246,.2); color: #60a5fa; }
+
+/* Action buttons — colorful & prominent */
+.pcard-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.pa-btn {
+  padding: 7px 13px; border-radius: 7px;
+  font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer; transition: all .12s;
+  white-space: nowrap;
+}
+.pa-btn.copy-btn  { background: #2d3748; color: #e2e8f0; }
+.pa-btn.copy-btn:hover  { background: #4a5568; color: #fff; }
+.pa-btn.copy-btn.copied { background: #276749; color: #9ae6b4; }
+.pa-btn.fx   { background: #1e3a5f; color: #63b3ed; }
+.pa-btn.fx:hover   { background: #2b4c7e; color: #90cdf4; }
+.pa-btn.dl   { background: #1a3a2a; color: #68d391; }
+.pa-btn.dl:hover   { background: #236038; color: #9ae6b4; }
+.pa-btn.ig   { background: #2d1b69; color: #b794f4; }
+.pa-btn.ig:hover   { background: #44337a; color: #d6bcfa; }
+
+/* Card body — two column */
+.pcard-body { display: flex; border-bottom: 1px solid #1a1a1a; }
+
+.prompt-en {
+  flex: 3; padding: 14px 16px;
+  border-right: 1px solid #1a1a1a; min-width: 0;
+}
+.pcard-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
+  font-size: 13px; line-height: 1.8; color: #c8c8c8;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Korean description panel */
+.prompt-ko {
+  width: 220px; min-width: 220px;
+  padding: 14px 15px;
+  background: #111;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ko-title {
+  font-size: 11px; font-weight: 700; color: #555;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+.ko-row { display: flex; flex-direction: column; gap: 2px; }
+.ko-label { font-size: 11px; color: #555; }
+.ko-val { font-size: 13px; color: #ccc; font-weight: 500; line-height: 1.4; }
+.ko-val.early-c { color: #fbbf24; }
+.ko-val.middle-c { color: #60a5fa; }
+.ko-divider { height: 1px; background: #1e1e1e; margin: 2px 0; }
+
+.pcard-foot {
+  padding: 8px 16px 10px;
+  display: flex; align-items: center; gap: 10px;
+}
+.pcard-foot-line { flex: 1; height: 1px; background: #1e1e1e; }
+.expand-btn {
+  font-size: 13px; color: #777; background: none; border: none;
+  cursor: pointer; padding: 0; transition: color .12s; font-weight: 500;
+}
+.expand-btn:hover { color: #ccc; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 22px; right: 22px;
+  background: #1c1c1c; color: #f0f0f0;
+  border: 1px solid #333; border-radius: 9px;
+  padding: 11px 18px; font-size: 14px; font-weight: 600;
+  opacity: 0; transform: translateY(5px);
+  transition: all .18s; pointer-events: none; z-index: 9999;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.toast.on { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+<div class="sidebar-inner">
+
+  <div class="logo-wrap">
+    <div class="logo-name">Bridge</div>
+    <div class="logo-desc">Image Prompt Generator</div>
+  </div>
+
+  <!-- Target -->
+  <div class="s-section">
+    <div class="s-label">Target</div>
+    <div class="t-group">
+      <div class="t-item on" data-val="all" onclick="setTarget(this)">
+        <div class="t-dot"></div> All
+      </div>
+      <div class="t-item" data-val="early" onclick="setTarget(this)">
+        <div class="t-dot"></div> Early Childhood
+      </div>
+      <div class="t-item" data-val="middle" onclick="setTarget(this)">
+        <div class="t-dot"></div> Middle / High School
+      </div>
+    </div>
+  </div>
+
+  <!-- Count -->
+  <div class="s-section">
+    <div class="s-label">Count</div>
+    <div class="count-row">
+      <div class="count-n" id="countN">5</div>
+      <div class="count-unit">prompts</div>
+    </div>
+    <input type="range" id="countSlider" min="1" max="12" value="5"
+      oninput="document.getElementById('countN').textContent=this.value">
+  </div>
+
+  <!-- Generate -->
+  <button class="gen-btn" id="genBtn" onclick="runGenerate()">Generate</button>
+
+  <!-- Services -->
+  <div class="s-section">
+    <div class="s-label">Open in</div>
+    <div class="svc-list">
+      <a class="svc-item svc-imagefx" href="https://labs.google/fx/tools/image-fx" target="_blank">
+        <div class="svc-dot"></div> ImageFX
+      </a>
+      <a class="svc-item svc-midjourney" href="https://www.midjourney.com/" target="_blank">
+        <div class="svc-dot"></div> Midjourney
+      </a>
+      <a class="svc-item svc-dalle" href="https://chatgpt.com/" target="_blank">
+        <div class="svc-dot"></div> DALL·E 3
+      </a>
+      <a class="svc-item svc-ideogram" href="https://ideogram.ai/" target="_blank">
+        <div class="svc-dot"></div> Ideogram
+      </a>
+    </div>
+  </div>
+
+  <!-- Advanced -->
+  <div class="s-section">
+    <button class="adv-toggle" onclick="toggleAdv()">
+      Advanced <span id="advArrow">▾</span>
+    </button>
+    <div class="adv-body" id="advBody">
+      <div class="adv-field">
+        <div class="adv-field-label">Background</div>
+        <select class="adv-select" id="bgFilter">
+          <option value="">Any</option>
+          <optgroup label="Early Childhood" id="earlyOpts"></optgroup>
+          <optgroup label="Middle / High" id="middleOpts"></optgroup>
+        </select>
+      </div>
+      <div class="adv-field">
+        <div class="adv-field-label">Instructor gender</div>
+        <select class="adv-select" id="genderFilter">
+          <option value="">Any</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /sidebar-inner -->
+
+<div class="sidebar-bottom">
+  <button class="copy-all-btn" onclick="copyAll()">Copy all prompts</button>
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-n" id="s-rules">744</div>
+      <div class="stat-d">rules</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">∞</div>
+      <div class="stat-d">combinations</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n" id="s-gen">0</div>
+      <div class="stat-d">generated</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /sidebar -->
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-label">Prompts</span>
+    <span class="topbar-badge" id="topCount">0</span>
+    <div class="topbar-spacer"></div>
+    <span class="topbar-hint">Copy prompt → paste into image AI</span>
+  </div>
+  <div class="output" id="output">
+    <div class="empty-state" id="emptyState">
+      <p>No prompts yet</p>
+      <p>Set options and click Generate</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// RULE BANK — 744 rules across 22 dimensions
+// ============================================================
+
+const FLOORS=[
+"polished hardwood parquet flooring with warm honey tones",
+"matte light-oak engineered wood panels",
+"glossy white ceramic tile flooring",
+"soft pastel-blue foam mat flooring",
+"colorful interlocking EVA foam tiles in primary colors",
+"speckled linoleum flooring in warm beige",
+"smooth poured concrete with a subtle sheen",
+"herringbone-patterned pale oak hardwood",
+"non-slip rubber athletic flooring in charcoal gray",
+"sprung maple hardwood sports floor",
+"cobblestone-patterned decorative tile (indoor themed area)",
+"soft carpet in warm grey with alphabet border stitching",
+"large-format porcelain tiles in light cream",
+"warm terracotta-toned ceramic tile",
+"bamboo flooring panels in natural green-tan hue",
+"industrial epoxy resin floor in cool gray",
+"bright yellow-and-blue checkerboard vinyl flooring",
+"cushioned play floor with star and circle motif",
+"fine-grain neutral concrete with sealer finish",
+"warm walnut hardwood with a satin finish",
+"anti-fatigue foam matting in forest green",
+"deep charcoal rubber flooring with yellow lane markers",
+"pale birch laminate flooring with micro-bevel edges",
+"smooth resin terrazzo in white and pale gold",
+"soft grey felt carpet tiles arranged in a grid",
+"light maple strip flooring with a gymnasium sheen",
+"bold rainbow-segment activity floor for children",
+"cool slate-grey anti-static lab flooring",
+"warm sienna-stained concrete microcement",
+"pastel mint green vinyl roll flooring",
+"brushed stainless-steel stage floor panels",
+"dance studio sprung floor with light beech finish",
+"woven jute area rug over light hardwood",
+"large pale terrazzo tiles with grey aggregate",
+"natural stone-look porcelain slabs in warm ivory",
+"recycled rubber flooring with subtle circular texture",
+"semi-gloss cream epoxy lab floor with anti-slip grit",
+"bold red-and-white striped activity floor for gym zone",
+"soft foam interlocking puzzle mat in pastel colors",
+"glossy dark ebony hardwood with high shine finish",
+];
+
+const WALLS=[
+"walls painted in warm white with subtle texture",
+"exposed brick wall painted matte white",
+"raw exposed brick in natural terracotta tones",
+"floor-to-ceiling glass curtain wall overlooking a green campus",
+"acoustic foam panels in charcoal arranged in a grid",
+"colorful phonics alphabet posters covering one wall",
+"world map mural spanning the entire back wall",
+"chalkboard-painted feature wall covered in student notes",
+"whiteboard wall with colorful dry-erase writing",
+"warm wood slat paneling running horizontally",
+"deep navy blue accent wall with star constellation decals",
+"pale sage green painted walls with white trim",
+"full-length mirror wall reflecting the entire room",
+"concrete block wall with industrial grey finish",
+"pastel yellow walls with cartoon English-learning stickers",
+"glass-walled partition dividing lab zones",
+"corrugated metal cladding painted in muted grey-blue",
+"light-grey textured plaster walls with shadow gaps",
+"colorful murals of world cities and landmarks",
+"panoramic window looking out to a tree-lined courtyard",
+"bright coral-orange feature wall behind the teacher's station",
+"vertical garden wall with real climbing plants",
+"linen-textured cream wallpaper with geometric pattern",
+"frosted glass partition with abstract etched design",
+"soft periwinkle blue walls with floating wooden shelves",
+"library-style bookshelves built into both side walls",
+"tall pegboard wall holding craft supplies in labeled bins",
+"theatrical black curtain backdrop wall with track lighting",
+"sky blue walls with clouds mural for early learners",
+"warm sand-colored stucco wall with recessed LED niches",
+"high-gloss white walls with color-band wayfinding stripes",
+"scientific periodic table wall print from floor to ceiling",
+"motivational English quotes typography wall in black and gold",
+"reclaimed wood shiplap paneling in weathered grey",
+"vibrant cartoon English village scene mural",
+"dark charcoal walls with neon accent lines",
+"pastel pink walls with framed children's artwork gallery",
+"exposed structural steel columns against off-white plaster",
+"pale turquoise walls with white wave-form acoustic baffles",
+"bold color-blocked walls — yellow left panel, white right",
+"deep forest-green walls with gold leaf framed learning charts",
+"soft lilac walls with floating white cloud sculptures",
+"warm amber-lit wood-panel walls in library reading room",
+"mint green walls with educational number-line border frieze",
+"soft-grey noise-reducing fabric wall panels with stitched pattern",
+"iridescent tile mosaic accent wall behind the whiteboard",
+"concrete wall with large-format school crest relief",
+"heritage brick restored with clear protective sealer",
+"holographic interactive display wall",
+"transparent polycarbonate panels revealing structural beams",
+];
+
+const CEILINGS=[
+"exposed industrial ductwork and concrete soffit painted white",
+"dropped acoustic tile ceiling with recessed LED panels",
+"high vaulted ceiling with exposed timber trusses",
+"skylights flooding the room with natural daylight",
+"colorful paper lantern installations hanging from above",
+"strings of warm Edison bulb fairy lights criss-crossing overhead",
+"double-height glass atrium ceiling with steel grid",
+"stage rigging grid with adjustable spotlights",
+"painted sky blue ceiling with cloud motifs",
+"suspended cloud-shaped acoustic baffles in white",
+"coffered ceiling in cream with subtle gold molding",
+"raw concrete ceiling with black industrial track lighting",
+"translucent polycarbonate roof diffusing soft daylight",
+"low suspended ceiling with colorful hexagonal tiles",
+"dome-shaped ceiling with star-field projection",
+"cathedral ceiling with dramatic arched wooden beams",
+"flat white ceiling with minimalist recessed downlights",
+"hanging mobile artwork installation of English alphabet letters",
+"LED strip lighting in warm white tracing the ceiling perimeter",
+"undulating wave-form white acoustic ceiling panels",
+"hanging origami bird installation above the reading circle",
+"black box theatre ceiling — all black, grid of fresnels",
+"bamboo slat ceiling panels creating organic rhythm",
+"glass clerestory windows high on walls letting in sidelight",
+"colorful kite-shaped fabric canopies suspended from ceiling",
+"metallic silver sound diffuser panels arranged geometrically",
+"warm wooden tongue-and-groove ceiling with pendant lamps",
+"concrete ceiling with embedded round LED dot matrix pattern",
+"mirrored ceiling panel adding depth over performance space",
+"large rectangular HVAC grilles integrated into white ceiling",
+];
+
+const LIGHTING=[
+"golden morning light streaming through east-facing windows",
+"soft diffused afternoon daylight filling the space evenly",
+"warm 3200K tungsten interior lighting",
+"neutral 4000K cool-white LED panels",
+"warm 2700K vintage Edison bulb warmth",
+"bright 6500K daylight-balanced studio lighting",
+"overcast sky producing flat even shadowless outdoor light",
+"dramatic low-key side lighting with deep shadows",
+"high-key bright even illumination eliminating harsh shadows",
+"split lighting — half face lit, half in shadow",
+"soft window light from a north-facing window, even and cool",
+"theatrical Fresnel spot creating a strong key light on subject",
+"colorful RGB stage wash in complementary hues",
+"warm pendant lamps creating pools of intimate light",
+"cool fluorescent overhead lighting of a science lab",
+"backlit window creating a gentle rim light on the instructor",
+"amber-toned late afternoon golden hour light",
+"blue-tinted dusk light through large windows",
+"mixed daylight and warm incandescent — natural color contrast",
+"fairy lights creating a warm twinkling ambient background",
+"skylight overhead producing a natural fill with soft shadows",
+"spotlit single beam on whiteboard, room in shadow",
+"soft ring-light frontal fill creating catchlights in eyes",
+"moody Rembrandt-style single side key light",
+"twin key-fill balanced studio setup",
+"classroom fluorescent tubes with slight flicker warmth",
+"recessed downlights creating scalloped wall wash",
+"track lighting accenting specific activity zones",
+"morning haze diffusing through sheer curtains",
+"crisp winter daylight — high contrast cool tones",
+"warm spring afternoon light through open curtains",
+"bright summer noon light bleaching color slightly",
+"deep autumn amber slant light through blinds creating stripes",
+"canopy-filtered dappled natural light for outdoor scene",
+"wall-washer LED creating gradient on feature wall",
+"colored gel wash — warm amber on instructor, cool blue on BG",
+"stage follow-spot isolating instructor from dim background",
+"diffused light through translucent ceiling panels, even overall",
+"stadium-style overhead floodlights — sports hall",
+"deep evening interior warmth, dark exterior visible outside",
+"cool blue backlight through frosted glass wall",
+"sunrise warm blush tone — pink-orange early morning light",
+"bounce light from wide white ceiling creating soft fill",
+"side-window light — strong directional, long shadows on floor",
+"mixed: cool daylight from windows and warm tungsten accent",
+"luminous halo from large LED softbox panel overhead",
+"late afternoon light at 15-degree angle creating long soft shadows",
+"even overcast bright studio daylight equivalent",
+"bright but soft north light — ideal for detail rendering",
+"clean clinical lighting with warm accent on key face areas",
+];
+
+const INSTRUCTOR_RG=[
+["White","male"],["White","female"],
+["Black","male"],["Black","female"],
+["Latino","male"],["Latina","female"],
+["South Asian","male"],["South Asian","female"],
+["East Asian","male"],["East Asian","female"],
+["Middle Eastern","male"],["Middle Eastern","female"],
+["Southeast Asian","male"],["Southeast Asian","female"],
+["Mixed-race","male"],["Mixed-race","female"],
+["Native American","male"],["Pacific Islander","female"],
+];
+
+const HAIR=[
+"short neat side-part","close-cropped natural afro",
+"long straight dark hair worn loose","shoulder-length wavy auburn hair",
+"tight coiled natural hair in a high bun","braided cornrows styled back neatly",
+"thick black hair in a sleek ponytail","medium-length curly brown hair",
+"shaved head with faded sides","silver-streaked short professional cut",
+"long flowing locs gathered over one shoulder","pixie cut in natural black",
+"undercut with wavy top styled back","bob cut in rich espresso brown",
+"short textured crop with slight fade","long beachy waves in caramel blonde",
+"buzz cut revealing natural head shape","double buns",
+"French braid crown for a polished look","loose chignon low bun at nape",
+"thick silver natural locs","curly red hair medium length",
+"straight black hair with blunt bangs","long box braids worn down",
+"tightly twisted natural hair mid-length","short grey tapered cut",
+"swept-back pompadour in dark brown","half-up half-down with natural curls",
+"deep side-swept waves past shoulders","dreadlocks gathered in a loose ponytail",
+"short afro with a fade","long straight platinum blonde hair",
+"kinky coils in a defined puff","layered chestnut hair just below chin",
+"cropped textured natural hair — salt and pepper",
+"loose romantic updo with face-framing tendrils",
+"slick back gel style — professional and sharp",
+"voluminous curly medium-length in warm brown",
+"short graduated bob in jet black",
+"long loosely braided plait over shoulder",
+"short choppy pixie with side-swept fringe",
+"medium-length natural twist-out style",
+"waist-length straight dark hair","tousled messy bun",
+"structured quiff in sandy brown","tapered natural hair with defined coils",
+"loose waves in warm honey tones","asymmetric short cut — bold and modern",
+"mid-length balayage in dark root to caramel ends",
+"very short natural hair with warm undertone skin",
+"long thick braid worn forward over one shoulder",
+];
+
+const CLOTHING=[
+"fitted navy blazer over a crisp white dress shirt",
+"colorful patterned blouse in coral and white",
+"casual pale blue Oxford shirt, top button open",
+"soft heather-grey V-neck sweater",
+"professional charcoal suit jacket",
+"bright yellow cardigan over a white undershirt",
+"smart olive-green bomber jacket",
+"striped Breton top in navy and white",
+"fitted turtleneck in warm burgundy",
+"lightweight denim jacket over floral blouse",
+"athletic tracksuit jacket in royal blue with white stripes",
+"crisp pressed white lab coat",
+"earthy terracotta linen button-down shirt",
+"slim-cut black turtleneck — minimalist style",
+"pastel pink oversized blazer",
+"forest green utility overshirt",
+"classic white polo shirt",
+"merino wool crew-neck sweater in camel",
+"bold geometric print short-sleeve shirt",
+"soft lavender quarter-zip pullover",
+"well-fitted dark denim shirt",
+"colourblock zip-up hoodie in teal and grey",
+"silk blouse in deep sapphire blue",
+"light grey marl sweatshirt — relaxed fit",
+"sleeveless mandarin-collar blouse in ivory",
+"smart casual checked flannel shirt in earth tones",
+"technical sports jersey — PE",
+"tailored black mock-neck top",
+"bright red crewneck sweater",
+"sheer white blouse over camisole",
+"structured plum-colored blazer",
+"striped linen button-down in soft peach",
+"oversized cream knit cardigan with pockets",
+"slim-fit cobalt blue dress shirt",
+"patterned ethnic-print dashiki top",
+"sporty performance polo in charcoal",
+"lightweight khaki utility shirt",
+"colorful embroidered kurta top",
+"mock-neck fitted ribbed top in olive",
+"classic teacher cardigan in soft mustard",
+"athletic long-sleeve base layer in slate blue",
+"corduroy overshirt in warm rust",
+"paint-stained smock over a neutral top",
+"short-sleeve linen shirt in washed indigo",
+"bold abstract-print blouse in warm tones",
+"sleek black button-through dress shirt",
+"cozy chunky knit pullover in oatmeal",
+"slim cashmere V-neck in forest green",
+"soft cotton jersey top in dusty rose",
+"technical moisture-wicking polo for gym instructor",
+"crisply ironed school-crest polo in white",
+"lightweight chambray shirt in soft blue",
+"printed batik short-sleeve top",
+"smart dark navy sweatshirt with minimalist logo",
+"formal waistcoat over light dress shirt",
+"cropped blazer in warm tan over high-waist trousers",
+"relaxed fit flannel in charcoal plaid",
+"vibrant orange knit top",
+"monochrome black athletic long-sleeve tee",
+"cable-knit cream sweater — warm and approachable",
+];
+
+const POSES=[
+"gesturing enthusiastically toward a whiteboard",
+"kneeling at a child's eye level with a warm smile",
+"standing with arms open in an inviting gesture",
+"holding up a large colorful flashcard",
+"sitting cross-legged on the floor with students gathered around",
+"pointing to something on an interactive smartboard",
+"clapping hands to the rhythm of a song",
+"reading aloud from an oversized picture book",
+"crouching next to a student to guide their work",
+"writing on a whiteboard mid-sentence, marker in hand",
+"arms crossed confidently, scanning the room",
+"leaning forward on a desk, engaged in student conversation",
+"making a two-hand frame gesture while explaining",
+"mid-step walking between student desks",
+"holding a globe and pointing to a location",
+"giving a thumbs-up to a student who answered correctly",
+"conducting students with both hands like an orchestra",
+"holding a marker and pausing mid-thought",
+"demonstrating a science procedure with both hands",
+"high-fiving a student in an encouraging moment",
+"gesturing to two students to collaborate",
+"leaning back against the teacher's desk, relaxed",
+"standing tall at the front of the room, confident posture",
+"holding a clipboard and reviewing student work",
+"extending one hand palm-up in an explanatory gesture",
+"demonstrating a dance move with arms extended",
+"blowing a whistle with one arm pointing direction",
+"adjusting a student's art piece with gentle hands",
+"turning to face the room while writing, mid-sentence",
+"using both hands to count off points on fingers",
+"bending over a lab bench to show a technique",
+"stepping forward to make eye contact with a student",
+"spreading both arms wide in an expressive storytelling pose",
+"placing a hand on a student's shoulder encouragingly",
+"snapping fingers to get the class's attention",
+"pointing upward as if referencing a key concept",
+"sitting on the edge of a desk casually addressing the group",
+"making a circle gesture with both hands — gather around",
+"walking and gesturing simultaneously — dynamic motion",
+"holding a book open to a page and showing it",
+"mid-clap celebrating a student achievement",
+"pointing to a student who raised their hand",
+"facing slightly away, shoulder toward camera, dynamic profile",
+"reaching up to a high shelf for a teaching prop",
+"holding chalk in one hand, turning from chalkboard",
+"handing out worksheets while smiling at students",
+"tossing a soft foam ball to a participating student",
+"pointing to a large printed infographic on the wall",
+"making an OK sign and nodding in affirmation",
+"sweeping one arm across the room in introduction gesture",
+"using sign language alongside spoken words",
+"mid-laugh sharing a moment of humor with students",
+"squatting beside a small group working on the floor",
+"holding a tablet showing content to nearby student",
+"raising one eyebrow and tilting head — Socratic pose",
+"using a laser pointer on a projected map or diagram",
+"leaning in close to a student's work with genuine interest",
+"making a precise hand gesture to illustrate a concept",
+"mid-turn between board and class, natural dynamic pose",
+"pausing with one hand on hip, thoughtful teaching stance",
+];
+
+const EXPRESSIONS=[
+"warm encouraging smile with kind eyes",
+"animated and excited expression",
+"calm and focused, thoughtful gaze",
+"mid-laugh, genuinely joyful",
+"raised eyebrow in a playful challenge",
+"proud and affirming smile",
+"intense concentration, brows slightly furrowed",
+"wide-eyed wonder matching the children's excitement",
+"composed, professional, and attentive",
+"gentle and patient expression",
+"bright enthusiastic grin, teeth showing",
+"soft smile with a knowing, experienced look",
+"curious, tilting head slightly to one side",
+"firm but kind — authoritative without coldness",
+"expression of delight discovering something with students",
+"relaxed and open, approachable demeanor",
+"mildly theatrical expression for storytelling",
+"deep listening expression — nodding, leaning in slightly",
+"encouraging nod with a half-smile",
+"pensive — pausing before a key reveal moment",
+"bright eyes and a subtle smirk — witty and engaging",
+"serene and confident — a natural classroom leader",
+"energetic and upbeat, eyebrows raised",
+"empathetic expression — listening to a student's question",
+"proud instructor beam — watching a student succeed",
+"slight squint of concentration reviewing student work",
+"open mouth mid-sentence explaining passionately",
+"laughing softly with eyes closed — genuine moment",
+"attentive and direct — making strong eye contact with camera",
+"warm half-smile, slightly turned head — candid portrait feel",
+];
+
+const AGES=[
+"appearing to be in their mid-20s — early career teacher",
+"appearing to be in their early 30s — confident and experienced",
+"appearing to be in their mid-30s — seasoned professional",
+"appearing to be in their late 30s — expert educator",
+"appearing to be in their early 40s — master teacher",
+"appearing to be in their mid-40s — experienced and composed",
+"appearing to be in their early 50s — distinguished educator",
+"appearing to be in their late 20s — energetic and fresh",
+"appearing to be in their 30s — peak career energy",
+"appearing to be in their 40s — authoritative yet approachable",
+"appearing to be in their 50s — mentor figure",
+"a youthful-looking instructor in their late 20s",
+"a warm middle-aged educator in their 40s",
+"a lively young instructor barely out of university",
+"a mature and distinguished instructor in their 50s",
+];
+
+const PLACES_EARLY=[
+{n:"Colorful English Kindergarten Classroom",d:"bright pastel-colored Korean English kindergarten classroom with low round tables, alphabet posters, colorful chairs sized for young children, picture books on low shelves"},
+{n:"English Play Room",d:"cheerful English play-learning room with soft foam flooring in primary colors, interactive phonics wall panels, a pretend-play corner with costumes, stuffed animals and English-labeled props"},
+{n:"Outdoor Playground Learning Area",d:"modern preschool outdoor learning area with bright artificial turf, colorful wooden playground structures, nature exploration stations, low garden beds, clear sky above"},
+{n:"Story Circle Room",d:"cozy story-time circle area with semicircular cushioned seating on a soft rug, a large interactive smartboard showing English storybook illustrations, plush animal characters on display shelves"},
+{n:"Art & Craft Learning Room",d:"bright art and craft room with child-height tables covered in colorful materials, walls lined with children's finished artwork, paint supply stations, drying racks with paper crafts"},
+{n:"English Village Town Square",d:"indoor themed English village modeled as a colorful Western small town, miniature storefronts — bakery, post office, toy shop — cobblestone-patterned floor tiles, decorative street lamps, English signage everywhere"},
+{n:"English Village Airport Zone",d:"realistic mock airport terminal inside a Korean English experience center, check-in counters with English signage, prop luggage conveyor, departure board showing English city names, customs desk with passport props"},
+{n:"English Experience Center Restaurant Zone",d:"themed mock restaurant inside a Korean English immersion center, diner-style booths and counter stools, chalkboard menu in English, plastic food props, wait-staff uniforms for children"},
+{n:"English Learning Center Classroom",d:"modern Korean English language center classroom, wall-to-wall English phonics charts and world maps, tiered seating with individual whiteboards, interactive smartboard with animated lessons"},
+{n:"English Village Hospital Zone",d:"realistic mock hospital ward inside a Korean English village center, examination beds with curtain dividers, doctor's desk with English medical charts, nurse station, medical equipment props"},
+{n:"English Library Reading Zone",d:"cozy English picture book library inside a Korean early learning center, floor-to-ceiling shelves of colorful English books, bean bag chairs and reading nooks, alphabet-border story-time rug"},
+{n:"English Village Science Lab Zone",d:"interactive science zone inside a Korean English experience center, hands-on experiment stations labeled in English, volcano model, simple circuit boards, plant growth experiments"},
+{n:"English Village Supermarket Zone",d:"themed indoor mini supermarket, color-coded aisles with English-labeled product categories, shopping baskets sized for children, mock cashier station with conveyor belt prop"},
+{n:"English Village Fire Station Zone",d:"miniature fire station themed room, fire truck prop vehicle, English-labeled safety equipment display, firefighter uniforms for children, safety-information posters in English"},
+{n:"English Village Post Office Zone",d:"miniature post office with service counter, English address labels, prop postboxes, parcel-packaging table, postal worker uniforms, sorting station"},
+{n:"Sensory Play English Room",d:"soft-play sensory exploration room with English-labeled tactile panels, sand and water tables with bilingual instructions, bubble walls"},
+{n:"English Phonics Music Room",d:"small music and phonics room with colorful percussion instruments, rhythm carpet, English song posters, a piano keyboard along one wall, acoustic ceiling tiles"},
+{n:"English Drama Mini-Stage",d:"small performance stage built inside an English kindergarten, mini stage risers, colorful curtain, prop costume rack, audience seating of low cushions for classmates"},
+{n:"Nature Discovery English Garden",d:"rooftop or ground-level school garden with labeled planters in English, butterfly observation dome, weather station, outdoor classroom seating, clear sky above"},
+{n:"English Cooking Studio",d:"child-height cooking studio with low countertops, English-labeled ingredient jars, aprons sized for children, sample recipe posters in English"},
+{n:"English Block Building Room",d:"open play room with giant foam building blocks in primary colors, English-labeled construction challenge cards on display, low bins of colored materials"},
+{n:"Morning Circle English Classroom",d:"early morning assembly-style classroom, day-of-week and weather chart on the wall, attendance board with student photo cards, calendar in English"},
+{n:"English STEAM Discovery Lab",d:"early childhood STEAM lab with age-appropriate robotics toys, magnetic tile sets, coding puzzles with English instructions"},
+{n:"English Immersion Camp Cabin Room",d:"English immersion camp-style cabin room with bunk-bed style cubbies, each with a flag and English name card, group activity tables, camp-theme murals"},
+{n:"English Village Bank Zone",d:"themed mini bank inside an English experience center, teller windows with English signage, prop currency and banking forms, vault door prop"},
+];
+
+const PLACES_MIDDLE=[
+{n:"International School Gymnasium",d:"modern international school indoor gymnasium with polished hardwood floors, basketball court markings, athletic equipment racks, tall clerestory windows"},
+{n:"Music Rehearsal Room",d:"intimate acoustic rehearsal room, sound-absorbing wall panels, diverse instruments — drums, keyboard, violins — music stands with sheet music"},
+{n:"Auditorium Stage",d:"large performance stage with dramatic spotlights, professional lighting towers, theatrical set pieces, dark auditorium seating in background"},
+{n:"IB Curriculum Classroom",d:"bright contemporary IB classroom with modular movable desks, large interactive whiteboard, student tablets, world-map graphics, floor-to-ceiling windows overlooking a green campus"},
+{n:"Science Laboratory",d:"cutting-edge high school science lab, glass-partitioned research spaces, microscopes, colorful glassware and flasks, safety equipment stations, periodic table mural"},
+{n:"International Study Hall",d:"quiet study hall with independent study booth style, individual desk lamps, stacked reference books, clean minimal aesthetic, motivational quotes on the wall"},
+{n:"Dance Practice Room",d:"professional dance practice room, full-length mirrored walls, ballet barre along one side, sprung hardwood floor, scattered dance props"},
+{n:"Makerspace",d:"creative makerspace with 3D printers, laser cutters behind safety glass, electronics workbenches, soldering stations, colorful project materials, industrial pipe shelving"},
+{n:"Debate Classroom",d:"specialized debate classroom with circular table arrangement, presentation screens, a podium at front, subtle acoustic paneling, professional conference atmosphere"},
+{n:"High School Art Studio",d:"spacious high school art studio, easels with student work-in-progress, wall of completed paintings, art supply trolleys, north-facing skylight"},
+{n:"Computer Science Lab",d:"modern computer science lab, dual-monitor workstations, visible server racks behind glass, students coding, soft blue underglow from screens"},
+{n:"School Library",d:"modern school library with high shelves of books, comfortable reading chairs, globe displays, study pods with privacy screens, warm wood tones and soft lighting"},
+{n:"Indoor Swimming Pool",d:"indoor Olympic-standard swimming pool, lane markers, starting blocks, viewing gallery, high ceiling with ventilation, aqua water reflections on walls"},
+{n:"School Commons / Cafeteria",d:"bright modern school cafeteria with long communal tables, natural light from full-wall windows, international food station signage, student artwork on walls"},
+{n:"Outdoor Sports Field",d:"international school artificial turf football field, surrounding track, stadium flood lights, clear sky, goal posts visible, students in team jerseys"},
+{n:"Robotics Lab",d:"dedicated robotics classroom, competition-spec robots on tables, coding stations, arena floor for robot testing, trophies from previous competitions displayed"},
+{n:"Ceramics Studio",d:"hands-on ceramics studio, potter's wheels, shelves of drying clay forms, kiln area, earthy textures, clay-dusted surfaces, natural light from high windows"},
+{n:"Video Production Suite",d:"professional-grade school video production room, green screen backdrop, camera rigs, editing workstations with dual monitors, broadcast-quality lighting equipment"},
+{n:"Student Lounge",d:"modern student common area, colorful modular seating, collaborative work tables, large screens showing school news, energetic social hub"},
+{n:"Yoga & Mindfulness Room",d:"serene yoga and mindfulness studio, bamboo mats rolled out, calming neutral tones, nature mural feature wall, plants, diffuse soft lighting"},
+{n:"Orchestra Rehearsal Hall",d:"full-size orchestra rehearsal hall with tiered risers, music stands for 40+ musicians, conductor's podium, acoustic shell panels, instrument storage cabinets"},
+{n:"ESL Conversation Room",d:"small-group English conversation room, round table for 6 students, vocabulary cards on walls, a language lab headset station along one wall"},
+{n:"Innovation Hub",d:"open-plan innovation and design thinking space, movable whiteboards, mood boards, prototype materials, standing-height tables, natural light from skylights"},
+{n:"Photography Darkroom",d:"traditional photography darkroom, red safelight glow, developing trays, enlargers, prints drying on wire lines — rare and atmospheric teaching space"},
+{n:"Nursing & Health Suite",d:"bright modern school health suite, examination beds behind privacy curtains, health posters in English and Korean, medical supplies cabinet, welcoming reception area"},
+];
+
+const STUDENTS_EARLY=[
+"5 Korean preschoolers (ages 3–5) sitting cross-legged on the floor, clapping along to an English song",
+"6 Korean kindergartners (ages 4–6) gathered in a semicircle on colorful cushions, eyes wide with curiosity",
+"7 Korean children (ages 5–7) at low tables, heads bent, focused on an English worksheet",
+"5 Korean children (ages 4–5) in matching school uniforms, lined up and smiling, ready for their turn",
+"8 Korean students (ages 6–8) standing in a line, practicing English phonics chants with big arm gestures",
+"6 Korean toddlers (ages 3–4) waving colorful English flashcards in the air with excitement",
+"5 Korean early learners (ages 6–7) taking turns performing an English skit, classmates watching eagerly",
+"7 Korean early childhood students making English letter crafts at tables, fully absorbed in their work",
+"4 Korean children (ages 5–6) in a tight small group, one child standing confidently saying English words",
+"6 Korean preschoolers in activity aprons, working through an English cooking vocabulary lesson together",
+"5 Korean kindergartners crowded around a world map, animated and pointing at countries",
+"8 Korean children (ages 6–7) laughing and participating in a lively team English game",
+"5 Korean children (ages 4–5) each holding up a letter card, spelling out E-N-G-L-I-S-H",
+"7 Korean early learners (ages 6–8) racing to match English word-picture pairs on the floor",
+"4 Korean preschoolers listening attentively while one child stands up to speak English to the group",
+"6 Korean children (ages 5–7) at an outdoor station examining nature props with English-labeled cards",
+"8 energetic Korean kindergartners (ages 5–6) jumping up to answer English questions enthusiastically",
+"5 Korean children (ages 6–8) at the English drama mini-stage, one in costume performing proudly",
+"6 Korean young students with colorful English storybooks, each reading a page aloud in turn",
+"4 Korean toddlers (ages 3–4) fitting giant foam puzzle letters together on the floor, laughing",
+"7 Korean mixed-age early learners (ages 5–8) in a circle, passing an English talking stick",
+"5 Korean students (ages 6–7) fully engaged in role-play in front of an English village storefront prop",
+"6 Korean preschoolers proudly holding up their finished English alphabet collage artwork",
+"8 Korean young students (ages 4–6) in a bilingual call-and-response game, voices raised happily",
+"4 Korean children (ages 5–7) at individual tablet stations completing English phonics exercises",
+"7 Korean kindergartners in chef hats, doing an English cooking vocabulary role-play at the counter",
+"6 Korean early learners (ages 6–8) paired up — one asking, one answering English questions",
+"5 Korean preschoolers building with giant blocks labeled with English words, deep in concentration",
+"8 Korean children (ages 5–7) raising hands high — every single child eager to answer in English",
+"4 Korean students (ages 6–8) at the role-play airport check-in desk, speaking English confidently",
+"6 Korean preschool children at the English science experiment table, wide-eyed with wonder",
+"7 Korean young learners (ages 5–6) wearing doctor costumes in the English hospital zone, playing seriously",
+"5 Korean children (ages 6–8) reading quietly in the English book nook, completely absorbed",
+"8 Korean kindergartners (ages 4–6) doing TPR actions for English verbs with full-body movements",
+"4 Korean preschool children (ages 3–5) singing an English counting song with hand gestures",
+"6 Korean early learners at a sensory water table, sorting objects by English vocabulary category",
+"5 Korean early childhood students doing fingerpainting while listening carefully to English narration",
+];
+
+const STUDENTS_MIDDLE=[
+"6 Korean middle school students listening attentively mid-lesson, pens poised",
+"5 Korean high school students collaborating over an open laptop, discussing quietly but intensely",
+"7 Korean middle schoolers in school uniforms taking notes with focus",
+"4 Korean high school students in a heated academic debate, one gesturing to make a point",
+"6 Korean middle schoolers conducting an experiment with safety goggles on, fully engaged",
+"5 Korean high school students rehearsing lines for a school play, scripts in hand",
+"8 Korean students playing team sport drills in the gym, all in motion",
+"4 Korean high schoolers studying at individual desks under lamp light, fully focused",
+"6 Korean teens practicing choreography in the dance room, mid-movement and concentrated",
+"7 Korean middle school students building a robotics project on a worktable, problem-solving together",
+"5 Korean teens in a music ensemble tuning their instruments before rehearsal",
+"8 Korean high school students in a lively classroom group discussion, multiple hands raised",
+"4 Korean high school students at computer stations writing code, screens glowing",
+"6 Korean students reading individually in the library, completely absorbed",
+"7 Korean middle schoolers at science lab benches examining slides through microscopes",
+"5 Korean high school students working on an art piece together, brushes in hand",
+"8 Korean middle schoolers at a group table for a project-based learning session, engaged",
+"4 Korean teens in sports uniforms cooling down post-training, water bottles in hand",
+"6 Korean students watching a peer presentation with focused, attentive expressions",
+"7 Korean high school students in a debate circle, one at the podium speaking confidently",
+"5 Korean high schoolers with color-coded SAT prep notes spread across their desks",
+"8 Korean middle schoolers completing a science worksheet at their desks, heads down",
+"4 Korean teens on the school stage, one in the spotlight mid-speech",
+"6 Korean students in the makerspace assembling a prototype together, hands busy",
+"5 Korean high school students in study hall, heads bent, pencils moving steadily",
+"7 Korean teens in PE class stretching in formation, disciplined",
+"4 Korean high schoolers mid-game playing basketball, action shot",
+"6 Korean students listening to a peer's music performance, genuinely engaged",
+"8 Korean middle schoolers in the school cafeteria chatting in English over lunch",
+"5 Korean high school students in yoga poses in the mindfulness room, calm and focused",
+"7 Korean students in the ceramics studio shaping clay at the wheel, hands covered in clay",
+"4 Korean teens in the computer lab deep in a coding challenge, fully absorbed",
+"6 Korean high schoolers in the film production suite editing footage at workstations",
+"5 Korean students in the innovation hub building a cardboard prototype, animated discussion",
+"8 Korean middle schoolers in the swimming pool during a team relay, mid-race energy",
+"4 Korean teens with notes spread out, one explaining carefully to the others",
+"6 Korean students in orchestra rehearsal, bows raised and ready",
+"7 Korean high schoolers in ESL conversation class, speaking animatedly in pairs",
+"5 Korean teens in robotics lab heads together, debugging their robot",
+"8 Korean high school students watching a science demonstration, all eyes fixed forward",
+];
+
+const BOKEH=[
+"natural depth of field — students and environment clearly visible, nothing aggressively blurred",
+"moderate depth of field: instructor sharp, students slightly soft but fully readable behind them",
+"gentle lens falloff — background retains full spatial and human context",
+"natural documentary depth — entire scene in focus, no artificial subject isolation",
+"environmental depth: foreground and background both clearly present, room feels real",
+"medium aperture — background students distinctly visible with gentle depth separation",
+"documentary-style focus: all major elements readable, natural focus plane",
+"soft environmental depth — background activity visible and meaningful, not erased",
+"natural room depth — windows, walls, and students all clearly rendered in frame",
+"f/4 natural depth — instructor and students share equal visual presence in the scene",
+"wide-angle environmental depth: entire classroom in sharp detail, no bokeh blur",
+"slight telephoto compression — background gently compressed but students fully visible",
+"natural editorial depth — lens falloff present but background students still clearly seen",
+"medium depth of field — classroom environment rich and detailed behind the instructor",
+"real-world depth of field — not a studio portrait, background is equally important",
+"subtle optical depth — students behind are slightly softer but faces and actions still clear",
+"documentary room depth — camera sees the whole space, no foreground hero isolation",
+"balanced depth: instructor in natural focus, students and environment both clearly visible",
+"wide natural depth of field — everything in the room is crisp and readable",
+"candid classroom depth — camera captures the full scene as the eye would see it naturally",
+];
+
+const CAMERAS=[
+"Sony A9 III, 35mm f/1.4 Zeiss, ultra-sharp 4K, editorial photography",
+"Canon EOS R5, 50mm f/1.2L, 4K, cinematic bokeh, documentary style",
+"Nikon Z9, 85mm f/1.4 S, ultra-sharp 4K, photojournalism",
+"Sony FX3, 35mm f/1.8, 4K cinema, warm Sony color science",
+"Leica SL3, 50mm APO-Summicron, medium format rendering quality, 4K",
+"Fujifilm GFX100S, 63mm f/2.8, medium-format 4K, film-like rendering",
+"Canon EOS R3, 35mm f/1.4, 4K editorial, fast AF freezing motion",
+"Sony A7R V, 55mm f/1.8 Zeiss, 61MP downsampled 4K, ultimate sharpness",
+"Nikon Z8, 50mm f/1.2 S, 4K, natural Nikon color palette",
+"Canon EOS R6 Mark II, 35mm f/1.8 IS, 4K, warm color rendering",
+"Sony A1, 24mm f/1.4 GM, 4K, ultra-wide immersive editorial",
+"Hasselblad X2D, 45mm, medium format 4K quality, serene tones",
+"Sony FX6, 50mm f/1.4, 4K cinema, Venice color science applied",
+"Panasonic Lumix S5 II, 50mm f/1.4, 4K, warm European color science",
+"Fujifilm X-T5, 56mm f/1.2, 4K, Eterna film simulation, filmic look",
+"Red Komodo, 35mm, 6K downsampled 4K, cinematic deep color",
+"Arri Alexa Mini, 40mm, cinema 4K, the gold standard for skin tones",
+"Blackmagic Pocket 6K G2, 25mm f/1.4, cinema 4K, Blackmagic Film grade",
+"Sony Venice 2, 50mm, cinema 4K, extraordinary dynamic range",
+"Canon EOS R7, 32mm f/1.4, 4K, punchy colors",
+"Nikon Z6 III, 50mm f/1.8 S, 4K, natural Nikon rendering",
+"Sigma fp L, 45mm f/2.8, Cinema DNG 4K rendering",
+"Leica Q3, 28mm f/1.7, distinctive Leica rendering, 4K",
+"Canon R5 + 135mm f/2L, 4K telephoto compression, stunning bokeh",
+"Sony A7 IV, 85mm f/1.8, 4K, warm Sony rendering, flattering portrait",
+"Canon EOS R8, 50mm f/1.8 STM, 4K, clean sharp imagery",
+"Fujifilm X100VI, 23mm equivalent 35mm, 4K, Velvia film simulation",
+"Sony A6700, 16mm f/1.4, crop 4K, clean wide editorial",
+"Phase One XT with Rodenstock 40mm, technical-camera 4K quality, extreme sharpness",
+"Canon EOS 5D Mark IV, 50mm f/1.4, classic 4K editorial photography",
+"Sony A7S III, 35mm f/1.4, 4K, exceptional low-light rendering",
+"Nikon D850, 50mm f/1.8G, 4K upscale, rich tonal range",
+"Canon EOS R5C, 28mm f/2, 4K cinema, S-Log3 color grade",
+"Sony PMW-F55, 35mm, 4K broadcast cinema, natural daylight rendering",
+"Phase One IQ4, 80mm, medium format 4K rendering, extraordinary detail",
+"Canon C500 Mark II, 50mm, 5.9K downsampled 4K, rich cinema look",
+"Sony PXW-FX9, 50mm, 4K broadcast quality, natural skin tones",
+"Olympus OM-1 Mark II, 25mm f/1.2, 4K, vivid detail",
+"Nikon Z5 II, 50mm f/1.8 S, 4K, color-accurate rendering",
+"Canon EOS R10, 22mm f/2, APS-C 4K, clean natural light style",
+];
+
+// Wide/environmental compositions — background must be richly visible
+const COMPOSITION=[
+"wide environmental shot — instructor in foreground, full classroom stretching behind, all background details visible",
+"establishing wide shot — entire room readable, architectural features prominent, instructor at natural scale",
+"medium-wide editorial — instructor occupies left third of frame, background fills remaining two-thirds",
+"full-room wide — camera at rear, entire space visible, instructor at far end anchoring the composition",
+"environmental portrait — wide enough that the complete educational setting surrounds the subject",
+"wide angle overview — slightly elevated angle revealing full room layout, depth, and background activity",
+"expansive editorial wide — generous negative space behind instructor, architecture and environment prominent",
+"documentary wide — candid editorial feel, instructor at natural scale within full environmental context",
+"room-revealing composition — foreground instructor sharp, rich background detail fully rendered behind",
+"editorial environmental — background fills 65% of frame, instructor anchors left foreground, setting dominates",
+"wide establishing composition — instructor entering frame, full background immediately readable and detailed",
+"wide group editorial — instructor and students both visible with complete background context richly shown",
+];
+
+const GRADES=[
+"warm golden editorial color grade with lifted shadows",
+"clean neutral tone-mapped — faithful true-to-life colors",
+"cinematic teal-and-orange color grade",
+"bright airy overexposed editorial look",
+"matte desaturated film-grade with cool shadows",
+"vivid saturated colors — advertising-grade retouching",
+"soft pastel palette — gentle greens and warm pinks",
+"Kodak Portra 400 film emulation — warm, grain, beautiful skin",
+"Fuji Velvia saturation with rich greens and blues",
+"Arri Alexa natural color science — skin tones paramount",
+"Sony Venice Look — clean, rich, cinematic",
+"slightly desaturated with warm skin-tone preservation",
+"clean corporate editorial grade — neutral, professional",
+"cool morning light color grade — blue-white tones",
+"warm afternoon golden grade — amber highlights",
+"fashion editorial grade — slightly crushed blacks, clean whites",
+"documentary natural color — as-seen, minimal grade",
+"bright and clean — maximum clarity, no color cast",
+"split-tone: warm highlights, cool shadows",
+"flat and creamy — low contrast editorial style",
+"rich jewel tones — deep teals, warm ambers, saturated overall",
+"lifestyle photography grade — warm, bright, inviting",
+"magazine editorial standard — calibrated, precise, polished",
+"brand color alignment — subtle warmth that reads as trustworthy",
+"Fuji Eterna Cinema simulation — natural, desaturated gracefully",
+"sunrise warm blush tone — pink-orange skin-friendly grade",
+"school photography standard — warm, clean, bright",
+"dark moody editorial — low-key, high contrast, deep shadows",
+"luminous soft-focus beauty grade — glow in highlights",
+"natural outdoor color — bright, true, summer freshness",
+];
+
+const PROPS=[
+"a large colorful world map poster visible on the side wall",
+"neatly organized bookshelves with colorful spines visible",
+"a globe on the teacher's desk catching the light",
+"stacked colorful textbooks on student desks",
+"a potted plant adding a touch of green near a window",
+"a vintage analog wall clock showing mid-morning time",
+"a motivational banner in English above the whiteboard",
+"children's artwork displayed in matching frames on the wall",
+"a collection of plastic educational models on a shelf",
+"tablet devices on student desks, screens on",
+"a bright yellow attendance board with student name cards",
+"an open piano with sheet music visible",
+"colorful building blocks scattered on low shelves",
+"a weather chart with sun, cloud, and rain symbols in English",
+"role-play props — hats, bags, passports — for English practice",
+"sports equipment (basketballs, cones) neatly stacked",
+"a digital smartboard showing a colorful lesson slide",
+"English vocabulary cards on a ring hanging from the whiteboard",
+"a cubbies rack with student labeled storage bins",
+"a large bean bag in one corner of the room",
+"an iPad stand with a visible language app running",
+"a cork board with pinned student work and gold-star stickers",
+"a standing easel with a half-finished student painting",
+"a mini-library trolley of English books parked near the wall",
+"a teacher's desk with a mug and open lesson plan book",
+"colorful rubber cones laid out in a pattern on gym floor",
+"a medal board showing achievement ribbons and trophies",
+"English country flags displayed along a bunting string",
+"a microscope visible on a lab bench in the background",
+"lab notebooks open on student tables",
+"an acoustic guitar leaning against the wall in a music room",
+"a sensory bin filled with colored sand visible on a shelf",
+"a class pet cage — small rabbit or hamster — on a counter",
+"a large number line frieze running at child eye level",
+"a mobile phone filming rig capturing the class for online use",
+"science fair display boards visible in background",
+"a class timetable chart on the side wall",
+"a small digital camera on a tripod in the background",
+"drums and a drum kit partially visible in the background",
+"student-made posters and infographics displayed on one wall",
+];
+
+const SEASONS=[
+"bright morning session, 9am light quality, clear day",
+"mid-morning class, 10:30am, clear spring light",
+"noon session, high sun, strong natural light",
+"after-school session, 4pm, warm afternoon light",
+"early evening class, sunset glow through windows",
+"rainy day — diffuse, cool, even interior light",
+"bright winter morning — cold clear light, blue sky outside",
+"autumn afternoon — warm amber light through golden leaves outside",
+"spring morning — soft fresh light, green visible outside",
+"summer noon — bleached-out bright exterior, interior slightly warm",
+"overcast grey day — flat even light, indoor warmth contrast",
+"early morning before students arrive — golden low preparatory light",
+"late afternoon golden hour slanting into classroom",
+"mid-morning after recess — students re-settled, warm steady light",
+"lunchtime light — warm bright, social energy in the atmosphere",
+"early winter afternoon — quick-to-darken sky, interior lighting prominent",
+"spring afternoon — cherry blossom haze of pink seen outside window",
+"stormy dramatic sky outside — moody interior contrast",
+"late morning, cloud patches creating dynamic light variation",
+"clear autumn morning — crisp cool blue light",
+"hot summer afternoon — strong overhead sun, shaded interior cool",
+"winter afternoon — snow visible outside windows, warm interior contrast",
+"after heavy rain — clean, washed light quality",
+"school open day morning — extra bright and well-prepared atmosphere",
+"exam season study hall — focused concentration in quiet mid-morning",
+"performance rehearsal evening — artificial light only, theatrical",
+"science fair day — heightened activity, bright full room lighting",
+"graduation morning — extraordinary care taken in presentation and light",
+"first day of new term — bright hopeful morning light",
+"late autumn afternoon — low warm light, golden hour indoors",
+];
+
+const MOODS=[
+"inspiring and aspirational — a place where futures are built",
+"warm and nurturing — every child feels seen and valued",
+"energetic and engaged — learning in motion",
+"focused and purposeful — serious academic intent",
+"joyful and expressive — creativity unleashed",
+"calm and contemplative — deep thinking rewarded",
+"collaborative and inclusive — no one left behind",
+"playful and imaginative — learning through discovery",
+"professional and polished — preparing students for the world",
+"multicultural and welcoming — the world in one classroom",
+"innovative and forward-thinking — tomorrow's skills, today",
+"magical and immersive — education as adventure",
+"disciplined and proud — high standards upheld with care",
+"vibrant and multicultural — English as the bridge between cultures",
+"safe and encouraging — risk-taking in learning welcomed",
+"dynamic and alive — no two moments the same",
+"rigorous and passionate — excellence pursued enthusiastically",
+"authentic and human — genuine connection between teacher and student",
+"globally minded — awareness of the wider world present throughout",
+"curious and questioning — Socratic atmosphere of inquiry",
+"bilingual bridge — seamlessly moving between Korean and English worlds",
+"digital-native friendly — technology as a natural extension of learning",
+"sensory-rich — learning that engages all five senses",
+"community-spirited — the classroom as a micro-society",
+"life-changing — the quiet sense that this moment matters",
+"BRIDGE-branded — quality, trust, and excellence personified",
+"gritty and persevering — challenge embraced not avoided",
+"celebratory — achievements recognized in every lesson",
+"competitive but kind — pushing each other to grow",
+"patient and supportive — every question is a good question",
+];
+
+const QUALITY=[
+"photorealistic human skin with visible pore detail, accurate anatomy",
+"no AI artifacts, no morphed hands, anatomically correct fingers",
+"editorial-grade retouching — natural skin, no plastic oversmoothing",
+"authentic candid energy — not overly posed or artificial",
+"accurate cultural authenticity — Korean school environment details correct",
+"highly detailed fabric textures on all clothing",
+"realistic eye catchlights and accurate pupil size",
+"natural hair texture and accurate hair flyaways",
+"no uncanny valley — hyper-realistic without crossing into digital artificiality",
+"cinematic grain structure consistent with film-stock choice",
+"accurate depth of field falloff consistent with stated aperture",
+"faithful color accuracy — no impossible hues or neon overkill",
+"correct environmental physics — light sources match visible windows",
+"micro-expressions captured — authentic emotional realism",
+"architectural accuracy — room proportions and perspective correct",
+"correct scale and proportion of furniture for stated age group",
+"award-winning editorial photography quality throughout",
+"accurate proportional rendering of children vs adults",
+"skin tones faithfully reproduced across all ethnic groups present",
+"sharp focus on instructor's face with natural specular highlights on eyes",
+];
+
+const BRIDGE_TEXT="The word 'BRIDGE' appears in clean white sans-serif letters, positioned at the center-left of the image. Plain text label only — no background, no shadow, no glow, no effects. Letters are sharp, flat, and white. NOT painted on any surface — does NOT warp or distort with the scene. No other text, logos, or watermarks anywhere in the image.";
+
+// ============================================================
+// UNIQUENESS ENGINE
+// ============================================================
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+
+const RACE_KO={
+  'White':'백인','Black':'흑인','Latino':'라틴계','Latina':'라틴계',
+  'South Asian':'남아시아계','East Asian':'동아시아계','Middle Eastern':'중동계',
+  'Southeast Asian':'동남아시아계','Mixed-race':'혼혈',
+  'Native American':'원주민계','Pacific Islander':'태평양계'
+};
+
+// Generate a batch where every prompt has a UNIQUE place
+function generateBatch(count, targetMode){
+  const earlyShuffled = shuffle(PLACES_EARLY);
+  const middleShuffled = shuffle(PLACES_MIDDLE);
+  const rgShuffled = shuffle(INSTRUCTOR_RG);
+  // Also shuffle secondary dims to avoid runs of same instructor
+  const hairShuffled = shuffle(HAIR);
+  const clothingShuffled = shuffle(CLOTHING);
+  const poseShuffled = shuffle(POSES);
+  const exprShuffled = shuffle(EXPRESSIONS);
+
+  let earlyIdx=0, middleIdx=0, rgIdx=0, hairIdx=0, clothIdx=0, poseIdx=0, exprIdx=0;
+
+  // Build target distribution
+  let targets;
+  if(targetMode==='all'){
+    targets=[];
+    for(let i=0;i<count;i++) targets.push(i%2===0?'early':'middle');
+    shuffle(targets); // inline shuffle
+    targets=shuffle(targets);
+  } else {
+    targets=Array.from({length:count},()=>targetMode);
+  }
+
+  const genderFilter=document.getElementById('genderFilter').value;
+  const bgFilterVal=document.getElementById('bgFilter').value;
+
+  return targets.map(t=>{
+    const isEarly=t==='early';
+    let place;
+    if(bgFilterVal){
+      const pool=isEarly?PLACES_EARLY:PLACES_MIDDLE;
+      place=pool.find(p=>p.n===bgFilterVal)||pick(isEarly?earlyShuffled:middleShuffled);
+    } else {
+      const pool=isEarly?earlyShuffled:middleShuffled;
+      const idx=isEarly?earlyIdx++:middleIdx++;
+      place=pool[idx%pool.length];
+    }
+
+    const rg=rgShuffled[rgIdx++%rgShuffled.length];
+    const [race,gender]=rg;
+    const finalGender=genderFilter||gender;
+
+    const hair=hairShuffled[hairIdx++%hairShuffled.length];
+    const clothing=clothingShuffled[clothIdx++%clothingShuffled.length];
+    const pose=poseShuffled[poseIdx++%poseShuffled.length];
+    const expression=exprShuffled[exprIdx++%exprShuffled.length];
+    const age=pick(AGES);
+
+    // All other dims fully random
+    const floor=pick(FLOORS);
+    const wall=pick(WALLS);
+    const ceiling=pick(CEILINGS);
+    const lighting=pick(LIGHTING);
+    const students=pick(isEarly?STUDENTS_EARLY:STUDENTS_MIDDLE);
+    const bokeh=pick(BOKEH);
+    const camera=pick(CAMERAS);
+    const grade=pick(GRADES);
+    const prop=pick(PROPS);
+    const season=pick(SEASONS);
+    const mood=pick(MOODS);
+    const quality=pick(QUALITY);
+    const composition=pick(COMPOSITION);
+
+    const raceKo = RACE_KO[race]||race;
+    const genderKo = finalGender==='male'?'남성':'여성';
+
+    // English prompt — for copying into AI tools
+    const text=
+`Photorealistic 4K editorial documentary photograph. Candid, unposed — a real classroom moment, not a photoshoot.
+
+SETTING: ${place.d}. ${floor}. ${wall}. ${ceiling}. ${prop}.
+
+COMPOSITION: ${composition}. The full classroom environment must be clearly visible. Both instructor and students are naturally distributed within the space.
+
+TIME & ATMOSPHERE: ${season}. ${lighting}. Mood: ${mood}.
+
+SCENE: A ${race} ${finalGender} instructor (${age}, ${hair}, ${clothing}) ${pose}. ${expression}. The instructor is naturally present within the room — not posed for camera, not isolated in the foreground.
+
+STUDENTS: ${students}. All students are Korean. They are actively engaged in the lesson — not simply blurred background decoration. ${bokeh}.
+
+IMPORTANT: This is a natural, candid documentary shot. No studio-style subject isolation. No artificial foreground/background separation. Instructor and students share the same genuine classroom moment.
+
+TEXT OVERLAY: ${BRIDGE_TEXT}
+
+TECHNICAL: ${camera}. Color grade: ${grade}. ${quality}. Aspect ratio 16:9. Award-winning editorial education photography. NO other text, watermarks, or logos besides the BRIDGE label.`;
+
+    // Korean display text — shown in UI
+    const koText=
+`포토리얼리스틱 4K 에디토리얼 다큐멘터리 사진
+연출 없는 실제 수업 장면 — 자연스럽고 솔직한 한 컷.
+
+◆ 배경·장소
+${place.n}. ${floor}. ${wall}. ${ceiling}. ${prop}.
+
+◆ 구도·앵글
+${composition}. 교실 전체 환경이 충분히 보여야 함. 강사와 학생이 공간 안에 자연스럽게 배치.
+
+◆ 시간 및 분위기
+${season}. 조명: ${lighting}. 분위기: ${mood}.
+
+◆ 수업 장면 (${raceKo} ${genderKo} 강사)
+${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습.
+
+◆ 한국인 학생들
+${students}. 학생들은 모두 한국인. 배경 흐림 처리의 소품이 아니라 수업에 적극 참여 중인 모습. ${bokeh}.
+
+◆ 핵심 요구사항
+스튜디오식 인물 분리 없음. 인위적 전경/배경 분리 없음. 강사와 학생이 같은 공간·같은 순간을 공유.
+
+◆ 텍스트 오버레이
+사진 좌측 중앙에 'BRIDGE' 글자를 깔끔한 흰색 산세리프체로 표시. 배경·그림자·효과 없음. 다른 텍스트·로고 없음.
+
+◆ 카메라·기술 설정
+${camera}. 색감: ${grade}. ${quality}. 화면비 16:9.`;
+
+    return {
+      target: t,
+      targetLabel: isEarly?'Early Childhood':'Middle / High',
+      place: place.n,
+      instructor: `${raceKo} ${genderKo}`,
+      text,
+      koText,
+      ko: {
+        target: isEarly?'유치·초등 대상':'중·고등 대상',
+        place: place.n,
+        instructor: (RACE_KO[race]||race)+' '+(finalGender==='male'?'남성':'여성'),
+        composition: composition.split(' — ')[0].trim(),
+        lighting: lighting.length>38 ? lighting.slice(0,38)+'…' : lighting,
+        grade: grade.split(' — ')[0].split(' with ')[0].trim(),
+        mood: mood.split(' — ')[0].trim(),
+        season: season.split(',')[0].split('—')[0].trim(),
+      },
+    };
+  });
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let currentTarget='all';
+let prompts=[];
+let totalGenerated=0;
+
+// ============================================================
+// UI HANDLERS
+// ============================================================
+function setTarget(el){
+  currentTarget=el.dataset.val;
+  document.querySelectorAll('.t-item').forEach(t=>{
+    t.className='t-item';
+    if(t.dataset.val===currentTarget){
+      t.classList.add('on');
+      if(currentTarget==='early') t.classList.add('on-early');
+      if(currentTarget==='middle') t.classList.add('on-middle');
+    }
+  });
+}
+
+function toggleAdv(){
+  const b=document.getElementById('advBody');
+  const a=document.getElementById('advArrow');
+  const open=b.classList.toggle('open');
+  a.textContent=open?'▴':'▾';
+}
+
+function runGenerate(){
+  const btn=document.getElementById('genBtn');
+  btn.classList.add('loading');
+  btn.textContent='Generating...';
+  setTimeout(()=>{
+    const count=parseInt(document.getElementById('countSlider').value);
+    prompts=generateBatch(count,currentTarget);
+    totalGenerated+=prompts.length;
+    renderAll();
+    btn.classList.remove('loading');
+    btn.textContent='Generate';
+    document.getElementById('s-gen').textContent=totalGenerated;
+    document.getElementById('topCount').textContent=prompts.length;
+  },300);
+}
+
+function renderAll(){
+  const out=document.getElementById('output');
+  out.innerHTML='';
+  prompts.forEach((p,i)=>{
+    const card=document.createElement('div');
+    card.className=`pcard ${p.target}`;
+    card.style.animationDelay=`${i*50}ms`;
+    card.innerHTML=`
+      <div class="pcard-head">
+        <div class="pcard-idx">${i+1}</div>
+        <div class="pcard-info">
+          <div class="pcard-place">${p.place}</div>
+          <div class="pcard-sub">${p.instructor}</div>
+        </div>
+        <span class="badge ${p.target}">${p.targetLabel}</span>
+        <div class="pcard-actions">
+          <button class="pa-btn copy-btn" id="cp${i}" onclick="copyOne(this,${i})">Copy</button>
+          <button class="pa-btn fx" onclick="openSvc('fx',${i})">ImageFX</button>
+          <button class="pa-btn dl" onclick="openSvc('dl',${i})">DALL·E</button>
+          <button class="pa-btn ig" onclick="openSvc('ig',${i})">Ideogram</button>
+        </div>
+      </div>
+      <div class="pcard-body">
+        <div class="prompt-en">
+          <pre class="pcard-text" id="pt${i}">${esc(p.koText)}</pre>
+        </div>
+        <div class="prompt-ko">
+          <div class="ko-title">한글 설명</div>
+          <div class="ko-row"><div class="ko-label">대상</div><div class="ko-val ${p.target}-c">${p.ko.target}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">배경·장소</div><div class="ko-val">${esc(p.ko.place)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">강사</div><div class="ko-val">${esc(p.ko.instructor)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">구도·앵글</div><div class="ko-val">${esc(p.ko.composition)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">조명</div><div class="ko-val">${esc(p.ko.lighting)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">색감</div><div class="ko-val">${esc(p.ko.grade)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">분위기</div><div class="ko-val">${esc(p.ko.mood)}</div></div>
+          <div class="ko-divider"></div>
+          <div class="ko-row"><div class="ko-label">시간대</div><div class="ko-val">${esc(p.ko.season)}</div></div>
+        </div>
+      </div>`;
+    out.appendChild(card);
+  });
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function toggle(btn,i){
+  const pre=document.getElementById(`pt${i}`);
+  const open=pre.classList.toggle('open');
+  pre.classList.toggle('collapsed',!open);
+  btn.textContent=open?'collapse':'expand';
+}
+
+// clipboard: works on file:// (fallback to execCommand)
+function clipCopy(text){
+  if(navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise(resolve=>{
+    const ta=document.createElement('textarea');
+    ta.value=text;
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    resolve();
+  });
+}
+
+function copyOne(btn,i){
+  clipCopy(prompts[i].text).then(()=>{
+    btn.textContent='Copied!';
+    btn.classList.add('copied');
+    toast('Copied to clipboard');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},2000);
+  });
+}
+
+const SVC={
+  fx:'https://labs.google/fx/tools/image-fx',
+  dl:'https://chatgpt.com/',
+  ig:'https://ideogram.ai/',
+};
+function openSvc(svc,i){
+  clipCopy(prompts[i].text).then(()=>{
+    toast('Prompt copied — paste it into the page');
+  });
+  window.open(SVC[svc],'_blank');
+}
+
+function copyAll(){
+  if(!prompts.length){toast('Generate prompts first');return;}
+  const all=prompts.map((p,i)=>`[${i+1}] ${p.targetLabel} — ${p.place}\n${p.text}`).join('\n\n---\n\n');
+  clipCopy(all).then(()=>toast(prompts.length+' prompts copied'));
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('on');
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.remove('on'),2200);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init(){
+  const earlyGrp=document.getElementById('earlyOpts');
+  const middleGrp=document.getElementById('middleOpts');
+  PLACES_EARLY.forEach(p=>{
+    const o=document.createElement('option');
+    o.value=p.n; o.textContent=p.n; earlyGrp.appendChild(o);
+  });
+  PLACES_MIDDLE.forEach(p=>{
+    const o=document.createElement('option');
+    o.value=p.n; o.textContent=p.n; middleGrp.appendChild(o);
+  });
+  // count rules
+  const total=[FLOORS,WALLS,CEILINGS,LIGHTING,INSTRUCTOR_RG,HAIR,CLOTHING,
+    POSES,EXPRESSIONS,AGES,PLACES_EARLY,PLACES_MIDDLE,
+    STUDENTS_EARLY,STUDENTS_MIDDLE,BOKEH,CAMERAS,COMPOSITION,GRADES,
+    PROPS,SEASONS,MOODS,QUALITY].reduce((s,a)=>s+a.length,0);
+  document.getElementById('s-rules').textContent=total;
+}
+init();
+</script>
+</body>
+</html>

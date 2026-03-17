@@ -1,120 +1,291 @@
-"""Rich console wrapper for BRIDGE Agent."""
+"""Rich console — BRIDGE Agent.
+
+Design  : Editorial Minimalism × Apple HIG
+Aesthetic: Brutalist editorial — stark, precise, purposeful
+Spacing : 4-unit base grid (Apple HIG)
+"""
+
+import itertools
+import threading
 
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.table import Table
-from rich.syntax import Syntax
+from rich.padding import Padding
+from rich.rule import Rule
+from rich.text import Text
 
-from .theme import BRIDGE_THEME, BANNER, AGENT_ICONS
+from .theme import (
+    BRIDGE_THEME,
+    AGENT_ICONS,
+    AGENT_LABELS,
+    AGENT_THINKING_FRAMES,
+    AGENT_THINKING_DEFAULT,
+)
 
+
+# ── Animated thinking indicator ────────────────────────────────────────────────
+
+class _AnimatedThinking:
+    """Cycles agent emoji frames through a Rich Status while work is running."""
+
+    def __init__(self, status, frames: list[str]):
+        self._status = status
+        self._iter   = itertools.cycle(frames)
+        self._stop   = threading.Event()
+        self._thread = None
+
+    def __enter__(self):
+        self._stop.clear()
+        self._status.__enter__()
+
+        def _cycle():
+            while not self._stop.wait(0.28):
+                self._status.update(f"[bridge.dim]  {next(self._iter)}[/]")
+
+        self._thread = threading.Thread(target=_cycle, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=0.6)
+        return self._status.__exit__(exc_type, exc_val, exc_tb)
+
+
+# ── Main console class ─────────────────────────────────────────────────────────
 
 class BridgeConsole:
-    """Wrapper around Rich console with BRIDGE styling."""
+    """Editorial terminal UI for BRIDGE Agent.
+
+    Principles:
+    - Apple HIG: 4-unit grid, typographic hierarchy, generous whitespace
+    - Brutalist editorial: stark contrast, precision, zero ornament
+    - Minimalist: remove everything that does not serve meaning
+    """
 
     def __init__(self):
         self.console = Console(theme=BRIDGE_THEME)
 
+    # ── Banner ─────────────────────────────────────────────────────────────────
+
     def show_banner(self):
-        self.console.print(BANNER, style="bridge.header")
+        """Editorial brand header — letterspace + full-width rules."""
+        c = self.console
+        w = c.width or 80
+
+        brand   = "B · R · I · D · G · E"
+        label   = "AGENT SYSTEM"
+        tagline = "A career that changes your life."
+
+        # Right-align label: pad between brand and label
+        gap = " " * max(w - len(brand) - len(label) - 4, 2)
+
+        c.print()
+        c.print(Rule(style="bold white"))
+        c.print()
+        c.print(f"  [bold white]{brand}[/]{gap}[dim white]{label}[/]")
+        c.print()
+        c.print(f"  [dim italic white]{tagline}[/]")
+        c.print()
+        c.print(Rule(style="dim white"))
+        c.print()
+
+    # ── Semantic messages ──────────────────────────────────────────────────────
 
     def info(self, msg: str):
-        self.console.print(f"[bridge.info]{msg}[/]")
+        self.console.print(f"  [bridge.info]→  {msg}[/]")
 
     def success(self, msg: str):
-        self.console.print(f"[bridge.success]{msg}[/]")
+        self.console.print(f"  [bridge.success]✓  {msg}[/]")
 
     def error(self, msg: str):
-        self.console.print(f"[bridge.error]{msg}[/]")
+        self.console.print(f"  [bridge.error]✕  {msg}[/]")
 
     def warning(self, msg: str):
-        self.console.print(f"[bridge.warning]{msg}[/]")
+        self.console.print(f"  [bridge.warning]⚠  {msg}[/]")
+
+    # ── Agent communication ────────────────────────────────────────────────────
 
     def agent_msg(self, agent_name: str, content: str):
-        icon = AGENT_ICONS.get(agent_name, "[bold]??[/]")
-        self.console.print(f"\n{icon} [{agent_name}]", style="bridge.agent")
-        self.console.print(Markdown(content))
+        """Agent response — editorial rule header + indented markdown."""
+        icon  = AGENT_ICONS.get(agent_name, AGENT_ICONS["_default"])
+        label = AGENT_LABELS.get(agent_name, agent_name.upper())
+
+        self.console.print()
+        self.console.print(
+            Rule(title=f" {icon}  {label} ", style="white", align="left")
+        )
+        self.console.print()
+        self.console.print(Padding(Markdown(content), pad=(0, 0, 1, 4)))
 
     def tool_call(self, tool_name: str, args: dict):
-        args_str = ", ".join(f"{k}={repr(v)[:60]}" for k, v in args.items())
-        self.console.print(f"  [bridge.tool]> {tool_name}({args_str})[/]")
+        """Tool invocation — minimal inline indicator."""
+        args_str = "  ".join(f"{k}={repr(v)[:50]}" for k, v in args.items())
+        self.console.print(
+            f"    [bridge.tool]▶  {tool_name}[/]  [dim]{args_str}[/]"
+        )
 
     def delegate(self, agent_name: str, task: str):
-        icon = AGENT_ICONS.get(agent_name, "??")
-        self.console.print(f"  [bridge.delegate]DELEGATE -> {icon} {agent_name}: {task[:80]}[/]")
+        """Delegation — bold purple indicator."""
+        icon  = AGENT_ICONS.get(agent_name, AGENT_ICONS["_default"])
+        label = AGENT_LABELS.get(agent_name, agent_name.upper())
+        self.console.print(
+            f"  [bridge.delegate]◈  DELEGATE  →  {icon}  {label}[/]  "
+            f"[dim]{task[:72]}[/]"
+        )
+
+    # ── Thinking animation ─────────────────────────────────────────────────────
+
+    def thinking(self, agent_name: str):
+        """Animated emoji spinner — context manager, cycles per agent role."""
+        frames = AGENT_THINKING_FRAMES.get(agent_name, AGENT_THINKING_DEFAULT)
+        status = self.console.status(
+            f"[bridge.dim]  {frames[0]}[/]",
+            spinner="dots",
+            spinner_style="bridge.accent",
+        )
+        return _AnimatedThinking(status, frames)
+
+    # ── Agent roster ───────────────────────────────────────────────────────────
 
     def show_agents(self, agents: list[dict]):
-        table = Table(title="Available Agents", show_header=True)
-        table.add_column("Agent", style="bridge.agent")
-        table.add_column("Active", justify="center")
-        table.add_column("History")
-        table.add_column("Tokens (in/out)")
+        c = self.console
+        c.print()
+        c.print(Rule(style="bold white"))
+        c.print("  [bold white]AGENTS[/]")
+        c.print(Rule(style="dim white"))
+        c.print()
 
         for a in agents:
-            active = "[green]>>>[/]" if a["active"] else ""
-            history = "yes" if a["has_history"] else "-"
+            icon  = AGENT_ICONS.get(a["name"], AGENT_ICONS["_default"])
+            label = AGENT_LABELS.get(a["name"], a["name"].upper())
             tin, tout = a["tokens"]
-            tokens = f"{tin:,}/{tout:,}" if tin > 0 else "-"
-            table.add_row(a["name"], active, history, tokens)
 
-        self.console.print(table)
+            status_str = (
+                "[bold green]●  ACTIVE[/]" if a["active"]
+                else "[dim]○  idle[/]"
+            )
+            token_str = (
+                f"[dim]{tin:,} ↑  {tout:,} ↓[/]" if tin > 0
+                else "[dim]—[/]"
+            )
+            ctx_str = "[dim]ctx[/]" if a["has_history"] else "   "
+
+            c.print(
+                f"  {icon}  [bold white]{label:<18}[/]  "
+                f"{status_str}   {token_str}   {ctx_str}"
+            )
+
+        c.print()
+        c.print(Rule(style="dim white"))
+        c.print()
+
+    # ── Conversation history ───────────────────────────────────────────────────
 
     def show_conversations(self, conversations: list[dict]):
+        c = self.console
         if not conversations:
             self.info("No conversations yet.")
             return
 
-        table = Table(title="Recent Conversations", show_header=True)
-        table.add_column("ID", style="dim")
-        table.add_column("Title")
-        table.add_column("Agent")
-        table.add_column("Provider/Model")
+        c.print()
+        c.print(Rule(style="bold white"))
+        c.print("  [bold white]CONVERSATIONS[/]")
+        c.print(Rule(style="dim white"))
+        c.print()
 
-        for c in conversations:
-            short_id = c["id"][:8]
-            table.add_row(short_id, c["title"], c["agent"], f"{c['provider']}/{c['model']}")
+        for conv in conversations:
+            short_id  = conv["id"][:8]
+            icon      = AGENT_ICONS.get(conv["agent"], AGENT_ICONS["_default"])
+            model_str = f"{conv['provider']}/{conv['model']}"
 
-        self.console.print(table)
+            c.print(
+                f"  [dim]{short_id}[/]  {icon}  "
+                f"[white]{conv['title']:<32}[/]  [dim]{model_str}[/]"
+            )
+
+        c.print()
+        c.print(Rule(style="dim white"))
+        c.print()
+
+    # ── Usage summary ──────────────────────────────────────────────────────────
 
     def show_usage(self, usage: dict):
-        table = Table(title="Usage Summary", show_header=True)
-        table.add_column("Metric")
-        table.add_column("Value", justify="right")
+        c = self.console
+        c.print()
+        c.print(Rule(style="bold white"))
+        c.print("  [bold white]USAGE[/]")
+        c.print(Rule(style="dim white"))
+        c.print()
 
-        table.add_row("API Calls", f"{usage.get('calls', 0):,}")
-        table.add_row("Tokens In", f"{usage.get('total_in', 0):,}")
-        table.add_row("Tokens Out", f"{usage.get('total_out', 0):,}")
-        table.add_row("Est. Cost", f"${usage.get('total_cost', 0):.4f}")
+        rows = [
+            ("API Calls",    f"{usage.get('calls', 0):,}"),
+            ("Tokens In",    f"{usage.get('total_in', 0):,}"),
+            ("Tokens Out",   f"{usage.get('total_out', 0):,}"),
+            ("Session In",   f"{usage.get('session_in', 0):,}"),
+            ("Session Out",  f"{usage.get('session_out', 0):,}"),
+            ("Est. Cost",    f"${usage.get('total_cost', 0):.4f}"),
+        ]
+        for metric, value in rows:
+            c.print(f"  [bridge.dim]{metric:<16}[/]  [white]{value}[/]")
 
-        self.console.print(table)
+        c.print()
+        c.print(Rule(style="dim white"))
+        c.print()
+
+    # ── Help ───────────────────────────────────────────────────────────────────
 
     def show_help(self):
-        help_text = """
-## BRIDGE Agent CLI Commands
+        c = self.console
+        sections = {
+            "NAVIGATION": [
+                ("/help",              "Show this reference"),
+                ("/agents",            "List all agents"),
+                ("/agent <name>",      "Switch agent"),
+                ("/team",              "Switch to team-lead"),
+                ("/clear",             "Clear screen"),
+                ("/exit",              "Exit"),
+            ],
+            "CONVERSATION": [
+                ("/new",               "Start new conversation"),
+                ("/history",           "Show conversation history"),
+                ("/load <id>",         "Load a conversation"),
+                ("/export [id]",       "Export to JSON"),
+                ("/import <file>",     "Import from JSON"),
+            ],
+            "CONFIGURATION": [
+                ("/model [name]",      "Show / change model"),
+                ("/provider [name]",   "Show / change provider"),
+                ("/tokens",            "Show token usage"),
+                ("/config",            "Show configuration"),
+            ],
+        }
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show this help |
-| `/agents` | List all agents |
-| `/agent <name>` | Switch to agent (team-lead, security-check, feature-dev, qa-test) |
-| `/team` | Switch to team-lead (with delegation) |
-| `/new` | Start new conversation |
-| `/history` | Show conversation history |
-| `/load <id>` | Load a conversation |
-| `/export [id]` | Export conversation to JSON |
-| `/import <file>` | Import conversation from JSON |
-| `/model [name]` | Show/change model |
-| `/provider [name]` | Show/change provider |
-| `/tokens` | Show token usage |
-| `/config` | Show configuration |
-| `/clear` | Clear screen |
-| `/exit` | Exit the program |
-"""
-        self.console.print(Markdown(help_text))
+        c.print()
+        c.print(Rule(style="bold white"))
+        c.print("  [bold white]COMMANDS[/]")
+        c.print(Rule(style="dim white"))
+
+        for section, commands in sections.items():
+            c.print()
+            c.print(f"  [dim]{section}[/]")
+            for cmd, desc in commands:
+                c.print(f"  [bridge.accent]{cmd:<26}[/]  [dim]{desc}[/]")
+
+        c.print()
+        c.print(Rule(style="dim white"))
+        c.print()
+
+    # ── REPL prompt ────────────────────────────────────────────────────────────
 
     def prompt(self, agent_name: str) -> str:
-        icon = AGENT_ICONS.get(agent_name, "")
+        """Agent-aware input prompt with emoji identity."""
+        icon  = AGENT_ICONS.get(agent_name, "◈")
+        label = AGENT_LABELS.get(agent_name, agent_name.upper())
         try:
-            return self.console.input(f"\n{icon} [bridge.prompt]bridge ({agent_name}) >[/] ")
+            return self.console.input(
+                f"\n  {icon}  [bridge.prompt]{label}[/]  [dim]›[/]  "
+            )
         except (EOFError, KeyboardInterrupt):
             return "/exit"

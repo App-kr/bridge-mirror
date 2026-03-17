@@ -339,12 +339,9 @@ def main():
         # Save user message
         db.add_message(conv_id, "user", user_input)
 
-        # Get agent response with spinner
+        # Get agent response with animated emoji spinner
         try:
-            with console.console.status(
-                "[bridge.info]Thinking...[/]",
-                spinner="dots",
-            ):
+            with console.thinking(orchestrator.current_agent_name):
                 response = orchestrator.chat(user_input)
 
             # Display response

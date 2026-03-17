@@ -145,6 +145,22 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **중요**: 테스트 실행 남발 금지 — 네이버 보안 블락 유발함. 실제 발행만 실행.
 - **글 구조**: 글↔사진 교차 (글-사진-글-사진-...) + 마지막에 배너사진(카카오링크)
 - **인용구**: ENTER+BACKSPACE로 탈출 (ENTER+ENTER 아님)
+- **확정 동작 (2026-03-17)**: 제목 입력 ✅ / 인용구 삽입 ✅ / 본문 글쓰기 ✅
+
+## ClaudeBlog 확정 수정 이력 (2026-03-17)
+- **서론→제목 침범 방지**: `_force_body_focus()` 추가 — 제목 입력 후 포커스 검증+강제 이동
+- **가운데 정렬**: Ctrl+E → `document.execCommand('justifyCenter')` 전면 교체 (SE4 호환)
+- **배너 링크**: JS click → ActionChains click + `button[data-name='link']` 광범위 탐색
+- **예약 날짜**: `days_ahead: 2` (2일 후) + React nativeInputValueSetter 날짜 주입
+
+## ClaudeBlog 개선 필요 사항 (2026-03-17 확정)
+- **가운데 정렬**: 글 전체 가운데 정렬 필요 — 작성 완료 후 Ctrl+A → Ctrl+E 적용
+- **서론 우선**: 본문에서 사진 삽입 전 반드시 서론(서론) 텍스트 먼저 입력
+  - [IMG_TOP]을 서론 이후 위치로 이동 (기존: body 첫 줄 강제 → 변경: 서론 다음)
+- **제목 커버 이미지**: 제목 섹션에도 사진 삽입 필요 (Naver SE4 커버 이미지 기능)
+  - `_set_cover_image()` 메서드로 구현, 실패 시 graceful fallback
+- **글자수 기준**: 1500자 이상 (순수 한글, 공백 제외)
+- **태그 분포**: 필수 5개(브릿지/원어민채용/원어민에이전시/브릿지에이전시/영어선생님고용) + 서이추/서이추환영 마지막 고정
 
 ## Python 실행 규칙 (2026-03-14 확정)
 - `C:\Python314` — 환경 깨짐, 사용 금지
