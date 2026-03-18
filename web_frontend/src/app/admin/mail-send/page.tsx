@@ -821,7 +821,7 @@ function ProfileBuilder({
         <div className="text-xs font-medium text-[#6e6e73]">HTML 미리보기</div>
         <div className="flex-1 border border-[#d2d2d7] rounded-lg overflow-auto bg-white p-4">
           {previewHtml ? (
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
           ) : (
             <div className="text-[#6e6e73] text-sm text-center mt-8">
               후보자를 선택 후 &quot;HTML 생성&quot; 클릭
