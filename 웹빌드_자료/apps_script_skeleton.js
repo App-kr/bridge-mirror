@@ -6,6 +6,9 @@
 //   FIX-2: LockService 추가 (동시제출 race condition 방지)
 //   FIX-3: e.range.getRow() 사용 (getLastRow() race 방지)
 //   FIX-4: copyFormatToRange → setBackground 순서 수정 (색상 덮어쓰기 방지)
+// 2026-03-18 버그 수정 (FIX-5~6):
+//   FIX-5: get() null/undefined/공백 안전 처리 (nationality 등 빈 값 크래시 방지)
+//   FIX-6: Utilities.htmlEscape() 적용 — Logger 및 HTML 출력 시 XSS 방지
 // ============================================================
 
 const CONFIG = {
@@ -159,7 +162,9 @@ function onFormSubmit(e) {
     }
     range.setBackground(CONFIG.COLOR_NEW); // 서식 복사 후 마지막에 적용
 
-    Logger.log(`✅ 번호 ${nextNum} | 행 ${submittedRow} | ${form[CONFIG.SRC.EMAIL-1]}`);
+    // [FIX-6] Utilities.htmlEscape() — HTML 컨텍스트(이메일 등) 사용 시 XSS 방지
+    const safeEmail = Utilities.htmlEscape(String(form[CONFIG.SRC.EMAIL-1] ?? ''));
+    Logger.log(`✅ 번호 ${nextNum} | 행 ${submittedRow} | ${safeEmail}`);
   } catch (err) {
     Logger.log('ERROR: ' + err.message);
   } finally {
@@ -198,7 +203,12 @@ function buildNewRow(form, number) {
   const n = CONFIG.NEW;
   const row = new Array(49).fill('');
 
-  const get = (col) => form[col - 1] ?? '';
+  // [FIX-5] null/undefined/공백 안전 처리 — nationality 등 미입력 값 크래시 방지
+  const get = (col) => {
+    const v = form[col - 1];
+    if (v === null || v === undefined) return '';
+    return String(v).trim();
+  };
 
   // ── 기본 정보 ──
   row[n.EMAIL      - 1] = get(s.EMAIL);
@@ -220,7 +230,6 @@ function buildNewRow(form, number) {
   // ── 경력/레퍼런스 ──
   row[n.REFERENCE  - 1] = get(s.REFERENCE);
   // [FIX-1] O열(EXPERIENCE=경력연수)은 폼에 숫자 항목 없음 → 수동 입력, 빈칸 유지
-  // row[n.EXPERIENCE - 1] = '';  // 수동 — 경력연수는 스프레드시트에서 직접 입력
   row[n.EMPLOYMENT - 1] = get(s.EMPLOYMENT);  // P열 — 한국 근무처 (텍스트)
 
   // ── 리크루터 관리 (수동) ──
