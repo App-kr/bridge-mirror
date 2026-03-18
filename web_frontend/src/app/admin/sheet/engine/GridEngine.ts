@@ -1,27 +1,28 @@
 /* ═══════════════════════════════════════════════════════
-   BRIDGE Canvas Spreadsheet — Grid Engine
+   BRIDGE Canvas Spreadsheet — Grid Engine v2
    Pure Canvas rendering: header, rows, photos, stages, tags
-   Ghost-div scrollbar, column resize, DPR scaling
+   Ghost-div scrollbar (상하좌우), column resize, DPR scaling
+   Configurable row height, updateCallbacks support
    ═══════════════════════════════════════════════════════ */
 
 import type { ColDef, DataRow, GridCallbacks, CellRef } from './types'
-import { HEADER_H, ROW_H, FONT, HEADER_FONT, STAGES, MTAGS } from './types'
+import { HEADER_H, FONT, HEADER_FONT, STAGES, MTAGS } from './types'
 import { SelectionManager } from './SelectionManager'
 import { EditManager } from './EditManager'
 
 /* ── Drawing constants ── */
 const HEADER_BG    = '#f8fafc'
 const HEADER_BORDER = '#cbd5e1'
-const GRID_LINE    = '#f1f5f9'
+const GRID_LINE    = '#e2e8f0'
 const SELECTED_BG  = '#dbeafe'
 const ACTIVE_BORDER = '#3b82f6'
-const HOVER_BG     = '#f8fafc'
+const HOVER_BG     = '#f1f5f9'
 const FROZEN_SEP   = '#94a3b8'
 const SORT_ARROW   = '#64748b'
-const RESIZE_ZONE  = 5 // px near column boundary for resize cursor
+const RESIZE_ZONE  = 5
 
 export class GridEngine {
-  /* ── DOM Elements ── */
+  /* ── DOM ── */
   private container: HTMLDivElement
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
@@ -45,16 +46,15 @@ export class GridEngine {
 
   /* ── Data ── */
   private cols: ColDef[] = []
-  private visCols: ColDef[] = []   // only visible cols
+  private visCols: ColDef[] = []
   private rows: DataRow[] = []
   private frozenCols = 3
+  private rowH = 36  // configurable row height
 
-  /* ── Interaction state ── */
+  /* ── Interaction ── */
   private hoverRow = -1
   private sortKey = ''
   private sortDir: 'asc' | 'desc' = 'asc'
-
-  /* ── Column resize ── */
   private resizeDrag: { visIdx: number; startX: number; startW: number } | null = null
 
   /* ── Photo cache ── */
@@ -64,11 +64,7 @@ export class GridEngine {
   /* ── RAF ── */
   private rafId = 0
   private destroyed = false
-
-  /* ── Observer ── */
   private ro: ResizeObserver
-
-  /* ── Auth header getter (for photos) ── */
   private getHeaders: (() => Record<string, string>) | null = null
 
   constructor(container: HTMLDivElement, cb: GridCallbacks) {
@@ -78,22 +74,21 @@ export class GridEngine {
     this.selection = new SelectionManager()
     this.editor = new EditManager(container)
 
-    // Container style
     container.style.position = 'relative'
     container.style.overflow = 'hidden'
 
-    // Canvas (renders everything, no pointer events)
+    // Canvas
     this.canvas = document.createElement('canvas')
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;'
     this.ctx = this.canvas.getContext('2d')!
     container.appendChild(this.canvas)
 
-    // Header hit area (captures header clicks/resize)
+    // Header hit area
     this.headerHit = document.createElement('div')
     this.headerHit.style.cssText = `position:absolute;top:0;left:0;right:0;height:${HEADER_H}px;z-index:2;cursor:default;`
     container.appendChild(this.headerHit)
 
-    // Ghost scroll div (captures data area scroll + clicks)
+    // Ghost scroll div — top: HEADER_H so scrollbar doesn't overlap header
     this.ghost = document.createElement('div')
     this.ghost.style.cssText = `position:absolute;top:${HEADER_H}px;left:0;right:0;bottom:0;overflow:auto;z-index:1;`
     this.sizer = document.createElement('div')
@@ -101,10 +96,8 @@ export class GridEngine {
     this.ghost.appendChild(this.sizer)
     container.appendChild(this.ghost)
 
-    // ResizeObserver
     this.ro = new ResizeObserver(() => { if (!this.destroyed) this.handleResize() })
     this.ro.observe(container)
-
     this.setupEvents()
     this.handleResize()
   }
@@ -112,6 +105,8 @@ export class GridEngine {
   /* ══════════════════════════════════════════════
      PUBLIC API
      ══════════════════════════════════════════════ */
+
+  updateCallbacks(cb: GridCallbacks): void { this.cb = cb }
 
   setData(rows: DataRow[]): void {
     this.rows = rows
@@ -126,55 +121,48 @@ export class GridEngine {
     this.requestRender()
   }
 
-  setFrozenCols(n: number): void {
-    this.frozenCols = n
-    this.requestRender()
-  }
+  setFrozenCols(n: number): void { this.frozenCols = n; this.requestRender() }
 
   setSort(key: string, dir: 'asc' | 'desc'): void {
-    this.sortKey = key
-    this.sortDir = dir
+    this.sortKey = key; this.sortDir = dir; this.requestRender()
+  }
+
+  setRowHeight(h: number): void {
+    this.rowH = h
+    this.updateSizer()
     this.requestRender()
   }
 
-  setHeaderGetter(fn: () => Record<string, string>): void {
-    this.getHeaders = fn
-  }
+  setHeaderGetter(fn: () => Record<string, string>): void { this.getHeaders = fn }
 
-  getVisibleCols(): ColDef[] {
-    return this.visCols
-  }
+  getVisibleCols(): ColDef[] { return this.visCols }
 
-  scrollToRow(idx: number): void {
-    const y = idx * ROW_H
-    this.ghost.scrollTop = y
-  }
+  scrollToRow(idx: number): void { this.ghost.scrollTop = idx * this.rowH }
 
-  /** Force a render */
-  refresh(): void {
-    this.requestRender()
-  }
+  refresh(): void { this.requestRender() }
 
   destroy(): void {
     this.destroyed = true
     this.ro.disconnect()
     if (this.rafId) cancelAnimationFrame(this.rafId)
     this.editor.destroy()
-    // Remove created DOM
+    // Remove document-level listeners
+    document.removeEventListener('mousemove', this.onDocMouseMove)
+    document.removeEventListener('mouseup', this.onDocMouseUp)
+    document.removeEventListener('keydown', this.onKeyDown)
     this.canvas.remove()
     this.headerHit.remove()
     this.ghost.remove()
   }
 
   /* ══════════════════════════════════════════════
-     LAYOUT & SIZING
+     LAYOUT
      ══════════════════════════════════════════════ */
 
   private handleResize(): void {
     const r = this.container.getBoundingClientRect()
     this.viewW = r.width
     this.viewH = r.height
-    // DPR canvas sizing
     this.canvas.width = this.viewW * this.dpr
     this.canvas.height = this.viewH * this.dpr
     this.canvas.style.width = this.viewW + 'px'
@@ -186,7 +174,7 @@ export class GridEngine {
 
   private updateSizer(): void {
     const totalW = this.visCols.reduce((s, c) => s + c.w, 0)
-    const totalH = this.rows.length * ROW_H
+    const totalH = this.rows.length * this.rowH
     this.sizer.style.width = totalW + 'px'
     this.sizer.style.height = totalH + 'px'
   }
@@ -198,7 +186,6 @@ export class GridEngine {
     return w
   }
 
-  /** Get column x position (in total scrollable coords) */
   private colX(visIdx: number): number {
     let x = 0
     for (let i = 0; i < visIdx; i++) x += this.visCols[i].w
@@ -210,41 +197,33 @@ export class GridEngine {
      ══════════════════════════════════════════════ */
 
   private setupEvents(): void {
-    // Ghost scroll
     this.ghost.addEventListener('scroll', this.onScroll, { passive: true })
-    // Ghost mouse events (data area)
     this.ghost.addEventListener('mousedown', this.onGhostMouseDown)
     this.ghost.addEventListener('mousemove', this.onGhostMouseMove)
     this.ghost.addEventListener('dblclick', this.onGhostDblClick)
     this.ghost.addEventListener('contextmenu', this.onGhostContextMenu)
-    // Header events
     this.headerHit.addEventListener('mousedown', this.onHeaderMouseDown)
     this.headerHit.addEventListener('mousemove', this.onHeaderMouseMove)
     this.headerHit.addEventListener('click', this.onHeaderClick)
-    // Global mousemove/up for resize drag
     document.addEventListener('mousemove', this.onDocMouseMove)
     document.addEventListener('mouseup', this.onDocMouseUp)
-    // Keyboard
     document.addEventListener('keydown', this.onKeyDown)
   }
 
-  /* ── Scroll ── */
   private onScroll = (): void => {
     this.scrollTop = this.ghost.scrollTop
     this.scrollLeft = this.ghost.scrollLeft
     this.requestRender()
-    // Infinite scroll trigger
     if (this.ghost.scrollTop + this.ghost.clientHeight > this.ghost.scrollHeight - 300) {
       this.cb.onRequestMore()
     }
   }
 
-  /* ── Ghost (data area) events ── */
   private hitCell(e: MouseEvent): { row: number; visCol: number } | null {
     const rect = this.ghost.getBoundingClientRect()
     const mx = e.clientX - rect.left + this.scrollLeft
     const my = e.clientY - rect.top + this.scrollTop
-    const row = Math.floor(my / ROW_H)
+    const row = Math.floor(my / this.rowH)
     if (row < 0 || row >= this.rows.length) return null
     let cx = 0
     for (let i = 0; i < this.visCols.length; i++) {
@@ -267,10 +246,7 @@ export class GridEngine {
   private onGhostMouseMove = (e: MouseEvent): void => {
     const hit = this.hitCell(e)
     const newHover = hit ? hit.row : -1
-    if (newHover !== this.hoverRow) {
-      this.hoverRow = newHover
-      this.requestRender()
-    }
+    if (newHover !== this.hoverRow) { this.hoverRow = newHover; this.requestRender() }
   }
 
   private onGhostDblClick = (e: MouseEvent): void => {
@@ -280,22 +256,15 @@ export class GridEngine {
     const row = this.rows[hit.row]
     if (!col || !row) return
 
-    // Special column types
     if (col.type === 'idx' || col.type === 'photo') return
-    if (col.type === 'mail') {
-      this.cb.onMailClick(hit.row, row)
-      return
-    }
+    if (col.type === 'mail') { this.cb.onMailClick(hit.row, row); return }
     if (col.type === 'stage') {
-      // Cycle stage
       const stKeys = STAGES.map(s => s.key)
       const cur = stKeys.indexOf(String(row.stage))
-      const next = stKeys[(cur + 1) % stKeys.length]
-      this.cb.onStageChange(hit.row, next)
+      this.cb.onStageChange(hit.row, stKeys[(cur + 1) % stKeys.length])
       return
     }
 
-    // Start inline edit
     const cellRect = this.getCellRect(hit.row, hit.visCol)
     if (!cellRect) return
     const val = String(row[col.key] ?? '')
@@ -322,15 +291,14 @@ export class GridEngine {
     this.requestRender()
   }
 
-  /** Get cell rect relative to container (for edit overlay) */
   private getCellRect(rowIdx: number, visColIdx: number): { x: number; y: number; w: number; h: number } | null {
     const col = this.visCols[visColIdx]
     if (!col) return null
     const isFrozen = visColIdx < this.frozenCols
     const cx = this.colX(visColIdx)
     const x = isFrozen ? cx : cx - this.scrollLeft
-    const y = HEADER_H + rowIdx * ROW_H - this.scrollTop
-    return { x, y, w: col.w, h: ROW_H }
+    const y = HEADER_H + rowIdx * this.rowH - this.scrollTop
+    return { x, y, w: col.w, h: this.rowH }
   }
 
   /* ── Header events ── */
@@ -350,11 +318,7 @@ export class GridEngine {
     const hit = this.headerHitVisCol(e)
     if (!hit || !hit.nearBorder) return
     e.preventDefault()
-    this.resizeDrag = {
-      visIdx: hit.visCol,
-      startX: e.clientX,
-      startW: this.visCols[hit.visCol].w,
-    }
+    this.resizeDrag = { visIdx: hit.visCol, startX: e.clientX, startW: this.visCols[hit.visCol].w }
   }
 
   private onHeaderMouseMove = (e: MouseEvent): void => {
@@ -370,13 +334,11 @@ export class GridEngine {
     if (col) this.cb.onSort(col.key)
   }
 
-  /* ── Document-level (resize drag) ── */
   private onDocMouseMove = (e: MouseEvent): void => {
     if (!this.resizeDrag) return
     const dx = e.clientX - this.resizeDrag.startX
     const newW = Math.max(30, this.resizeDrag.startW + dx)
     this.visCols[this.resizeDrag.visIdx].w = newW
-    // Sync back to cols array
     const key = this.visCols[this.resizeDrag.visIdx].key
     const src = this.cols.find(c => c.key === key)
     if (src) src.w = newW
@@ -391,12 +353,10 @@ export class GridEngine {
     this.resizeDrag = null
   }
 
-  /* ── Keyboard ── */
   private onKeyDown = (e: KeyboardEvent): void => {
     if (this.editor.isEditing()) return
-    const active = e.target as HTMLElement
-    if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT') return
-
+    const t = e.target as HTMLElement
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return
     switch (e.key) {
       case 'ArrowUp':    e.preventDefault(); this.selection.moveActive(-1, 0, this.rows.length, this.visCols.length); break
       case 'ArrowDown':  e.preventDefault(); this.selection.moveActive(1, 0, this.rows.length, this.visCols.length); break
@@ -406,17 +366,16 @@ export class GridEngine {
       default: return
     }
     this.cb.onSelectionChange(this.selection.getSelectedRows())
-    // Scroll active cell into view
     const ac = this.selection.getActiveCell()
     if (ac) this.ensureVisible(ac)
     this.requestRender()
   }
 
   private ensureVisible(cell: CellRef): void {
-    const y = cell.row * ROW_H
+    const y = cell.row * this.rowH
     const ghostH = this.ghost.clientHeight
     if (y < this.scrollTop) this.ghost.scrollTop = y
-    else if (y + ROW_H > this.scrollTop + ghostH) this.ghost.scrollTop = y + ROW_H - ghostH
+    else if (y + this.rowH > this.scrollTop + ghostH) this.ghost.scrollTop = y + this.rowH - ghostH
   }
 
   /* ══════════════════════════════════════════════
@@ -425,123 +384,85 @@ export class GridEngine {
 
   private requestRender(): void {
     if (this.rafId || this.destroyed) return
-    this.rafId = requestAnimationFrame(() => {
-      this.rafId = 0
-      this.draw()
-    })
+    this.rafId = requestAnimationFrame(() => { this.rafId = 0; this.draw() })
   }
 
   private draw(): void {
-    const { ctx, viewW, viewH } = this
+    const { ctx, viewW, viewH, rowH } = this
     ctx.clearRect(0, 0, viewW, viewH)
-
     if (this.visCols.length === 0) return
 
     const frozenW = this.getFrozenWidth()
     const frozenN = Math.min(this.frozenCols, this.visCols.length)
-
-    // Calculate visible rows
     const dataH = viewH - HEADER_H
-    const startRow = Math.max(0, Math.floor(this.scrollTop / ROW_H))
-    const endRow = Math.min(startRow + Math.ceil(dataH / ROW_H) + 2, this.rows.length)
+    const startRow = Math.max(0, Math.floor(this.scrollTop / rowH))
+    const endRow = Math.min(startRow + Math.ceil(dataH / rowH) + 2, this.rows.length)
 
-    // ── Draw scrollable columns (clipped to non-frozen area) ──
+    // ── Scrollable columns (clipped) ──
     ctx.save()
     ctx.beginPath()
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
     ctx.clip()
-
     for (let r = startRow; r < endRow; r++) {
-      const y = HEADER_H + r * ROW_H - this.scrollTop
+      const y = HEADER_H + r * rowH - this.scrollTop
       this.drawRowBg(r, y, frozenW, viewW)
       let cx = -this.scrollLeft
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
-        if (c < frozenN) { cx += col.w; continue } // skip frozen here
-        this.drawCell(this.rows[r], col, cx, y, col.w, ROW_H)
-        // Grid line (vertical)
-        ctx.strokeStyle = GRID_LINE
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(cx + col.w - 0.5, y)
-        ctx.lineTo(cx + col.w - 0.5, y + ROW_H)
-        ctx.stroke()
+        if (c < frozenN) { cx += col.w; continue }
+        this.drawCell(this.rows[r], col, cx, y, col.w, rowH)
+        ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
+        ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
         cx += col.w
       }
-      // Horizontal grid line
-      ctx.strokeStyle = GRID_LINE
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(frozenW, y + ROW_H - 0.5)
-      ctx.lineTo(viewW, y + ROW_H - 0.5)
-      ctx.stroke()
+      ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(frozenW, y + rowH - 0.5); ctx.lineTo(viewW, y + rowH - 0.5); ctx.stroke()
     }
     ctx.restore()
 
-    // ── Draw frozen columns (clipped to frozen area) ──
+    // ── Frozen columns ──
     if (frozenN > 0) {
       ctx.save()
       ctx.beginPath()
       ctx.rect(0, HEADER_H, frozenW, dataH)
       ctx.clip()
-
       for (let r = startRow; r < endRow; r++) {
-        const y = HEADER_H + r * ROW_H - this.scrollTop
+        const y = HEADER_H + r * rowH - this.scrollTop
         this.drawRowBg(r, y, 0, frozenW)
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
           const col = this.visCols[c]
-          this.drawCell(this.rows[r], col, cx, y, col.w, ROW_H)
-          ctx.strokeStyle = GRID_LINE
-          ctx.lineWidth = 1
-          ctx.beginPath()
-          ctx.moveTo(cx + col.w - 0.5, y)
-          ctx.lineTo(cx + col.w - 0.5, y + ROW_H)
-          ctx.stroke()
+          this.drawCell(this.rows[r], col, cx, y, col.w, rowH)
+          ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
+          ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
           cx += col.w
         }
-        // Horizontal grid line
         ctx.strokeStyle = GRID_LINE
-        ctx.beginPath()
-        ctx.moveTo(0, y + ROW_H - 0.5)
-        ctx.lineTo(frozenW, y + ROW_H - 0.5)
-        ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(0, y + rowH - 0.5); ctx.lineTo(frozenW, y + rowH - 0.5); ctx.stroke()
       }
       ctx.restore()
-
-      // Frozen column separator line
-      ctx.strokeStyle = FROZEN_SEP
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(frozenW, HEADER_H)
-      ctx.lineTo(frozenW, viewH)
-      ctx.stroke()
+      ctx.strokeStyle = FROZEN_SEP; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(frozenW, HEADER_H); ctx.lineTo(frozenW, viewH); ctx.stroke()
     }
 
-    // ── Draw Header ──
+    // ── Header (always on top) ──
     this.drawHeader(frozenW, frozenN)
   }
 
   private drawRowBg(rowIdx: number, y: number, x0: number, x1: number): void {
-    const { ctx } = this
+    const { ctx, rowH } = this
     if (this.selection.isRowSelected(rowIdx)) {
-      ctx.fillStyle = SELECTED_BG
-      ctx.fillRect(x0, y, x1 - x0, ROW_H)
+      ctx.fillStyle = SELECTED_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
     } else if (rowIdx === this.hoverRow) {
-      ctx.fillStyle = HOVER_BG
-      ctx.fillRect(x0, y, x1 - x0, ROW_H)
+      ctx.fillStyle = HOVER_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
     } else if (rowIdx % 2 === 1) {
-      ctx.fillStyle = '#fafafa'
-      ctx.fillRect(x0, y, x1 - x0, ROW_H)
+      ctx.fillStyle = '#fafafa'; ctx.fillRect(x0, y, x1 - x0, rowH)
     }
-
-    // Active cell highlight
     const ac = this.selection.getActiveCell()
     if (ac && ac.row === rowIdx) {
       const rect = this.getCellRect(rowIdx, ac.col)
       if (rect) {
-        ctx.strokeStyle = ACTIVE_BORDER
-        ctx.lineWidth = 2
+        ctx.strokeStyle = ACTIVE_BORDER; ctx.lineWidth = 2
         ctx.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2)
       }
     }
@@ -551,332 +472,216 @@ export class GridEngine {
   private drawCell(row: DataRow, col: ColDef, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const val = String(row[col.key] ?? '')
-
-    ctx.font = FONT
-    ctx.textBaseline = 'middle'
+    ctx.font = FONT; ctx.textBaseline = 'middle'
     const ty = y + h / 2
 
     switch (col.type) {
       case 'idx':
-        ctx.fillStyle = '#94a3b8'
-        ctx.textAlign = 'right'
-        ctx.fillText(val, x + w - 8, ty)
-        ctx.textAlign = 'left'
+        ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'right'
+        ctx.fillText(val, x + w - 8, ty); ctx.textAlign = 'left'
         break
-
       case 'photo':
         this.drawPhoto(row, x, y, w, h)
         break
-
       case 'stage':
         this.drawStage(String(row.stage), x, y, w, h)
         break
-
       case 'tags':
         this.drawTags(val, x, y, w, h)
         break
-
       case 'mail':
         this.drawMailBtn(x, y, w, h)
         break
-
       case 'dropdown':
         ctx.fillStyle = '#1e293b'
         this.drawTruncated(val, x + 4, ty, w - 20)
-        // dropdown arrow
-        ctx.fillStyle = '#94a3b8'
-        ctx.font = '10px sans-serif'
-        ctx.fillText('▾', x + w - 14, ty)
-        ctx.font = FONT
+        ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
+        ctx.fillText('▾', x + w - 14, ty); ctx.font = FONT
         break
-
       case 'long':
         ctx.fillStyle = '#334155'
         this.drawWrapped(val, x + 4, y + 4, w - 8, h - 8)
         break
-
-      default: // 't'
+      default:
         ctx.fillStyle = '#1e293b'
         this.drawTruncated(val, x + 4, ty, w - 8)
-        break
     }
   }
 
-  /** Draw text truncated with ellipsis */
   private drawTruncated(text: string, x: number, y: number, maxW: number): void {
     const { ctx } = this
-    if (!text) return
-    if (ctx.measureText(text).width <= maxW) {
-      ctx.fillText(text, x, y)
-      return
-    }
+    if (!text || maxW <= 0) return
+    if (ctx.measureText(text).width <= maxW) { ctx.fillText(text, x, y); return }
     let t = text
     while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1)
     ctx.fillText(t + '…', x, y)
   }
 
-  /** Draw wrapped text (up to 2 lines) */
   private drawWrapped(text: string, x: number, y: number, maxW: number, maxH: number): void {
     const { ctx } = this
-    if (!text) return
+    if (!text || maxW <= 0) return
     const lineH = 15
-    const lines = text.split('\n')
-    const maxLines = Math.floor(maxH / lineH)
+    const maxLines = Math.max(1, Math.floor(maxH / lineH))
     let line = 0
     ctx.textBaseline = 'top'
-    for (const raw of lines) {
+    for (const raw of text.split('\n')) {
       if (line >= maxLines) break
       if (ctx.measureText(raw).width <= maxW) {
-        ctx.fillText(raw, x, y + line * lineH)
-        line++
+        ctx.fillText(raw, x, y + line * lineH); line++
       } else {
         let seg = ''
         for (const ch of raw) {
           if (ctx.measureText(seg + ch).width > maxW) {
-            ctx.fillText(seg, x, y + line * lineH)
-            line++
+            ctx.fillText(seg, x, y + line * lineH); line++
             if (line >= maxLines) break
             seg = ch
-          } else {
-            seg += ch
-          }
+          } else { seg += ch }
         }
-        if (line < maxLines && seg) {
-          ctx.fillText(seg, x, y + line * lineH)
-          line++
-        }
+        if (line < maxLines && seg) { ctx.fillText(seg, x, y + line * lineH); line++ }
       }
     }
     ctx.textBaseline = 'middle'
   }
 
-  /** Draw photo thumbnail */
   private drawPhoto(row: DataRow, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const url = String(row.photoUrl ?? '')
     if (!url) {
-      // Placeholder
       ctx.fillStyle = '#e2e8f0'
       const sz = Math.min(w, h) - 8
-      const px = x + (w - sz) / 2
-      const py = y + (h - sz) / 2
-      ctx.fillRect(px, py, sz, sz)
-      ctx.fillStyle = '#94a3b8'
-      ctx.font = '10px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
+      ctx.fillRect(x + (w - sz) / 2, y + (h - sz) / 2, sz, sz)
+      ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText('📷', x + w / 2, y + h / 2)
-      ctx.font = FONT
-      ctx.textAlign = 'left'
+      ctx.font = FONT; ctx.textAlign = 'left'
       return
     }
     const cached = this.photoCache.get(url)
     if (cached) {
       const sz = Math.min(w, h) - 6
-      const px = x + (w - sz) / 2
-      const py = y + (h - sz) / 2
-      try { ctx.drawImage(cached, px, py, sz, sz) } catch { /* corrupt image */ }
-    } else if (!this.photoLoading.has(url)) {
-      this.loadPhoto(url)
-    }
+      try { ctx.drawImage(cached, x + (w - sz) / 2, y + (h - sz) / 2, sz, sz) } catch { /* */ }
+    } else if (!this.photoLoading.has(url)) { this.loadPhoto(url) }
   }
 
   private loadPhoto(url: string): void {
     this.photoLoading.add(url)
-    // For URLs that need auth, fetch via XHR and create blob URL
     if (url.includes('/api/') && this.getHeaders) {
       const hdrs = this.getHeaders()
       fetch(url, { headers: hdrs }).then(r => r.blob()).then(blob => {
         const objectUrl = URL.createObjectURL(blob)
         const img = new Image()
-        img.onload = () => {
-          this.photoCache.set(url, img)
-          this.photoLoading.delete(url)
-          this.requestRender()
-        }
+        img.onload = () => { this.photoCache.set(url, img); this.photoLoading.delete(url); this.requestRender() }
         img.onerror = () => { this.photoLoading.delete(url) }
         img.src = objectUrl
       }).catch(() => { this.photoLoading.delete(url) })
     } else {
       const img = new Image()
       img.crossOrigin = 'anonymous'
-      img.onload = () => {
-        this.photoCache.set(url, img)
-        this.photoLoading.delete(url)
-        this.requestRender()
-      }
+      img.onload = () => { this.photoCache.set(url, img); this.photoLoading.delete(url); this.requestRender() }
       img.onerror = () => { this.photoLoading.delete(url) }
       img.src = url
     }
   }
 
-  /** Draw stage badge */
   private drawStage(stageKey: string, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const stage = STAGES.find(s => s.key === stageKey)
     if (!stage || stage.key === 'none') return
-
     const pad = 4
     const bw = Math.min(w - pad * 2, ctx.measureText(stage.label).width + 16)
     const bh = 22
-    const bx = x + pad
-    const by = y + (h - bh) / 2
-
-    ctx.fillStyle = stage.color
-    this.roundRect(bx, by, bw, bh, 4)
-    ctx.fill()
-
+    const bx = x + pad, by = y + (h - bh) / 2
+    ctx.fillStyle = stage.color; this.roundRect(bx, by, bw, bh, 4); ctx.fill()
     ctx.fillStyle = stage.text
     ctx.font = '12px -apple-system,"Segoe UI",sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillText(stage.label, bx + bw / 2, by + bh / 2)
-    ctx.font = FONT
-    ctx.textAlign = 'left'
+    ctx.font = FONT; ctx.textAlign = 'left'
   }
 
-  /** Draw mail tag badges */
   private drawTags(val: string, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     if (!val) return
-    const keys = val.split(',').filter(Boolean)
     let tx = x + 4
-    const tagH = 18
-    const ty = y + (h - tagH) / 2
+    const tagH = 18, ty = y + (h - tagH) / 2
     ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
-    for (const k of keys) {
+    for (const k of val.split(',').filter(Boolean)) {
       const tag = MTAGS.find(m => m.key === k.trim())
       if (!tag) continue
       const tw = ctx.measureText(tag.label).width + 10
       if (tx + tw > x + w) break
-      ctx.fillStyle = tag.c + '20' // 12% opacity bg
-      this.roundRect(tx, ty, tw, tagH, 3)
-      ctx.fill()
-      ctx.fillStyle = tag.c
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
+      ctx.fillStyle = tag.c + '20'; this.roundRect(tx, ty, tw, tagH, 3); ctx.fill()
+      ctx.fillStyle = tag.c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText(tag.label, tx + tw / 2, ty + tagH / 2)
       tx += tw + 3
     }
-    ctx.font = FONT
-    ctx.textAlign = 'left'
+    ctx.font = FONT; ctx.textAlign = 'left'
   }
 
-  /** Draw mail action button */
   private drawMailBtn(x: number, y: number, w: number, h: number): void {
     const { ctx } = this
-    const bw = Math.min(w - 8, 60)
-    const bh = 24
-    const bx = x + (w - bw) / 2
-    const by = y + (h - bh) / 2
-    ctx.fillStyle = '#eff6ff'
-    this.roundRect(bx, by, bw, bh, 4)
-    ctx.fill()
-    ctx.strokeStyle = '#93c5fd'
-    ctx.lineWidth = 1
-    this.roundRect(bx, by, bw, bh, 4)
-    ctx.stroke()
-    ctx.fillStyle = '#2563eb'
-    ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
+    const bw = Math.min(w - 8, 60), bh = 24
+    const bx = x + (w - bw) / 2, by = y + (h - bh) / 2
+    ctx.fillStyle = '#eff6ff'; this.roundRect(bx, by, bw, bh, 4); ctx.fill()
+    ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1; this.roundRect(bx, by, bw, bh, 4); ctx.stroke()
+    ctx.fillStyle = '#2563eb'; ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillText('✉ 발송', bx + bw / 2, by + bh / 2)
-    ctx.font = FONT
-    ctx.textAlign = 'left'
+    ctx.font = FONT; ctx.textAlign = 'left'
   }
 
-  /** Helper: draw rounded rect path */
   private roundRect(x: number, y: number, w: number, h: number, r: number): void {
     const { ctx } = this
     ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.lineTo(x + w - r, y)
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-    ctx.lineTo(x + w, y + h - r)
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-    ctx.lineTo(x + r, y + h)
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-    ctx.lineTo(x, y + r)
-    ctx.quadraticCurveTo(x, y, x + r, y)
-    ctx.closePath()
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r)
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h)
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r)
+    ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath()
   }
 
   /* ── Header ── */
   private drawHeader(frozenW: number, frozenN: number): void {
     const { ctx, viewW } = this
-    // Header background
-    ctx.fillStyle = HEADER_BG
-    ctx.fillRect(0, 0, viewW, HEADER_H)
-    // Header bottom border
-    ctx.strokeStyle = HEADER_BORDER
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(0, HEADER_H - 0.5)
-    ctx.lineTo(viewW, HEADER_H - 0.5)
-    ctx.stroke()
+    ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, viewW, HEADER_H)
+    ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, HEADER_H - 0.5); ctx.lineTo(viewW, HEADER_H - 0.5); ctx.stroke()
+    ctx.font = HEADER_FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1e293b'
 
-    ctx.font = HEADER_FONT
-    ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#475569'
-
-    // ── Scrollable headers (clipped to non-frozen area) ──
+    // Scrollable headers
     ctx.save()
-    ctx.beginPath()
-    ctx.rect(frozenW, 0, viewW - frozenW, HEADER_H)
-    ctx.clip()
+    ctx.beginPath(); ctx.rect(frozenW, 0, viewW - frozenW, HEADER_H); ctx.clip()
     let cx = -this.scrollLeft
     for (let i = 0; i < this.visCols.length; i++) {
       const col = this.visCols[i]
       if (i < frozenN) { cx += col.w; continue }
-      this.drawHeaderCell(col, cx, col.w)
-      cx += col.w
+      this.drawHeaderCell(col, cx, col.w); cx += col.w
     }
     ctx.restore()
 
-    // ── Frozen headers ──
+    // Frozen headers
     if (frozenN > 0) {
-      ctx.fillStyle = HEADER_BG
-      ctx.fillRect(0, 0, frozenW, HEADER_H)
+      ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, frozenW, HEADER_H)
       let fx = 0
       for (let i = 0; i < frozenN; i++) {
-        const col = this.visCols[i]
-        this.drawHeaderCell(col, fx, col.w)
-        fx += col.w
+        this.drawHeaderCell(this.visCols[i], fx, this.visCols[i].w); fx += this.visCols[i].w
       }
-      // Frozen separator on header
-      ctx.strokeStyle = FROZEN_SEP
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(frozenW, 0)
-      ctx.lineTo(frozenW, HEADER_H)
-      ctx.stroke()
+      ctx.strokeStyle = FROZEN_SEP; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(frozenW, 0); ctx.lineTo(frozenW, HEADER_H); ctx.stroke()
     }
   }
 
   private drawHeaderCell(col: ColDef, x: number, w: number): void {
     const { ctx } = this
-    ctx.fillStyle = '#475569'
-    ctx.font = HEADER_FONT
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
     this.drawTruncated(col.label, x + 6, HEADER_H / 2, w - 18)
-
-    // Sort indicator
     if (col.key === this.sortKey) {
-      ctx.fillStyle = SORT_ARROW
-      ctx.font = '10px sans-serif'
-      ctx.textAlign = 'right'
+      ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText(this.sortDir === 'asc' ? '▲' : '▼', x + w - 6, HEADER_H / 2)
-      ctx.font = HEADER_FONT
-      ctx.textAlign = 'left'
+      ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
-
-    // Column separator
-    ctx.strokeStyle = HEADER_BORDER
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(x + w - 0.5, 4)
-    ctx.lineTo(x + w - 0.5, HEADER_H - 4)
-    ctx.stroke()
+    ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
   }
 }
