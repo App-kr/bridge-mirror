@@ -658,7 +658,12 @@
       "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" -c \"\nimport urllib.request, json\nr = urllib.request.urlopen\\(''http://localhost:8899'', timeout=4\\)\nprint\\(''server:'', r.status, ''✅''\\)\nr2 = urllib.request.urlopen\\(''http://localhost:8899/api/all'', timeout=4\\)\nd = json.loads\\(r2.read\\(\\)\\)\nprint\\(''agents:'', len\\(d.get\\(''agents'',[]\\)\\), ''| git:'', len\\(d.get\\(''git'',[]\\)\\)\\)\n\")",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -m py_compile \"Q:/Claudework/bridge base/api_server.py\")",
       "Bash(npm ls:*)",
-      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"print\\(open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\rules\\\\PROMPT_V6.md'',encoding=''utf-8''\\).read\\(\\)\\)\")"
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"print\\(open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\rules\\\\PROMPT_V6.md'',encoding=''utf-8''\\).read\\(\\)\\)\")",
+      "Bash(\"C:\\\\Python314\\\\python.exe\" -m py_compile:*)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"\ntests = {}\n\ntry:\n    from PyQt6.QtWidgets import QApplication\n    tests[''PyQt6''] = ''OK''\nexcept: tests[''PyQt6''] = ''FAIL - pip install PyQt6 필요''\n\ntry:\n    from selenium import webdriver\n    tests[''selenium''] = ''OK''\nexcept: tests[''selenium''] = ''FAIL''\n\ntry:\n    from google import genai\n    tests[''google-genai''] = ''OK''\nexcept: tests[''google-genai''] = ''FAIL''\n\ntry:\n    from pytrends.request import TrendReq\n    tests[''pytrends''] = ''OK''\nexcept: tests[''pytrends''] = ''FAIL''\n\ntry:\n    import keyring\n    tests[''keyring''] = ''OK''\nexcept: tests[''keyring''] = ''FAIL''\n\ntry:\n    import openpyxl\n    tests[''openpyxl''] = ''OK''\nexcept: tests[''openpyxl''] = ''FAIL''\n\ntry:\n    from PIL import Image\n    tests[''Pillow''] = ''OK''\nexcept: tests[''Pillow''] = ''FAIL''\n\ntry:\n    import pyperclip\n    tests[''pyperclip''] = ''OK''\nexcept: tests[''pyperclip''] = ''FAIL''\n\ntry:\n    import anthropic\n    tests[''anthropic''] = ''OK''\nexcept: tests[''anthropic''] = ''FAIL''\n\ntry:\n    import sqlite3\n    tests[''sqlite3''] = ''OK''\nexcept: tests[''sqlite3''] = ''FAIL''\n\nfor k,v in tests.items\\(\\):\n    print\\(f''{k}: {v}''\\)\n\")",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" install:*)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" install PyQt6)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"from PyQt6.QtWidgets import QApplication; print\\(''PyQt6 import OK''\\)\")"
     ]
   }
 }
