@@ -1,6 +1,11 @@
 // ============================================================
-// BRIDGE Google Apps Script — 완성본
+// BRIDGE Google Apps Script — 완성본 v2
 // 2026-03-17 컬럼 전체 확인 완료
+// 2026-03-18 버그 수정 (FIX-1~4):
+//   FIX-1: O열 EXPERIENCE 중복매핑 제거 (경력연수 = 수동입력)
+//   FIX-2: LockService 추가 (동시제출 race condition 방지)
+//   FIX-3: e.range.getRow() 사용 (getLastRow() race 방지)
+//   FIX-4: copyFormatToRange → setBackground 순서 수정 (색상 덮어쓰기 방지)
 // ============================================================
 
 const CONFIG = {
@@ -119,36 +124,47 @@ const CONFIG = {
 // 메인 트리거 — 폼 제출 시 자동 실행
 // ============================================================
 function onFormSubmit(e) {
-  const ss  = SpreadsheetApp.getActiveSpreadsheet();
-  const src = ss.getSheetByName(CONFIG.SHEET_SOURCE);
-  const nw  = ss.getSheetByName(CONFIG.SHEET_NEW);
+  // ── [FIX-2] LockService: 동시 제출 race condition 방지 ──
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000); // 최대 15초 대기
 
-  if (!src || !nw) {
-    Logger.log('ERROR: 시트를 찾을 수 없음 — 탭 이름 확인 필요');
-    return;
+    const ss  = SpreadsheetApp.getActiveSpreadsheet();
+    const src = ss.getSheetByName(CONFIG.SHEET_SOURCE);
+    const nw  = ss.getSheetByName(CONFIG.SHEET_NEW);
+
+    if (!src || !nw) {
+      Logger.log('ERROR: 시트를 찾을 수 없음 — 탭 이름 확인 필요');
+      return;
+    }
+
+    // ── [FIX-3] e.range.getRow(): 이벤트 정확한 행 사용 (getLastRow race 방지) ──
+    const submittedRow = e.range.getRow();
+    const form         = src.getRange(submittedRow, 1, 1, 38).getValues()[0];
+    const nextNum      = getNextNumber(nw);
+    const newRow       = buildNewRow(form, nextNum);
+
+    // New 시트 데이터 최상단 (3행)에 삽입
+    nw.insertRowBefore(CONFIG.NEW_DATA_START);
+    const range = nw.getRange(CONFIG.NEW_DATA_START, 1, 1, newRow.length);
+    range.setValues([newRow]);
+
+    // ── [FIX-4] copyFormatToRange 먼저 → setBackground 마지막 (색상 덮어쓰기 방지) ──
+    if (nw.getLastRow() > CONFIG.NEW_DATA_START) {
+      const templateRange = nw.getRange(CONFIG.NEW_DATA_START + 1, 1, 1, newRow.length);
+      templateRange.copyFormatToRange(
+        nw, 1, newRow.length,
+        CONFIG.NEW_DATA_START, CONFIG.NEW_DATA_START
+      );
+    }
+    range.setBackground(CONFIG.COLOR_NEW); // 서식 복사 후 마지막에 적용
+
+    Logger.log(`✅ 번호 ${nextNum} | 행 ${submittedRow} | ${form[CONFIG.SRC.EMAIL-1]}`);
+  } catch (err) {
+    Logger.log('ERROR: ' + err.message);
+  } finally {
+    lock.releaseLock();
   }
-
-  const lastRow  = src.getLastRow();
-  const form     = src.getRange(lastRow, 1, 1, 38).getValues()[0];
-  const nextNum  = getNextNumber(nw);
-  const newRow   = buildNewRow(form, nextNum);
-
-  // New 시트 데이터 최상단 (3행)에 삽입
-  nw.insertRowBefore(CONFIG.NEW_DATA_START);
-  const range = nw.getRange(CONFIG.NEW_DATA_START, 1, 1, newRow.length);
-  range.setValues([newRow]);
-  range.setBackground(CONFIG.COLOR_NEW);
-
-  // 아래 행 서식 복사 (기존 조건부 서식 유지)
-  if (nw.getLastRow() > CONFIG.NEW_DATA_START) {
-    const templateRange = nw.getRange(CONFIG.NEW_DATA_START + 1, 1, 1, newRow.length);
-    templateRange.copyFormatToRange(
-      nw, 1, newRow.length,
-      CONFIG.NEW_DATA_START, CONFIG.NEW_DATA_START
-    );
-  }
-
-  Logger.log(`✅ 번호 ${nextNum} | ${form[CONFIG.SRC.FULLNAME-1]} | ${form[CONFIG.SRC.EMAIL-1]}`);
 }
 
 
@@ -203,8 +219,9 @@ function buildNewRow(form, number) {
 
   // ── 경력/레퍼런스 ──
   row[n.REFERENCE  - 1] = get(s.REFERENCE);
-  row[n.EXPERIENCE - 1] = get(s.EMPLOYMENT);  // 경력 (경력연수)
-  row[n.EMPLOYMENT - 1] = get(s.EMPLOYMENT);  // 한국 근무처
+  // [FIX-1] O열(EXPERIENCE=경력연수)은 폼에 숫자 항목 없음 → 수동 입력, 빈칸 유지
+  // row[n.EXPERIENCE - 1] = '';  // 수동 — 경력연수는 스프레드시트에서 직접 입력
+  row[n.EMPLOYMENT - 1] = get(s.EMPLOYMENT);  // P열 — 한국 근무처 (텍스트)
 
   // ── 리크루터 관리 (수동) ──
   row[n.JOB_PREFS  - 1] = get(s.JOB_PREFS);
