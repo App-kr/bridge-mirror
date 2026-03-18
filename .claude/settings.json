@@ -101,6 +101,16 @@
       ]
     }
   ],
+  "PreCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\precompact_hook.bat\""
+        }
+      ]
+    }
+  ],
   "TaskCompleted": [
     {
       "matcher": {},
