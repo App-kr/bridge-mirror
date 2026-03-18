@@ -1366,7 +1366,9 @@ _ADMIN_DECRYPT_FIELDS = {
     "full_name", "email",
     "mobile_phone", "kakaotalk",
     "passport", "criminal_record",
-    "religion", "health_info", "criminal_record_check",
+    "criminal_record_check", "korean_criminal_record",
+    "religion", "health_info",
+    "dob", "nationality", "current_location", "reference",
 }
 
 

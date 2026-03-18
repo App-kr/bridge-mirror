@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="h-screen bg-[#f5f5f7] flex overflow-hidden">
+    <div className="fixed inset-0 bg-[#f5f5f7] flex overflow-hidden z-50">
       <AdminSidebar />
       <main className="flex-1 min-w-0 overflow-hidden h-full">
         {isFullWidth ? (

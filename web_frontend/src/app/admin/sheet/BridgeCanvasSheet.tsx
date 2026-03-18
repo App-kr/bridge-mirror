@@ -124,6 +124,9 @@ export default function BridgeCanvasSheet() {
   const [showStyleBar, setShowStyleBar] = useState(true)
   const [colorPicker, setColorPicker] = useState<'text' | 'bg' | null>(null)
 
+  // Per-row custom heights
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({})
+
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<GridEngine | null>(null)
   const prefsRef = useRef(new PrefsManager())
@@ -154,6 +157,7 @@ export default function BridgeCanvasSheet() {
     if (savedData && (savedData.active?.length || savedData.past?.length || savedData.blacklist?.length)) {
       setData(savedData)
     }
+    setRowHeights(pm.loadRowHeights())
     setReady(true)
   }, [])
 
@@ -533,6 +537,13 @@ export default function BridgeCanvasSheet() {
     onHeaderContextMenu: (e: MouseEvent, colKey: string) => {
       setHeaderMenu({ colKey, x: e.clientX, y: e.clientY })
     },
+    onRowHeightChange: (cid: string, height: number) => {
+      setRowHeights(prev => {
+        const next = { ...prev, [cid]: height }
+        prefsRef.current.saveRowHeights(next)
+        return next
+      })
+    },
   }), [pushHistory, saveToServer, openMailModal])
 
   /* ── Engine init (once) ── */
@@ -554,7 +565,8 @@ export default function BridgeCanvasSheet() {
     e.setFrozenCols(frozenCols)
     e.setSort(sortKey, sortDir)
     e.setRowHeight(rowHeight)
-  }, [displayRows, cols, frozenCols, sortKey, sortDir, rowHeight])
+    e.setRowHeights(rowHeights)
+  }, [displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights])
 
   /* ── Context menu ── */
   const ctxAction = useCallback((action: string) => {
