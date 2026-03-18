@@ -2,7 +2,7 @@
 
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import BridgeAdminSheet from '../components/BridgeAdminSheet'
+import BridgeCanvasSheet from './BridgeCanvasSheet'
 
 export default function AdminSheetPage() {
   const { authed, login, waking } = useAdminAuth()
@@ -11,5 +11,5 @@ export default function AdminSheetPage() {
     return <AdminAuth onLogin={login} waking={waking} />
   }
 
-  return <BridgeAdminSheet />
+  return <BridgeCanvasSheet />
 }
