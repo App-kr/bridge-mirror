@@ -62,6 +62,15 @@
           "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event post_tool"
         }
       ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"Q:\\Claudework\\claude 뷰컨트롤\\agent_reporter.py\""
+        }
+      ]
     }
   ],
   "Stop": [
@@ -80,6 +89,14 @@
         {
           "type": "command",
           "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event stop"
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"Q:\\Claudework\\claude 뷰컨트롤\\agent_reporter.py\" --stop"
         }
       ]
     }
