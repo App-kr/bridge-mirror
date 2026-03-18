@@ -24,7 +24,8 @@
 | [deployment.md](deployment.md) | 배포 설정, nginx, systemd, 환경변수 | 2026-02-28 |
 | [worklog-2026-03-07.md](worklog-2026-03-07.md) | 24시간 작업 기록 — 보안·MailComposer·드래그UX 등 | 2026-03-07 |
 | [worklog-2026-03-13-bridgejob-old.md](worklog-2026-03-13-bridgejob-old.md) | 구 홈페이지(bridgejob.co.kr) 작업 — 그누보드5+카페24 | 2026-03-13 |
-| [blog-gemini-prompt-v6.3.1.md](blog-gemini-prompt-v6.3.1.md) | 네이버 블로그 글쓰기 마스터 규칙 v6.3.1 **최신** — 세션 무관 항상 적용 | 2026-03-18 |
+| [blog-gemini-prompt-v6.6.md](blog-gemini-prompt-v6.6.md) | 네이버 블로그 글쓰기 마스터 규칙 v6.6 **최신** — 세션 무관 항상 적용 | 2026-03-18 |
+| [blog-gemini-prompt-v6.3.1.md](blog-gemini-prompt-v6.3.1.md) | v6.3.1 (구버전 — v6.6으로 대체됨) | 2026-03-18 |
 
 ---
 
@@ -133,12 +134,13 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - settings.json에 `"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}` 추가됨 (2026-03-16)
 - Delegate Mode: Shift+Tab으로 활성화
 
-## ClaudeBlog 블로그 자동화 설정 (2026-03-16 확정)
+## ClaudeBlog 블로그 자동화 설정 (2026-03-18 업데이트)
 - **경로**: `Q:\Claudework\ClaudeBlog`
 - **실행 방법**: `Q:\Claudework\ClaudeBlog\실행.vbs` 더블클릭 (콘솔창 없음)
 - **바탕화면 아이콘**: `바탕화면_아이콘_만들기.bat` 실행하면 생성됨
-- **venv**: `.venv\Scripts\pythonw.exe` (app.py 실행 전용)
-- **config**: `config.json` — Gemini 키 4개(스칼렛/바이올렛/세번째/네번째), 모델=gemini-2.5-flash
+- **venv**: `Q:\Claudework\ClaudeBlog\.venv\Scripts\python.exe` — 반드시 이 경로만 사용
+- **config**: `config.json` — Gemini 키 4개(스칼렛/바이올렛/세번째/네번째), 모델=gemini-2.0-flash-lite, `claude_fallback: true`
+- **Claude 폴백**: config.json `"claude_fallback": true` (Gemini 429 시 자동 전환) — false로 두면 안 됨
 - **쿠키**: `logs/naver_cookies.json` — 절대경로 필수 (`_BASE_DIR` 기준)
 - **네이버 계정**: `bridgejobkr` / blog_id=`bridgejob`
 - **GUI 앱**: `app.py` (tkinter) — 쿠키저장/건조실행/지금발행/스케줄 버튼
@@ -147,6 +149,14 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **글 구조**: 글↔사진 교차 (글-사진-글-사진-...) + 마지막에 배너사진(카카오링크)
 - **인용구**: ENTER+BACKSPACE로 탈출 (ENTER+ENTER 아님)
 - **확정 동작 (2026-03-17)**: 제목 입력 ✅ / 인용구 삽입 ✅ / 본문 글쓰기 ✅
+- **업로더 마커 구조** (2026-03-18 확정):
+  - [IMG_TOP]: 서론 뒤 첫 사진
+  - [IMG_1]~[IMG_6]: 단락 사이 사진 (총 6장)
+  - [QUOTE]텍스트[/QUOTE]: 인용구 블록
+  - [IMG_BANNER]: 본문 끝 배너 (카카오 링크 삽입)
+  - 위 마커는 body 문자열에 반드시 포함, Claude 응답 화면에는 출력 금지
+- **inject_draft.py**: 승인된 글 직접 Excel에 삽입 후 --publish-approved로 발행
+  - 경로: `Q:\Claudework\ClaudeBlog\inject_draft.py`
 
 ## ClaudeBlog 확정 수정 이력 (2026-03-17)
 - **서론→제목 침범 방지**: `_force_body_focus()` 추가 — 제목 입력 후 포커스 검증+강제 이동
@@ -191,18 +201,22 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - 예약 작업: `TeastPost30Day` — 매 30일마다 09:00 자동실행 (다음: 2026-04-16)
 - `--show` 플래그로 포스팅 내용 미리보기 가능 (실제 포스팅 안 함)
 
-## Python 실행 규칙 (2026-03-14 확정)
-- `C:\Python314` — 환경 깨짐, 사용 금지
-- **항상 사용**: `C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe`
+## Python 실행 규칙 (2026-03-18 업데이트)
+- **ClaudeBlog 전용**: `Q:\Claudework\ClaudeBlog\.venv\Scripts\python.exe` (RULE-PYTHON)
+  - 실행 예시: `"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe" -X utf8 main.py --dry`
+  - Python313/Python314 사용 금지 (ClaudeBlog에서)
+- `C:\Python314` — 환경 깨짐, 사용 금지 (bridge base 프로젝트)
 - D 드라이브 Python 접근 금지
-- C 드라이브는 실행 파일(Python 등) 용도만 — 아티팩트/메모리 저장 금지
+- C 드라이브는 실행 파일 용도만 — 아티팩트/메모리 저장 금지
 - **모든 저장 파일은 Q:\Claudework\bridge base 내부에만**
 
-## 브릿지 블로그 글쓰기 규칙 v6.3.1 (2026-03-18 최신 — 세션 무관 항상 적용)
-> 상세 전체: `.memory/blog-gemini-prompt-v6.3.1.md`
+## 브릿지 블로그 글쓰기 규칙 v6.6 (2026-03-18 최신 — 세션 무관 항상 적용)
+> 상세 전체: `.memory/blog-gemini-prompt-v6.6.md`
+> 원본: `Q:/Claudework/ClaudeBlog/CLAUDE.md`
 
 핵심 요약:
-- **글자수**: 목표 1,600자 / 최소 1,500자 / 권장 1,800자+ / 채용 실무 1,600~1,800자 / 부족분은 STEP 6 확장 주제 풀에서 충당 (반복·패딩 금지)
+- **글자수**: 목표 1,600자 / 최소 1,500자 / 권장 2,000자+ / 채용 실무 2,000~2,500자 / 부족분은 STEP 6 확장 주제 풀에서 충당 (반복·패딩 금지)
+- **내부 백링크 2개 이상** (v6.6 신규): 결론 직후 삽입 필수
 - **모바일 줄바꿈**: 공백 제외 15~20자마다 실제 개행 / 한 문단 최대 3줄
 - **키워드**: 대표 키워드 총 3회 자연 삽입 / 서브 키워드 각 1회
 - **태그**: 11~13개 + 마지막 2개 반드시 #서이추 #서이추환영
@@ -211,8 +225,8 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **비자 종류명 금지**: E-2 등 구체 비자명 본문 직접 언급 금지 → "올바른 비자", "적합한 체류 자격"으로만
 - **경험 화자**: 1단락당 1회 이상 ("실제로", "현장에서", "실무적으로는")
 - **에이전시 주의 섹션**: 결론 직후 / 공백 제외 100자 이내 / 2~3문장
-- **이미지 마커 출력 금지**: [IMG_*] 류 마커 블로그 본문에 절대 출력 금지
-- **저작권 정확한 형식**: ⓒ 무단 전재 및 재배포 금지 / 중요내용은 사실 확인 후 시행바랍니다
+- **이미지 마커**: [IMG_TOP][IMG_1]~[IMG_6][IMG_BANNER][QUOTE]...[/QUOTE] — Claude 응답에는 출력 금지, but inject_draft.py body에는 반드시 포함해야 단락 사이 사진 삽입됨
+- **저작권 정확한 형식**: ⓒ 무단 전재 및 재배포 금지 / 중요 내용은 사실 확인 후 시행바랍니다 (공백 주의: "중요 내용은")
 - **기호 완전 금지**: *, -, |, >, ` 마크다운 금지 / 줄바꿈용 공백 2칸 금지
 - **나열 금지**: 번호/불릿/줄별 항목 나열 금지 → 문장 속 자연 삽입
 - **AI 패턴 회피**: 동일 길이 단락 반복 / "첫째둘째셋째" / 소제목 5개 이상 정형 구조 금지
