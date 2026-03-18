@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════
-   BRIDGE Canvas Spreadsheet — Grid Engine v3
+   BRIDGE Canvas Spreadsheet — Grid Engine v3.1
    Pure Canvas rendering: header, rows, photos, stages, tags
    Ghost-div scrollbar, column resize, DPR scaling
    v3: checkbox, stage dropdown, tag toggle, photo wheel,
        cell styles, filter icons, header context menu
+   v3.1: per-row variable heights, drag-to-resize rows
    ═══════════════════════════════════════════════════════ */
 
 import type { ColDef, DataRow, GridCallbacks, CellRef } from './types'
@@ -22,6 +23,7 @@ const HOVER_BG     = '#f1f5f9'
 const FROZEN_SEP   = '#94a3b8'
 const SORT_ARROW   = '#64748b'
 const RESIZE_ZONE  = 5
+const ROW_RESIZE_ZONE = 5
 const CHECKBOX_SIZE = 14
 const CHECKBOX_PAD  = 4
 
@@ -54,13 +56,19 @@ export class GridEngine {
   private visCols: ColDef[] = []
   private rows: DataRow[] = []
   private frozenCols = 3
-  private rowH = 36
+  private defaultRowH = 36
+
+  /* ── Per-row heights ── */
+  private rowHeights = new Map<string, number>()  // cid → height
+  private rowYs: number[] = []                     // prefix sum: rowYs[i] = top Y of row i
+  private totalContentH = 0
 
   /* ── Interaction ── */
   private hoverRow = -1
   private sortKey = ''
   private sortDir: 'asc' | 'desc' = 'asc'
-  private resizeDrag: { visIdx: number; startX: number; startW: number } | null = null
+  private colResizeDrag: { visIdx: number; startX: number; startW: number } | null = null
+  private rowResizeDrag: { rowIdx: number; startClientY: number; startH: number; cid: string } | null = null
 
   /* ── Photo cache ── */
   private photoCache = new Map<string, HTMLImageElement>()
@@ -83,18 +91,15 @@ export class GridEngine {
     container.style.position = 'relative'
     container.style.overflow = 'hidden'
 
-    // Canvas
     this.canvas = document.createElement('canvas')
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;'
     this.ctx = this.canvas.getContext('2d')!
     container.appendChild(this.canvas)
 
-    // Header hit area
     this.headerHit = document.createElement('div')
     this.headerHit.style.cssText = `position:absolute;top:0;left:0;right:0;height:${HEADER_H}px;z-index:2;cursor:default;`
     container.appendChild(this.headerHit)
 
-    // Ghost scroll div
     this.ghost = document.createElement('div')
     this.ghost.style.cssText = `position:absolute;top:${HEADER_H}px;left:0;right:0;bottom:0;overflow:auto;z-index:1;`
     this.sizer = document.createElement('div')
@@ -116,6 +121,7 @@ export class GridEngine {
 
   setData(rows: DataRow[]): void {
     this.rows = rows
+    this.computeRowYs()
     this.updateSizer()
     this.requestRender()
   }
@@ -133,8 +139,21 @@ export class GridEngine {
     this.sortKey = key; this.sortDir = dir; this.requestRender()
   }
 
+  /** Set default row height (toolbar selector) */
   setRowHeight(h: number): void {
-    this.rowH = h
+    this.defaultRowH = h
+    this.computeRowYs()
+    this.updateSizer()
+    this.requestRender()
+  }
+
+  /** Load per-row custom heights (from localStorage) */
+  setRowHeights(heights: Record<string, number>): void {
+    this.rowHeights.clear()
+    for (const [cid, h] of Object.entries(heights)) {
+      this.rowHeights.set(cid, h)
+    }
+    this.computeRowYs()
     this.updateSizer()
     this.requestRender()
   }
@@ -143,7 +162,9 @@ export class GridEngine {
 
   getVisibleCols(): ColDef[] { return this.visCols }
 
-  scrollToRow(idx: number): void { this.ghost.scrollTop = idx * this.rowH }
+  scrollToRow(idx: number): void {
+    this.ghost.scrollTop = idx < this.rowYs.length ? this.rowYs[idx] : 0
+  }
 
   refresh(): void { this.requestRender() }
 
@@ -158,6 +179,42 @@ export class GridEngine {
     this.canvas.remove()
     this.headerHit.remove()
     this.ghost.remove()
+  }
+
+  /* ══════════════════════════════════════════════
+     ROW HEIGHT HELPERS
+     ══════════════════════════════════════════════ */
+
+  /** Get height for a specific row */
+  private getRowH(rowIdx: number): number {
+    const row = this.rows[rowIdx]
+    if (!row) return this.defaultRowH
+    const cid = String(row._cid ?? row.id)
+    return this.rowHeights.get(cid) ?? this.defaultRowH
+  }
+
+  /** Compute prefix sum of row Y positions */
+  private computeRowYs(): void {
+    const n = this.rows.length
+    this.rowYs = new Array(n + 1)
+    this.rowYs[0] = 0
+    for (let i = 0; i < n; i++) {
+      this.rowYs[i + 1] = this.rowYs[i] + this.getRowH(i)
+    }
+    this.totalContentH = n > 0 ? this.rowYs[n] : 0
+  }
+
+  /** Binary search: find row index at content Y coordinate */
+  private rowAtY(contentY: number): number {
+    if (this.rows.length === 0) return -1
+    let lo = 0, hi = this.rows.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (this.rowYs[mid + 1] <= contentY) lo = mid + 1
+      else if (this.rowYs[mid] > contentY) hi = mid - 1
+      else return mid
+    }
+    return Math.min(lo, this.rows.length - 1)
   }
 
   /* ══════════════════════════════════════════════
@@ -179,9 +236,8 @@ export class GridEngine {
 
   private updateSizer(): void {
     const totalW = this.visCols.reduce((s, c) => s + c.w, 0)
-    const totalH = this.rows.length * this.rowH
     this.sizer.style.width = totalW + 'px'
-    this.sizer.style.height = totalH + 'px'
+    this.sizer.style.height = this.totalContentH + 'px'
   }
 
   private getFrozenWidth(): number {
@@ -226,28 +282,50 @@ export class GridEngine {
     }
   }
 
-  private hitCell(e: MouseEvent): { row: number; visCol: number; localX: number; localY: number } | null {
+  /** Get content-space mouse position from event */
+  private ghostMousePos(e: MouseEvent): { mx: number; my: number } {
     const rect = this.ghost.getBoundingClientRect()
-    const mx = e.clientX - rect.left + this.scrollLeft
-    const my = e.clientY - rect.top + this.scrollTop
-    const row = Math.floor(my / this.rowH)
+    return {
+      mx: e.clientX - rect.left + this.scrollLeft,
+      my: e.clientY - rect.top + this.scrollTop,
+    }
+  }
+
+  private hitCell(e: MouseEvent): { row: number; visCol: number; localX: number; localY: number } | null {
+    const { mx, my } = this.ghostMousePos(e)
+    const row = this.rowAtY(my)
     if (row < 0 || row >= this.rows.length) return null
+    const rowTop = this.rowYs[row]
     let cx = 0
     for (let i = 0; i < this.visCols.length; i++) {
       if (mx >= cx && mx < cx + this.visCols[i].w) {
-        return { row, visCol: i, localX: mx - cx, localY: my - row * this.rowH }
+        return { row, visCol: i, localX: mx - cx, localY: my - rowTop }
       }
       cx += this.visCols[i].w
     }
     return null
   }
 
-  /** Check if click is on the checkbox area of an idx cell */
+  /** Check if mouse is near the bottom border of a row (for row resize) */
+  private nearRowBorder(e: MouseEvent): number {
+    const { my } = this.ghostMousePos(e)
+    // Check if near any row's bottom edge
+    const row = this.rowAtY(my)
+    if (row < 0 || row >= this.rows.length) return -1
+    const rowBottom = this.rowYs[row + 1]
+    if (Math.abs(my - rowBottom) <= ROW_RESIZE_ZONE) return row
+    // Also check the row above (in case cursor is just past the border)
+    if (row > 0) {
+      const prevBottom = this.rowYs[row]
+      if (Math.abs(my - prevBottom) <= ROW_RESIZE_ZONE) return row - 1
+    }
+    return -1
+  }
+
   private isCheckboxHit(localX: number): boolean {
     return localX < CHECKBOX_SIZE + CHECKBOX_PAD * 2
   }
 
-  /** Check which tag was hit in a tags-type cell */
   private hitTag(val: string, localX: number): string | null {
     if (!val) return null
     const { ctx } = this
@@ -267,6 +345,22 @@ export class GridEngine {
 
   private onGhostMouseDown = (e: MouseEvent): void => {
     if (this.editor.isEditing()) return
+
+    // Check for row resize drag first
+    const resizeRow = this.nearRowBorder(e)
+    if (resizeRow >= 0) {
+      e.preventDefault()
+      const row = this.rows[resizeRow]
+      const cid = String(row?._cid ?? row?.id ?? '')
+      this.rowResizeDrag = {
+        rowIdx: resizeRow,
+        startClientY: e.clientY,
+        startH: this.getRowH(resizeRow),
+        cid,
+      }
+      return
+    }
+
     const hit = this.hitCell(e)
     if (!hit) return
 
@@ -290,10 +384,7 @@ export class GridEngine {
           this.requestRender()
           return
         }
-        // If not on a specific tag, check if in the remaining area for adding tags
-        // Show all available tags for toggling
         const allTags = String(row.mailStatus ?? '').split(',').filter(Boolean)
-        // Calculate where all drawn tags end
         let endX = 4
         this.ctx.save()
         this.ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
@@ -303,7 +394,6 @@ export class GridEngine {
           endX += this.ctx.measureText(tag.label).width + 10 + 3
         }
         this.ctx.restore()
-        // If click is after existing tags, cycle through to add next missing tag
         if (hit.localX >= endX) {
           for (const mt of MTAGS) {
             if (!allTags.includes(mt.key)) {
@@ -330,11 +420,21 @@ export class GridEngine {
   }
 
   private onGhostMouseMove = (e: MouseEvent): void => {
+    // During row resize drag, don't change hover
+    if (this.rowResizeDrag) return
+
     const hit = this.hitCell(e)
     const newHover = hit ? hit.row : -1
     if (newHover !== this.hoverRow) { this.hoverRow = newHover; this.requestRender() }
 
-    // Change cursor for clickable areas
+    // Row resize cursor
+    const resizeRow = this.nearRowBorder(e)
+    if (resizeRow >= 0) {
+      this.ghost.style.cursor = 'row-resize'
+      return
+    }
+
+    // Clickable area cursors
     if (hit) {
       const col = this.visCols[hit.visCol]
       if (col && (col.type === 'tags' || col.type === 'mail' || (col.type === 'idx' && this.isCheckboxHit(hit.localX)))) {
@@ -356,15 +456,13 @@ export class GridEngine {
 
     if (col.type === 'idx') return
     if (col.type === 'mail') { this.cb.onMailClick(hit.row, row); return }
-    if (col.type === 'tags') return // tags handled by single click
+    if (col.type === 'tags') return
 
-    // Photo double-click → upload
     if (col.type === 'photo') {
       this.cb.onPhotoUpload(hit.row)
       return
     }
 
-    // Stage → use dropdown with STAGES options
     if (col.type === 'stage') {
       const cellRect = this.getCellRect(hit.row, hit.visCol)
       if (!cellRect) return
@@ -422,8 +520,10 @@ export class GridEngine {
     const isFrozen = visColIdx < this.frozenCols
     const cx = this.colX(visColIdx)
     const x = isFrozen ? cx : cx - this.scrollLeft
-    const y = HEADER_H + rowIdx * this.rowH - this.scrollTop
-    return { x, y, w: col.w, h: this.rowH }
+    const rowTop = rowIdx < this.rowYs.length ? this.rowYs[rowIdx] : 0
+    const y = HEADER_H + rowTop - this.scrollTop
+    const h = this.getRowH(rowIdx)
+    return { x, y, w: col.w, h }
   }
 
   /* ── Header events ── */
@@ -443,7 +543,7 @@ export class GridEngine {
     const hit = this.headerHitVisCol(e)
     if (!hit || !hit.nearBorder) return
     e.preventDefault()
-    this.resizeDrag = { visIdx: hit.visCol, startX: e.clientX, startW: this.visCols[hit.visCol].w }
+    this.colResizeDrag = { visIdx: hit.visCol, startX: e.clientX, startW: this.visCols[hit.visCol].w }
   }
 
   private onHeaderMouseMove = (e: MouseEvent): void => {
@@ -452,20 +552,18 @@ export class GridEngine {
   }
 
   private onHeaderClick = (e: MouseEvent): void => {
-    if (this.resizeDrag) return
+    if (this.colResizeDrag) return
     const hit = this.headerHitVisCol(e)
     if (!hit || hit.nearBorder) return
     const col = this.visCols[hit.visCol]
     if (!col) return
 
-    // Checkbox in header for idx column
     if (col.type === 'idx') {
       this.cb.onHeaderCheckToggle()
       this.requestRender()
       return
     }
 
-    // Filter icon click (last 16px of header cell)
     if (hit.localX > col.w - 18 && col.type !== 'photo' && col.type !== 'mail') {
       const rect = this.headerHit.getBoundingClientRect()
       const cx = this.colX(hit.visCol) - this.scrollLeft
@@ -485,22 +583,46 @@ export class GridEngine {
   }
 
   private onDocMouseMove = (e: MouseEvent): void => {
-    if (!this.resizeDrag) return
-    const dx = e.clientX - this.resizeDrag.startX
-    const newW = Math.max(30, this.resizeDrag.startW + dx)
-    this.visCols[this.resizeDrag.visIdx].w = newW
-    const key = this.visCols[this.resizeDrag.visIdx].key
-    const src = this.cols.find(c => c.key === key)
-    if (src) src.w = newW
-    this.updateSizer()
-    this.requestRender()
+    // Column resize drag
+    if (this.colResizeDrag) {
+      const dx = e.clientX - this.colResizeDrag.startX
+      const newW = Math.max(30, this.colResizeDrag.startW + dx)
+      this.visCols[this.colResizeDrag.visIdx].w = newW
+      const key = this.visCols[this.colResizeDrag.visIdx].key
+      const src = this.cols.find(c => c.key === key)
+      if (src) src.w = newW
+      this.updateSizer()
+      this.requestRender()
+      return
+    }
+
+    // Row resize drag
+    if (this.rowResizeDrag) {
+      const dy = e.clientY - this.rowResizeDrag.startClientY
+      const newH = Math.max(24, this.rowResizeDrag.startH + dy)
+      this.rowHeights.set(this.rowResizeDrag.cid, newH)
+      this.computeRowYs()
+      this.updateSizer()
+      this.requestRender()
+      return
+    }
   }
 
   private onDocMouseUp = (): void => {
-    if (!this.resizeDrag) return
-    const col = this.visCols[this.resizeDrag.visIdx]
-    this.cb.onColumnResize(col.key, col.w)
-    this.resizeDrag = null
+    if (this.colResizeDrag) {
+      const col = this.visCols[this.colResizeDrag.visIdx]
+      this.cb.onColumnResize(col.key, col.w)
+      this.colResizeDrag = null
+      return
+    }
+
+    if (this.rowResizeDrag) {
+      const { cid } = this.rowResizeDrag
+      const finalH = this.rowHeights.get(cid) ?? this.defaultRowH
+      this.cb.onRowHeightChange(cid, finalH)
+      this.rowResizeDrag = null
+      return
+    }
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -508,7 +630,6 @@ export class GridEngine {
     const t = e.target as HTMLElement
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return
 
-    // Ctrl+A = select all
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       e.preventDefault()
       this.selection.selectAll(this.rows.length)
@@ -532,10 +653,11 @@ export class GridEngine {
   }
 
   private ensureVisible(cell: CellRef): void {
-    const y = cell.row * this.rowH
+    const y = cell.row < this.rowYs.length ? this.rowYs[cell.row] : 0
+    const h = this.getRowH(cell.row)
     const ghostH = this.ghost.clientHeight
     if (y < this.scrollTop) this.ghost.scrollTop = y
-    else if (y + this.rowH > this.scrollTop + ghostH) this.ghost.scrollTop = y + this.rowH - ghostH
+    else if (y + h > this.scrollTop + ghostH) this.ghost.scrollTop = y + h - ghostH
   }
 
   /* ══════════════════════════════════════════════
@@ -548,15 +670,19 @@ export class GridEngine {
   }
 
   private draw(): void {
-    const { ctx, viewW, viewH, rowH } = this
+    const { ctx, viewW, viewH } = this
     ctx.clearRect(0, 0, viewW, viewH)
     if (this.visCols.length === 0) return
 
     const frozenW = this.getFrozenWidth()
     const frozenN = Math.min(this.frozenCols, this.visCols.length)
     const dataH = viewH - HEADER_H
-    const startRow = Math.max(0, Math.floor(this.scrollTop / rowH))
-    const endRow = Math.min(startRow + Math.ceil(dataH / rowH) + 2, this.rows.length)
+
+    // Find visible row range using binary search
+    const startRow = Math.max(0, this.rowAtY(this.scrollTop))
+    let endRow = startRow
+    while (endRow < this.rows.length && this.rowYs[endRow] < this.scrollTop + dataH + 100) endRow++
+    endRow = Math.min(endRow + 1, this.rows.length)
 
     // ── Scrollable columns (clipped) ──
     ctx.save()
@@ -564,8 +690,9 @@ export class GridEngine {
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
     ctx.clip()
     for (let r = startRow; r < endRow; r++) {
-      const y = HEADER_H + r * rowH - this.scrollTop
-      this.drawRowBg(r, y, frozenW, viewW)
+      const rowH = this.getRowH(r)
+      const y = HEADER_H + this.rowYs[r] - this.scrollTop
+      this.drawRowBg(r, y, frozenW, viewW, rowH)
       let cx = -this.scrollLeft
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
@@ -587,8 +714,9 @@ export class GridEngine {
       ctx.rect(0, HEADER_H, frozenW, dataH)
       ctx.clip()
       for (let r = startRow; r < endRow; r++) {
-        const y = HEADER_H + r * rowH - this.scrollTop
-        this.drawRowBg(r, y, 0, frozenW)
+        const rowH = this.getRowH(r)
+        const y = HEADER_H + this.rowYs[r] - this.scrollTop
+        this.drawRowBg(r, y, 0, frozenW, rowH)
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
           const col = this.visCols[c]
@@ -605,12 +733,11 @@ export class GridEngine {
       ctx.beginPath(); ctx.moveTo(frozenW, HEADER_H); ctx.lineTo(frozenW, viewH); ctx.stroke()
     }
 
-    // ── Header (always on top) ──
     this.drawHeader(frozenW, frozenN)
   }
 
-  private drawRowBg(rowIdx: number, y: number, x0: number, x1: number): void {
-    const { ctx, rowH } = this
+  private drawRowBg(rowIdx: number, y: number, x0: number, x1: number, rowH: number): void {
+    const { ctx } = this
     if (this.selection.isRowSelected(rowIdx)) {
       ctx.fillStyle = SELECTED_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
     } else if (rowIdx === this.hoverRow) {
@@ -634,7 +761,6 @@ export class GridEngine {
     const val = String(row[col.key] ?? '')
     const cid = String(row._cid ?? '')
 
-    // Apply cell style (bgColor) for non-special types
     if (col.type === 't' || col.type === 'long') {
       const style = this.styleManager.getStyle(cid, col.key)
       if (style?.bgColor) {
@@ -643,7 +769,6 @@ export class GridEngine {
       }
     }
 
-    // Build font string from style
     const style = (col.type === 't' || col.type === 'long') ? this.styleManager.getStyle(cid, col.key) : undefined
     const fontSize = style?.fontSize || 13
     const bold = style?.bold ? 'bold ' : ''
@@ -689,12 +814,9 @@ export class GridEngine {
     ctx.font = FONT
   }
 
-  /** Draw checkbox + row number in idx cell */
   private drawCheckboxCell(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
     const isSelected = this.selection.isRowSelected(rowIdx)
-
-    // Checkbox
     const cbX = x + CHECKBOX_PAD
     const cbY = y + (h - CHECKBOX_SIZE) / 2
     ctx.strokeStyle = isSelected ? '#3b82f6' : '#94a3b8'
@@ -703,7 +825,6 @@ export class GridEngine {
     if (isSelected) {
       ctx.fillStyle = '#3b82f6'
       ctx.fillRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
-      // Checkmark
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
       ctx.beginPath()
       ctx.moveTo(cbX + 3, cbY + CHECKBOX_SIZE / 2)
@@ -711,8 +832,6 @@ export class GridEngine {
       ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
       ctx.stroke()
     }
-
-    // Row number
     ctx.fillStyle = '#94a3b8'
     ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
@@ -813,11 +932,10 @@ export class GridEngine {
   private drawTags(val: string, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     if (!val) {
-      // Draw "+" hint for empty tags
       ctx.fillStyle = '#d1d5db'
       ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('+ 태그', x + w / 2, y + h / 2)
+      ctx.fillText('+ \uD0DC\uADF8', x + w / 2, y + h / 2)
       ctx.font = FONT; ctx.textAlign = 'left'
       return
     }
@@ -867,7 +985,6 @@ export class GridEngine {
     ctx.beginPath(); ctx.moveTo(0, HEADER_H - 0.5); ctx.lineTo(viewW, HEADER_H - 0.5); ctx.stroke()
     ctx.font = HEADER_FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1e293b'
 
-    // Scrollable headers
     ctx.save()
     ctx.beginPath(); ctx.rect(frozenW, 0, viewW - frozenW, HEADER_H); ctx.clip()
     let cx = -this.scrollLeft
@@ -878,7 +995,6 @@ export class GridEngine {
     }
     ctx.restore()
 
-    // Frozen headers
     if (frozenN > 0) {
       ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, frozenW, HEADER_H)
       let fx = 0
@@ -893,7 +1009,6 @@ export class GridEngine {
   private drawHeaderCell(col: ColDef, x: number, w: number): void {
     const { ctx } = this
 
-    // For idx column, draw header checkbox
     if (col.type === 'idx') {
       const isAll = this.selection.isAllSelected(this.rows.length)
       const cbX = x + CHECKBOX_PAD
@@ -911,11 +1026,9 @@ export class GridEngine {
         ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
         ctx.stroke()
       }
-      // Label after checkbox
       ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
       ctx.fillText(col.label, cbX + CHECKBOX_SIZE + 3, HEADER_H / 2)
-      // Border
       ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
       return
@@ -925,14 +1038,12 @@ export class GridEngine {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
     this.drawTruncated(col.label, x + 6, HEADER_H / 2, w - 24)
 
-    // Sort arrow
     if (col.key === this.sortKey) {
       ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText(this.sortDir === 'asc' ? '\u25B2' : '\u25BC', x + w - 16, HEADER_H / 2)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
-    // Filter icon
     if (col.type !== 'photo' && col.type !== 'mail') {
       ctx.fillStyle = '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText('\u25BC', x + w - 5, HEADER_H / 2)

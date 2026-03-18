@@ -81,4 +81,17 @@ export class PrefsManager {
       return JSON.parse(raw) as T
     } catch { return null }
   }
+
+  /** Save per-row heights (keyed by candidate_id) */
+  saveRowHeights(heights: Record<string, number>): void {
+    try {
+      localStorage.setItem(this.storageKey + '-rowheights', JSON.stringify(heights))
+    } catch { /* ignore */ }
+  }
+
+  loadRowHeights(): Record<string, number> {
+    try {
+      return JSON.parse(localStorage.getItem(this.storageKey + '-rowheights') || '{}') as Record<string, number>
+    } catch { return {} }
+  }
 }

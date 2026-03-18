@@ -71,6 +71,7 @@ export interface GridCallbacks {
   onAddRow: () => void
   onFilterClick: (colKey: string, x: number, y: number) => void
   onHeaderContextMenu: (e: MouseEvent, colKey: string) => void
+  onRowHeightChange: (cid: string, height: number) => void
 }
 
 export interface CellStyle {

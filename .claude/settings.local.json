@@ -663,7 +663,10 @@
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"\ntests = {}\n\ntry:\n    from PyQt6.QtWidgets import QApplication\n    tests[''PyQt6''] = ''OK''\nexcept: tests[''PyQt6''] = ''FAIL - pip install PyQt6 필요''\n\ntry:\n    from selenium import webdriver\n    tests[''selenium''] = ''OK''\nexcept: tests[''selenium''] = ''FAIL''\n\ntry:\n    from google import genai\n    tests[''google-genai''] = ''OK''\nexcept: tests[''google-genai''] = ''FAIL''\n\ntry:\n    from pytrends.request import TrendReq\n    tests[''pytrends''] = ''OK''\nexcept: tests[''pytrends''] = ''FAIL''\n\ntry:\n    import keyring\n    tests[''keyring''] = ''OK''\nexcept: tests[''keyring''] = ''FAIL''\n\ntry:\n    import openpyxl\n    tests[''openpyxl''] = ''OK''\nexcept: tests[''openpyxl''] = ''FAIL''\n\ntry:\n    from PIL import Image\n    tests[''Pillow''] = ''OK''\nexcept: tests[''Pillow''] = ''FAIL''\n\ntry:\n    import pyperclip\n    tests[''pyperclip''] = ''OK''\nexcept: tests[''pyperclip''] = ''FAIL''\n\ntry:\n    import anthropic\n    tests[''anthropic''] = ''OK''\nexcept: tests[''anthropic''] = ''FAIL''\n\ntry:\n    import sqlite3\n    tests[''sqlite3''] = ''OK''\nexcept: tests[''sqlite3''] = ''FAIL''\n\nfor k,v in tests.items\\(\\):\n    print\\(f''{k}: {v}''\\)\n\")",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" install:*)",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" install PyQt6)",
-      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"from PyQt6.QtWidgets import QApplication; print\\(''PyQt6 import OK''\\)\")"
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"from PyQt6.QtWidgets import QApplication; print\\(''PyQt6 import OK''\\)\")",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" list --format=freeze)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/pip.exe\" freeze)",
+      "Bash(awk:*)"
     ]
   }
 }
