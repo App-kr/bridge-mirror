@@ -11,9 +11,10 @@ ClaudeBlog 모든 python 실행은 반드시:
 - python 단독 사용 금지
 - py 단독 사용 금지
 
-모든 실행 예시:
-  cd Q:\Claudework\ClaudeBlog
-  .venv\Scripts\python -X utf8 main.py --dry
+모든 실행 예시 (cd 금지 — bash에서 Q드라이브 cd 불가):
+  "Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe" -X utf8 "Q:/Claudework/ClaudeBlog/main.py" --dry
+  "Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe" -X utf8 "Q:/Claudework/ClaudeBlog/main.py" --now
+  "Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe" -X utf8 "Q:/Claudework/ClaudeBlog/main.py" --publish-approved
 
 ## [RULE-0] 모든 작업 시작 전 — 실제 백업 먼저
 어떤 작업이든 시작 전 아래를 반드시 실행. 완료 확인 후 작업 시작.
