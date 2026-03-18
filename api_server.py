@@ -2244,20 +2244,20 @@ def _substitute_vars(html: str, candidate: dict, guide_links: dict) -> str:
 
 def _build_profile_card(c: dict) -> str:
     """PII 제외 후보자 프로필 카드 HTML 생성."""
-    cid = c.get("id", "")
-    nationality = c.get("nationality", "—")
-    visa = c.get("visa_type", "—")
-    age = c.get("age", "—")
-    education = c.get("education_level", "—")
-    teaching_exp = c.get("teaching_experience", "—")
-    korea_exp = c.get("korea_experience", "—")
-    location = c.get("city", "—")
-    available = c.get("start_month") or c.get("available_from", "—")
+    cid = _html.escape(str(c.get("id", "")))
+    nationality = _html.escape(str(c.get("nationality", "—")))
+    visa = _html.escape(str(c.get("visa_type", "—")))
+    age = _html.escape(str(c.get("age", "—")))
+    education = _html.escape(str(c.get("education_level", "—")))
+    teaching_exp = _html.escape(str(c.get("teaching_experience", "—")))
+    korea_exp = _html.escape(str(c.get("korea_experience", "—")))
+    location = _html.escape(str(c.get("city", "—")))
+    available = _html.escape(str(c.get("start_month") or c.get("available_from", "—")))
     photo = c.get("photo_url", "")
 
     photo_html = ""
-    if photo:
-        photo_html = f'<img src="{photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover" alt="photo"/>'
+    if photo and str(photo).startswith(("http://", "https://")):
+        photo_html = f'<img src="{_html.escape(str(photo))}" style="width:80px;height:80px;border-radius:50%;object-fit:cover" alt="photo"/>'
 
     return f"""<div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:12px 0;display:flex;gap:16px;align-items:flex-start">
   {photo_html}

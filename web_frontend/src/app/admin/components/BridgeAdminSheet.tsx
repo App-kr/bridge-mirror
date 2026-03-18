@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AllCandidatesGrid from './AllCandidatesGrid'
@@ -474,6 +475,12 @@ export default function BridgeAdminSheet() {
     if (sk) it.sort((a, b) => { const av = String(a[sk] || ''), bv = String(b[sk] || ''); return sd === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) })
     return it
   }, [allTD, filters, q, sk, sd])
+  const rowVirtualizer = useVirtualizer({
+    count: cur.length,
+    getScrollElement: () => tblRef.current,
+    estimateSize: useCallback((i: number) => rh[cur[i]?.id] || 58, [rh, cur]),
+    overscan: 15,
+  })
   const cnt = useMemo(() => ({
     active: dbAll.filter(r => r.category === 'active').length,
     past: dbAll.filter(r => r.category === 'past').length,
@@ -794,13 +801,22 @@ export default function BridgeAdminSheet() {
           </thead>
           <tbody>
             {cur.length === 0 && <tr><td colSpan={visCols.length + 1} style={{ textAlign: 'center', padding: 60, color: '#aaa', fontSize: 16 }}>No data</td></tr>}
-            {cur.map((row, ri) => {
+            {cur.length > 0 && (() => {
+              const virtualItems = rowVirtualizer.getVirtualItems()
+              const topPad = virtualItems[0]?.start ?? 0
+              const btmPad = rowVirtualizer.getTotalSize() - (virtualItems[virtualItems.length - 1]?.end ?? 0)
+              return (<>
+                {topPad > 0 && <tr><td colSpan={visCols.length + 1} style={{ height: topPad, padding: 0, border: 'none' }} /></tr>}
+                {virtualItems.map(vRow => {
+                  const ri = vRow.index
+                  const row = cur[ri]
+                  if (!row) return null
               const h = gH(row.id); const isSel = sel.has(row.id); const bg = getBg(row, ri, isSel)
               const stI = STAGES.find(s => s.key === (row.stage || 'none')) || STAGES[0]
               const mTags = String(row.mailStatus || '').split(',').filter(Boolean)
               const ps = Number(row.photoSize) || 50
               return (
-                <tr key={row.id} onContextMenu={e => hC(e, row)} style={{ height: h, background: bg, position: 'relative' }}>
+                <tr key={row.id} data-index={ri} ref={rowVirtualizer.measureElement} onContextMenu={e => hC(e, row)} style={{ height: h, background: bg, position: 'relative' }}>
                   <td style={{ textAlign: 'center', border: '1px solid #d1d5db', background: isSel ? '#93c5fd' : '#f8fafc', padding: 0, position: 'relative' }}>
                     <input type="checkbox" checked={isSel} onChange={() => tR(row.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                     <div onMouseDown={e => onRD(e, row.id)} style={{ position: 'absolute', bottom: -2, left: 0, right: 0, height: 5, cursor: 'row-resize' }} />
@@ -863,7 +879,10 @@ export default function BridgeAdminSheet() {
                   })}
                 </tr>
               )
-            })}
+                })}
+                {btmPad > 0 && <tr><td colSpan={visCols.length + 1} style={{ height: btmPad, padding: 0, border: 'none' }} /></tr>}
+              </>)
+            })()}
           </tbody>
         </table>
       </div>
