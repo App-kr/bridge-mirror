@@ -34,6 +34,22 @@
 **config.json**: `claude_fallback: true` 유지 필수
 **Gemini 429**: 한국 오전 9시 초기화 / Anthropic 크레딧 부족 시 Plans&Billing 충전
 
+## ⚡ [RULE-API] Gemini API 절약 — 절대 규칙
+- **--now 는 하루 1회만** (반복 실행 절대 금지 — 재시도도 금지)
+- **--dry 는 LLM 호출 없음** — 테스트는 반드시 --dry 로만
+- 발행 1회 = Gemini 2회 호출 (STEP2 분석 + STEP3 작성)
+- 4키 × 1,500RPD = 6,000회 / 2 = 이론상 3,000포스팅/일
+- API 소진 시 원인은 retry 루프 또는 다중 실행 — 내 --dry 가 아님
+- **inject_draft.py + --publish-approved** = Gemini 0회 (권장 워크플로우)
+
+## ⚡ draft_queue.xlsx 현황 (2026-03-18 기준)
+| row | 제목 | 상태 |
+|-----|------|------|
+| 2 | 원어민채용 직접 진행 시 반복되는 실수 | 발행완료 (2026-03-20 09:30) |
+| 3 | F비자 원어민강사 채용 어학원 현실 정리 | **승인대기** (발행 전 승인 필요) |
+- inject_draft.py = 계약서 조항 글 (아직 미실행, 다음 포스팅용)
+- 승인 후: 상태 "승인대기"→"승인" 변경 → --publish-approved 실행
+
 ---
 
 ## Topic Files
