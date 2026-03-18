@@ -35,6 +35,7 @@ import hashlib
 import hmac
 import asyncio
 import threading
+import html as _html
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
@@ -2273,6 +2274,214 @@ def _build_profile_card(c: dict) -> str:
     </table>
   </div>
 </div>"""
+
+
+# ── 프로필 메일 빌더 ──────────────────────────────────────────────────────────
+
+
+def _ensure_candidates_sheet_number():
+    """candidates 테이블에 sheet_number 컬럼 추가 (없으면)."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("ALTER TABLE candidates ADD COLUMN sheet_number INTEGER DEFAULT NULL")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+try:
+    _ensure_candidates_sheet_number()
+except Exception:
+    pass
+
+
+def _build_profile_card_v2(c: dict) -> str:
+    """실사례(02.JPG, 03.JPG) 기준 프로필 카드. 기존 _build_profile_card() 건드리지 않음."""
+    num = c.get("sheet_number") or c.get("candidate_id", "")
+    nat = (c.get("nationality") or "").strip()
+    loc = (c.get("current_location") or "").lower()
+    is_korea = any(k in loc for k in [
+        "korea", "한국", "서울", "부산", "대구", "인천",
+        "수원", "경기", "광주", "대전", "울산", "대구",
+        "제주", "세종", "청주", "전주", "천안", "성남",
+        "용인", "고양", "안양", "평택", "김포",
+    ])
+    residence = "국내" if is_korea else "해외"
+    res_emoji = "\U0001f60a" if is_korea else "\U0001f3e0"
+
+    raw_photo = c.get("photo_url") or c.get("thumb_url") or ""
+    photo_url = raw_photo if raw_photo.startswith(("http://", "https://")) else ""
+    if photo_url:
+        photo_html = (
+            f'<img src="{_html.escape(photo_url)}" width="65" height="65" alt="" '
+            f'style="border-radius:50%;object-fit:cover;object-position:top;'
+            f'float:left;margin:0 12px 8px 0;display:block"/>'
+        )
+    else:
+        photo_html = (
+            '<div style="width:65px;height:65px;border-radius:50%;background:#e5e7eb;'
+            'float:left;margin:0 12px 8px 0;font-size:28px;line-height:65px;'
+            'text-align:center">\U0001f464</div>'
+        )
+
+    cert = (c.get("arc_holders") or c.get("visa_type") or c.get("education_level") or "")
+    area = c.get("area_prefs") or "\u2014"
+    cert_str = f"{area} | {cert}" if cert else area
+
+    kor_exp = str(c.get("korea_experience") or "").strip()
+    exp = str(c.get("experience") or "").strip()
+    if kor_exp:
+        exp_label = f"\uc6d0 \ud55c\uad6d {kor_exp}\ub144\ucc28"
+    elif exp:
+        exp_label = f"\uc6d0 \ud55c\uad6d {exp}\ub144\ucc28"
+    else:
+        exp_label = "\u2014"
+
+    housing = (c.get("housing_type") or c.get("housing") or c.get("housing_detail") or "\u2014")
+    salary = c.get("desired_salary") or c.get("placed_salary") or "\ud611\uc758"
+
+    interview = _html.escape(str(c.get("recruiter_memo") or "\u2014"))
+    reference = _html.escape(str(c.get("reference") or "\u2014"))
+    prefs = _html.escape(str(c.get("preferences") or "\u2014"))
+    dislik = _html.escape(str(c.get("dislikes") or "\u2014"))
+
+    target = c.get("target") or c.get("target_level") or ""
+    start = c.get("start_month") or c.get("start_date") or ""
+    target_str = " | ".join(filter(None, [target, f"{start}\uc2dc\uc791" if start else ""])) or "\u2014"
+
+    YEL = "background:#FFFF00;font-weight:bold;padding:1px 3px"
+
+    return (
+        f'<div style="margin:20px 0 4px">'
+        f'  <strong style="font-size:14px">\u25a0{_html.escape(str(num))}{_html.escape(nat)} {residence}\uac70\uc8fc{res_emoji}</strong>'
+        f'</div>'
+        f'<div style="margin-bottom:4px;overflow:hidden">'
+        f'  {photo_html}'
+        f'  <div style="font-size:13px;line-height:2.0;color:#222">'
+        f'    \u2022\uc120\ud638\uc9c0\uc5ed \uc790\uaca9 \uae30\ud0c0: {_html.escape(cert_str)}<br>'
+        f'    \u2022\uacbd\ub825 \uc8fc\uac70 \ud76c\ub9dd\uae09\uc5ec: {_html.escape(exp_label)} | {_html.escape(str(housing))} | {_html.escape(str(salary))}<br>'
+        f'    \u2022\ub9ac\ud06c\ub8e8\ud130 \uc778\ud130\ubdf0: {interview}<br>'
+        f'    \u2022\ub808\ud37c\ub7f0\uc2a4: {reference}<br>'
+        f'    <span style="{YEL}">\ud76c\ub9dd\uc0ac\ud56d</span>: {prefs}<br>'
+        f'    <span style="{YEL}">\uae30\ud53c\uc0ac\ud56d</span>: {dislik}<br>'
+        f'    \u2022\ud0c0\uac9f \uadfc\ub85c\uac1c\uc2dc: {_html.escape(target_str)}'
+        f'  </div>'
+        f'  <div style="clear:both"></div>'
+        f'</div>'
+        f'<hr style="border:none;border-top:1px dashed #d1d5db;margin:12px 0"/>'
+    )
+
+
+_PROFILE_SEARCH_COLS = frozenset({
+    "candidate_id", "sheet_number", "nationality", "current_location",
+    "photo_url", "thumb_url", "area_prefs", "visa_type", "arc_holders",
+    "experience", "housing_type", "housing", "housing_detail",
+    "desired_salary", "placed_salary", "recruiter_memo", "reference",
+    "preferences", "dislikes", "target", "target_level", "start_month",
+    "start_date", "education_level", "status", "married", "certification",
+    "personal_consideration", "gender", "dob",
+})
+
+
+@app.get("/api/admin/candidates/profile-search", tags=["admin"])
+async def profile_search(request: Request, q: str = "", limit: int = 20):
+    """프로필 빌더용 경량 검색. 평문 필드만 LIKE 검색 (암호화 필드 제외)."""
+    _check_admin(request)
+    limit = min(max(1, limit), 100)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        if q.strip():
+            pat = f"%{q.strip()}%"
+            rows = conn.execute(
+                "SELECT candidate_id, sheet_number, nationality, current_location, "
+                "photo_url, thumb_url, area_prefs, status, gender, dob "
+                "FROM candidates "
+                "WHERE nationality LIKE ? OR area_prefs LIKE ? OR current_location LIKE ? "
+                "OR status LIKE ? OR candidate_id LIKE ? "
+                "ORDER BY CASE WHEN status='Active' THEN 0 ELSE 1 END, rowid DESC "
+                "LIMIT ?",
+                (pat, pat, pat, pat, pat, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT candidate_id, sheet_number, nationality, current_location, "
+                "photo_url, thumb_url, area_prefs, status, gender, dob "
+                "FROM candidates "
+                "ORDER BY CASE WHEN status='Active' THEN 0 ELSE 1 END, rowid DESC "
+                "LIMIT ?",
+                (limit,),
+            ).fetchall()
+        data = [dict(r) for r in rows]
+        return ok(data=data)
+    finally:
+        conn.close()
+
+
+class BuildProfileHtmlBody(BaseModel):
+    candidate_ids: list[str]
+    include_intro: bool = True
+    include_footer: bool = True
+
+
+@app.post("/api/admin/candidates/build-profile-html", tags=["admin"])
+async def build_profile_html(request: Request, body: BuildProfileHtmlBody):
+    """선택된 후보자 목록으로 프로필 이메일 HTML 생성."""
+    _check_admin(request)
+    if not body.candidate_ids:
+        return err("candidate_ids가 비어 있습니다.")
+    if len(body.candidate_ids) > 99:
+        return err("최대 99명까지 선택 가능합니다.")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        cards_html = []
+        for cid in body.candidate_ids:
+            row = conn.execute("SELECT * FROM candidates WHERE candidate_id = ?", (cid,)).fetchone()
+            if row:
+                c = dict(row)
+                # 암호화 필드 복호화 (카드에는 PII 미포함이지만 recruiter_memo 등에 필요)
+                for f in ("full_name", "email", "mobile_phone", "kakaotalk"):
+                    val = c.get(f, "")
+                    if val and is_encrypted(val):
+                        try:
+                            c[f] = decrypt_field(val)
+                        except Exception:
+                            c[f] = ""
+                cards_html.append(_build_profile_card_v2(c))
+
+        parts = []
+        if body.include_intro:
+            parts.append(
+                '<p style="font-size:13px;color:#444;margin-bottom:20px">'
+                '\uc548\ub155\ud558\uc138\uc694. BRIDGE \uc6d0\uc5b4\ubbfc \uac15\uc0ac \ud504\ub85c\ud544\uc744 \uacf5\uc720\ub4dc\ub9bd\ub2c8\ub2e4.<br/>'
+                'Start date and preferences noted. Reference provided for review only.'
+                '</p>'
+            )
+        parts.append("".join(cards_html))
+        if body.include_footer:
+            parts.append(
+                '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>'
+                '<p style="font-size:12px;color:#555;line-height:1.8">'
+                'BRIDGE\ub294 \uac15\uc0ac\uc758 \uc778\uc131\uc744 \uac00\uc7a5 \uc911\uc694\ud558\uac8c \uc5ec\uae30\uba70, \uacf5\uc815\ud558\uace0 \ucc28\ubcc4 \uc5c6\ub294 \ucc44\uc6a9\uc744 \uc9c0\ud5a5\ud569\ub2c8\ub2e4.<br/>'
+                '\uc778\ud130\ubdf0\ub294 Google Meet\uc73c\ub85c \uc9c4\ud589\ub429\ub2c8\ub2e4.'
+                '</p>'
+                '<p style="font-size:11px;color:#555">Kind Regards,</p>'
+                '<p style="font-size:11px;color:#666;line-height:1.7">'
+                '\u25a0 \uc9c1\uc5c5\uc548\uc815\ubc95 \uc81c34\uc870 \uc548\ub0b4: '
+                '\ubb34\uc790\uaca9\uc790\uac00 \uc18c\uac1c \ube44\uc6a9\uc744 \uccad\uad6c\ud558\ub294 \uacbd\uc6b0 \uc2e0\uace0 \uc2dc \ud3ec\uc0c1\uae08 \uc9c0\uae09'
+                '</p>'
+                '<p style="font-size:10px;color:#999;line-height:1.6">'
+                '\ubcf8 \uba54\uc77c\uc740 \uc9c0\uc815\ub41c \uc218\uc2e0\uc790\uc5d0\uac8c\ub9cc \uc804\ub2ec\ub41c \uac83\uc73c\ub85c, '
+                '\ubb34\ub2e8 \uc5f4\ub78c\u00b7\ubcf4\uad00\u00b7\uc804\ub2ec\uc744 \uae08\uc9c0\ud569\ub2c8\ub2e4.'
+                '</p>'
+            )
+        full_html = "\n".join(parts)
+        return ok(data={"html": full_html, "count": len(cards_html)})
+    finally:
+        conn.close()
 
 
 class SendEmailBody(BaseModel):

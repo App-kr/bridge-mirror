@@ -71,6 +71,7 @@ This email is intended for the designated recipient only. If you are not the int
 export default function MailSendPage() {
   const { adminKey, authed, login, signedFetch, waking } = useAdminAuth()
 
+  const [activeTab, setActiveTab] = useState<'mail' | 'builder'>('mail')
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(false)
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
@@ -260,6 +261,48 @@ export default function MailSendPage() {
           </a>
         </div>
       </div>
+
+      {/* ── Tab Switch ── */}
+      <div className="flex gap-1 border-b border-[#e5e5e7]">
+        <button
+          onClick={() => setActiveTab('mail')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'mail'
+              ? 'border-[#0071e3] text-[#0071e3]'
+              : 'border-transparent text-[#6e6e73] hover:text-[#1d1d1f]'
+          }`}
+        >
+          <Mail size={14} className="inline mr-1.5 -mt-0.5" />
+          메일 발송
+        </button>
+        <button
+          onClick={() => setActiveTab('builder')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'builder'
+              ? 'border-[#0071e3] text-[#0071e3]'
+              : 'border-transparent text-[#6e6e73] hover:text-[#1d1d1f]'
+          }`}
+        >
+          <FileText size={14} className="inline mr-1.5 -mt-0.5" />
+          프로필 빌더
+        </button>
+      </div>
+
+      {/* ── Profile Builder Tab ── */}
+      {activeTab === 'builder' && (
+        <ProfileBuilder
+          onInsert={(html) => {
+            setBodyHtml(html)
+            setSubject('\ud83d\udce2BRIDGE \uc6d0\uc5b4\ubbfc \uac15\uc0ac \uc18c\uc2dd ! \uad6d\ub0b4/\ud574\uc678 \ud504\ub85c\ud544 \ud655\uc778\ud558\uc138\uc694')
+            setActiveTab('mail')
+          }}
+          signedFetch={signedFetch}
+          adminKey={adminKey}
+        />
+      )}
+
+      {/* ── Mail Tab ── */}
+      {activeTab === 'mail' && (<>
 
       {/* ── Naver-style Toolbar ── */}
       <div className="bg-[#f0f4fb] border border-[#c8d6f0] rounded-xl px-4 py-2.5 flex items-center gap-2 flex-wrap">
@@ -607,6 +650,191 @@ export default function MailSendPage() {
             )}
           </div>
         </div>
+      </div>
+
+      </>)}
+    </div>
+  )
+}
+
+
+/* ── ProfileBuilder Component ── */
+interface ProfileCandidate {
+  candidate_id: string
+  sheet_number?: number | null
+  nationality?: string
+  current_location?: string
+  photo_url?: string
+  thumb_url?: string
+  area_prefs?: string
+  status?: string
+  gender?: string
+  dob?: string
+}
+
+function ProfileBuilder({
+  onInsert,
+  signedFetch,
+  adminKey,
+}: {
+  onInsert: (html: string) => void
+  signedFetch: (url: string, init?: RequestInit) => Promise<Response>
+  adminKey: string
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<ProfileCandidate[]>([])
+  const [selected, setSelected] = useState<ProfileCandidate[]>([])
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (!adminKey) return
+      try {
+        const res = await signedFetch(
+          `${API}/api/admin/candidates/profile-search?q=${encodeURIComponent(query)}&limit=20`
+        )
+        const data = await res.json()
+        setResults(data.data || [])
+      } catch {
+        /* silent */
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query, adminKey, signedFetch])
+
+  const addCandidate = (c: ProfileCandidate) => {
+    if (!selected.find((s) => s.candidate_id === c.candidate_id)) {
+      setSelected(prev => [...prev, c])
+    }
+  }
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return
+    setSelected(prev => {
+      const arr = [...prev]
+      ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+      return arr
+    })
+  }
+
+  const moveDown = (idx: number) => {
+    setSelected(prev => {
+      if (idx >= prev.length - 1) return prev
+      const arr = [...prev]
+      ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+      return arr
+    })
+  }
+
+  const buildHtml = async () => {
+    if (selected.length === 0) return
+    setLoading(true)
+    try {
+      const res = await signedFetch(`${API}/api/admin/candidates/build-profile-html`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_ids: selected.map((c) => c.candidate_id),
+          include_intro: true,
+          include_footer: true,
+        }),
+      })
+      const data = await res.json()
+      setPreviewHtml(data.data?.html || '')
+    } catch {
+      /* silent */
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex gap-4 h-[calc(100vh-200px)]">
+      {/* Left: Search + Results */}
+      <div className="w-72 flex flex-col gap-3 shrink-0">
+        <input
+          type="text"
+          placeholder="국적/지역 검색..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+        />
+        <div className="flex-1 overflow-y-auto border border-[#d2d2d7] rounded-lg divide-y divide-[#f0f0f0]">
+          {results.map((c: ProfileCandidate) => (
+            <button
+              key={c.candidate_id}
+              onClick={() => addCandidate(c)}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f7] flex items-center gap-2"
+            >
+              {c.photo_url || c.thumb_url ? (
+                <img src={c.photo_url || c.thumb_url} className="w-8 h-8 rounded-full object-cover object-top shrink-0" alt="" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#e5e7eb] flex items-center justify-center text-xs shrink-0">{'\ud83d\udc64'}</div>
+              )}
+              <div className="min-w-0">
+                <div className="font-medium truncate">{c.sheet_number || c.candidate_id}</div>
+                <div className="text-[#6e6e73] text-xs truncate">{c.nationality} · {c.current_location}</div>
+              </div>
+            </button>
+          ))}
+          {results.length === 0 && (
+            <div className="px-3 py-6 text-center text-[#86868b] text-xs">
+              {query ? '결과 없음' : '최근 후보자 로딩 중...'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Center: Selected list */}
+      <div className="w-56 flex flex-col gap-2 shrink-0">
+        <div className="text-xs font-medium text-[#6e6e73]">선택된 후보자 ({selected.length})</div>
+        <div className="flex-1 overflow-y-auto border border-[#d2d2d7] rounded-lg divide-y divide-[#f0f0f0]">
+          {selected.map((c: ProfileCandidate, idx: number) => (
+            <div key={c.candidate_id} className="px-3 py-2 flex items-center gap-1 text-sm">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{c.sheet_number || c.candidate_id}</div>
+                <div className="text-[#6e6e73] text-xs truncate">{c.nationality}</div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <button onClick={() => moveUp(idx)} className="text-[#6e6e73] hover:text-[#1d1d1f] leading-none text-xs">{'\u25b2'}</button>
+                <button onClick={() => moveDown(idx)} className="text-[#6e6e73] hover:text-[#1d1d1f] leading-none text-xs">{'\u25bc'}</button>
+              </div>
+              <button
+                onClick={() => setSelected(prev => prev.filter((_, i) => i !== idx))}
+                className="text-[#ff3b30] hover:text-red-700 text-xs ml-1"
+              >{'\u2715'}</button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={buildHtml}
+          disabled={selected.length === 0 || loading}
+          className="w-full py-2 bg-[#0071e3] text-white text-sm font-medium rounded-lg disabled:opacity-40 hover:bg-[#0077ed] transition-colors"
+        >
+          {loading ? '생성 중...' : 'HTML 생성'}
+        </button>
+      </div>
+
+      {/* Right: Preview */}
+      <div className="flex-1 flex flex-col gap-2 min-w-0">
+        <div className="text-xs font-medium text-[#6e6e73]">HTML 미리보기</div>
+        <div className="flex-1 border border-[#d2d2d7] rounded-lg overflow-auto bg-white p-4">
+          {previewHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          ) : (
+            <div className="text-[#6e6e73] text-sm text-center mt-8">
+              후보자를 선택 후 &quot;HTML 생성&quot; 클릭
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => previewHtml && onInsert(previewHtml)}
+          disabled={!previewHtml}
+          className="py-2 bg-[#34c759] text-white text-sm font-medium rounded-lg disabled:opacity-40 hover:bg-[#2db34a] transition-colors"
+        >
+          {'\u2705'} 본문에 삽입 (메일 발송 탭으로 이동)
+        </button>
       </div>
     </div>
   )
