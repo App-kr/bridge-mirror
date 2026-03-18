@@ -1,6 +1,18 @@
 # BRIDGE 프로필 메일 빌더 — Opus 구현 명령서
 > 작성: 2026-03-18 | Sonnet 설계 → Opus 구현
 > 작업 시간: 2x 타임 내 (약 90분 예상)
+> v1.2: apps_script v3 완전 검증 완료 (xlsx 원본 파싱 기준)
+
+## ✅ 사전 완료 사항 (Opus 작업 불필요)
+
+| 항목 | 파일 | 상태 |
+|------|------|------|
+| 구글시트 Apps Script | `웹빌드_자료/apps_script_skeleton.js` v3 | ✅ 완성 — 구글시트에 붙여넣기만 하면 됨 |
+| 컬럼 매핑 검증 | xlsx sharedStrings 직접 파싱 (2026-03-18) | ✅ Form 40열 / New 50열 모두 확인 |
+| 발견된 오류 수정 | Form 시트 탭명=`Form` (Source 아님) | ✅ v3에 반영 |
+| | Form col 15 = ARC holders (Passport 아님) | ✅ v3에 반영 |
+| | New AM(39) = Passport 누락 → 추가 | ✅ v3에 반영 |
+| | 배열 크기 49→50, 폼 읽기 38→40 | ✅ v3에 반영 |
 
 ---
 
@@ -443,4 +455,4 @@ Q:\Claudework\bridge base\
 
 ---
 
-*OPUS_명령서.md v1.0 — 2026-03-18 | Sonnet 4.6 설계 완료*
+*OPUS_명령서.md v1.2 — 2026-03-18 | Sonnet 4.6 설계 완료 | apps_script v3 xlsx 실측 기준 완전 검증*

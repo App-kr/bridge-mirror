@@ -1,18 +1,17 @@
 // ============================================================
-// BRIDGE Google Apps Script — 완성본 v2
+// BRIDGE Google Apps Script — 완성본 v3
 // 2026-03-17 컬럼 전체 확인 완료
-// 2026-03-18 버그 수정 (FIX-1~4):
-//   FIX-1: O열 EXPERIENCE 중복매핑 제거 (경력연수 = 수동입력)
-//   FIX-2: LockService 추가 (동시제출 race condition 방지)
-//   FIX-3: e.range.getRow() 사용 (getLastRow() race 방지)
-//   FIX-4: copyFormatToRange → setBackground 순서 수정 (색상 덮어쓰기 방지)
-// 2026-03-18 버그 수정 (FIX-5~6):
-//   FIX-5: get() null/undefined/공백 안전 처리 (nationality 등 빈 값 크래시 방지)
-//   FIX-6: Utilities.htmlEscape() 적용 — Logger 및 HTML 출력 시 XSS 방지
+// 2026-03-18 v2: 버그 수정 (FIX-1~6)
+// 2026-03-18 v3: 원본 xlsx 직접 파싱 — SRC/NEW 전체 컬럼 재검증
+//   CRITICAL FIX: Form 시트 col 15 = ARC holders (기존엔 Passport로 잘못 기재)
+//   → col 15부터 전체 1칸 오프셋 오류 수정
+//   → NEW 시트 AM(39) = Passport 추가 (기존 누락)
+//   → Experience(Form col 23) 매핑 복원
+//   → 배열 크기 49→50, 폼 읽기 38→40 컬럼
 // ============================================================
 
 const CONFIG = {
-  SHEET_SOURCE: 'Source',
+  SHEET_SOURCE: 'Form',   // ← 실제 탭명: "Form" (구글폼 원본)
   SHEET_NEW:    'New',
   SHEET_CLIENT: 'Client',
 
@@ -25,100 +24,104 @@ const CONFIG = {
   COLOR_HIRED:   '#E8F5E9',  // 채용완료 — 연녹
   COLOR_WAITING: '#FFF3E0',  // 취업대기 — 연주황
 
-  // ── Source 시트 컬럼 (구글폼 원본, 1-indexed) ──
+  // ── Form 시트 컬럼 (구글폼 원본, 1-indexed) ──
+  // 2026-03-18 실측: xlsx sharedStrings 직접 파싱으로 확인
   SRC: {
-    TIMESTAMP:   1,   // 타임스탬프
-    EMAIL:       2,   // 이메일 주소
-    HOW_TO:      3,   // How to (경로)
-    ATTACH:      4,   // Attach your files
-    FULLNAME:    5,   // Full name
-    NATIONALITY: 6,   // Nationality
-    ANCESTRY:    7,   // Family Ancestry Background
-    DOB:         8,   // Date of Birth
-    GENDER:      9,   // Gender
-    LOCATION:    10,  // Current Location
-    EDUCATION:   11,  // Educational Background
-    MAJOR:       12,  // Major
-    CERT:        13,  // Certification
-    EVISA:       14,  // E visa
-    PASSPORT:    15,  // Passport
-    CRIMINAL:    16,  // Criminal Record
-    DOCS:        17,  // Document Status
-    START_DATE:  18,  // Start date
-    TARGET:      19,  // Target
-    AREA_PREFS:  20,  // Area prefs
-    JOB_PREFS:   21,  // Job prefs
-    EMPLOYMENT:  22,  // Employment (한국 경력)
-    REFERENCE:   23,  // Reference
-    CURR_SAL:    24,  // Current salary
-    DESIRED_SAL: 25,  // Desired salary
-    MARITAL:     26,  // Marital Status
-    DEPENDENTS:  27,  // Dependents Pets
-    HOUSING:     28,  // Housing
-    PERSONAL:    29,  // Personal Considerations
-    RELIGION:    30,  // Religion
-    HEALTH:      31,  // Health Information
-    CRIMINAL_KR: 32,  // Criminal Record in Korea
-    INTV_TIME:   33,  // Interview time
-    KAKAO:       34,  // KakaoTalk
-    MOBILE:      35,  // Mobile Phone
-    AGREEMENT:   36,  // Agreement
-    FACTS:       37,  // Facts
-    MEMO:        38,  // 메모
+    TIMESTAMP:   1,   // A — 타임스탬프
+    EMAIL:       2,   // B — 이메일 주소
+    HOW_TO:      3,   // C — How to (경로)
+    ATTACH:      4,   // D — Attach your files
+    FULLNAME:    5,   // E — Full name
+    NATIONALITY: 6,   // F — Nationality
+    ANCESTRY:    7,   // G — Family Ancestry Background
+    DOB:         8,   // H — Date of Birth
+    GENDER:      9,   // I — Gender
+    LOCATION:    10,  // J — Current Location
+    EDUCATION:   11,  // K — Educational Background
+    MAJOR:       12,  // L — Major
+    CERT:        13,  // M — Certification
+    EVISA:       14,  // N — E visa
+    ARC:         15,  // O — ARC holders  ← 이전 버전에서 PASSPORT로 잘못 표기
+    PASSPORT:    16,  // P — Passport
+    CRIMINAL:    17,  // Q — Criminal Record
+    DOCS:        18,  // R — Document Status
+    START_DATE:  19,  // S — Start date
+    TARGET:      20,  // T — Target
+    AREA_PREFS:  21,  // U — Area prefs
+    JOB_PREFS:   22,  // V — Job prefs (Notes)
+    EXPERIENCE:  23,  // W — Experience (경력 텍스트: "over 4 year" 등)
+    EMPLOYMENT:  24,  // X — Employment (한국 근무처)
+    REFERENCE:   25,  // Y — Reference
+    CURR_SAL:    26,  // Z — Current salary
+    DESIRED_SAL: 27,  // AA — Desired salary
+    MARITAL:     28,  // AB — Marital Status
+    DEPENDENTS:  29,  // AC — Dependents Pets
+    HOUSING:     30,  // AD — Housing
+    PERSONAL:    31,  // AE — Personal Considerations
+    RELIGION:    32,  // AF — Religion
+    HEALTH:      33,  // AG — Health Information
+    CRIMINAL_KR: 34,  // AH — Criminal Record Check
+    INTV_TIME:   35,  // AI — Interview time
+    KAKAO:       36,  // AJ — KakaoTalk
+    MOBILE:      37,  // AK — Mobile Phone
+    AGREEMENT:   38,  // AL — Agreement
+    FACTS:       39,  // AM — Facts
+    MEMO:        40,  // AN — 메모
   },
 
   // ── New 시트 컬럼 (운영 관리, 1-indexed) ──
-  // A=1 ~ AW=49 확인 완료
+  // 2026-03-18 실측: A~AX = 50열 확인
   NEW: {
-    EMAIL:       1,   // A — 메 (이메일 주소)
-    NAME:        2,   // B — 이 (Full name)
-    PHOTO:       3,   // C — 사 (Photo — 수동)
-    NUMBER:      4,   // D — 번 (번호 — 자동부여)
+    EMAIL:       1,   // A — 이메일 주소
+    NAME:        2,   // B — Full name
+    PHOTO:       3,   // C — Photo (수동)
+    NUMBER:      4,   // D — No (번호, 자동부여)
     ARC:         5,   // E — ARC holders
-    NATIONALITY: 6,   // F — 국적
-    ANCESTRY:    7,   // G — 배경
-    DOB:         8,   // H — 나이
-    GENDER:      9,   // I — 성별
-    LOCATION:    10,  // J — 현재
-    START:       11,  // K — 시작
-    TARGET:      12,  // L — 대상
-    AREA:        13,  // M — 지역
-    REFERENCE:   14,  // N — 레퍼런스/근무처확인
-    EXPERIENCE:  15,  // O — 경력
-    EMPLOYMENT:  16,  // P — 한국 (Employment)
-    JOB_PREFS:   17,  // Q — 선호사항/리크루터인터뷰
-    INTERVIEW:   18,  // R — 지원한곳/인터뷰요청 (수동)
-    APPLY:       19,  // S — 포지션제안/진행 (수동)
-    CURR_SAL:    20,  // T — 현급
-    DESIRED_SAL: 21,  // U — 희망
-    INTV_TIME:   22,  // V — 시간
-    DEGREE:      23,  // W — 학위
-    MAJOR:       24,  // X — 전공
-    CERT:        25,  // Y — 자격
-    DOCS:        26,  // Z — 서류
-    HEALTH:      27,  // AA — 건강
-    PERSONAL:    28,  // AB — 타투
-    PIERCINGS:   29,  // AC — 피어
-    DEPENDENTS:  30,  // AD — 가족
-    MARITAL:     31,  // AE — 결혼
-    HOUSING:     32,  // AF — 숙소
-    RELIGION:    33,  // AG — 종교
-    EVISA:       34,  // AH — 비자
-    KAKAO:       35,  // AI — 카톡
-    MOBILE:      36,  // AJ — 핸폰 (PII — 관리자 내부용)
-    CRIMINAL:    37,  // AK — 범죄
-    CRIMINAL_KR: 38,  // AL — 국범
-    AGREEMENT:   39,  // AM — 동의
-    FACTS:       40,  // AN — 사실
-    HOW_TO:      41,  // AO — 경로
-    TIMESTAMP:   42,  // AP — 타임스탬프
-    HIRED_AT:    43,  // AQ — 채용처 (수동)
-    WAGE:        44,  // AR — 임금 (수동)
-    START_MONTH: 45,  // AS — 개시월 (수동)
-    HOUSING2:    46,  // AT — 숙박 (수동)
-    COST:        47,  // AU — 비용 (수동)
-    PROCESS:     48,  // AV — 처리 (수동)
-    PAST_MEMO:   49,  // AW — 과거메모 (수동)
+    NATIONALITY: 6,   // F — Nationality
+    ANCESTRY:    7,   // G — Family Ancestry Background
+    DOB:         8,   // H — Date of Birth
+    GENDER:      9,   // I — Gender
+    LOCATION:    10,  // J — Current Location
+    START:       11,  // K — Start date
+    TARGET:      12,  // L — Target
+    AREA:        13,  // M — Area prefs
+    REFERENCE:   14,  // N — Reference
+    EXPERIENCE:  15,  // O — Experience (경력)
+    EMPLOYMENT:  16,  // P — Employment (한국 근무처)
+    JOB_PREFS:   17,  // Q — Job prefs (선호사항/리크루터인터뷰)
+    INTERVIEW:   18,  // R — Interview (수동)
+    APPLY:       19,  // S — Apply (수동)
+    CURR_SAL:    20,  // T — Current salary
+    DESIRED_SAL: 21,  // U — Desired salary
+    INTV_TIME:   22,  // V — Interview time
+    DEGREE:      23,  // W — Degree
+    MAJOR:       24,  // X — Major
+    CERT:        25,  // Y — Certification
+    DOCS:        26,  // Z — Documents
+    HEALTH:      27,  // AA — Health Information
+    PERSONAL:    28,  // AB — Personal Considerations (타투)
+    PIERCINGS:   29,  // AC — piercings
+    DEPENDENTS:  30,  // AD — Dependents Pets
+    MARITAL:     31,  // AE — Marital Status
+    HOUSING:     32,  // AF — Housing
+    RELIGION:    33,  // AG — Religion
+    EVISA:       34,  // AH — E visa
+    KAKAO:       35,  // AI — KakaoTalk
+    MOBILE:      36,  // AJ — Mobile Phone (PII — 관리자 내부용)
+    CRIMINAL:    37,  // AK — Criminal Record
+    CRIMINAL_KR: 38,  // AL — Criminal Record in Korea
+    PASSPORT:    39,  // AM — Passport (여권)       ← 이전 버전 누락
+    AGREEMENT:   40,  // AN — Agreement (동의)
+    FACTS:       41,  // AO — Facts (사실)
+    HOW_TO:      42,  // AP — How to (경로)
+    TIMESTAMP:   43,  // AQ — 타임스탬프
+    HIRED_AT:    44,  // AR — 채용처 (수동)
+    WAGE:        45,  // AS — 임금 (수동)
+    START_MONTH: 46,  // AT — 개시월 (수동)
+    HOUSING2:    47,  // AU — 숙박 (수동)
+    COST:        48,  // AV — 비용 (수동)
+    PROCESS:     49,  // AW — 처리 (수동)
+    PAST_MEMO:   50,  // AX — 과거메모 (수동)
   },
 };
 
@@ -137,13 +140,14 @@ function onFormSubmit(e) {
     const nw  = ss.getSheetByName(CONFIG.SHEET_NEW);
 
     if (!src || !nw) {
-      Logger.log('ERROR: 시트를 찾을 수 없음 — 탭 이름 확인 필요');
+      Logger.log('ERROR: 시트를 찾을 수 없음 — 탭 이름 확인 필요 (Form / New)');
       return;
     }
 
     // ── [FIX-3] e.range.getRow(): 이벤트 정확한 행 사용 (getLastRow race 방지) ──
     const submittedRow = e.range.getRow();
-    const form         = src.getRange(submittedRow, 1, 1, 38).getValues()[0];
+    // Form 시트: 40컬럼 (A~AN) — 2026-03-18 실측
+    const form         = src.getRange(submittedRow, 1, 1, 40).getValues()[0];
     const nextNum      = getNextNumber(nw);
     const newRow       = buildNewRow(form, nextNum);
 
@@ -162,7 +166,7 @@ function onFormSubmit(e) {
     }
     range.setBackground(CONFIG.COLOR_NEW); // 서식 복사 후 마지막에 적용
 
-    // [FIX-6] Utilities.htmlEscape() — HTML 컨텍스트(이메일 등) 사용 시 XSS 방지
+    // [FIX-6] Utilities.htmlEscape() — HTML 컨텍스트 사용 시 XSS 방지
     const safeEmail = Utilities.htmlEscape(String(form[CONFIG.SRC.EMAIL-1] ?? ''));
     Logger.log(`✅ 번호 ${nextNum} | 행 ${submittedRow} | ${safeEmail}`);
   } catch (err) {
@@ -196,14 +200,15 @@ function getNextNumber(sheet) {
 
 
 // ============================================================
-// Source → New 매핑 (전체 컬럼 확인 완료)
+// Form → New 매핑 (2026-03-18 xlsx 실측 기준 완전 수정)
 // ============================================================
 function buildNewRow(form, number) {
   const s = CONFIG.SRC;
   const n = CONFIG.NEW;
-  const row = new Array(49).fill('');
+  // New 시트: 50열 (A~AX)
+  const row = new Array(50).fill('');
 
-  // [FIX-5] null/undefined/공백 안전 처리 — nationality 등 미입력 값 크래시 방지
+  // [FIX-5] null/undefined/공백 안전 처리
   const get = (col) => {
     const v = form[col - 1];
     if (v === null || v === undefined) return '';
@@ -213,9 +218,9 @@ function buildNewRow(form, number) {
   // ── 기본 정보 ──
   row[n.EMAIL      - 1] = get(s.EMAIL);
   row[n.NAME       - 1] = get(s.FULLNAME);
-  // row[n.PHOTO   - 1] = ''; // 수동 — 구글폼 첨부는 Drive URL로 처리
+  // row[n.PHOTO   - 1] = ''; // 수동 — Drive URL
   row[n.NUMBER     - 1] = number;
-  row[n.ARC        - 1] = get(s.EVISA);   // E visa → ARC 참고값
+  row[n.ARC        - 1] = get(s.ARC);         // Form O열(15): ARC holders
   row[n.NATIONALITY- 1] = get(s.NATIONALITY);
   row[n.ANCESTRY   - 1] = get(s.ANCESTRY);
   row[n.DOB        - 1] = get(s.DOB);
@@ -229,12 +234,12 @@ function buildNewRow(form, number) {
 
   // ── 경력/레퍼런스 ──
   row[n.REFERENCE  - 1] = get(s.REFERENCE);
-  // [FIX-1] O열(EXPERIENCE=경력연수)은 폼에 숫자 항목 없음 → 수동 입력, 빈칸 유지
-  row[n.EMPLOYMENT - 1] = get(s.EMPLOYMENT);  // P열 — 한국 근무처 (텍스트)
+  row[n.EXPERIENCE - 1] = get(s.EXPERIENCE);  // Form W열(23): Experience 텍스트
+  row[n.EMPLOYMENT - 1] = get(s.EMPLOYMENT);  // Form X열(24): 한국 근무처
 
-  // ── 리크루터 관리 (수동) ──
+  // ── 리크루터 관리 ──
   row[n.JOB_PREFS  - 1] = get(s.JOB_PREFS);
-  // INTERVIEW, APPLY → 수동
+  // INTERVIEW(R), APPLY(S) → 수동
 
   // ── 급여 ──
   row[n.CURR_SAL   - 1] = get(s.CURR_SAL);
@@ -250,20 +255,21 @@ function buildNewRow(form, number) {
   // ── 개인 정보 ──
   row[n.HEALTH     - 1] = get(s.HEALTH);
   row[n.PERSONAL   - 1] = get(s.PERSONAL);
-  // PIERCINGS → Source에 별도 컬럼 없음, Personal에 포함된 경우 처리
+  // PIERCINGS: Form에 별도 컬럼 없음 (Personal에 포함)
   row[n.DEPENDENTS - 1] = get(s.DEPENDENTS);
   row[n.MARITAL    - 1] = get(s.MARITAL);
   row[n.HOUSING    - 1] = get(s.HOUSING);
   row[n.RELIGION   - 1] = get(s.RELIGION);
 
   // ── 비자/연락처 ──
-  row[n.EVISA      - 1] = get(s.EVISA);
+  row[n.EVISA      - 1] = get(s.EVISA);       // Form N열(14): E visa
   row[n.KAKAO      - 1] = get(s.KAKAO);
-  row[n.MOBILE     - 1] = get(s.MOBILE);   // PII — 관리자 내부용
+  row[n.MOBILE     - 1] = get(s.MOBILE);       // PII — 관리자 내부용
 
-  // ── 범죄기록 ──
+  // ── 범죄/여권 ──
   row[n.CRIMINAL   - 1] = get(s.CRIMINAL);
   row[n.CRIMINAL_KR- 1] = get(s.CRIMINAL_KR);
+  row[n.PASSPORT   - 1] = get(s.PASSPORT);    // Form P열(16): Passport
 
   // ── 동의/경로 ──
   row[n.AGREEMENT  - 1] = get(s.AGREEMENT);
@@ -289,8 +295,9 @@ function testRun() {
   Logger.log('=== BRIDGE Apps Script 테스트 ===');
   Logger.log('시트 목록: ' + ss.getSheets().map(s => s.getName()).join(', '));
   Logger.log('New 시트 마지막 행: ' + nw.getLastRow());
-  Logger.log('Source 시트 마지막 행: ' + src.getLastRow());
+  Logger.log('Form 시트 마지막 행: ' + src.getLastRow());
   Logger.log('다음 부여 번호: ' + getNextNumber(nw));
+  Logger.log('New 50열 / Form 40열 매핑 v3 활성');
 }
 
 
