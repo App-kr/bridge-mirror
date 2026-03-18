@@ -68,7 +68,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 \"Q:\\Claudework\\claude 뷰컨트롤\\agent_reporter.py\""
+          "command": "cmd /c \"Q:\\Claudework\\claude 뷰컨트롤\\reporter_post.bat\""
         }
       ]
     }
@@ -96,7 +96,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 \"Q:\\Claudework\\claude 뷰컨트롤\\agent_reporter.py\" --stop"
+          "command": "cmd /c \"Q:\\Claudework\\claude 뷰컨트롤\\reporter_stop.bat\""
         }
       ]
     }
