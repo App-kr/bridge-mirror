@@ -1,398 +1,427 @@
-# BRIDGE 프로필 메일 빌더 — Opus 설계서
-> 작성: 2026-03-18 | Sonnet 분석 → Opus 구현
-> 목표: 02.JPG 이메일 포맷 완벽 재현 + 관리자 UI 구축
+# BRIDGE 프로필 메일 빌더 — Opus 최종 설계서 v2
+> 작성: 2026-03-18 | 02.JPG + 03.JPG 실사례 역공학 완료 + 보안점검 반영
+> Sonnet 분석 → Opus 구현
 
 ---
 
-## 1. 02.JPG 역공학 분석 (실제 이미지 기준)
+## ⚠️ 보안 재점검 결과 — Opus 구현 전 필수 반영 (2026-03-18)
 
-### 이메일 전체 구조
+| 항목 | 판정 | 조치 |
+|------|------|------|
+| SQL f-string 패턴 7개 | ✅ PASS | 전체 화이트리스트 검증 확인 |
+| HMAC_SECRET 폴백 | ⚠️ WARNING | ADMIN_API_KEY로 폴백 — 실제 무력화 아님, .env 명시 권장 |
+| CSP unsafe-inline | ⚠️ WARNING | API서버는 HTML 미렌더링 — 실질 위험 없음 |
+| IDOR / 인증 우회 | ✅ PASS | 모든 관리자 엔드포인트 _check_admin() 선행 확인 |
+| 암호화 구현 | ✅ PASS | Fail-Closed, gitignore 확인 |
+| 로그 이메일 평문 기록 | ⚠️ WARNING | _smtp_send() 로그 + profile_sends.to_email 평문 저장 |
+| **신규 API XSS** | 🔴 **필수** | html.escape() 미적용 — **Opus 구현 시 반드시 적용** |
+| **암호화 필드 LIKE 검색** | 🔴 **필수** | full_name 암호화 저장 → LIKE 불가 → 평문 필드만 검색 |
+
+### DB 컬럼명 불일치 (실측 확인)
+| 설계서 필드 | DB 실제 컬럼 | 상태 |
+|-------------|-------------|------|
+| `sheet_number` | 없음 | ⚠️ ALTER TABLE 필요 (설계서 반영됨) |
+| `korea_experience` | 없음 | 🔴 fallback 필요 → `experience` 사용 |
+| `marital` | `married` | 🔴 컬럼명 수정 필요 |
+| `personal` | `personal_consideration` | 🔴 컬럼명 수정 필요 |
+
+---
+
+## 0. 실사례 역공학 결과 (이미지 2장 비교 확정)
+
+### 02.JPG 확인 사항
 ```
-제목: 📢BRIDGE 원어민 강사 소식 ! 국내/해외 프로필 확인하세요
-발신: Bridge <bridgejobkr@naver.com>
-
-[인트로 문구]
-안녕하세요. BRIDGE 원어민 강사 프로필을 공유드립니다.
-Start date and preferences noted. Reference provided for review only.
-
-[프로필 카드 × N]
-
-[서명 + 법적 고지]
+■5567영국 해외거주🏠
+■5213캐나다 국내거주😊
+■5569남아공 해외거주🏠
 ```
 
-### 프로필 카드 1개 포맷 (■5567영국 해외거주🏠)
+### 03.JPG 확인 사항
+```
+■5271영국 국내거주😊
+■5683남아공 국내거주😊
+■5579미국 국내거주😊
+```
+
+### ✅ 최종 확정 헤더 포맷
 ```
 ■{번호}{국적} {거주구분}거주{거주이모지}
-[사진: 원형 60~70px, 카드 왼쪽 상단]
+```
+- **국기 이모지 없음** (이전 설계서의 FLAG_MAP 불필요 → 제거)
+- 국내거주 = 😊, 해외거주 = 🏠
+- 국내/해외 판별: `current_location`에 "Korea/한국/서울/부산..." 포함 여부
 
-•선호지역 자격 기타: {area_prefs} | {cert} | {기타}
-•경력 주거 희망급여: {경력라벨} | {housing} | {desired_salary}
+---
+
+## 1. 프로필 카드 HTML 최종 스펙 (실사례 기준)
+
+```
+■{번호}{국적} {거주구분}거주{거주이모지}
+[사진: 60×60px 원형, 왼쪽 float]
+
+•선호지역 자격 기타: {area_prefs} | {cert}
+•경력 주거 희망급여: {경력라벨} | {housing} | {salary}
 •리크루터 인터뷰: {recruiter_memo}
 •레퍼런스: {reference}
-🟡희망사항: {preferences}   ← 노란 배경 하이라이트
-🟡기피사항: {dislikes}       ← 노란 배경 하이라이트
-•타겟 근로개시: {target} | {start_date}~
+🟡희망사항: {preferences}    ← background:#FFFF00 span
+🟡기피사항: {dislikes}        ← background:#FFFF00 span
+•타겟 근로개시: {target} | {start}
 ```
 
-### 세부 필드 매핑 (DB → 표시)
+### 경력 라벨 로직 (03.JPG 실사례 "원 한국 1년차" 확인)
+```python
+# "원" = 원래 외국 출신 (모든 강사 공통)
+# "한국 N년차" = korea_experience 필드
+if korea_experience:
+    exp_label = f"원 한국 {korea_experience}년차"
+elif experience:
+    exp_label = f"{experience}년"
+else:
+    exp_label = "—"
+```
 
-| 표시 항목 | DB 컬럼 | 가공 방식 |
-|-----------|---------|----------|
-| 번호 | `sheet_number` (없으면 `id`) | 그대로 |
-| 국적 | `nationality` | 그대로 |
-| 국기 이모지 | `nationality` | 아래 매핑표 |
-| 거주구분 | `current_location` | "Korea/한국" 포함 → 국내, 아니면 해외 |
-| 거주이모지 | 거주구분 결과 | 국내=😊, 해외=🏠 |
-| 사진 | `photo_url` | 원형 img 태그 |
-| 선호지역 | `area_prefs` | 그대로 |
-| 자격/기타 | `visa_type` or `arc_holders` + `education_level` | 파이프로 연결 |
-| 경력라벨 | `experience` + `korea_experience` | "원 한국 {N}년차" 또는 "{N}년" |
-| 주거 | `housing_type` → `housing` 순서로 fallback | 그대로 |
-| 희망급여 | `desired_salary` → `placed_salary` | 그대로 |
-| 리크루터 인터뷰 | `recruiter_memo` | 그대로 |
-| 레퍼런스 | `reference` | 그대로 |
-| 희망사항 | `preferences` | 노란배경 `<span>` |
-| 기피사항 | `dislikes` | 노란배경 `<span>` |
-| 타겟 | `target` or `target_level` | 그대로 |
-| 근로개시 | `start_month` → `start_date` | 그대로 |
-
-### 국적 → 국기 이모지 매핑
-```javascript
-const FLAG_MAP = {
-  '미국': '🇺🇸', 'American': '🇺🇸', 'USA': '🇺🇸',
-  '캐나다': '🇨🇦', 'Canadian': '🇨🇦', 'Canada': '🇨🇦',
-  '영국': '🇬🇧', 'British': '🇬🇧', 'UK': '🇬🇧',
-  '남아공': '🇿🇦', 'South African': '🇿🇦', 'South Africa': '🇿🇦',
-  '뉴질랜드': '🇳🇿', 'New Zealand': '🇳🇿', 'Kiwi': '🇳🇿',
-  '호주': '🇦🇺', 'Australian': '🇦🇺', 'Australia': '🇦🇺',
-  '아일랜드': '🇮🇪', 'Irish': '🇮🇪', 'Ireland': '🇮🇪',
-  '필리핀': '🇵🇭', 'Filipino': '🇵🇭', 'Philippines': '🇵🇭',
-}
-// fallback: 국적 텍스트 그대로
+### 자격(cert) 로직 (실사례 "테블 O" 확인)
+```python
+# 03.JPG: "서울경기 | 테블 O"
+# "테블" = TEFL/TESOL/TESL 자격증 + 등급 O/A/B
+# visa_type, arc_holders, education_level 순서로 fallback
+cert = (c.get("arc_holders") or         # E-2, F-4 등
+        c.get("visa_type") or
+        c.get("education_level") or "—")
 ```
 
 ---
 
-## 2. DB 변경사항 (최소)
+## 2. DB 필드 매핑 최종 확정 (실측 컬럼 기준)
+
+| 표시 | DB 실제 컬럼 | Fallback | 비고 |
+|------|------------|---------|------|
+| 번호 | `sheet_number` | `id` (rowid) | ALTER TABLE 후 사용 |
+| 국적 | `nationality` | — | 평문 |
+| 거주구분 | `current_location` | "해외" | 평문 |
+| 사진 | `photo_url` | `thumb_url` → 👤 | URL 검증 필수 |
+| 선호지역 | `area_prefs` | — | 평문 |
+| 자격 | `arc_holders` → `visa_type` → `education_level` | — | 평문 |
+| 경력 | `experience` | — | 🔴 `korea_experience` 컬럼 없음 |
+| 주거 | `housing_type` → `housing` → `housing_detail` | — | |
+| 희망급여 | `desired_salary` → `placed_salary` | 협의 | |
+| 리크루터 인터뷰 | `recruiter_memo` | — | 🔴 html.escape 필수 |
+| 레퍼런스 | `reference` | — | 🔴 html.escape 필수 |
+| 희망사항 | `preferences` | — | 🔴 html.escape 필수 |
+| 기피사항 | `dislikes` | — | 🔴 html.escape 필수 |
+| 타겟 | `target` → `target_level` | — | |
+| 근로개시 | `start_month` → `start_date` | — | |
+
+---
+
+## 3. 이메일 전체 HTML 구조
+
+```html
+<!-- 인트로 -->
+<p style="font-size:13px;color:#444;margin-bottom:20px">
+안녕하세요. BRIDGE 원어민 강사 프로필을 공유드립니다.<br/>
+Start date and preferences noted. Reference provided for review only.
+</p>
+
+<!-- 프로필 카드 × N (반복) -->
+{profile_cards}
+
+<!-- 푸터 고정 -->
+<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
+<p style="font-size:12px;color:#555;line-height:1.8">
+BRIDGE는 강사의 인성을 가장 중요하게 여기며, 공정하고 차별 없는 채용을 지향합니다.<br/>
+인터뷰는 Google Meet으로 진행됩니다.
+</p>
+<p style="font-size:12px;color:#555">
+QR코드 스캔하여 BRIDGE와 채팅하기<br/>
+<img src="{qr_url}" width="60" height="60" alt="QR"/>
+</p>
+<p style="font-size:11px;color:#555">Kind Regards,</p>
+<p style="font-size:11px;color:#666;line-height:1.7">
+■ 직업안정법 제34조 안내: 무자격자가 소개 비용을 청구하는 경우 신고 시 포상금 지급<br/>
+(기업 및 법적 고지)
+</p>
+<p style="font-size:10px;color:#999;line-height:1.6">
+본 메일은 지정된 수신자에게만 전달된 것으로 ... (기존 법적 고지 유지)
+</p>
+```
+
+---
+
+## 4. DB 변경사항
 
 ### `sheet_number` 컬럼 추가
-기존 candidates 테이블에 컬럼 추가 (없으면 폼 번호 표시 불가):
-```sql
-ALTER TABLE candidates ADD COLUMN sheet_number INTEGER DEFAULT NULL;
-```
-- 기존 레코드: NULL (표시 시 DB `id` 로 fallback)
-- 새 Apps Script 등록자: Google Sheet D열 번호로 채워질 예정
-- **주의**: api_server.py `init_db()` 에 `IF NOT EXISTS` 형태로 추가할 것
-
----
-
-## 3. 새 API 엔드포인트
-
-### `GET /api/admin/candidates/profile-preview`
 ```python
-# 쿼리: ?ids=cnd_xxx,cnd_yyy (candidate_id 목록)
-# 반환: 각 후보자의 프로필 카드용 경량 데이터
-# PII 포함 (관리자 전용, X-Admin-Key 필수)
-# 반환 필드:
-{
-  "candidate_id": "cnd_xxx",
-  "sheet_number": 5567,        # 없으면 DB id
-  "nationality": "영국",
-  "current_location": "UK",
-  "photo_url": "https://...",
-  "area_prefs": "서울경기남부",
-  "visa_type": "E-2",
-  "education_level": "MA",
-  "experience": "3",
-  "korea_experience": "1",
-  "housing_type": "하우징 제공 최탈",
-  "desired_salary": "280 이상",
-  "recruiter_memo": "애들이 재밌게...",
-  "reference": "업무는 미리...",
-  "preferences": "프린타임이 구분된...",
-  "dislikes": "의사소통이 안되며...",
-  "target": "유치초등선호",
-  "start_month": "4월",
-}
-```
-
-### `POST /api/admin/candidates/build-profile-html`
-```python
-# body: { candidate_ids: ["cnd_xxx", "cnd_yyy"], include_intro: true }
-# 반환: { html: "<완성된 이메일 HTML>" }
-# 기능: 여러 후보자의 프로필 카드를 이어붙인 완성 HTML 반환
+# api_server.py init_db() 내부에 추가
+# try/except로 이미 있는 경우 무시
+try:
+    conn.execute("ALTER TABLE candidates ADD COLUMN sheet_number INTEGER DEFAULT NULL")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass  # 이미 존재
 ```
 
 ---
 
-## 4. 프로필 카드 HTML 생성 함수 (Python)
+## 5. 새 API 엔드포인트 2개
 
-### `_build_profile_card_v2(c: dict) -> str`
-기존 `_build_profile_card()` 는 **건드리지 말 것** (호환성 유지).
-새 함수를 별도로 추가:
+### 5-1. `POST /api/admin/candidates/build-profile-html`
+```python
+class BuildProfileHtmlBody(BaseModel):
+    candidate_ids: list[str]       # candidate_id 목록 (순서 = 카드 순서)
+    include_intro: bool = True
+    include_footer: bool = True
+
+@app.post("/api/admin/candidates/build-profile-html", tags=["admin"])
+async def build_profile_html(request: Request, body: BuildProfileHtmlBody):
+    _check_admin(request)
+    # 각 candidate_id로 DB 조회 → _build_profile_card_v2() 호출
+    # 전체 이메일 HTML 조합 후 반환
+    return ok(data={"html": full_html, "count": len(body.candidate_ids)})
+```
+
+### 5-2. `GET /api/admin/candidates/profile-search`
+```python
+# ?q=검색어&limit=20
+# 관리자 전용 경량 검색 (프로필 빌더 UI용)
+# 반환: candidate_id, sheet_number, nationality, current_location, photo_url, status
+@app.get("/api/admin/candidates/profile-search", tags=["admin"])
+async def profile_search(request: Request, q: str = "", limit: int = 20):
+    _check_admin(request)
+    # 🔴 중요: full_name은 AES-256-GCM 암호화 저장 → LIKE 검색 불가 (항상 0건)
+    # 반드시 평문 저장 필드만 검색 대상으로 사용:
+    #   nationality, area_prefs, current_location, status (평문 OK)
+    #   full_name, email, mobile_phone, kakaotalk (암호화 → LIKE 불가)
+    # WHERE nationality LIKE ? OR area_prefs LIKE ? OR current_location LIKE ?
+    # status='Active' 우선 정렬 (ORDER BY CASE WHEN status='Active' THEN 0 ELSE 1 END)
+```
+
+---
+
+## 6. `_build_profile_card_v2()` 최종 Python 코드 (보안 재점검 반영)
 
 ```python
+import html as _html  # 파일 상단에 추가
+
 def _build_profile_card_v2(c: dict) -> str:
-    """02.JPG 포맷 프로필 카드 HTML. 관리자 메일 빌더용."""
+    """실사례(02.JPG, 03.JPG) 기준 프로필 카드. 기존 _build_profile_card() 건드리지 않음."""
 
     # 번호
     num = c.get("sheet_number") or c.get("id", "")
 
-    # 국적 + 국기
-    nat = c.get("nationality", "")
-    flag = _get_flag_emoji(nat)  # FLAG_MAP 참조
-
-    # 거주구분
+    # 국적 + 거주구분
+    # 🔴 보안: nationality None 안전 처리
+    nat = (c.get("nationality") or "").strip()
     loc = (c.get("current_location") or "").lower()
-    is_korea = any(k in loc for k in ["korea", "한국", "서울", "부산", "대구", "인천"])
+    is_korea = any(k in loc for k in ["korea", "한국", "서울", "부산", "대구", "인천",
+                                       "수원", "경기", "광주", "대전", "울산"])
     residence = "국내" if is_korea else "해외"
     res_emoji = "😊" if is_korea else "🏠"
 
-    # 사진
-    photo_url = c.get("photo_url") or c.get("thumb_url") or ""
-    photo_html = (
-        f'<img src="{photo_url}" width="65" height="65" '
-        f'style="border-radius:50%;object-fit:cover;float:left;margin:0 12px 8px 0" alt="" />'
-    ) if photo_url else (
-        '<div style="width:65px;height:65px;border-radius:50%;background:#e5e7eb;'
-        'float:left;margin:0 12px 8px 0;display:flex;align-items:center;justify-content:center;'
-        'font-size:24px">👤</div>'
-    )
+    # 사진 — URL은 XSS 위험 없이 안전하게 처리 (http/https만 허용)
+    raw_photo = c.get("photo_url") or c.get("thumb_url") or ""
+    photo_url = raw_photo if raw_photo.startswith(("http://", "https://")) else ""
+    if photo_url:
+        photo_html = (
+            f'<img src="{_html.escape(photo_url)}" width="65" height="65" alt="" '
+            f'style="border-radius:50%;object-fit:cover;object-position:top;'
+            f'float:left;margin:0 12px 8px 0;display:block"/>'
+        )
+    else:
+        photo_html = (
+            '<div style="width:65px;height:65px;border-radius:50%;background:#e5e7eb;'
+            'float:left;margin:0 12px 8px 0;font-size:28px;line-height:65px;'
+            'text-align:center">👤</div>'
+        )
 
-    # 경력 라벨: "원 한국 1년차" 또는 "{N}년"
-    exp = c.get("experience") or c.get("teaching_experience") or ""
-    kor_exp = c.get("korea_experience") or ""
-    exp_label = f"원 한국 {kor_exp}년차" if kor_exp else (f"{exp}년" if exp else "—")
+    # 자격
+    cert = (c.get("arc_holders") or c.get("visa_type") or c.get("education_level") or "")
 
-    # 자격/기타
-    visa = c.get("visa_type") or c.get("arc_holders") or c.get("e_visa") or ""
-    edu  = c.get("education_level") or ""
-    cert_str = " | ".join(filter(None, [visa, edu])) or "—"
+    # 선호지역 + 자격
+    area = c.get("area_prefs") or "—"
+    cert_str = f"{area} | {cert}" if cert else area
+
+    # 경력
+    # 🔴 DB에 korea_experience 컬럼 없음 → experience로 fallback
+    kor_exp = str(c.get("korea_experience") or "").strip()   # ALTER TABLE 후 채워질 값
+    exp     = str(c.get("experience") or "").strip()
+    if kor_exp:
+        exp_label = f"원 한국 {kor_exp}년차"
+    elif exp:
+        exp_label = f"원 한국 {exp}년차"   # experience를 korea_experience로 표시
+    else:
+        exp_label = "—"
 
     # 주거
-    housing = c.get("housing_type") or c.get("housing") or c.get("housing_detail") or "—"
+    housing = (c.get("housing_type") or c.get("housing") or c.get("housing_detail") or "—")
 
     # 급여
     salary = c.get("desired_salary") or c.get("placed_salary") or "협의"
 
-    # 인터뷰/레퍼런스
-    interview = c.get("recruiter_memo") or "—"
-    reference = c.get("reference") or "—"
-
-    # 희망/기피 (노란 배경)
-    prefs  = c.get("preferences") or ""
-    dislik = c.get("dislikes") or ""
+    # 🔴 보안 필수: DB 필드 → html.escape() 적용 (XSS 방어)
+    interview = _html.escape(c.get("recruiter_memo") or "—")
+    reference = _html.escape(c.get("reference") or "—")
+    prefs     = _html.escape(c.get("preferences") or "—")
+    dislik    = _html.escape(c.get("dislikes") or "—")
 
     # 타겟 + 근로개시
     target = c.get("target") or c.get("target_level") or ""
     start  = c.get("start_month") or c.get("start_date") or ""
-    target_str = " | ".join(filter(None, [target, f"{start}시작~" if start else ""])) or "—"
+    target_str = " | ".join(filter(None, [target, f"{start}시작" if start else ""])) or "—"
 
-    YELLOW = 'background:#FFFF00;font-weight:bold;padding:0 2px'
+    YEL = "background:#FFFF00;font-weight:bold;padding:1px 3px"
 
-    return f"""
-<div style="margin:16px 0 8px;clear:both">
-  <strong style="font-size:14px">■{num}{flag} {nat} {residence}거주{res_emoji}</strong>
+    return f"""<div style="margin:20px 0 4px">
+  <strong style="font-size:14px">■{num}{nat} {residence}거주{res_emoji}</strong>
 </div>
-<div style="margin-bottom:16px;overflow:hidden">
+<div style="margin-bottom:4px;overflow:hidden">
   {photo_html}
-  <div style="font-size:13px;line-height:1.9">
-    <span>•선호지역 자격 기타: {c.get('area_prefs','—')} | {cert_str}</span><br/>
-    <span>•경력 주거 희망급여: {exp_label} | {housing} | {salary}</span><br/>
-    <span>•리크루터 인터뷰: {interview}</span><br/>
-    <span>•레퍼런스: {reference}</span><br/>
-    <span><span style="{YELLOW}">희망사항:</span> {prefs if prefs else '—'}</span><br/>
-    <span><span style="{YELLOW}">기피사항:</span> {dislik if dislik else '—'}</span><br/>
-    <span>•타겟 근로개시: {target_str}</span>
+  <div style="font-size:13px;line-height:2.0;color:#222">
+    •선호지역 자격 기타: {_html.escape(cert_str)}<br>
+    •경력 주거 희망급여: {exp_label} | {_html.escape(housing)} | {_html.escape(salary)}<br>
+    •리크루터 인터뷰: {interview}<br>
+    •레퍼런스: {reference}<br>
+    <span style="{YEL}">희망사항</span>: {prefs}<br>
+    <span style="{YEL}">기피사항</span>: {dislik}<br>
+    •타겟 근로개시: {_html.escape(target_str)}
   </div>
   <div style="clear:both"></div>
 </div>
-<hr style="border:none;border-top:1px dashed #d1d5db;margin:4px 0 16px"/>
+<hr style="border:none;border-top:1px dashed #d1d5db;margin:12px 0"/>
 """
-
-def _get_flag_emoji(nationality: str) -> str:
-    FLAG_MAP = {
-        '미국':'🇺🇸','american':'🇺🇸','usa':'🇺🇸',
-        '캐나다':'🇨🇦','canadian':'🇨🇦','canada':'🇨🇦',
-        '영국':'🇬🇧','british':'🇬🇧','uk':'🇬🇧',
-        '남아공':'🇿🇦','south african':'🇿🇦',
-        '뉴질랜드':'🇳🇿','new zealand':'🇳🇿',
-        '호주':'🇦🇺','australian':'🇦🇺','australia':'🇦🇺',
-        '아일랜드':'🇮🇪','irish':'🇮🇪','ireland':'🇮🇪',
-        '필리핀':'🇵🇭','filipino':'🇵🇭',
-    }
-    return FLAG_MAP.get(nationality.lower(), "")
 ```
 
 ---
 
-## 5. 프론트엔드 설계 (mail-send/page.tsx)
+## 7. 프론트엔드 최종 설계 (mail-send/page.tsx)
 
-### 탭 구조
-기존 페이지에 탭을 **최상단**에 추가. 기존 코드는 Tab 1("메일 발송")로 이동, 신규 Tab 2("프로필 빌더") 추가.
-
-```
-[ 메일 발송 ]  [ 📋 프로필 빌더 ]   ← 탭 버튼
-─────────────────────────────────────
-Tab 1: 기존 메일 발송 UI (그대로 유지, 코드 변경 없음)
-Tab 2: 프로필 빌더 (신규)
-```
-
-### Tab 2 레이아웃
-```
-┌─────────────────────────────────────────────────┐
-│  📋 프로필 빌더                                   │
-│  후보자를 검색·선택하여 이메일 HTML을 자동 생성합니다  │
-├──────────────────────┬──────────────────────────┤
-│ [검색 패널]           │ [선택된 후보자 목록]         │
-│                      │                          │
-│ 🔍 이름/번호 검색      │  ① 5567 영국 🇬🇧 해외  ×  │
-│ ┌──────────────┐     │  ② 5213 캐나다 🇨🇦 국내 ×  │
-│ │ 검색어 입력   │     │  ③ 5569 남아공 🇿🇦 해외 ×  │
-│ └──────────────┘     │                          │
-│                      │  ↑↓ 드래그로 순서 변경     │
-│ [검색 결과 목록]       │                          │
-│  ○ 5567 영국 해외 [+]│  [HTML 생성] [본문에 삽입]  │
-│  ○ 5213 캐나다 국내[+]│                          │
-│  ○ 5569 남아공 해외[+]│                          │
-│  ...                 │                          │
-├──────────────────────┴──────────────────────────┤
-│ [미리보기]  ← 생성된 HTML을 이메일 스타일로 렌더링   │
-│  ■5567영국 해외거주🏠                             │
-│  [사진] •선호지역: 서울경기남부 ...                │
-│  ■5213캐나다 국내거주😊                           │
-│  [사진] •선호지역: 서울선호 ...                    │
-└─────────────────────────────────────────────────┘
-```
-
-### 주요 State
+### 탭 구조 (기존 코드 최소 변경)
 ```typescript
-// Tab 2 전용 state
-const [searchQuery, setSearchQuery] = useState('')
-const [searchResults, setSearchResults] = useState<CandidateMini[]>([])
-const [selectedCandidates, setSelectedCandidates] = useState<CandidateMini[]>([])
-const [profileHtml, setProfileHtml] = useState('')
-const [buildLoading, setBuildLoading] = useState(false)
-const [profilePreview, setProfilePreview] = useState(false)
+// 추가할 state 딱 2개
+const [activeTab, setActiveTab] = useState<'mail' | 'builder'>('mail')
 
-interface CandidateMini {
-  candidate_id: string
-  sheet_number: number | null
-  nationality: string
-  current_location: string
-  display_label: string  // "5567 영국 해외거주"
-}
+// 탭 버튼 (헤더 h1 아래에 추가)
+<div className="flex gap-1 border-b border-[#e5e5e7] mb-4">
+  <button onClick={() => setActiveTab('mail')}
+    className={activeTab==='mail' ? '탭활성스타일' : '탭비활성스타일'}>
+    ✉️ 메일 발송
+  </button>
+  <button onClick={() => setActiveTab('builder')}
+    className={activeTab==='builder' ? '탭활성스타일' : '탭비활성스타일'}>
+    📋 프로필 빌더
+  </button>
+</div>
+
+{activeTab === 'mail' && <기존JSX />}
+{activeTab === 'builder' && <ProfileBuilder
+  onInsert={(html) => {
+    setBodyHtml(html)
+    setSubject('📢BRIDGE 원어민 강사 소식 ! 국내/해외 프로필 확인하세요')
+    setActiveTab('mail')
+  }}
+/>}
 ```
 
-### 주요 함수
+### ProfileBuilder 컴포넌트 (같은 파일 하단에 추가)
 ```typescript
-// 1. 검색 (300ms debounce)
-const searchCandidates = async (q: string) => {
-  const res = await signedFetch(`${API}/api/admin/candidates?search=${q}&limit=20`)
-  const json = await res.json()
-  setSearchResults(json.data?.candidates ?? [])
-}
+function ProfileBuilder({ onInsert }: { onInsert: (html: string) => void }) {
+  const { adminKey, signedFetch } = useAdminAuth()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [selected, setSelected] = useState([])   // 순서 유지 배열
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [loading, setLoading] = useState(false)
 
-// 2. 후보자 추가/제거
-const addCandidate = (c: CandidateMini) => {
-  if (!selectedCandidates.find(s => s.candidate_id === c.candidate_id)) {
-    setSelectedCandidates(prev => [...prev, c])
-  }
-}
-const removeCandidate = (id: string) => {
-  setSelectedCandidates(prev => prev.filter(c => c.candidate_id !== id))
-}
-
-// 3. HTML 생성 (API 호출)
-const buildHtml = async () => {
-  setBuildLoading(true)
-  const ids = selectedCandidates.map(c => c.candidate_id)
-  const res = await signedFetch(`${API}/api/admin/candidates/build-profile-html`, {
-    method: 'POST',
-    body: JSON.stringify({ candidate_ids: ids, include_intro: true }),
-  })
-  const json = await res.json()
-  setProfileHtml(json.data?.html ?? '')
-  setBuildLoading(false)
-}
-
-// 4. 본문에 삽입 → Tab 1으로 전환
-const insertToMailBody = () => {
-  setBodyHtml(profileHtml)  // Tab 1의 bodyHtml state 업데이트
-  setSubject('📢BRIDGE 원어민 강사 소식 ! 국내/해외 프로필 확인하세요')
-  setActiveTab('mail')      // Tab 1으로 전환
+  // 300ms debounce 검색
+  // 선택 추가/제거
+  // "HTML 생성" → POST /api/admin/candidates/build-profile-html
+  // "본문에 삽입" → onInsert(previewHtml)
 }
 ```
 
 ---
 
-## 6. 구현 순서 (Opus 실행 순서)
+## 8. 보안 점검 결과 반영
 
-### Step 0: DB 마이그레이션 (5분)
+Opus 구현 시 아래 3가지 추가 적용:
+
+### 8-1. ✅ 이미 PASS (건드리지 말 것)
+- PII 마스킹: 프로필 카드에 이름/이메일/전화번호 포함 금지 (유지)
+- Rate limit: 기존 설정 유지
+- 파일 업로드 검증: 기존 유지
+
+### 8-2. ⚠️ WARNING → 설계 반영
+**SQL f-string 컬럼명 패턴**: 신규 엔드포인트에서 컬럼명은 **반드시 화이트리스트 검증 후** f-string 사용
 ```python
-# api_server.py init_db() 에 추가
-conn.execute("""
-  ALTER TABLE candidates ADD COLUMN sheet_number INTEGER DEFAULT NULL
-""")
-# 이미 있으면 에러 무시 처리 필요 (try/except sqlite3.OperationalError)
+# 신규 API에서 사용할 화이트리스트
+_PROFILE_SAFE_COLS = frozenset({
+    "candidate_id", "sheet_number", "nationality", "current_location",
+    "photo_url", "thumb_url", "area_prefs", "visa_type", "arc_holders",
+    "experience", "korea_experience", "housing_type", "housing",
+    "housing_detail", "desired_salary", "placed_salary", "recruiter_memo",
+    "reference", "preferences", "dislikes", "target", "target_level",
+    "start_month", "start_date", "education_level", "status", "id",
+})
 ```
 
-### Step 1: API 엔드포인트 추가 (20분)
-파일: `api_server.py`
+**HMAC_SECRET**: Opus는 Render 환경변수 확인 방법 주석으로 안내만 (직접 설정은 관리자 수동)
+```python
+# ⚠️ 주의: HMAC_SECRET 환경변수가 Render에 설정되어야 HMAC 재전송 공격 방어 활성화
+# Render Dashboard → bridge-n7hk → Environment → HMAC_SECRET 확인
+```
 
-1. `_get_flag_emoji()` 헬퍼 함수 추가
-2. `_build_profile_card_v2()` 함수 추가 (기존 `_build_profile_card` 건드리지 말 것)
-3. `GET /api/admin/candidates/profile-preview` 엔드포인트
-4. `POST /api/admin/candidates/build-profile-html` 엔드포인트
-   - intro HTML + 카드들 + 기존 footer(법적고지) 조합
-   - 완성 HTML 반환
+**CSP unsafe-inline**: 현재 유지 (Nonce 방식 전환은 별도 작업으로 분리)
 
-### Step 2: 프론트엔드 탭 추가 (40분)
-파일: `web_frontend/src/app/admin/mail-send/page.tsx`
+---
 
-1. 탭 state `activeTab: 'mail' | 'builder'` 추가
-2. 탭 버튼 UI를 헤더 아래에 추가
-3. 기존 JSX를 `activeTab === 'mail'` 조건부 렌더링으로 감싸기
-4. `activeTab === 'builder'` 블록에 프로필 빌더 UI 구현
+## 9. Opus 실행 순서 (확정)
 
-### Step 3: 검증 (15분)
-```bash
-# 백엔드 컴파일
-python -m py_compile api_server.py && echo OK
+```
+Step 0: DB 마이그레이션 (5분)
+  └─ api_server.py init_db() 에 sheet_number 컬럼 추가
 
-# 프론트엔드 빌드
-cd web_frontend && npm run build
+Step 1: Python 함수 + API 추가 (30분)
+  ├─ _build_profile_card_v2() 함수 추가 (기존 건드리지 말 것)
+  ├─ POST /api/admin/candidates/build-profile-html
+  └─ GET  /api/admin/candidates/profile-search
 
-# 수동 테스트
-# 1. /admin/mail-send 접속 → "프로필 빌더" 탭 확인
-# 2. 후보자 검색 → 선택 → HTML 생성 → 미리보기 확인
-# 3. "본문에 삽입" → 메일 발송 탭으로 이동 + 본문 확인
+Step 2: 프론트엔드 탭 + ProfileBuilder (40분)
+  ├─ activeTab state 추가
+  ├─ 탭 버튼 UI (h1 아래)
+  ├─ 기존 JSX를 activeTab==='mail' 조건부로 감싸기
+  └─ ProfileBuilder 컴포넌트 구현 (같은 파일 하단)
 
-# git push
-cd .. && git add -A && git commit -m "feat: 프로필 메일 빌더 UI + API (02.JPG 포맷)" && git push
+Step 3: 검증 (15분)
+  ├─ python -m py_compile api_server.py → OK 확인
+  ├─ cd web_frontend && npm run build → 에러 없음 확인
+  └─ git add -A && git commit -m "feat: 프로필 메일 빌더" && git push
+
+총 예상: 90분 (2x 시간대 내 충분히 완료 가능)
 ```
 
 ---
 
-## 7. 절대 금지 사항 (CLAUDE.md)
-- 기존 `_build_profile_card()` 함수 수정 금지 → 새 `_build_profile_card_v2()` 만 추가
-- 기존 메일 발송 탭 UI 변경 금지 (탭 1 코드는 건드리지 말 것)
-- 비밀번호 변경 금지
-- SQL f-string 삽입 금지 → parameterized query만
-- hard-delete 금지
-- PII (이름, 이메일, 전화번호) → 프로필 카드 HTML에 포함 금지
+## 10. 완료 체크리스트
+
+- [ ] `/admin/mail-send` → "프로필 빌더" 탭 보임
+- [ ] 이름/국적 검색 → 후보자 목록 출력
+- [ ] 후보자 선택 → 선택 목록에 추가
+- [ ] "HTML 생성" → 03.JPG 스타일 카드 생성 확인
+  - [ ] 헤더 형식: `■{번호}{국적} {거주구분}거주{이모지}`
+  - [ ] 사진 원형 float:left
+  - [ ] 노란배경 희망사항/기피사항
+- [ ] "본문에 삽입" → 탭 1 전환 + 제목·본문 자동입력
+- [ ] `python -m py_compile api_server.py` → PASS
+- [ ] `npm run build` → PASS
+- [ ] git push → `main -> main` 확인
 
 ---
 
-## 8. 완료 기준
-- [ ] `/admin/mail-send` 에서 "프로필 빌더" 탭 접근 가능
-- [ ] 후보자 이름/번호 검색 → 선택 가능
-- [ ] 1명 이상 선택 후 "HTML 생성" 클릭 → 02.JPG 스타일 카드 생성
-- [ ] 미리보기에서 국기이모지·사진·노란하이라이트 확인
-- [ ] "본문에 삽입" → 탭 1 본문 자동 입력 확인
-- [ ] `npm run build` 통과
-- [ ] `python -m py_compile api_server.py` 통과
-- [ ] git push 완료
+## 참고 파일
+- 실사례 이미지: `웹빌드_자료/02.JPG`, `03.JPG`
+- Apps Script: `웹빌드_자료/apps_script_skeleton.js` (완성본)
+- 기존 메일 발송 UI: `web_frontend/src/app/admin/mail-send/page.tsx`
+- 기존 프로필 카드 함수: `api_server.py:2244` (`_build_profile_card`)
 
 ---
-*설계 완료: 2026-03-18 | 구현: Opus*
+*v2 최종확정: 2026-03-18 | 실사례 2장 역공학 + 보안점검 반영 완료*

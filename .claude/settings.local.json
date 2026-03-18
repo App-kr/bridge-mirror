@@ -620,7 +620,8 @@
       "Bash(claude mcp add:*)",
       "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" --version)",
       "Bash(C:UsersScarlettAppDataLocalProgramsPythonPython313python.exe -X utf8 \"Q:\\\\Claudework\\\\bridge base\\\\scripts\\\\audio\\\\register_audio_task.py\")",
-      "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" -c \"\nimport sqlite3, os\ndb = ''master.db''\nconn = sqlite3.connect\\(db\\)\ncur = conn.cursor\\(\\)\ncur.execute\\(''PRAGMA integrity_check''\\)\nic = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM candidates''\\)\nc = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM client_inquiries''\\)\ne = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM jobs''\\)\nj = cur.fetchone\\(\\)[0]\nconn.close\\(\\)\nprint\\(f''DB={os.path.getsize\\(db\\)//1024}KB | integrity={ic} | candidates={c} | employers={e} | jobs={j}''\\)\n\")"
+      "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" -c \"\nimport sqlite3, os\ndb = ''master.db''\nconn = sqlite3.connect\\(db\\)\ncur = conn.cursor\\(\\)\ncur.execute\\(''PRAGMA integrity_check''\\)\nic = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM candidates''\\)\nc = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM client_inquiries''\\)\ne = cur.fetchone\\(\\)[0]\ncur.execute\\(''SELECT COUNT\\(*\\) FROM jobs''\\)\nj = cur.fetchone\\(\\)[0]\nconn.close\\(\\)\nprint\\(f''DB={os.path.getsize\\(db\\)//1024}KB | integrity={ic} | candidates={c} | employers={e} | jobs={j}''\\)\n\")",
+      "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" \"tools\\\\status_writer.py\" STOP)"
     ]
   }
 }
