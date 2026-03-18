@@ -72,7 +72,17 @@
 cat tasks/lessons.md | tail -20
 cat tasks/todo.md | grep "^\- \[ \]"
 git log --name-only -3
+# 3중 기억 파일 — 반드시 읽을 것 (미완료 작업·주의사항 포함)
+cat .claude/session_log.md
+cat .claude/work_state.md
+cat .claude/next_todo.md
 ```
+
+## ⚠️ 현재 시스템 상태 (2026-03-18 갱신)
+- **deploy_skip.json**: expire=9999999999 → 모든 push 자동 승인 (게이트 없음)
+- **auto_backup 중단**: 3/14 08:20 이후 DB 5분 주기 백업 미실행 → 재시작 필요
+- **PAT workflow 제한**: .github/ 폴더 push 불가 (workflow scope 없음) → auto_finalize 제외 처리됨
+- **monitor server v3.1**: bridge base 데이터 직결 완료, settings.local.json 설정
 
 ## User Preferences
 - 묻지 말고 자율 실행 선호
