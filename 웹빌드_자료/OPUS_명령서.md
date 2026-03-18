@@ -78,9 +78,10 @@ except sqlite3.OperationalError:
 
 **파일**: `api_server.py`
 
-#### 2-1. 파일 상단 import 확인
+#### 2-1. 파일 상단 import 확인 (현재 없음 — 반드시 추가)
 ```python
-import html as _html  # 없으면 추가 (표준 라이브러리)
+import html as _html  # ← api_server.py 최상단 import 블록에 추가 필수
+                      # 현재 api_server.py에 없음 (2026-03-18 실측 확인)
 ```
 
 #### 2-2. `_build_profile_card_v2()` 함수 추가
@@ -136,7 +137,7 @@ python -m py_compile api_server.py && echo "✅ COMPILE_OK"
 
 ### Step 3: 프론트엔드 탭 추가 (40분)
 
-**파일**: `web_frontend/src/app/admin/mail-send/page.tsx` (약 1600줄)
+**파일**: `web_frontend/src/app/admin/mail-send/page.tsx` (614줄, 2026-03-18 실측)
 
 #### 3-1. state 1개 추가 (기존 state 근처에)
 ```typescript
