@@ -1,14 +1,16 @@
 /* ═══════════════════════════════════════════════════════
-   BRIDGE Canvas Spreadsheet — Grid Engine v2
+   BRIDGE Canvas Spreadsheet — Grid Engine v3
    Pure Canvas rendering: header, rows, photos, stages, tags
-   Ghost-div scrollbar (상하좌우), column resize, DPR scaling
-   Configurable row height, updateCallbacks support
+   Ghost-div scrollbar, column resize, DPR scaling
+   v3: checkbox, stage dropdown, tag toggle, photo wheel,
+       cell styles, filter icons, header context menu
    ═══════════════════════════════════════════════════════ */
 
 import type { ColDef, DataRow, GridCallbacks, CellRef } from './types'
 import { HEADER_H, FONT, HEADER_FONT, STAGES, MTAGS } from './types'
 import { SelectionManager } from './SelectionManager'
 import { EditManager } from './EditManager'
+import { StyleManager } from './StyleManager'
 
 /* ── Drawing constants ── */
 const HEADER_BG    = '#f8fafc'
@@ -20,6 +22,8 @@ const HOVER_BG     = '#f1f5f9'
 const FROZEN_SEP   = '#94a3b8'
 const SORT_ARROW   = '#64748b'
 const RESIZE_ZONE  = 5
+const CHECKBOX_SIZE = 14
+const CHECKBOX_PAD  = 4
 
 export class GridEngine {
   /* ── DOM ── */
@@ -34,6 +38,7 @@ export class GridEngine {
   private cb: GridCallbacks
   selection: SelectionManager
   editor: EditManager
+  styleManager: StyleManager
 
   /* ── Viewport ── */
   private dpr = 1
@@ -49,7 +54,7 @@ export class GridEngine {
   private visCols: ColDef[] = []
   private rows: DataRow[] = []
   private frozenCols = 3
-  private rowH = 36  // configurable row height
+  private rowH = 36
 
   /* ── Interaction ── */
   private hoverRow = -1
@@ -73,6 +78,7 @@ export class GridEngine {
     this.dpr = window.devicePixelRatio || 1
     this.selection = new SelectionManager()
     this.editor = new EditManager(container)
+    this.styleManager = new StyleManager()
 
     container.style.position = 'relative'
     container.style.overflow = 'hidden'
@@ -88,7 +94,7 @@ export class GridEngine {
     this.headerHit.style.cssText = `position:absolute;top:0;left:0;right:0;height:${HEADER_H}px;z-index:2;cursor:default;`
     container.appendChild(this.headerHit)
 
-    // Ghost scroll div — top: HEADER_H so scrollbar doesn't overlap header
+    // Ghost scroll div
     this.ghost = document.createElement('div')
     this.ghost.style.cssText = `position:absolute;top:${HEADER_H}px;left:0;right:0;bottom:0;overflow:auto;z-index:1;`
     this.sizer = document.createElement('div')
@@ -146,7 +152,6 @@ export class GridEngine {
     this.ro.disconnect()
     if (this.rafId) cancelAnimationFrame(this.rafId)
     this.editor.destroy()
-    // Remove document-level listeners
     document.removeEventListener('mousemove', this.onDocMouseMove)
     document.removeEventListener('mouseup', this.onDocMouseUp)
     document.removeEventListener('keydown', this.onKeyDown)
@@ -202,9 +207,11 @@ export class GridEngine {
     this.ghost.addEventListener('mousemove', this.onGhostMouseMove)
     this.ghost.addEventListener('dblclick', this.onGhostDblClick)
     this.ghost.addEventListener('contextmenu', this.onGhostContextMenu)
+    this.ghost.addEventListener('wheel', this.onGhostWheel, { passive: false })
     this.headerHit.addEventListener('mousedown', this.onHeaderMouseDown)
     this.headerHit.addEventListener('mousemove', this.onHeaderMouseMove)
     this.headerHit.addEventListener('click', this.onHeaderClick)
+    this.headerHit.addEventListener('contextmenu', this.onHeaderContextMenu)
     document.addEventListener('mousemove', this.onDocMouseMove)
     document.addEventListener('mouseup', this.onDocMouseUp)
     document.addEventListener('keydown', this.onKeyDown)
@@ -219,7 +226,7 @@ export class GridEngine {
     }
   }
 
-  private hitCell(e: MouseEvent): { row: number; visCol: number } | null {
+  private hitCell(e: MouseEvent): { row: number; visCol: number; localX: number; localY: number } | null {
     const rect = this.ghost.getBoundingClientRect()
     const mx = e.clientX - rect.left + this.scrollLeft
     const my = e.clientY - rect.top + this.scrollTop
@@ -227,9 +234,34 @@ export class GridEngine {
     if (row < 0 || row >= this.rows.length) return null
     let cx = 0
     for (let i = 0; i < this.visCols.length; i++) {
-      if (mx >= cx && mx < cx + this.visCols[i].w) return { row, visCol: i }
+      if (mx >= cx && mx < cx + this.visCols[i].w) {
+        return { row, visCol: i, localX: mx - cx, localY: my - row * this.rowH }
+      }
       cx += this.visCols[i].w
     }
+    return null
+  }
+
+  /** Check if click is on the checkbox area of an idx cell */
+  private isCheckboxHit(localX: number): boolean {
+    return localX < CHECKBOX_SIZE + CHECKBOX_PAD * 2
+  }
+
+  /** Check which tag was hit in a tags-type cell */
+  private hitTag(val: string, localX: number): string | null {
+    if (!val) return null
+    const { ctx } = this
+    ctx.save()
+    ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
+    let tx = 4
+    for (const k of val.split(',').filter(Boolean)) {
+      const tag = MTAGS.find(m => m.key === k.trim())
+      if (!tag) continue
+      const tw = ctx.measureText(tag.label).width + 10
+      if (localX >= tx && localX < tx + tw) { ctx.restore(); return tag.key }
+      tx += tw + 3
+    }
+    ctx.restore()
     return null
   }
 
@@ -237,6 +269,60 @@ export class GridEngine {
     if (this.editor.isEditing()) return
     const hit = this.hitCell(e)
     if (!hit) return
+
+    const col = this.visCols[hit.visCol]
+
+    // Checkbox click in idx column
+    if (col && col.type === 'idx' && this.isCheckboxHit(hit.localX)) {
+      this.selection.toggleRow(hit.row)
+      this.cb.onSelectionChange(this.selection.getSelectedRows())
+      this.requestRender()
+      return
+    }
+
+    // Tag toggle click
+    if (col && col.type === 'tags') {
+      const row = this.rows[hit.row]
+      if (row) {
+        const tagKey = this.hitTag(String(row.mailStatus ?? ''), hit.localX)
+        if (tagKey) {
+          this.cb.onTagToggle(hit.row, tagKey)
+          this.requestRender()
+          return
+        }
+        // If not on a specific tag, check if in the remaining area for adding tags
+        // Show all available tags for toggling
+        const allTags = String(row.mailStatus ?? '').split(',').filter(Boolean)
+        // Calculate where all drawn tags end
+        let endX = 4
+        this.ctx.save()
+        this.ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
+        for (const k of allTags) {
+          const tag = MTAGS.find(m => m.key === k.trim())
+          if (!tag) continue
+          endX += this.ctx.measureText(tag.label).width + 10 + 3
+        }
+        this.ctx.restore()
+        // If click is after existing tags, cycle through to add next missing tag
+        if (hit.localX >= endX) {
+          for (const mt of MTAGS) {
+            if (!allTags.includes(mt.key)) {
+              this.cb.onTagToggle(hit.row, mt.key)
+              this.requestRender()
+              return
+            }
+          }
+        }
+      }
+    }
+
+    // Mail button click
+    if (col && col.type === 'mail') {
+      const row = this.rows[hit.row]
+      if (row) this.cb.onMailClick(hit.row, row)
+      return
+    }
+
     this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
     this.selection.selectCell(hit.row, hit.visCol)
     this.cb.onSelectionChange(this.selection.getSelectedRows())
@@ -247,6 +333,18 @@ export class GridEngine {
     const hit = this.hitCell(e)
     const newHover = hit ? hit.row : -1
     if (newHover !== this.hoverRow) { this.hoverRow = newHover; this.requestRender() }
+
+    // Change cursor for clickable areas
+    if (hit) {
+      const col = this.visCols[hit.visCol]
+      if (col && (col.type === 'tags' || col.type === 'mail' || (col.type === 'idx' && this.isCheckboxHit(hit.localX)))) {
+        this.ghost.style.cursor = 'pointer'
+      } else {
+        this.ghost.style.cursor = 'default'
+      }
+    } else {
+      this.ghost.style.cursor = 'default'
+    }
   }
 
   private onGhostDblClick = (e: MouseEvent): void => {
@@ -256,12 +354,29 @@ export class GridEngine {
     const row = this.rows[hit.row]
     if (!col || !row) return
 
-    if (col.type === 'idx' || col.type === 'photo') return
+    if (col.type === 'idx') return
     if (col.type === 'mail') { this.cb.onMailClick(hit.row, row); return }
+    if (col.type === 'tags') return // tags handled by single click
+
+    // Photo double-click → upload
+    if (col.type === 'photo') {
+      this.cb.onPhotoUpload(hit.row)
+      return
+    }
+
+    // Stage → use dropdown with STAGES options
     if (col.type === 'stage') {
-      const stKeys = STAGES.map(s => s.key)
-      const cur = stKeys.indexOf(String(row.stage))
-      this.cb.onStageChange(hit.row, stKeys[(cur + 1) % stKeys.length])
+      const cellRect = this.getCellRect(hit.row, hit.visCol)
+      if (!cellRect) return
+      const stageOpts = STAGES.map(s => s.label)
+      const curStage = STAGES.find(s => s.key === String(row.stage)) || STAGES[0]
+      this.editor.startEdit(cellRect, 'dropdown', curStage.label, stageOpts).then(result => {
+        if (result.committed) {
+          const selected = STAGES.find(s => s.label === result.value)
+          if (selected) this.cb.onStageChange(hit.row, selected.key)
+        }
+        this.requestRender()
+      })
       return
     }
 
@@ -291,6 +406,16 @@ export class GridEngine {
     this.requestRender()
   }
 
+  private onGhostWheel = (e: WheelEvent): void => {
+    const hit = this.hitCell(e as unknown as MouseEvent)
+    if (!hit) return
+    const col = this.visCols[hit.visCol]
+    if (col && col.type === 'photo') {
+      e.preventDefault()
+      this.cb.onPhotoWheel(hit.row, e.deltaY < 0 ? 5 : -5)
+    }
+  }
+
   private getCellRect(rowIdx: number, visColIdx: number): { x: number; y: number; w: number; h: number } | null {
     const col = this.visCols[visColIdx]
     if (!col) return null
@@ -302,14 +427,14 @@ export class GridEngine {
   }
 
   /* ── Header events ── */
-  private headerHitVisCol(e: MouseEvent): { visCol: number; nearBorder: boolean } | null {
+  private headerHitVisCol(e: MouseEvent): { visCol: number; nearBorder: boolean; localX: number } | null {
     const rect = this.headerHit.getBoundingClientRect()
     const mx = e.clientX - rect.left + this.scrollLeft
     let cx = 0
     for (let i = 0; i < this.visCols.length; i++) {
       cx += this.visCols[i].w
-      if (Math.abs(mx - cx) <= RESIZE_ZONE) return { visCol: i, nearBorder: true }
-      if (mx < cx) return { visCol: i, nearBorder: false }
+      if (Math.abs(mx - cx) <= RESIZE_ZONE) return { visCol: i, nearBorder: true, localX: mx - (cx - this.visCols[i].w) }
+      if (mx < cx) return { visCol: i, nearBorder: false, localX: mx - (cx - this.visCols[i].w) }
     }
     return null
   }
@@ -331,7 +456,32 @@ export class GridEngine {
     const hit = this.headerHitVisCol(e)
     if (!hit || hit.nearBorder) return
     const col = this.visCols[hit.visCol]
-    if (col) this.cb.onSort(col.key)
+    if (!col) return
+
+    // Checkbox in header for idx column
+    if (col.type === 'idx') {
+      this.cb.onHeaderCheckToggle()
+      this.requestRender()
+      return
+    }
+
+    // Filter icon click (last 16px of header cell)
+    if (hit.localX > col.w - 18 && col.type !== 'photo' && col.type !== 'mail') {
+      const rect = this.headerHit.getBoundingClientRect()
+      const cx = this.colX(hit.visCol) - this.scrollLeft
+      this.cb.onFilterClick(col.key, rect.left + cx + col.w, rect.top + HEADER_H)
+      return
+    }
+
+    this.cb.onSort(col.key)
+  }
+
+  private onHeaderContextMenu = (e: MouseEvent): void => {
+    e.preventDefault()
+    const hit = this.headerHitVisCol(e)
+    if (!hit) return
+    const col = this.visCols[hit.visCol]
+    if (col) this.cb.onHeaderContextMenu(e, col.key)
   }
 
   private onDocMouseMove = (e: MouseEvent): void => {
@@ -357,6 +507,16 @@ export class GridEngine {
     if (this.editor.isEditing()) return
     const t = e.target as HTMLElement
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return
+
+    // Ctrl+A = select all
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault()
+      this.selection.selectAll(this.rows.length)
+      this.cb.onSelectionChange(this.selection.getSelectedRows())
+      this.requestRender()
+      return
+    }
+
     switch (e.key) {
       case 'ArrowUp':    e.preventDefault(); this.selection.moveActive(-1, 0, this.rows.length, this.visCols.length); break
       case 'ArrowDown':  e.preventDefault(); this.selection.moveActive(1, 0, this.rows.length, this.visCols.length); break
@@ -410,7 +570,7 @@ export class GridEngine {
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
         if (c < frozenN) { cx += col.w; continue }
-        this.drawCell(this.rows[r], col, cx, y, col.w, rowH)
+        this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
         ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
         ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
         cx += col.w
@@ -432,7 +592,7 @@ export class GridEngine {
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
           const col = this.visCols[c]
-          this.drawCell(this.rows[r], col, cx, y, col.w, rowH)
+          this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
           ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
           ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
           cx += col.w
@@ -469,16 +629,36 @@ export class GridEngine {
   }
 
   /* ── Cell Drawing ── */
-  private drawCell(row: DataRow, col: ColDef, x: number, y: number, w: number, h: number): void {
+  private drawCell(row: DataRow, col: ColDef, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
     const val = String(row[col.key] ?? '')
-    ctx.font = FONT; ctx.textBaseline = 'middle'
+    const cid = String(row._cid ?? '')
+
+    // Apply cell style (bgColor) for non-special types
+    if (col.type === 't' || col.type === 'long') {
+      const style = this.styleManager.getStyle(cid, col.key)
+      if (style?.bgColor) {
+        ctx.fillStyle = style.bgColor
+        ctx.fillRect(x, y, w, h)
+      }
+    }
+
+    // Build font string from style
+    const style = (col.type === 't' || col.type === 'long') ? this.styleManager.getStyle(cid, col.key) : undefined
+    const fontSize = style?.fontSize || 13
+    const bold = style?.bold ? 'bold ' : ''
+    const italic = style?.italic ? 'italic ' : ''
+    const customFont = (style?.fontSize || style?.bold || style?.italic)
+      ? `${italic}${bold}${fontSize}px -apple-system,"Segoe UI",sans-serif`
+      : FONT
+
+    ctx.font = customFont
+    ctx.textBaseline = 'middle'
     const ty = y + h / 2
 
     switch (col.type) {
       case 'idx':
-        ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'right'
-        ctx.fillText(val, x + w - 8, ty); ctx.textAlign = 'left'
+        this.drawCheckboxCell(row, x, y, w, h, rowIdx)
         break
       case 'photo':
         this.drawPhoto(row, x, y, w, h)
@@ -493,19 +673,51 @@ export class GridEngine {
         this.drawMailBtn(x, y, w, h)
         break
       case 'dropdown':
-        ctx.fillStyle = '#1e293b'
+        ctx.fillStyle = style?.color || '#1e293b'
         this.drawTruncated(val, x + 4, ty, w - 20)
         ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
-        ctx.fillText('▾', x + w - 14, ty); ctx.font = FONT
+        ctx.fillText('\u25BE', x + w - 14, ty); ctx.font = customFont
         break
       case 'long':
-        ctx.fillStyle = '#334155'
+        ctx.fillStyle = style?.color || '#334155'
         this.drawWrapped(val, x + 4, y + 4, w - 8, h - 8)
         break
       default:
-        ctx.fillStyle = '#1e293b'
+        ctx.fillStyle = style?.color || '#1e293b'
         this.drawTruncated(val, x + 4, ty, w - 8)
     }
+    ctx.font = FONT
+  }
+
+  /** Draw checkbox + row number in idx cell */
+  private drawCheckboxCell(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
+    const { ctx } = this
+    const isSelected = this.selection.isRowSelected(rowIdx)
+
+    // Checkbox
+    const cbX = x + CHECKBOX_PAD
+    const cbY = y + (h - CHECKBOX_SIZE) / 2
+    ctx.strokeStyle = isSelected ? '#3b82f6' : '#94a3b8'
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
+    if (isSelected) {
+      ctx.fillStyle = '#3b82f6'
+      ctx.fillRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
+      // Checkmark
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(cbX + 3, cbY + CHECKBOX_SIZE / 2)
+      ctx.lineTo(cbX + CHECKBOX_SIZE / 2 - 1, cbY + CHECKBOX_SIZE - 3)
+      ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
+      ctx.stroke()
+    }
+
+    // Row number
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+    ctx.fillText(String(row.id), x + w - 4, y + h / 2)
+    ctx.textAlign = 'left'; ctx.font = FONT
   }
 
   private drawTruncated(text: string, x: number, y: number, maxW: number): void {
@@ -513,8 +725,8 @@ export class GridEngine {
     if (!text || maxW <= 0) return
     if (ctx.measureText(text).width <= maxW) { ctx.fillText(text, x, y); return }
     let t = text
-    while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1)
-    ctx.fillText(t + '…', x, y)
+    while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1)
+    ctx.fillText(t + '\u2026', x, y)
   }
 
   private drawWrapped(text: string, x: number, y: number, maxW: number, maxH: number): void {
@@ -546,20 +758,19 @@ export class GridEngine {
   private drawPhoto(row: DataRow, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const url = String(row.photoUrl ?? '')
+    const ps = Math.min(Number(row.photoSize) || 50, Math.min(w, h) - 4)
     if (!url) {
       ctx.fillStyle = '#e2e8f0'
-      const sz = Math.min(w, h) - 8
-      ctx.fillRect(x + (w - sz) / 2, y + (h - sz) / 2, sz, sz)
+      ctx.fillRect(x + (w - ps) / 2, y + (h - ps) / 2, ps, ps)
       ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('📷', x + w / 2, y + h / 2)
+      ctx.fillText('\uD83D\uDCF7', x + w / 2, y + h / 2)
       ctx.font = FONT; ctx.textAlign = 'left'
       return
     }
     const cached = this.photoCache.get(url)
     if (cached) {
-      const sz = Math.min(w, h) - 6
-      try { ctx.drawImage(cached, x + (w - sz) / 2, y + (h - sz) / 2, sz, sz) } catch { /* */ }
+      try { ctx.drawImage(cached, x + (w - ps) / 2, y + (h - ps) / 2, ps, ps) } catch { /* */ }
     } else if (!this.photoLoading.has(url)) { this.loadPhoto(url) }
   }
 
@@ -601,7 +812,15 @@ export class GridEngine {
 
   private drawTags(val: string, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
-    if (!val) return
+    if (!val) {
+      // Draw "+" hint for empty tags
+      ctx.fillStyle = '#d1d5db'
+      ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText('+ 태그', x + w / 2, y + h / 2)
+      ctx.font = FONT; ctx.textAlign = 'left'
+      return
+    }
     let tx = x + 4
     const tagH = 18, ty = y + (h - tagH) / 2
     ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
@@ -626,7 +845,7 @@ export class GridEngine {
     ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1; this.roundRect(bx, by, bw, bh, 4); ctx.stroke()
     ctx.fillStyle = '#2563eb'; ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText('✉ 발송', bx + bw / 2, by + bh / 2)
+    ctx.fillText('\u2709 \uBC1C\uC1A1', bx + bw / 2, by + bh / 2)
     ctx.font = FONT; ctx.textAlign = 'left'
   }
 
@@ -673,14 +892,53 @@ export class GridEngine {
 
   private drawHeaderCell(col: ColDef, x: number, w: number): void {
     const { ctx } = this
+
+    // For idx column, draw header checkbox
+    if (col.type === 'idx') {
+      const isAll = this.selection.isAllSelected(this.rows.length)
+      const cbX = x + CHECKBOX_PAD
+      const cbY = (HEADER_H - CHECKBOX_SIZE) / 2
+      ctx.strokeStyle = isAll ? '#3b82f6' : '#94a3b8'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
+      if (isAll) {
+        ctx.fillStyle = '#3b82f6'
+        ctx.fillRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(cbX + 3, cbY + CHECKBOX_SIZE / 2)
+        ctx.lineTo(cbX + CHECKBOX_SIZE / 2 - 1, cbY + CHECKBOX_SIZE - 3)
+        ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
+        ctx.stroke()
+      }
+      // Label after checkbox
+      ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+      ctx.fillText(col.label, cbX + CHECKBOX_SIZE + 3, HEADER_H / 2)
+      // Border
+      ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
+      return
+    }
+
     ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-    this.drawTruncated(col.label, x + 6, HEADER_H / 2, w - 18)
+    this.drawTruncated(col.label, x + 6, HEADER_H / 2, w - 24)
+
+    // Sort arrow
     if (col.key === this.sortKey) {
       ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
-      ctx.fillText(this.sortDir === 'asc' ? '▲' : '▼', x + w - 6, HEADER_H / 2)
+      ctx.fillText(this.sortDir === 'asc' ? '\u25B2' : '\u25BC', x + w - 16, HEADER_H / 2)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
+
+    // Filter icon
+    if (col.type !== 'photo' && col.type !== 'mail') {
+      ctx.fillStyle = '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
+      ctx.fillText('\u25BC', x + w - 5, HEADER_H / 2)
+      ctx.font = HEADER_FONT; ctx.textAlign = 'left'
+    }
+
     ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
   }

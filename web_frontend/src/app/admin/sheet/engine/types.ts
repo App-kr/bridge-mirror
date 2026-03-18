@@ -64,7 +64,40 @@ export interface GridCallbacks {
   onPhotoClick: (rowIdx: number, row: DataRow) => void
   onMailClick: (rowIdx: number, row: DataRow) => void
   onStageChange: (rowIdx: number, stage: string) => void
+  onTagToggle: (rowIdx: number, tagKey: string) => void
+  onPhotoUpload: (rowIdx: number) => void
+  onPhotoWheel: (rowIdx: number, delta: number) => void
+  onHeaderCheckToggle: () => void
+  onAddRow: () => void
+  onFilterClick: (colKey: string, x: number, y: number) => void
+  onHeaderContextMenu: (e: MouseEvent, colKey: string) => void
 }
+
+export interface CellStyle {
+  fontSize?: number
+  color?: string
+  bgColor?: string
+  bold?: boolean
+  italic?: boolean
+}
+
+export interface MailTemplate {
+  key: string
+  label: string
+  s: string
+  b: string
+}
+
+export const MAIL_TEMPLATES: MailTemplate[] = [
+  { key: 'interview', label: 'Interview', s: '[BRIDGE] Interview', b: 'Dear {{name}},\n\nInterview arranged.\n\nBRIDGE' },
+  { key: 'contract', label: 'Contract', s: '[BRIDGE] Contract', b: 'Dear {{name}},\n\nContract attached.\n\nBRIDGE' },
+  { key: 'visa', label: 'Visa', s: '[BRIDGE] Visa Guide', b: 'Dear {{name}},\n\nVisa guide attached.\n\nBRIDGE' },
+  { key: 'settle', label: 'Settlement', s: '[BRIDGE] Settlement', b: 'Dear {{name}},\n\nSettlement guide.\n\nBRIDGE' },
+  { key: 'tax', label: 'Tax', s: '[BRIDGE] Tax Info', b: 'Dear {{name}},\n\nTax info.\n\nBRIDGE' },
+  { key: 'transfer', label: 'Transfer', s: '[BRIDGE] Transfer', b: 'Dear {{name}},\n\nTransfer guide.\n\nBRIDGE' },
+  { key: 'renewal', label: 'Renewal', s: '[BRIDGE] Renewal', b: 'Dear {{name}},\n\nRenewal info.\n\nBRIDGE' },
+  { key: 'custom', label: 'Write', s: '', b: '' },
+]
 
 /* ── Constants ── */
 export const HEADER_H = 32
@@ -101,11 +134,11 @@ export const MTAGS: MailTag[] = [
 
 export const H_OPTS = ['숙소제공', '월세제공', '보증+월세', '불필요', '자체']
 export const FEE_OPTS = ['선금완료', '잔금완료', '일시납완료', '연체중', '14일연체', '장기연체']
-export const PROC_OPTS = ['진행중', '완료', '보류', '취소', '무단이탈']
+export const PROC_OPTS = ['선금대기', '선금완료', '잔금대기', '잔금완료', '일시납대기', '일시납완료', '연체중', '장기연체', '특이사항']
 
 export function defaultCols(): ColDef[] {
   return [
-    { key: 'rowNum', label: '#', w: 42, type: 'idx', v: true },
+    { key: 'rowNum', label: '번호', w: 52, type: 'idx', v: true },
     { key: 'email', label: '메일', w: 190, type: 't', v: true },
     { key: 'name', label: '이름', w: 140, type: 't', v: true },
     { key: 'photo', label: '사진', w: 65, type: 'photo', v: true },

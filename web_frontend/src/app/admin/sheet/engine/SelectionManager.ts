@@ -62,6 +62,25 @@ export class SelectionManager {
     return this.selectedRows.size
   }
 
+  /** Select all rows */
+  selectAll(count: number): void {
+    this.selectedRows.clear()
+    for (let i = 0; i < count; i++) this.selectedRows.add(i)
+    this.anchorRow = 0
+  }
+
+  /** Check if all rows are selected */
+  isAllSelected(count: number): boolean {
+    return count > 0 && this.selectedRows.size === count
+  }
+
+  /** Toggle a single row (for checkbox click) */
+  toggleRow(row: number): void {
+    if (this.selectedRows.has(row)) this.selectedRows.delete(row)
+    else this.selectedRows.add(row)
+    this.anchorRow = row
+  }
+
   /** Move active cell with keyboard arrows */
   moveActive(dr: number, dc: number, maxRow: number, maxCol: number): void {
     if (!this.activeCell) {
