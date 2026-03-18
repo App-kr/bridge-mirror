@@ -450,3 +450,11 @@ Q:\Claudework\bridge base\
 - **변경 파일**: modules/keyword_researcher.py (신규), modules/keyword_manager.py, modules/main.py, config.json
 - **결과**: ✅ 완료 (로컬 커밋)
 n### 2026.03.17 07:34 — ClaudeBlog 자동화 완전 수정n- **내용**: 인용구 탈출(Escape+Tab×2), 스케줄 시간→날짜 순서, 제목 입력 안정화n- **변경 파일**: modules/naver_uploader.py, modules/content_generator.pyn- **결과**: ✅ 완료 — 실제 발행 성공 확인 (원어민강사 채용, 2026-03-18 09:30 예약)n- **해결된 이슈**: 인용구 in_quote=False 5개, 스케줄 시간먼저 설정 성공
+
+
+### 2026.03.18 18:00 — ClaudeBlog rules/ 구조화 + inject_draft.py v6.6 개선
+- **내용**: CLAUDE.md 신버전(rules/ 인덱스) 교체 / rules/ 폴더 4개 파일 생성 / inject_draft.py [IMG_1~6][QUOTE] 마커 구조 개선
+- **변경 파일**: CLAUDE.md, rules/BLOG_RULES.md, rules/PROMPT_V6.md, rules/EDITOR_STEPS.md, rules/API_CONFIG.md, inject_draft.py
+- **결과**: 완료 (2017자 v6.6 준수 / 마커 전 구간 포함 / 마침표 0건)
+- **dry run**: 파이프라인 정상 / Top키워드: 원어민강사구인하는방법
+- **DB 수호자**: candidates=3059 | employers=1227 | jobs=1072 | integrity=ok

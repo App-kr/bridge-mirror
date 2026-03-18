@@ -28,7 +28,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event user_prompt"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event user_prompt"
         }
       ]
     }
@@ -59,7 +59,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event post_tool"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event post_tool"
         }
       ]
     }
@@ -79,7 +79,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event stop"
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event stop"
         }
       ]
     }

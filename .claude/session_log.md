@@ -9,14 +9,13 @@
 - 프로필 빌더 설계서 DB 컬럼 대조 점검
 
 미완료:
-- apps_script_skeleton.js 오류 수정 반영 (파일 미수정)
 - Apps Script 구글 시트 실제 설치 (수동 작업 필요)
 - 프로필 메일 빌더 API/UI 구현 (api_server.py + mail-send/page.tsx)
 
 주의:
 - DB에 sheet_number, korea_experience 컬럼 없음 → 구현 전 ALTER TABLE 선행
 - marital → married / personal → personal_consideration (컬럼명 불일치)
-- apps_script_skeleton.js 버그 4개는 e7d0977에서 이미 수정됨, 나머지 3개 미수정
+- apps_script_skeleton.js: FIX-1~6 전체 수정 완료 (210633d)
 
 ---
 날짜: 2026-03-18 (오전 세션, 09:00~14:40)

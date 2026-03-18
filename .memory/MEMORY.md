@@ -47,6 +47,7 @@
 | [design-system.md](design-system.md) | UI 디자인 규칙 | 2026-02-28 |
 | [deployment.md](deployment.md) | 배포 설정 | 2026-02-28 |
 | [blog-gemini-prompt-v6.6.md](blog-gemini-prompt-v6.6.md) | 블로그 마스터 규칙 v6.6 **최신** | 2026-03-18 |
+| [blog-automation.md](blog-automation.md) | ClaudeBlog 자동화 전체 기술 레퍼런스 (**환각 방지**) | 2026-03-18 |
 
 ---
 
