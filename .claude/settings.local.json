@@ -648,7 +648,9 @@
       "Bash(do git show $hash --name-only --no-color)",
       "Bash(\"Q:\\\\Claudework\\\\ClaudeBlog\\\\.venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nwith open\\(r''Q:\\\\Claudework\\\\bridge base\\\\.claude\\\\settings.json'', encoding=''utf-8''\\) as f:\n    raw = f.read\\(\\)\n\n# Stop 섹션 전체 출력\ns = json.loads\\(raw\\)\nimport pprint\npprint.pprint\\(s.get\\(''Stop'', []\\)\\)\n\")",
       "Bash(\"Q:\\\\Claudework\\\\ClaudeBlog\\\\.venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nwith open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\config.json'', encoding=''utf-8''\\) as f:\n    c = json.load\\(f\\)\nprint\\(''현재 모델:'', c[''api''].get\\(''gemini_model''\\)\\)\n\")",
-      "Bash(\"Q:\\\\Claudework\\\\ClaudeBlog\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import json; f=open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\config.json'',encoding=''utf-8''\\); c=json.load\\(f\\); print\\(c[''api''].get\\(''gemini_model''\\)\\)\")"
+      "Bash(\"Q:\\\\Claudework\\\\ClaudeBlog\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import json; f=open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\config.json'',encoding=''utf-8''\\); c=json.load\\(f\\); print\\(c[''api''].get\\(''gemini_model''\\)\\)\")",
+      "Bash(\"Q:\\\\Claudework\\\\ClaudeBlog\\\\.venv\\\\Scripts\\\\python.exe\" -c \"\nimport json\nwith open\\(r''Q:\\\\Claudework\\\\ClaudeBlog\\\\config.json'', encoding=''utf-8''\\) as f:\n    c = json.load\\(f\\)\nkeys = c[''api''].get\\(''gemini_api_keys'', []\\)\nfor k in keys:\n    print\\(k.get\\(''name''\\), '':'', k.get\\(''key'',''''\\)[:20]+''...''\\)\n\")",
+      "Bash(\"C:\\\\Users\\\\Scarlett\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" \"Q:\\\\Claudework\\\\claude 뷰컨트롤\\\\bridge_monitor_server_v3.py\")"
     ]
   }
 }
