@@ -22,6 +22,15 @@
           "command": "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"Q:\\Claudework\\bridge base\\tools\\start-backup-daemon.ps1\""
         }
       ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event user_prompt"
+        }
+      ]
     }
   ],
   "PreToolUse": [
@@ -44,6 +53,15 @@
           "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\post_hook.bat\""
         }
       ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event post_tool"
+        }
+      ]
     }
   ],
   "Stop": [
@@ -53,6 +71,15 @@
         {
           "type": "command",
           "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\stop_hook.bat\""
+        }
+      ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"Q:\\Claudework\\bridge base\\tools\\bridge_memory.py\" --event stop"
         }
       ]
     }
