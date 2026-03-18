@@ -153,6 +153,25 @@ rm -rf web_frontend/.next && cd web_frontend && npm run build
 - **배너 링크**: JS click → ActionChains click + `button[data-name='link']` 광범위 탐색
 - **예약 날짜**: `days_ahead: 2` (2일 후) + React nativeInputValueSetter 날짜 주입
 
+## 구글시트 자동화 작업 (2026-03-17 준비 완료 — 내일 Opus 실행)
+- **스프레드시트 ID**: `1PveCbB7yfPhsmV-YwERf2PjoaKtXJmB0uJngu1dhTxM`
+- **탭 이름**: New, Client, Source, Form, 정리24, 정리25, Note, 선물
+- **New 시트**: 헤더 2행, 데이터 3행부터, D열=번호
+- **번호 체계**: 현재 최고 5583, 신규는 **10001부터 5자리**
+- **Source 시트**: 구글폼 원본 38컬럼 (타임스탬프~메모)
+- **브리핑 파일**: `웹빌드_자료/OPUS_브리핑_내일작업.md`
+- **Apps Script 스켈레톤**: `웹빌드_자료/apps_script_skeleton.js`
+- **작업**: onFormSubmit → New 자동매핑 + 5자리번호 + 프로필메일빌더
+
+## Bridge 전체 업무 흐름 (2026-03-17 완전 파악)
+- **구직자**: 구글폼 → Source 시트 → New 시트 정리 → 이력서 PII 삭제 → 파일명 변환
+- **파일 규칙**: `번호_성별_국적(00born).pdf` | 남아공 강사만 영상 제출(1분 편집+로고+번호)
+- **PII 삭제**: 한국 5년내 실제 직장명 삭제→학원/학교+지역만. 해외 직장은 유지
+- **구인자**: 구글폼→이메일→워드파일(Job.XXXX) + Client 시트 + 지역별시트 (2개 수기)
+- **매칭 메일**: 사진+번호+국적+선호지역+급여+리크루터노트 (1~99명/일 발송)
+- **업체진행메모**: `업체코드 S번호` 형식 (두X S5569, 대치DEP S5513)
+- **샘플파일**: `Q:\Claudework\bridge base\웹빌드_자료\`
+
 ## ClaudeBlog 개선 필요 사항 (2026-03-17 확정)
 - **가운데 정렬**: 글 전체 가운데 정렬 필요 — 작성 완료 후 Ctrl+A → Ctrl+E 적용
 - **서론 우선**: 본문에서 사진 삽입 전 반드시 서론(서론) 텍스트 먼저 입력
