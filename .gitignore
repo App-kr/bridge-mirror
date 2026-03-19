@@ -86,6 +86,7 @@ bridge-overnight/
 
 # ── Security Keys ────────────────────────────────────────────
 .bridge.key
+vault/data/
 mail_log_*.json
 
 # ── Archive (large test data, old files) ─────────────────────
