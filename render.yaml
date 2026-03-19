@@ -34,6 +34,10 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
+      - key: NAVER_SMTP_USER
+        value: bridgejobkr@naver.com
+      - key: NAVER_SMTP_PASS
+        sync: false
     disk:
       name: bridge-data
       mountPath: /data

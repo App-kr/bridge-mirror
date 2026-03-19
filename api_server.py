@@ -6636,6 +6636,7 @@ _EMPLOYER_ENC_FIELDS = {"email", "phone", "memo"}
 @app.get("/api/employers", tags=["employers"])
 async def get_employers(request: Request):
     """구인자 전체 목록 반환 (PII 복호화 포함)."""
+    _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
@@ -6667,6 +6668,7 @@ async def get_employers(request: Request):
 @app.post("/api/employers", tags=["employers"])
 async def create_employer(request: Request):
     """구인자 신규 등록."""
+    _check_admin(request)
     data = await request.json()
     jn = data.get("jNumber", "").strip()
     if not jn:
@@ -6703,6 +6705,7 @@ async def create_employer(request: Request):
 @app.patch("/api/employers/{jNumber}", tags=["employers"])
 async def update_employer(jNumber: str, request: Request):
     """구인자 정보 수정."""
+    _check_admin(request)
     data = await request.json()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -6748,8 +6751,9 @@ async def update_employer(jNumber: str, request: Request):
 
 
 @app.delete("/api/employers/{jNumber}", tags=["employers"])
-async def delete_employer(jNumber: str):
+async def delete_employer(jNumber: str, request: Request):
     """구인자 논리 삭제 (is_deleted=1)."""
+    _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -6766,6 +6770,7 @@ async def delete_employer(jNumber: str):
 @app.post("/api/send-mail", tags=["mail"])
 async def send_mail_single(request: Request):
     """MailComposer(구인자관리)에서 단건 발송 — Naver/Gmail 자동 분기."""
+    _check_admin(request)
     data = await request.json()
     to_email: str = data.get("to", "").strip()
     subject: str = data.get("subject", "").strip()
