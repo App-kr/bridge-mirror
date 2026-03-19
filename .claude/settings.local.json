@@ -680,7 +680,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.gpters.org)",
       "WebFetch(domain:velog.io)",
-      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"canvas-ui-fixes\" --type pre-task)"
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"canvas-ui-fixes\" --type pre-task)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"Sheet-TagPopup-4수정\" --type pre-task)"
     ]
   }
 }
