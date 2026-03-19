@@ -86,6 +86,7 @@ bridge-overnight/
 
 # ── Security Keys ────────────────────────────────────────────
 .bridge.key
+.bx/
 vault/data/
 mail_log_*.json
 
