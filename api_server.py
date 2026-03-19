@@ -577,8 +577,26 @@ def ok(data=None, message: str = "ok"):
     return {"success": True, "message": message, "data": _sanitize_data(data)}
 
 
-def err(message: str, code: int = 400):
-    raise HTTPException(status_code=code, detail=message)
+def err(message: str, code: int = 400, error_code: str = ""):
+    """구조화 에러 — HTTPException에 error_code 포함."""
+    raise HTTPException(
+        status_code=code,
+        detail={"message": message, "error_code": error_code or _http_to_error_code(code)},
+    )
+
+
+def _http_to_error_code(status: int) -> str:
+    """HTTP 상태 코드 → 에이전트 재시도 판단용 에러 코드."""
+    return {
+        400: "VALIDATION_ERROR",
+        401: "AUTH_FAILED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        409: "CONFLICT",
+        429: "RATE_LIMITED",
+        500: "SERVER_ERROR",
+        503: "SERVICE_UNAVAILABLE",
+    }.get(status, "UNKNOWN_ERROR")
 
 
 # ── 라우트 ────────────────────────────────────────────────────────────────────
@@ -989,13 +1007,37 @@ async def inquiry(request: Request, body: ClientInquiry):
 
 
 # ── 전역 예외 처리 ─────────────────────────────────────────────────────────────
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """모든 HTTPException → 통일된 구조 {"success", "error", "data"}."""
+    detail = exc.detail
+    if isinstance(detail, dict):
+        msg = detail.get("message", str(detail))
+        code = detail.get("error_code", _http_to_error_code(exc.status_code))
+    else:
+        msg = str(detail)
+        code = _http_to_error_code(exc.status_code)
+    return SafeJSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {"code": code, "message": msg, "status": exc.status_code},
+            "data": None,
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import logging as _logging
     _logging.getLogger("bridge.api").error("Unhandled exception: %s", exc, exc_info=True)
     return SafeJSONResponse(
         status_code=500,
-        content={"success": False, "message": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."},
+        content={
+            "success": False,
+            "error": {"code": "SERVER_ERROR", "message": "서버 오류가 발생했습니다.", "status": 500},
+            "data": None,
+        },
     )
 
 
