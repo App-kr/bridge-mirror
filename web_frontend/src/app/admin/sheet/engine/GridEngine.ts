@@ -581,7 +581,13 @@ export class GridEngine {
       return
     }
 
+    // 열 헤더 클릭: 전체 행 선택 + active cell을 해당 열로 설정
+    // → 이후 색/서식 적용 시 전체 열에 반영됨
+    this.selection.selectAll(this.rows.length)
+    this.selection.selectCell(0, hit.visCol)
+    this.cb.onSelectionChange(this.selection.getSelectedRows())
     this.cb.onSort(col.key)
+    this.requestRender()
   }
 
   private onHeaderContextMenu = (e: MouseEvent): void => {

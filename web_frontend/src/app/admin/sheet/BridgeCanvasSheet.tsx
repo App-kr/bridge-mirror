@@ -279,7 +279,7 @@ export default function BridgeCanvasSheet() {
     return () => document.removeEventListener('keydown', h)
   }, [undo, redo])
 
-  /* ── Clipboard paste (image) ── */
+  /* ── Clipboard paste (image) — 사진 칸 캡쳐 붙여넣기 ── */
   useEffect(() => {
     const h = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items
@@ -289,8 +289,11 @@ export default function BridgeCanvasSheet() {
           e.preventDefault()
           const blob = item.getAsFile()
           if (!blob) return
-          const targetIdx = [...selectedRows][0]
-          if (targetIdx === undefined) return
+          // active cell 우선, 없으면 첫 번째 선택 행
+          const engine = engineRef.current
+          const ac = engine?.selection.getActiveCell()
+          const targetIdx = ac?.row ?? [...selectedRows][0]
+          if (targetIdx === undefined || targetIdx < 0) return
           const targetRow = displayRowsRef.current[targetIdx]
           if (!targetRow) return
           const cid = String(targetRow._cid ?? '')
@@ -727,7 +730,7 @@ export default function BridgeCanvasSheet() {
             }}
           />
           <span style={{ position: 'absolute', left: 7, top: '50%', transform: 'translateY(-50%)', color: '#666', fontSize: 13 }}>
-            \uD83D\uDD0D
+            🔍
           </span>
         </div>
 
@@ -737,8 +740,8 @@ export default function BridgeCanvasSheet() {
             : <span>{dbAll.length.toLocaleString()} / {dbTotal.toLocaleString()}건</span>
           }
         </span>
-        {lastSync && <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}> \xB7 {lastSync}</span>}
-        {newCount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}> \xB7 신규 {newCount}</span>}
+        {lastSync && <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}> · {lastSync}</span>}
+        {newCount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}> · 신규 {newCount}</span>}
 
         <div style={{ flex: 1 }} />
 
@@ -758,20 +761,20 @@ export default function BridgeCanvasSheet() {
               }}
               style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}
             >
-              \u2709 메일 발송
+              ✉ 메일 발송
             </button>
           </div>
         )}
 
         <button onClick={addNewRow} style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}>
-          \uD83D\uDC64+ 신규
+          👤+ 신규
         </button>
-        <button onClick={fullReload} style={tbBtn} title="새로고침">\u21BB 새로고침</button>
-        <button onClick={undo} style={tbBtn} title="실행취소 (Ctrl+Z)">\u2936 되돌리기</button>
-        <button onClick={redo} style={tbBtn} title="다시실행 (Ctrl+Y)">\u293B 다시</button>
-        <button onClick={exportCsv} style={tbBtn} title="CSV 내보내기">\uD83D\uDCCA CSV</button>
+        <button onClick={fullReload} style={tbBtn} title="새로고침">↻ 새로고침</button>
+        <button onClick={undo} style={tbBtn} title="실행취소 (Ctrl+Z)">↩ 되돌리기</button>
+        <button onClick={redo} style={tbBtn} title="다시실행 (Ctrl+Y)">↪ 다시</button>
+        <button onClick={exportCsv} style={tbBtn} title="CSV 내보내기">📊 CSV</button>
         <button onClick={() => setFrozenCols(p => p === 0 ? 3 : 0)} style={tbBtn} title="고정열 토글">
-          {frozenCols > 0 ? '\uD83D\uDD12 고정' : '\uD83D\uDD13 해제'}
+          {frozenCols > 0 ? '🔒 고정' : '🔓 해제'}
         </button>
         {hiddenCount > 0 && (
           <button onClick={showAllCols} style={{ ...tbBtn, borderColor: '#06b6d4', color: '#0e7490' }}>
@@ -791,7 +794,7 @@ export default function BridgeCanvasSheet() {
         </select>
 
         <button onClick={() => setShowStyleBar(p => !p)} style={tbBtn} title="서식 도구바 토글">
-          {showStyleBar ? '\uD83C\uDFA8 서식' : '\uD83C\uDFA8'}
+          {showStyleBar ? '🎨 서식' : '🎨'}
         </button>
       </div>
 
@@ -854,7 +857,7 @@ export default function BridgeCanvasSheet() {
               onClick={e => { e.stopPropagation(); setColorPicker(p => p === 'bg' ? null : 'bg') }}
               style={{ ...styleTbBtn, background: '#fef9c3' }}
               title="배경색"
-            >\u2B1B</button>
+            >⬛</button>
             {colorPicker === 'bg' && (
               <div onClick={e => e.stopPropagation()} style={paletteStyle}>
                 {PALETTE.map(c => (
@@ -877,11 +880,12 @@ export default function BridgeCanvasSheet() {
       }}>
         {TABS.map(t => {
           const active = tab === t.key
+          const inactiveBg = t.bg + '55'  // 탭 비활성: 옅은 파스텔 (33% 투명도)
           return (
             <button key={t.key} onClick={() => { setTab(t.key); setSelectedRows(new Set()); setFilters({}) }} style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 700,
               color: active ? t.color : '#555',
-              background: active ? t.bg : 'transparent',
+              background: active ? t.bg : inactiveBg,
               border: 'none', borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
               cursor: 'pointer',
             }}>
@@ -930,17 +934,17 @@ export default function BridgeCanvasSheet() {
           }}
           onClick={e => e.stopPropagation()}
         >
-          <CtxItem label="\u2709 메일 발송" onClick={() => ctxAction('mail')} />
-          <CtxItem label="\uD83D\uDCCB 행 복사" onClick={() => ctxAction('copy_row')} />
-          <CtxItem label="\uD83D\uDCE7 이메일 복사" onClick={() => ctxAction('copy_email')} />
+          <CtxItem label="✉ 메일 발송" onClick={() => ctxAction('mail')} />
+          <CtxItem label="📋 행 복사" onClick={() => ctxAction('copy_row')} />
+          <CtxItem label="📧 이메일 복사" onClick={() => ctxAction('copy_email')} />
           <CtxItem label="+ 아래 행 추가" onClick={() => ctxAction('add_row')} />
           <div style={{ height: 1, background: '#e5e7eb', margin: '3px 0' }} />
-          <CtxItem label="\uD83D\uDC64 구직활동중으로" onClick={() => ctxAction('to_active')} />
-          <CtxItem label="\u2705 체결완료로" onClick={() => ctxAction('to_past')} />
-          <CtxItem label="\u26D4 블랙리스트로" onClick={() => ctxAction('to_blacklist')} />
+          <CtxItem label="👤 구직활동중으로" onClick={() => ctxAction('to_active')} />
+          <CtxItem label="✅ 체결완료로" onClick={() => ctxAction('to_past')} />
+          <CtxItem label="⛔ 블랙리스트로" onClick={() => ctxAction('to_blacklist')} />
           <div style={{ height: 1, background: '#e5e7eb', margin: '3px 0' }} />
           {STAGES.filter(s => s.key !== 'none').map(s => (
-            <CtxItem key={s.key} label={`\u2192 ${s.label}`} onClick={() => {
+            <CtxItem key={s.key} label={`→ ${s.label}`} onClick={() => {
               const cid = String(ctx.row._cid ?? '')
               pushHistory()
               setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, stage: s.key } : r))
@@ -1005,9 +1009,9 @@ export default function BridgeCanvasSheet() {
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 170,
           }}
         >
-          <CtxItem label="\uD83D\uDC41 컬럼 숨기기" onClick={() => toggleColVisibility(headerMenu.colKey)} />
+          <CtxItem label="👁 컬럼 숨기기" onClick={() => toggleColVisibility(headerMenu.colKey)} />
           {hiddenCount > 0 && (
-            <CtxItem label="\uD83D\uDC41 숨긴 열 모두 표시" onClick={() => { showAllCols(); setHeaderMenu(null) }} />
+            <CtxItem label="👁 숨긴 열 모두 표시" onClick={() => { showAllCols(); setHeaderMenu(null) }} />
           )}
         </div>
       )}
