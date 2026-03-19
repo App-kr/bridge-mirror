@@ -6579,6 +6579,178 @@ async def get_mail_templates(request: Request):
     return ok(data={"templates": templates})
 
 
+# ── 구인자 관리 (employers) CRUD ──────────────────────────────────────────────
+_EMPLOYER_ENC_FIELDS = {"email", "phone", "memo"}
+
+
+@app.get("/api/employers", tags=["employers"])
+async def get_employers(request: Request):
+    """구인자 전체 목록 반환 (PII 복호화 포함)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT * FROM employers WHERE is_deleted = 0 ORDER BY createdAt DESC"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # PII 복호화
+            for f in _EMPLOYER_ENC_FIELDS:
+                d[f] = _safe_decrypt(d.get(f)) or ""
+            # JSON 파싱
+            for jf in ("emails", "tags"):
+                try:
+                    d[jf] = _json.loads(d.get(jf) or "[]")
+                except Exception:
+                    d[jf] = []
+            # bool 변환
+            for bf in ("blacklist", "active", "isNew", "confirmed"):
+                d[bf] = bool(d.get(bf, 0))
+            result.append(d)
+        return result
+    finally:
+        conn.close()
+
+
+@app.post("/api/employers", tags=["employers"])
+async def create_employer(request: Request):
+    """구인자 신규 등록."""
+    data = await request.json()
+    jn = data.get("jNumber", "").strip()
+    if not jn:
+        raise HTTPException(status_code=400, detail="jNumber 필수")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = {}
+        for k, v in data.items():
+            if k in _EMPLOYER_ENC_FIELDS and v:
+                row[k] = _encrypt_if_needed(v)
+            elif k in ("emails", "tags") and isinstance(v, list):
+                row[k] = _json.dumps(v, ensure_ascii=False)
+            elif isinstance(v, bool):
+                row[k] = int(v)
+            else:
+                row[k] = v
+
+        cols = list(row.keys())
+        placeholders = ",".join(["?"] * len(cols))
+        conn.execute(
+            f"INSERT INTO employers ({','.join(cols)}) VALUES ({placeholders})",
+            [row[c] for c in cols],
+        )
+        conn.commit()
+        return {"ok": True, "jNumber": jn}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="이미 존재하는 구인번호")
+    finally:
+        conn.close()
+
+
+@app.patch("/api/employers/{jNumber}", tags=["employers"])
+async def update_employer(jNumber: str, request: Request):
+    """구인자 정보 수정."""
+    data = await request.json()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        sets = []
+        vals = []
+        for k, v in data.items():
+            if k == "jNumber":
+                continue  # PK는 별도 처리
+            if k in _EMPLOYER_ENC_FIELDS and v:
+                sets.append(f"{k} = ?")
+                vals.append(_encrypt_if_needed(v))
+            elif k in ("emails", "tags") and isinstance(v, list):
+                sets.append(f"{k} = ?")
+                vals.append(_json.dumps(v, ensure_ascii=False))
+            elif isinstance(v, bool):
+                sets.append(f"{k} = ?")
+                vals.append(int(v))
+            else:
+                sets.append(f"{k} = ?")
+                vals.append(v)
+
+        if not sets:
+            return {"ok": True}
+
+        vals.append(jNumber)
+        conn.execute(
+            f"UPDATE employers SET {','.join(sets)} WHERE jNumber = ?", vals
+        )
+
+        # jNumber 변경 요청 시
+        new_jn = data.get("jNumber")
+        if new_jn and new_jn != jNumber:
+            conn.execute(
+                "UPDATE employers SET jNumber = ? WHERE jNumber = ?",
+                (new_jn, jNumber),
+            )
+
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/employers/{jNumber}", tags=["employers"])
+async def delete_employer(jNumber: str):
+    """구인자 논리 삭제 (is_deleted=1)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            "UPDATE employers SET is_deleted = 1 WHERE jNumber = ?", (jNumber,)
+        )
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+# ── 구인자 메일 단건 발송 (/api/send-mail) ────────────────────────────────────
+@app.post("/api/send-mail", tags=["mail"])
+async def send_mail_single(request: Request):
+    """MailComposer(구인자관리)에서 단건 발송 — Naver/Gmail 자동 분기."""
+    data = await request.json()
+    to_email: str = data.get("to", "").strip()
+    subject: str = data.get("subject", "").strip()
+    html_body: str = data.get("html", data.get("body", ""))
+    sender: str = data.get("from", data.get("from_", "bridgejobkr@naver.com"))
+
+    if not to_email or not subject:
+        raise HTTPException(status_code=400, detail="to, subject 필수")
+
+    smtp_key = "naver" if "naver" in sender.lower() else "gmail"
+    cfg = SMTP_CONFIG[smtp_key]
+    if not cfg["user"] or not cfg["password"]:
+        raise HTTPException(status_code=503, detail=f"{smtp_key.upper()} SMTP 미설정")
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"BRIDGE Recruitment <{cfg['user']}>"
+        msg["To"] = to_email
+        msg["Reply-To"] = "bridgejobkr@gmail.com"
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
+        server.starttls()
+        server.login(cfg["user"], cfg["password"])
+        server.sendmail(cfg["user"], [to_email], msg.as_string())
+        server.quit()
+
+        return {"ok": True, "to": to_email}
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=401, detail="SMTP 인증 실패")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
 try:
     from inbox_api import router as inbox_router
