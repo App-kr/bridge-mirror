@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-19 (21:35)
+최근 업데이트: 2026-03-20 (21:35)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,13 @@
 
 ## 현재 진행 중인 작업
 없음 (세션 종료)
+
+## 2026-03-20 세션 완료 (EmployerManagement 기능 머지)
+- feat(DocBlock): Job번호·업체명 더블클릭 인라인 편집 (onEditJobCode / onEditName 콜백)
+- feat(DocBlock): 이메일 클릭 → 메일 팝업 자동 오픈 (onOpenMail 콜백)
+- feat(MailComposer): 헤더 드래그로 팝업 위치 이동 (dragPos state + mousemove)
+- feat(ExcelView): 열 문자 헤더(A/B/C) + 행 번호(1/2/3) 추가
+- EmployerManagement: 위 3개 콜백 DocBlock에 연결, 빌드 에러 0개
 
 ## 2026-03-19 저녁 세션 완료 (ClaudeBlog API 오류 수정)
 - fix(content_generator): Gemini 키 고갈 오류 근본 수정

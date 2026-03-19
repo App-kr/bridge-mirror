@@ -245,6 +245,42 @@ select.adv-select:focus { border-color: #555; }
 .pa-btn.dl:hover   { background: #236038; color: #9ae6b4; }
 .pa-btn.ig   { background: #2d1b69; color: #b794f4; }
 .pa-btn.ig:hover   { background: #44337a; color: #d6bcfa; }
+.pa-btn.gen-img { background: linear-gradient(135deg,#065f46,#047857); color: #6ee7b7; font-weight: 800; }
+.pa-btn.gen-img:hover { background: linear-gradient(135deg,#047857,#059669); color: #a7f3d0; }
+.pa-btn.gen-img.loading { opacity:.55; pointer-events:none; }
+.pa-btn.gen-img.loading::after { content:" ..."; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+
+/* Image preview gallery */
+.img-gallery {
+  display: flex; gap: 8px; padding: 12px 16px;
+  background: #0a0a0a; border-bottom: 1px solid #1a1a1a;
+  overflow-x: auto;
+}
+.img-gallery img {
+  height: 180px; border-radius: 8px; cursor: pointer;
+  border: 2px solid #222; transition: border-color .15s, transform .15s;
+  object-fit: cover;
+}
+.img-gallery img:hover { border-color: #4ade80; transform: scale(1.03); }
+.img-gallery-info {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px; background: #0a0a0a;
+  font-size: 12px; color: #666; border-bottom: 1px solid #1a1a1a;
+}
+.img-gallery-info .folder-link {
+  color: #4ade80; cursor: pointer; text-decoration: underline;
+  font-weight: 600;
+}
+.img-gallery-info .folder-link:hover { color: #86efac; }
+
+/* Server status indicator */
+.server-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 6px;
+}
+.server-dot.online { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
+.server-dot.offline { background: #ef4444; }
 
 /* Card body — two column */
 .pcard-body { display: flex; border-bottom: 1px solid #1a1a1a; }
@@ -415,7 +451,7 @@ select.adv-select:focus { border-color: #555; }
     <span class="topbar-label">Prompts</span>
     <span class="topbar-badge" id="topCount">0</span>
     <div class="topbar-spacer"></div>
-    <span class="topbar-hint">Copy prompt → paste into image AI</span>
+    <span class="topbar-hint" id="serverStatus"><span class="server-dot offline" id="serverDot"></span>Server offline</span>
   </div>
   <div class="output" id="output">
     <div class="empty-state" id="emptyState">
@@ -1462,6 +1498,7 @@ function renderAll(){
         <span class="badge ${p.target}">${p.targetLabel}</span>
         <div class="pcard-actions">
           <button class="pa-btn copy-btn" id="cp${i}" onclick="copyOne(this,${i})">Copy</button>
+          <button class="pa-btn gen-img" id="gi${i}" onclick="genImage(this,${i})">사진 생성</button>
           <button class="pa-btn fx" onclick="openSvc('fx',${i})">ImageFX</button>
           <button class="pa-btn dl" onclick="openSvc('dl',${i})">DALL·E</button>
           <button class="pa-btn ig" onclick="openSvc('ig',${i})">Ideogram</button>
@@ -1556,6 +1593,124 @@ function toast(msg){
 }
 
 // ============================================================
+// IMAGE GENERATION (Imagen 3 via local server)
+// ============================================================
+const API_BASE = 'http://localhost:8765';
+let serverOnline = false;
+
+async function checkServer() {
+  try {
+    const r = await fetch(API_BASE + '/api/status', { signal: AbortSignal.timeout(2000) });
+    const d = await r.json();
+    serverOnline = d.ok && d.key_set;
+    const dot = document.getElementById('serverDot');
+    const stat = document.getElementById('serverStatus');
+    if (serverOnline) {
+      dot.className = 'server-dot online';
+      stat.innerHTML = '<span class="server-dot online" id="serverDot"></span>FLUX.1 Ready';
+    } else {
+      dot.className = 'server-dot offline';
+      stat.innerHTML = '<span class="server-dot offline" id="serverDot"></span>Server offline';
+    }
+  } catch {
+    serverOnline = false;
+    const dot = document.getElementById('serverDot');
+    if (dot) dot.className = 'server-dot offline';
+    const stat = document.getElementById('serverStatus');
+    if (stat) stat.innerHTML = '<span class="server-dot offline" id="serverDot"></span>Server offline';
+  }
+}
+
+async function genImage(btn, i) {
+  if (!serverOnline) {
+    toast('서버 미실행 — bridge_imagefx.py를 먼저 실행하세요');
+    return;
+  }
+  if (!prompts[i]) return;
+
+  btn.classList.add('loading');
+  btn.textContent = '생성 중';
+
+  try {
+    const r = await fetch(API_BASE + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompts[i].text, count: 3 }),
+    });
+    const d = await r.json();
+
+    if (d.ok) {
+      btn.textContent = d.count + '장 완료';
+      btn.classList.remove('loading');
+      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
+      // 이미지 프리뷰 삽입
+      showImagePreview(i, d);
+      toast(d.count + '장 저장 완료 → ' + d.folder.split('/').pop());
+    } else {
+      btn.textContent = '실패';
+      btn.classList.remove('loading');
+      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
+      toast('생성 실패: ' + (d.error || '알 수 없는 오류'));
+    }
+  } catch (e) {
+    btn.textContent = '오류';
+    btn.classList.remove('loading');
+    setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
+    toast('서버 연결 실패');
+  }
+}
+
+function showImagePreview(i, data) {
+  const card = document.querySelectorAll('.pcard')[i];
+  if (!card) return;
+
+  // 기존 프리뷰 제거
+  const old = card.querySelector('.img-gallery');
+  if (old) old.remove();
+  const oldInfo = card.querySelector('.img-gallery-info');
+  if (oldInfo) oldInfo.remove();
+
+  // 이미지 갤러리
+  const gallery = document.createElement('div');
+  gallery.className = 'img-gallery';
+  data.images.forEach(img => {
+    const el = document.createElement('img');
+    el.src = 'data:image/png;base64,' + img.base64_thumb;
+    el.title = img.filename + ' (' + img.size_kb + 'KB)';
+    el.onclick = () => window.open(API_BASE + '/generated_images/' + data.folder.split('/').pop() + '/' + img.filename, '_blank');
+    gallery.appendChild(el);
+  });
+
+  // 폴더 정보
+  const info = document.createElement('div');
+  info.className = 'img-gallery-info';
+  info.innerHTML = data.count + '장 저장 · <span class="folder-link" onclick="openFolder(\'' + data.folder.replace(/'/g, "\\'") + '\')">' + data.folder.split('/').pop() + '</span>';
+
+  // body 뒤에 삽입
+  const body = card.querySelector('.pcard-body');
+  if (body) {
+    body.after(info);
+    info.after(gallery);
+  } else {
+    card.appendChild(info);
+    card.appendChild(gallery);
+  }
+}
+
+async function openFolder(folder) {
+  try {
+    await fetch(API_BASE + '/api/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder }),
+    });
+  } catch { /* ignore */ }
+}
+
+// 5초마다 서버 상태 체크
+setInterval(checkServer, 5000);
+
+// ============================================================
 // INIT
 // ============================================================
 function init(){
@@ -1575,6 +1730,7 @@ function init(){
     STUDENTS_EARLY,STUDENTS_MIDDLE,BOKEH,CAMERAS,COMPOSITION,GRADES,
     PROPS,SEASONS,MOODS,QUALITY].reduce((s,a)=>s+a.length,0);
   document.getElementById('s-rules').textContent=total;
+  checkServer();
 }
 init();
 </script>
