@@ -384,35 +384,16 @@ export class GridEngine {
       return
     }
 
-    // Tag toggle click
+    // Tag cell click → 팝업으로 위임 (롤선택 방식)
     if (col && col.type === 'tags') {
       const row = this.rows[hit.row]
       if (row) {
-        const tagKey = this.hitTag(String(row.mailStatus ?? ''), hit.localX)
-        if (tagKey) {
-          this.cb.onTagToggle(hit.row, tagKey)
-          this.requestRender()
-          return
-        }
-        const allTags = String(row.mailStatus ?? '').split(',').filter(Boolean)
-        let endX = 4
-        this.ctx.save()
-        this.ctx.font = '10px -apple-system,"Segoe UI",sans-serif'
-        for (const k of allTags) {
-          const tag = MTAGS.find(m => m.key === k.trim())
-          if (!tag) continue
-          endX += this.ctx.measureText(tag.label).width + 10 + 3
-        }
-        this.ctx.restore()
-        if (hit.localX >= endX) {
-          for (const mt of MTAGS) {
-            if (!allTags.includes(mt.key)) {
-              this.cb.onTagToggle(hit.row, mt.key)
-              this.requestRender()
-              return
-            }
-          }
-        }
+        this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
+        this.selection.selectCell(hit.row, hit.visCol)
+        this.cb.onSelectionChange(this.selection.getSelectedRows())
+        this.cb.onTagCellClick(hit.row, row, e.clientX, e.clientY)
+        this.requestRender()
+        return
       }
     }
 

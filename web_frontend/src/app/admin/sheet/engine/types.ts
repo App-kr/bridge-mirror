@@ -65,6 +65,7 @@ export interface GridCallbacks {
   onMailClick: (rowIdx: number, row: DataRow) => void
   onStageChange: (rowIdx: number, stage: string) => void
   onTagToggle: (rowIdx: number, tagKey: string) => void
+  onTagCellClick: (rowIdx: number, row: DataRow, x: number, y: number) => void
   onPhotoUpload: (rowIdx: number) => void
   onPhotoWheel: (rowIdx: number, delta: number) => void
   onHeaderCheckToggle: () => void
@@ -125,12 +126,27 @@ export const TABS: TabDef[] = [
 ]
 
 export const MTAGS: MailTag[] = [
-  { key: 'guide_done', label: '가이드✓', c: '#16a34a' },
+  // 진행단계
+  { key: 'interview',     label: '인터뷰',   c: '#d97706' },
+  { key: 'proposal',      label: '계약제안', c: '#ca8a04' },
+  { key: 'signed',        label: '서명완료', c: '#16a34a' },
+  { key: 'guide_sent',    label: '안내발송', c: '#2563eb' },
+  { key: 'guide_done',    label: '안내완료', c: '#1d4ed8' },
+  { key: 'caution',       label: '주의',     c: '#ef4444' },
+  { key: 'lost',          label: '두절',     c: '#9ca3af' },
+  // 발송완료
   { key: 'contract_sent', label: '계약발송', c: '#2563eb' },
-  { key: 'contract_done', label: '계약✓', c: '#16a34a' },
-  { key: 'visa_sent', label: '비자✓', c: '#7c3aed' },
-  { key: 'housing_sent', label: '숙소✓', c: '#0891b2' },
-  { key: 'ot_done', label: 'OT✓', c: '#16a34a' },
+  { key: 'contract_done', label: '계약완료', c: '#16a34a' },
+  { key: 'visa_sent',     label: '비자완료', c: '#7c3aed' },
+  { key: 'housing_sent',  label: '숙소완료', c: '#0891b2' },
+  { key: 'ot_done',       label: 'OT완료',   c: '#16a34a' },
+  // 역할
+  { key: 'role_kindy',    label: '유치원',   c: '#ec4899' },
+  { key: 'role_elem',     label: '초등',     c: '#f97316' },
+  { key: 'role_middle',   label: '중등',     c: '#8b5cf6' },
+  { key: 'role_high',     label: '고등',     c: '#0f172a' },
+  { key: 'role_hogwan',   label: '학원',     c: '#06b6d4' },
+  { key: 'role_camp',     label: '캠프',     c: '#84cc16' },
 ]
 
 export const H_OPTS = ['숙소제공', '월세제공', '보증+월세', '불필요', '자체']

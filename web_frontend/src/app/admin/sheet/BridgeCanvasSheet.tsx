@@ -29,6 +29,7 @@ type EditOverride = Partial<Pick<DataRow, 'stage' | 'mailStatus' | 'proposal' | 
 interface CtxMenu { x: number; y: number; rowIdx: number; row: DataRow }
 interface FilterPopup { colKey: string; x: number; y: number }
 interface HeaderMenu { colKey: string; x: number; y: number }
+interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
@@ -55,7 +56,7 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     })(),
     photoSize: Number(ov.photoSize ?? 50),
     email: String(c.email ?? ''), name: String(c.full_name ?? ''),
-    mgtNum: cid.slice(-4), arc: String(c.arc_holders ?? ''),
+    mgtNum: String(idx + 1), arc: String(c.arc_holders ?? ''),
     nationality: String(c.nationality ?? ''), background: String(c.ancestry ?? ''),
     age: String(c.dob ?? ''), gender: String(c.gender ?? ''),
     currentLoc: String(c.current_location ?? ''), startDate: String(c.start_date ?? ''),
@@ -119,6 +120,7 @@ export default function BridgeCanvasSheet() {
 
   // Header context menu
   const [headerMenu, setHeaderMenu] = useState<HeaderMenu | null>(null)
+  const [tagPopup, setTagPopup] = useState<TagPopup | null>(null)
 
   // Formatting toolbar state
   const [showStyleBar, setShowStyleBar] = useState(true)
@@ -222,13 +224,14 @@ export default function BridgeCanvasSheet() {
   /* ── Filtered + sorted rows ── */
   const displayRows = useMemo(() => {
     let rows: DataRow[]
-    if (tab === 'all') {
-      rows = dbAll
+    if (dbAll.length === 0) {
+      // 로딩 중: localStorage 캐시로 즉시 표시
+      rows = tab === 'all'
+        ? [...(data.active || []), ...(data.past || []), ...(data.blacklist || [])]
+        : (data[tab] || [])
     } else {
-      const manual = data[tab] || []
-      const fromDb = dbAll.filter(r => r.category === tab)
-      const manualIds = new Set(manual.map(r => r._cid))
-      rows = [...manual, ...fromDb.filter(r => !manualIds.has(r._cid))]
+      // 로드 완료: 항상 서버에서 받은 복호화된 최신 데이터 사용
+      rows = tab === 'all' ? dbAll : dbAll.filter(r => r.category === tab)
     }
     // Apply filters
     for (const [colKey, vals] of Object.entries(filters)) {
@@ -407,13 +410,13 @@ export default function BridgeCanvasSheet() {
     const colKey = visCols[ac.col]?.key
     if (!colKey) return
 
-    // Apply to all selected rows at the active column
-    for (const ri of selectedRowSet) {
-      const row = rows[ri]
-      if (row) {
-        const cid = String(row._cid ?? '')
-        if (cid) engine.styleManager.setStyle(cid, colKey, style)
-      }
+    // Excel-like: 전체 선택(열 헤더 클릭) 시 전체 열에 적용, 부분 선택 시 선택 행만
+    const targetRows = (selectedRowSet.size >= rows.length && rows.length > 0)
+      ? rows
+      : [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
+    for (const row of targetRows) {
+      const cid = String(row._cid ?? '')
+      if (cid) engine.styleManager.setStyle(cid, colKey, style)
     }
     engine.refresh()
   }, [])
@@ -503,6 +506,9 @@ export default function BridgeCanvasSheet() {
         edits[cid] = { ...(edits[cid] || {}), mailStatus: ms } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
       }
+    },
+    onTagCellClick: (rowIdx: number, _row: DataRow, x: number, y: number) => {
+      setTagPopup({ rowIdx, x, y })
     },
     onPhotoUpload: (rowIdx: number) => {
       photoTargetRef.current = rowIdx
@@ -663,18 +669,23 @@ export default function BridgeCanvasSheet() {
 
   /* ── Close popups on outside click ── */
   useEffect(() => {
-    if (!ctx && !filterPopup && !headerMenu) return
-    const h = () => { setCtx(null); setFilterPopup(null); setHeaderMenu(null); setColorPicker(null) }
+    if (!ctx && !filterPopup && !headerMenu && !tagPopup) return
+    const h = () => { setCtx(null); setFilterPopup(null); setHeaderMenu(null); setColorPicker(null); setTagPopup(null) }
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
-  }, [ctx, filterPopup, headerMenu])
+  }, [ctx, filterPopup, headerMenu, tagPopup])
 
   /* ── Tab counts ── */
   const tabCounts = useMemo(() => {
     const c: Record<string, number> = {}
     for (const t of TABS) {
-      if (t.key === 'all') c[t.key] = dbAll.length
-      else c[t.key] = dbAll.filter(r => r.category === t.key).length + (data[t.key]?.length ?? 0)
+      if (t.key === 'all') {
+        c[t.key] = dbAll.length || (data.active?.length || 0) + (data.past?.length || 0) + (data.blacklist?.length || 0)
+      } else {
+        c[t.key] = dbAll.length > 0
+          ? dbAll.filter(r => r.category === t.key).length
+          : (data[t.key]?.length ?? 0)
+      }
     }
     return c
   }, [dbAll, data])
@@ -837,7 +848,7 @@ export default function BridgeCanvasSheet() {
               onClick={e => { e.stopPropagation(); setColorPicker(p => p === 'text' ? null : 'text') }}
               style={{ ...styleTbBtn, color: '#ef4444' }}
               title="글자색"
-            >A</button>
+            >글자색</button>
             {colorPicker === 'text' && (
               <div onClick={e => e.stopPropagation()} style={paletteStyle}>
                 {PALETTE.map(c => (
@@ -857,7 +868,7 @@ export default function BridgeCanvasSheet() {
               onClick={e => { e.stopPropagation(); setColorPicker(p => p === 'bg' ? null : 'bg') }}
               style={{ ...styleTbBtn, background: '#fef9c3' }}
               title="배경색"
-            >⬛</button>
+            >배경색</button>
             {colorPicker === 'bg' && (
               <div onClick={e => e.stopPropagation()} style={paletteStyle}>
                 {PALETTE.map(c => (
@@ -1015,6 +1026,72 @@ export default function BridgeCanvasSheet() {
           )}
         </div>
       )}
+
+      {/* ── Tag Selection Popup ── */}
+      {tagPopup && (() => {
+        const popRow = displayRows[tagPopup.rowIdx]
+        if (!popRow) return null
+        const activeTags = String(popRow.mailStatus || '').split(',').filter(Boolean)
+        return (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed', left: tagPopup.x, top: tagPopup.y, zIndex: 150,
+              background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)', minWidth: 200, maxHeight: 340,
+              overflow: 'auto',
+            }}
+          >
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '6px 10px 6px 12px', borderBottom: '1px solid #f1f5f9',
+            }}>
+              <b style={{ fontSize: 13, color: '#111' }}>태그 · 역할 선택</b>
+              <span
+                onClick={() => setTagPopup(null)}
+                style={{ fontSize: 16, cursor: 'pointer', color: '#64748b', lineHeight: 1, padding: '0 2px' }}
+              >✕</span>
+            </div>
+            <div style={{ padding: '4px 0' }}>
+              {MTAGS.map(mt => (
+                <label key={mt.key} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '4px 12px', cursor: 'pointer', fontSize: 13,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={activeTags.includes(mt.key)}
+                    onChange={() => {
+                      const row = displayRowsRef.current[tagPopup.rowIdx]
+                      if (!row) return
+                      const cid = String(row._cid ?? '')
+                      const tags = String(row.mailStatus || '').split(',').filter(Boolean)
+                      const ms = (tags.includes(mt.key)
+                        ? tags.filter(t => t !== mt.key)
+                        : [...tags, mt.key]).join(',')
+                      pushHistory()
+                      setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, mailStatus: ms } : r))
+                      setData(prev => {
+                        const u = { ...prev }
+                        for (const k of ['active', 'past', 'blacklist'] as CategoryKey[])
+                          u[k] = prev[k].map(r => r._cid === cid ? { ...r, mailStatus: ms } : r)
+                        return u
+                      })
+                      if (cid) {
+                        const edits = editsRef.current
+                        edits[cid] = { ...(edits[cid] || {}), mailStatus: ms } as EditOverride
+                        prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+                      }
+                    }}
+                    style={{ width: 14, height: 14, accentColor: mt.c }}
+                  />
+                  <span style={{ color: mt.c, fontWeight: 700 }}>{mt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Footer Legend ── */}
       <div style={{
