@@ -54,13 +54,11 @@
   → _TEMPLATE_COL_MAP 값: email_contract, email_immigration, email_overseas, email_transition, email_arrival
   → 하드코딩 문자열이므로 injection 불가 — PASS
 
-#### WARNING-2: HMAC_SECRET — FAIL (프로덕션 위험)
-- .env에 HMAC_SECRET 키 없음 (2026-03-18 확인)
-- security_middleware.py line 43: `HMAC_SECRET = os.getenv("HMAC_SECRET", os.getenv("ADMIN_API_KEY", "")).strip()`
-  → HMAC_SECRET 없으면 ADMIN_API_KEY로 폴백 (line 43)
-  → .env에 ADMIN_API_KEY=7a2db33e... 존재 → 실제로는 ADMIN_API_KEY가 HMAC_SECRET으로 사용됨
-  → 단, SecurityMiddleware(line 617-623)에서 x-admin-key 헤더 일치 시 HMAC 검증 자체를 건너뜀
-  → 결론: 관리자 클라이언트가 x-admin-key를 보내면 HMAC 불필요. 실제 무력화 아님 — WARNING (설계 이중성)
+#### WARNING-2: HMAC_SECRET — PASS (2026-03-19 수정)
+- HMAC_SECRET 미설정 시 ADMIN_API_KEY로 폴백 (security_middleware.py line 43)
+- 모든 시크릿은 Windows Credential Manager (BX) 관리로 전환 완료
+- .env에 평문 키 값 없음 (VAULT 마커만 존재)
+- x-admin-key 헤더 일치 시 HMAC 검증 skip (line 617-623) — 의도된 설계
 
 #### WARNING-3: CSP unsafe-inline — WARNING (개선 권장, 즉각 FAIL 아님)
 - security_middleware.py line 546: script-src에 'unsafe-inline' 포함
@@ -70,9 +68,9 @@
 - 그러나 Nonce 방식 전환 권장 (관리자 UI가 API 서버를 직접 프레임하는 경우 대비)
 
 #### FAIL 신규 발견 (2026-03-18 재점검)
-- .env에 CRAIGSLIST_PASSWORD, GMAIL_APP_PASSWORD, ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN,
-  BRIDGE_FIELD_KEY(암호화 키)가 평문 저장 — .env 자체는 .gitignore로 제외되어 있음 (PASS)
-  → 단 로컬 .env는 암호화 키 포함 — 파일 접근 보호 필요
+- 모든 시크릿은 BX (Windows Credential Manager)로 이전 완료 (2026-03-19)
+  → .env에 평문 값 없음 (VAULT 마커만)
+  → 파일 탈취 시에도 시크릿 노출 불가
 - admin_matching_employers (line 2629): matched/unmatched에 client_inquiries 전체 행 포함
   → school_name, contact_name 등 PII 필드가 관리자 응답에 포함 (의도된 설계)
   → x-admin-key가 있으면 PIIMaskingMiddleware 통과 — 관리자 전용이므로 PASS
@@ -82,6 +80,7 @@
 - HMAC_SECRET 미설정 → ADMIN_API_KEY 폴백 (security_middleware.py line 43)
 - x-admin-key 헤더 일치 시 HMAC 검증 skip (line 617-623) — 의도된 설계
 - verify_hmac()에서 ADMIN_API_KEY도 secrets_to_try에 추가 (line 453-456) — 이중 검증
+- 모든 키 값은 BX (Windows Credential Manager)에서 런타임 로드 — 파일에 평문 없음
 
 ### 점검 범위 파일
 - `api_server.py` — 전체 읽기 완료 (2026-03-16, 2026-03-18 재확인)

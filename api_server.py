@@ -46,6 +46,14 @@ try:
 except ImportError:
     pass
 
+# ── BX credential loader (Windows only) ────────────────────────────────────
+if sys.platform == "win32":
+    try:
+        from tools.bx import load_to_env as _bx_load
+        _bx_load()
+    except Exception:
+        pass
+
 # ── FastAPI / Supabase 임포트 ────────────────────────────────────────────────
 try:
     from fastapi import FastAPI, HTTPException, Request, Query, status, UploadFile, File as FastFile
