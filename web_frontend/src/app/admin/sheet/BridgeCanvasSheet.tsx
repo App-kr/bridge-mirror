@@ -537,12 +537,12 @@ export default function BridgeCanvasSheet() {
     onHeaderContextMenu: (e: MouseEvent, colKey: string) => {
       setHeaderMenu({ colKey, x: e.clientX, y: e.clientY })
     },
-    onRowHeightChange: (cid: string, height: number) => {
-      setRowHeights(prev => {
-        const next = { ...prev, [cid]: height }
-        prefsRef.current.saveRowHeights(next)
-        return next
-      })
+    onRowHeightChange: () => {
+      const engine = engineRef.current
+      if (!engine) return
+      const allHeights = engine.getRowHeightsMap()
+      setRowHeights(allHeights)
+      prefsRef.current.saveRowHeights(allHeights)
     },
   }), [pushHistory, saveToServer, openMailModal])
 

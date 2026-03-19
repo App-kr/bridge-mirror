@@ -26,6 +26,9 @@ const RESIZE_ZONE  = 5
 const ROW_RESIZE_ZONE = 5
 const CHECKBOX_SIZE = 14
 const CHECKBOX_PAD  = 4
+const KEY_COLS = new Set(['email', 'name'])
+const KEY_COL_FONT = '14px -apple-system,"Segoe UI",sans-serif'
+const KEY_HEADER_FONT = '13px -apple-system,"Segoe UI",sans-serif'
 
 export class GridEngine {
   /* ── DOM ── */
@@ -167,6 +170,13 @@ export class GridEngine {
   }
 
   refresh(): void { this.requestRender() }
+
+  /** Return all custom row heights as a plain object */
+  getRowHeightsMap(): Record<string, number> {
+    const out: Record<string, number> = {}
+    for (const [cid, h] of this.rowHeights) out[cid] = h
+    return out
+  }
 
   destroy(): void {
     this.destroyed = true
@@ -596,11 +606,19 @@ export class GridEngine {
       return
     }
 
-    // Row resize drag
+    // Row resize drag — apply to all selected rows if the dragged row is selected
     if (this.rowResizeDrag) {
       const dy = e.clientY - this.rowResizeDrag.startClientY
       const newH = Math.max(24, this.rowResizeDrag.startH + dy)
-      this.rowHeights.set(this.rowResizeDrag.cid, newH)
+      const selectedRows = this.selection.getSelectedRows()
+      if (selectedRows.has(this.rowResizeDrag.rowIdx) && selectedRows.size > 1) {
+        for (const ri of selectedRows) {
+          const row = this.rows[ri]
+          if (row) this.rowHeights.set(String(row._cid ?? row.id), newH)
+        }
+      } else {
+        this.rowHeights.set(this.rowResizeDrag.cid, newH)
+      }
       this.computeRowYs()
       this.updateSizer()
       this.requestRender()
@@ -619,6 +637,7 @@ export class GridEngine {
     if (this.rowResizeDrag) {
       const { cid } = this.rowResizeDrag
       const finalH = this.rowHeights.get(cid) ?? this.defaultRowH
+      // Signal callback — React side reads full map via getRowHeightsMap()
       this.cb.onRowHeightChange(cid, finalH)
       this.rowResizeDrag = null
       return
@@ -808,8 +827,16 @@ export class GridEngine {
         this.drawWrapped(val, x + 4, y + 4, w - 8, h - 8)
         break
       default:
-        ctx.fillStyle = style?.color || '#1e293b'
-        this.drawTruncated(val, x + 4, ty, w - 8)
+        if (KEY_COLS.has(col.key)) {
+          ctx.font = KEY_COL_FONT
+          ctx.fillStyle = style?.color || '#1e293b'
+          ctx.textAlign = 'center'
+          this.drawTruncated(val, x + w / 2, ty, w - 8)
+          ctx.textAlign = 'left'
+        } else {
+          ctx.fillStyle = style?.color || '#1e293b'
+          this.drawTruncated(val, x + 4, ty, w - 8)
+        }
     }
     ctx.font = FONT
   }
@@ -1034,9 +1061,13 @@ export class GridEngine {
       return
     }
 
-    ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-    this.drawTruncated(col.label, x + 6, HEADER_H / 2, w - 24)
+    const isKeyCol = KEY_COLS.has(col.key)
+    ctx.fillStyle = '#1e293b'
+    ctx.font = isKeyCol ? KEY_HEADER_FONT : HEADER_FONT
+    ctx.textAlign = isKeyCol ? 'center' : 'left'
+    ctx.textBaseline = 'middle'
+    this.drawTruncated(col.label, isKeyCol ? x + w / 2 : x + 6, HEADER_H / 2, w - 24)
+    ctx.textAlign = 'left'
 
     if (col.key === this.sortKey) {
       ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
