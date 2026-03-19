@@ -56,7 +56,8 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     })(),
     photoSize: Number(ov.photoSize ?? 50),
     email: String(c.email ?? ''), name: String(c.full_name ?? ''),
-    mgtNum: String(idx + 1), arc: String(c.arc_holders ?? ''),
+    mgtNum: c.sheet_number != null ? String(c.sheet_number) : String(c.row_id ?? ''),
+    arc: String(c.arc_holders ?? ''),
     nationality: String(c.nationality ?? ''), background: String(c.ancestry ?? ''),
     age: String(c.dob ?? ''), gender: String(c.gender ?? ''),
     currentLoc: String(c.current_location ?? ''), startDate: String(c.start_date ?? ''),
@@ -154,11 +155,39 @@ export default function BridgeCanvasSheet() {
     const { cols: restored, frozenCols: fc } = pm.load(defaultCols())
     setCols(restored)
     setFrozenCols(fc)
-    editsRef.current = pm.loadEdits() as Record<string, EditOverride>
+
+    // 암호화 값 판별 (AES-256-GCM base64: 40자 이상 + base64 문자만)
+    const isStaleEncrypted = (v: unknown): boolean =>
+      typeof v === 'string' && v.length > 40 && /^[A-Za-z0-9+/]{38,}={0,2}$/.test(v)
+
+    // editsRef: 암호화된 stale 값 제거
+    const rawEdits = pm.loadEdits() as Record<string, EditOverride>
+    for (const cid of Object.keys(rawEdits)) {
+      const ov = rawEdits[cid] as Record<string, unknown>
+      for (const k of Object.keys(ov)) {
+        if (isStaleEncrypted(ov[k])) delete ov[k]
+      }
+    }
+    editsRef.current = rawEdits
+
+    // savedData: DataRow 내 암호화된 stale 값 빈 문자열로 교체
     const savedData = pm.loadTabData<DataStore>()
     if (savedData && (savedData.active?.length || savedData.past?.length || savedData.blacklist?.length)) {
-      setData(savedData)
+      const cleanRows = (rows: DataRow[]): DataRow[] =>
+        rows.map(r => {
+          const cleaned: DataRow = { ...r }
+          for (const k of Object.keys(r)) {
+            if (isStaleEncrypted(r[k])) (cleaned as Record<string, unknown>)[k] = ''
+          }
+          return cleaned
+        })
+      setData({
+        active: cleanRows(savedData.active || []),
+        past: cleanRows(savedData.past || []),
+        blacklist: cleanRows(savedData.blacklist || []),
+      })
     }
+
     setRowHeights(pm.loadRowHeights())
     setReady(true)
   }, [])

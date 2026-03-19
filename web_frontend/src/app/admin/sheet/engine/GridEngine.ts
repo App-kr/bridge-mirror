@@ -388,6 +388,10 @@ export class GridEngine {
     if (col && col.type === 'tags') {
       const row = this.rows[hit.row]
       if (row) {
+        // mousedown 직후 click 이벤트가 document에 버블링되어 팝업 즉시 닫힘 방지
+        const stopOpeningClick = (ev: MouseEvent) => ev.stopPropagation()
+        this.ghost.addEventListener('click', stopOpeningClick, { capture: true, once: true })
+
         this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
         this.selection.selectCell(hit.row, hit.visCol)
         this.cb.onSelectionChange(this.selection.getSelectedRows())

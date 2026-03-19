@@ -1488,7 +1488,7 @@ async def admin_candidates(
             total = total_row[0] if total_row else 0
 
             _COLS = (
-                "candidate_id, email, full_name, nationality, ancestry, dob, gender, "
+                "candidate_id, sheet_number, email, full_name, nationality, ancestry, dob, gender, "
                 "current_location, start_date, target, area_prefs, experience, "
                 "current_salary, desired_salary, certification, e_visa, mobile_phone, "
                 "kakaotalk, criminal_record, housing, arc_holders, job_prefs, "
@@ -1530,6 +1530,7 @@ async def admin_candidates(
             for r in rows_raw:
                 d = dict(r)
                 last_rowid = d.pop("rowid", None)
+                d["row_id"] = last_rowid          # 관리번호 fallback용 rowid 노출
                 d["id"] = d.pop("candidate_id", d.get("id"))
                 d.setdefault("admin_notes", d.get("notes", ""))
                 d.setdefault("photo_url", None)
