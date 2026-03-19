@@ -81,6 +81,9 @@ interface DocBlockProps {
   isFirst: boolean
   isLast: boolean
   showDivider: boolean
+  onOpenMail?: () => void
+  onEditJobCode?: (id: string, code: string) => void
+  onEditName?: (id: string, name: string) => void
 }
 
 /**
@@ -141,7 +144,7 @@ export default function DocBlock({
   province, city, jobNo, searchQuery,
   onConfirm, onStatusChange, onEditMemo, onEditNotes,
   onMoveTop, onMoveUp, onMoveDown, isFirst, isLast,
-  showDivider,
+  showDivider, onOpenMail, onEditJobCode, onEditName,
 }: DocBlockProps) {
   const rawText = buildRawText(employer, province, city, jobNo)
   const lines = rawText ? rawText.split('\n') : []
@@ -158,10 +161,16 @@ export default function DocBlock({
   const [editingRaw, setEditingRaw] = useState(false)
   const [memoVal, setMemoVal] = useState(employer.memo || '')
   const [rawVal, setRawVal] = useState(rawText)
+  const [editingJobNo, setEditingJobNo] = useState(false)
+  const [jobNoVal, setJobNoVal] = useState(jobNo)
+  const [editingName, setEditingName] = useState(false)
+  const [nameVal, setNameVal] = useState(employer.school_name || employer.name || '')
 
   useEffect(() => {
     setMemoVal(employer.memo || '')
     setRawVal(buildRawText(employer, province, city, jobNo))
+    setJobNoVal(jobNo)
+    setNameVal(employer.school_name || employer.name || '')
   }, [employer, province, city, jobNo])
 
   const displayName = employer.school_name || employer.name || ''
@@ -272,22 +281,61 @@ export default function DocBlock({
 
         {/* ══ 3. 헤더: Job번호(초록+도시) + 업체명 + 이동버튼 ══ */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, position: 'relative', zIndex: 2 }}>
-          <span style={{
-            fontFamily: "'Consolas',monospace", fontSize: '1.0rem', fontWeight: 800,
-            background: isNewCode ? '#2563eb' : '#f0fdf4',
-            color: isNewCode ? '#fff' : '#166534',
-            border: isNewCode ? 'none' : '1px solid #bbf7d0',
-            padding: '4px 14px', borderRadius: 6, flexShrink: 0,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}>
-            {jobNo}
-            {(province || city) && (
-              <span style={{ fontWeight: 500, fontSize: '0.85rem', opacity: 0.8 }}>
-                · {[province, city].filter(Boolean).join(' ')}
-              </span>
-            )}
-          </span>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111', flex: 1 }}>{displayName}</span>
+          {editingJobNo ? (
+            <input
+              value={jobNoVal}
+              onChange={e => setJobNoVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { onEditJobCode?.(employer.id, jobNoVal); setEditingJobNo(false) }
+                if (e.key === 'Escape') { setJobNoVal(jobNo); setEditingJobNo(false) }
+              }}
+              onBlur={() => { onEditJobCode?.(employer.id, jobNoVal); setEditingJobNo(false) }}
+              autoFocus
+              style={{ fontFamily: "'Consolas',monospace", fontSize: '0.9rem', fontWeight: 800, border: '2px solid #2563eb', borderRadius: 6, padding: '3px 10px', outline: 'none', width: 130, flexShrink: 0 }}
+            />
+          ) : (
+            <span
+              style={{
+                fontFamily: "'Consolas',monospace", fontSize: '1.0rem', fontWeight: 800,
+                background: isNewCode ? '#2563eb' : '#f0fdf4',
+                color: isNewCode ? '#fff' : '#166534',
+                border: isNewCode ? 'none' : '1px solid #bbf7d0',
+                padding: '4px 14px', borderRadius: 6, flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                cursor: 'default',
+              }}
+              onDoubleClick={() => setEditingJobNo(true)}
+              title="더블클릭으로 편집"
+            >
+              {jobNo}
+              {(province || city) && (
+                <span style={{ fontWeight: 500, fontSize: '0.85rem', opacity: 0.8 }}>
+                  · {[province, city].filter(Boolean).join(' ')}
+                </span>
+              )}
+            </span>
+          )}
+          {editingName ? (
+            <input
+              value={nameVal}
+              onChange={e => setNameVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { onEditName?.(employer.id, nameVal); setEditingName(false) }
+                if (e.key === 'Escape') { setNameVal(employer.school_name || employer.name || ''); setEditingName(false) }
+              }}
+              onBlur={() => { onEditName?.(employer.id, nameVal); setEditingName(false) }}
+              autoFocus
+              style={{ fontSize: '0.95rem', fontWeight: 700, flex: 1, border: '2px solid #2563eb', borderRadius: 4, padding: '3px 8px', outline: 'none' }}
+            />
+          ) : (
+            <span
+              style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111', flex: 1, cursor: 'default' }}
+              onDoubleClick={() => setEditingName(true)}
+              title="더블클릭으로 편집"
+            >
+              {displayName}
+            </span>
+          )}
           {isBlacklist && (
             <span style={{ fontSize: '0.72rem', background: '#dc2626', color: '#fff', padding: '2px 9px', borderRadius: 999, fontWeight: 800, flexShrink: 0 }}>BLACKLIST</span>
           )}
@@ -378,9 +426,24 @@ export default function DocBlock({
             <div>
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem', marginBottom: 4 }}>
                 <span style={{ color: '#64748b', fontWeight: 700, minWidth: 60, flexShrink: 0 }}>이메일</span>
-                <span style={{ color: '#333' }}>
-                  {showPII ? (employer.email || '—') : maskEmail(employer.email)}
-                </span>
+                {showPII ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenMail?.()}
+                    style={{
+                      color: employer.email ? '#2563eb' : '#aaa',
+                      textDecoration: employer.email ? 'underline' : 'none',
+                      cursor: employer.email ? 'pointer' : 'default',
+                      background: 'none', border: 'none', padding: 0,
+                      fontSize: '0.86rem', fontFamily: 'inherit', textAlign: 'left',
+                    }}
+                    title={employer.email ? '클릭하여 메일 발송' : '이메일 없음'}
+                  >
+                    {employer.email || '—'}
+                  </button>
+                ) : (
+                  <span style={{ color: '#333' }}>{maskEmail(employer.email)}</span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: '0.86rem' }}>
                 <span style={{ color: '#64748b', fontWeight: 700, minWidth: 60, flexShrink: 0 }}>전화</span>

@@ -186,6 +186,11 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
+  // 드래그 위치
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 })
+
   // 팔레트 표시 상태
   const [showTextColor, setShowTextColor] = useState(false)
   const [showBgColor, setShowBgColor] = useState(false)
@@ -210,6 +215,23 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
   const editorRef = useRef<HTMLDivElement>(null)
   const attachInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
+
+  /* 드래그 이동 */
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      const dx = e.clientX - dragStartRef.current.mouseX
+      const dy = e.clientY - dragStartRef.current.mouseY
+      setDragPos({ x: dragStartRef.current.posX + dx, y: dragStartRef.current.posY + dy })
+    }
+    const onUp = () => { isDraggingRef.current = false }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   /* 템플릿 변경 */
   const selectTemplate = useCallback((idx: number) => {
@@ -498,12 +520,21 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col"
+        style={{ transform: `translate(${dragPos.x}px, ${dragPos.y}px)` }}
         onClick={e => e.stopPropagation()}
       >
-        {/* 헤더 */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
-          <h2 className="text-[16px] font-bold text-[#1d1d1f]">메일 작성</h2>
-          <button type="button" onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-sm">&#10005;</button>
+        {/* 헤더 (드래그 가능) */}
+        <div
+          className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 cursor-move select-none"
+          onMouseDown={(e) => {
+            if ((e.target as HTMLElement).closest('button')) return
+            isDraggingRef.current = true
+            dragStartRef.current = { mouseX: e.clientX, mouseY: e.clientY, posX: dragPos.x, posY: dragPos.y }
+            e.preventDefault()
+          }}
+        >
+          <h2 className="text-[16px] font-bold text-[#1d1d1f]">메일 작성 <span className="text-[11px] font-normal text-gray-400">드래그로 이동</span></h2>
+          <button type="button" onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-sm cursor-pointer" style={{ cursor: 'pointer' }}>&#10005;</button>
         </div>
 
         {/* 메인 (좌: 작성, 우: 미리보기) */}

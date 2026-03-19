@@ -732,6 +732,9 @@ export default function EmployerManagement() {
                   isFirst={visIdx === 0}
                   isLast={visIdx === filtered.length - 1}
                   showDivider={(visIdx + 1) % PAGE_BREAK_EVERY === 0 && visIdx < visibleFiltered.length - 1}
+                  onOpenMail={() => openMailComposer([app])}
+                  onEditJobCode={(id, code) => setEmployers(prev => prev.map(e => e.id === id ? { ...e, job_code: code } : e))}
+                  onEditName={(id, name) => setEmployers(prev => prev.map(e => e.id === id ? { ...e, school_name: name } : e))}
                 />
               ))}
 
@@ -755,13 +758,24 @@ export default function EmployerManagement() {
           {viewMode === 'excel' && (
             <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + 80}px` }}>
+                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + 116}px` }}>
                   <colgroup>
+                    <col style={{ width: '36px' }} />
                     {visibleCols.map(c => <col key={c.key} style={{ width: `${c.width}px` }} />)}
                     <col style={{ width: '80px' }} />
                   </colgroup>
                   <thead>
-                    <tr className="bg-[#f5f5f7] text-[11px] text-[#86868b] uppercase tracking-wider" style={{ position: 'sticky', top: 0, zIndex: 20 }}>
+                    {/* 열 문자 행 A, B, C... */}
+                    <tr className="bg-[#ebebed] text-[10px] text-[#aaa]" style={{ position: 'sticky', top: 0, zIndex: 21 }}>
+                      <th className="px-1 py-0.5 text-center border-r border-gray-200" />
+                      {visibleCols.map((c, i) => (
+                        <th key={c.key} className="px-1 py-0.5 text-center font-normal">{String.fromCharCode(65 + i)}</th>
+                      ))}
+                      <th className="px-1 py-0.5 text-center font-normal">{String.fromCharCode(65 + visibleCols.length)}</th>
+                    </tr>
+                    {/* 열 이름 행 */}
+                    <tr className="bg-[#f5f5f7] text-[11px] text-[#86868b] uppercase tracking-wider" style={{ position: 'sticky', top: '22px', zIndex: 20 }}>
+                      <th className="px-1 py-3 text-center text-[9px] text-gray-300 border-r border-gray-100 select-none" />
                       {visibleCols.map(c => (
                         <th key={c.key} className="px-3 py-3 text-left font-semibold relative group">
                           {c.label}
@@ -775,7 +789,7 @@ export default function EmployerManagement() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0f0f2]">
-                    {filtered.map(app => {
+                    {filtered.map((app, rowIdx) => {
                       const isBlacklist = app.status === 'blacklist'
                       const isNew = app.status === 'new' && !confirmedIds.has(app.id)
                       const no = jobNo(app)
@@ -796,6 +810,7 @@ export default function EmployerManagement() {
                           } ${isNew ? 'employer-blink' : ''}`}
                           style={isBlacklist ? { borderLeft: '3px solid rgba(220,38,38,0.4)' } : undefined}
                         >
+                          <td className="px-1 py-2.5 text-center text-[10px] text-gray-300 border-r border-gray-100 select-none">{rowIdx + 1}</td>
                           {visibleCols.map(c => (
                             <td key={c.key} className="px-3 py-2.5 text-[13px] truncate" title={cellValue(app, c.key)}>
                               {c.key === 'no' ? (
