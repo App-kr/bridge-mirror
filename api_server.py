@@ -1377,15 +1377,21 @@ def _decrypt_row(row: dict) -> dict:
     import logging as _log_dec
     for field in _ADMIN_DECRYPT_FIELDS:
         val = row.get(field)
-        if val and is_encrypted(val):
+        if not val or not isinstance(val, str):
+            continue
+        # 일부 DB 값에 개행/공백이 삽입될 수 있어 제거 후 검사
+        val_clean = val.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+        if is_encrypted(val_clean):
             try:
-                row[field] = decrypt_field(val)
+                row[field] = decrypt_field(val_clean)
             except Exception as e:
                 _log_dec.getLogger("bridge.security").error(
                     "PII 복호화 실패 — field=%s row_id=%s: %s",
                     field, row.get("id", "?"), e,
                 )
                 row[field] = "[복호화 실패]"
+        elif val_clean != val:
+            row[field] = val_clean
     return row
 
 

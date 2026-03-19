@@ -434,18 +434,34 @@ export default function BridgeCanvasSheet() {
     const rows = displayRowsRef.current
     const visCols = engine.getVisibleCols()
     const ac = engine.selection.getActiveCell()
-    if (!ac) return
     const selectedRowSet = engine.selection.getSelectedRows()
-    const colKey = visCols[ac.col]?.key
-    if (!colKey) return
 
-    // Excel-like: 전체 선택(열 헤더 클릭) 시 전체 열에 적용, 부분 선택 시 선택 행만
-    const targetRows = (selectedRowSet.size >= rows.length && rows.length > 0)
-      ? rows
-      : [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
-    for (const row of targetRows) {
-      const cid = String(row._cid ?? '')
-      if (cid) engine.styleManager.setStyle(cid, colKey, style)
+    if (ac) {
+      // 셀/컬럼 선택 모드: ac.col 기준 컬럼에 색상 적용
+      const colKey = visCols[ac.col]?.key
+      if (!colKey) return
+      // 전체 행 선택(열 헤더 클릭) → 전체 열 / 부분 선택 → 선택 행만
+      const isAllRows = selectedRowSet.size >= rows.length && rows.length > 0
+      const targetRows = isAllRows
+        ? rows
+        : [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
+      for (const row of targetRows) {
+        const cid = String(row._cid ?? '')
+        if (cid) engine.styleManager.setStyle(cid, colKey, style)
+      }
+    } else if (selectedRowSet.size > 0) {
+      // 행 체크박스 선택 모드: 선택된 행의 모든 컬럼에 색상 적용 (Excel 행 색상 동작)
+      const targetRows = [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
+      for (const row of targetRows) {
+        const cid = String(row._cid ?? '')
+        if (cid) {
+          for (const col of visCols) {
+            if (col.key !== 'rowNum' && col.key !== 'photo') {
+              engine.styleManager.setStyle(cid, col.key, style)
+            }
+          }
+        }
+      }
     }
     engine.refresh()
   }, [])
@@ -1145,6 +1161,7 @@ export default function BridgeCanvasSheet() {
         recipients={mailRecipients}
         onClose={() => setMailOpen(false)}
         onSend={handleMailSend}
+        getHeaders={() => hdrsRef.current()}
       />
     </div>
   )
