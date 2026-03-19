@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-19
+최근 업데이트: 2026-03-19 (21:35)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,25 @@
 
 ## 현재 진행 중인 작업
 없음 (세션 종료)
+
+## 2026-03-19 저녁 세션 완료 (ClaudeBlog API 오류 수정)
+- fix(content_generator): Gemini 키 고갈 오류 근본 수정
+  - _SESSION_EXHAUSTED: 세션 내 일일 고갈 키 추적 (재시도 낭비 방지)
+  - 60초 재시도 → 20초 단축 (RPM 회복용)
+  - 2회 연속 429 → 일일 고갈로 간주, 세션 제외
+  - Claude 400 잔액부족 감지 → 명확한 메시지 + 행동 안내
+- fix(main): --count N 인수 지원 / daily_posts 루프 적용
+  - --dry --count 2 → 2건 더미 생성 확인 완료
+  - --now --count 5 → 5건 발행 지원
+  - --draft --count 10 → 10건 초안 생성 지원
+- feat(settings.py): 신규 설정 관리자
+  - 메뉴 1: Gemini API 키 추가/삭제/이름변경/모델변경
+  - 메뉴 2: 계정/스케줄 편집 (daily_posts, post_time, days_ahead)
+  - 메뉴 3: 키워드 풀 편집 (추가/삭제/재사용기간)
+  - 메뉴 4: 사용자 정의 명령어 등록·즉시실행
+  - 메뉴 5: 명령어 실행 (직접 인수 입력 포함)
+  - 메뉴 6: API 키 상태 실시간 확인
+- config.json: user_commands 기본 5개 preset 추가
 
 ## 작업하던 파일 목록
 - `web_frontend/src/app/admin/sheet/` — Canvas Sheet Phase 3 진행 중

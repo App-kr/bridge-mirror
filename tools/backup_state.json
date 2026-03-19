@@ -455,8 +455,56 @@
       "git": "03c048b",
       "files": 1971,
       "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_213425__ClaudeBlog-API오류수정완료",
+      "task": "ClaudeBlog-API오류수정완료",
+      "ts": "2026.03.19 21:34:28",
+      "git": "25871d0",
+      "files": 1972,
+      "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_213437__ClaudeBlog-설정관리자완료",
+      "task": "ClaudeBlog-설정관리자완료",
+      "ts": "2026.03.19 21:34:40",
+      "git": "25871d0",
+      "files": 1972,
+      "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_213618__EmployerManagement_SMTP+Excel+DB",
+      "task": "EmployerManagement SMTP+Excel+DB",
+      "ts": "2026.03.19 21:36:21",
+      "git": "25871d0",
+      "files": 1972,
+      "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_213634__EmployerManagement_SMTP+Excel+DB",
+      "task": "EmployerManagement SMTP+Excel+DB",
+      "ts": "2026.03.19 21:36:38",
+      "git": "25871d0",
+      "files": 1972,
+      "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_225206__credential-vault-setup",
+      "task": "credential-vault-setup",
+      "ts": "2026.03.19 22:52:12",
+      "git": "b49b8ad",
+      "files": 1973,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260319_225217__credential-vault-setup",
+      "task": "credential-vault-setup",
+      "ts": "2026.03.19 22:52:21",
+      "git": "b49b8ad",
+      "files": 1973,
+      "db_hash": "1e8b254a33e2"
     }
   ],
-  "last_backup": "2026.03.19 21:08:28",
-  "total_count": 57
+  "last_backup": "2026.03.19 22:52:21",
+  "total_count": 63
 }
