@@ -12,10 +12,14 @@ $killList = @(
     "Adobe Genuine Launcher",
     "agshelper",
     "AGSService",
+    "AGMService",                   # Adobe Genuine Monitor
+    "AdobeGenuineMonitor",
+    "AdobeNotificationClient",
     "HDHelper",
     "armsvc",
     "AdobeARMHelper",
-    "AdobeARM"
+    "AdobeARM",
+    "AdobeUpdateService"
 )
 foreach ($proc in $killList) {
     $p = Get-Process -Name $proc -ErrorAction SilentlyContinue
@@ -29,7 +33,7 @@ foreach ($proc in $killList) {
 # 2. Disable AGSService / armsvc
 # =========================================================
 Write-Host "`n[2] Disabling services..."
-$services = @("AGSService", "armsvc", "AdobeARMService")
+$services = @("AGSService", "AGMService", "armsvc", "AdobeARMService", "AdobeUpdateService")
 foreach ($svc in $services) {
     $s = Get-Service $svc -ErrorAction SilentlyContinue
     if ($s) {

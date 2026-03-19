@@ -681,7 +681,15 @@
       "WebFetch(domain:www.gpters.org)",
       "WebFetch(domain:velog.io)",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"canvas-ui-fixes\" --type pre-task)",
-      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"Sheet-TagPopup-4수정\" --type pre-task)"
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"Sheet-TagPopup-4수정\" --type pre-task)",
+      "Bash(__NEW_LINE_6c0e0d7fd76b07a6__ powershell -NoProfile -Command \"\n$progs = Get-ItemProperty ''HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\*'' 2>$null\n$progs | Where-Object {$_.DisplayName -match ''ahn|safe|nprotect''} | Select-Object DisplayName, Publisher | Format-Table -AutoSize\n\")",
+      "Bash(/tmp/check_safe_notif.ps1:*)",
+      "Bash(/tmp/check_safe_files.ps1:*)",
+      "Bash(/tmp/check_ahnreg.ps1:*)",
+      "Bash(/tmp/silent_ahnlab.ps1:*)",
+      "Bash(__NEW_LINE_e5305c37b2be082a__ powershell -NoProfile -Command \"schtasks /Create /TN AhnSilentMode /TR ''powershell -NoProfile -ExecutionPolicy Bypass -File C:\\\\Windows\\\\Temp\\\\ss.ps1'' /SC ONCE /ST 00:00 /RU SYSTEM /F\")",
+      "Bash(\"C:\\\\Windows\\\\Temp\\\\setservice.bat\":*)",
+      "Bash(__NEW_LINE_a12ee0abe623df9b__ powershell -NoProfile -Command \"\n$time = \\(Get-Date\\).AddMinutes\\(1\\).ToString\\(''HH:mm''\\)\nschtasks /Create /TN AhnSvcDisable /TR ''C:\\\\Windows\\\\Temp\\\\setservice.bat'' /SC ONCE /ST $time /RU SYSTEM /F 2>&1\n\")"
     ]
   }
 }

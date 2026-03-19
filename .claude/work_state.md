@@ -16,6 +16,13 @@
 - `api_server.py` — 프로필 메일 빌더 API (배포 실패 상태)
 - `web_frontend/src/app/admin/mail-send/page.tsx` — 프로필 빌더 탭
 
+## 2026-03-19 세션 완료 사항 (추가)
+- fix(sheet): 행 체크박스 선택 후 색상 → 전체 컬럼에 적용 (applyStyleToSelection)
+- fix(sheet): MailModal Gmail/Naver 토글 + handleSend API 호출 + 결과 피드백
+- fix(api): _decrypt_row 공백/개행 제거 후 is_encrypted 체크 (edge case 대응)
+- fix(db): candidates.sheet_number 컬럼 추가 + 3059건 rowid 마이그레이션 완료
+  → 번호 컬럼에 1~3059 고유 번호 표시 (사용자 직접 수정 가능)
+
 ## 절대 건드리면 안 되는 것
 - master.db (hard-delete 금지)
 - .backups/ 내용 (임의 삭제 금지)
