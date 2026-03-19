@@ -615,15 +615,32 @@ const LIGHTING=[
 ];
 
 const INSTRUCTOR_RG=[
-["White","male"],["White","female"],
-["Black","male"],["Black","female"],
+// Western / Caucasian
+["White American","male"],["White American","female"],
+["Caucasian","male"],["Caucasian","female"],
+["White British","male"],["White British","female"],
+["Australian","male"],["Australian","female"],
+["New Zealander","male"],["New Zealander","female"],
+["Canadian","male"],["Canadian","female"],
+["Irish","male"],["Irish","female"],
+["South African White","male"],["South African White","female"],
+// Black / African
+["Black American","male"],["Black American","female"],
+["African","male"],["African","female"],
+["Black British","male"],["Black British","female"],
+["Afro-Caribbean","male"],["Afro-Caribbean","female"],
+// Latino / Hispanic
 ["Latino","male"],["Latina","female"],
-["South Asian","male"],["South Asian","female"],
-["East Asian","male"],["East Asian","female"],
-["Middle Eastern","male"],["Middle Eastern","female"],
-["Southeast Asian","male"],["Southeast Asian","female"],
-["Mixed-race","male"],["Mixed-race","female"],
-["Native American","male"],["Pacific Islander","female"],
+["Mexican-American","male"],["Mexican-American","female"],
+["Colombian","male"],["Colombian","female"],
+["Brazilian","male"],["Brazilian","female"],
+// Native / Indigenous
+["Native American","male"],["Native American","female"],
+["Indigenous Australian","male"],["Indigenous Australian","female"],
+["Māori","male"],["Māori","female"],
+// Mixed
+["Mixed-race (White and Black)","male"],["Mixed-race (White and Black)","female"],
+["Mixed-race (White and Latino)","male"],["Mixed-race (White and Latino)","female"],
 ];
 
 const HAIR=[
@@ -724,66 +741,61 @@ const CLOTHING=[
 ];
 
 const POSES=[
-"gesturing enthusiastically toward a whiteboard",
+// — 정면 (카메라 바라보는 방향)
+"gesturing enthusiastically toward a whiteboard, facing the class front-on",
+"standing with arms open in an inviting gesture, directly facing students",
+"holding up a large colorful flashcard toward the front of the room",
+"conducting students with both hands like an orchestra, full frontal stance",
+"standing tall at the front of the room, confident upright posture facing forward",
+"spreading both arms wide in an expressive storytelling pose facing the class",
+"mid-clap celebrating a student achievement, full body facing forward",
+"using sign language alongside spoken words, directly facing students",
+// — 측면 왼쪽 (왼쪽 옆모습)
+"left-side profile view — gesturing toward a smartboard on the left wall",
+"left profile, pointing to something on the board with right arm extended",
+"viewed from the left side, walking briskly between rows of desks",
+"left three-quarter angle, writing on whiteboard mid-sentence",
+"facing left, handing materials to a student seated on that side",
+"left profile — leaning over a student's desk to review work closely",
+// — 측면 오른쪽 (오른쪽 옆모습)
+"right-side profile — addressing a group of students seated to the right",
+"viewed from the right, holding a book open and showing a page",
+"right three-quarter angle, making an explanatory hand gesture outward",
+"right profile, crouching next to a student at floor level",
+"facing right, mid-laugh sharing a genuine moment of humor",
+"right profile — pausing thoughtfully with one hand raised near the chin",
+// — 후면 / 등 (뒤에서 보는 방향)
+"seen from behind at a slight angle, writing on a chalkboard, back to camera",
+"viewed from behind, arms extended outward addressing the full class",
+"back-view angle — instructor facing the whiteboard, students visible ahead",
+"rear three-quarter view — walking toward students gathered at the far end",
+"seen from behind, pointing up at a projected screen, students in view ahead",
+"back turned slightly toward camera, orchestrating student activity ahead",
+// — 동적 움직임
+"mid-step walking between student desks, body in natural motion",
+"mid-turn between board and class, caught mid-pivot in natural motion",
+"walking and gesturing simultaneously — caught mid-stride",
+"dynamic low crouch beside a student, leaning in close with genuine interest",
+// — 앉거나 낮은 자세
 "kneeling at a child's eye level with a warm smile",
-"standing with arms open in an inviting gesture",
-"holding up a large colorful flashcard",
 "sitting cross-legged on the floor with students gathered around",
-"pointing to something on an interactive smartboard",
-"clapping hands to the rhythm of a song",
-"reading aloud from an oversized picture book",
-"crouching next to a student to guide their work",
-"writing on a whiteboard mid-sentence, marker in hand",
-"arms crossed confidently, scanning the room",
-"leaning forward on a desk, engaged in student conversation",
-"making a two-hand frame gesture while explaining",
-"mid-step walking between student desks",
-"holding a globe and pointing to a location",
-"giving a thumbs-up to a student who answered correctly",
-"conducting students with both hands like an orchestra",
-"holding a marker and pausing mid-thought",
-"demonstrating a science procedure with both hands",
-"high-fiving a student in an encouraging moment",
-"gesturing to two students to collaborate",
-"leaning back against the teacher's desk, relaxed",
-"standing tall at the front of the room, confident posture",
-"holding a clipboard and reviewing student work",
-"extending one hand palm-up in an explanatory gesture",
-"demonstrating a dance move with arms extended",
-"blowing a whistle with one arm pointing direction",
-"adjusting a student's art piece with gentle hands",
-"turning to face the room while writing, mid-sentence",
-"using both hands to count off points on fingers",
-"bending over a lab bench to show a technique",
-"stepping forward to make eye contact with a student",
-"spreading both arms wide in an expressive storytelling pose",
-"placing a hand on a student's shoulder encouragingly",
-"snapping fingers to get the class's attention",
-"pointing upward as if referencing a key concept",
 "sitting on the edge of a desk casually addressing the group",
-"making a circle gesture with both hands — gather around",
-"walking and gesturing simultaneously — dynamic motion",
-"holding a book open to a page and showing it",
-"mid-clap celebrating a student achievement",
-"pointing to a student who raised their hand",
-"facing slightly away, shoulder toward camera, dynamic profile",
-"reaching up to a high shelf for a teaching prop",
-"holding chalk in one hand, turning from chalkboard",
-"handing out worksheets while smiling at students",
-"tossing a soft foam ball to a participating student",
-"pointing to a large printed infographic on the wall",
-"making an OK sign and nodding in affirmation",
-"sweeping one arm across the room in introduction gesture",
-"using sign language alongside spoken words",
-"mid-laugh sharing a moment of humor with students",
 "squatting beside a small group working on the floor",
-"holding a tablet showing content to nearby student",
+// — 상호작용 포즈
+"high-fiving a student in an encouraging moment",
+"placing a hand on a student's shoulder encouragingly",
+"tossing a soft foam ball to a participating student",
+"holding a tablet showing content to a nearby student",
+"handing out worksheets while smiling at students",
+"leaning forward on a desk, engaged in student conversation",
+"bending over a lab bench to show a technique",
+// — 정적 / 사색
+"arms crossed confidently, scanning the room",
+"leaning back against the teacher's desk, relaxed",
+"holding a clipboard and reviewing student work",
+"pausing with one hand on hip, thoughtful teaching stance",
 "raising one eyebrow and tilting head — Socratic pose",
 "using a laser pointer on a projected map or diagram",
-"leaning in close to a student's work with genuine interest",
-"making a precise hand gesture to illustrate a concept",
-"mid-turn between board and class, natural dynamic pose",
-"pausing with one hand on hip, thoughtful teaching stance",
 ];
 
 const EXPRESSIONS=[
@@ -1223,7 +1235,7 @@ const QUALITY=[
 "sharp focus on instructor's face with natural specular highlights on eyes",
 ];
 
-const BRIDGE_TEXT="The word 'BRIDGE' appears in clean white sans-serif letters, positioned at the center-left of the image. Plain text label only — no background, no shadow, no glow, no effects. Letters are sharp, flat, and white. NOT painted on any surface — does NOT warp or distort with the scene. No other text, logos, or watermarks anywhere in the image.";
+const NO_TEXT_RULE="CRITICAL: Absolutely NO text, letters, words, numbers, typography, logos, watermarks, signs, or written characters of any kind anywhere in the image — not on walls, not on boards, not on clothing, not floating in the scene, nowhere. The image must be completely and entirely free of any readable or decorative text. Do not render any written language whatsoever.";
 
 // ============================================================
 // UNIQUENESS ENGINE
@@ -1239,10 +1251,16 @@ function shuffle(arr){
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 
 const RACE_KO={
-  'White':'백인','Black':'흑인','Latino':'라틴계','Latina':'라틴계',
-  'South Asian':'남아시아계','East Asian':'동아시아계','Middle Eastern':'중동계',
-  'Southeast Asian':'동남아시아계','Mixed-race':'혼혈',
-  'Native American':'원주민계','Pacific Islander':'태평양계'
+  'White American':'백인 미국인','Caucasian':'코카시안','White British':'백인 영국인',
+  'Australian':'호주인','New Zealander':'뉴질랜드인','Canadian':'캐나다인',
+  'Irish':'아일랜드인','South African White':'백인 남아공인',
+  'Black American':'흑인 미국인','African':'아프리카계','Black British':'흑인 영국인',
+  'Afro-Caribbean':'아프로카리브계',
+  'Latino':'라틴계 남성','Latina':'라틴계 여성',
+  'Mexican-American':'멕시코계 미국인','Colombian':'콜롬비아인','Brazilian':'브라질인',
+  'Native American':'미국 원주민','Indigenous Australian':'호주 원주민','Māori':'마오리계',
+  'Mixed-race (White and Black)':'혼혈(백인+흑인)',
+  'Mixed-race (White and Latino)':'혼혈(백인+라틴)',
 };
 
 // Generate a batch where every prompt has a UNIQUE place
@@ -1322,15 +1340,15 @@ COMPOSITION: ${composition}. The full classroom environment must be clearly visi
 
 TIME & ATMOSPHERE: ${season}. ${lighting}. Mood: ${mood}.
 
-SCENE: A ${race} ${finalGender} instructor (${age}, ${hair}, ${clothing}) ${pose}. ${expression}. The instructor is naturally present within the room — not posed for camera, not isolated in the foreground.
+SCENE: A ${race} ${finalGender} foreign English instructor (${age}, ${hair}, ${clothing}) ${pose}. ${expression}. The instructor is naturally present within the room — not posed for camera, not isolated in the foreground. The instructor is clearly a foreigner — Western or non-Asian in appearance, such as American, Australian, Canadian, British, African, or Latino.
 
-STUDENTS: ${students}. All students are Korean. They are actively engaged in the lesson — not simply blurred background decoration. ${bokeh}.
+STUDENTS: ${students}. All students are Korean — diverse, trendy, individualistic 2025 Korean youth. They wear contemporary fashion that reflects current Korean youth culture: expressive personal style, mix of school uniform elements with personal touches, modern aesthetics. Students are stylish, confident, and full of personality — not generic or bland. They are actively engaged in the lesson — not simply blurred background decoration. ${bokeh}.
 
 IMPORTANT: This is a natural, candid documentary shot. No studio-style subject isolation. No artificial foreground/background separation. Instructor and students share the same genuine classroom moment.
 
-TEXT OVERLAY: ${BRIDGE_TEXT}
+${NO_TEXT_RULE}
 
-TECHNICAL: ${camera}. Color grade: ${grade}. ${quality}. Aspect ratio 16:9. Award-winning editorial education photography. NO other text, watermarks, or logos besides the BRIDGE label.`;
+TECHNICAL: ${camera}. Color grade: ${grade}. ${quality}. Aspect ratio 16:9. Award-winning editorial education photography.`;
 
     // Korean display text — shown in UI
     const koText=
@@ -1346,17 +1364,17 @@ ${composition}. 교실 전체 환경이 충분히 보여야 함. 강사와 학�
 ◆ 시간 및 분위기
 ${season}. 조명: ${lighting}. 분위기: ${mood}.
 
-◆ 수업 장면 (${raceKo} ${genderKo} 강사)
-${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습.
+◆ 수업 장면 (${raceKo} ${genderKo} 외국인 강사)
+${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습. 명확하게 비(非)한국인 외국인 강사.
 
 ◆ 한국인 학생들
-${students}. 학생들은 모두 한국인. 배경 흐림 처리의 소품이 아니라 수업에 적극 참여 중인 모습. ${bokeh}.
+${students}. 학생들은 모두 한국인. 2025년 한국 청소년 스타일 — 개성 있고 트렌디하며 자신만의 패션 감각을 갖춘 학생들. 배경 흐림 처리의 소품이 아니라 수업에 적극 참여 중인 모습. ${bokeh}.
 
 ◆ 핵심 요구사항
 스튜디오식 인물 분리 없음. 인위적 전경/배경 분리 없음. 강사와 학생이 같은 공간·같은 순간을 공유.
 
-◆ 텍스트 오버레이
-사진 좌측 중앙에 'BRIDGE' 글자를 깔끔한 흰색 산세리프체로 표시. 배경·그림자·효과 없음. 다른 텍스트·로고 없음.
+◆ 텍스트·로고 절대 금지
+이미지 어디에도 글자·문자·숫자·로고·워터마크 일절 없음. 벽, 칠판, 의류, 소품 포함 완전 텍스트 프리.
 
 ◆ 카메라·기술 설정
 ${camera}. 색감: ${grade}. ${quality}. 화면비 16:9.`;
