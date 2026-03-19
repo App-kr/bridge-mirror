@@ -439,8 +439,24 @@
       "git": "68d9f7a",
       "files": 1984,
       "db_hash": "b8b6d0d486aa"
+    },
+    {
+      "dir": "20260319_210636__ClaudeBlog-API할당오류수정",
+      "task": "ClaudeBlog-API할당오류수정",
+      "ts": "2026.03.19 21:06:48",
+      "git": "03c048b",
+      "files": 1971,
+      "db_hash": "3e421d89f217"
+    },
+    {
+      "dir": "20260319_210824__ClaudeBlog-API할당오류수정",
+      "task": "ClaudeBlog-API할당오류수정",
+      "ts": "2026.03.19 21:08:28",
+      "git": "03c048b",
+      "files": 1971,
+      "db_hash": "3e421d89f217"
     }
   ],
-  "last_backup": "2026.03.19 13:07:21",
-  "total_count": 55
+  "last_backup": "2026.03.19 21:08:28",
+  "total_count": 57
 }

@@ -1369,6 +1369,7 @@ _ADMIN_DECRYPT_FIELDS = {
     "criminal_record_check", "korean_criminal_record",
     "religion", "health_info",
     "dob", "nationality", "current_location", "reference",
+    "gender", "notes",
 }
 
 
@@ -1389,7 +1390,7 @@ def _decrypt_row(row: dict) -> dict:
                     "PII 복호화 실패 — field=%s row_id=%s: %s",
                     field, row.get("id", "?"), e,
                 )
-                row[field] = "[복호화 실패]"
+                row[field] = val  # 실패 시 원본값 유지 (에러 문자 표시 금지)
         elif val_clean != val:
             row[field] = val_clean
     return row

@@ -34,8 +34,6 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 const API = API_URL
 const PAGE_SIZE = 150
 
-const PALETTE = ['#000', '#fff', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#fef9c3', '#dbeafe']
-
 /* ── DB → DataRow mapping ── */
 function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, EditOverride>): DataRow {
   const cid = String(c.candidate_id ?? c.id ?? '')
@@ -123,9 +121,15 @@ export default function BridgeCanvasSheet() {
   const [headerMenu, setHeaderMenu] = useState<HeaderMenu | null>(null)
   const [tagPopup, setTagPopup] = useState<TagPopup | null>(null)
 
-  // Formatting toolbar state
-  const [showStyleBar, setShowStyleBar] = useState(true)
-  const [colorPicker, setColorPicker] = useState<'text' | 'bg' | null>(null)
+  // Text/Bg color pickers (Google Sheets style)
+  const [showTextColor, setShowTextColor] = useState(false)
+  const [showBgColor, setShowBgColor] = useState(false)
+
+  // Memo area
+  const [memo, setMemo] = useState('')
+  const [memoStyle, setMemoStyle] = useState({ fontSize: 13, bold: false, color: '#111' })
+  const [memoHeight, setMemoHeight] = useState(60)
+  const memoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Per-row custom heights
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({})
@@ -189,6 +193,17 @@ export default function BridgeCanvasSheet() {
     }
 
     setRowHeights(pm.loadRowHeights())
+
+    // Memo restore
+    try {
+      const savedMemo = localStorage.getItem('bridge_sheet_memo')
+      if (savedMemo) {
+        const mp = JSON.parse(savedMemo)
+        if (mp.memo) setMemo(mp.memo)
+        if (mp.style) setMemoStyle(mp.style)
+      }
+    } catch { /* ignore */ }
+
     setReady(true)
   }, [])
 
@@ -712,10 +727,25 @@ export default function BridgeCanvasSheet() {
   /* ── Full reload ── */
   const fullReload = useCallback(() => { setDbAll([]); setLoaded(0); loadAllData() }, [loadAllData])
 
+  /* ── Memo save ── */
+  const saveMemo = useCallback((m: string, s: { fontSize: number; bold: boolean; color: string }) => {
+    const data = { memo: m, style: s }
+    localStorage.setItem('bridge_sheet_memo', JSON.stringify(data))
+  }, [])
+
+  /* ── StyleManager getAllIds ── */
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    engine.styleManager.setGetAllIds(() =>
+      dbAllRef.current.map(r => String(r._cid ?? r.id))
+    )
+  }, [ready])
+
   /* ── Close popups on outside click ── */
   useEffect(() => {
     if (!ctx && !filterPopup && !headerMenu && !tagPopup) return
-    const h = () => { setCtx(null); setFilterPopup(null); setHeaderMenu(null); setColorPicker(null); setTagPopup(null) }
+    const h = () => { setCtx(null); setFilterPopup(null); setHeaderMenu(null); setShowTextColor(false); setShowBgColor(false); setTagPopup(null) }
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
   }, [ctx, filterPopup, headerMenu, tagPopup])
@@ -770,12 +800,12 @@ export default function BridgeCanvasSheet() {
       {/* Hidden file input for photo upload */}
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
 
-      {/* ── Toolbar ── */}
+      {/* ── Toolbar Row 1: actions ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
-        background: '#fff', borderBottom: '1.5px solid #d1d5db', flexShrink: 0,
+        background: '#fff', borderBottom: '1px solid #e2e8f0', flexShrink: 0,
       }}>
-        <div style={{ position: 'relative', flex: '0 0 220px' }}>
+        <div style={{ position: 'relative', flex: '0 0 200px' }}>
           <input
             type="text" placeholder="검색..."
             value={q} onChange={e => setQ(e.target.value)}
@@ -790,7 +820,7 @@ export default function BridgeCanvasSheet() {
           </span>
         </div>
 
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#111', marginLeft: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>
           {loading
             ? <span style={{ color: '#2563eb' }}>{loaded.toLocaleString()} / {dbTotal.toLocaleString()}건 로드 중...</span>
             : <span>{dbAll.length.toLocaleString()} / {dbTotal.toLocaleString()}건</span>
@@ -801,172 +831,154 @@ export default function BridgeCanvasSheet() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Selection bar */}
         {selectedRows.size > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '3px 10px', background: '#dbeafe', borderRadius: 6,
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>
-              선택 {selectedRows.size}명
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 10px', background: '#dbeafe', borderRadius: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8' }}>선택 {selectedRows.size}명</span>
             <button
-              onClick={() => {
-                const rows = [...selectedRows].map(i => displayRowsRef.current[i]).filter(Boolean)
-                if (rows.length) openMailModal(rows)
-              }}
+              onClick={() => { const rows = [...selectedRows].map(i => displayRowsRef.current[i]).filter(Boolean); if (rows.length) openMailModal(rows) }}
               style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}
-            >
-              ✉ 메일 발송
-            </button>
+            >✉ 메일</button>
           </div>
         )}
 
-        <button onClick={addNewRow} style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}>
-          👤+ 신규
-        </button>
-        <button onClick={fullReload} style={tbBtn} title="새로고침">↻ 새로고침</button>
-        <button onClick={undo} style={tbBtn} title="실행취소 (Ctrl+Z)">↩ 되돌리기</button>
-        <button onClick={redo} style={tbBtn} title="다시실행 (Ctrl+Y)">↪ 다시</button>
-        <button onClick={exportCsv} style={tbBtn} title="CSV 내보내기">📊 CSV</button>
-        <button onClick={() => setFrozenCols(p => p === 0 ? 3 : 0)} style={tbBtn} title="고정열 토글">
-          {frozenCols > 0 ? '🔒 고정' : '🔓 해제'}
-        </button>
+        <button onClick={() => setFrozenCols(p => p === 0 ? 3 : 0)} style={tbBtn}>{frozenCols > 0 ? '🔒 고정' : '🔓 해제'}</button>
+        <button onClick={fullReload} style={tbBtn}>↻ DB동기화</button>
+        <button onClick={exportCsv} style={tbBtn}>↓CSV</button>
+        <button onClick={addNewRow} style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}>+새후보자</button>
         {hiddenCount > 0 && (
-          <button onClick={showAllCols} style={{ ...tbBtn, borderColor: '#06b6d4', color: '#0e7490' }}>
-            숨긴{hiddenCount}열 표시
-          </button>
+          <button onClick={showAllCols} style={{ ...tbBtn, borderColor: '#06b6d4', color: '#0e7490' }}>숨긴{hiddenCount}열</button>
         )}
+      </div>
+
+      {/* ── Toolbar Row 2: formatting ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4, padding: '3px 12px',
+        background: '#f8fafc', borderBottom: '1.5px solid #d1d5db', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 12, color: '#555', marginRight: 2 }}>Arial</span>
+
+        <select
+          onChange={e => applyStyleToSelection({ fontSize: Number(e.target.value) })}
+          defaultValue=""
+          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px' }}
+        >
+          <option value="" disabled>크기</option>
+          {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
+
+        <button onClick={() => applyStyleToSelection({ bold: true })} style={{ ...fmtBtn, fontWeight: 700 }} title="Bold">B</button>
+        <button onClick={() => applyStyleToSelection({ italic: true })} style={{ ...fmtBtn, fontStyle: 'italic' }} title="Italic">I</button>
+        <button onClick={() => applyStyleToSelection({ strikethrough: true })} style={{ ...fmtBtn, textDecoration: 'line-through' }} title="Strikethrough">S</button>
+
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
+
+        {/* Text color */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setShowTextColor(v => !v); setShowBgColor(false) }}
+            style={{ ...fmtBtn, borderBottom: '3px solid #000', paddingBottom: 1 }}
+            title="글자색"
+          >A</button>
+          {showTextColor && (
+            <ColorPalette
+              onSelect={c => { applyStyleToSelection({ color: c }); setShowTextColor(false) }}
+              onReset={() => { applyStyleToSelection({ color: '#000000' }); setShowTextColor(false) }}
+              onClose={() => setShowTextColor(false)}
+            />
+          )}
+        </div>
+
+        {/* Bg color */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setShowBgColor(v => !v); setShowTextColor(false) }}
+            style={{ ...fmtBtn, borderBottom: '3px solid transparent', paddingBottom: 1 }}
+            title="배경색"
+          >🎨</button>
+          {showBgColor && (
+            <ColorPalette
+              onSelect={c => { applyStyleToSelection({ bgColor: c }); setShowBgColor(false) }}
+              onReset={() => { applyStyleToSelection({ bgColor: '' }); setShowBgColor(false) }}
+              onClose={() => setShowBgColor(false)}
+            />
+          )}
+        </div>
+
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
+
+        <button onClick={() => applyStyleToSelection({ align: 'left' })} style={fmtBtn} title="왼쪽 정렬">⬅</button>
+        <button onClick={() => applyStyleToSelection({ align: 'center' })} style={fmtBtn} title="가운데 정렬">≡</button>
+        <button onClick={() => applyStyleToSelection({ align: 'right' })} style={fmtBtn} title="오른쪽 정렬">➡</button>
+
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
         <select
           value={rowHeight}
           onChange={e => setRowHeight(Number(e.target.value))}
-          style={{ ...tbBtn, padding: '4px 6px', fontSize: 12 }}
+          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px' }}
         >
-          <option value={28}>행 낮게</option>
-          <option value={36}>행 보통</option>
-          <option value={56}>행 높게</option>
-          <option value={72}>행 사진</option>
+          <option value={28}>낮게</option>
+          <option value={40}>보통</option>
+          <option value={56}>높게</option>
+          <option value={72}>사진</option>
         </select>
 
-        <button onClick={() => setShowStyleBar(p => !p)} style={tbBtn} title="서식 도구바 토글">
-          {showStyleBar ? '🎨 서식' : '🎨'}
-        </button>
+        <div style={{ flex: 1 }} />
+
+        <button onClick={undo} style={fmtBtn} title="Ctrl+Z">↩</button>
+        <button onClick={redo} style={fmtBtn} title="Ctrl+Y">↪</button>
       </div>
 
-      {/* ── Style Toolbar ── */}
-      {showStyleBar && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px',
-          background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0,
-          flexWrap: 'wrap',
-        }}>
-          <button
-            onClick={() => applyStyleToSelection({ bold: true })}
-            style={{ ...styleTbBtn, fontWeight: 900 }}
-            title="굵게 (Ctrl+B)"
-          >B</button>
-          <button
-            onClick={() => applyStyleToSelection({ italic: true })}
-            style={{ ...styleTbBtn, fontStyle: 'italic' }}
-            title="기울임 (Ctrl+I)"
-          >I</button>
-
-          <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 4px' }} />
-
-          <select
-            onChange={e => applyStyleToSelection({ fontSize: Number(e.target.value) })}
-            defaultValue=""
-            style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4 }}
-          >
-            <option value="" disabled>글자크기</option>
-            {[10, 12, 13, 14, 16, 18, 20].map(s => (
-              <option key={s} value={s}>{s}px</option>
-            ))}
-          </select>
-
-          <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 4px' }} />
-
-          {/* Text color */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={e => { e.stopPropagation(); setColorPicker(p => p === 'text' ? null : 'text') }}
-              style={{ ...styleTbBtn, color: '#ef4444' }}
-              title="글자색"
-            >글자색</button>
-            {colorPicker === 'text' && (
-              <div onClick={e => e.stopPropagation()} style={paletteStyle}>
-                {PALETTE.map(c => (
-                  <div
-                    key={c}
-                    onClick={() => { applyStyleToSelection({ color: c }); setColorPicker(null) }}
-                    style={{ width: 22, height: 22, background: c, border: '1px solid #d1d5db', borderRadius: 3, cursor: 'pointer' }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Bg color */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={e => { e.stopPropagation(); setColorPicker(p => p === 'bg' ? null : 'bg') }}
-              style={{ ...styleTbBtn, background: '#fef9c3' }}
-              title="배경색"
-            >배경색</button>
-            {colorPicker === 'bg' && (
-              <div onClick={e => e.stopPropagation()} style={paletteStyle}>
-                {PALETTE.map(c => (
-                  <div
-                    key={c}
-                    onClick={() => { applyStyleToSelection({ bgColor: c }); setColorPicker(null) }}
-                    style={{ width: 22, height: 22, background: c, border: '1px solid #d1d5db', borderRadius: 3, cursor: 'pointer' }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Tabs ── */}
+      {/* ── Memo Area ── */}
       <div style={{
-        display: 'flex', gap: 0, background: '#fff',
-        borderBottom: '1.5px solid #d1d5db', flexShrink: 0, paddingLeft: 8,
+        flexShrink: 0, background: '#FFFDE7',
+        borderBottom: '2px solid #F9A825',
+        display: 'flex', flexDirection: 'column',
+        height: memoHeight, minHeight: 40, maxHeight: 200,
+        position: 'relative',
       }}>
-        {TABS.map(t => {
-          const active = tab === t.key
-          const inactiveBg = t.bg + '55'  // 탭 비활성: 옅은 파스텔 (33% 투명도)
-          return (
-            <button key={t.key} onClick={() => { setTab(t.key); setSelectedRows(new Set()); setFilters({}) }} style={{
-              padding: '7px 16px', fontSize: 13, fontWeight: 700,
-              color: active ? t.color : '#555',
-              background: active ? t.bg : inactiveBg,
-              border: 'none', borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
-              cursor: 'pointer',
-            }}>
-              {t.icon} {t.label}
-              <span style={{
-                marginLeft: 6, fontSize: 11, fontWeight: 700,
-                background: active ? t.accent + '20' : '#eee',
-                color: active ? t.accent : '#888',
-                padding: '1px 6px', borderRadius: 10,
-              }}>
-                {tabCounts[t.key] ?? 0}
-              </span>
-            </button>
-          )
-        })}
-        {loading && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingRight: 12 }}>
-            <div style={{ flex: 1, height: 4, background: '#e2e8f0', borderRadius: 2 }}>
-              <div style={{
-                width: dbTotal > 0 ? `${(loaded / dbTotal) * 100}%` : '0%',
-                height: '100%', background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s',
-              }} />
-            </div>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 4, padding: '2px 8px', borderBottom: '1px solid #F9A825', alignItems: 'center' }}>
+          <select
+            value={memoStyle.fontSize}
+            onChange={e => { const s = { ...memoStyle, fontSize: +e.target.value }; setMemoStyle(s); saveMemo(memo, s) }}
+            style={{ fontSize: 11, padding: '0 2px', border: '1px solid #e0d78a', borderRadius: 3 }}
+          >
+            {[10, 11, 12, 13, 14, 16, 18].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <button
+            onClick={() => { const s = { ...memoStyle, bold: !memoStyle.bold }; setMemoStyle(s); saveMemo(memo, s) }}
+            style={{ fontWeight: memoStyle.bold ? 700 : 400, width: 22, height: 22, border: '1px solid #e0d78a', borderRadius: 3, background: memoStyle.bold ? '#fff3cd' : 'transparent', cursor: 'pointer', fontSize: 12 }}
+          >B</button>
+          <input
+            type="color" value={memoStyle.color}
+            onChange={e => { const s = { ...memoStyle, color: e.target.value }; setMemoStyle(s); saveMemo(memo, s) }}
+            style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer' }}
+            title="글자색"
+          />
+        </div>
+        <textarea
+          value={memo}
+          onChange={e => { setMemo(e.target.value); saveMemo(e.target.value, memoStyle) }}
+          placeholder="메모를 입력하세요..."
+          style={{
+            flex: 1, border: 'none', outline: 'none', resize: 'none',
+            padding: '4px 8px', background: 'transparent',
+            fontSize: memoStyle.fontSize, fontWeight: memoStyle.bold ? 700 : 400,
+            color: memoStyle.color, fontFamily: 'system-ui, sans-serif',
+          }}
+        />
+        <div
+          onMouseDown={e => {
+            const startY = e.clientY; const startH = memoHeight
+            const onMove = (me: MouseEvent) => setMemoHeight(Math.max(40, Math.min(200, startH + (me.clientY - startY))))
+            const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+            window.addEventListener('mousemove', onMove)
+            window.addEventListener('mouseup', onUp)
+          }}
+          style={{ height: 5, cursor: 'row-resize', background: '#F9A825', opacity: 0.4 }}
+        />
       </div>
 
       {/* ── Canvas Container (fills remaining space) ── */}
@@ -1138,6 +1150,46 @@ export default function BridgeCanvasSheet() {
         )
       })()}
 
+      {/* ── Tabs (bottom) ── */}
+      <div style={{
+        display: 'flex', gap: 0, flexShrink: 0, paddingLeft: 4,
+        borderTop: '1px solid #ccc', background: '#37474F',
+      }}>
+        {TABS.map(t => {
+          const active = tab === t.key
+          return (
+            <button key={t.key} onClick={() => { setTab(t.key); setSelectedRows(new Set()); setFilters({}) }} style={{
+              padding: '6px 16px', fontSize: 13, fontWeight: 400,
+              color: active ? '#fff' : '#ccc',
+              background: active ? t.bg : '#546E7A',
+              border: 'none',
+              borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
+              cursor: 'pointer', transition: 'background 0.15s',
+            }}>
+              {t.icon} {t.label}
+              <span style={{
+                marginLeft: 6, fontSize: 11, fontWeight: 600,
+                background: active ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+                color: active ? '#fff' : '#aaa',
+                padding: '1px 6px', borderRadius: 10,
+              }}>
+                {tabCounts[t.key] ?? 0}
+              </span>
+            </button>
+          )
+        })}
+        {loading && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingRight: 12, paddingLeft: 12 }}>
+            <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.15)', borderRadius: 2 }}>
+              <div style={{
+                width: dbTotal > 0 ? `${(loaded / dbTotal) * 100}%` : '0%',
+                height: '100%', background: '#64b5f6', borderRadius: 2, transition: 'width 0.3s',
+              }} />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Footer Legend ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '4px 12px',
@@ -1182,6 +1234,50 @@ function CtxItem({ label, onClick }: { label: string; onClick: () => void }) {
   )
 }
 
+/* ── Color Palette (Google Sheets style) ── */
+const GPALETTE = [
+  ['#000000','#434343','#666666','#999999','#b7b7b7','#cccccc','#d9d9d9','#efefef','#f3f3f3','#ffffff'],
+  ['#ff0000','#ff9900','#ffff00','#00ff00','#00ffff','#4a86e8','#0000ff','#9900ff','#ff00ff','#980000'],
+  ['#ea9999','#f9cb9c','#ffe599','#b6d7a8','#a2c4c9','#9fc5e8','#b4a7d6','#d5a6bd','#e6b8af','#f4cccc'],
+  ['#e06666','#f6b26b','#ffd966','#93c47d','#76a5af','#6fa8dc','#8e7cc3','#c27ba0','#dd7e6b','#ea9999'],
+  ['#cc0000','#e69138','#f1c232','#6aa84f','#45818e','#3d85c8','#674ea7','#a64d79','#b45f06','#990000'],
+  ['#660000','#783f04','#7f6000','#274e13','#0c343d','#1c4587','#20124d','#4c1130','#351c75','#741b47'],
+]
+
+function ColorPalette({ onSelect, onReset, onClose }: {
+  onSelect: (c: string) => void; onReset: () => void; onClose: () => void
+}) {
+  useEffect(() => {
+    const handler = () => onClose()
+    const t = setTimeout(() => document.addEventListener('click', handler), 0)
+    return () => { clearTimeout(t); document.removeEventListener('click', handler) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'absolute', top: '100%', left: 0, zIndex: 2000,
+      background: '#fff', border: '1px solid #ddd', borderRadius: 4,
+      padding: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', width: 230,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 11, color: '#555' }}>재설정</span>
+        <div onClick={onReset} title="색상 제거"
+          style={{ width: 18, height: 18, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+          background: 'linear-gradient(135deg,#fff 45%,#f00 45%,#f00 55%,#fff 55%)' }} />
+      </div>
+      {GPALETTE.map((row, ri) => (
+        <div key={ri} style={{ display: 'flex', gap: 2, marginBottom: 2 }}>
+          {row.map(color => (
+            <div key={color} onClick={() => onSelect(color)}
+              style={{ width: 18, height: 18, background: color, cursor: 'pointer',
+              border: '1px solid rgba(0,0,0,0.15)', borderRadius: 2, flexShrink: 0 }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── Style constants ── */
 const tbBtn: React.CSSProperties = {
   padding: '4px 10px', border: '1.5px solid #bbb', borderRadius: 4,
@@ -1189,16 +1285,9 @@ const tbBtn: React.CSSProperties = {
   color: '#111', lineHeight: 1, letterSpacing: '-0.3px',
 }
 
-const styleTbBtn: React.CSSProperties = {
-  padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 4,
-  background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600,
-  color: '#333', lineHeight: 1, minWidth: 28, textAlign: 'center',
-}
-
-const paletteStyle: React.CSSProperties = {
-  position: 'absolute', top: '100%', left: 0, zIndex: 200,
-  background: '#fff', border: '1px solid #d1d5db', borderRadius: 8,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: 8,
-  display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4,
-  minWidth: 160,
+const fmtBtn: React.CSSProperties = {
+  width: 26, height: 26, border: '1px solid #ccc', borderRadius: 3,
+  background: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  color: '#333', lineHeight: 1, textAlign: 'center', display: 'inline-flex',
+  alignItems: 'center', justifyContent: 'center',
 }

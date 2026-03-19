@@ -9,9 +9,18 @@ const STORAGE_KEY = 'bridge-sheet-styles'
 
 export class StyleManager {
   private styles = new Map<string, CellStyle>()
+  private _getAllIds: (() => string[]) | null = null
 
   constructor() {
     this.load()
+  }
+
+  setGetAllIds(fn: () => string[]): void {
+    this._getAllIds = fn
+  }
+
+  getAllIds(): string[] {
+    return this._getAllIds ? this._getAllIds() : []
   }
 
   private key(cid: string, colKey: string): string {

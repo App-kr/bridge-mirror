@@ -689,7 +689,8 @@
       "Bash(/tmp/silent_ahnlab.ps1:*)",
       "Bash(__NEW_LINE_e5305c37b2be082a__ powershell -NoProfile -Command \"schtasks /Create /TN AhnSilentMode /TR ''powershell -NoProfile -ExecutionPolicy Bypass -File C:\\\\Windows\\\\Temp\\\\ss.ps1'' /SC ONCE /ST 00:00 /RU SYSTEM /F\")",
       "Bash(\"C:\\\\Windows\\\\Temp\\\\setservice.bat\":*)",
-      "Bash(__NEW_LINE_a12ee0abe623df9b__ powershell -NoProfile -Command \"\n$time = \\(Get-Date\\).AddMinutes\\(1\\).ToString\\(''HH:mm''\\)\nschtasks /Create /TN AhnSvcDisable /TR ''C:\\\\Windows\\\\Temp\\\\setservice.bat'' /SC ONCE /ST $time /RU SYSTEM /F 2>&1\n\")"
+      "Bash(__NEW_LINE_a12ee0abe623df9b__ powershell -NoProfile -Command \"\n$time = \\(Get-Date\\).AddMinutes\\(1\\).ToString\\(''HH:mm''\\)\nschtasks /Create /TN AhnSvcDisable /TR ''C:\\\\Windows\\\\Temp\\\\setservice.bat'' /SC ONCE /ST $time /RU SYSTEM /F 2>&1\n\")",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8:*)"
     ]
   }
 }

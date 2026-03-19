@@ -9,6 +9,7 @@ export class SelectionManager {
   private selectedRows = new Set<number>()
   private activeCell: CellRef | null = null
   private anchorRow = -1  // for shift+click range
+  selectedCols = new Set<number>()
 
   /** Single cell selection */
   selectCell(row: number, col: number): void {
@@ -38,6 +39,7 @@ export class SelectionManager {
 
   clearSelection(): void {
     this.selectedRows.clear()
+    this.selectedCols.clear()
     this.activeCell = null
     this.anchorRow = -1
   }
@@ -79,6 +81,15 @@ export class SelectionManager {
     if (this.selectedRows.has(row)) this.selectedRows.delete(row)
     else this.selectedRows.add(row)
     this.anchorRow = row
+  }
+
+  /** Select an entire column (alphabet header click) */
+  selectColumn(colIndex: number, rowCount: number): void {
+    this.selectedRows.clear()
+    for (let i = 0; i < rowCount; i++) this.selectedRows.add(i)
+    this.selectedCols = new Set([colIndex])
+    this.activeCell = { row: 0, col: colIndex }
+    this.anchorRow = 0
   }
 
   /** Move active cell with keyboard arrows */

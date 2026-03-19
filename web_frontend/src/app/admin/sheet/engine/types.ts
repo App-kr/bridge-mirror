@@ -81,6 +81,8 @@ export interface CellStyle {
   bgColor?: string
   bold?: boolean
   italic?: boolean
+  strikethrough?: boolean
+  align?: 'left' | 'center' | 'right'
 }
 
 export interface MailTemplate {
@@ -102,7 +104,7 @@ export const MAIL_TEMPLATES: MailTemplate[] = [
 ]
 
 /* ── Constants ── */
-export const HEADER_H = 32
+export const HEADER_H = 56
 export const ROW_H = 36
 export const FONT = '13px -apple-system,"Segoe UI",sans-serif'
 export const HEADER_FONT = 'bold 12px -apple-system,"Segoe UI",sans-serif'
@@ -119,10 +121,10 @@ export const STAGES: Stage[] = [
 ]
 
 export const TABS: TabDef[] = [
-  { key: 'active', label: '구직활동중', color: '#2563eb', bg: '#dbeafe', accent: '#1d4ed8', icon: '👤' },
-  { key: 'past', label: '체결완료', color: '#16a34a', bg: '#dcfce7', accent: '#166534', icon: '✅' },
-  { key: 'blacklist', label: '블랙리스트', color: '#dc2626', bg: '#fee2e2', accent: '#991b1b', icon: '⛔' },
-  { key: 'all', label: '전체', color: '#0f172a', bg: '#e2e8f0', accent: '#020617', icon: '📋' },
+  { key: 'active', label: '구직활동중', color: '#fff', bg: '#2E7D32', accent: '#1B5E20', icon: '👤' },
+  { key: 'past', label: '체결완료', color: '#fff', bg: '#1976D2', accent: '#0D47A1', icon: '✅' },
+  { key: 'blacklist', label: '블랙리스트', color: '#fff', bg: '#C62828', accent: '#B71C1C', icon: '⛔' },
+  { key: 'all', label: '전체', color: '#fff', bg: '#37474F', accent: '#263238', icon: '📋' },
 ]
 
 export const MTAGS: MailTag[] = [
@@ -149,13 +151,19 @@ export const MTAGS: MailTag[] = [
   { key: 'role_camp',     label: '캠프',     c: '#84cc16' },
 ]
 
+/** Column alphabet label: 0→A, 1→B, ... 25→Z, 26→AA, 27→AB */
+export function colAlphabet(i: number): string {
+  if (i < 26) return String.fromCharCode(65 + i)
+  return String.fromCharCode(65 + Math.floor(i / 26) - 1) + String.fromCharCode(65 + (i % 26))
+}
+
 export const H_OPTS = ['숙소제공', '월세제공', '보증+월세', '불필요', '자체']
 export const FEE_OPTS = ['선금완료', '잔금완료', '일시납완료', '연체중', '14일연체', '장기연체']
 export const PROC_OPTS = ['선금대기', '선금완료', '잔금대기', '잔금완료', '일시납대기', '일시납완료', '연체중', '장기연체', '특이사항']
 
 export function defaultCols(): ColDef[] {
   return [
-    { key: 'rowNum', label: '번호', w: 52, type: 'idx', v: true },
+    { key: 'rowNum', label: '번호', w: 80, type: 'idx', v: true },
     { key: 'email', label: '메일', w: 190, type: 't', v: true },
     { key: 'name', label: '이름', w: 140, type: 't', v: true },
     { key: 'photo', label: '사진', w: 65, type: 'photo', v: true },

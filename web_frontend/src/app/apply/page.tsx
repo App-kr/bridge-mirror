@@ -179,23 +179,23 @@ function StepIndicator({ step }: { step: number }) {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function Sec({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="text-lg font-bold text-gray-900 uppercase tracking-wide border-b border-gray-100 pb-2 mb-1">
+    <div className="text-[22px] font-bold text-[#1a1a2e] uppercase tracking-wide border-b border-gray-100 pb-2 mb-2">
       {title}
-      {subtitle && <span className="ml-2 text-gray-300 normal-case font-normal tracking-normal">{subtitle}</span>}
+      {subtitle && <span className="ml-2 text-gray-400 normal-case font-normal tracking-normal text-base">{subtitle}</span>}
     </div>
   )
 }
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="block text-[15px] font-semibold text-gray-800 mb-1">
-      {children}{required && <span className="text-red-400 ml-0.5">*</span>}
+    <label className="block text-[14px] font-semibold text-[#111] mb-1">
+      {children}{required && <span className="text-[#d32f2f] ml-0.5">*</span>}
     </label>
   )
 }
 
 function Desc({ text }: { text: string }) {
-  return <p className="text-sm text-gray-400 -mt-0.5 mb-2 leading-relaxed">{text}</p>
+  return <p className="text-[13px] text-[#333] -mt-0.5 mb-2 leading-relaxed">{text}</p>
 }
 
 function SingleTog({
@@ -1087,7 +1087,8 @@ export default function ApplyPage() {
               type="button"
               onClick={handleSubmit}
               disabled={status === 'submitting'}
-              className="btn-primary flex-1 text-base py-3"
+              className="flex-1 text-base py-3.5 px-8 rounded-lg font-bold text-white disabled:opacity-50"
+              style={{ background: '#1a1a2e', fontSize: 16 }}
             >
               {status === 'submitting' ? 'Submitting...' : 'Submit Application'}
             </button>

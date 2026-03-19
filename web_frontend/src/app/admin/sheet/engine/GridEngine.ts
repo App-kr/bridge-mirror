@@ -8,7 +8,7 @@
    ═══════════════════════════════════════════════════════ */
 
 import type { ColDef, DataRow, GridCallbacks, CellRef } from './types'
-import { HEADER_H, FONT, HEADER_FONT, STAGES, MTAGS } from './types'
+import { HEADER_H, FONT, HEADER_FONT, STAGES, MTAGS, colAlphabet } from './types'
 import { SelectionManager } from './SelectionManager'
 import { EditManager } from './EditManager'
 import { StyleManager } from './StyleManager'
@@ -26,6 +26,8 @@ const RESIZE_ZONE  = 5
 const ROW_RESIZE_ZONE = 5
 const CHECKBOX_SIZE = 14
 const CHECKBOX_PAD  = 4
+const CHECKBOX_W = 24  // left zone for checkbox
+const NUM_W_PAD = 4    // right padding for row number
 const KEY_COLS = new Set(['email', 'name'])
 const KEY_COL_FONT = '14px -apple-system,"Segoe UI",sans-serif'
 const KEY_HEADER_FONT = '13px -apple-system,"Segoe UI",sans-serif'
@@ -522,14 +524,15 @@ export class GridEngine {
   }
 
   /* ── Header events ── */
-  private headerHitVisCol(e: MouseEvent): { visCol: number; nearBorder: boolean; localX: number } | null {
+  private headerHitVisCol(e: MouseEvent): { visCol: number; nearBorder: boolean; localX: number; localY: number } | null {
     const rect = this.headerHit.getBoundingClientRect()
     const mx = e.clientX - rect.left + this.scrollLeft
+    const my = e.clientY - rect.top
     let cx = 0
     for (let i = 0; i < this.visCols.length; i++) {
       cx += this.visCols[i].w
-      if (Math.abs(mx - cx) <= RESIZE_ZONE) return { visCol: i, nearBorder: true, localX: mx - (cx - this.visCols[i].w) }
-      if (mx < cx) return { visCol: i, nearBorder: false, localX: mx - (cx - this.visCols[i].w) }
+      if (Math.abs(mx - cx) <= RESIZE_ZONE) return { visCol: i, nearBorder: true, localX: mx - (cx - this.visCols[i].w), localY: my }
+      if (mx < cx) return { visCol: i, nearBorder: false, localX: mx - (cx - this.visCols[i].w), localY: my }
     }
     return null
   }
@@ -559,6 +562,14 @@ export class GridEngine {
       return
     }
 
+    // Alphabet row click (top 20px) → select entire column
+    if (hit.localY < 20) {
+      this.selection.selectColumn(hit.visCol, this.rows.length)
+      this.cb.onSelectionChange(this.selection.getSelectedRows())
+      this.requestRender()
+      return
+    }
+
     if (hit.localX > col.w - 18 && col.type !== 'photo' && col.type !== 'mail') {
       const rect = this.headerHit.getBoundingClientRect()
       const cx = this.colX(hit.visCol) - this.scrollLeft
@@ -566,8 +577,7 @@ export class GridEngine {
       return
     }
 
-    // 열 헤더 클릭: 전체 행 선택 + active cell을 해당 열로 설정
-    // → 이후 색/서식 적용 시 전체 열에 반영됨
+    // Column name click: select all + sort
     this.selection.selectAll(this.rows.length)
     this.selection.selectCell(0, hit.visCol)
     this.cb.onSelectionChange(this.selection.getSelectedRows())
@@ -771,7 +781,7 @@ export class GridEngine {
     const val = String(row[col.key] ?? '')
     const cid = String(row._cid ?? '')
 
-    if (col.type === 't' || col.type === 'long') {
+    if (col.type === 't' || col.type === 'long' || col.type === 'dropdown') {
       const style = this.styleManager.getStyle(cid, col.key)
       if (style?.bgColor) {
         ctx.fillStyle = style.bgColor
@@ -779,7 +789,7 @@ export class GridEngine {
       }
     }
 
-    const style = (col.type === 't' || col.type === 'long') ? this.styleManager.getStyle(cid, col.key) : undefined
+    const style = (col.type === 't' || col.type === 'long' || col.type === 'dropdown') ? this.styleManager.getStyle(cid, col.key) : undefined
     const fontSize = style?.fontSize || 13
     const bold = style?.bold ? 'bold ' : ''
     const italic = style?.italic ? 'italic ' : ''
@@ -808,34 +818,53 @@ export class GridEngine {
         this.drawMailBtn(x, y, w, h)
         break
       case 'dropdown':
+        ctx.save()
+        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
         ctx.fillStyle = style?.color || '#1e293b'
-        this.drawTruncated(val, x + 4, ty, w - 20)
+        this.drawWrapped(val, x + 4, y + 4, w - 20, h - 8)
+        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 20)
+        ctx.restore()
         ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
         ctx.fillText('\u25BE', x + w - 14, ty); ctx.font = customFont
         break
       case 'long':
+        ctx.save()
+        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
         ctx.fillStyle = style?.color || '#334155'
         this.drawWrapped(val, x + 4, y + 4, w - 8, h - 8)
+        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 8)
+        ctx.restore()
         break
-      default:
-        if (KEY_COLS.has(col.key)) {
-          ctx.font = KEY_COL_FONT
-          ctx.fillStyle = style?.color || '#1e293b'
-          ctx.textAlign = 'center'
-          this.drawTruncated(val, x + w / 2, ty, w - 8)
-          ctx.textAlign = 'left'
-        } else {
-          ctx.fillStyle = style?.color || '#1e293b'
-          this.drawTruncated(val, x + 4, ty, w - 8)
-        }
+      default: {
+        // All text cells: clip + wrapped text
+        ctx.save()
+        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
+        const isKey = KEY_COLS.has(col.key)
+        if (isKey) ctx.font = KEY_COL_FONT
+        ctx.fillStyle = style?.color || '#1e293b'
+        const align = style?.align || (isKey ? 'center' : 'left')
+        ctx.textAlign = align
+        const tx = align === 'center' ? x + w / 2 : align === 'right' ? x + w - 4 : x + 4
+        this.drawWrapped(val, tx, y + 4, w - 8, h - 8)
+        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 8)
+        ctx.textAlign = 'left'
+        ctx.restore()
+      }
     }
     ctx.font = FONT
   }
 
   private drawCheckboxCell(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
+    // Checkbox zone background
+    ctx.fillStyle = '#f8f9fa'
+    ctx.fillRect(x, y, CHECKBOX_W, h)
+    // Number zone background
+    ctx.fillStyle = '#f1f3f4'
+    ctx.fillRect(x + CHECKBOX_W, y, w - CHECKBOX_W, h)
+
     const isSelected = this.selection.isRowSelected(rowIdx)
-    const cbX = x + CHECKBOX_PAD
+    const cbX = x + (CHECKBOX_W - CHECKBOX_SIZE) / 2
     const cbY = y + (h - CHECKBOX_SIZE) / 2
     ctx.strokeStyle = isSelected ? '#3b82f6' : '#94a3b8'
     ctx.lineWidth = 1.5
@@ -850,11 +879,25 @@ export class GridEngine {
       ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
       ctx.stroke()
     }
-    ctx.fillStyle = '#94a3b8'
+    // Row number in the right zone
+    ctx.fillStyle = '#555'
     ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
-    ctx.fillText(String(row.id), x + w - 4, y + h / 2)
+    ctx.fillText(String(row.mgtNum || row.id), x + w - NUM_W_PAD, y + h / 2)
     ctx.textAlign = 'left'; ctx.font = FONT
+  }
+
+  /** Draw strikethrough line over text */
+  private drawStrikethrough(text: string, x: number, y: number, maxW: number): void {
+    const w = Math.min(this.ctx.measureText(text).width, maxW)
+    this.ctx.save()
+    this.ctx.strokeStyle = this.ctx.fillStyle as string
+    this.ctx.lineWidth = 1
+    this.ctx.beginPath()
+    this.ctx.moveTo(x, y)
+    this.ctx.lineTo(x + w, y)
+    this.ctx.stroke()
+    this.ctx.restore()
   }
 
   private drawTruncated(text: string, x: number, y: number, maxW: number): void {
@@ -995,10 +1038,15 @@ export class GridEngine {
     ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath()
   }
 
-  /* ── Header ── */
+  /* ── Header (2-row: alphabet + column name) ── */
   private drawHeader(frozenW: number, frozenN: number): void {
     const { ctx, viewW } = this
+    // Header background
     ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, viewW, HEADER_H)
+    // Alphabet row separator line at y=20
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, 20.5); ctx.lineTo(viewW, 20.5); ctx.stroke()
+    // Header bottom border
     ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, HEADER_H - 0.5); ctx.lineTo(viewW, HEADER_H - 0.5); ctx.stroke()
     ctx.font = HEADER_FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1e293b'
@@ -1009,7 +1057,7 @@ export class GridEngine {
     for (let i = 0; i < this.visCols.length; i++) {
       const col = this.visCols[i]
       if (i < frozenN) { cx += col.w; continue }
-      this.drawHeaderCell(col, cx, col.w); cx += col.w
+      this.drawHeaderCell(col, cx, col.w, i); cx += col.w
     }
     ctx.restore()
 
@@ -1017,20 +1065,27 @@ export class GridEngine {
       ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, frozenW, HEADER_H)
       let fx = 0
       for (let i = 0; i < frozenN; i++) {
-        this.drawHeaderCell(this.visCols[i], fx, this.visCols[i].w); fx += this.visCols[i].w
+        this.drawHeaderCell(this.visCols[i], fx, this.visCols[i].w, i); fx += this.visCols[i].w
       }
       ctx.strokeStyle = FROZEN_SEP; ctx.lineWidth = 2
       ctx.beginPath(); ctx.moveTo(frozenW, 0); ctx.lineTo(frozenW, HEADER_H); ctx.stroke()
     }
   }
 
-  private drawHeaderCell(col: ColDef, x: number, w: number): void {
+  private drawHeaderCell(col: ColDef, x: number, w: number, colIndex: number): void {
     const { ctx } = this
+    const nameY = 38  // vertical center of the column-name row (20..56 → center ≈ 38)
 
     if (col.type === 'idx') {
+      // Checkbox area background
+      ctx.fillStyle = '#f0f0f2'
+      ctx.fillRect(x, 0, CHECKBOX_W, HEADER_H)
+      ctx.fillStyle = '#eaeaec'
+      ctx.fillRect(x + CHECKBOX_W, 0, w - CHECKBOX_W, HEADER_H)
+
       const isAll = this.selection.isAllSelected(this.rows.length)
-      const cbX = x + CHECKBOX_PAD
-      const cbY = (HEADER_H - CHECKBOX_SIZE) / 2
+      const cbX = x + (CHECKBOX_W - CHECKBOX_SIZE) / 2
+      const cbY = nameY - CHECKBOX_SIZE / 2
       ctx.strokeStyle = isAll ? '#3b82f6' : '#94a3b8'
       ctx.lineWidth = 1.5
       ctx.strokeRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
@@ -1046,29 +1101,34 @@ export class GridEngine {
       }
       ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-      ctx.fillText(col.label, cbX + CHECKBOX_SIZE + 3, HEADER_H / 2)
+      ctx.fillText(col.label, x + CHECKBOX_W + 4, nameY)
       ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
       return
     }
 
-    const isKeyCol = KEY_COLS.has(col.key)
+    // ── Alphabet row (top 0-20px) ──
+    ctx.font = '10px system-ui, -apple-system, sans-serif'
+    ctx.fillStyle = '#999'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(colAlphabet(colIndex), x + w / 2, 10)
+
+    // ── Column name row (20-56px) ──
     ctx.fillStyle = '#1e293b'
-    ctx.font = isKeyCol ? KEY_HEADER_FONT : HEADER_FONT
-    ctx.textAlign = isKeyCol ? 'center' : 'left'
-    ctx.textBaseline = 'middle'
-    this.drawTruncated(col.label, isKeyCol ? x + w / 2 : x + 6, HEADER_H / 2, w - 24)
+    ctx.font = HEADER_FONT
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    this.drawTruncated(col.label, x + w / 2, nameY, w - 24)
     ctx.textAlign = 'left'
 
     if (col.key === this.sortKey) {
       ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
-      ctx.fillText(this.sortDir === 'asc' ? '\u25B2' : '\u25BC', x + w - 16, HEADER_H / 2)
+      ctx.fillText(this.sortDir === 'asc' ? '\u25B2' : '\u25BC', x + w - 16, nameY)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
     if (col.type !== 'photo' && col.type !== 'mail') {
       ctx.fillStyle = '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
-      ctx.fillText('\u25BC', x + w - 5, HEADER_H / 2)
+      ctx.fillText('\u25BC', x + w - 5, nameY)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
