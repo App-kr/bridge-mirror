@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BRIDGE ESLCafe Ad Manager</title>
+<style>
+:root{
+  --navy:#003366;--blue:#1a5ff8;--blue2:#1248c8;--green:#05b97d;
+  --bg:#f0f2f5;--white:#ffffff;
+  --gray1:#1a1d25;--gray2:#3d4150;--gray3:#6b7280;--gray4:#9ca3af;
+  --gray5:#d1d5db;--gray6:#e5e7eb;--gray7:#f3f4f6;
+  --shadow:0 1px 4px rgba(0,0,0,.07);--shadow2:0 4px 16px rgba(0,0,0,.09);
+  --r:8px;--r-lg:12px;--r-xl:16px;
+  --f:Pretendard,-apple-system,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:var(--bg);color:var(--gray1);font-size:13px;overflow:hidden;height:100vh}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;height:48px;background:var(--navy);color:#fff;padding:0 16px;gap:12px;z-index:100}
+.topbar .logo{font-weight:700;font-size:16px;letter-spacing:1px}
+.topbar .logo span{color:var(--green)}
+.topbar .tabs{display:flex;gap:2px;margin-left:16px}
+.topbar .tab{padding:6px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-size:12px;background:rgba(255,255,255,.1);transition:.15s}
+.topbar .tab:hover{background:rgba(255,255,255,.2)}
+.topbar .tab.active{background:var(--white);color:var(--navy);font-weight:600}
+.topbar .spacer{flex:1}
+.topbar .clock{font-size:12px;opacity:.8;font-family:var(--mono)}
+.topbar .btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:.15s}
+.topbar .btn-rand{background:#f59e0b;color:#78350f}
+.topbar .btn-rand:hover{background:#fbbf24}
+.topbar .btn-gen{background:var(--green);color:#fff}
+.topbar .btn-gen:hover{background:#04a06d}
+
+/* LAYOUT */
+.layout{display:flex;height:calc(100vh - 48px)}
+
+/* LEFT PANEL */
+.left{width:340px;min-width:340px;background:var(--white);border-right:1px solid var(--gray6);display:flex;flex-direction:column;overflow:hidden}
+.left .search-box{padding:10px 12px;border-bottom:1px solid var(--gray6)}
+.left .search-box input{width:100%;padding:7px 10px;border:1px solid var(--gray5);border-radius:var(--r);font-size:12px;outline:none}
+.left .search-box input:focus{border-color:var(--blue)}
+.left .filters{display:flex;gap:4px;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid var(--gray6)}
+.left .chip{padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--gray5);background:var(--white);transition:.15s}
+.left .chip:hover{border-color:var(--blue);color:var(--blue)}
+.left .chip.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.left .job-list{flex:1;overflow-y:auto;padding:8px 0}
+.left .section-label{font-size:11px;font-weight:700;color:var(--gray3);padding:8px 12px 4px;text-transform:uppercase;letter-spacing:.5px}
+.left .job-item{display:flex;align-items:center;padding:8px 12px;cursor:pointer;gap:8px;transition:.1s;border-left:3px solid transparent}
+.left .job-item:hover{background:var(--gray7)}
+.left .job-item.selected{background:#eff6ff;border-left-color:var(--blue)}
+.left .job-item.premium{border-left-color:#7c3aed}
+.left .job-item .jid{font-size:11px;color:var(--blue);font-weight:600;min-width:36px}
+.left .job-item .jloc{font-weight:600;font-size:12px;flex:1}
+.left .job-item .jsal{font-size:11px;color:var(--gray3)}
+.left .job-item .badge{font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700}
+.left .job-item .badge-hot{background:#fef3c7;color:#92400e}
+.left .job-item .badge-on{background:#d1fae5;color:#065f46}
+.left .job-item .badge-off{background:var(--gray6);color:var(--gray4)}
+
+/* CENTER PANEL */
+.center{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.center .toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--white);border-bottom:1px solid var(--gray6)}
+.center .toolbar .btn{padding:6px 12px;border:1px solid var(--gray5);background:var(--white);border-radius:var(--r);cursor:pointer;font-size:11px;transition:.15s}
+.center .toolbar .btn:hover{border-color:var(--blue);color:var(--blue)}
+.center .toolbar .btn svg{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
+.center .toolbar .sep{width:1px;height:20px;background:var(--gray5)}
+.center .toolbar .url-switch{display:flex;gap:0;border:1px solid var(--gray5);border-radius:var(--r);overflow:hidden}
+.center .toolbar .url-opt{padding:5px 10px;font-size:11px;cursor:pointer;background:var(--white);transition:.15s}
+.center .toolbar .url-opt.active{background:var(--blue);color:#fff}
+.center .center-body{flex:1;overflow-y:auto;padding:16px}
+
+/* EDIT FORM */
+.edit-form{background:var(--white);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow)}
+.edit-form h3{font-size:14px;margin-bottom:12px;color:var(--navy)}
+.edit-form label{display:block;font-size:11px;font-weight:600;color:var(--gray3);margin-bottom:4px;margin-top:10px}
+.edit-form input,.edit-form textarea,.edit-form select{width:100%;padding:7px 10px;border:1px solid var(--gray5);border-radius:var(--r);font-size:12px;font-family:var(--f);outline:none}
+.edit-form input:focus,.edit-form textarea:focus{border-color:var(--blue)}
+.edit-form textarea{min-height:120px;resize:vertical;font-family:var(--mono);font-size:11px;line-height:1.5}
+.edit-form .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.edit-form .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.edit-form .checks{display:flex;gap:16px;margin-top:8px}
+.edit-form .checks label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--gray1)}
+.edit-form .btn-row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.edit-form .btn-save{padding:8px 20px;border:none;border-radius:var(--r);background:var(--blue);color:#fff;cursor:pointer;font-weight:600;font-size:12px}
+.edit-form .btn-del{padding:8px 16px;border:1px solid #ef4444;border-radius:var(--r);background:var(--white);color:#ef4444;cursor:pointer;font-size:12px}
+.edit-form .btn-del:hover{background:#fef2f2}
+
+/* OUTPUT PANEL */
+.output-area{margin-top:16px;background:var(--white);border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow)}
+.output-area h3{font-size:13px;margin-bottom:10px}
+.output-area textarea{width:100%;min-height:300px;font-family:var(--mono);font-size:11px;line-height:1.5;padding:10px;border:1px solid var(--gray5);border-radius:var(--r);resize:vertical}
+
+/* PLACEHOLDER */
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--gray4);gap:12px}
+.placeholder svg{width:64px;height:64px;stroke:var(--gray5)}
+.placeholder p{font-size:14px}
+
+/* RIGHT PANEL */
+.right{width:460px;min-width:460px;background:var(--white);border-left:1px solid var(--gray6);display:flex;flex-direction:column;overflow:hidden}
+.right .rtabs{display:flex;border-bottom:1px solid var(--gray6)}
+.right .rtab{flex:1;padding:10px;text-align:center;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:.15s;color:var(--gray3)}
+.right .rtab:hover{color:var(--gray1)}
+.right .rtab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.right .rpanel{flex:1;overflow:hidden;display:none}
+.right .rpanel.active{display:flex;flex-direction:column}
+.right .preview-frame{flex:1;border:none;background:var(--white)}
+.right .source-area{flex:1;display:flex;flex-direction:column;padding:10px}
+.right .source-area textarea{flex:1;font-family:var(--mono);font-size:11px;line-height:1.5;padding:10px;border:1px solid var(--gray5);border-radius:var(--r);resize:none}
+.right .source-area .btn-apply{margin-top:8px;padding:8px 16px;border:none;border-radius:var(--r);background:var(--green);color:#fff;cursor:pointer;font-weight:600;font-size:12px;align-self:flex-end}
+
+/* TOAST */
+.toast{position:fixed;top:60px;right:20px;padding:10px 20px;border-radius:var(--r);font-size:13px;font-weight:600;z-index:999;opacity:0;transform:translateY(-10px);transition:.3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-ok{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+.toast-err{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--gray5);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--gray4)}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">BRIDGE <span>ESLCafe</span></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="manage">Manage</div>
+    <div class="tab" data-tab="generate">Generate</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="clock" id="clock"></div>
+  <button class="btn btn-rand" onclick="doShuffle()" title="Randomize order">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+    Random
+  </button>
+  <button class="btn btn-gen" onclick="generateAd()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    Generate Ad
+  </button>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+  <!-- LEFT -->
+  <div class="left">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Search by location or Job ID..." oninput="renderJobList()">
+    </div>
+    <div class="filters" id="filterBar">
+      <span class="chip active" data-f="all">All</span>
+      <span class="chip" data-f="premium">Premium</span>
+      <span class="chip" data-f="hot">HOT</span>
+      <span class="chip" data-f="seoul">Seoul</span>
+      <span class="chip" data-f="gg">GG+IC</span>
+      <span class="chip" data-f="etc">Others</span>
+    </div>
+    <div class="job-list" id="jobList"></div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="toolbar">
+      <button class="btn" onclick="addJob()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add</button>
+      <button class="btn" onclick="copyHtml()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy HTML</button>
+      <button class="btn" onclick="openPreviewTab()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>New Tab</button>
+      <button class="btn" onclick="downloadHtml()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save .html</button>
+      <div class="sep"></div>
+      <button class="btn" onclick="exportJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Export JSON</button>
+      <button class="btn" onclick="importJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>Import JSON</button>
+      <button class="btn" onclick="resetJobs()" style="color:#ef4444">Reset Default</button>
+      <div class="sep"></div>
+      <div class="url-switch">
+        <div class="url-opt active" data-url="gform" onclick="setUrl(this)">Google Form</div>
+        <div class="url-opt" data-url="bridge" onclick="setUrl(this)">bridgejob.co.kr</div>
+      </div>
+    </div>
+    <div class="center-body" id="centerBody">
+      <div class="placeholder" id="editPlaceholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+        <p>Select a job from the left panel to edit, or click Generate Ad</p>
+      </div>
+      <div class="edit-form" id="editForm" style="display:none">
+        <h3 id="editTitle">Edit Job</h3>
+        <div class="row2">
+          <div><label>Job ID</label><input id="eId" type="text"></div>
+          <div><label>Location</label><input id="eLoc" type="text"></div>
+        </div>
+        <div class="row3">
+          <div><label>Region</label>
+            <select id="eRegion"><option value="seoul">Seoul</option><option value="gg">GG+Incheon</option><option value="etc">Others</option></select>
+          </div>
+          <div><label>Salary</label><input id="eSal" type="text"></div>
+          <div><label>Start Date</label><input id="eDate" type="text"></div>
+        </div>
+        <div class="row2">
+          <div><label>Working Hours</label><input id="eHrs" type="text"></div>
+          <div><label>Housing</label><input id="eHsg" type="text"></div>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="ePrem"> Premium</label>
+          <label><input type="checkbox" id="eHot"> HOT</label>
+          <label><input type="checkbox" id="eActive"> Active</label>
+        </div>
+        <label>Details</label>
+        <textarea id="eTxt"></textarea>
+        <div class="btn-row">
+          <button class="btn-del" onclick="deleteJob()">Delete</button>
+          <button class="btn-save" onclick="saveJob()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="rtabs">
+      <div class="rtab active" data-rt="preview" onclick="switchRTab(this)">Preview</div>
+      <div class="rtab" data-rt="source" onclick="switchRTab(this)">Source</div>
+    </div>
+    <div class="rpanel active" id="rpPreview">
+      <iframe class="preview-frame" id="previewFrame"></iframe>
+    </div>
+    <div class="rpanel" id="rpSource">
+      <div class="source-area">
+        <textarea id="sourceText" placeholder="Generated HTML source will appear here..."></textarea>
+        <button class="btn-apply" onclick="applySource()">Apply to Preview</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- HIDDEN FILE INPUT -->
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<script>
+/* ═══════════════════════════════════════════
+   BRIDGE ESLCafe Ad Manager
+   ═══════════════════════════════════════════ */
+
+const DEFAULT_JOBS=[{"id":"2035","l":"Seoul","r":"seoul","p":true,"h":true,"a":true,"sal":"2.30m-2.80m","date":"Apr / Aug","hrs":"08:30~16:30","hsg":"Allowance 400k (no deposit)","txt":"Starting Date: April, August\nTeaching Age: Elementary\nClass size: ~5~15\nWorking Hours: 08:30~16:30\nVacation: 4~5 weeks (incl. summer & winter camps)\nMonthly Salary: 2.30m-2.80m KRW\nHousing: Allowance 400k, no deposit cost\nBA in education/related field + ESL cert + 2+ yrs Korea experience + reference letter required\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"1671","l":"Chuncheon","r":"etc","p":true,"h":true,"a":true,"sal":"2.50m-3.20m","date":"May / Sep","hrs":"08:40~16:40","hsg":"Provided or allowance","txt":"Starting Date: May, September\nTeaching Age: Elementary\nWorking Hours: 08:40~16:40\nMonthly Salary: 2.50m-3.20m KRW\nVacation: 4~6 weeks\nHigh salary requires MA/PhD in education\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, vacation, contract completion bonus, airfare support"},{"id":"2022","l":"Seongnam","r":"gg","p":true,"h":true,"a":true,"sal":"2.50m-3.20m","date":"Jun / Sep","hrs":"08:45~16:45","hsg":"Provided or allowance","txt":"Starting Date: June, September\nTeaching Age: Kindergarten\nWorking Hours: 08:45~16:45\nMonthly Salary: 2.50m-3.20m KRW\nVacation: 4~5 weeks\nPGCE holders preferred; lesson plans developed collaboratively without textbooks\nIf you have children aged 4~7, they may apply for admission\nEmployee Benefits: Visa sponsorship, severance, pension, insurance, vacation, airfare"},{"id":"3090","l":"Seoul Seongdong","r":"seoul","p":false,"h":false,"a":true,"sal":"2.50m-2.80m","date":"ASAP","hrs":"09:00~17:00","hsg":"Provided or allowance 500k","txt":"Starting Date: ASAP\nTeaching Age: Kindy - Elem\nClass size: ~12\nWorking Hours: 09:00~17:00\nAverage Teaching Hours/Week: 23\nMonthly Salary: 2.50m-2.80m KRW\nHousing: Provided or allowance 500k (5M deposit)\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2968","l":"Incheon Yeonsu","r":"gg","p":false,"h":false,"a":true,"sal":"2.40m-3.20m","date":"Jul / Sep","hrs":"08:30~17:30","hsg":"Provided or allowance 500k","txt":"Starting Date: July, September\nTeaching Age: Elem - High school\nWorking Hours: 08:30~17:30\nVacation: 15~20 days\nMonthly Salary: 2.40m-3.20m KRW\nHousing: Provided or allowance 500k\nF-visa holders with BA or higher also welcome\nEmployee Benefits: Visa sponsorship, severance, pension, insurance, vacation, medical check support, airfare"},{"id":"2966","l":"Suwon Gwanggyo","r":"gg","p":false,"h":false,"a":true,"sal":"2.50m-3.20m","date":"April","hrs":"09:10~18:45","hsg":"Provided or allowance 700k","txt":"Starting Date: April\nTeaching Age: Kindy - Elem\nClass size: ~12\nWorking Hours: 09:10~18:45\nMonthly Salary: 2.50m-3.20m KRW\nHousing: Provided or allowance 700k (5M deposit)\nF-visa holders with BA or higher also welcome\nEmployee Benefits: Visa sponsorship, severance, pension, insurance, vacation, renewal bonus, airfare"},{"id":"2662","l":"Gyeongju","r":"etc","p":false,"h":false,"a":true,"sal":"2.50m","date":"Aug / Sep","hrs":"13:00~19:00","hsg":"Provided","txt":"Starting Date: August, September\nTeaching Age: Elementary\nClass size: ~8\nWorking Hours: 13:00~19:00\nMonthly Salary: 2.50m KRW\nHousing: Provided\nPrefer teachers residing in Korea with positive attitude and strong teamwork\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"3299","l":"Seoul Yongsan","r":"seoul","p":false,"h":false,"a":true,"sal":"2.50m-3.10m","date":"Feb / May","hrs":"08:30~17:00","hsg":"Provided or allowance 600k","txt":"Starting Date: February, May\nTeaching Age: Pre-K - Kindy\nWorking Hours: 08:30~17:00\nMonthly Salary: 2.50m-3.10m KRW\nHousing: Provided or allowance 600k\nReference from most recent Korea employer mandatory\nVacation: 13~20 days + 2 week unpaid break after contract\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"3365","l":"Yongin","r":"gg","p":false,"h":false,"a":true,"sal":"2.50m-2.80m","date":"June","hrs":"08:20~16:20","hsg":"Provided or allowance 500k","txt":"Starting Date: June\nTeaching Age: Kindy - Elem\nClass size: ~9~12\nWorking Hours: 08:20~16:20\nMonthly Salary: 2.50m-2.80m KRW\nHousing: Provided or allowance 500k\nWe prefer bright, positive, energetic teachers with excellent teamwork skills\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"3340","l":"Goyang","r":"gg","p":false,"h":false,"a":true,"sal":"2.60m-3.00m","date":"April","hrs":"13:00~19:00","hsg":"Provided or allowance","txt":"Starting Date: April\nTeaching Age: Kindy - Elem\nClass size: ~12\nWorking Hours: 13:00~19:00\nVacation: 20 days\nMonthly Salary: 2.60m-3.00m KRW\nHousing: Provided or allowance\nPassionate teachers who are not job-hoppers preferred\nEmployee Benefits: Visa sponsorship, pension, severance pay, insurance, vacation, airfare"},{"id":"3217","l":"Jeju","r":"etc","p":false,"h":false,"a":true,"sal":"2.50m-2.60m","date":"January","hrs":"13:50~20:00","hsg":"Provided or allowance 400k","txt":"Starting Date: January\nTeaching Age: Elem - Middle school\nClass size: ~12\nWorking Hours: 13:50~20:00\nMonthly Salary: 2.50m-2.60m KRW\nHousing: Provided or allowance 400k\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2897","l":"Suwon","r":"gg","p":false,"h":false,"a":true,"sal":"2.60m-3.10m","date":"October","hrs":"14:00~20:30","hsg":"Not provided","txt":"Starting Date: October\nTeaching Age: Elementary\nClass size: ~30\nWorking Hours: MWF 14:00~20:00 / TTH 14:00~20:30\nMonthly Salary: 2.60m-3.10m KRW\nF-visa native speakers preferred\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"1027","l":"Seoul Gangdong","r":"seoul","p":false,"h":false,"a":true,"sal":"2.50m-2.80m","date":"ASAP","hrs":"07:30~16:30","hsg":"Provided or allowance 500k","txt":"Starting Date: ASAP\nTeaching Age: Elementary Grade 1\nWorking Hours: 07:30~16:30\nVacation: 4~8 weeks/year\nMonthly Salary: 2.50m~2.80m KRW\nHousing: Provided or allowance 500k\nFull-time Korea experience required, no contract breaches\nBA in Education, History, Political Science, Geography or related field preferred\nEmployee Benefits: Severance pay, pension, insurance, paid vacation"},{"id":"1924","l":"Busan Gangseo","r":"etc","p":false,"h":false,"a":true,"sal":"2.40m-2.80m","date":"Jan / Jul","hrs":"09:00~18:00","hsg":"Provided","txt":"Starting Date: January, July\nTeaching Age: Kindy - Elem\nClass size: ~8\nWorking Hours: 09:00~18:00\nMonthly Salary: 2.40m-2.80m KRW\nHousing: Provided\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, partial airfare support"},{"id":"2329","l":"Yongin","r":"gg","p":false,"h":false,"a":true,"sal":"2.50m-3.20m","date":"Aug / Sep","hrs":"09:00~18:00","hsg":"Provided or allowance 500k","txt":"Starting Date: August, September\nTeaching Age: Kindy - Elem\nWorking Hours: 09:00~18:00\nMonthly Salary: 2.50m-3.20m KRW\nHousing: Provided or allowance 500k\n3.0m+ requires education major + 2 yrs full-time experience\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, vacation, airfare"},{"id":"2230","l":"Seoul Mapo","r":"seoul","p":false,"h":false,"a":true,"sal":"2.70m-3.00m","date":"September","hrs":"09:00~18:00","hsg":"Provided or allowance 500k","txt":"Starting Date: September\nTeaching Age: Kindy - Elem\nWorking Hours: 09:00~18:00\nMonthly Salary: 2.70m-3.00m KRW\nHousing: Provided or allowance 500k\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2058","l":"Seoul Gangdong","r":"seoul","p":false,"h":false,"a":true,"sal":"2.50m-3.00m","date":"April","hrs":"09:00~18:00","hsg":"Provided or allowance 500k","txt":"Starting Date: April\nTeaching Age: Kindy - Elem\nWorking Hours: 09:00~18:00\nMonthly Salary: 2.50m-3.00m KRW\nHousing: Provided or allowance 500k (no deposit help)\n1-3 years experience + F visa holders welcome\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, vacation, lunch flex, airfare"},{"id":"2830","l":"Incheon","r":"gg","p":false,"h":false,"a":true,"sal":"2.40m-2.70m","date":"November","hrs":"09:00~18:00","hsg":"Provided or allowance 400k","txt":"Starting Date: November\nTeaching Age: Kindergarten\nClass size: ~12\nWorking Hours: 09:00~18:00\nMonthly Salary: 2.40m~2.70m KRW\nAverage Teaching Hours/Week: 30\nHousing: Provided or allowance 400k\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"3315","l":"Seoul Seocho","r":"seoul","p":false,"h":false,"a":true,"sal":"2.80m-3.10m","date":"Feb ~ May","hrs":"08:00~16:30","hsg":"Not provided","txt":"Starting Date: February~May\nTeaching Age: Elementary to High School\nWorking Hours: 08:00~16:30\nVacation: 8~11 weeks\nMonthly Salary: 2.80m-3.10m KRW\nEnergetic 20s~30s with F-visa, high-level teaching ability preferred\nFrequent job changers please refrain from applying\nEmployee Benefits: Severance pay, pension, insurance (no visa/deposit support)"},{"id":"3383","l":"Busan Namgu","r":"etc","p":false,"h":false,"a":true,"sal":"2.60m-2.80m","date":"June","hrs":"09:20~18:30","hsg":"Provided","txt":"Starting Date: June\nTeaching Age: Kindy - Elem\nWorking Hours: 09:20~18:30\nMonthly Salary: 2.60m-2.80m KRW\nHousing: Provided\nTeaching major + certification preferred\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"2048","l":"Seongnam","r":"gg","p":false,"h":false,"a":true,"sal":"2.50m-2.80m","date":"ASAP / Sep","hrs":"09:00~18:00","hsg":"Provided or allowance 500k","txt":"Starting Date: ASAP, September\nTeaching Age: Kindy - Elem\nClass size: ~11\nAverage Teaching Hours/Week: 30\nWorking Hours: 09:00~18:00 (may leave at 5 PM when classes finish early)\nMonthly Salary: 2.50m-2.80m KRW\nHousing: Provided or allowance 500k\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2163","l":"Seongnam","r":"gg","p":false,"h":true,"a":true,"sal":"2.80m-4.30m","date":"Jan / Sep","hrs":"14:10~21:20","hsg":"Not provided","txt":"Starting Date: January, September\nTeaching Age: Elementary\nClass size: ~10\nWorking Hours: 14:10~21:20\nVacation: 12~15 days\nMonthly Salary: 2.80m-4.30m KRW\nHousing: Not provided\nHumble person with strong organizational skills preferred\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation"},{"id":"3110","l":"Seoul Gangnam","r":"seoul","p":false,"h":false,"a":true,"sal":"3.00m-3.20m","date":"July","hrs":"08:30~17:00","hsg":"Allowance 700k only","txt":"Starting Date: July\nTeaching Age: Kindy - Elem\nClass size: ~12\nWorking Hours: 08:30~17:00\nVacation: 15~20 days\nMonthly Salary: 3.00m-3.20m KRW\nHousing: Allowance 700k only (no deposit)\nHigh salary requires proven teaching passion and ability \u2014 not just years\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2015","l":"Jeju","r":"etc","p":false,"h":false,"a":true,"sal":"2.50m-2.70m","date":"Apr / Aug","hrs":"08:30~17:30","hsg":"Provided or allowance 300k","txt":"Starting Date: April, August\nTeaching Age: Kindy - Elem\nWorking Hours: 08:30~17:30\nMonthly Salary: 2.50m-2.70m KRW\nHousing: Provided or allowance 300k (no deposit)\nPositive and outgoing individuals strongly encouraged\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, airfare"},{"id":"2570","l":"Seoul Seodaemun","r":"seoul","p":false,"h":false,"a":true,"sal":"2.40m-3.00m","date":"May / Aug","hrs":"09:30~18:00","hsg":"Provided or allowance 600k","txt":"Starting Date: May, August, ASAP\nTeaching Age: Kindy - Elem\nWorking Hours: MWF 09:30~17:00 / TTH 09:30~18:00\nMonthly Salary: 2.40m-3.00m KRW\nHousing: Provided or allowance 600k (couple-friendly accommodation available)\nEmployee Benefits: Visa sponsorship, severance pay, pension, insurance, paid vacation, round-trip airfare"}];
+
+/* ── SVG Icons ── */
+const IC = {
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
+  academic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M22 10l-10-6L2 10l10 6 10-6z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M22 8l-6 4 6 4V8z"/></svg>',
+  id: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="11" r="2.5"/><path d="M4 18c0-2 2-3 4-3s4 1 4 3"/><line x1="15" y1="9" x2="20" y2="9"/><line x1="15" y1="13" x2="20" y2="13"/></svg>',
+  plane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+  grow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+  badge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 15l-3 3v5l3-2 3 2v-5l-3-3z"/><circle cx="12" cy="9" r="6"/></svg>',
+  form: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+  handshake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M20 8l-4-4-6 6-4-4-4 4 6 6 2-2 6 6 4-4-6-6z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'
+};
+
+/* ── State ── */
+let jobs = [];
+let selectedIdx = -1;
+let currentFilter = 'all';
+let applyUrl = 'gform';
+let lastGeneratedHtml = '';
+
+/* ── Init ── */
+function init() {
+  const saved = localStorage.getItem('bridge-eslcafe-jobs');
+  if (saved) { try { jobs = JSON.parse(saved); } catch { jobs = JSON.parse(JSON.stringify(DEFAULT_JOBS)); } }
+  else { jobs = JSON.parse(JSON.stringify(DEFAULT_JOBS)); }
+  renderJobList();
+  startClock();
+  setupFilterChips();
+}
+
+function persist() {
+  localStorage.setItem('bridge-eslcafe-jobs', JSON.stringify(jobs));
+}
+
+/* ── Clock ── */
+function startClock() {
+  const el = document.getElementById('clock');
+  const tick = () => {
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
+  };
+  tick(); setInterval(tick, 1000);
+}
+
+/* ── Filter Chips ── */
+function setupFilterChips() {
+  document.querySelectorAll('#filterBar .chip').forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('#filterBar .chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      currentFilter = c.dataset.f;
+      renderJobList();
+    });
+  });
+}
+
+/* ── Render Job List ── */
+function renderJobList() {
+  const el = document.getElementById('jobList');
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  let filtered = jobs.filter(j => {
+    if (q && !j.l.toLowerCase().includes(q) && !j.id.includes(q)) return false;
+    if (currentFilter === 'premium') return j.p;
+    if (currentFilter === 'hot') return j.h;
+    if (currentFilter === 'seoul') return j.r === 'seoul';
+    if (currentFilter === 'gg') return j.r === 'gg';
+    if (currentFilter === 'etc') return j.r === 'etc';
+    return true;
+  });
+
+  const prems = filtered.filter(j => j.p);
+  const rest = filtered.filter(j => !j.p);
+
+  let html = '';
+  if (prems.length) {
+    html += '<div class="section-label">Premium</div>';
+    prems.forEach(j => { html += jobItemHtml(j); });
+  }
+  if (rest.length) {
+    html += '<div class="section-label">Jobs</div>';
+    rest.forEach(j => { html += jobItemHtml(j); });
+  }
+  if (!prems.length && !rest.length) {
+    html = '<div style="padding:20px;text-align:center;color:var(--gray4)">No jobs found</div>';
+  }
+  el.innerHTML = html;
+
+  el.querySelectorAll('.job-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const idx = jobs.findIndex(j => j.id === item.dataset.jid);
+      selectJob(idx);
+    });
+  });
+}
+
+function jobItemHtml(j) {
+  const idx = jobs.indexOf(j);
+  const sel = idx === selectedIdx ? ' selected' : '';
+  const prem = j.p ? ' premium' : '';
+  return `<div class="job-item${sel}${prem}" data-jid="${j.id}">
+    <span class="jid">#${j.id}</span>
+    <span class="jloc">${esc(j.l)}</span>
+    <span class="jsal">${esc(j.sal)}</span>
+    ${j.h ? '<span class="badge badge-hot">HOT</span>' : ''}
+    ${j.a ? '<span class="badge badge-on">ON</span>' : '<span class="badge badge-off">OFF</span>'}
+  </div>`;
+}
+
+/* ── Select / Edit Job ── */
+function selectJob(idx) {
+  selectedIdx = idx;
+  const j = jobs[idx];
+  if (!j) return;
+
+  document.getElementById('editPlaceholder').style.display = 'none';
+  document.getElementById('editForm').style.display = 'block';
+  document.getElementById('editTitle').textContent = `Edit Job #${j.id} — ${j.l}`;
+  document.getElementById('eId').value = j.id;
+  document.getElementById('eLoc').value = j.l;
+  document.getElementById('eRegion').value = j.r;
+  document.getElementById('eSal').value = j.sal;
+  document.getElementById('eDate').value = j.date;
+  document.getElementById('eHrs').value = j.hrs;
+  document.getElementById('eHsg').value = j.hsg;
+  document.getElementById('ePrem').checked = j.p;
+  document.getElementById('eHot').checked = j.h;
+  document.getElementById('eActive').checked = j.a;
+  document.getElementById('eTxt').value = j.txt;
+  renderJobList();
+}
+
+function saveJob() {
+  if (selectedIdx < 0) return;
+  const j = jobs[selectedIdx];
+  j.id = document.getElementById('eId').value.trim();
+  j.l = document.getElementById('eLoc').value.trim();
+  j.r = document.getElementById('eRegion').value;
+  j.sal = document.getElementById('eSal').value.trim();
+  j.date = document.getElementById('eDate').value.trim();
+  j.hrs = document.getElementById('eHrs').value.trim();
+  j.hsg = document.getElementById('eHsg').value.trim();
+  j.p = document.getElementById('ePrem').checked;
+  j.h = document.getElementById('eHot').checked;
+  j.a = document.getElementById('eActive').checked;
+  j.txt = document.getElementById('eTxt').value;
+  persist();
+  renderJobList();
+  toast('Saved', 'ok');
+}
+
+function deleteJob() {
+  if (selectedIdx < 0) return;
+  if (!confirm('Delete this job?')) return;
+  jobs.splice(selectedIdx, 1);
+  selectedIdx = -1;
+  document.getElementById('editForm').style.display = 'none';
+  document.getElementById('editPlaceholder').style.display = 'flex';
+  persist();
+  renderJobList();
+  toast('Deleted', 'ok');
+}
+
+function addJob() {
+  const nj = { id: String(Date.now()).slice(-4), l: 'New Location', r: 'seoul', p: false, h: false, a: true, sal: '2.50m', date: 'TBD', hrs: '09:00~18:00', hsg: 'TBD', txt: '' };
+  jobs.push(nj);
+  persist();
+  selectJob(jobs.length - 1);
+  toast('Added', 'ok');
+}
+
+/* ── Shuffle ── */
+function doShuffle() {
+  buildOrder();
+  renderJobList();
+  toast('Shuffled!', 'ok');
+  if (lastGeneratedHtml) generateAd();
+}
+
+function buildOrder() {
+  const active = jobs.filter(j => j.a);
+  const inactive = jobs.filter(j => !j.a);
+  const prems = active.filter(j => j.p).slice(0, 3);
+  const overflow = active.filter(j => j.p).slice(3);
+  const rest = active.filter(j => !j.p);
+
+  // Fisher-Yates
+  const toShuffle = [...overflow, ...rest];
+  for (let i = toShuffle.length - 1; i > 0; i--) {
+    const k = Math.floor(Math.random() * (i + 1));
+    [toShuffle[i], toShuffle[k]] = [toShuffle[k], toShuffle[i]];
+  }
+
+  // HOT auto: premium always, rest 25%
+  prems.forEach(j => { j.h = true; });
+  toShuffle.forEach(j => { if (!j.p) j.h = Math.random() < 0.25; });
+
+  jobs = [...prems, ...toShuffle, ...inactive];
+  persist();
+}
+
+/* ── Generate Ad HTML ── */
+function generateAd() {
+  buildOrder();
+  renderJobList();
+
+  const active = jobs.filter(j => j.a);
+  const rnd = () => Math.random().toString(36).slice(2, 6);
+  const cls = { wrap: 'bw-' + rnd(), hero: 'bh-' + rnd(), card: 'bc-' + rnd(), hot: 'bt-' + rnd(), prem: 'bp-' + rnd(), grid: 'bg-' + rnd(), apply: 'ba-' + rnd(), footer: 'bf-' + rnd(), step: 'bs-' + rnd(), benefit: 'bb-' + rnd() };
+
+  const applyLink = applyUrl === 'bridge'
+    ? 'https://bridgejob.co.kr/apply'
+    : 'https://forms.gle/bridgeapply';
+
+  let cardsHtml = '';
+  active.forEach((j, i) => {
+    const topBar = j.p
+      ? 'background:linear-gradient(135deg,#7c3aed,#a78bfa);'
+      : 'background:linear-gradient(135deg,#1a5ff8,#60a5fa);';
+    const hotBadge = j.h ? `<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;">HOT</span>` : '';
+
+    const lines = j.txt.split('\n').filter(Boolean);
+    let detailGrid = '';
+    lines.forEach(line => {
+      const [label, ...valParts] = line.split(':');
+      const val = valParts.join(':').trim();
+      if (!val) return;
+      let icon = IC.doc;
+      const ll = label.trim().toLowerCase();
+      if (ll.includes('salary') || ll.includes('month')) icon = IC.money;
+      else if (ll.includes('hour') || ll.includes('working')) icon = IC.clock;
+      else if (ll.includes('housing')) icon = IC.home;
+      else if (ll.includes('vacation') || ll.includes('break')) icon = IC.sun;
+      else if (ll.includes('date') || ll.includes('start')) icon = IC.calendar;
+      else if (ll.includes('age') || ll.includes('teach')) icon = IC.academic;
+      else if (ll.includes('class')) icon = IC.users;
+      else if (ll.includes('benefit') || ll.includes('employee')) icon = IC.star;
+      else if (ll.includes('visa') || ll.includes('sponsor')) icon = IC.shield;
+
+      detailGrid += `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;"><div style="width:18px;height:18px;flex-shrink:0;color:#6b7280;margin-top:1px;">${icon}</div><div><span style="font-size:11px;color:#6b7280;">${esc(label.trim())}</span><br><span style="font-size:13px;color:#1a1d25;font-weight:500;">${esc(val)}</span></div></div>`;
+    });
+
+    cardsHtml += `<div class="${cls.card}" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px;">
+      <div style="height:4px;${topBar}"></div>
+      <div style="padding:16px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div><span style="font-size:20px;font-weight:600;color:#111;">${esc(j.l)}</span>${hotBadge}</div>
+          <span style="font-size:20px;font-weight:600;color:#1a5ff8;">Job #${esc(j.id)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">${detailGrid}</div>
+        <div style="margin-top:14px;text-align:right;">
+          <a href="${applyLink}" target="_blank" style="display:inline-block;background:#1a5ff8;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Apply Now</a>
+        </div>
+      </div>
+    </div>`;
+
+    // Insert apply bar every 5 cards
+    if ((i + 1) % 5 === 0 && i < active.length - 1) {
+      cardsHtml += `<div class="${cls.apply}" style="background:linear-gradient(135deg,#003366,#1a5ff8);border-radius:12px;padding:20px 24px;margin-bottom:16px;text-align:center;">
+        <p style="color:#fff;font-size:16px;font-weight:600;margin:0 0 8px;">Ready to start your teaching career in Korea?</p>
+        <a href="${applyLink}" target="_blank" style="display:inline-block;background:#05b97d;color:#fff;padding:10px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">APPLY NOW</a>
+      </div>`;
+    }
+  });
+
+  const whoChips = [
+    { icon: IC.globe, text: 'Native English Speaker' },
+    { icon: IC.academic, text: "Bachelor's Degree or Higher" },
+    { icon: IC.doc, text: 'Clean Background Check' },
+    { icon: IC.video, text: 'Video Interview Ready' },
+    { icon: IC.id, text: 'Valid Passport' }
+  ];
+  let whoHtml = whoChips.map(c =>
+    `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);padding:6px 14px;border-radius:20px;font-size:12px;color:#fff;"><div style="width:16px;height:16px;">${c.icon}</div>${c.text}</div>`
+  ).join('');
+
+  const steps = [
+    { icon: IC.form, title: 'Submit Application', desc: 'Complete our simple online form' },
+    { icon: IC.chat, title: 'Video Call with BRIDGE', desc: 'Brief interview to understand your goals' },
+    { icon: IC.handshake, title: 'School Interview', desc: 'We arrange interviews with matched schools' },
+    { icon: IC.badge, title: 'Start Teaching!', desc: 'Begin your adventure in Korea' }
+  ];
+  let stepsHtml = steps.map((s, i) =>
+    `<div style="flex:1;text-align:center;padding:16px;"><div style="width:48px;height:48px;margin:0 auto 10px;background:rgba(26,95,248,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#1a5ff8;">${s.icon}</div><div style="font-size:14px;font-weight:600;color:#111;margin-bottom:4px;">${s.title}</div><div style="font-size:12px;color:#6b7280;">${s.desc}</div>${i < 3 ? '<div style="margin-top:10px;color:#d1d5db;font-size:20px;">&#8594;</div>' : ''}</div>`
+  ).join('');
+
+  const benefits = [
+    { icon: IC.plane, text: 'Round-trip Airfare' },
+    { icon: IC.home, text: 'Housing Provided or Allowance' },
+    { icon: IC.shield, text: 'National Health Insurance' },
+    { icon: IC.sun, text: 'Paid Vacation' },
+    { icon: IC.key, text: 'Visa Sponsorship (E-2)' },
+    { icon: IC.star, text: 'Severance Pay (1 month)' },
+    { icon: IC.grow, text: 'Career Growth Opportunities' },
+    { icon: IC.users, text: 'Dedicated Support Team' },
+    { icon: IC.badge, text: 'National Pension' },
+    { icon: IC.academic, text: 'Professional Development' }
+  ];
+  let benefitsHtml = benefits.map(b =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;"><div style="width:20px;height:20px;color:#1a5ff8;flex-shrink:0;">${b.icon}</div><span style="font-size:13px;color:#1a1d25;">${b.text}</span></div>`
+  ).join('');
+
+  const hashtags = '#TeachInKorea #ESLJobs #KoreaJobs #TeachAbroad #TEFL #ESL #BRIDGE #EnglishTeacher #KoreaTeaching #LivingInKorea';
+
+  lastGeneratedHtml = `<div class="${cls.wrap}" style="max-width:720px;margin:0 auto;font-family:-apple-system,'Segoe UI',sans-serif;color:#1a1d25;">
+
+<!-- HERO -->
+<div class="${cls.hero}" style="background:linear-gradient(135deg,#003366 0%,#1a5ff8 100%);border-radius:16px;padding:40px 32px;text-align:center;margin-bottom:20px;">
+  <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;margin-bottom:8px;">GOV'T-CERTIFIED AGENCY</div>
+  <div style="font-size:32px;font-weight:800;color:#fff;letter-spacing:1px;margin-bottom:4px;">BRIDGE</div>
+  <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px;">Teach English in Korea</div>
+  <div style="font-size:14px;color:rgba(255,255,255,.85);margin-bottom:20px;">The right school, the right support &mdash; your next chapter starts here</div>
+  <a href="${applyLink}" target="_blank" style="display:inline-block;background:#05b97d;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;">APPLY NOW &rarr;</a>
+  <div style="margin-top:20px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;">${whoHtml}</div>
+  <div style="margin-top:16px;font-size:11px;color:rgba(255,255,255,.5);word-spacing:4px;">${hashtags}</div>
+</div>
+
+<!-- CARDS -->
+${cardsHtml}
+
+<!-- HOW TO APPLY -->
+<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);">
+  <h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 20px;color:#003366;">HOW TO APPLY</h3>
+  <div style="display:flex;gap:8px;">${stepsHtml}</div>
+</div>
+
+<!-- WHAT YOU GET -->
+<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);">
+  <h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 16px;color:#003366;">WHAT YOU GET</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${benefitsHtml}</div>
+</div>
+
+<!-- FOOTER -->
+<div class="${cls.footer}" style="background:#003366;border-radius:12px;padding:24px;text-align:center;">
+  <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:6px;">BRIDGE</div>
+  <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:12px;">Government-Certified Employment Agency | Connecting Teachers with Korea</div>
+  <a href="${applyLink}" target="_blank" style="display:inline-block;background:#05b97d;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">START YOUR APPLICATION</a>
+  <div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.4);">&copy; BRIDGE. All rights reserved.</div>
+</div>
+
+</div>`;
+
+  // Update preview
+  updatePreview(lastGeneratedHtml);
+  document.getElementById('sourceText').value = lastGeneratedHtml;
+  toast('Ad generated! (' + active.length + ' jobs)', 'ok');
+}
+
+/* ── Preview ── */
+function updatePreview(html) {
+  const frame = document.getElementById('previewFrame');
+  const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;padding:16px;background:#f0f2f5;font-family:-apple-system,'Segoe UI',sans-serif;}</style></head><body>${html}</body></html>`;
+  frame.srcdoc = doc;
+}
+
+function applySource() {
+  const src = document.getElementById('sourceText').value;
+  lastGeneratedHtml = src;
+  updatePreview(src);
+  toast('Applied', 'ok');
+}
+
+/* ── Right tabs ── */
+function switchRTab(el) {
+  document.querySelectorAll('.rtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.rpanel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(el.dataset.rt === 'preview' ? 'rpPreview' : 'rpSource').classList.add('active');
+}
+
+/* ── URL switch ── */
+function setUrl(el) {
+  document.querySelectorAll('.url-opt').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+  applyUrl = el.dataset.url;
+  if (lastGeneratedHtml) generateAd();
+}
+
+/* ── Copy / Download / New Tab ── */
+function copyHtml() {
+  if (!lastGeneratedHtml) { toast('Generate first!', 'err'); return; }
+  navigator.clipboard.writeText(lastGeneratedHtml).then(() => toast('HTML copied!', 'ok')).catch(() => toast('Copy failed', 'err'));
+}
+
+function downloadHtml() {
+  if (!lastGeneratedHtml) { toast('Generate first!', 'err'); return; }
+  const full = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad</title><style>body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,'Segoe UI',sans-serif;}</style></head><body>${lastGeneratedHtml}</body></html>`;
+  const blob = new Blob([full], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().slice(0, 10);
+  a.download = `BRIDGE_ESLCafe_${ts}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Downloaded!', 'ok');
+}
+
+function openPreviewTab() {
+  if (!lastGeneratedHtml) { toast('Generate first!', 'err'); return; }
+  const full = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad Preview</title><style>body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,'Segoe UI',sans-serif;}.copy-bar{position:fixed;top:0;left:0;right:0;background:#003366;padding:10px 20px;text-align:center;z-index:100;}.copy-bar button{background:#05b97d;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;}</style></head><body style="padding-top:52px;"><div class="copy-bar"><button onclick="copyAd()">Copy Ad HTML</button></div>${lastGeneratedHtml}<` + `script>function copyAd(){const el=document.querySelector('.copy-bar');const clone=document.body.cloneNode(true);clone.removeChild(clone.querySelector('.copy-bar'));const scr=clone.querySelector('script');if(scr)scr.remove();navigator.clipboard.writeText(clone.innerHTML.trim()).then(()=>alert('Copied!')).catch(()=>alert('Failed'));}<` + `/script></body></html>`;
+  const blob = new Blob([full], { type: 'text/html' });
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
+/* ── JSON Import/Export ── */
+function exportJson() {
+  const blob = new Blob([JSON.stringify(jobs, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bridge_eslcafe_jobs.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Exported!', 'ok');
+}
+
+function importJson() {
+  document.getElementById('fileInput').click();
+}
+
+function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data)) throw new Error('Not array');
+      jobs = data;
+      persist();
+      selectedIdx = -1;
+      renderJobList();
+      toast('Imported ' + data.length + ' jobs', 'ok');
+    } catch { toast('Invalid JSON', 'err'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function resetJobs() {
+  if (!confirm('Reset all jobs to default? This cannot be undone.')) return;
+  jobs = JSON.parse(JSON.stringify(DEFAULT_JOBS));
+  selectedIdx = -1;
+  document.getElementById('editForm').style.display = 'none';
+  document.getElementById('editPlaceholder').style.display = 'flex';
+  persist();
+  renderJobList();
+  toast('Reset to defaults', 'ok');
+}
+
+/* ── Toast ── */
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast toast-' + type + ' show';
+  setTimeout(() => { el.classList.remove('show'); }, 2000);
+}
+
+/* ── Utility ── */
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ── Boot ── */
+init();
+</script>
+</body>
+</html>
