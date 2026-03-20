@@ -21,6 +21,7 @@ import subprocess
 import threading
 from datetime import datetime, timedelta
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, quote
 import urllib.request
 import urllib.error
@@ -605,7 +606,10 @@ def main():
     print("  Token will be auto-refreshed by Chrome extension.")
     print(f"\n  Exit: Ctrl+C\n")
 
-    server = HTTPServer(("127.0.0.1", PORT), ImageFXHandler)
+    class ThreadedServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
+    server = ThreadedServer(("127.0.0.1", PORT), ImageFXHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
