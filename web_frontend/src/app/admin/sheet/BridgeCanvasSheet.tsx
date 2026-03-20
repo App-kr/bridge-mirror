@@ -501,11 +501,6 @@ export default function BridgeCanvasSheet() {
     setMailOpen(true)
   }, [])
 
-  const handleMailSend = useCallback((subject: string, body: string, _files: File[], recipients: DataRow[]) => {
-    // TODO: integrate with real email API
-    alert(`발송: ${recipients.map(r => r.email).join(', ')}\n${subject}`)
-  }, [])
-
   /* ── Style apply helper (with toggle support) ── */
   const applyStyleToSelection = useCallback((style: CellStyle) => {
     const engine = engineRef.current
@@ -514,8 +509,26 @@ export default function BridgeCanvasSheet() {
     const visCols = engine.getVisibleCols()
     const ac = engine.selection.getActiveCell()
     const selectedRowSet = engine.selection.getSelectedRows()
+    const hasColSel = engine.selection.hasColSelection()
     const isAllRows = selectedRowSet.size >= rows.length && rows.length > 0
     const styleCols = visCols.filter(c => c.key !== 'rowNum' && c.key !== 'photo')
+
+    // 열 전체 선택 → 선택된 열 × 전체 displayRows 대상
+    if (hasColSel) {
+      const selCols = visCols.filter((_, vi) => engine.selection.isColSelected(vi))
+        .filter(c => c.key !== 'rowNum' && c.key !== 'photo')
+      if (selCols.length === 0) return
+      const entries: Array<{ cid: string; colKey: string }> = []
+      for (const row of rows) {
+        const cid = String(row._cid ?? '')
+        if (!cid) continue
+        for (const col of selCols) entries.push({ cid, colKey: col.key })
+      }
+      if (entries.length > 0) engine.styleManager.batchSet(entries, style)
+      engine.refresh()
+      showPhotoToast('서식 적용 완료', true)
+      return
+    }
 
     if (isAllRows || selectedRowSet.size > 0) {
       // 전체 선택 또는 행 선택 → 선택된 모든 행 × 모든 컬럼에 일괄 적용
@@ -1669,8 +1682,8 @@ export default function BridgeCanvasSheet() {
         open={mailOpen}
         recipients={mailRecipients}
         onClose={() => setMailOpen(false)}
-        onSend={handleMailSend}
-        getHeaders={() => hdrsRef.current()}
+        adminKey={adminKey}
+        apiUrl={API}
       />
     </div>
   )

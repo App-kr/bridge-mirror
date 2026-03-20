@@ -1,321 +1,327 @@
 'use client'
-
-import { useState, useEffect, useRef, useCallback } from 'react'
-import type { DataRow } from './engine/types'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { MAIL_TEMPLATES } from './engine/types'
-import { API_URL } from '@/lib/api'
-
-const API = API_URL
-
-// 발송자 계정 목록
-const SENDERS = [
-  { value: 'bridgejobkr@gmail.com', label: 'Gmail', color: '#ea4335' },
-  { value: 'bridgejobkr@naver.com', label: 'Naver', color: '#03c75a' },
-]
-
-// 템플릿 한국어 라벨 오버라이드
-const TMPL_KR: Record<string, string> = {
-  interview: '인터뷰 안내',
-  contract: '계약 안내',
-  visa: '비자 안내',
-  settle: '정착 안내',
-  tax: '세금 안내',
-  transfer: '이체 안내',
-  renewal: '갱신 안내',
-  custom: '직접 작성',
-}
+import type { DataRow } from './engine/types'
 
 interface MailModalProps {
   open: boolean
-  recipients: DataRow[]
   onClose: () => void
-  onSend: (subject: string, body: string, files: File[], recipients: DataRow[]) => void
-  getHeaders?: () => Record<string, string>
+  recipients: DataRow[]
+  adminKey: string
+  apiUrl: string
 }
 
-export default function MailModal({ open, recipients, onClose, onSend, getHeaders }: MailModalProps) {
-  const [tmpl, setTmpl] = useState('custom')
-  const [subj, setSubj] = useState('')
-  const [body, setBody] = useState('')
-  const [files, setFiles] = useState<File[]>([])
-  const [sender, setSender] = useState(SENDERS[0].value)
+export default function MailModal({ open, onClose, recipients, adminKey, apiUrl }: MailModalProps) {
+  const [tmplKey, setTmplKey] = useState(MAIL_TEMPLATES[0].key)
+  const [sender, setSender] = useState<'gmail' | 'naver'>('naver')
+  const [subject, setSubject] = useState(MAIL_TEMPLATES[0].s)
+  const [body, setBody] = useState(MAIL_TEMPLATES[0].b)
+  const [attachments, setAttachments] = useState<File[]>([])
   const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<{ success: boolean; sent: number; failed: number } | null>(null)
+  const [result, setResult] = useState('')
+  const [previewMode, setPreviewMode] = useState(false)
+  const [previewIdx, setPreviewIdx] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
 
+  const senderEmail = sender === 'gmail' ? 'bridgejobkr@gmail.com' : 'bridgejobkr@naver.com'
+
+  const applyVars = useCallback((text: string, r: DataRow) => {
+    return text
+      .replace(/\{\{name\}\}/g, String(r.name ?? r.email ?? 'Teacher'))
+      .replace(/\{\{region\}\}/g, String(r.prefRegion ?? ''))
+  }, [])
+
+  const applyTemplate = (key: string) => {
+    const t = MAIL_TEMPLATES.find(t => t.key === key)
+    if (!t) return
+    setTmplKey(key)
+    setSubject(t.s)
+    setBody(t.b)
+    setPreviewMode(false)
+    setResult('')
+  }
+
   useEffect(() => {
-    if (!open) return
-    setTmpl('custom')
-    setSubj('')
-    setBody('')
-    setFiles([])
-    setResult(null)
+    if (open) {
+      applyTemplate(MAIL_TEMPLATES[0].key)
+      setAttachments([])
+      setResult('')
+      setPreviewIdx(0)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   useEffect(() => {
-    if (!open) return
-    const t = MAIL_TEMPLATES.find(m => m.key === tmpl)
-    if (t && tmpl !== 'custom') {
-      setSubj(t.s)
-      setBody(t.b)
+    const el = dropRef.current
+    if (!el) return
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      setAttachments(a => [...a, ...Array.from(e.dataTransfer?.files ?? [])])
     }
-  }, [tmpl, open])
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const droppedFiles = Array.from(e.dataTransfer.files)
-    if (droppedFiles.length) setFiles(p => [...p, ...droppedFiles])
+    const onDragOver = (e: DragEvent) => e.preventDefault()
+    el.addEventListener('drop', onDrop)
+    el.addEventListener('dragover', onDragOver)
+    return () => { el.removeEventListener('drop', onDrop); el.removeEventListener('dragover', onDragOver) }
   }, [])
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }, [])
-
-  const handleSend = useCallback(async () => {
-    if (!subj || !body) return
-    setSending(true)
-    setResult(null)
-    try {
-      const hdrs = getHeaders ? getHeaders() : {}
-      const res = await fetch(`${API}/api/admin/send-mail`, {
-        method: 'POST',
-        headers: { ...hdrs, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender,
-          recipients: recipients.map(r => ({ email: String(r.email), name: String(r.name) })),
-          subject: subj,
-          body,
-          personal: true,
-        }),
-      })
-      const json = await res.json()
-      if (res.ok) {
-        setResult({ success: true, sent: json.data?.sent ?? recipients.length, failed: json.data?.failed ?? 0 })
-        onSend(subj, body, files, recipients)
-      } else {
-        setResult({ success: false, sent: 0, failed: recipients.length })
-      }
-    } catch {
-      // API 없음 — 로컬 콜백만 실행
-      onSend(subj, body, files, recipients)
-      setResult({ success: true, sent: recipients.length, failed: 0 })
-    } finally {
-      setSending(false)
+  const handleSend = async () => {
+    if (!subject.trim() || !body.trim()) { alert('제목과 본문을 입력해주세요'); return }
+    if (recipients.length === 0) { alert('수신자가 없습니다'); return }
+    setSending(true); setResult('')
+    let ok = 0, fail = 0
+    for (const r of recipients) {
+      const email = String(r.email ?? '')
+      if (!email) { fail++; continue }
+      try {
+        const form = new FormData()
+        form.append('sender', sender)
+        form.append('to', email)
+        form.append('to_name', String(r.name ?? r.email ?? ''))
+        form.append('subject', applyVars(subject, r))
+        form.append('body', applyVars(body, r))
+        attachments.forEach(f => form.append('files', f))
+        const res = await fetch(`${apiUrl}/api/admin/mail/send`, {
+          method: 'POST',
+          headers: { 'x-admin-key': adminKey },
+          body: form,
+        })
+        if (res.ok) ok++; else fail++
+      } catch { fail++ }
     }
-  }, [subj, body, sender, recipients, files, getHeaders, onSend])
+    setSending(false)
+    setResult(fail === 0 ? `✓ ${ok}명 발송 완료` : `✓ ${ok}명 성공 / ✗ ${fail}명 실패`)
+  }
 
   if (!open) return null
 
-  const activeSender = SENDERS.find(s => s.value === sender) ?? SENDERS[0]
+  const previewRow = recipients[previewIdx]
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: '#fff', borderRadius: 16, width: '85vw', maxWidth: 1100,
-          height: '88vh', overflow: 'auto',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.3)',
-          display: 'flex', flexDirection: 'column',
-          minWidth: 500, minHeight: 400,
-        }}
-      >
-        {/* Header */}
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.45)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center'
+    }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{
+        width: 680, maxHeight: '90vh', background: '#fff',
+        borderRadius: 10, display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden'
+      }}>
+        {/* 헤더 */}
         <div style={{
-          padding: '16px 24px', borderBottom: '1px solid #e2e8f0',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+          padding: '14px 20px', borderBottom: '1px solid #e8e8e8',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          background: '#1a1a2e'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <b style={{ fontSize: 20 }}>메일 작성</b>
-          </div>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
+            메일 발송 — 구직자
+          </span>
           <button onClick={onClose} style={{
-            border: 'none', background: 'transparent', fontSize: 22, cursor: 'pointer', color: '#64748b',
+            background: 'none', border: 'none', color: '#fff',
+            fontSize: 18, cursor: 'pointer', padding: '0 4px'
           }}>✕</button>
         </div>
 
-        {/* Template buttons */}
-        <div style={{ padding: '10px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>템플릿</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {MAIL_TEMPLATES.map(m => (
-              <button
-                key={m.key}
-                onClick={() => setTmpl(m.key)}
-                style={{
-                  padding: '6px 14px', fontSize: 13, borderRadius: 6,
-                  border: tmpl === m.key ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                  background: tmpl === m.key ? '#2563eb' : '#f8fafc',
-                  color: tmpl === m.key ? '#fff' : '#374151',
-                  cursor: 'pointer', fontWeight: tmpl === m.key ? 800 : 500,
-                  transition: 'all 0.1s',
-                }}
-              >
-                {TMPL_KR[m.key] ?? m.label}
-              </button>
-            ))}
+        {/* 템플릿 탭 */}
+        <div style={{
+          padding: '8px 20px', borderBottom: '1px solid #f0f0f0',
+          display: 'flex', gap: 6, overflowX: 'auto', background: '#fafafa'
+        }}>
+          {MAIL_TEMPLATES.map(t => (
+            <button key={t.key} onClick={() => applyTemplate(t.key)}
+              style={{
+                padding: '4px 12px', fontSize: 12, borderRadius: 16, border: 'none',
+                background: tmplKey === t.key ? '#1a1a2e' : '#eee',
+                color: tmplKey === t.key ? '#fff' : '#555',
+                cursor: 'pointer', fontWeight: tmplKey === t.key ? 700 : 400,
+                whiteSpace: 'nowrap', flexShrink: 0
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 발신자 선택 */}
+        <div style={{
+          padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 8,
+          borderBottom: '1px solid #f0f0f0', background: '#fafafa'
+        }}>
+          <span style={{ fontSize: 12, color: '#888', width: 36 }}>발신</span>
+          {(['gmail', 'naver'] as const).map(s => (
+            <button key={s} onClick={() => setSender(s)} style={{
+              padding: '3px 14px', fontSize: 12, borderRadius: 20,
+              border: '1.5px solid ' + (sender === s ? '#1a1a2e' : '#ddd'),
+              background: sender === s ? '#1a1a2e' : '#fff',
+              color: sender === s ? '#fff' : '#555',
+              cursor: 'pointer', fontWeight: sender === s ? 700 : 400
+            }}>{s === 'gmail' ? 'Gmail' : 'Naver'}</button>
+          ))}
+          <span style={{ fontSize: 11, color: '#aaa', marginLeft: 4 }}>{senderEmail}</span>
+          <div style={{ marginLeft: 'auto' }}>
+            <span style={{
+              background: '#e8f5e9', color: '#2e7d32', padding: '3px 10px',
+              borderRadius: 12, fontSize: 11, fontWeight: 700
+            }}>{recipients.length}명 개별발송</span>
           </div>
         </div>
 
-        {/* Sender toggle */}
-        <div style={{ padding: '8px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', minWidth: 40 }}>발신</span>
-          <div style={{ display: 'flex', gap: 0, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-            {SENDERS.map((s, i) => (
-              <button
-                key={s.value}
-                onClick={() => setSender(s.value)}
-                style={{
-                  padding: '6px 18px', fontSize: 13, cursor: 'pointer',
-                  background: sender === s.value ? s.color : '#fff',
-                  color: sender === s.value ? '#fff' : '#374151',
-                  fontWeight: sender === s.value ? 800 : 500,
-                  transition: 'all 0.15s',
-                  border: 'none',
-                  borderRight: i < SENDERS.length - 1 ? '1px solid #e2e8f0' : 'none',
-                }}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            background: activeSender.color + '15',
-            color: activeSender.color,
-            padding: '4px 10px', borderRadius: 6,
-          }}>
-            {activeSender.value}
-          </span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '4px 12px', borderRadius: 20 }}>
-            {recipients.length}명 개별발송
-          </span>
-        </div>
-
-        {/* To */}
-        <div style={{ padding: '8px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', minWidth: 40 }}>수신</span>
-          {recipients.map(r => (
-            <span key={r.id} style={{
-              fontSize: 13, padding: '3px 10px', background: '#f1f5f9',
-              borderRadius: 20, border: '1px solid #e2e8f0',
-            }}>
-              {String(r.name)} &lt;{String(r.email)}&gt;
+        {/* 수신자 칩 */}
+        <div style={{
+          padding: '8px 20px', display: 'flex', gap: 6, alignItems: 'center',
+          borderBottom: '1px solid #f0f0f0', flexWrap: 'wrap',
+          maxHeight: 80, overflowY: 'auto'
+        }}>
+          <span style={{ fontSize: 12, color: '#888', flexShrink: 0 }}>수신</span>
+          {recipients.map((r, i) => (
+            <span key={i} onClick={() => { setPreviewIdx(i); setPreviewMode(true) }}
+              style={{
+                background: '#f0f4ff', border: '1px solid #c5d0f0', borderRadius: 12,
+                padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4
+              }}>
+              <span>{String(r.name ?? r.email ?? '')}</span>
+              <span style={{ color: '#888', fontSize: 10 }}>({String(r.email ?? '')})</span>
             </span>
           ))}
         </div>
 
-        {/* Subject */}
-        <div style={{ padding: '8px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', minWidth: 40 }}>제목</span>
-          <input
-            value={subj} onChange={e => setSubj(e.target.value)}
-            placeholder="Subject"
-            style={{
-              flex: 1, padding: '8px 12px', fontSize: 15,
-              border: '1px solid #d1d5db', borderRadius: 6,
-              outline: 'none', boxSizing: 'border-box',
-            }}
-          />
+        {/* 제목 */}
+        <div style={{
+          padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 8,
+          borderBottom: '1px solid #f0f0f0'
+        }}>
+          <span style={{ fontSize: 12, color: '#888', width: 36 }}>제목</span>
+          <input value={subject} onChange={e => setSubject(e.target.value)}
+            placeholder='Subject'
+            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#111' }} />
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '10px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <textarea
-            value={body} onChange={e => setBody(e.target.value)}
-            placeholder="본문을 입력하세요. {{name}} 변수 사용 가능"
-            style={{
-              flex: 1, width: '100%', minHeight: 200, padding: '14px 16px',
-              fontSize: 14, border: '1px solid #d1d5db', borderRadius: 8,
-              outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.8,
-              fontFamily: '-apple-system, "Segoe UI", sans-serif',
-            }}
-          />
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-            변수: {'{{name}}'} {'{{region}}'} {'{{city}}'}  &nbsp;|&nbsp; 1:1 개별 발송 — 수신자 정보 타인에게 미노출
+        {/* 미리보기 바 */}
+        {previewMode && previewRow && (
+          <div style={{
+            padding: '6px 20px', background: '#fff8e1',
+            borderBottom: '1px solid #ffe082',
+            display: 'flex', alignItems: 'center', gap: 8, fontSize: 11
+          }}>
+            <span>미리보기:</span>
+            <select value={previewIdx}
+              onChange={e => setPreviewIdx(Number(e.target.value))}
+              style={{ fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }}>
+              {recipients.map((r, i) => (
+                <option key={i} value={i}>
+                  {String(r.name ?? r.email ?? '')} ({String(r.email ?? '')})
+                </option>
+              ))}
+            </select>
+            <button onClick={() => setPreviewMode(false)}
+              style={{ fontSize: 11, border: '1px solid #ccc', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', background: '#fff' }}>
+              편집으로 돌아가기
+            </button>
           </div>
+        )}
+
+        {/* 본문 */}
+        <div style={{ flex: 1, position: 'relative', minHeight: 200 }}>
+          {previewMode && previewRow ? (
+            <div style={{
+              padding: '16px 20px', height: '100%', overflowY: 'auto',
+              fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap',
+              color: '#111', fontFamily: 'Arial, sans-serif'
+            }}>
+              <div style={{ marginBottom: 8, color: '#888', fontSize: 11 }}>
+                제목: {applyVars(subject, previewRow)}
+              </div>
+              <hr style={{ border: 'none', borderTop: '1px solid #eee', marginBottom: 12 }} />
+              {applyVars(body, previewRow)}
+            </div>
+          ) : (
+            <textarea value={body} onChange={e => setBody(e.target.value)}
+              placeholder='본문 입력 — {{name}} {{region}} 변수 사용 가능'
+              style={{
+                width: '100%', height: '100%', minHeight: 200,
+                border: 'none', outline: 'none', resize: 'none',
+                padding: '14px 20px', fontSize: 13, lineHeight: 1.7,
+                fontFamily: 'Arial, sans-serif', color: '#111',
+                boxSizing: 'border-box'
+              }} />
+          )}
         </div>
 
-        {/* File attach */}
-        <div style={{ padding: '8px 24px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-          <div
-            ref={dropRef}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onClick={() => fileRef.current?.click()}
+        {/* 변수 힌트 + 미리보기 토글 */}
+        <div style={{
+          padding: '4px 20px', background: '#fafafa',
+          borderTop: '1px solid #f0f0f0', fontSize: 11, color: '#888',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <span>변수: {'{{name}}'} {'{{region}}'} | 1:1 개별 발송</span>
+          <button onClick={() => setPreviewMode(p => !p)}
             style={{
-              border: '2px dashed #d1d5db', borderRadius: 8, padding: '10px 16px',
-              textAlign: 'center', cursor: 'pointer', color: '#94a3b8', fontSize: 13,
-            }}
-          >
-            📎 파일을 드래그하거나 클릭하여 첨부
-          </div>
-          <input
-            ref={fileRef} type="file" multiple
-            onChange={e => setFiles(p => [...p, ...Array.from(e.target.files || [])])}
-            style={{ display: 'none' }}
-          />
-          {files.length > 0 && (
-            <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {files.map((f, i) => (
+              fontSize: 11, padding: '2px 10px', border: '1px solid #ccc',
+              borderRadius: 3, cursor: 'pointer',
+              background: previewMode ? '#1a1a2e' : '#fff',
+              color: previewMode ? '#fff' : '#333'
+            }}>
+            {previewMode ? '편집' : '미리보기'}
+          </button>
+        </div>
+
+        {/* 첨부파일 */}
+        <div ref={dropRef} onClick={() => fileRef.current?.click()}
+          style={{
+            margin: '8px 20px', border: '1.5px dashed #ccc', borderRadius: 6,
+            padding: '10px', textAlign: 'center', cursor: 'pointer',
+            background: '#fafafa', fontSize: 12, color: '#888'
+          }}>
+          📎 파일 드래그 또는 클릭하여 첨부
+          {attachments.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+              {attachments.map((f, i) => (
                 <span key={i} style={{
-                  fontSize: 12, padding: '3px 10px', background: '#f1f5f9', borderRadius: 4,
+                  background: '#e8eaf6', padding: '2px 8px', borderRadius: 10,
+                  fontSize: 11, display: 'flex', alignItems: 'center', gap: 4
                 }}>
                   {f.name}
-                  <span
-                    onClick={() => setFiles(p => p.filter((_, j) => j !== i))}
-                    style={{ cursor: 'pointer', color: '#ef4444', marginLeft: 6 }}
-                  >✕</span>
+                  <span onClick={e => { e.stopPropagation(); setAttachments(a => a.filter((_, j) => j !== i)) }}
+                    style={{ cursor: 'pointer', color: '#999' }}>✕</span>
                 </span>
               ))}
             </div>
           )}
         </div>
+        <input ref={fileRef} type='file' multiple style={{ display: 'none' }}
+          onChange={e => setAttachments(a => [...a, ...Array.from(e.target.files ?? [])])} />
 
-        {/* Footer */}
+        {/* 하단 */}
         <div style={{
-          padding: '14px 24px', borderTop: '2px solid #e2e8f0',
+          padding: '10px 20px', borderTop: '1px solid #e8e8e8',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          flexShrink: 0, flexWrap: 'wrap', gap: 8,
+          background: '#fafafa'
         }}>
           <div>
+            <div style={{ fontSize: 11, color: '#d32f2f', marginBottom: 2 }}>
+              * 타인 정보 절대 미노출 / 1:1 개별 발송
+            </div>
             {result && (
-              <div style={{
-                fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 6,
-                background: result.success ? '#dcfce7' : '#fee2e2',
-                color: result.success ? '#16a34a' : '#dc2626',
-              }}>
-                {result.success
-                  ? `✓ ${result.sent}명 발송 완료${result.failed > 0 ? ` (실패 ${result.failed}명)` : ''}`
-                  : `✗ 발송 실패 (${result.failed}명)`}
-              </div>
-            )}
-            {!result && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>
-                * 타인 정보 절대 미노출 / 1:1 개별 발송
+              <div style={{ fontSize: 12, fontWeight: 700, color: result.startsWith('✓') ? '#2e7d32' : '#c62828' }}>
+                {result}
               </div>
             )}
           </div>
-          <button
-            onClick={handleSend}
-            disabled={!subj || !body || sending}
-            style={{
-              padding: '12px 28px', fontSize: 16, border: 'none', borderRadius: 10,
-              background: subj && body && !sending ? activeSender.color : '#aaa',
-              color: '#fff', cursor: subj && body && !sending ? 'pointer' : 'default',
-              fontWeight: 900, transition: 'background 0.2s',
-            }}
-          >
-            {sending ? '발송 중...' : `보내기 (${recipients.length}명 개별발송)`}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose}
+              style={{ padding: '7px 18px', fontSize: 13, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 6, background: '#fff' }}>
+              취소
+            </button>
+            <button onClick={handleSend} disabled={sending}
+              style={{
+                padding: '7px 22px', fontSize: 13, cursor: sending ? 'not-allowed' : 'pointer',
+                background: sending ? '#bbb' : '#1a1a2e', color: '#fff',
+                border: 'none', borderRadius: 6, fontWeight: 700
+              }}>
+              {sending ? '발송중...' : `보내기 (${recipients.length}명)`}
+            </button>
+          </div>
         </div>
       </div>
     </div>
