@@ -1,15 +1,43 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
-const INIT_DATA = [
-  { jNumber:"1003",region:"부산",city:"해운대",name:"브릿지영어1호점",email:"bridge@nave.com",emails:["bridge@nave.com","bridge_busan@gmail.com"],phone:"010-4560-0333",contact:"원장",tags:["방학"],teachingAge:"Kindy - Elem",salary:"2,400,000",status:"active",blacklist:false,active:true,isNew:true,confirmed:false,memo:"(부산 해운대 브릿지영어1호점 원장0104560333 부장010555 bridge@nave.com 담임교사아님-영어만/1:1한국어보조교사있음/긴방학; 방학 겨울3주 여름2주, 병가3일, 주당 25시간 프렙 하루2시간, 점심자유, 남자 교육전공선호)Native Teacher (Numbers can change) : Approx. 2 / 400 k",tags:[],rawText:"Busan\nJob. 1003\nStarting Date : September, March\nTeaching Age : Kindy - Elem\nClass size : around ~10\nWorking Hours : 09:00~16 (line 10)\nMonthly Salary : 2,40m KRW Not negotiable\nAverage Teaching Hours per Week : 23\nVacation : total 5 weeks, plus 2 days for sick leave\nNative Teacher (Numbers can change) : Approx. 3\nHousing : allowance 400k, No deposit or additional cost support provided.\nOnly hiring teachers residing in Korea, Good reputation and team players preferred.\nEmployee Benefits : Visa sponsorship, severance pay, pension, insurance, paid vacation, flexible lunch and airfare support." },
-  { jNumber:"1204",region:"서울",city:"구로",name:"해피해피",email:"test@gmail.com",emails:["test@gmail.com"],phone:"010-2542-6545",contact:"김테스원장",tags:["짧은"],teachingAge:"Elem, Adult",salary:"2,300,000",status:"active",blacklist:false,active:true,isNew:false,confirmed:true,memo:"(서울 구로 해피해피 김테스원장 010-2542-6545 test@gmail.com 남아공외지원가, 짧은시간)",tags:[],rawText:"Seoul Guro\nJob. 1204\nStarting Date : March, June\nTeaching Age : Elem, Sometimes adult\nClass size : around ~8\nWorking Hours : 09:00~15:00\nMonthly Salary : 2,30m KRW Not negotiable\nAverage Teaching Hours per Week : 20\nVacation : 16 days\nNative Teacher (Numbers can change) : Approx. 1\nHousing : provided or allowance 700k, 5M deposit.\nBachelor's or higher with an F visa kyopo or native speakers are also welcome\nEmployee Benefits : Visa sponsorship, severance pay, pension, insurance, paid vacation, renewal Bonus, flexible lunch and airfare support." },
-  { jNumber:"1087",region:"경기",city:"수원시",name:"광교SLP",email:"hwangjungah@gmail.com",emails:["hwangjungah@gmail.com","slp_gwanggyo@naver.com"],phone:"010-9647-9060",contact:"황정아",teachingAge:"Kinder",salary:"2,500,000",status:"active",blacklist:false,active:true,isNew:false,confirmed:true,memo:"",tags:[],rawText:"Gyeonggi Suwon\nJob. 1087\nStarting Date : August\nTeaching Age : Kinder" },
-  { jNumber:"1088",region:"경기",city:"수지",name:"수지 폴리어학원",email:"itsjenny@naver.com",emails:["itsjenny@naver.com"],phone:"010-5678-5500",contact:"",teachingAge:"Kinder",salary:"2,600,000",status:"new",blacklist:false,active:true,isNew:true,confirmed:false,memo:"",tags:[],rawText:"Gyeonggi Suji\nJob. 1088\nStarting Date : March\nTeaching Age : Kinder" },
-  { jNumber:"1045",region:"부산",city:"동래구",name:"브릿지",email:"airel@naver.com",emails:["airel@naver.com"],phone:"010-5900-2221",contact:"",teachingAge:"Kinder - Elem",salary:"2,400,000",status:"active",blacklist:false,active:true,isNew:false,confirmed:true,memo:"",tags:[],rawText:"Busan Dongnae\nJob. 1045" },
-  { jNumber:"1046",region:"부산",city:"동래구",name:"브릿지에이전시",email:"airel@naver.com",emails:["airel@naver.com"],phone:"010-5900-2221",contact:"",teachingAge:"Pre-K, Kinder",salary:"2,300,000",status:"active",blacklist:false,active:true,isNew:false,confirmed:true,memo:"",tags:[],rawText:"Busan Dongnae\nJob. 1046" },
-  { jNumber:"0823",region:"경북",city:"경주",name:"브라이트스타",email:"brightstarenglish1@gmail.com",emails:["brightstarenglish1@gmail.com"],phone:"",contact:"",teachingAge:"초중",salary:"",status:"active",blacklist:true,active:false,isNew:false,confirmed:true,memo:"(경북 경주 브라이트스타 — 연락두절 3회, 급여 지연 이력)",tags:[],rawText:"Job. 0823" },
-  { jNumber:"0714",region:"제주",city:"서귀",name:"브라이트잉글리쉬",email:"bright4566@naver.com",emails:["bright4566@naver.com","bright_jeju@gmail.com"],phone:"070-7756-4566",contact:"",teachingAge:"초중",salary:"",status:"active",blacklist:true,active:false,isNew:false,confirmed:true,memo:"(제주 서귀 브라이트잉글리쉬 — 계약 위반 2건)",tags:[],rawText:"Job. 0714" },
-];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+function mapApiItem(it) {
+  return {
+    _apiId: it.id,
+    jNumber: it.job_code || it.id || "",
+    region: it.location || "",
+    city: it.city || "",
+    name: it.school_name || it.name || "",
+    email: it.email || "",
+    emails: [it.email].filter(Boolean),
+    phone: it.phone || "",
+    contact: it.contact_name || "",
+    teachingAge: it.teaching_age || "",
+    salary: it.salary_raw || "",
+    status: it.status || "open",
+    blacklist: false,
+    active: it.status !== "closed",
+    isNew: it.created_at ? (Date.now() - new Date(it.created_at).getTime()) < 7 * 86400000 : false,
+    confirmed: false,
+    tags: [],
+    memo: it.memo || "",
+    rawText: it.raw_text || [
+      it.location && it.city ? it.location + " " + it.city : it.location || "",
+      it.job_code && "Job. " + it.job_code,
+      it.start_date && "Starting Date : " + it.start_date,
+      it.teaching_age && "Teaching Age : " + it.teaching_age,
+      it.class_size && "Class size : " + it.class_size,
+      it.working_hours && "Working Hours : " + it.working_hours,
+      it.salary_raw && "Monthly Salary : " + it.salary_raw,
+      it.teach_hrs_week && "Average Teaching Hours per Week : " + it.teach_hrs_week,
+      it.vacation && "Vacation : " + it.vacation,
+      it.native_count && "Native Teacher (Numbers can change) : " + it.native_count,
+      it.housing && "Housing : " + it.housing,
+      it.benefits && "Employee Benefits : " + it.benefits,
+    ].filter(Boolean).join("\n"),
+  };
+}
 
 let _nxt=1101;
 function nextId(){const n=_nxt;_nxt+=2;return`N${n}`;}
@@ -210,7 +238,7 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
     for(const r of allRecipientEmails.slice(0,99)){
       try{
         const body=html.replace(/\{\{name\}\}/g,r.name||"").replace(/\{\{region\}\}/g,"").replace(/\{\{city\}\}/g,"").replace(/\{\{teachingAge\}\}/g,"");
-        const res=await fetch("/api/send-mail",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({from:sender,to:r.email,subject,html:body})});
+        const res=await fetch(`${API_BASE}/api/send-mail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({from:sender,to:r.email,subject,html:body})});
         res.ok?ok++:fail++;
       }catch{fail++;}
     }
@@ -1061,7 +1089,30 @@ const ColMgr=({cols,setCols,onClose})=>{
 
 // ─── 메인 ───────────────────────────────────────────────
 export default function EmployerManagement(){
-  const[data,setData]=useState(INIT_DATA);
+  const[data,setData]=useState([]);
+  const[loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    const adminKey=localStorage.getItem("bridge_admin_key")||"";
+    const hdrs={"Content-Type":"application/json"};
+    if(adminKey)hdrs["x-admin-key"]=adminKey;
+    (async()=>{
+      try{
+        let all=[];let pg=1;let more=true;
+        while(more){
+          const res=await fetch(`${API_BASE}/api/admin/applications?type=employer&page=${pg}&limit=500`,{headers:hdrs});
+          if(!res.ok)break;
+          const json=await res.json();
+          console.log(`[employers] page=${pg} items=${(json.data||[]).length} total=${json.total||"?"} has_more=${json.has_more}`);
+          all=[...all,...(json.data||[])];
+          more=json.has_more||false;pg++;
+        }
+        console.log(`[employers] total loaded: ${all.length}`);
+        setData(all.map(mapApiItem));
+      }catch(e){console.error("[employers] load failed:",e);}
+      finally{setLoading(false);}
+    })();
+  },[]);
   const[tab,setTab]=useState("active");
   const[mode,setMode]=useState("doc");
   const[fl,setFl]=useState({});
@@ -1139,49 +1190,9 @@ export default function EmployerManagement(){
     return next;
   })),[]);
 
-  // 실시간 신규 접수 폴링 — /api/inquiries?new=1 (30초 간격)
-  // 원어민채용의뢰 폼 접수 시 상단에 자동 추가
-  const seenIds=useRef(new Set(data.map(d=>d.jNumber)));
-  useEffect(()=>{
-    const poll=async()=>{
-      try{
-        const res=await fetch("/api/inquiries?new=1");
-        if(!res.ok)return;
-        const list=await res.json();
-        if(!Array.isArray(list))return;
-        const fresh=list.filter(item=>!seenIds.current.has(item.jNumber));
-        if(fresh.length===0)return;
-        fresh.forEach(item=>seenIds.current.add(item.jNumber));
-        setData(p=>[
-          ...fresh.map(item=>({
-            jNumber:item.jNumber||nextId(),
-            region:item.region||"",
-            city:item.city||"",
-            name:item.name||"",
-            email:item.email||"",
-            emails:item.emails||[item.email||""],
-            phone:item.phone||"",
-            contact:item.contact||"",
-            teachingAge:item.teachingAge||"",
-            salary:item.salary||"",
-            status:"new",
-            blacklist:false,
-            active:true,
-            isNew:true,
-            confirmed:false,
-            tags:[],
-            memo:item.memo||`(신규접수 ${new Date().toLocaleDateString("ko-KR")})`,
-            rawText:item.rawText||`Job. ${item.jNumber||""}
-`,
-          })),
-          ...p
-        ]);
-        if(cRef.current)cRef.current.scrollTop=0;
-      }catch(e){/* 백엔드 미연결 시 무시 */}
-    };
-    const timer=setInterval(poll,30000);
-    return()=>clearInterval(timer);
-  },[]);
+  // 신규 접수 자동 감지 — seenIds 관리
+  const seenIds=useRef(new Set());
+  useEffect(()=>{seenIds.current=new Set(data.map(d=>d._apiId||d.jNumber));},[data]);
   const moveItem=useCallback((jn,dir)=>{setData(p=>{const idx=p.findIndex(d=>d.jNumber===jn);if(idx<0)return p;const n=[...p];if(dir==="top"){const it=n.splice(idx,1)[0];n.unshift(it);}else if(dir==="up"&&idx>0)[n[idx-1],n[idx]]=[n[idx],n[idx-1]];else if(dir==="down"&&idx<n.length-1)[n[idx],n[idx+1]]=[n[idx+1],n[idx]];return n;});},[]);
   const toggleCheck=useCallback(jn=>setChecked(p=>{const n=new Set(p);n.has(jn)?n.delete(jn):n.add(jn);return n;}),[]);
   const checkAll=useCallback(()=>setChecked(new Set(filtered.map(d=>d.jNumber))),[filtered]);
@@ -1200,6 +1211,15 @@ export default function EmployerManagement(){
     {id:"all",l:"전체보기",c:data.length,co:"#111"},
     {id:"blacklist",l:"블랙리스트",c:data.filter(d=>d.blacklist).length,co:"#dc2626"},
   ];
+
+  if(loading)return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:"#888"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:"2rem",marginBottom:12}}>&#9203;</div>
+        <div style={{fontSize:"1rem",fontWeight:600}}>구인자 데이터 로딩 중...</div>
+      </div>
+    </div>
+  );
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",fontFamily:"'Malgun Gothic',-apple-system,sans-serif",background:"#f0f0f0",overflow:"hidden"}}>
