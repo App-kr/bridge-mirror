@@ -1,10 +1,11 @@
 /* ═══════════════════════════════════════════════════════
-   BRIDGE Canvas Spreadsheet — Grid Engine v3.1
+   BRIDGE Canvas Spreadsheet — Grid Engine v4
    Pure Canvas rendering: header, rows, photos, stages, tags
    Ghost-div scrollbar, column resize, DPR scaling
-   v3: checkbox, stage dropdown, tag toggle, photo wheel,
-       cell styles, filter icons, header context menu
-   v3.1: per-row variable heights, drag-to-resize rows
+   v4: Google Sheets style — row numbers (no checkbox),
+       corner select-all, stage dropdown, tag toggle,
+       photo wheel, cell styles, filter icons, header context menu,
+       per-row variable heights, drag-to-resize rows
    ═══════════════════════════════════════════════════════ */
 
 import type { ColDef, DataRow, GridCallbacks, CellRef } from './types'
@@ -24,10 +25,8 @@ const FROZEN_SEP   = '#94a3b8'
 const SORT_ARROW   = '#64748b'
 const RESIZE_ZONE  = 5
 const ROW_RESIZE_ZONE = 5
-const CHECKBOX_SIZE = 14
-const CHECKBOX_PAD  = 4
-const CHECKBOX_W = 24  // left zone for checkbox
-const NUM_W_PAD = 4    // right padding for row number
+const ROW_NUM_BG      = '#f8f9fa'
+const ROW_NUM_SEL_BG  = '#d3e3fd'
 const KEY_COLS = new Set(['email', 'name'])
 const KEY_COL_FONT = '14px -apple-system,"Segoe UI",sans-serif'
 const KEY_HEADER_FONT = '13px -apple-system,"Segoe UI",sans-serif'
@@ -334,9 +333,6 @@ export class GridEngine {
     return -1
   }
 
-  private isCheckboxHit(localX: number): boolean {
-    return localX < CHECKBOX_SIZE + CHECKBOX_PAD * 2
-  }
 
   private hitTag(val: string, localX: number): string | null {
     if (!val) return null
@@ -378,9 +374,9 @@ export class GridEngine {
 
     const col = this.visCols[hit.visCol]
 
-    // Checkbox click in idx column
-    if (col && col.type === 'idx' && this.isCheckboxHit(hit.localX)) {
-      this.selection.toggleRow(hit.row)
+    // Row number click → select row (Google Sheets style)
+    if (col && col.type === 'idx') {
+      this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
       this.cb.onSelectionChange(this.selection.getSelectedRows())
       this.requestRender()
       return
@@ -434,7 +430,7 @@ export class GridEngine {
     // Clickable area cursors
     if (hit) {
       const col = this.visCols[hit.visCol]
-      if (col && (col.type === 'tags' || col.type === 'mail' || (col.type === 'idx' && this.isCheckboxHit(hit.localX)))) {
+      if (col && (col.type === 'tags' || col.type === 'mail')) {
         this.ghost.style.cursor = 'pointer'
       } else {
         this.ghost.style.cursor = 'default'
@@ -803,7 +799,7 @@ export class GridEngine {
 
     switch (col.type) {
       case 'idx':
-        this.drawCheckboxCell(row, x, y, w, h, rowIdx)
+        this.drawRowNum(row, x, y, w, h, rowIdx)
         break
       case 'photo':
         this.drawPhoto(row, x, y, w, h)
@@ -854,36 +850,15 @@ export class GridEngine {
     ctx.font = FONT
   }
 
-  private drawCheckboxCell(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
+  /** Google Sheets style row number cell */
+  private drawRowNum(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
-    // Checkbox zone background
-    ctx.fillStyle = '#f8f9fa'
-    ctx.fillRect(x, y, CHECKBOX_W, h)
-    // Number zone background
-    ctx.fillStyle = '#f1f3f4'
-    ctx.fillRect(x + CHECKBOX_W, y, w - CHECKBOX_W, h)
-
-    const isSelected = this.selection.isRowSelected(rowIdx)
-    const cbX = x + (CHECKBOX_W - CHECKBOX_SIZE) / 2
-    const cbY = y + (h - CHECKBOX_SIZE) / 2
-    ctx.strokeStyle = isSelected ? '#3b82f6' : '#94a3b8'
-    ctx.lineWidth = 1.5
-    ctx.strokeRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
-    if (isSelected) {
-      ctx.fillStyle = '#3b82f6'
-      ctx.fillRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(cbX + 3, cbY + CHECKBOX_SIZE / 2)
-      ctx.lineTo(cbX + CHECKBOX_SIZE / 2 - 1, cbY + CHECKBOX_SIZE - 3)
-      ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
-      ctx.stroke()
-    }
-    // Row number in the right zone
+    ctx.fillStyle = this.selection.isRowSelected(rowIdx) ? ROW_NUM_SEL_BG : ROW_NUM_BG
+    ctx.fillRect(x, y, w, h)
     ctx.fillStyle = '#555'
     ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
-    ctx.fillText(String(row.mgtNum || row.id), x + w - NUM_W_PAD, y + h / 2)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(String(row.mgtNum || row.id), x + w / 2, y + h / 2)
     ctx.textAlign = 'left'; ctx.font = FONT
   }
 
@@ -1077,31 +1052,9 @@ export class GridEngine {
     const nameY = 38  // vertical center of the column-name row (20..56 → center ≈ 38)
 
     if (col.type === 'idx') {
-      // Checkbox area background
+      // Corner select-all button (Google Sheets style)
       ctx.fillStyle = '#f0f0f2'
-      ctx.fillRect(x, 0, CHECKBOX_W, HEADER_H)
-      ctx.fillStyle = '#eaeaec'
-      ctx.fillRect(x + CHECKBOX_W, 0, w - CHECKBOX_W, HEADER_H)
-
-      const isAll = this.selection.isAllSelected(this.rows.length)
-      const cbX = x + (CHECKBOX_W - CHECKBOX_SIZE) / 2
-      const cbY = nameY - CHECKBOX_SIZE / 2
-      ctx.strokeStyle = isAll ? '#3b82f6' : '#94a3b8'
-      ctx.lineWidth = 1.5
-      ctx.strokeRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
-      if (isAll) {
-        ctx.fillStyle = '#3b82f6'
-        ctx.fillRect(cbX, cbY, CHECKBOX_SIZE, CHECKBOX_SIZE)
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.moveTo(cbX + 3, cbY + CHECKBOX_SIZE / 2)
-        ctx.lineTo(cbX + CHECKBOX_SIZE / 2 - 1, cbY + CHECKBOX_SIZE - 3)
-        ctx.lineTo(cbX + CHECKBOX_SIZE - 3, cbY + 3)
-        ctx.stroke()
-      }
-      ctx.fillStyle = '#1e293b'; ctx.font = HEADER_FONT
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
-      ctx.fillText(col.label, x + CHECKBOX_W + 4, nameY)
+      ctx.fillRect(x, 0, w, HEADER_H)
       ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
       return

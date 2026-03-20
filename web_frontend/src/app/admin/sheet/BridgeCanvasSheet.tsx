@@ -1,15 +1,14 @@
 'use client'
 
 /* ═══════════════════════════════════════════════════════
-   BRIDGE Canvas Spreadsheet v3 — React Wrapper
+   BRIDGE Canvas Spreadsheet v4 — Google Sheets Style
    - 전체 데이터 자동 로드 (3000+건)
-   - 고정 뷰포트 (브라우저 스크롤 차단, Canvas 내부만 스크롤)
-   - 체크박스 + 전체선택
-   - 메일 모달
-   - 진행단계 드롭다운
-   - 발송상태 태그 토글
-   - 사진 붙여넣기 + 업로드 + 줌
-   - 셀 서식 (굵게, 기울임, 글자색, 배경색, 글자크기)
+   - 고정 뷰포트 (Canvas 내부만 스크롤)
+   - 행번호 클릭 선택 + 코너 전체선택
+   - Google Sheets 스타일 툴바 (Undo/Redo/Zoom/Font/Size/B/I/S/Color/Align)
+   - 메일 모달 + 진행단계 + 발송상태 태그
+   - 사진 Ctrl+V 붙여넣기 + 업로드
+   - 셀 서식 (굵게, 기울임, 글자색, 배경색, 글자크기, 정렬)
    - 컬럼 필터 + 헤더 우클릭 메뉴
    ═══════════════════════════════════════════════════════ */
 
@@ -99,6 +98,8 @@ export default function BridgeCanvasSheet() {
   const [cols, setCols] = useState<ColDef[]>(() => defaultCols())
   const [frozenCols, setFrozenCols] = useState(3)
   const [rowHeight, setRowHeight] = useState(36)
+  const [zoomLevel, setZoomLevel] = useState(100)
+  const [fontFamily, setFontFamily] = useState('system')
   const [q, setQ] = useState('')
   const [sortKey, setSortKey] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -850,17 +851,48 @@ export default function BridgeCanvasSheet() {
         )}
       </div>
 
-      {/* ── Toolbar Row 2: formatting ── */}
+      {/* ── Toolbar Row 2: Google Sheets formatting bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 4, padding: '3px 12px',
         background: '#f8fafc', borderBottom: '1.5px solid #d1d5db', flexShrink: 0,
       }}>
-        <span style={{ fontSize: 12, color: '#555', marginRight: 2 }}>Arial</span>
+        {/* Undo / Redo */}
+        <button onClick={undo} style={fmtBtn} title="Ctrl+Z (실행취소)">↩</button>
+        <button onClick={redo} style={fmtBtn} title="Ctrl+Y (다시실행)">↪</button>
 
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
+
+        {/* Zoom */}
+        <select
+          value={zoomLevel}
+          onChange={e => setZoomLevel(Number(e.target.value))}
+          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px', width: 60 }}
+          title="확대/축소"
+        >
+          {[50, 75, 90, 100, 110, 125, 150].map(n => <option key={n} value={n}>{n}%</option>)}
+        </select>
+
+        <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
+
+        {/* Font family */}
+        <select
+          value={fontFamily}
+          onChange={e => setFontFamily(e.target.value)}
+          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px', width: 90 }}
+          title="글꼴"
+        >
+          <option value="system">System UI</option>
+          <option value="arial">Arial</option>
+          <option value="nanum">나눔고딕</option>
+          <option value="mono">Monospace</option>
+        </select>
+
+        {/* Font size */}
         <select
           onChange={e => applyStyleToSelection({ fontSize: Number(e.target.value) })}
           defaultValue=""
-          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px' }}
+          style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px', width: 52 }}
+          title="글자 크기"
         >
           <option value="" disabled>크기</option>
           {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24].map(n => <option key={n} value={n}>{n}</option>)}
@@ -868,9 +900,10 @@ export default function BridgeCanvasSheet() {
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
-        <button onClick={() => applyStyleToSelection({ bold: true })} style={{ ...fmtBtn, fontWeight: 700 }} title="Bold">B</button>
-        <button onClick={() => applyStyleToSelection({ italic: true })} style={{ ...fmtBtn, fontStyle: 'italic' }} title="Italic">I</button>
-        <button onClick={() => applyStyleToSelection({ strikethrough: true })} style={{ ...fmtBtn, textDecoration: 'line-through' }} title="Strikethrough">S</button>
+        {/* B / I / S */}
+        <button onClick={() => applyStyleToSelection({ bold: true })} style={{ ...fmtBtn, fontWeight: 700 }} title="Bold (Ctrl+B)">B</button>
+        <button onClick={() => applyStyleToSelection({ italic: true })} style={{ ...fmtBtn, fontStyle: 'italic' }} title="Italic (Ctrl+I)">I</button>
+        <button onClick={() => applyStyleToSelection({ strikethrough: true })} style={{ ...fmtBtn, textDecoration: 'line-through' }} title="취소선">S</button>
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
@@ -908,27 +941,25 @@ export default function BridgeCanvasSheet() {
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
+        {/* Alignment */}
         <button onClick={() => applyStyleToSelection({ align: 'left' })} style={fmtBtn} title="왼쪽 정렬">⬅</button>
         <button onClick={() => applyStyleToSelection({ align: 'center' })} style={fmtBtn} title="가운데 정렬">≡</button>
         <button onClick={() => applyStyleToSelection({ align: 'right' })} style={fmtBtn} title="오른쪽 정렬">➡</button>
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
+        {/* Row height */}
         <select
           value={rowHeight}
           onChange={e => setRowHeight(Number(e.target.value))}
           style={{ height: 26, fontSize: 12, border: '1px solid #ccc', borderRadius: 3, padding: '0 4px' }}
+          title="행 높이"
         >
           <option value={28}>낮게</option>
           <option value={40}>보통</option>
           <option value={56}>높게</option>
           <option value={72}>사진</option>
         </select>
-
-        <div style={{ flex: 1 }} />
-
-        <button onClick={undo} style={fmtBtn} title="Ctrl+Z">↩</button>
-        <button onClick={redo} style={fmtBtn} title="Ctrl+Y">↪</button>
       </div>
 
       {/* ── Memo Area ── */}
@@ -982,15 +1013,18 @@ export default function BridgeCanvasSheet() {
       </div>
 
       {/* ── Canvas Container (fills remaining space) ── */}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          position: 'relative',
-          overflow: 'hidden',
-          minHeight: 0,
-        }}
-      />
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
+        <div
+          ref={containerRef}
+          style={{
+            position: 'absolute', inset: 0,
+            transformOrigin: 'top left',
+            transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+            width: zoomLevel !== 100 ? `${10000 / zoomLevel}%` : '100%',
+            height: zoomLevel !== 100 ? `${10000 / zoomLevel}%` : '100%',
+          }}
+        />
+      </div>
 
       {/* ── Context Menu ── */}
       {ctx && (
