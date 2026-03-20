@@ -525,6 +525,47 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
+            {/* 카카오 OAuth 설정 가이드 */}
+            <div className="mb-5 p-4 bg-[#fffbea] border border-[#f0d060] rounded-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[15px]">💬</span>
+                <span className="text-[13px] font-semibold text-[#7a5c00]">카카오 관리자 로그인 설정 순서</span>
+              </div>
+              <div className="space-y-2 text-[12px] text-[#5a4400]">
+                <div className="flex gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">1</span>
+                  <div>
+                    <span className="font-semibold font-mono">KAKAO_CLIENT_ID</span>
+                    <span className="ml-1 opacity-70">— 카카오 REST API 키</span>
+                    <div className="opacity-60 mt-0.5">developers.kakao.com → 앱 → 앱 키 → REST API 키</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">2</span>
+                  <div>
+                    <span className="font-semibold font-mono">KAKAO_CLIENT_SECRET</span>
+                    <span className="ml-1 opacity-70">— 카카오 보안 코드</span>
+                    <div className="opacity-60 mt-0.5">카카오 로그인 → 보안 → Client Secret 코드 생성 후 복사</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">3</span>
+                  <div>
+                    <span className="font-semibold font-mono">KAKAO_ADMIN_IDS</span>
+                    <span className="ml-1 opacity-70">— 허용할 카카오 계정 숫자 ID</span>
+                    <div className="opacity-60 mt-0.5">콤마 구분 (예: 1234567890) — developers.kakao.com → 도구 → REST API 테스터 → /v2/user/me 호출 후 id 값</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#d0f060] text-[#3a5a00] flex items-center justify-center font-bold shrink-0 text-[11px]">+</span>
+                  <div className="opacity-70">
+                    카카오 로그인 활성화: 카카오 로그인 → 활성화 ON → Redirect URI 등록:
+                    <code className="ml-1 px-1 py-0.5 bg-[#f0e080] rounded text-[11px] font-mono break-all">https://bridge-n7hk.onrender.com/api/admin/kakao/callback</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* 저장된 키 목록 */}
             {secrets.length > 0 && (
               <div className="mb-4 space-y-2">
