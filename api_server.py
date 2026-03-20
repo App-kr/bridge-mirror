@@ -6796,7 +6796,7 @@ async def get_employers(request: Request):
             school = display_name or dec_employer or ""
             result.append({
                 "id": j["id"],
-                "jNumber": j["job_code"] or "",
+                "jNumber": (j["job_code"] or "").replace("Job.", ""),
                 "region": j["location"] or "",
                 "city": j["city"] or "",
                 "name": school,
