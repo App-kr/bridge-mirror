@@ -18,7 +18,7 @@ import {
   slideInRight,
   defaultViewport,
 } from '@/lib/animations'
-import EditModeBar, { useEditMode, NewPostButton } from '@/components/EditModeBar'
+import { useEditMode, NewPostButton } from '@/components/EditModeBar'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData, type ContentType } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
@@ -796,7 +796,6 @@ export default function BoardPage() {
 
   return (
     <>
-      <EditModeBar />
       {editMode && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}

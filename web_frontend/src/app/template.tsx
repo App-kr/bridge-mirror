@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import MegaMenu from '@/components/MegaMenu'
+import EditModeBar from '@/components/EditModeBar'
 import { initSecurityGuard } from '@/utils/securityGuard'
 
 export default function Template({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function Template({ children }: { children: React.ReactNode }) {
   return (
     <>
       <MegaMenu />
+      <EditModeBar />
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

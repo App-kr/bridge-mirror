@@ -313,7 +313,7 @@ export default function AdminDashboardPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-[#0071e3] shadow-sm hover:bg-[#0077ED] active:scale-[0.98] transition-all"
         >
           <span className="text-[14px] leading-none">⚙️</span>
-          홈페이지 편집
+          관리자로 메인가기
         </Link>
         <button
           type="button"
@@ -324,7 +324,7 @@ export default function AdminDashboardPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#dc2626] bg-red-50 border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all"
         >
           <span className="text-[14px] leading-none">✏️</span>
-          편집모드로 사이트 보기
+          편집모드로 사이트보기 (글변경)
         </button>
         {kakaoUrl ? (
           <a

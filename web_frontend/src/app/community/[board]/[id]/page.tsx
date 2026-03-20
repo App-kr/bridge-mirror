@@ -6,7 +6,7 @@ import Link from 'next/link'
 import MarkdownBody from '@/components/MarkdownBody'
 import HtmlPreview from '@/components/HtmlPreview'
 import { getBoardConfig } from '@/lib/boards'
-import EditModeBar, { EditButton } from '@/components/EditModeBar'
+import { EditButton } from '@/components/EditModeBar'
 import { API_URL } from '@/lib/api'
 
 const API = API_URL
@@ -63,7 +63,6 @@ export default function PostDetailPage() {
 
   return (
     <>
-    <EditModeBar />
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
       {/* Disclaimer notice */}
       <div className="disclaimer-notice">
