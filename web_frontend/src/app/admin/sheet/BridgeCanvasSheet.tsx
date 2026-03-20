@@ -1030,21 +1030,59 @@ export default function BridgeCanvasSheet() {
       {ctx && (
         <div
           style={{
-            position: 'fixed', left: ctx.x, top: ctx.y, zIndex: 100,
-            background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 190,
+            position: 'fixed', left: ctx.x, top: ctx.y, zIndex: 9999,
+            background: '#fff', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10)',
+            padding: '4px 0', minWidth: 200, border: 'none',
           }}
           onClick={e => e.stopPropagation()}
         >
-          <CtxItem label="✉ 메일 발송" onClick={() => ctxAction('mail')} />
-          <CtxItem label="📋 행 복사" onClick={() => ctxAction('copy_row')} />
-          <CtxItem label="📧 이메일 복사" onClick={() => ctxAction('copy_email')} />
-          <CtxItem label="+ 아래 행 추가" onClick={() => ctxAction('add_row')} />
-          <div style={{ height: 1, background: '#e5e7eb', margin: '3px 0' }} />
-          <CtxItem label="👤 구직활동중으로" onClick={() => ctxAction('to_active')} />
-          <CtxItem label="✅ 체결완료로" onClick={() => ctxAction('to_past')} />
-          <CtxItem label="⛔ 블랙리스트로" onClick={() => ctxAction('to_blacklist')} />
-          <div style={{ height: 1, background: '#e5e7eb', margin: '3px 0' }} />
+          {/* 행 조작 */}
+          <CtxItem label="위에 행 삽입" onClick={() => {
+            const cid = String(ctx.row._cid ?? '')
+            pushHistory()
+            const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
+            const newRow: DataRow = { id: 0, _cid: '', category: tt, stage: 'none', mailStatus: '', photoUrl: '', photoSize: 50 }
+            defaultCols().forEach(c => { if (!['rowNum','stage','mailStatus','photo'].includes(c.key) && !(c.key in newRow)) (newRow as Record<string, unknown>)[c.key] = '' })
+            setDbAll(prev => { const idx = prev.findIndex(r => r._cid === cid); if (idx >= 0) { const a = [...prev]; a.splice(idx, 0, newRow); return a }; return [newRow, ...prev] })
+            setCtx(null)
+          }} />
+          <CtxItem label="아래에 행 삽입" onClick={() => ctxAction('add_row')} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 셀 조작 */}
+          <CtxItem label="셀 복사" onClick={() => {
+            const engine = engineRef.current
+            const ac = engine?.selection.getActiveCell()
+            if (!ac) return
+            const visCols = engine!.getVisibleCols()
+            const col = visCols[ac.col]
+            if (col) navigator.clipboard.writeText(String(ctx.row[col.key] ?? '')).catch(() => {})
+            setCtx(null)
+          }} />
+          <CtxItem label="셀 지우기" onClick={() => {
+            const engine = engineRef.current
+            const ac = engine?.selection.getActiveCell()
+            if (!ac) return
+            const visCols = engine!.getVisibleCols()
+            const col = visCols[ac.col]
+            if (col) stableCallbacks.onCellChange(ctx.rowIdx, col.key, '')
+            setCtx(null)
+          }} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 틀고정 */}
+          <CtxItem label={frozenCols > 0 ? '틀 고정 해제' : '틀 고정 설정'} onClick={() => { setFrozenCols(p => p === 0 ? 3 : 0); setCtx(null) }} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 메일 & 복사 */}
+          <CtxItem label="메일 발송" onClick={() => ctxAction('mail')} />
+          <CtxItem label="행 복사 (탭구분)" onClick={() => ctxAction('copy_row')} />
+          <CtxItem label="이메일 주소 복사" onClick={() => ctxAction('copy_email')} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 탭 이동 */}
+          <CtxItem label="구직자 탭으로 이동" onClick={() => ctxAction('to_active')} />
+          <CtxItem label="체결완료 탭으로 이동" onClick={() => ctxAction('to_past')} />
+          <CtxItem label="블랙리스트로 이동" onClick={() => ctxAction('to_blacklist')} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 진행단계 */}
           {STAGES.filter(s => s.key !== 'none').map(s => (
             <CtxItem key={s.key} label={`→ ${s.label}`} onClick={() => {
               const cid = String(ctx.row._cid ?? '')
@@ -1106,15 +1144,31 @@ export default function BridgeCanvasSheet() {
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            position: 'fixed', left: headerMenu.x, top: headerMenu.y, zIndex: 100,
-            background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '4px 0', minWidth: 170,
+            position: 'fixed', left: headerMenu.x, top: headerMenu.y, zIndex: 9999,
+            background: '#fff', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10)',
+            padding: '4px 0', minWidth: 200, border: 'none',
           }}
         >
-          <CtxItem label="👁 컬럼 숨기기" onClick={() => toggleColVisibility(headerMenu.colKey)} />
+          <CtxItem label="열 숨기기" onClick={() => toggleColVisibility(headerMenu.colKey)} />
+          <CtxItem label="열 너비 초기화" onClick={() => {
+            const defW = defaultCols().find(c => c.key === headerMenu.colKey)?.w ?? 100
+            setCols(prev => prev.map(c => c.key === headerMenu.colKey ? { ...c, w: defW } : c))
+            setHeaderMenu(null)
+          }} />
           {hiddenCount > 0 && (
-            <CtxItem label="👁 숨긴 열 모두 표시" onClick={() => { showAllCols(); setHeaderMenu(null) }} />
+            <CtxItem label="숨긴 열 모두 표시" onClick={() => { showAllCols(); setHeaderMenu(null) }} />
           )}
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          <CtxItem label={frozenCols > 0 ? '틀 고정 해제' : '이 열까지 틀 고정'} onClick={() => {
+            if (frozenCols > 0) {
+              setFrozenCols(0)
+            } else {
+              const visIdx = cols.filter(c => c.v !== false).findIndex(c => c.key === headerMenu.colKey)
+              if (visIdx >= 0) setFrozenCols(visIdx + 1)
+            }
+            setHeaderMenu(null)
+          }} />
         </div>
       )}
 
