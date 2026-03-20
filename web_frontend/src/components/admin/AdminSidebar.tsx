@@ -98,7 +98,6 @@ export default function AdminSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [kakaoUrl, setKakaoUrl] = useState<string>('')
   const [newCount, setNewCount] = useState(0)
 
   const handleLogout = () => {
@@ -107,13 +106,6 @@ export default function AdminSidebar() {
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
     router.push('/')
   }
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/settings`)
-      .then(r => r.json())
-      .then(j => { if (j.success) setKakaoUrl(j.data?.settings?.kakao_channel ?? '') })
-      .catch(() => {})
-  }, [])
 
   const pollNewCount = useCallback(() => {
     const key = typeof window !== 'undefined' ? localStorage.getItem(ADMIN_KEY_STORAGE) : ''
@@ -161,32 +153,6 @@ export default function AdminSidebar() {
               </div>
             )}
             <div className="space-y-0.5">
-              {/* 사이트 관리 섹션 최상단: 카카오 채널 */}
-              {cat.title === '사이트 관리' && (
-                kakaoUrl ? (
-                  <a
-                    href={kakaoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full font-medium text-[14px] text-[#191919] transition-all hover:brightness-95 active:scale-[0.98]"
-                    style={{ background: '#FEE500' }}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    <span className="text-[15px] leading-none shrink-0">💬</span>
-                    <span>카카오 채널 설정</span>
-                    <span className="ml-auto text-[11px] opacity-50">↗</span>
-                  </a>
-                ) : (
-                  <Link
-                    href="/admin/settings"
-                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:text-[#424245] transition-colors"
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    <span className="text-[15px] leading-none shrink-0">💬</span>
-                    <span>카카오 채널 설정</span>
-                  </Link>
-                )
-              )}
               {cat.items.map((item) => {
                 const active = isActive(item.href)
                 return (
