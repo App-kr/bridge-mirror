@@ -1072,11 +1072,11 @@ const PLACES_EARLY=[
 {n:"Indoor Village Airport Zone",d:"realistic mock airport terminal with plain counters, prop luggage conveyor, plain departure board (no text on it), customs desk with passport props, clean minimalist walls"},
 {n:"Indoor Village Restaurant Zone",d:"themed mock restaurant with diner-style booths and counter stools, plain menu boards (no writing), plastic food props, plain aprons for children, clean walls"},
 {n:"Modern Learning Center Classroom",d:"modern Korean language center classroom with clean plain walls, tiered seating, large blank interactive screen, bright overhead LED panels, no posters, no charts, no decorations on walls"},
-{n:"Indoor Village Hospital Zone",d:"realistic mock hospital ward with examination beds and curtain dividers, plain doctor's desk, nurse station, medical equipment props, clean white walls with no charts"},
+{n:"Indoor Village Market Zone",d:"colorful indoor market-themed play area with miniature stalls, play cash register, fabric canopy decorations, toy fruit and vegetable displays, clean walls"},
 {n:"Cozy Reading Zone",d:"cozy picture book library with floor-to-ceiling shelves of colorful books (spines facing inward), bean bag chairs and reading nooks, soft rug with geometric patterns only (no letters)"},
 {n:"Science Discovery Zone",d:"interactive science zone with hands-on experiment stations, volcano model, simple circuit boards, plant growth experiments, plain lab tables, no labels anywhere"},
 {n:"Indoor Mini Supermarket",d:"themed indoor mini supermarket with color-coded aisles, shopping baskets sized for children, mock cashier station with conveyor belt prop, plain shelf dividers (no product labels visible)"},
-{n:"Indoor Fire Station Zone",d:"miniature fire station themed room, fire truck prop vehicle, plain equipment display, firefighter uniforms for children, solid-colored walls with no posters"},
+{n:"Indoor Play Village Zone",d:"colorful miniature play village with small storefronts, dress-up costumes, pretend play kitchen and shop counters, bright colored walls"},
 {n:"Sensory Play Room",d:"soft-play sensory exploration room with plain tactile panels, sand and water tables, bubble walls, soft padded flooring, clean pastel walls with no decorations"},
 {n:"Music Room",d:"small music room with colorful percussion instruments, rhythm carpet with geometric patterns, a piano keyboard along one wall, acoustic ceiling tiles, plain walls"},
 {n:"Drama Mini-Stage",d:"small performance stage with mini stage risers, colorful curtain, prop costume rack, audience seating of low cushions for classmates, plain backdrop"},
@@ -1564,7 +1564,7 @@ const KID_FEATURES=[
 "one noticeably taller than the others",
 "one showing dimples while smiling",
 "one with bangs neatly covering the forehead",
-"one with a missing front tooth grinning proudly",
+"one with a wide cheerful grin showing bright teeth",
 "one wearing a small yellow hair pin",
 "one with slightly curly permed hair",
 "one with a tidy side-parted hairstyle",
@@ -1746,16 +1746,16 @@ function generateBatch(count, targetMode){
     const genderKo = finalGender==='male'?'남성':'여성';
 
     // English prompt — photorealistic, coherent, natural
+    // NOTE: eye color + specific age removed — triggers Google PROMINENT_PEOPLE filter
     const text=
-`Shot on ${cameraShort}. ${shotType} of ${place.d}. ${kidCount} Korean young learners are enjoying ${activity}. Their teacher, a warm ${race} ${finalGender} ${ageDesc}, with ${hair} and ${eyeColor}, wearing ${clothing}, is ${teacherAction}. The children have visibly diverse appearances: ${kidFeats}. They wear ${uniform}. ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture and pores. No text, no logos, no watermarks, no symbols anywhere in the image. All clothing completely plain and solid-colored. Aspect ratio 16:9.`;
+`Shot on ${cameraShort}. ${shotType} of ${place.d}. ${kidCount} Korean young learners are enjoying ${activity}. Their foreign teacher, a friendly ${finalGender} with ${hair}, wearing ${clothing}, is ${teacherAction}. The children have visibly diverse appearances: ${kidFeats}. They wear ${uniform}. ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture. No text, no logos, no watermarks, no symbols anywhere in the image. All clothing completely plain and solid-colored. Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koText=
 `${shotType} — ${place.n}
 
-◆ 외국인 강사 (${raceKo} ${genderKo})
-${ageDesc}, ${hair}, ${eyeColor}
-${clothing} 착용
+◆ 외국인 강사 (${genderKo})
+${hair}, ${clothing} 착용
 행동: ${teacherAction}
 
 ◆ 한국인 아이들 (${kidCount}명)
