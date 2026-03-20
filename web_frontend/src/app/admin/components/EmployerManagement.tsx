@@ -519,7 +519,10 @@ export default function EmployerManagement() {
       case 'no': return jobNo(app)
       case 'province': return province
       case 'city': return city
-      case 'name': return showPII ? (v(app.school_name) || v(app.name)) : maskName(app.school_name || app.name)
+      case 'name': {
+        const nm = showPII ? (v(app.school_name) || v(app.name)) : maskName(app.school_name || app.name)
+        return nm || v(app.job_code) || jobNo(app)
+      }
       case 'age': return v(app.teaching_age)
       case 'email': return showPII ? v(app.email) : maskEmail(app.email)
       case 'phone': return showPII ? v(app.phone) : maskPhone(app.phone)

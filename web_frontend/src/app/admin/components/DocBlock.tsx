@@ -173,7 +173,7 @@ export default function DocBlock({
     setNameVal(employer.school_name || employer.name || '')
   }, [employer, province, city, jobNo])
 
-  const displayName = employer.school_name || employer.name || ''
+  const displayName = employer.school_name || employer.name || employer.job_code || jobNo
   const isNewCode = jobNo.startsWith('N')
 
   return (
