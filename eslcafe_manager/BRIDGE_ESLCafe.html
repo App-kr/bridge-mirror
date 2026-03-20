@@ -351,11 +351,17 @@ function generateAd(){
 
   var c={w:obfCls('w'),h:obfCls('h'),cd:obfCls('cd'),ht:obfCls('ht'),ap:obfCls('ap'),ft:obfCls('ft')};
 
+  /* Anti-Copy: inline style block injected into generated HTML */
+  var acStyle='<style>*{user-select:none!important;-webkit-user-select:none!important;-moz-user-select:none!important;-ms-user-select:none!important;-webkit-touch-callout:none!important;}::selection{background:transparent!important;color:inherit!important;}::-moz-selection{background:transparent!important;color:inherit!important;}a,a *{cursor:pointer!important;pointer-events:auto!important;}@media print{body{display:none!important;}}</style>';
+
+  /* Anti-Copy: inline event handlers on wrapper */
+  var acEvts='oncontextmenu="return false" oncopy="return false" oncut="return false" onselectstart="return false" ondragstart="return false" onmousedown="if(event.button===2)return false"';
+
   /* L3: CSS를 base64 주입용으로 래핑 */
-  var cssBlock='';
+  var cssBlock=acStyle;
   if(obsLv===3){
     var rawCss='.'+c.w+'{max-width:720px;margin:0 auto;font-family:-apple-system,"Segoe UI",sans-serif;color:#1a1d25}';
-    cssBlock='<scr'+'ipt>(function(){var s=document.createElement("style");s.textContent=atob("'+btoa(rawCss)+'");document.head.appendChild(s);})()</scr'+'ipt>';
+    cssBlock+=('<scr'+'ipt>(function(){var s=document.createElement("style");s.textContent=atob("'+btoa(rawCss)+'");document.head.appendChild(s);})()</scr'+'ipt>');
   }
 
   /* WHO CAN APPLY chips */
@@ -383,25 +389,25 @@ function generateAd(){
       else if(ll.indexOf('class')>=0)ic=I.users;
       else if(ll.indexOf('benefit')>=0||ll.indexOf('employee')>=0)ic=I.star;
       else if(ll.indexOf('visa')>=0)ic=I.shield;
-      grid+='<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;"><div style="width:18px;height:18px;flex-shrink:0;color:#6b7280;margin-top:1px;">'+ic+'</div><div><span style="font-size:12px;color:#6b7280;">'+esc(lab.trim())+'</span><br><span style="font-size:14px;color:#1a1d25;font-weight:500;">'+esc(val)+'</span></div></div>';
+      grid+='<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;'+NOSEL+'" '+NODRAG+'><div style="width:18px;height:18px;flex-shrink:0;color:#6b7280;margin-top:1px;">'+ic+'</div><div><span style="font-size:12px;color:#6b7280;">'+pesc(lab.trim())+'</span><br><span style="font-size:14px;color:#1a1d25;font-weight:500;">'+pesc(val)+'</span></div></div>';
     });
 
-    cards+='<div class="'+c.cd+'" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px;">'
+    cards+='<div class="'+c.cd+'" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px;'+NOSEL+'" '+NODRAG+'>'
       +'<div style="height:4px;'+bar+'"></div>'
       +'<div style="padding:16px 20px;">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
-      +'<div><span style="font-size:22px;font-weight:600;color:#111;">'+esc(j.l)+'</span>'+hot+'</div>'
-      +'<span style="font-size:22px;font-weight:600;color:#1a5ff8;">Job #'+esc(j.id)+'</span></div>'
+      +'<div><span style="font-size:22px;font-weight:600;color:#111;">'+pesc(j.l)+'</span>'+hot+'</div>'
+      +'<span style="font-size:22px;font-weight:600;color:#1a5ff8;">Job #'+pesc(j.id)+'</span></div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">'+grid+'</div>'
       +'<div style="margin-top:14px;text-align:center;">'
-      +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#1a5ff8;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Apply for this position</a>'
+      +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#1a5ff8;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;pointer-events:auto;cursor:pointer;user-select:none;">Apply for this position</a>'
       +'</div></div></div>';
 
     /* Apply bar every 5 cards */
     if((idx+1)%5===0&&idx<active.length-1){
       cards+='<div class="'+c.ap+'" style="background:linear-gradient(135deg,#003366,#1a5ff8);border-radius:12px;padding:20px 24px;margin-bottom:16px;text-align:center;">'
         +'<p style="color:#fff;font-size:16px;font-weight:600;margin:0 0 10px;">Ready to start your teaching career in Korea?</p>'
-        +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;">APPLY NOW</a></div>';
+        +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;pointer-events:auto;cursor:pointer;">APPLY NOW</a></div>';
     }
   });
 
@@ -417,38 +423,38 @@ function generateAd(){
 
   var tags='#TeachInKorea #ESLJobs #KoreaJobs #TeachAbroad #TEFL #ESL #BRIDGE #EnglishTeacher #KoreaTeaching #LivingInKorea';
 
-  lastHtml='<div class="'+c.w+'" style="max-width:720px;margin:0 auto;font-family:-apple-system,\'Segoe UI\',sans-serif;color:#1a1d25;">'
+  lastHtml='<div class="'+c.w+'" '+acEvts+' style="max-width:720px;margin:0 auto;font-family:-apple-system,\'Segoe UI\',sans-serif;color:#1a1d25;'+NOSEL+'">'
   +cssBlock
 
   /* HERO */
-  +'<div class="'+c.h+'" style="background:linear-gradient(135deg,#003366 0%,#1a5ff8 100%);border-radius:16px;padding:40px 32px;text-align:center;margin-bottom:20px;">'
-  +'<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;margin-bottom:8px;">GOV\'T-CERTIFIED AGENCY</div>'
-  +'<div style="font-size:32px;font-weight:800;color:#fff;letter-spacing:1px;margin-bottom:4px;">BRIDGE</div>'
-  +'<div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px;">Teach English in Korea</div>'
-  +'<div style="font-size:14px;color:rgba(255,255,255,.85);margin-bottom:20px;">The right school, the right support &mdash; your next chapter starts here</div>'
-  +'<div style="margin-bottom:20px;"><a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;">APPLY NOW &rarr;</a></div>'
+  +'<div class="'+c.h+'" style="background:linear-gradient(135deg,#003366 0%,#1a5ff8 100%);border-radius:16px;padding:40px 32px;text-align:center;margin-bottom:20px;'+NOSEL+'" '+NODRAG+'>'
+  +'<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;margin-bottom:8px;">'+zw("GOV'T-CERTIFIED AGENCY")+'</div>'
+  +'<div style="font-size:32px;font-weight:800;color:#fff;letter-spacing:1px;margin-bottom:4px;">'+zw('BRIDGE')+'</div>'
+  +'<div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px;">'+zw('Teach English in Korea')+'</div>'
+  +'<div style="font-size:14px;color:rgba(255,255,255,.85);margin-bottom:20px;">'+zw('The right school, the right support')+' &mdash; '+zw('your next chapter starts here')+'</div>'
+  +'<div style="margin-bottom:20px;"><a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;pointer-events:auto;cursor:pointer;">APPLY NOW &rarr;</a></div>'
   +'<div style="margin-bottom:16px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;">'+whoH+'</div>'
-  +'<div style="font-size:11px;color:rgba(255,255,255,.5);word-spacing:4px;">'+tags+'</div></div>'
+  +'<div style="font-size:11px;color:rgba(255,255,255,.5);word-spacing:4px;">'+zw(tags)+'</div></div>'
 
   /* CARDS */
   +cards
 
   /* HOW TO APPLY */
-  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);">'
-  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 20px;color:#003366;">HOW TO APPLY</h3>'
+  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);'+NOSEL+'">'
+  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 20px;color:#003366;">'+zw('HOW TO APPLY')+'</h3>'
   +'<div style="display:flex;gap:8px;">'+stH+'</div></div>'
 
   /* WHAT YOU GET */
-  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);">'
-  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 16px;color:#003366;">WHAT YOU GET</h3>'
+  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);'+NOSEL+'">'
+  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 16px;color:#003366;">'+zw('WHAT YOU GET')+'</h3>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+benH+'</div></div>'
 
   /* FOOTER */
-  +'<div class="'+c.ft+'" style="background:#003366;border-radius:12px;padding:24px;text-align:center;">'
-  +'<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:6px;">BRIDGE</div>'
-  +'<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:12px;">Government-Certified Employment Agency | Connecting Teachers with Korea</div>'
-  +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">START YOUR APPLICATION</a>'
-  +'<div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.4);">&copy; BRIDGE. All rights reserved.</div></div>'
+  +'<div class="'+c.ft+'" style="background:#003366;border-radius:12px;padding:24px;text-align:center;'+NOSEL+'">'
+  +'<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:6px;">'+zw('BRIDGE')+'</div>'
+  +'<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:12px;">'+zw('Government-Certified Employment Agency | Connecting Teachers with Korea')+'</div>'
+  +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;pointer-events:auto;cursor:pointer;">START YOUR APPLICATION</a>'
+  +'<div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.4);">&copy; '+zw('BRIDGE. All rights reserved.')+'</div></div>'
 
   +'</div>';
 
@@ -480,13 +486,32 @@ function copyHtml(){if(!lastHtml){toast('Generate first!','er');return;}navigato
 
 function openTab(){
   if(!lastHtml){toast('Generate first!','er');return;}
-  var full='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad</title><style>body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,"Segoe UI",sans-serif;}.cb{position:fixed;top:0;left:0;right:0;background:#003366;padding:10px 20px;text-align:center;z-index:100;}.cb button{background:#05b97d;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin:0 4px;}</style></head><body style="padding-top:52px;"><div class="cb"><button onclick="doCopy()">Copy HTML</button></div>'+lastHtml+'<'+'script>function doCopy(){var b=document.querySelector(".cb");var cl=document.body.cloneNode(true);cl.removeChild(cl.querySelector(".cb"));var sc=cl.querySelector("script");if(sc)sc.remove();navigator.clipboard.writeText(cl.innerHTML.trim()).then(function(){alert("Copied!")}).catch(function(){alert("Failed")});}</'+'script></body></html>';
+  var full='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad</title>'
+  +'<style>'
+  +'body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none;}'
+  +'*{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}'
+  +'::selection{background:transparent!important;}::-moz-selection{background:transparent!important;}'
+  +'a,a *{pointer-events:auto!important;cursor:pointer!important;}'
+  +'@media print{body{display:none!important;}body::after{content:"Protected content";display:block;font-size:48px;text-align:center;padding:200px 0;color:#ccc;}}'
+  +'.cb{position:fixed;top:0;left:0;right:0;background:#003366;padding:10px 20px;text-align:center;z-index:100;}'
+  +'.cb button{background:#05b97d;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;margin:0 4px;pointer-events:auto!important;-webkit-user-select:auto!important;user-select:auto!important;}'
+  +'img{-webkit-user-drag:none;user-drag:none;pointer-events:none;}'
+  +'</style></head>'
+  +'<body style="padding-top:52px;" oncontextmenu="return false" oncopy="return false" oncut="return false" ondragstart="return false">'
+  +'<div class="cb"><button onclick="doCopy()">Copy HTML</button></div>'
+  +lastHtml
+  +antiCopyScript()
+  +'<'+'script>function doCopy(){var b=document.querySelector(".cb");var cl=document.body.cloneNode(true);cl.removeChild(cl.querySelector(".cb"));var scs=cl.querySelectorAll("script");scs.forEach(function(s){s.remove();});navigator.clipboard.writeText(cl.innerHTML.trim()).then(function(){alert("Copied!")}).catch(function(){alert("Failed")});}</'+'script>'
+  +'</body></html>';
   var blob=new Blob([full],{type:'text/html'});window.open(URL.createObjectURL(blob),'_blank');
 }
 
 function dlHtml(){
   if(!lastHtml){toast('Generate first!','er');return;}
-  var full='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad</title><style>body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,"Segoe UI",sans-serif;}</style></head><body>'+lastHtml+'</body></html>';
+  var full='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BRIDGE ESLCafe Ad</title>'
+  +'<style>body{margin:0;padding:20px;background:#f0f2f5;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none;}*{-webkit-user-select:none!important;user-select:none!important;}::selection{background:transparent!important;}a,a *{pointer-events:auto!important;cursor:pointer!important;}@media print{body{display:none!important;}}</style>'
+  +'</head><body oncontextmenu="return false" oncopy="return false" oncut="return false" ondragstart="return false">'
+  +lastHtml+antiCopyScript()+'</body></html>';
   var blob=new Blob([full],{type:'text/html'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='BRIDGE_ESLCafe_'+new Date().toISOString().slice(0,10)+'.html';a.click();URL.revokeObjectURL(a.href);toast('Downloaded!','ok');
 }
@@ -499,6 +524,80 @@ function resetJ(){if(!confirm('Reset all to default?'))return;jobs=JSON.parse(JS
 /* ── Utils ── */
 function toast(m,t){var e=document.getElementById('tst');e.textContent=m;e.className='toast toast-'+t+' v';setTimeout(function(){e.classList.remove('v');},2200);}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+/* ── Anti-Copy: zero-width character injection ──
+   Inserts invisible Unicode chars between every character.
+   Copied text becomes garbage while looking normal on screen. */
+var ZW=['\u200B','\u200C','\u200D','\uFEFF','\u2060','\u180E'];
+function zw(s){
+  if(!s)return s;
+  var out='';
+  for(var i=0;i<s.length;i++){
+    out+=s[i];
+    if(i<s.length-1&&s[i]!==' '&&s[i+1]!==' '){
+      out+=ZW[Math.floor(Math.random()*ZW.length)];
+    }
+  }
+  return out;
+}
+/* Protected escape: HTML-escape + zero-width injection */
+function pesc(s){return zw(esc(s));}
+
+/* Anti-Copy inline style (for generated HTML elements) */
+var NOSEL='user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none;';
+var NODRAG='draggable="false" ondragstart="return false" ';
+
+/* Full JS protection script for New Tab / standalone preview */
+function antiCopyScript(){
+  return '<'+'script>'
+  +'(function(){'
+  /* Block right-click */
+  +'document.addEventListener("contextmenu",function(e){e.preventDefault();return false;});'
+  /* Block keyboard shortcuts */
+  +'document.addEventListener("keydown",function(e){'
+  +'var k=e.keyCode||e.which;'
+  /* F12 */
+  +'if(k===123){e.preventDefault();return false;}'
+  /* Ctrl+Shift+I/J/C (DevTools) */
+  +'if(e.ctrlKey&&e.shiftKey&&(k===73||k===74||k===67)){e.preventDefault();return false;}'
+  /* Ctrl+U (View Source) */
+  +'if(e.ctrlKey&&k===85){e.preventDefault();return false;}'
+  /* Ctrl+S (Save) */
+  +'if(e.ctrlKey&&k===83){e.preventDefault();return false;}'
+  /* Ctrl+P (Print) */
+  +'if(e.ctrlKey&&k===80){e.preventDefault();return false;}'
+  /* Ctrl+A (Select All) */
+  +'if(e.ctrlKey&&k===65){e.preventDefault();return false;}'
+  /* Ctrl+C / Ctrl+X (Copy/Cut) */
+  +'if(e.ctrlKey&&(k===67||k===88)){e.preventDefault();return false;}'
+  +'});'
+  /* Block copy/cut/selectstart events */
+  +'document.addEventListener("copy",function(e){e.preventDefault();});'
+  +'document.addEventListener("cut",function(e){e.preventDefault();});'
+  +'document.addEventListener("selectstart",function(e){'
+  +'if(e.target.tagName==="A"||e.target.closest("a"))return true;'
+  +'e.preventDefault();return false;'
+  +'});'
+  /* Block drag */
+  +'document.addEventListener("dragstart",function(e){e.preventDefault();});'
+  /* Block PrintScreen (overlay flash) */
+  +'document.addEventListener("keyup",function(e){'
+  +'if(e.key==="PrintScreen"||e.keyCode===44){'
+  +'navigator.clipboard.writeText(" ").catch(function(){});'
+  +'var ov=document.createElement("div");'
+  +'ov.style.cssText="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;";'
+  +'document.body.appendChild(ov);setTimeout(function(){ov.remove();},800);'
+  +'}});'
+  /* DevTools open detection (resize-based) */
+  +'var dT=false;setInterval(function(){'
+  +'var w=window.outerWidth-window.innerWidth>160;'
+  +'var h=window.outerHeight-window.innerHeight>160;'
+  +'if((w||h)&&!dT){dT=true;document.body.innerHTML="<div style=\\"display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;font-family:sans-serif;\\">Content protected</div>";}'
+  +'else if(!w&&!h){dT=false;}'
+  +'},1000);'
+  +'})();'
+  +'</'+'script>';
+}
 
 /* ── Boot ── */
 init();
