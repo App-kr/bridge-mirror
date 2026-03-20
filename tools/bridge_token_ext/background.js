@@ -30,8 +30,8 @@ async function refreshToken() {
 // 설치 시 즉시 실행
 chrome.runtime.onInstalled.addListener(() => {
   refreshToken();
-  // 25분마다 갱신 (토큰 ~50분 유효)
-  chrome.alarms.create("refresh", { periodInMinutes: 25 });
+  // 2분마다 갱신 (로컬 fetch 비용 거의 0)
+  chrome.alarms.create("refresh", { periodInMinutes: 2 });
 });
 
 // 브라우저 시작 시

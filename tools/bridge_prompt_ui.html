@@ -1903,6 +1903,8 @@ async function openSaveFolder() {
   } catch { /* ignore */ }
 }
 
+let _authRetryTimer = null;
+
 async function checkServer() {
   try {
     const r = await fetch(API_BASE + '/api/status', { signal: AbortSignal.timeout(2000) });
@@ -1914,10 +1916,16 @@ async function checkServer() {
       stat.innerHTML = '<span class="server-dot online"></span>ImageFX ' + (q.hourly||'') + ' \xb7 ' + (q.token_min||'?') + '\ubd84';
       stat.onclick = null;
       stat.style.cursor = 'default';
+      // Stop fast polling once authenticated
+      if (_authRetryTimer) { clearInterval(_authRetryTimer); _authRetryTimer = null; }
     } else {
-      stat.innerHTML = '<span class="server-dot auth-needed"></span>Extension \ud655\uc778 \ud544\uc694';
+      stat.innerHTML = '<span class="server-dot auth-needed"></span>\ud1a0\ud070 \uc5f0\uacb0 \uc911\u2026';
       stat.style.cursor = 'default';
       stat.onclick = null;
+      // Start fast 3s polling until authenticated
+      if (!_authRetryTimer) {
+        _authRetryTimer = setInterval(checkServer, 3000);
+      }
     }
   } catch {
     serverOnline = false;
