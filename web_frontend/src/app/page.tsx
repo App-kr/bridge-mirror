@@ -733,50 +733,127 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          5. CTA — Start Your Journey
+          5. CTA — Your Next Chapter (Apple + Kakao MZ style)
           ═══════════════════════════════════════════════════════════════════ */}
-      <section
-        className="relative py-20 sm:py-[80px] border-t border-white/[0.06] overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
-      >
-        <div className="relative z-10 max-w-[700px] mx-auto px-5 sm:px-8">
+      <section className="relative py-24 sm:py-32 border-t border-white/[0.06] overflow-hidden bg-black">
+        {/* Ambient glow blobs */}
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[120px]"
+          style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[120px]"
+          style={{ background: 'radial-gradient(circle, #f59e0b, transparent 70%)' }} />
+
+        <div className="relative z-10 max-w-[900px] mx-auto px-5 sm:px-8">
+          {/* Headline — Apple bold */}
           <motion.div
-            className="text-center"
+            className="text-center mb-16"
             variants={fadeInUp}
             initial="hidden"
             whileInView="visible"
             viewport={defaultViewport}
           >
-            <h2 className="text-4xl sm:text-5xl md:text-[56px] font-semibold text-white tracking-tight leading-[1.1] mb-5">
-              Start Your Journey
+            <h2 className="text-5xl sm:text-6xl md:text-[72px] font-bold text-white tracking-tight leading-[1.05]">
+              Your Next Chapter.
             </h2>
-            <p className="text-white/60 text-base sm:text-lg leading-relaxed mb-12 max-w-[480px] mx-auto">
-              Whether you&apos;re a teacher or an employer, we&apos;ll find the perfect match.
+            <p className="text-white/40 text-lg sm:text-xl mt-5 font-medium">
+              Choose your path. We&apos;ll handle the rest.
             </p>
+          </motion.div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {/* Two cards */}
+          <div className="grid sm:grid-cols-2 gap-5 sm:gap-6">
+            {/* Teacher Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
               <Link
                 href="/apply"
-                className="cta-btn-primary inline-flex items-center justify-center px-8 sm:px-10 py-4 text-base font-semibold rounded-lg
-                           bg-[#2563EB] text-white w-full sm:w-auto sm:min-w-[220px]
-                           hover:brightness-[1.15] hover:scale-[1.03] hover:shadow-[0_8px_30px_rgba(37,99,235,0.45)]
-                           active:scale-[0.98] transition-all duration-300"
+                className="group relative block rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500
+                           hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(59,130,246,0.25)] active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1a1a2e 100%)' }}
               >
-                I&apos;m a Teacher
+                {/* Gradient border glow */}
+                <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.2), transparent 60%)', pointerEvents: 'none' }} />
+                {/* Icon */}
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-[-3deg]"
+                  style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight">
+                  I&apos;m a Teacher
+                </h3>
+                <p className="text-white/50 text-[15px] leading-relaxed mb-8">
+                  Find your dream ESL position in Korea. We connect you with top schools and academies.
+                </p>
+                <span className="inline-flex items-center gap-2 text-[#60a5fa] font-semibold text-[15px] transition-all duration-300 group-hover:gap-3">
+                  Apply Now
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </span>
               </Link>
+            </motion.div>
+
+            {/* Employer Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+            >
               <Link
                 href="/inquiry"
-                className="cta-btn-outline inline-flex items-center justify-center px-8 sm:px-10 py-4 text-base font-semibold rounded-lg
-                           border border-white text-white w-full sm:w-auto sm:min-w-[220px]
-                           hover:bg-white/10 hover:scale-[1.03]
-                           active:scale-[0.98] transition-all duration-300"
+                className="group relative block rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500
+                           hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(245,158,11,0.25)] active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #422006 0%, #1a1a2e 100%)' }}
               >
-                I&apos;m Hiring
+                <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.2), transparent 60%)', pointerEvents: 'none' }} />
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3"
+                  style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight">
+                  I&apos;m Hiring
+                </h3>
+                <p className="text-white/50 text-[15px] leading-relaxed mb-8">
+                  Find qualified native English teachers. Fast, reliable, zero hassle recruitment.
+                </p>
+                <span className="inline-flex items-center gap-2 text-[#fbbf24] font-semibold text-[15px] transition-all duration-300 group-hover:gap-3">
+                  Request Teachers
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </span>
               </Link>
-            </div>
+            </motion.div>
+          </div>
 
-            {/* Contact info */}
-            <p className="mt-10 text-white/30 text-sm">
+          {/* Hashtag row — Kakao MZ style */}
+          <motion.div
+            className="mt-14 text-center"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+          >
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+              {['#TeachInKorea', '#ESLJobs', '#원어민채용', '#FindYourMatch', '#BRIDGERecruitment'].map((tag) => (
+                <span key={tag} className="px-4 py-1.5 rounded-full text-[13px] font-semibold text-white/40 border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] hover:text-white/60 transition-all duration-300 cursor-default">
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <p className="mt-8 text-white/20 text-sm tracking-wide">
               bridgejobkr@gmail.com
             </p>
           </motion.div>
