@@ -1147,8 +1147,8 @@ export default function EmployerManagement(){
 
   const filtered=useMemo(()=>{
     let r=[...data];
-    if(tab==="active")r=r.filter(d=>d.active&&!d.blacklist);
-    else if(tab==="blacklist")r=r.filter(d=>d.blacklist);
+    if(tab==="active")r=r.filter(d=>Boolean(d.active)&&!Boolean(d.blacklist));
+    else if(tab==="blacklist")r=r.filter(d=>Boolean(d.blacklist));
     // 상단 필터 적용
     Object.entries(fl).forEach(([k,v])=>{if(v&&v.length)r=r.filter(d=>{const val=(d[k]||"").toString();return v.includes(val);});});
     // Ctrl+F 검색 필터
@@ -1157,10 +1157,11 @@ export default function EmployerManagement(){
       r=r.filter(d=>(d.rawText||"").toLowerCase().includes(q)||(d.memo||"").toLowerCase().includes(q)||d.name.toLowerCase().includes(q)||d.jNumber.toLowerCase().includes(q));
     }
     if(sortKey)r.sort((a,b)=>{const av=(a[sortKey]||"").toString().toLowerCase();const bv=(b[sortKey]||"").toString().toLowerCase();return sortDir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);});
+    console.log(`[employers] tab=${tab} total=${data.length} filtered=${r.length} searchQ="${searchQ}"`);
     return r;
   },[data,tab,fl,sortKey,sortDir,searchQ]);
 
-  const newCount=data.filter(d=>d.isNew&&!d.confirmed&&d.active&&!d.blacklist).length;
+  const newCount=data.filter(d=>d.isNew&&!d.confirmed&&Boolean(d.active)&&!Boolean(d.blacklist)).length;
   const confirm=useCallback(jn=>setData(p=>p.map(d=>d.jNumber===jn?{...d,confirmed:true,isNew:false}:d)),[]);
   const confirmAll=useCallback(()=>setData(p=>p.map(d=>d.isNew&&!d.confirmed?{...d,confirmed:true}:d)),[]);
   const delRows=useCallback((jns)=>{setData(p=>p.filter(d=>!jns.includes(d.jNumber)));setChecked(new Set());},[]);
@@ -1207,9 +1208,9 @@ export default function EmployerManagement(){
 
   // 탭 정의 — 메일링 제거, 3개만
   const TABS=[
-    {id:"active",l:"활발한 채용보기",c:data.filter(d=>d.active&&!d.blacklist).length,co:"#2563eb"},
+    {id:"active",l:"활발한 채용보기",c:data.filter(d=>Boolean(d.active)&&!Boolean(d.blacklist)).length,co:"#2563eb"},
     {id:"all",l:"전체보기",c:data.length,co:"#111"},
-    {id:"blacklist",l:"블랙리스트",c:data.filter(d=>d.blacklist).length,co:"#dc2626"},
+    {id:"blacklist",l:"블랙리스트",c:data.filter(d=>Boolean(d.blacklist)).length,co:"#dc2626"},
   ];
 
   if(loading)return(

@@ -12,7 +12,7 @@ const DEV_MODE = true
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { authed, login, waking } = useAdminAuth()
   const pathname = usePathname()
-  const isFullWidth = pathname === '/admin/sheet'
+  const isFullWidth = pathname === '/admin/sheet' || pathname === '/admin/employers'
 
   useEffect(() => {
     document.body.style.filter = ""
