@@ -1801,7 +1801,7 @@ async function checkServer() {
     serverOnline = !!d.online;
     const stat = document.getElementById('serverStatus');
     if (d.online) {
-      stat.innerHTML = '<span class="server-dot online"></span>Pollinations.ai Ready';
+      stat.innerHTML = '<span class="server-dot online"></span>' + (d.provider || 'Ready');
       stat.onclick = null;
       stat.style.cursor = 'default';
     }

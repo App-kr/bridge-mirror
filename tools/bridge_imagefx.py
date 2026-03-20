@@ -1,10 +1,8 @@
 r"""
-bridge_imagefx.py — Bridge ImageFX v4 (Pollinations.ai)
-=======================================================
-완전 자동 이미지 생성 — API키/토큰/로그인 불필요
-
+bridge_imagefx.py — Bridge ImageFX v4 (Gemini)
+================================================
+완전 자동 이미지 생성 — BX에 저장된 Gemini API 키 사용
 바탕화면 "Bridge ImageFX" 아이콘 더블클릭 → 자동생성 → 저장 폴더에 자동 저장
-Pollinations.ai API: 무료, 인증 없음, 텍스트→이미지 변환
 """
 
 import os
@@ -12,12 +10,13 @@ import sys
 import json
 import time
 import random
+import base64
 import socket
 import subprocess
 import threading
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse
 import urllib.request
 import urllib.error
 
@@ -47,73 +46,127 @@ def _save_config(cfg):
 _config = _load_config()
 _save_dir = _config.get("save_dir", DEFAULT_SAVE_DIR)
 
-# ── Rate Limiting (429 방지) ─────────────────────────────────────────────
-DELAY_BETWEEN = 5          # 요청 간 최소 대기 (초)
+# ── Gemini API Keys (BX에서 로드) ────────────────────────────────────────
+_gemini_keys = []
+_key_index = 0
+
+def _load_gemini_keys():
+    global _gemini_keys
+    try:
+        sys.path.insert(0, TOOLS_DIR)
+        from bx import get_gemini_keys
+        keys = get_gemini_keys()
+        _gemini_keys = [k["key"] for k in keys if k.get("key")]
+        print(f"[KEYS] Gemini API keys loaded: {len(_gemini_keys)}")
+    except Exception as e:
+        print(f"[KEYS] Failed to load keys: {e}")
+        _gemini_keys = []
+
+def _next_key():
+    global _key_index
+    if not _gemini_keys:
+        return None
+    key = _gemini_keys[_key_index % len(_gemini_keys)]
+    _key_index += 1
+    return key
+
+# ── Rate Limiting ────────────────────────────────────────────────────────
+DELAY_BETWEEN = 3
 _last_request_time = 0.0
 _gen_lock = threading.Lock()
 
-# ── Pollinations.ai 이미지 생성 ──────────────────────────────────────────
-POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&seed={seed}"
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
+# ── Gemini Image Generation ─────────────────────────────────────────────
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
 
 
 def generate_image(prompt: str) -> dict:
-    """Pollinations.ai로 이미지 1장 생성 + 저장"""
     global _last_request_time, _save_dir
 
+    if not _gemini_keys:
+        return {"ok": False, "error": "Gemini API key not found. Run: python tools/bx.py ls"}
+
     with _gen_lock:
-        # Rate limit
         elapsed = time.time() - _last_request_time
         if _last_request_time > 0 and elapsed < DELAY_BETWEEN:
-            wait = DELAY_BETWEEN - elapsed + random.uniform(0.5, 2.0)
-            print(f"[WAIT] {wait:.1f}s delay (rate limit)")
+            wait = DELAY_BETWEEN - elapsed
             time.sleep(wait)
 
         os.makedirs(_save_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        seed = random.randint(1, 999999999)
+        uid = random.randint(1000, 9999)
 
-        encoded_prompt = quote(prompt, safe="")
-        url = POLLINATIONS_URL.format(
-            prompt=encoded_prompt, w=1280, h=720, seed=seed
-        )
+        api_key = _next_key()
+        url = f"{GEMINI_URL}?key={api_key}"
+
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+        }).encode("utf-8")
 
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             with urllib.request.urlopen(req, timeout=120) as resp:
-                img_bytes = resp.read()
-                content_type = resp.headers.get("Content-Type", "")
+                result = json.loads(resp.read().decode("utf-8"))
 
-            if len(img_bytes) < 1000 or "json" in content_type:
-                return {"ok": False, "error": f"Invalid response ({len(img_bytes)} bytes)"}
+            # Extract image from response
+            candidates = result.get("candidates", [])
+            if not candidates:
+                return {"ok": False, "error": "No candidates in response"}
 
-            fname = f"bridge_{ts}_{seed % 10000:04d}.jpg"
-            fpath = os.path.join(_save_dir, fname)
-            with open(fpath, "wb") as f:
-                f.write(img_bytes)
+            parts = candidates[0].get("content", {}).get("parts", [])
+            saved = []
+            img_idx = 0
+            for part in parts:
+                inline = part.get("inlineData")
+                if not inline:
+                    continue
+                b64_data = inline.get("data", "")
+                mime = inline.get("mimeType", "image/png")
+                if not b64_data:
+                    continue
 
-            _last_request_time = time.time()
+                img_bytes = base64.b64decode(b64_data)
+                ext = ".png" if "png" in mime else ".jpg"
+                fname = f"bridge_{ts}_{uid}_{img_idx}{ext}"
+                fpath = os.path.join(_save_dir, fname)
+                with open(fpath, "wb") as f:
+                    f.write(img_bytes)
 
-            return {
-                "ok": True,
-                "count": 1,
-                "folder": _save_dir.replace("\\", "/"),
-                "images": [{
+                saved.append({
                     "filename": fname,
                     "url": f"/api/saved-image/{fname}",
                     "size_kb": round(len(img_bytes) / 1024, 1),
-                }],
-            }
+                })
+                img_idx += 1
+
+            _last_request_time = time.time()
+
+            if saved:
+                return {
+                    "ok": True,
+                    "count": len(saved),
+                    "folder": _save_dir.replace("\\", "/"),
+                    "images": saved,
+                }
+            else:
+                return {"ok": False, "error": "No image in response (prompt may be filtered)"}
 
         except urllib.error.HTTPError as e:
+            body_text = ""
+            try:
+                body_text = e.read().decode("utf-8", errors="replace")[:300]
+            except Exception:
+                pass
             if e.code == 429:
                 return {"ok": False, "error": "Rate limited. 잠시 후 재시도"}
-            return {"ok": False, "error": f"HTTP {e.code}"}
+            if e.code == 400 and "SAFETY" in body_text.upper():
+                return {"ok": False, "error": "Safety filter blocked this prompt"}
+            return {"ok": False, "error": f"HTTP {e.code}: {body_text[:200]}"}
         except Exception as e:
             return {"ok": False, "error": str(e)[:300]}
 
@@ -216,8 +269,8 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
     def _status_info(self):
         return {
             "ok": True,
-            "online": True,
-            "provider": "Pollinations.ai (Free, No Auth)",
+            "online": bool(_gemini_keys),
+            "provider": f"Gemini ({len(_gemini_keys)} keys)",
             "save_dir": _save_dir.replace("\\", "/"),
             "port": PORT,
         }
@@ -269,6 +322,7 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
 def main():
     global _save_dir
     os.makedirs(_save_dir, exist_ok=True)
+    _load_gemini_keys()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(("127.0.0.1", PORT)) == 0:
@@ -276,11 +330,11 @@ def main():
             return
 
     print(f"\n{'='*50}")
-    print(f"  Bridge ImageFX v4 (Pollinations.ai)")
+    print(f"  Bridge ImageFX v4 (Gemini)")
     print(f"{'='*50}")
     print(f"  Server:  http://localhost:{PORT}")
     print(f"  Save:    {_save_dir}")
-    print(f"  Auth:    Not required (free API)")
+    print(f"  Keys:    {len(_gemini_keys)}")
     print(f"\n  Exit: Ctrl+C\n")
 
     server = HTTPServer(("127.0.0.1", PORT), ImageFXHandler)

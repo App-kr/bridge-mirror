@@ -599,8 +599,32 @@
       "git": "43f101f",
       "files": 1979,
       "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_124137__이미지배치+테스트글재작성",
+      "task": "이미지배치+테스트글재작성",
+      "ts": "2026.03.20 12:41:41",
+      "git": "4b6ac4b",
+      "files": 1980,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_124335__이미지배치",
+      "task": "이미지배치",
+      "ts": "2026.03.20 12:43:39",
+      "git": "4b6ac4b",
+      "files": 1980,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_130350__CTA-period-remove-card-redesign",
+      "task": "CTA-period-remove-card-redesign",
+      "ts": "2026.03.20 13:03:54",
+      "git": "d9651fd",
+      "files": 1980,
+      "db_hash": "1e8b254a33e2"
     }
   ],
-  "last_backup": "2026.03.20 12:13:25",
-  "total_count": 75
+  "last_backup": "2026.03.20 13:03:54",
+  "total_count": 78
 }
