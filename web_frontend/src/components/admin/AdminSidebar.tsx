@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { API_URL } from '@/lib/api'
 import {
@@ -24,7 +24,6 @@ import {
   HelpCircle,
   LogOut,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 
 interface NavItem {
   href: string
@@ -138,12 +137,16 @@ export default function AdminSidebar() {
 
   const sidebarContent = (
     <nav className="flex flex-col h-full">
-      {/* Logo */}
+      {/* Logo — 클릭 시 항상 /admin 으로 이동 (같은 페이지여도 동작) */}
       <div className="px-5 pt-6 pb-4">
-        <Link href="/admin" className="block">
+        <button
+          type="button"
+          onClick={() => { router.push('/admin'); router.refresh(); setMobileOpen(false) }}
+          className="block text-left cursor-pointer"
+        >
           <span className="text-[17px] font-bold tracking-tight text-[#1d1d1f]">BRIDGE</span>
           <span className="text-[13px] text-[#86868b] ml-1.5 font-medium">Admin</span>
-        </Link>
+        </button>
       </div>
 
       {/* Nav Items */}

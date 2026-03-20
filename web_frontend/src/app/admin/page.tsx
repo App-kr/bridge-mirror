@@ -308,6 +308,24 @@ export default function AdminDashboardPage() {
 
       {/* 빠른 실행 */}
       <div className="flex flex-wrap gap-2">
+        <Link
+          href="/admin/settings"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-[#0071e3] shadow-sm hover:bg-[#0077ED] active:scale-[0.98] transition-all"
+        >
+          <span className="text-[14px] leading-none">⚙️</span>
+          홈페이지 편집
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            document.cookie = 'bridge_edit_mode=true; path=/; max-age=7200'
+            window.open('/', '_blank')
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#dc2626] bg-red-50 border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all"
+        >
+          <span className="text-[14px] leading-none">✏️</span>
+          편집모드로 사이트 보기
+        </button>
         {kakaoUrl ? (
           <a
             href={kakaoUrl}
@@ -339,6 +357,30 @@ export default function AdminDashboardPage() {
           사이트 바로가기
           <span className="text-[11px] opacity-40 ml-1">↗</span>
         </a>
+      </div>
+
+      {/* ── 관리 메뉴 바로가기 ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {[
+          { href: '/admin/settings', label: '사이트 설정', desc: '이름·히어로·네비·CTA·SNS', icon: '⚙️' },
+          { href: '/admin/candidates', label: '원어민 관리', desc: '전체 후보자 DB', icon: '👤' },
+          { href: '/admin/employers', label: '구인자 관리', desc: '고용주 문의·매칭', icon: '🏢' },
+          { href: '/admin/posts', label: '게시물 관리', desc: '전체 게시판 콘텐츠', icon: '📝' },
+          { href: '/admin/jobs', label: '채용공고', desc: 'Job Board 관리', icon: '💼' },
+          { href: '/admin/banners', label: '배너 관리', desc: '사이트 배너 이미지', icon: '🖼️' },
+          { href: '/admin/mail-send', label: '메일 발송', desc: '이메일 작성·발송', icon: '📧' },
+          { href: '/admin/sheet', label: '스프레드시트', desc: '원어민 전체 시트', icon: '📊' },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group"
+          >
+            <span className="text-[20px]">{item.icon}</span>
+            <div className="text-[14px] font-semibold text-[#1d1d1f] mt-2 group-hover:text-[#0071e3] transition-colors">{item.label}</div>
+            <div className="text-[11px] text-[#86868b] mt-0.5">{item.desc}</div>
+          </Link>
+        ))}
       </div>
 
       {loading ? (
