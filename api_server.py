@@ -7038,8 +7038,9 @@ async def kakao_callback(code: str = "", error: str = "", error_description: str
         return RedirectResponse(f"{front_url}/admin?kakao_error=network_error")
 
     if not allowed_ids:
-        logging.getLogger("bridge.api").warning("[KAKAO] KAKAO_ADMIN_IDS 미설정 — 거부")
-        return RedirectResponse(f"{front_url}/admin?kakao_error=not_configured")
+        # 초기 설정 중 — ID를 셋업 페이지로 전달 (로그인은 허용 안 함)
+        logging.getLogger("bridge.api").warning("[KAKAO] KAKAO_ADMIN_IDS 미설정 — 셋업 유도: %s", kakao_id)
+        return RedirectResponse(f"{front_url}/admin/kakao-setup?kakao_id={kakao_id}")
     if kakao_id not in allowed_ids:
         logging.getLogger("bridge.api").warning("[KAKAO] 미허가 계정: %s", kakao_id)
         return RedirectResponse(f"{front_url}/admin?kakao_error=not_allowed")
