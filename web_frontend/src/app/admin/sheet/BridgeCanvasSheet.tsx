@@ -109,6 +109,8 @@ export default function BridgeCanvasSheet() {
   const [newCount, setNewCount] = useState(0)
   const [ready, setReady] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+  const [newBanner, setNewBanner] = useState(0)  // 신규 접수 배너 카운트
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
   // Mail modal
   const [mailOpen, setMailOpen] = useState(false)
@@ -261,8 +263,21 @@ export default function BridgeCanvasSheet() {
         const json = await res.json()
         const rows: Record<string, unknown>[] = json.data?.candidates ?? []
         setNewCount(rows.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length)
+
+        // 신규 접수 배너 감지 — localStorage 마지막 방문 이후 신규 항목
+        const lastVisit = localStorage.getItem('bridge_last_sheet_visit') ?? ''
+        const freshRows = rows.filter(r => {
+          const created = String(r.created_at ?? '')
+          return created > lastVisit && String(r.source ?? r.how_to ?? '') === 'web_form'
+        })
+        if (freshRows.length > 0) {
+          setNewBanner(freshRows.length)
+          setBannerDismissed(false)
+        }
       } catch { /* ignore */ }
-    }, 60_000)
+    }, 30_000)
+    // 페이지 진입 시 방문 시각 기록
+    localStorage.setItem('bridge_last_sheet_visit', new Date().toISOString())
     return () => clearInterval(iv)
   }, [])
 
@@ -805,6 +820,30 @@ export default function BridgeCanvasSheet() {
     }}>
       {/* Hidden file input for photo upload */}
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+
+      {/* ── 신규 접수 알림 배너 ── */}
+      {newBanner > 0 && !bannerDismissed && (
+        <div
+          onClick={() => { setTab('active'); setBannerDismissed(true); setNewBanner(0) }}
+          style={{
+            flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            padding: '8px 20px',
+            background: '#dc2626',
+            color: '#fff',
+            fontSize: 13, fontWeight: 700,
+            cursor: 'pointer',
+            animation: 'bridge-blink 1.2s step-end infinite',
+          }}
+        >
+          <span>신규 접수 {newBanner}건 — 클릭하여 확인</span>
+          <span
+            onClick={e => { e.stopPropagation(); setBannerDismissed(true); setNewBanner(0) }}
+            style={{ marginLeft: 8, fontSize: 16, lineHeight: 1, opacity: 0.8, cursor: 'pointer' }}
+          >✕</span>
+        </div>
+      )}
+      <style>{`@keyframes bridge-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }`}</style>
 
       {/* ── Toolbar Row 1: actions ── */}
       <div style={{
