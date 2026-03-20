@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════ */
 
 export type CategoryKey = 'active' | 'past' | 'blacklist'
-export type TabKey = CategoryKey | 'all'
+export type TabKey = CategoryKey | 'all' | 'focus'
 export type ColType = 'idx' | 't' | 'photo' | 'long' | 'mail' | 'tags' | 'stage' | 'dropdown'
 
 export interface ColDef {
@@ -122,6 +122,7 @@ export const STAGES: Stage[] = [
 
 export const TABS: TabDef[] = [
   { key: 'active', label: '구직자', color: '#fff', bg: '#2E7D32', accent: '#1B5E20', icon: '👤' },
+  { key: 'focus', label: '집중관리', color: '#fff', bg: '#6D4C41', accent: '#4E342E', icon: '🎯' },
   { key: 'past', label: '체결완료', color: '#fff', bg: '#1976D2', accent: '#0D47A1', icon: '✅' },
   { key: 'blacklist', label: '블랙리스트', color: '#fff', bg: '#C62828', accent: '#B71C1C', icon: '⛔' },
   { key: 'all', label: '전체', color: '#fff', bg: '#37474F', accent: '#263238', icon: '📋' },

@@ -33,6 +33,12 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 const API = API_URL
 const PAGE_SIZE = 150
 
+/* ── 집중관리 탭 필터 — 진행중/계약중 강사 ── */
+const FOCUS_STAGES = new Set(['interview', 'proposal', 'signed', 'guide_sent', 'guide_done', 'caution'])
+const isFocusRow = (r: DataRow): boolean =>
+  r.category === 'past' ||
+  (r.category === 'active' && FOCUS_STAGES.has(r.stage as string))
+
 /* ── DB → DataRow mapping ── */
 function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, EditOverride>): DataRow {
   const cid = String(c.candidate_id ?? c.id ?? '')
@@ -286,12 +292,25 @@ export default function BridgeCanvasSheet() {
     let rows: DataRow[]
     if (dbAll.length === 0) {
       // 로딩 중: localStorage 캐시로 즉시 표시
-      rows = tab === 'all'
-        ? [...(data.active || []), ...(data.past || []), ...(data.blacklist || [])]
-        : (data[tab] || [])
+      if (tab === 'all') {
+        rows = [...(data.active || []), ...(data.past || []), ...(data.blacklist || [])]
+      } else if (tab === 'focus') {
+        rows = [
+          ...(data.active || []).filter(r => FOCUS_STAGES.has(r.stage as string)),
+          ...(data.past || []),
+        ]
+      } else {
+        rows = (data[tab] || [])
+      }
     } else {
       // 로드 완료: 항상 서버에서 받은 복호화된 최신 데이터 사용
-      rows = tab === 'all' ? dbAll : dbAll.filter(r => r.category === tab)
+      if (tab === 'all') {
+        rows = dbAll
+      } else if (tab === 'focus') {
+        rows = dbAll.filter(isFocusRow)
+      } else {
+        rows = dbAll.filter(r => r.category === tab)
+      }
     }
     // Apply filters
     for (const [colKey, vals] of Object.entries(filters)) {
@@ -693,7 +712,7 @@ export default function BridgeCanvasSheet() {
         break
       case 'add_row': {
         const newId = Math.max(...dbAllRef.current.map(r => r.id), 0) + 1
-        const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
+        const tt: CategoryKey = (tab === 'all' || tab === 'focus') ? 'active' : tab as CategoryKey
         const newRow: DataRow = {
           id: newId, _cid: '', category: tt, stage: 'none', mailStatus: '',
           photoUrl: '', photoSize: 50,
@@ -722,7 +741,7 @@ export default function BridgeCanvasSheet() {
   const addNewRow = useCallback(() => {
     pushHistory()
     const newId = Math.max(...dbAllRef.current.map(r => r.id), 0) + 1
-    const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
+    const tt: CategoryKey = (tab === 'all' || tab === 'focus') ? 'active' : tab as CategoryKey
     const newRow: DataRow = {
       id: newId, _cid: '', category: tt, stage: 'none', mailStatus: '',
       photoUrl: '', photoSize: 50,
@@ -777,6 +796,10 @@ export default function BridgeCanvasSheet() {
     for (const t of TABS) {
       if (t.key === 'all') {
         c[t.key] = dbAll.length || (data.active?.length || 0) + (data.past?.length || 0) + (data.blacklist?.length || 0)
+      } else if (t.key === 'focus') {
+        c[t.key] = dbAll.length > 0
+          ? dbAll.filter(isFocusRow).length
+          : (data.active?.filter(r => FOCUS_STAGES.has(r.stage as string)).length || 0) + (data.past?.length || 0)
       } else {
         c[t.key] = dbAll.length > 0
           ? dbAll.filter(r => r.category === t.key).length
@@ -1085,7 +1108,7 @@ export default function BridgeCanvasSheet() {
           <CtxItem label="위에 행 삽입" onClick={() => {
             const cid = String(ctx.row._cid ?? '')
             pushHistory()
-            const tt: CategoryKey = tab === 'all' ? 'active' : tab as CategoryKey
+            const tt: CategoryKey = (tab === 'all' || tab === 'focus') ? 'active' : tab as CategoryKey
             const newRow: DataRow = { id: 0, _cid: '', category: tt, stage: 'none', mailStatus: '', photoUrl: '', photoSize: 50 }
             defaultCols().forEach(c => { if (!['rowNum','stage','mailStatus','photo'].includes(c.key) && !(c.key in newRow)) (newRow as Record<string, unknown>)[c.key] = '' })
             setDbAll(prev => { const idx = prev.findIndex(r => r._cid === cid); if (idx >= 0) { const a = [...prev]; a.splice(idx, 0, newRow); return a }; return [newRow, ...prev] })
