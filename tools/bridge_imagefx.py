@@ -358,6 +358,27 @@ _session.load_persisted_token()
 _gen_lock = threading.Lock()
 
 
+def _simplify_prompt(prompt: str) -> str:
+    """Simplify a prompt for retry after safety filter rejection.
+    Removes race descriptors and shortens constraints that may trigger filters."""
+    import re
+    # Remove race/ethnicity descriptors that may trigger PROMINENT_PEOPLE filter
+    prompt = re.sub(r'\b(Caucasian|Black|Latino|mixed-race Western)\b', '', prompt)
+    # Remove age ranges
+    prompt = re.sub(r'\(ages? \d+[–\-]\d+\)', '', prompt)
+    # Shorten the CRITICAL block to reduce complexity
+    prompt = re.sub(
+        r'CRITICAL:.*?(?=Aspect ratio)',
+        'No text, no letters, no logos anywhere. ',
+        prompt,
+        flags=re.DOTALL,
+    )
+    # Collapse multiple spaces/periods
+    prompt = re.sub(r'  +', ' ', prompt)
+    prompt = re.sub(r'\.\s*\.', '.', prompt)
+    return prompt.strip()
+
+
 def generate_images(prompt: str, count: int = 3) -> dict:
     global _save_dir
     if not _session.authenticated:
@@ -387,95 +408,130 @@ def generate_images(prompt: str, count: int = 3) -> dict:
                 pass
         next_n = max_n + 1
 
-        try:
-            headers = _session.get_auth_headers()
+        # Retry loop: attempt original prompt, then simplified on filter error
+        attempts = [prompt]
+        last_error = ""
 
-            body = json.dumps({
-                "userInput": {
-                    "candidatesCount": min(count, MAX_IMAGES),
-                    "prompts": [prompt],
-                    "seed": random.randint(1, 999999999),
-                },
-                "clientContext": {
-                    "sessionId": f";{int(time.time() * 1000)}",
-                    "tool": "IMAGE_FX",
-                },
-                "modelInput": {
-                    "modelNameType": "IMAGEN_3_5",
-                },
-                "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
-            }).encode("utf-8")
+        for attempt_idx, current_prompt in enumerate(attempts):
+            try:
+                headers = _session.get_auth_headers()
 
-            req = urllib.request.Request(GENERATE_URL, data=body, headers=headers)
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
+                body = json.dumps({
+                    "userInput": {
+                        "candidatesCount": min(count, MAX_IMAGES),
+                        "prompts": [current_prompt],
+                        "seed": random.randint(1, 999999999),
+                    },
+                    "clientContext": {
+                        "sessionId": f";{int(time.time() * 1000)}",
+                        "tool": "IMAGE_FX",
+                    },
+                    "modelInput": {
+                        "modelNameType": "IMAGEN_3_5",
+                    },
+                    "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                }).encode("utf-8")
 
-            panels = result.get("imagePanels", [])
-            if not panels:
-                return {"ok": False, "error": "No panels — prompt may be filtered"}
+                req = urllib.request.Request(GENERATE_URL, data=body, headers=headers)
+                with urllib.request.urlopen(req, timeout=90) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
 
-            gen_images = panels[0].get("generatedImages", [])
-            if not gen_images:
-                return {"ok": False, "error": "No images generated"}
+                panels = result.get("imagePanels", [])
+                if not panels:
+                    last_error = "No panels — prompt may be filtered"
+                    if attempt_idx == 0:
+                        simplified = _simplify_prompt(prompt)
+                        if simplified != prompt:
+                            print(f"[RETRY] Prompt filtered, retrying with simplified version...")
+                            attempts.append(simplified)
+                            _session.wait_delay()
+                            continue
+                    return {"ok": False, "error": last_error}
 
-            saved = []
-            for i, img_data in enumerate(gen_images):
-                encoded = img_data.get("encodedImage", "")
-                if not encoded:
-                    continue
-                try:
-                    img_bytes = base64.b64decode(encoded)
-                except Exception:
-                    img_bytes = _fetch_media(encoded, headers)
-                    if not img_bytes:
+                gen_images = panels[0].get("generatedImages", [])
+                if not gen_images:
+                    last_error = "No images generated"
+                    if attempt_idx == 0:
+                        simplified = _simplify_prompt(prompt)
+                        if simplified != prompt:
+                            print(f"[RETRY] No images, retrying with simplified version...")
+                            attempts.append(simplified)
+                            _session.wait_delay()
+                            continue
+                    return {"ok": False, "error": last_error}
+
+                saved = []
+                for i, img_data in enumerate(gen_images):
+                    encoded = img_data.get("encodedImage", "")
+                    if not encoded:
                         continue
+                    try:
+                        img_bytes = base64.b64decode(encoded)
+                    except Exception:
+                        img_bytes = _fetch_media(encoded, headers)
+                        if not img_bytes:
+                            continue
 
-                # Apply BRIDGE logo overlay
-                img_bytes = _overlay_bridge_logo(img_bytes)
+                    # Apply BRIDGE logo overlay
+                    img_bytes = _overlay_bridge_logo(img_bytes)
 
-                # Naturalize: add real-camera imperfections + convert to JPG
-                img_bytes = _naturalize_photo(img_bytes, quality=random.randint(85, 92))
+                    # Naturalize: add real-camera imperfections + convert to JPG
+                    img_bytes = _naturalize_photo(img_bytes, quality=random.randint(85, 92))
 
-                fname = f"BRIDGE_{next_n + i}.jpg"
-                fpath = os.path.join(_save_dir, fname)
-                with open(fpath, "wb") as f:
-                    f.write(img_bytes)
+                    fname = f"BRIDGE_{next_n + i}.jpg"
+                    fpath = os.path.join(_save_dir, fname)
+                    with open(fpath, "wb") as f:
+                        f.write(img_bytes)
 
-                saved.append({
-                    "filename": fname,
-                    "url": f"/api/saved-image/{fname}",
-                    "size_kb": round(len(img_bytes) / 1024, 1),
-                })
+                    saved.append({
+                        "filename": fname,
+                        "url": f"/api/saved-image/{fname}",
+                        "size_kb": round(len(img_bytes) / 1024, 1),
+                    })
 
-            _session.record_request()
+                _session.record_request()
 
-            if saved:
-                return {
-                    "ok": True,
-                    "count": len(saved),
-                    "folder": _save_dir.replace("\\", "/"),
-                    "images": saved,
-                    "quota": _session.remaining(),
-                }
-            else:
-                return {"ok": False, "error": "Failed to save images"}
+                if saved:
+                    retried = " (retried with simplified prompt)" if attempt_idx > 0 else ""
+                    return {
+                        "ok": True,
+                        "count": len(saved),
+                        "folder": _save_dir.replace("\\", "/"),
+                        "images": saved,
+                        "quota": _session.remaining(),
+                        "retried": attempt_idx > 0,
+                    }
+                else:
+                    return {"ok": False, "error": "Failed to save images"}
 
-        except urllib.error.HTTPError as e:
-            body_text = e.read().decode("utf-8", errors="replace")[:500]
-            if e.code in (401, 403):
-                _session.token = None
-                return {
-                    "ok": False,
-                    "error": f"Auth expired (HTTP {e.code})",
-                    "need_auth": True,
-                }
-            if e.code == 429:
-                return {"ok": False, "error": "Google rate limit. Wait a moment"}
-            return {"ok": False, "error": f"HTTP {e.code}: {body_text}"}
-        except RuntimeError as e:
-            return {"ok": False, "error": str(e), "need_auth": True}
-        except Exception as e:
-            return {"ok": False, "error": str(e)[:300]}
+            except urllib.error.HTTPError as e:
+                body_text = e.read().decode("utf-8", errors="replace")[:500]
+                if e.code in (401, 403):
+                    _session.token = None
+                    return {
+                        "ok": False,
+                        "error": f"Auth expired (HTTP {e.code})",
+                        "need_auth": True,
+                    }
+                if e.code == 429:
+                    return {"ok": False, "error": "Google rate limit. Wait a moment"}
+                # On HTTP error, try simplified prompt if first attempt
+                last_error = f"HTTP {e.code}: {body_text}"
+                if attempt_idx == 0:
+                    simplified = _simplify_prompt(prompt)
+                    if simplified != prompt:
+                        print(f"[RETRY] HTTP {e.code}, retrying with simplified prompt...")
+                        attempts.append(simplified)
+                        _session.wait_delay()
+                        continue
+                return {"ok": False, "error": last_error}
+            except RuntimeError as e:
+                return {"ok": False, "error": str(e), "need_auth": True}
+            except Exception as e:
+                return {"ok": False, "error": str(e)[:300]}
+
+        # All attempts exhausted
+        return {"ok": False, "error": last_error or "All retry attempts failed"}
 
 
 def _fetch_media(media_key: str, headers: dict):
