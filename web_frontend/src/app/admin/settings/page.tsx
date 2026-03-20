@@ -17,6 +17,12 @@ interface SettingsMap {
   [key: string]: string
 }
 
+interface SecretMeta {
+  key: string
+  description: string
+  updated_at: string
+}
+
 interface NavItem {
   href: string
   label: string
@@ -77,6 +83,58 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
+  // Secrets
+  const [secrets, setSecrets] = useState<SecretMeta[]>([])
+  const [newKey, setNewKey] = useState('')
+  const [newValue, setNewValue] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [secretSaving, setSecretSaving] = useState(false)
+  const [secretMsg, setSecretMsg] = useState<{ text: string; ok: boolean } | null>(null)
+
+  const showSecretMsg = (text: string, ok = true) => {
+    setSecretMsg({ text, ok })
+    setTimeout(() => setSecretMsg(null), 3000)
+  }
+
+  const fetchSecrets = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/secrets`, { headers: headers() })
+      if (!res.ok) return
+      const json = await res.json()
+      setSecrets(json.data?.secrets || [])
+    } catch { /* ignore */ }
+  }, [headers])
+
+  const handleSetSecret = async () => {
+    if (!newKey.trim() || !newValue.trim()) { showSecretMsg('키와 값을 모두 입력하세요', false); return }
+    setSecretSaving(true)
+    try {
+      const res = await signedFetch(`${API}/api/admin/secrets`, {
+        method: 'POST',
+        body: JSON.stringify({ key: newKey.trim(), value: newValue.trim(), description: newDesc.trim() }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        showSecretMsg(json.message || '저장 완료')
+        setNewKey(''); setNewValue(''); setNewDesc('')
+        fetchSecrets()
+      } else {
+        showSecretMsg(json.detail || '저장 실패', false)
+      }
+    } catch { showSecretMsg('네트워크 오류', false) }
+    finally { setSecretSaving(false) }
+  }
+
+  const handleDeleteSecret = async (key: string) => {
+    if (!confirm(`'${key}' 를 삭제하시겠습니까?`)) return
+    try {
+      const res = await signedFetch(`${API}/api/admin/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (res.ok) { showSecretMsg(json.message || '삭제 완료'); fetchSecrets() }
+      else showSecretMsg(json.detail || '삭제 실패', false)
+    } catch { showSecretMsg('네트워크 오류', false) }
+  }
+
   // Nav menu items
   const [navItems, setNavItems] = useState<NavItem[]>([])
   const [navOriginal, setNavOriginal] = useState<string>('')
@@ -122,8 +180,8 @@ export default function AdminSettingsPage() {
   }, [headers])
 
   useEffect(() => {
-    if (authed) fetchSettings()
-  }, [authed, fetchSettings])
+    if (authed) { fetchSettings(); fetchSecrets() }
+  }, [authed, fetchSettings, fetchSecrets])
 
   const showMsg = (msg: string) => {
     setActionMsg(msg)
@@ -458,6 +516,82 @@ export default function AdminSettingsPage() {
               </div>
             </div>
           ))}
+          {/* ── 비밀키 관리 ── */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#1d1d1f]">비밀키 관리</h3>
+                <p className="text-[12px] text-[#86868b] mt-0.5">외부 API 키는 여기서만 입력 — AES-256 암호화 저장, 값 재표시 불가</p>
+              </div>
+            </div>
+
+            {/* 저장된 키 목록 */}
+            {secrets.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {secrets.map((s) => (
+                  <div key={s.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#f5f5f7] rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-mono font-semibold text-[#1d1d1f]">{s.key}</div>
+                      {s.description && <div className="text-[11px] text-[#86868b] truncate">{s.description}</div>}
+                      <div className="text-[10px] text-[#aeaeb2] mt-0.5">{s.updated_at?.slice(0, 16).replace('T', ' ')}</div>
+                    </div>
+                    <div className="text-[12px] font-mono text-[#aeaeb2] tracking-widest select-none">••••••••</div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSecret(s.key)}
+                      className="text-[11px] text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {secrets.length === 0 && (
+              <p className="text-[13px] text-[#aeaeb2] mb-4">등록된 비밀키 없음</p>
+            )}
+
+            {/* 신규 등록 폼 */}
+            <div className="border border-dashed border-[#d2d2d7] rounded-xl p-4 space-y-3">
+              <p className="text-[12px] font-medium text-[#6e6e73]">새 비밀키 등록</p>
+              <input
+                type="text"
+                placeholder="키 이름 (예: KAKAO_CLIENT_ID)"
+                value={newKey}
+                onChange={e => setNewKey(e.target.value.toUpperCase().replace(/\s/g, '_'))}
+                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] font-mono focus:outline-none focus:border-[#0071e3]"
+              />
+              <input
+                type="password"
+                placeholder="값 (저장 후 재표시 불가)"
+                value={newValue}
+                onChange={e => setNewValue(e.target.value)}
+                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:border-[#0071e3]"
+                autoComplete="new-password"
+              />
+              <input
+                type="text"
+                placeholder="설명 (선택, 예: 카카오 REST API 키)"
+                value={newDesc}
+                onChange={e => setNewDesc(e.target.value)}
+                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:border-[#0071e3]"
+              />
+              {secretMsg && (
+                <div className={`text-[12px] font-medium px-3 py-1.5 rounded-lg ${secretMsg.ok ? 'text-green-700 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+                  {secretMsg.text}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleSetSecret}
+                disabled={secretSaving || !newKey.trim() || !newValue.trim()}
+                className="px-4 py-2 bg-[#1d1d1f] text-white rounded-lg text-[13px] font-medium hover:bg-[#333] disabled:opacity-40 transition-colors"
+              >
+                {secretSaving ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
     </div>
