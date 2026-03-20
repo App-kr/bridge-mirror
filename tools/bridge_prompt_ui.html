@@ -1603,35 +1603,50 @@ async function checkServer() {
   try {
     const r = await fetch(API_BASE + '/api/status', { signal: AbortSignal.timeout(2000) });
     const d = await r.json();
-    serverOnline = d.ok && d.key_set;
-    const dot = document.getElementById('serverDot');
+    serverOnline = !!d.authenticated;
     const stat = document.getElementById('serverStatus');
-    if (serverOnline) {
-      dot.className = 'server-dot online';
+    if (d.authenticated) {
       const q = d.quota || {};
-      stat.innerHTML = '<span class="server-dot online" id="serverDot"></span>ImageFX ' + (q.hourly || '');
+      stat.innerHTML = '<span class="server-dot online"></span>ImageFX ' + (q.hourly||'') + ' \xb7 ' + (q.token_min||'?') + '\ubd84';
+      stat.onclick = null;
+      stat.style.cursor = 'default';
     } else {
-      dot.className = 'server-dot offline';
-      stat.innerHTML = '<span class="server-dot offline" id="serverDot"></span>Server offline';
+      stat.innerHTML = '<span class="server-dot auth-needed"></span><u>\ud1a0\ud070 \ub4f1\ub85d</u> (\ud074\ub9ad\u2192\ubcf5\uc0ac)';
+      stat.style.cursor = 'pointer';
+      stat.onclick = copyAuthSnippet;
     }
   } catch {
     serverOnline = false;
-    const dot = document.getElementById('serverDot');
-    if (dot) dot.className = 'server-dot offline';
     const stat = document.getElementById('serverStatus');
-    if (stat) stat.innerHTML = '<span class="server-dot offline" id="serverDot"></span>Server offline';
+    if (stat) {
+      stat.innerHTML = '<span class="server-dot offline"></span>Server offline';
+      stat.onclick = null;
+      stat.style.cursor = 'default';
+    }
+  }
+}
+
+async function copyAuthSnippet() {
+  try {
+    const r = await fetch(API_BASE + '/api/auth-snippet');
+    const d = await r.json();
+    await clipCopy(d.snippet);
+    toast('\uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428 \u2014 ImageFX \ud398\uc774\uc9c0 Console(F12)\uc5d0 \ubd99\uc5ec\ub123\uae30 \ud6c4 Enter');
+  } catch {
+    toast('\uc11c\ubc84\uc5d0\uc11c \uc778\uc99d \ucf54\ub4dc\ub97c \uac00\uc838\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4');
   }
 }
 
 async function genImage(btn, i) {
   if (!serverOnline) {
-    toast('서버 미실행 — bridge_imagefx.py를 먼저 실행하세요');
+    copyAuthSnippet();
+    toast('\ud1a0\ud070 \ubbf8\ub4f1\ub85d \u2014 \uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428. ImageFX Console\uc5d0 \ubd99\uc5ec\ub123\uae30');
     return;
   }
   if (!prompts[i]) return;
 
   btn.classList.add('loading');
-  btn.textContent = '생성 중';
+  btn.textContent = '\uc0dd\uc131 \uc911';
 
   try {
     const r = await fetch(API_BASE + '/api/generate', {
@@ -1642,23 +1657,27 @@ async function genImage(btn, i) {
     const d = await r.json();
 
     if (d.ok) {
-      btn.textContent = d.count + '장 완료';
+      btn.textContent = d.count + '\uc7a5 \uc644\ub8cc';
       btn.classList.remove('loading');
-      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
-      // 이미지 프리뷰 삽입
+      setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
       showImagePreview(i, d);
-      toast(d.count + '장 저장 완료 → ' + d.folder.split('/').pop());
+      toast(d.count + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc \u2192 ' + d.folder.split('/').pop());
     } else {
-      btn.textContent = '실패';
+      btn.textContent = '\uc2e4\ud328';
       btn.classList.remove('loading');
-      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
-      toast('생성 실패: ' + (d.error || '알 수 없는 오류'));
+      setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
+      if (d.need_auth) {
+        copyAuthSnippet();
+        toast('\ud1a0\ud070 \ub9cc\ub8cc \u2014 \uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428. ImageFX Console\uc5d0 \ubd99\uc5ec\ub123\uae30');
+      } else {
+        toast('\uc0dd\uc131 \uc2e4\ud328: ' + (d.error || '\uc54c \uc218 \uc5c6\ub294 \uc624\ub958'));
+      }
     }
   } catch (e) {
-    btn.textContent = '오류';
+    btn.textContent = '\uc624\ub958';
     btn.classList.remove('loading');
-    setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
-    toast('서버 연결 실패');
+    setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
+    toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
   }
 }
 
@@ -1677,9 +1696,9 @@ function showImagePreview(i, data) {
   gallery.className = 'img-gallery';
   data.images.forEach(img => {
     const el = document.createElement('img');
-    el.src = 'data:image/png;base64,' + img.base64_thumb;
+    el.src = img.url ? (API_BASE + img.url) : ('data:image/png;base64,' + img.base64_thumb);
     el.title = img.filename + ' (' + img.size_kb + 'KB)';
-    el.onclick = () => window.open(API_BASE + '/generated_images/' + data.folder.split('/').pop() + '/' + img.filename, '_blank');
+    el.onclick = () => window.open(img.url ? (API_BASE + img.url) : '#', '_blank');
     gallery.appendChild(el);
   });
 

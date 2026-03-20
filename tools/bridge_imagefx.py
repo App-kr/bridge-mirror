@@ -449,6 +449,15 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
 def main():
     os.makedirs(SAVE_DIR, exist_ok=True)
 
+    # 이미 실행 중이면 브라우저만 열고 종료
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex(("127.0.0.1", PORT)) == 0:
+            print(f"이미 실행 중: http://localhost:{PORT}")
+            import webbrowser
+            webbrowser.open(f"http://localhost:{PORT}")
+            return
+
     print(f"\n{'='*56}")
     print(f"  Bridge ImageFX Server v2")
     print(f"{'='*56}")
