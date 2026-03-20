@@ -344,7 +344,55 @@ select.adv-select:focus { border-color: #555; }
 }
 .server-dot.online { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
 .server-dot.offline { background: #ef4444; }
-.server-dot.auth-needed { background: #fbbf24; animation: blink 1.5s infinite; } /* unused, kept for compat */
+.server-dot.auth-needed { background: #fbbf24; animation: blink 1.5s infinite; }
+
+/* ── STATUS BAR (작업 상태바) ── */
+#statusBar {
+  width: 100%;
+  padding: 10px 20px;
+  font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; gap: 10px;
+  transition: background .3s, color .3s;
+  border-bottom: 1px solid #272727;
+  min-height: 42px;
+  letter-spacing: 0.02em;
+}
+#statusBar .sb-icon { font-size: 16px; flex-shrink: 0; }
+#statusBar .sb-text { flex: 1; }
+#statusBar .sb-detail { font-weight: 400; font-size: 12px; color: inherit; opacity: 0.7; }
+#statusBar .sb-progress {
+  height: 3px; border-radius: 2px; background: rgba(255,255,255,0.15);
+  flex-basis: 120px; flex-shrink: 0; overflow: hidden;
+}
+#statusBar .sb-progress-fill {
+  height: 100%; border-radius: 2px; transition: width .3s;
+}
+
+/* status bar states */
+#statusBar.sb-idle     { background: #1a1a1a; color: #888; }
+#statusBar.sb-connect  { background: #78350f; color: #fbbf24; }
+#statusBar.sb-ready    { background: #14532d; color: #4ade80; }
+#statusBar.sb-working  { background: #1e3a5f; color: #60a5fa; }
+#statusBar.sb-saving   { background: #312e81; color: #a78bfa; }
+#statusBar.sb-done     { background: #14532d; color: #4ade80; }
+#statusBar.sb-error    { background: #7f1d1d; color: #fca5a5; }
+#statusBar.sb-warn     { background: #78350f; color: #fbbf24; }
+
+#statusBar.sb-connect .sb-progress-fill { background: #fbbf24; animation: sb-pulse 1.2s infinite; }
+#statusBar.sb-working .sb-progress-fill { background: #60a5fa; animation: sb-grow 2s infinite; }
+#statusBar.sb-saving  .sb-progress-fill { background: #a78bfa; }
+#statusBar.sb-done    .sb-progress-fill { background: #4ade80; }
+#statusBar.sb-error   .sb-progress-fill { background: #ef4444; }
+
+@keyframes sb-pulse {
+  0%, 100% { opacity: 0.4; width: 30%; }
+  50% { opacity: 1; width: 70%; }
+}
+@keyframes sb-grow {
+  0% { width: 5%; }
+  50% { width: 80%; }
+  100% { width: 5%; }
+}
 
 /* Card body — two column */
 .pcard-body { display: flex; border-bottom: 1px solid #1a1a1a; }
@@ -527,6 +575,12 @@ select.adv-select:focus { border-color: #555; }
 
 <!-- MAIN -->
 <div class="main">
+  <div id="statusBar" class="sb-idle">
+    <span class="sb-icon" id="sbIcon">&#9679;</span>
+    <span class="sb-text" id="sbText">대기 중</span>
+    <span class="sb-detail" id="sbDetail"></span>
+    <div class="sb-progress"><div class="sb-progress-fill" id="sbFill" style="width:0%"></div></div>
+  </div>
   <div class="topbar">
     <span class="topbar-label">Prompts</span>
     <span class="topbar-badge" id="topCount">0</span>
@@ -1780,20 +1834,42 @@ function toast(msg){
 const API_BASE = 'http://localhost:8765';
 let serverOnline = false;
 
+// ── STATUS BAR CONTROLLER ──
+function setStatus(state, text, detail='', pct=0) {
+  const bar = document.getElementById('statusBar');
+  const icon = document.getElementById('sbIcon');
+  const txt = document.getElementById('sbText');
+  const det = document.getElementById('sbDetail');
+  const fill = document.getElementById('sbFill');
+  bar.className = 'sb-' + state;
+  const icons = { idle:'\u25CF', connect:'\u26A1', ready:'\u2714', working:'\u23F3', saving:'\uD83D\uDCBE', done:'\u2705', error:'\u274C', warn:'\u26A0' };
+  icon.textContent = icons[state] || '\u25CF';
+  txt.textContent = text;
+  det.textContent = detail;
+  if (state === 'working' || state === 'connect') {
+    fill.style.width = ''; // let animation handle it
+  } else {
+    fill.style.width = pct + '%';
+  }
+}
+
 // ── 생성하기: 이미 만들어진 프롬프트로 이미지 생성 ──
 async function runGenerateImages() {
   if (!prompts.length) {
-    toast('먼저 Generate로 프롬프트를 생성하세요');
+    toast('\uba3c\uc800 Generate\ub85c \ud504\ub86c\ud504\ud2b8\ub97c \uc0dd\uc131\ud558\uc138\uc694');
     return;
   }
   if (!serverOnline) {
-    toast('Token \ubbf8\ub4f1\ub85d \u2014 Chrome extension \ud655\uc778');
+    setStatus('error', '\ud1a0\ud070 \ubbf8\uc5f0\uacb0', 'Chrome Extension \ud655\uc778 \ud544\uc694');
     return;
   }
+  _isGenerating = true;
   const btn = document.getElementById('genImgBtn');
   btn.classList.add('loading');
   let totalSaved = 0;
   for (let i = 0; i < prompts.length; i++) {
+    const pct = Math.round((i / prompts.length) * 100);
+    setStatus('working', (i+1) + '/' + prompts.length + ' \uc0dd\uc131 \uc911', 'BRIDGE_' + (totalSaved+1) + ' \uc774\ubbf8\uc9c0 \uc0dd\uc131 \uc694\uccad \uc911\u2026', pct);
     btn.textContent = (i+1) + '/' + prompts.length + ' \uc0dd\uc131 \uc911...';
     try {
       const r = await fetch(API_BASE + '/api/generate', {
@@ -1805,33 +1881,41 @@ async function runGenerateImages() {
       if (d.ok) {
         showImagePreview(i, d);
         totalSaved += d.count;
+        setStatus('saving', (i+1) + '/' + prompts.length + ' \uc800\uc7a5 \uc644\ub8cc', totalSaved + '\uc7a5 \uc800\uc7a5\ub428', Math.round(((i+1)/prompts.length)*100));
       } else if (d.need_auth) {
-        toast('Token \ub9cc\ub8cc \u2014 ImageFX \ud398\uc774\uc9c0 \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0');
+        setStatus('error', '\ud1a0\ud070 \ub9cc\ub8cc', 'ImageFX \ud398\uc774\uc9c0\ub97c \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0\ub429\ub2c8\ub2e4');
+        break;
+      } else if (d.error && d.error.includes('limit')) {
+        setStatus('warn', '\uc791\uc5c5\ub7c9 \uc81c\ud55c', d.error + ' \u2014 \ub098\uc911\uc5d0 \ub2e4\uc2dc \uc2e4\ud589\ud558\uc138\uc694');
         break;
       } else {
+        setStatus('error', (i+1) + '\ubc88 \uc2e4\ud328', d.error || '\uc54c \uc218 \uc5c6\ub294 \uc624\ub958');
         toast((i+1) + '\ubc88 \uc2e4\ud328: ' + (d.error || ''));
       }
     } catch (e) {
-      toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
+      setStatus('error', '\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328', '\uc11c\ubc84\uac00 \uc751\ub2f5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4');
       break;
     }
   }
   btn.classList.remove('loading');
   btn.textContent = '\uc0dd\uc131\ud558\uae30';
-  if (totalSaved > 0) toast('\ucd1d ' + totalSaved + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc');
+  _isGenerating = false;
+  if (totalSaved > 0) setStatus('done', '\uc791\uc5c5 \uc644\ub8cc', '\ucd1d ' + totalSaved + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc', 100);
 }
 
 // ── 자동생성: 프롬프트 생성 + 이미지 생성 + 저장까지 원클릭 ──
 async function runAutoGenerate() {
   if (!serverOnline) {
-    toast('Token \ubbf8\ub4f1\ub85d \u2014 Chrome extension \ud655\uc778');
+    setStatus('error', '\ud1a0\ud070 \ubbf8\uc5f0\uacb0', 'Chrome Extension \ud655\uc778 \ud544\uc694');
     return;
   }
+  _isGenerating = true;
   const btn = document.getElementById('autoBtn');
   btn.classList.add('loading');
-  btn.textContent = '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc911...';
 
   // Step 1: Generate prompts
+  setStatus('working', '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc911\u2026', '\ud504\ub86c\ud504\ud2b8 \uc870\ud569 \uc911');
+  btn.textContent = '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc911...';
   await new Promise(r => setTimeout(r, 200));
   const count = parseInt(document.getElementById('countSlider').value);
   prompts = generateBatch(count, currentTarget);
@@ -1840,9 +1924,11 @@ async function runAutoGenerate() {
   document.getElementById('s-gen').textContent = totalGenerated;
   document.getElementById('topCount').textContent = prompts.length;
 
-  // Step 2: Generate images for each prompt (fully automatic)
+  // Step 2: Generate images
   let totalSaved = 0;
   for (let i = 0; i < prompts.length; i++) {
+    const pct = Math.round((i / prompts.length) * 100);
+    setStatus('working', (i+1) + '/' + prompts.length + ' \uc0ac\uc9c4 \uc0dd\uc131 \uc911', 'BRIDGE_' + (totalSaved+1) + ' \uc774\ubbf8\uc9c0 \uc0dd\uc131 \uc694\uccad \uc911\u2026', pct);
     btn.textContent = (i+1) + '/' + prompts.length + ' \uc0ac\uc9c4 \uc0dd\uc131 \uc911...';
     try {
       const r = await fetch(API_BASE + '/api/generate', {
@@ -1854,20 +1940,28 @@ async function runAutoGenerate() {
       if (d.ok) {
         showImagePreview(i, d);
         totalSaved += d.count;
+        setStatus('saving', (i+1) + '/' + prompts.length + ' \uc800\uc7a5 \uc644\ub8cc', totalSaved + '\uc7a5 \uc800\uc7a5\ub428', Math.round(((i+1)/prompts.length)*100));
       } else if (d.need_auth) {
-        toast('Token \ub9cc\ub8cc \u2014 ImageFX \ud398\uc774\uc9c0 \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0');
+        setStatus('error', '\ud1a0\ud070 \ub9cc\ub8cc', 'ImageFX \ud398\uc774\uc9c0\ub97c \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0\ub429\ub2c8\ub2e4');
+        break;
+      } else if (d.error && d.error.includes('limit')) {
+        setStatus('warn', '\uc791\uc5c5\ub7c9 \uc81c\ud55c', d.error + ' \u2014 \ub098\uc911\uc5d0 \ub2e4\uc2dc \uc2e4\ud589\ud558\uc138\uc694');
         break;
       } else {
+        setStatus('error', (i+1) + '\ubc88 \uc2e4\ud328', d.error || '\uc54c \uc218 \uc5c6\ub294 \uc624\ub958');
         toast((i+1) + '\ubc88 \uc2e4\ud328: ' + (d.error || ''));
       }
     } catch (e) {
-      toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
+      setStatus('error', '\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328', '\uc11c\ubc84\uac00 \uc751\ub2f5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4');
       break;
     }
   }
   btn.classList.remove('loading');
   btn.textContent = '\uc790\ub3d9\uc0dd\uc131';
-  if (totalSaved > 0) toast('\uc790\ub3d9\uc0dd\uc131 \uc644\ub8cc: ' + totalSaved + '\uc7a5 \uc800\uc7a5');
+  _isGenerating = false;
+  if (totalSaved > 0) {
+    setStatus('done', '\uc790\ub3d9\uc0dd\uc131 \uc644\ub8cc', '\ucd1d ' + totalSaved + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc', 100);
+  }
 }
 
 // ── 폴더 관리 ──
@@ -1904,6 +1998,7 @@ async function openSaveFolder() {
 }
 
 let _authRetryTimer = null;
+let _isGenerating = false; // true during image generation — don't override status bar
 
 async function checkServer() {
   try {
@@ -1916,13 +2011,23 @@ async function checkServer() {
       stat.innerHTML = '<span class="server-dot online"></span>ImageFX ' + (q.hourly||'') + ' \xb7 ' + (q.token_min||'?') + '\ubd84';
       stat.onclick = null;
       stat.style.cursor = 'default';
-      // Stop fast polling once authenticated
       if (_authRetryTimer) { clearInterval(_authRetryTimer); _authRetryTimer = null; }
+      // Update status bar only if not generating
+      if (!_isGenerating) {
+        const hUsed = parseInt((q.hourly||'0').split('/')[0]);
+        const hMax = parseInt((q.hourly||'0/8').split('/')[1]);
+        if (hUsed >= hMax) {
+          const nextSlot = 60 - (Math.floor(Date.now()/1000) % 3600) / 60;
+          setStatus('warn', '\uc791\uc5c5\ub7c9 \uc81c\ud55c', '\uc2dc\uac04\ub2f9 ' + hMax + '\ud68c \uc0ac\uc6a9 \uc644\ub8cc \u2014 ' + Math.ceil(nextSlot) + '\ubd84 \ud6c4 \uc2e4\ud589\ud558\uc138\uc694', 100);
+        } else {
+          setStatus('ready', '\uc900\ube44 \uc644\ub8cc', '\ud1a0\ud070 ' + (q.token_min||'?') + '\ubd84 \u00b7 ' + (q.hourly||'') + ' \uc0ac\uc6a9', 100);
+        }
+      }
     } else {
       stat.innerHTML = '<span class="server-dot auth-needed"></span>\ud1a0\ud070 \uc5f0\uacb0 \uc911\u2026';
       stat.style.cursor = 'default';
       stat.onclick = null;
-      // Start fast 3s polling until authenticated
+      if (!_isGenerating) setStatus('connect', '\ud1a0\ud070 \uc5f0\uacb0 \uc911\u2026', 'Chrome Extension\uc774 \ud1a0\ud070\uc744 \uc804\uc1a1 \uc911\uc785\ub2c8\ub2e4');
       if (!_authRetryTimer) {
         _authRetryTimer = setInterval(checkServer, 3000);
       }
@@ -1935,18 +2040,21 @@ async function checkServer() {
       stat.onclick = null;
       stat.style.cursor = 'default';
     }
+    if (!_isGenerating) setStatus('error', '\uc11c\ubc84 \uc624\ud504\ub77c\uc778', '\ud504\ub85c\uadf8\ub7a8\uc744 \ub2e4\uc2dc \uc2e4\ud589\ud558\uc138\uc694');
   }
 }
 
 async function genImage(btn, i) {
   if (!serverOnline) {
-    toast('Token \ubbf8\ub4f1\ub85d \u2014 Chrome extension \ud655\uc778 \ud544\uc694');
+    setStatus('error', '\ud1a0\ud070 \ubbf8\uc5f0\uacb0', 'Chrome Extension \ud655\uc778 \ud544\uc694');
     return;
   }
   if (!prompts[i]) return;
 
+  _isGenerating = true;
   btn.classList.add('loading');
   btn.textContent = '\uc0dd\uc131 \uc911';
+  setStatus('working', '\uc0ac\uc9c4 \uc0dd\uc131 \uc911', (i+1) + '\ubc88 \ud504\ub86c\ud504\ud2b8 \uc774\ubbf8\uc9c0 \uc0dd\uc131 \uc694\uccad \uc911\u2026');
 
   try {
     const r = await fetch(API_BASE + '/api/generate', {
@@ -1961,23 +2069,26 @@ async function genImage(btn, i) {
       btn.classList.remove('loading');
       setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
       showImagePreview(i, d);
-      toast(d.count + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc');
+      setStatus('done', '\uc800\uc7a5 \uc644\ub8cc', d.count + '\uc7a5 \uc800\uc7a5\ub428', 100);
     } else {
       btn.textContent = '\uc2e4\ud328';
       btn.classList.remove('loading');
       setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
       if (d.need_auth) {
-        toast('Token \ub9cc\ub8cc \u2014 ImageFX \ud398\uc774\uc9c0 \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0');
+        setStatus('error', '\ud1a0\ud070 \ub9cc\ub8cc', 'ImageFX \ud398\uc774\uc9c0\ub97c \uc5f4\uba74 \uc790\ub3d9 \uac31\uc2e0\ub429\ub2c8\ub2e4');
+      } else if (d.error && d.error.includes('limit')) {
+        setStatus('warn', '\uc791\uc5c5\ub7c9 \uc81c\ud55c', d.error);
       } else {
-        toast('\uc0dd\uc131 \uc2e4\ud328: ' + (d.error || ''));
+        setStatus('error', '\uc0dd\uc131 \uc2e4\ud328', d.error || '\uc54c \uc218 \uc5c6\ub294 \uc624\ub958');
       }
     }
   } catch (e) {
     btn.textContent = '\uc624\ub958';
     btn.classList.remove('loading');
     setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
-    toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
+    setStatus('error', '\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328', '\uc11c\ubc84\uac00 \uc751\ub2f5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4');
   }
+  _isGenerating = false;
 }
 
 function showImagePreview(i, data) {
