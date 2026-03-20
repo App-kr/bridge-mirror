@@ -623,8 +623,88 @@
       "git": "d9651fd",
       "files": 1980,
       "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_133250__employers-api-fix",
+      "task": "employers-api-fix",
+      "ts": "2026.03.20 13:32:54",
+      "git": "224d81a",
+      "files": 1980,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_133304__employers-api-fix",
+      "task": "employers-api-fix",
+      "ts": "2026.03.20 13:33:08",
+      "git": "224d81a",
+      "files": 1980,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_140433__ImageFX-prompt-quality-upgrade",
+      "task": "ImageFX-prompt-quality-upgrade",
+      "ts": "2026.03.20 14:04:38",
+      "git": "786955f",
+      "files": 1985,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_140445__ImageFX-prompt-quality-upgrade",
+      "task": "ImageFX-prompt-quality-upgrade",
+      "ts": "2026.03.20 14:04:50",
+      "git": "786955f",
+      "files": 1985,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_142053__sheet-image-paste-bgcolor-fix",
+      "task": "sheet-image-paste-bgcolor-fix",
+      "ts": "2026.03.20 14:20:56",
+      "git": "a55a2fc",
+      "files": 1985,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_151634__sheet-3bugs-fix",
+      "task": "sheet-3bugs-fix",
+      "ts": "2026.03.20 15:16:39",
+      "git": "2ef0262",
+      "files": 1988,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_153838__employers-cleanup",
+      "task": "employers-cleanup",
+      "ts": "2026.03.20 15:38:42",
+      "git": "2f21934",
+      "files": 1998,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_154232__prompt-diversity",
+      "task": "prompt-diversity",
+      "ts": "2026.03.20 15:42:36",
+      "git": "ad99462",
+      "files": 1998,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_154245__prompt-diversity",
+      "task": "prompt-diversity",
+      "ts": "2026.03.20 15:42:49",
+      "git": "ad99462",
+      "files": 1998,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_162215__sheet-4fixes",
+      "task": "sheet-4fixes",
+      "ts": "2026.03.20 16:22:20",
+      "git": "7f41284",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
     }
   ],
-  "last_backup": "2026.03.20 13:03:54",
-  "total_count": 78
+  "last_backup": "2026.03.20 16:22:20",
+  "total_count": 88
 }
