@@ -703,8 +703,96 @@
       "git": "7f41284",
       "files": 1999,
       "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_170619__데스크톱자동화",
+      "task": "데스크톱자동화",
+      "ts": "2026.03.20 17:06:24",
+      "git": "75d895b",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_170943__데스크톱자동화",
+      "task": "데스크톱자동화",
+      "ts": "2026.03.20 17:09:47",
+      "git": "ae8b8dd",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_175223__ESLCafe_HTML_생성",
+      "task": "ESLCafe HTML 생성",
+      "ts": "2026.03.20 17:52:27",
+      "git": "a5114b3",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_175558__employer-scroll-fix",
+      "task": "employer-scroll-fix",
+      "ts": "2026.03.20 17:56:02",
+      "git": "7204d56",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_180042__employer-scroll-fix",
+      "task": "employer-scroll-fix",
+      "ts": "2026.03.20 18:00:46",
+      "git": "30fab25",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_180055__employer-scroll-fix",
+      "task": "employer-scroll-fix",
+      "ts": "2026.03.20 18:00:58",
+      "git": "30fab25",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_180837__구인자관리-3수정",
+      "task": "구인자관리-3수정",
+      "ts": "2026.03.20 18:08:41",
+      "git": "1850a7c",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_180850__구인자관리-3수정",
+      "task": "구인자관리-3수정",
+      "ts": "2026.03.20 18:08:54",
+      "git": "1850a7c",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_184342__ImageFX_diversity_overhaul",
+      "task": "ImageFX diversity overhaul",
+      "ts": "2026.03.20 18:43:47",
+      "git": "7aeaef1",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_184910__ESLCafe_anti-copy_완료",
+      "task": "ESLCafe anti-copy 완료",
+      "ts": "2026.03.20 18:49:13",
+      "git": "7aeaef1",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_190235__website-gap-fix",
+      "task": "website-gap-fix",
+      "ts": "2026.03.20 19:02:40",
+      "git": "be14905",
+      "files": 1999,
+      "db_hash": "26bbe3d6b1f7"
     }
   ],
-  "last_backup": "2026.03.20 16:22:20",
-  "total_count": 88
+  "last_backup": "2026.03.20 19:02:40",
+  "total_count": 99
 }
