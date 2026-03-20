@@ -110,6 +110,7 @@ export default function BridgeCanvasSheet() {
   const [sortKey, setSortKey] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
+  const [photoToast, setPhotoToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
   const [lastSync, setLastSync] = useState('')
   const [newCount, setNewCount] = useState(0)
@@ -362,6 +363,12 @@ export default function BridgeCanvasSheet() {
     return () => document.removeEventListener('keydown', h)
   }, [undo, redo])
 
+  /* ── Photo toast helper ── */
+  const showPhotoToast = useCallback((msg: string, ok = true) => {
+    setPhotoToast({ msg, ok })
+    setTimeout(() => setPhotoToast(null), 3000)
+  }, [])
+
   /* ── Clipboard paste (image) — 사진 칸 캡쳐 붙여넣기 ── */
   useEffect(() => {
     const h = (e: ClipboardEvent) => {
@@ -399,7 +406,6 @@ export default function BridgeCanvasSheet() {
               pushHistory()
               setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: fullUrl } : r))
               if (cid) {
-                // Persist to DB via PATCH
                 await fetch(`${API}/api/admin/candidates/${cid}`, {
                   method: 'PATCH',
                   headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
@@ -409,6 +415,9 @@ export default function BridgeCanvasSheet() {
                 edits[cid] = { ...(edits[cid] || {}), photoUrl: fullUrl } as EditOverride
                 prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
               }
+              showPhotoToast('사진 저장 완료 ✓')
+            } else {
+              showPhotoToast('사진 업로드 실패', false)
             }
           }).catch(() => {
             // base64 fallback (임시 — 서버 연결 불가 시)
@@ -417,6 +426,7 @@ export default function BridgeCanvasSheet() {
               pushHistory()
               const dataUrl = ev2.target?.result as string
               setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: dataUrl } : r))
+              showPhotoToast('사진 저장 (로컬)')
             }
             rd.readAsDataURL(blob)
           })
@@ -456,10 +466,11 @@ export default function BridgeCanvasSheet() {
       method: 'POST', headers: fileHdrs, body: fd,
     }).then(r => r.ok ? r.json() : null).then(async j => {
       const url: string = j?.data?.url ?? ''
+      if (!url) { showPhotoToast('사진 업로드 실패', false); return }
       const fullUrl = url.startsWith('http') ? url : `${API}${url}`
       pushHistory()
       setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: fullUrl } : r))
-      if (cid && url) {
+      if (cid) {
         await fetch(`${API}/api/admin/candidates/${cid}`, {
           method: 'PATCH',
           headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
@@ -469,11 +480,13 @@ export default function BridgeCanvasSheet() {
         edits[cid] = { ...(edits[cid] || {}), photoUrl: fullUrl } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
       }
+      showPhotoToast('사진 저장 완료 ✓')
     }).catch(() => {
       const rd = new FileReader()
       rd.onload = ev2 => {
         pushHistory()
         setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: ev2.target?.result as string } : r))
+        showPhotoToast('사진 저장 (로컬)')
       }
       rd.readAsDataURL(file)
     })
@@ -719,6 +732,25 @@ export default function BridgeCanvasSheet() {
       case 'mail':
         openMailModal([row])
         break
+      case 'photo_upload':
+        photoTargetRef.current = ctx.rowIdx
+        photoRef.current?.click()
+        return  // don't setCtx(null) — file dialog takes over
+      case 'photo_delete': {
+        setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: '' } : r))
+        if (cid) {
+          fetch(`${API}/api/admin/candidates/${cid}`, {
+            method: 'PATCH',
+            headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ photo_url: '' }),
+          }).catch(() => {})
+          const edits = editsRef.current
+          edits[cid] = { ...(edits[cid] || {}), photoUrl: '' } as EditOverride
+          prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+        }
+        showPhotoToast('사진 삭제 완료')
+        break
+      }
       case 'add_row': {
         const newId = Math.max(...dbAllRef.current.map(r => r.id), 0) + 1
         const tt: CategoryKey = (tab === 'all' || tab === 'focus') ? 'active' : tab as CategoryKey
@@ -919,6 +951,21 @@ export default function BridgeCanvasSheet() {
       {/* Hidden file input for photo upload */}
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
 
+      {/* ── 사진 업로드 토스트 ── */}
+      {photoToast && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 99999, padding: '10px 22px', borderRadius: 24,
+          background: photoToast.ok ? '#16a34a' : '#dc2626',
+          color: '#fff', fontSize: 14, fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+          animation: 'fadeInUp 0.2s ease',
+        }}>
+          {photoToast.msg}
+        </div>
+      )}
+
       {/* ── 신규 접수 알림 배너 ── */}
       {newBanner > 0 && !bannerDismissed && (
         <div
@@ -941,7 +988,10 @@ export default function BridgeCanvasSheet() {
           >✕</span>
         </div>
       )}
-      <style>{`@keyframes bridge-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }`}</style>
+      <style>{`
+        @keyframes bridge-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }
+        @keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(12px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }
+      `}</style>
 
       {/* ── Pipeline 상태표시줄 ── */}
       <div style={{
@@ -1307,6 +1357,10 @@ export default function BridgeCanvasSheet() {
             if (col) stableCallbacks.onCellChange(ctx.rowIdx, col.key, '')
             setCtx(null)
           }} />
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          {/* 사진 */}
+          <CtxItem label="📷 사진 파일 선택..." onClick={() => ctxAction('photo_upload')} />
+          {ctx.row.photoUrl && <CtxItem label="🗑 사진 삭제" onClick={() => ctxAction('photo_delete')} />}
           <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
           {/* 틀고정 */}
           <CtxItem label={frozenCols > 0 ? '틀 고정 해제' : '틀 고정 설정'} onClick={() => { setFrozenCols(p => p === 0 ? 3 : 0); setCtx(null) }} />
