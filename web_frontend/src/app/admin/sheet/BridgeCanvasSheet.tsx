@@ -506,7 +506,7 @@ export default function BridgeCanvasSheet() {
     alert(`발송: ${recipients.map(r => r.email).join(', ')}\n${subject}`)
   }, [])
 
-  /* ── Style apply helper ── */
+  /* ── Style apply helper (with toggle support) ── */
   const applyStyleToSelection = useCallback((style: CellStyle) => {
     const engine = engineRef.current
     if (!engine) return
@@ -518,7 +518,7 @@ export default function BridgeCanvasSheet() {
     const styleCols = visCols.filter(c => c.key !== 'rowNum' && c.key !== 'photo')
 
     if (isAllRows || selectedRowSet.size > 0) {
-      // 전체 선택 또는 행 선택 → 선택된 행 × 모든 컬럼에 일괄 적용
+      // 전체 선택 또는 행 선택 → 선택된 모든 행 × 모든 컬럼에 일괄 적용
       const targetRows = isAllRows
         ? rows
         : [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
@@ -538,6 +538,34 @@ export default function BridgeCanvasSheet() {
       if (cid) engine.styleManager.setStyle(cid, colKey, style)
     }
     engine.refresh()
+    showPhotoToast('서식 적용 완료', true)
+  }, [showPhotoToast])
+
+  /* ── Read current active cell style (for toggle) ── */
+  const getCurrentStyle = useCallback((): CellStyle => {
+    const engine = engineRef.current
+    if (!engine) return {}
+    const rows = displayRowsRef.current
+    const visCols = engine.getVisibleCols()
+    const selectedRowSet = engine.selection.getSelectedRows()
+    const ac = engine.selection.getActiveCell()
+    // Prefer first selected row, fallback to active cell
+    let cid = ''
+    let colKey = ''
+    if (selectedRowSet.size > 0) {
+      const firstRowIdx = [...selectedRowSet][0]
+      const row = rows[firstRowIdx]
+      cid = String(row?._cid ?? '')
+      // use first non-system col
+      const firstCol = visCols.find(c => c.key !== 'rowNum' && c.key !== 'photo')
+      colKey = firstCol?.key ?? ''
+    } else if (ac) {
+      const row = rows[ac.row]
+      cid = String(row?._cid ?? '')
+      colKey = visCols[ac.col]?.key ?? ''
+    }
+    if (!cid || !colKey) return {}
+    return engine.styleManager.getStyle(cid, colKey) ?? {}
   }, [])
 
   /* ── Stable GridEngine callbacks ── */
@@ -818,6 +846,30 @@ export default function BridgeCanvasSheet() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
     a.download = `bridge_${tab}_${new Date().toISOString().slice(0, 10)}.csv`; a.click()
   }, [cols, displayRows, tab])
+
+  /* ── Delete rows ── */
+  const deleteRows = useCallback(async (rowIndices: Set<number>) => {
+    if (rowIndices.size === 0) return
+    const rows = displayRowsRef.current
+    const cidsToDelete = new Set([...rowIndices].map(i => String(rows[i]?._cid ?? '')).filter(Boolean))
+    pushHistory()
+    setDbAll(prev => prev.filter(r => !cidsToDelete.has(String(r._cid ?? ''))))
+    setData(prev => {
+      const u: DataStore = { active: [], past: [], blacklist: [] }
+      for (const k of ['active', 'past', 'blacklist'] as CategoryKey[])
+        u[k] = prev[k].filter(r => !cidsToDelete.has(String(r._cid ?? '')))
+      return u
+    })
+    // Soft-delete to server (is_deleted=1)
+    for (const cid of cidsToDelete) {
+      if (!cid) continue
+      fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+        method: 'PATCH',
+        headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_deleted: 1 }),
+      }).catch(() => {})
+    }
+  }, [pushHistory])
 
   /* ── Full reload ── */
   const fullReload = useCallback(() => { setDbAll([]); setLoaded(0); loadAllData() }, [loadAllData])
@@ -1192,10 +1244,10 @@ export default function BridgeCanvasSheet() {
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
-        {/* B / I / S */}
-        <button onClick={() => applyStyleToSelection({ bold: true })} style={{ ...fmtBtn, fontWeight: 700 }} title="Bold (Ctrl+B)">B</button>
-        <button onClick={() => applyStyleToSelection({ italic: true })} style={{ ...fmtBtn, fontStyle: 'italic' }} title="Italic (Ctrl+I)">I</button>
-        <button onClick={() => applyStyleToSelection({ strikethrough: true })} style={{ ...fmtBtn, textDecoration: 'line-through' }} title="취소선">S</button>
+        {/* B / I / S — toggle style */}
+        <button onClick={() => { const cur = getCurrentStyle(); applyStyleToSelection({ bold: !cur.bold }) }} style={{ ...fmtBtn, fontWeight: 700 }} title="Bold (Ctrl+B)">B</button>
+        <button onClick={() => { const cur = getCurrentStyle(); applyStyleToSelection({ italic: !cur.italic }) }} style={{ ...fmtBtn, fontStyle: 'italic' }} title="Italic (Ctrl+I)">I</button>
+        <button onClick={() => { const cur = getCurrentStyle(); applyStyleToSelection({ strikethrough: !cur.strikethrough }) }} style={{ ...fmtBtn, textDecoration: 'line-through' }} title="취소선">S</button>
 
         <span style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 2px' }} />
 
@@ -1351,6 +1403,13 @@ export default function BridgeCanvasSheet() {
             setCtx(null)
           }} />
           <CtxItem label="아래에 행 삽입" onClick={() => ctxAction('add_row')} />
+          <CtxItem label="행 삭제" onClick={() => {
+            const engine = engineRef.current
+            const selRows = engine?.selection.getSelectedRows() ?? new Set<number>()
+            const rowsToDelete = selRows.size > 0 ? selRows : new Set([ctx.rowIdx])
+            deleteRows(rowsToDelete)
+            setCtx(null)
+          }} />
           <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
           {/* 셀 조작 */}
           <CtxItem label="셀 복사" onClick={() => {

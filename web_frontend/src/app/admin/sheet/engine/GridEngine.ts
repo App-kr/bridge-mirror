@@ -843,14 +843,28 @@ export class GridEngine {
 
   private drawRowBg(rowIdx: number, y: number, x0: number, x1: number, rowH: number): void {
     const { ctx } = this
+    const row = this.rows[rowIdx]
+
+    // 진행단계 배경색 (선택/호버보다 낮은 우선순위)
+    if (row) {
+      const stageInfo = STAGES.find(s => s.key === String(row.stage ?? ''))
+      if (stageInfo && stageInfo.key !== 'none') {
+        ctx.fillStyle = stageInfo.color + '55'  // 33% opacity
+        ctx.fillRect(x0, y, x1 - x0, rowH)
+      } else if (rowIdx % 2 === 1) {
+        ctx.fillStyle = '#fafafa'; ctx.fillRect(x0, y, x1 - x0, rowH)
+      }
+    } else if (rowIdx % 2 === 1) {
+      ctx.fillStyle = '#fafafa'; ctx.fillRect(x0, y, x1 - x0, rowH)
+    }
+
     // 열 선택 모드에서는 행 전체 하이라이트 없음 (열 단위 그라데이션은 drawCell에서)
     if (!this.selection.hasColSelection() && this.selection.isRowSelected(rowIdx)) {
       ctx.fillStyle = SELECTED_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
     } else if (rowIdx === this.hoverRow) {
       ctx.fillStyle = HOVER_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
-    } else if (rowIdx % 2 === 1) {
-      ctx.fillStyle = '#fafafa'; ctx.fillRect(x0, y, x1 - x0, rowH)
     }
+
     const ac = this.selection.getActiveCell()
     if (ac && ac.row === rowIdx) {
       const rect = this.getCellRect(rowIdx, ac.col)
@@ -1017,10 +1031,9 @@ export class GridEngine {
   private drawPhoto(row: DataRow, x: number, y: number, w: number, h: number): void {
     const { ctx } = this
     const url = String(row.photoUrl ?? '')
-    const ps = Math.min(Number(row.photoSize) || 50, Math.min(w, h) - 4)
     if (!url) {
       ctx.fillStyle = '#e2e8f0'
-      ctx.fillRect(x + (w - ps) / 2, y + (h - ps) / 2, ps, ps)
+      ctx.fillRect(x, y, w, h)
       ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText('\uD83D\uDCF7', x + w / 2, y + h / 2)
@@ -1029,7 +1042,24 @@ export class GridEngine {
     }
     const cached = this.photoCache.get(url)
     if (cached) {
-      try { ctx.drawImage(cached, x + (w - ps) / 2, y + (h - ps) / 2, ps, ps) } catch { /* */ }
+      try {
+        // object-fit: cover — crop source to fill destination while preserving aspect ratio
+        const iw = cached.naturalWidth || cached.width
+        const ih = cached.naturalHeight || cached.height
+        if (iw > 0 && ih > 0) {
+          const scale = Math.max(w / iw, h / ih)
+          const sw = w / scale
+          const sh = h / scale
+          const sx = (iw - sw) / 2
+          const sy = (ih - sh) / 2
+          ctx.save()
+          ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
+          ctx.drawImage(cached, sx, sy, sw, sh, x, y, w, h)
+          ctx.restore()
+        } else {
+          ctx.drawImage(cached, x, y, w, h)
+        }
+      } catch { /* */ }
     } else if (!this.photoLoading.has(url)) { this.loadPhoto(url) }
   }
 
