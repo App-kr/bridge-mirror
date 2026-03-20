@@ -85,15 +85,19 @@ export default function AdminSettingsPage() {
 
   // Secrets
   const [secrets, setSecrets] = useState<SecretMeta[]>([])
-  const [newKey, setNewKey] = useState('')
-  const [newValue, setNewValue] = useState('')
-  const [newDesc, setNewDesc] = useState('')
-  const [secretSaving, setSecretSaving] = useState(false)
-  const [secretMsg, setSecretMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [kakaoValues, setKakaoValues] = useState<Record<string, string>>({})
+  const [kakaoSaving, setKakaoSaving] = useState<Record<string, boolean>>({})
+  const [kakaoMsg, setKakaoMsg] = useState<Record<string, { text: string; ok: boolean }>>({})
 
-  const showSecretMsg = (text: string, ok = true) => {
-    setSecretMsg({ text, ok })
-    setTimeout(() => setSecretMsg(null), 3000)
+  const KAKAO_FIELDS = [
+    { key: 'KAKAO_CLIENT_ID',     label: 'REST API 키',    hint: 'developers.kakao.com → 앱 키 → REST API 키' },
+    { key: 'KAKAO_CLIENT_SECRET', label: 'Client Secret',  hint: '카카오 로그인 → 보안 탭 → Client Secret 코드' },
+    { key: 'KAKAO_ADMIN_IDS',     label: '관리자 ID',      hint: '허용할 카카오 숫자 ID (콤마 구분, 예: 1234567890)' },
+  ]
+
+  const showKakaoMsg = (key: string, text: string, ok = true) => {
+    setKakaoMsg(prev => ({ ...prev, [key]: { text, ok } }))
+    setTimeout(() => setKakaoMsg(prev => { const n = { ...prev }; delete n[key]; return n }), 3000)
   }
 
   const fetchSecrets = useCallback(async () => {
@@ -105,24 +109,25 @@ export default function AdminSettingsPage() {
     } catch { /* ignore */ }
   }, [headers])
 
-  const handleSetSecret = async () => {
-    if (!newKey.trim() || !newValue.trim()) { showSecretMsg('키와 값을 모두 입력하세요', false); return }
-    setSecretSaving(true)
+  const handleSaveKakaoKey = async (key: string, desc: string) => {
+    const value = kakaoValues[key]?.trim()
+    if (!value) { showKakaoMsg(key, '값을 입력하세요', false); return }
+    setKakaoSaving(prev => ({ ...prev, [key]: true }))
     try {
       const res = await signedFetch(`${API}/api/admin/secrets`, {
         method: 'POST',
-        body: JSON.stringify({ key: newKey.trim(), value: newValue.trim(), description: newDesc.trim() }),
+        body: JSON.stringify({ key, value, description: desc }),
       })
       const json = await res.json()
       if (res.ok) {
-        showSecretMsg(json.message || '저장 완료')
-        setNewKey(''); setNewValue(''); setNewDesc('')
+        showKakaoMsg(key, '저장 완료 ✓')
+        setKakaoValues(prev => ({ ...prev, [key]: '' }))
         fetchSecrets()
       } else {
-        showSecretMsg(json.detail || '저장 실패', false)
+        showKakaoMsg(key, json.detail || '저장 실패', false)
       }
-    } catch { showSecretMsg('네트워크 오류', false) }
-    finally { setSecretSaving(false) }
+    } catch { showKakaoMsg(key, '네트워크 오류', false) }
+    finally { setKakaoSaving(prev => ({ ...prev, [key]: false })) }
   }
 
   const handleDeleteSecret = async (key: string) => {
@@ -130,9 +135,9 @@ export default function AdminSettingsPage() {
     try {
       const res = await signedFetch(`${API}/api/admin/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' })
       const json = await res.json()
-      if (res.ok) { showSecretMsg(json.message || '삭제 완료'); fetchSecrets() }
-      else showSecretMsg(json.detail || '삭제 실패', false)
-    } catch { showSecretMsg('네트워크 오류', false) }
+      if (res.ok) { fetchSecrets() }
+      else { alert(json.detail || '삭제 실패') }
+    } catch { alert('네트워크 오류') }
   }
 
   // Nav menu items
@@ -525,112 +530,78 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* 카카오 OAuth 설정 가이드 */}
-            <div className="mb-5 p-4 bg-[#fffbea] border border-[#f0d060] rounded-xl">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[15px]">💬</span>
-                <span className="text-[13px] font-semibold text-[#7a5c00]">카카오 관리자 로그인 설정 순서</span>
-              </div>
-              <div className="space-y-2 text-[12px] text-[#5a4400]">
-                <div className="flex gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">1</span>
-                  <div>
-                    <span className="font-semibold font-mono">KAKAO_CLIENT_ID</span>
-                    <span className="ml-1 opacity-70">— 카카오 REST API 키</span>
-                    <div className="opacity-60 mt-0.5">developers.kakao.com → 앱 → 앱 키 → REST API 키</div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">2</span>
-                  <div>
-                    <span className="font-semibold font-mono">KAKAO_CLIENT_SECRET</span>
-                    <span className="ml-1 opacity-70">— 카카오 보안 코드</span>
-                    <div className="opacity-60 mt-0.5">카카오 로그인 → 보안 → Client Secret 코드 생성 후 복사</div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#f0d060] text-[#7a5c00] flex items-center justify-center font-bold shrink-0 text-[11px]">3</span>
-                  <div>
-                    <span className="font-semibold font-mono">KAKAO_ADMIN_IDS</span>
-                    <span className="ml-1 opacity-70">— 허용할 카카오 계정 숫자 ID</span>
-                    <div className="opacity-60 mt-0.5">콤마 구분 (예: 1234567890) — developers.kakao.com → 도구 → REST API 테스터 → /v2/user/me 호출 후 id 값</div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#d0f060] text-[#3a5a00] flex items-center justify-center font-bold shrink-0 text-[11px]">+</span>
-                  <div className="opacity-70">
-                    카카오 로그인 활성화: 카카오 로그인 → 활성화 ON → Redirect URI 등록:
-                    <code className="ml-1 px-1 py-0.5 bg-[#f0e080] rounded text-[11px] font-mono break-all">https://bridge-n7hk.onrender.com/api/admin/kakao/callback</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 저장된 키 목록 */}
-            {secrets.length > 0 && (
-              <div className="mb-4 space-y-2">
-                {secrets.map((s) => (
-                  <div key={s.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#f5f5f7] rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-mono font-semibold text-[#1d1d1f]">{s.key}</div>
-                      {s.description && <div className="text-[11px] text-[#86868b] truncate">{s.description}</div>}
-                      <div className="text-[10px] text-[#aeaeb2] mt-0.5">{s.updated_at?.slice(0, 16).replace('T', ' ')}</div>
+            {/* 카카오 OAuth 3개 고정 입력 */}
+            <div className="space-y-3 mb-5">
+              {KAKAO_FIELDS.map((field, idx) => {
+                const saved = secrets.find(s => s.key === field.key)
+                const msg = kakaoMsg[field.key]
+                return (
+                  <div key={field.key} className="border border-[#e5e5e7] rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-5 h-5 rounded-full bg-[#f5f5f7] text-[#424245] flex items-center justify-center font-bold text-[11px] shrink-0">{idx + 1}</span>
+                      <span className="text-[13px] font-semibold text-[#1d1d1f]">{field.label}</span>
+                      <span className="font-mono text-[11px] text-[#86868b]">{field.key}</span>
+                      {saved && (
+                        <span className="ml-auto text-[11px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">등록됨 ✓</span>
+                      )}
                     </div>
-                    <div className="text-[12px] font-mono text-[#aeaeb2] tracking-widest select-none">••••••••</div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSecret(s.key)}
-                      className="text-[11px] text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                    >
-                      삭제
-                    </button>
+                    <p className="text-[11px] text-[#86868b] mb-2.5">{field.hint}</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        placeholder={saved ? '새 값으로 덮어쓰기' : '값 입력 (저장 후 재표시 불가)'}
+                        value={kakaoValues[field.key] || ''}
+                        onChange={e => setKakaoValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        className="flex-1 px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:border-[#0071e3]"
+                        autoComplete="new-password"
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveKakaoKey(field.key, field.label) }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveKakaoKey(field.key, field.label)}
+                        disabled={kakaoSaving[field.key] || !kakaoValues[field.key]?.trim()}
+                        className="px-4 py-2 bg-[#1d1d1f] text-white rounded-lg text-[13px] font-medium hover:bg-[#333] disabled:opacity-40 transition-colors shrink-0"
+                      >
+                        {kakaoSaving[field.key] ? '저장...' : saved ? '덮어쓰기' : '저장'}
+                      </button>
+                      {saved && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSecret(field.key)}
+                          className="px-3 py-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg text-[13px] transition-colors shrink-0"
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                    {msg && (
+                      <p className={`mt-1.5 text-[12px] font-medium ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>
+                    )}
                   </div>
-                ))}
+                )
+              })}
+            </div>
+
+            {/* 기타 저장된 키 (카카오 외) */}
+            {secrets.filter(s => !KAKAO_FIELDS.some(f => f.key === s.key)).length > 0 && (
+              <div className="border-t border-[#f0f0f2] pt-4">
+                <p className="text-[12px] font-medium text-[#86868b] mb-2">기타 비밀키</p>
+                <div className="space-y-2">
+                  {secrets.filter(s => !KAKAO_FIELDS.some(f => f.key === s.key)).map(s => (
+                    <div key={s.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#f5f5f7] rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-mono font-semibold text-[#1d1d1f]">{s.key}</div>
+                        {s.description && <div className="text-[11px] text-[#86868b] truncate">{s.description}</div>}
+                      </div>
+                      <div className="text-[12px] font-mono text-[#aeaeb2] tracking-widest select-none">••••••••</div>
+                      <button type="button" onClick={() => handleDeleteSecret(s.key)}
+                        className="text-[11px] text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">삭제</button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            {secrets.length === 0 && (
-              <p className="text-[13px] text-[#aeaeb2] mb-4">등록된 비밀키 없음</p>
-            )}
 
-            {/* 신규 등록 폼 */}
-            <div className="border border-dashed border-[#d2d2d7] rounded-xl p-4 space-y-3">
-              <p className="text-[12px] font-medium text-[#6e6e73]">새 비밀키 등록</p>
-              <input
-                type="text"
-                placeholder="키 이름 (예: KAKAO_CLIENT_ID)"
-                value={newKey}
-                onChange={e => setNewKey(e.target.value.toUpperCase().replace(/\s/g, '_'))}
-                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] font-mono focus:outline-none focus:border-[#0071e3]"
-              />
-              <input
-                type="password"
-                placeholder="값 (저장 후 재표시 불가)"
-                value={newValue}
-                onChange={e => setNewValue(e.target.value)}
-                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:border-[#0071e3]"
-                autoComplete="new-password"
-              />
-              <input
-                type="text"
-                placeholder="설명 (선택, 예: 카카오 REST API 키)"
-                value={newDesc}
-                onChange={e => setNewDesc(e.target.value)}
-                className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:border-[#0071e3]"
-              />
-              {secretMsg && (
-                <div className={`text-[12px] font-medium px-3 py-1.5 rounded-lg ${secretMsg.ok ? 'text-green-700 bg-green-50' : 'text-red-600 bg-red-50'}`}>
-                  {secretMsg.text}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={handleSetSecret}
-                disabled={secretSaving || !newKey.trim() || !newValue.trim()}
-                className="px-4 py-2 bg-[#1d1d1f] text-white rounded-lg text-[13px] font-medium hover:bg-[#333] disabled:opacity-40 transition-colors"
-              >
-                {secretSaving ? '저장 중...' : '저장'}
-              </button>
-            </div>
           </div>
 
         </div>
