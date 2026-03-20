@@ -50,8 +50,8 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
   return {
     id: idx + 1, _cid: cid,
     category: (ov.category as string) ?? cat,
-    stage: (ov.stage as string) ?? 'none',
-    mailStatus: (ov.mailStatus as string) ?? '',
+    stage: (ov.stage as string) ?? String(c.stage ?? 'none'),
+    mailStatus: (ov.mailStatus as string) ?? String(c.mail_tags ?? ''),
     photoUrl: (() => {
       const raw = String(c.photo_url ?? ov.photoUrl ?? '')
       if (!raw) return ''
@@ -645,6 +645,12 @@ export default function BridgeCanvasSheet() {
         const edits = editsRef.current
         edits[cid] = { ...(edits[cid] || {}), stage } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+        // DB PATCH
+        fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+          method: 'PATCH',
+          headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage }),
+        }).catch(() => {})
       }
       // 상태별 행 색상 자동 적용
       const stageInfo = STAGES.find(s => s.key === stage)
@@ -677,6 +683,12 @@ export default function BridgeCanvasSheet() {
         const edits = editsRef.current
         edits[cid] = { ...(edits[cid] || {}), mailStatus: ms } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+        // DB PATCH
+        fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+          method: 'PATCH',
+          headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mail_tags: ms }),
+        }).catch(() => {})
       }
     },
     onTagCellClick: (rowIdx: number, _row: DataRow, x: number, y: number) => {
@@ -1470,6 +1482,13 @@ export default function BridgeCanvasSheet() {
               const edits = editsRef.current
               edits[cid] = { ...(edits[cid] || {}), stage: s.key } as EditOverride
               prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+              if (cid) {
+                fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+                  method: 'PATCH',
+                  headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stage: s.key }),
+                }).catch(() => {})
+              }
               setCtx(null)
             }} />
           ))}
@@ -1608,6 +1627,11 @@ export default function BridgeCanvasSheet() {
                         const edits = editsRef.current
                         edits[cid] = { ...(edits[cid] || {}), mailStatus: ms } as EditOverride
                         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+                        fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+                          method: 'PATCH',
+                          headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ mail_tags: ms }),
+                        }).catch(() => {})
                       }
                     }}
                     style={{ width: 14, height: 14, accentColor: mt.c }}

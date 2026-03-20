@@ -1751,6 +1751,7 @@ async def admin_update_candidate(
         "residence_type", "start_detail", "target_level", "housing_type",
         "interview_time", "job_prefs", "invoice", "tattoo", "visa_type",
         "working_hours", "photo_url", "thumb_url",
+        "stage", "mail_tags", "korea_experience",
     }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
@@ -1814,6 +1815,7 @@ _CANDIDATES_MUTABLE_COLS: frozenset = frozenset({
     "religion", "korean_criminal_record", "consent", "fact_check",
     "photo_url", "thumb_url", "target_age", "criminal_record_check",
     "doc_status", "how_to", "tattoo", "visa_type", "working_hours", "invoice",
+    "stage", "mail_tags", "korea_experience",
     "updated_at",
 })
 
