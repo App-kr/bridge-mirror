@@ -1301,46 +1301,32 @@ const GRADES=[
 ];
 
 const PROPS=[
-"a large colorful world map poster visible on the side wall",
 "neatly organized bookshelves with colorful spines visible",
 "a globe on the teacher's desk catching the light",
-"stacked colorful textbooks on student desks",
 "a potted plant adding a touch of green near a window",
 "a vintage analog wall clock showing mid-morning time",
-"a motivational banner in English above the whiteboard",
 "children's artwork displayed in matching frames on the wall",
 "a collection of plastic educational models on a shelf",
-"tablet devices on student desks, screens on",
-"a bright yellow attendance board with student name cards",
-"an open piano with sheet music visible",
 "colorful building blocks scattered on low shelves",
-"a weather chart with sun, cloud, and rain symbols in English",
-"role-play props — hats, bags, passports — for English practice",
 "sports equipment (basketballs, cones) neatly stacked",
-"a digital smartboard showing a colorful lesson slide",
-"English vocabulary cards on a ring hanging from the whiteboard",
-"a cubbies rack with student labeled storage bins",
+"a cubbies rack with plain storage bins",
 "a large bean bag in one corner of the room",
-"an iPad stand with a visible language app running",
-"a cork board with pinned student work and gold-star stickers",
 "a standing easel with a half-finished student painting",
-"a mini-library trolley of English books parked near the wall",
-"a teacher's desk with a mug and open lesson plan book",
+"a teacher's desk with a mug and supplies",
 "colorful rubber cones laid out in a pattern on gym floor",
-"a medal board showing achievement ribbons and trophies",
-"English country flags displayed along a bunting string",
+"a medal display showing achievement ribbons and trophies",
+"colorful country flags displayed along a bunting string",
 "a microscope visible on a lab bench in the background",
-"lab notebooks open on student tables",
 "an acoustic guitar leaning against the wall in a music room",
 "a sensory bin filled with colored sand visible on a shelf",
 "a class pet cage — small rabbit or hamster — on a counter",
-"a large number line frieze running at child eye level",
 "a mobile phone filming rig capturing the class for online use",
-"science fair display boards visible in background",
-"a class timetable chart on the side wall",
 "a small digital camera on a tripod in the background",
 "drums and a drum kit partially visible in the background",
-"student-made posters and infographics displayed on one wall",
+"stacked colorful textbooks on student desks",
+"a toy kitchen set in the play corner",
+"wooden puzzles and board games on a low shelf",
+"a large floor cushion reading nook near a bookshelf",
 ];
 
 const SEASONS=[
@@ -1433,6 +1419,25 @@ const QUALITY=[
 ];
 
 const NO_TEXT_RULE="ABSOLUTE RULE — ZERO TEXT IN IMAGE: There must be NO text, NO letters, NO words, NO numbers, NO typography, NO logos, NO watermarks, NO signs, NO brand names, NO written characters of ANY kind ANYWHERE in the image. Not on walls, not on boards, not on clothing, not on bags, not on shoes, not on accessories, not floating in the scene, not on any surface. Every piece of clothing must be completely plain with zero printed graphics, zero logos, zero text. The image must be 100% free of any readable or decorative text or symbols. Do not render any written language whatsoever. This is the single most important rule.";
+
+// ── Shot types (촬영 스타일 다양화) ──
+const SHOT_TYPES=[
+"wide-angle cinematic photograph",
+"environmental editorial photograph",
+"wide establishing shot",
+"documentary-style photograph",
+"medium-wide editorial photograph",
+"ultra-wide immersive photograph",
+"environmental portrait photograph",
+"expansive editorial photograph",
+"full-room wide-angle photograph",
+"photojournalistic wide shot",
+"lifestyle editorial photograph",
+"natural-light documentary photograph",
+"cinematic wide-angle shot",
+"editorial room-revealing photograph",
+"professional candid photograph",
+];
 
 // ── Activities (생동감 넘치는 교육 활동) ──
 const ACTIVITIES_EARLY=[
@@ -1649,38 +1654,45 @@ function generateBatch(count, targetMode){
     const quality=pick(QUALITY);
     const composition=pick(COMPOSITION);
 
-    // Pick elements for concise cinematic prompt
+    // Pick elements for diverse prompt
     const boyHair1 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
     const boyHair2 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
     const girlHair1 = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
+    const girlHair2 = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
     const activity = pick(isEarly ? ACTIVITIES_EARLY : ACTIVITIES_MIDDLE);
     const uniform = pick(isEarly ? KO_UNIFORMS : KO_UNIFORMS_MIDDLE);
     const kidCount = isEarly ? (3 + Math.floor(Math.random()*3)) : (4 + Math.floor(Math.random()*3));
     const ageMin = isEarly ? 4 : 12;
     const ageMax = isEarly ? 7 : 18;
 
+    const shotType = pick(SHOT_TYPES);
+    const cameraShort = camera.split(',').slice(0,2).join(',').trim();
+    const seasonShort = season.split(',')[0].trim();
+
     const raceKo = RACE_KO[race]||race;
     const genderKo = finalGender==='male'?'남성':'여성';
 
-    // English prompt — concise cinematic style (matches sample)
+    // English prompt — diverse style (randomized camera, lighting, grade, composition)
     const text=
-`A high-resolution, wide-angle cinematic photograph of ${place.d}. A warm ${race} ${finalGender} teacher with ${hair}, wearing ${clothing}, is ${pose.toLowerCase().replace(/^[a-z]/, c=>c)}. ${expression}. The teacher is guiding ${kidCount} happy Korean children (aged ${ageMin}-${ageMax}) in ${activity}. The children feature diverse 2025 Korean kids' hairstyles: ${boyHair1}, ${girlHair1}, ${boyHair2}. They are wearing ${uniform}. Dappled ${season.split(',')[0].split('—')[0].trim().toLowerCase()} light filters through windows, creating warm backlighting (rim light) on their hair and clothes. The 50mm f/1.8 lens captures sharp joyful expressions from a distance to show the entire room. ${floor}. ${wall}. ${ceiling}. No text, no letters, no logos, no symbols on any surface or clothing. All walls completely clean and bare. Natural color grading. Aspect ratio 16:9.`;
+`A high-resolution ${shotType} of ${place.d}. Shot on ${cameraShort}. A warm ${race} ${finalGender} teacher with ${hair}, wearing ${clothing}, is ${pose.toLowerCase().replace(/^[a-z]/, c=>c)}. ${expression}. The teacher is guiding ${kidCount} happy Korean children (aged ${ageMin}-${ageMax}) in ${activity}. The children have diverse 2025-2026 Korean trendy hairstyles: ${boyHair1}, ${girlHair1}, ${boyHair2}, ${girlHair2}. They are wearing ${uniform}. ${lighting}. ${seasonShort}. ${floor}. ${wall}. ${ceiling}. ${bokeh}. No text, no letters, no logos, no symbols on any surface or clothing. All walls completely clean and bare. ${grade}. Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koText=
-`시네마틱 광각 고해상도 사진 — ${place.n}
+`${shotType} — ${place.n}
 
 ◆ 외국인 강사 (${raceKo} ${genderKo})
 ${hair}, ${clothing} 착용. ${pose}. ${expression}.
 
 ◆ 한국인 아이들 (${kidCount}명, ${ageMin}-${ageMax}세)
 활동: ${activity}
-헤어: ${boyHair1}, ${girlHair1}, ${boyHair2} 등 2025 트렌드
+헤어: ${boyHair1}, ${girlHair1}, ${boyHair2}, ${girlHair2} — 2025-2026 트렌드
 의상: ${uniform}
 
-◆ 조명·분위기
-${season.split(',')[0].trim()}. 창문 역광 — 머리카락·옷에 림라이트.
-50mm f/1.8 렌즈, 먼 거리 촬영, 교실 전체 보이게.
+◆ 조명·카메라
+${lighting}
+${seasonShort}
+카메라: ${cameraShort}
+컬러: ${grade}
 
 ◆ 금지 사항
 텍스트·로고·심볼 일절 없음. 벽면 완전 깨끗. 의류 완전 무지.`;
