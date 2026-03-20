@@ -2680,6 +2680,50 @@ class BulkSendBody(BaseModel):
     template_key: str
 
 
+@app.post("/api/admin/candidates/bulk-patch", tags=["admin"])
+async def admin_bulk_patch(request: Request, body: dict = None):
+    """암호화 복원용 벌크 패치 — candidate_id 기준으로 여러 필드를 한꺼번에 업데이트.
+    body: { "rows": [{"candidate_id": "...", "field1": "val1", ...}, ...] }
+    """
+    _check_admin(request)
+    if body is None:
+        body = await request.json()
+    rows = body.get("rows", [])
+    if not rows or not isinstance(rows, list):
+        raise HTTPException(400, "rows 필드 필요")
+    ALLOWED = {
+        "nationality", "current_location", "dob", "korean_criminal_record",
+        "reference", "email", "full_name", "mobile_phone", "kakaotalk",
+        "gender", "health_info", "religion", "notes", "criminal_record",
+        "criminal_record_check",
+    }
+    conn = sqlite3.connect(str(_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 30000")
+    updated = 0
+    skipped = 0
+    try:
+        for row in rows:
+            cid = row.get("candidate_id")
+            if not cid:
+                skipped += 1
+                continue
+            updates = {k: v for k, v in row.items() if k in ALLOWED}
+            if not updates:
+                skipped += 1
+                continue
+            set_parts = [f"{k} = ?" for k in updates]
+            params = list(updates.values()) + [cid]
+            conn.execute(
+                f"UPDATE candidates SET {', '.join(set_parts)} WHERE candidate_id = ?",
+                params,
+            )
+            updated += 1
+        conn.commit()
+        return ok(data={"updated": updated, "skipped": skipped})
+    finally:
+        conn.close()
+
+
 @app.post("/api/admin/candidates/bulk-send", tags=["admin"])
 async def admin_bulk_send(request: Request, body: BulkSendBody):
     """다수 후보자에게 일괄 이메일 발송 (1초 간격)."""
