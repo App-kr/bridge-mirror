@@ -27,7 +27,7 @@ import urllib.request
 import urllib.error
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
     HAS_PILLOW = True
 except ImportError:
     HAS_PILLOW = False
@@ -262,6 +262,96 @@ def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
         return img_bytes
 
 
+def _naturalize_photo(img_bytes: bytes, quality: int = 88) -> bytes:
+    """Post-process AI image to look like a real DSLR photograph.
+
+    Applies subtle real-camera imperfections:
+    1. Sensor noise (Gaussian grain)
+    2. Micro color shift (WB drift)
+    3. Subtle vignette
+    4. Minor sharpness variation
+    5. JPEG compression artifacts (real cameras save JPEG)
+    6. Realistic EXIF-style metadata via JPEG save
+    """
+    if not HAS_PILLOW:
+        return img_bytes
+    try:
+        import io
+        import struct
+        import numpy as np
+    except ImportError:
+        # numpy not available — at least do JPEG conversion
+        try:
+            import io as _io
+            img = Image.open(_io.BytesIO(img_bytes)).convert("RGB")
+            out = _io.BytesIO()
+            img.save(out, format="JPEG", quality=quality, subsampling=0)
+            return out.getvalue()
+        except Exception:
+            return img_bytes
+
+    try:
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        w, h = img.size
+        arr = np.array(img, dtype=np.float32)
+
+        # 1. Sensor noise — subtle Gaussian grain (ISO 200-400 feel)
+        noise_strength = random.uniform(2.5, 5.0)
+        noise = np.random.normal(0, noise_strength, arr.shape).astype(np.float32)
+        # Slightly more noise in blue channel (real sensors)
+        noise[:, :, 2] *= 1.3
+        arr = np.clip(arr + noise, 0, 255)
+
+        # 2. Micro white-balance drift — subtle warm/cool shift
+        wb_r = random.uniform(0.995, 1.008)
+        wb_g = random.uniform(0.997, 1.003)
+        wb_b = random.uniform(0.992, 1.005)
+        arr[:, :, 0] *= wb_r
+        arr[:, :, 1] *= wb_g
+        arr[:, :, 2] *= wb_b
+        arr = np.clip(arr, 0, 255)
+
+        # 3. Subtle vignette — darker corners like a real lens
+        Y, X = np.ogrid[:h, :w]
+        cx, cy = w / 2, h / 2
+        max_dist = np.sqrt(cx ** 2 + cy ** 2)
+        dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2) / max_dist
+        vignette_strength = random.uniform(0.08, 0.18)
+        vignette = 1.0 - (dist ** 2) * vignette_strength
+        arr *= vignette[:, :, np.newaxis]
+        arr = np.clip(arr, 0, 255)
+
+        img = Image.fromarray(arr.astype(np.uint8))
+
+        # 4. Micro sharpness variation — slight unsharp mask
+        if random.random() < 0.6:
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(random.uniform(0.92, 1.08))
+
+        # 5. Very subtle brightness micro-drift
+        enhancer = ImageEnhance.Brightness(img)
+        img = enhancer.enhance(random.uniform(0.985, 1.015))
+
+        # 6. Save as JPEG with realistic quality (not perfect PNG)
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=quality, subsampling=0, optimize=True)
+        print(f"[NATURALIZE] {w}x{h} | noise={noise_strength:.1f} | "
+              f"wb=({wb_r:.3f},{wb_g:.3f},{wb_b:.3f}) | "
+              f"vignette={vignette_strength:.2f} | jpg_q={quality}")
+        return out.getvalue()
+
+    except Exception as e:
+        print(f"[NATURALIZE] Failed: {e}")
+        # Fallback: at least convert to JPEG
+        try:
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=quality, subsampling=0)
+            return out.getvalue()
+        except Exception:
+            return img_bytes
+
+
 # ── Image Generation ──────────────────────────────────────────────────────
 _session = ImageFXSession()
 _session.load_persisted_token()
@@ -285,12 +375,12 @@ def generate_images(prompt: str, count: int = 3) -> dict:
         _session.wait_delay()
         os.makedirs(_save_dir, exist_ok=True)
 
-        # Find next BRIDGE_N sequence number
-        existing = [f for f in os.listdir(_save_dir) if f.startswith("BRIDGE_") and f.endswith(".png")]
+        # Find next BRIDGE_N sequence number (supports both .png and .jpg)
+        existing = [f for f in os.listdir(_save_dir) if f.startswith("BRIDGE_") and (f.endswith(".png") or f.endswith(".jpg"))]
         max_n = 0
         for f in existing:
             try:
-                n = int(f.replace("BRIDGE_", "").replace(".png", ""))
+                n = int(f.replace("BRIDGE_", "").replace(".png", "").replace(".jpg", ""))
                 if n > max_n:
                     max_n = n
             except ValueError:
@@ -343,7 +433,10 @@ def generate_images(prompt: str, count: int = 3) -> dict:
                 # Apply BRIDGE logo overlay
                 img_bytes = _overlay_bridge_logo(img_bytes)
 
-                fname = f"BRIDGE_{next_n + i}.png"
+                # Naturalize: add real-camera imperfections + convert to JPG
+                img_bytes = _naturalize_photo(img_bytes, quality=random.randint(85, 92))
+
+                fname = f"BRIDGE_{next_n + i}.jpg"
                 fpath = os.path.join(_save_dir, fname)
                 with open(fpath, "wb") as f:
                     f.write(img_bytes)
