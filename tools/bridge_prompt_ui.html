@@ -1434,6 +1434,61 @@ const QUALITY=[
 
 const NO_TEXT_RULE="ABSOLUTE RULE — ZERO TEXT IN IMAGE: There must be NO text, NO letters, NO words, NO numbers, NO typography, NO logos, NO watermarks, NO signs, NO brand names, NO written characters of ANY kind ANYWHERE in the image. Not on walls, not on boards, not on clothing, not on bags, not on shoes, not on accessories, not floating in the scene, not on any surface. Every piece of clothing must be completely plain with zero printed graphics, zero logos, zero text. The image must be 100% free of any readable or decorative text or symbols. Do not render any written language whatsoever. This is the single most important rule.";
 
+// ── Activities (생동감 넘치는 교육 활동) ──
+const ACTIVITIES_EARLY=[
+"a fun sensory play activity with colorful kinetic sand and molds",
+"a rice puff making activity, pressing and shaping with small hands",
+"finger painting with vibrant watercolors on large paper sheets",
+"a tactile play activity with soft clay, rolling and shaping figures",
+"building colorful wooden block towers together",
+"a bubble-making activity with giant wands in the play area",
+"a paper collage craft activity with scissors and colored paper",
+"planting seeds in small pots during a nature activity",
+"a music and rhythm activity with tambourines and maracas",
+"a water play activity with cups, funnels, and floating toys",
+"a baking activity, decorating cookies with colorful icing",
+"a puppet show activity with hand puppets and a small stage",
+"a treasure hunt activity, searching for hidden objects around the room",
+"a balancing and movement activity with stepping stones and hoops",
+"a magnet play activity, exploring which objects stick together",
+];
+
+const ACTIVITIES_MIDDLE=[
+"a group discussion seated in a circle, sharing ideas animatedly",
+"a science experiment with colorful liquids in beakers and test tubes",
+"a collaborative art project, painting a large canvas together",
+"a coding activity with laptop screens showing colorful blocks",
+"a debate activity, one student presenting while others listen intently",
+"a team-building exercise with building materials and challenges",
+"a music jam session with guitars, keyboards, and drums",
+"a creative writing workshop, brainstorming ideas on large paper",
+"a photography activity with cameras, framing and composing shots",
+"a robotics project, assembling and testing a small robot",
+"a cooking class, preparing a dish together at a counter",
+"a drama rehearsal, practicing a scene with props",
+];
+
+// ── Matching uniforms (깔끔한 매칭 원복) ──
+const KO_UNIFORMS=[
+"matching plain solid beige overalls over plain ivory shirts — strictly no logos, no text, no emblems",
+"matching plain solid navy smocks over plain white shirts — strictly no logos, no text, no emblems",
+"matching plain solid mint-green aprons over plain cream tops — strictly no logos, no text, no emblems",
+"matching plain solid sky-blue jumpers over plain white undershirts — strictly no logos, no text, no emblems",
+"matching plain solid light-yellow vests over plain white tops — strictly no logos, no text, no emblems",
+"matching plain solid soft-pink pinafores over plain white shirts — strictly no logos, no text, no emblems",
+"matching plain solid lavender overalls over plain ivory tops — strictly no logos, no text, no emblems",
+"matching plain solid sage-green smocks over plain cream shirts — strictly no logos, no text, no emblems",
+];
+
+const KO_UNIFORMS_MIDDLE=[
+"matching plain solid navy blazers over plain white shirts — strictly no logos, no text, no emblems",
+"matching plain solid charcoal sweaters over plain white collared shirts — strictly no logos, no text",
+"matching plain solid cream cardigans over plain light-blue shirts — strictly no logos, no text",
+"matching plain solid dark-green vests over plain white shirts — strictly no logos, no text",
+"plain coordinated solid-color tops in earth tones — strictly no logos, no text, no brand marks",
+"matching plain solid grey hoodies — strictly no logos, no text, no graphics, no patches",
+];
+
 // ── Korean student clothing (all explicitly plain, no logos) ──
 const KO_STUDENT_TOPS=[
 "plain white t-shirt — no logos, no text, no graphics",
@@ -1594,63 +1649,41 @@ function generateBatch(count, targetMode){
     const quality=pick(QUALITY);
     const composition=pick(COMPOSITION);
 
-    // Pick Korean hairstyle keywords for group description (not per-child)
-    const boyHair = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
-    const girlHair = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
-    const studentTop1 = pick(KO_STUDENT_TOPS).split('—')[0].trim();
-    const studentTop2 = pick(KO_STUDENT_TOPS).split('—')[0].trim();
+    // Pick elements for concise cinematic prompt
+    const boyHair1 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
+    const boyHair2 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
+    const girlHair1 = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
+    const activity = pick(isEarly ? ACTIVITIES_EARLY : ACTIVITIES_MIDDLE);
+    const uniform = pick(isEarly ? KO_UNIFORMS : KO_UNIFORMS_MIDDLE);
+    const kidCount = isEarly ? (3 + Math.floor(Math.random()*3)) : (4 + Math.floor(Math.random()*3));
+    const ageMin = isEarly ? 4 : 12;
+    const ageMax = isEarly ? 7 : 18;
 
     const raceKo = RACE_KO[race]||race;
     const genderKo = finalGender==='male'?'남성':'여성';
 
-    // English prompt — for copying into AI tools
+    // English prompt — concise cinematic style (matches sample)
     const text=
-`${NO_TEXT_RULE}
-
-Photorealistic 4K editorial documentary photograph. Candid, unposed — a real classroom moment, not a photoshoot. Every surface, wall, board, and object must be completely free of any writing, letters, numbers, or symbols.
-
-SETTING: ${place.d}. ${floor}. ${wall}. ${ceiling}. ${prop}. All walls are clean — no posters, no charts, no alphabet decorations, no written materials visible anywhere.
-
-COMPOSITION: ${composition}. The full classroom environment must be clearly visible. Both instructor and students are naturally distributed within the space.
-
-TIME & ATMOSPHERE: ${season}. ${lighting}. Mood: ${mood}.
-
-INSTRUCTOR: A ${race} ${finalGender} foreign English instructor (${age}, ${hair}, ${clothing}) ${pose}. ${expression}. The instructor is naturally present within the room — not posed for camera, not isolated in the foreground. The instructor is clearly a foreigner — Western or non-Asian in appearance, such as American, Australian, Canadian, British, African, or Latino.
-
-STUDENTS: ${sceneDesc}. All students are Korean with 2025 trending Korean hairstyles — boys with styles like ${boyHair}, girls with styles like ${girlHair}. Students wear plain solid-color clothing such as ${studentTop1} and ${studentTop2}. Every piece of clothing is completely plain with zero logos, zero text, zero graphics. Students are stylish, confident, and full of personality. ${bokeh}.
-
-CRITICAL: No text anywhere in the entire image. No letters on walls, boards, clothing, books, or any surface. All clothing completely plain. All walls bare and clean. This is a natural candid documentary shot.
-
-TECHNICAL: ${camera}. Color grade: ${grade}. ${quality}. Aspect ratio 16:9. Award-winning editorial education photography.`;
+`A high-resolution, wide-angle cinematic photograph of ${place.d}. A warm ${race} ${finalGender} teacher with ${hair}, wearing ${clothing}, is ${pose.toLowerCase().replace(/^[a-z]/, c=>c)}. ${expression}. The teacher is guiding ${kidCount} happy Korean children (aged ${ageMin}-${ageMax}) in ${activity}. The children feature diverse 2025 Korean kids' hairstyles: ${boyHair1}, ${girlHair1}, ${boyHair2}. They are wearing ${uniform}. Dappled ${season.split(',')[0].split('—')[0].trim().toLowerCase()} light filters through windows, creating warm backlighting (rim light) on their hair and clothes. The 50mm f/1.8 lens captures sharp joyful expressions from a distance to show the entire room. ${floor}. ${wall}. ${ceiling}. No text, no letters, no logos, no symbols on any surface or clothing. All walls completely clean and bare. Natural color grading. Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koText=
-`◆ 텍스트·로고 절대 금지 (최우선 규칙)
-이미지 어디에도 글자·문자·숫자·로고·워터마크 일절 없음. 벽, 칠판, 의류, 소품 포함 완전 텍스트 프리. 모든 의류는 완전 무지.
-
-포토리얼리스틱 4K 에디토리얼 다큐멘터리 사진
-연출 없는 실제 수업 장면 — 자연스럽고 솔직한 한 컷.
-
-◆ 배경·장소
-${place.n}. ${floor}. ${wall}. ${ceiling}. ${prop}. 벽면 완전 깨끗 — 포스터·차트·알파벳 장식 없음.
-
-◆ 구도·앵글
-${composition}. 교실 전체 환경이 충분히 보여야 함. 강사와 학생이 공간 안에 자연스럽게 배치.
-
-◆ 시간 및 분위기
-${season}. 조명: ${lighting}. 분위기: ${mood}.
+`시네마틱 광각 고해상도 사진 — ${place.n}
 
 ◆ 외국인 강사 (${raceKo} ${genderKo})
-${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습.
+${hair}, ${clothing} 착용. ${pose}. ${expression}.
 
-◆ 한국인 학생들
-${sceneDesc}. 2025년 한국 청소년 트렌드 헤어 — 남학생 ${boyHair}, 여학생 ${girlHair} 등. 무지 단색 옷 착용. 수업에 적극 참여 중. ${bokeh}.
+◆ 한국인 아이들 (${kidCount}명, ${ageMin}-${ageMax}세)
+활동: ${activity}
+헤어: ${boyHair1}, ${girlHair1}, ${boyHair2} 등 2025 트렌드
+의상: ${uniform}
 
-◆ 핵심
-모든 벽면 깨끗, 모든 옷 완전 무지, 이미지 전체 텍스트 0.
+◆ 조명·분위기
+${season.split(',')[0].trim()}. 창문 역광 — 머리카락·옷에 림라이트.
+50mm f/1.8 렌즈, 먼 거리 촬영, 교실 전체 보이게.
 
-◆ 카메라·기술 설정
-${camera}. 색감: ${grade}. ${quality}. 화면비 16:9.`;
+◆ 금지 사항
+텍스트·로고·심볼 일절 없음. 벽면 완전 깨끗. 의류 완전 무지.`;
 
     return {
       target: t,
