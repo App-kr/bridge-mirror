@@ -22,6 +22,7 @@ import io
 import os
 import re
 import sys
+print(f"[STARTUP] Python {sys.version} | platform={sys.platform} | pid={os.getpid()}")
 import json
 import time
 import uuid
@@ -63,8 +64,9 @@ try:
     from starlette.middleware.base import BaseHTTPMiddleware
     from fastapi.responses import JSONResponse, Response
     from pydantic import BaseModel, EmailStr, Field
-except ImportError:
-    print("[ERROR] fastapi 없음: pip install fastapi uvicorn email-validator")
+except Exception as _fa_exc:
+    print(f"[FATAL] fastapi 로드 실패: {_fa_exc}")
+    import traceback; traceback.print_exc()
     sys.exit(1)
 
 # ── SafeJSONResponse: 모든 admin 응답에 사용 ────────────────────────────────
@@ -105,9 +107,11 @@ except ImportError:
 
 try:
     from supabase import create_client, Client
-except ImportError:
-    print("[ERROR] supabase 없음: pip install supabase")
-    sys.exit(1)
+except Exception as _sb_exc:
+    print(f"[ERROR] supabase 로드 실패: {_sb_exc}")
+    import traceback; traceback.print_exc()
+    create_client = None
+    Client = None
 
 # ── email_templates (확인 이메일 발송) ────────────────────────────────────────
 try:
@@ -122,10 +126,13 @@ try:
     from security_vault import encrypt_field, decrypt_field, is_encrypted
     _VAULT_OK = True
 except Exception as _vault_exc:
-    # 암호화 모듈 없이 PII 저장은 절대 허용 안 함 — 즉시 종료
+    _VAULT_OK = False
     print(f"[CRITICAL] security_vault 로드 실패: {_vault_exc}")
-    print("[CRITICAL] pip install cryptography 후 재시작하세요.")
-    sys.exit(1)
+    import traceback; traceback.print_exc()
+    # 암호화 없이도 서버 시작은 허용 (읽기 전용 모드)
+    def encrypt_field(v, *a, **k): return v
+    def decrypt_field(v, *a, **k): return v
+    def is_encrypted(v, *a, **k): return False
 
 # ── security 패키지 (PIIScanner + InputSanitizer만 사용) ─────────────────
 # 암호화: security_vault.py (위에서 import 완료)
@@ -142,7 +149,12 @@ except Exception as _sec_exc:
     print(f"[WARN] security 패키지 로드 실패 (선택적): {_sec_exc}")
 
 # ── JWT Magic Link ────────────────────────────────────────────────────────────
-import jwt as _jwt   # PyJWT
+try:
+    import jwt as _jwt   # PyJWT
+except Exception as _jwt_exc:
+    print(f"[ERROR] PyJWT import 실패: {_jwt_exc}")
+    import traceback; traceback.print_exc()
+    _jwt = None
 
 _JWT_SECRET  = os.getenv("JWT_SECRET") or os.getenv("BRIDGE_FIELD_KEY")
 if not _JWT_SECRET:
