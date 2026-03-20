@@ -436,7 +436,7 @@ export default function BridgeCanvasSheet() {
     }
     document.addEventListener('paste', h)
     return () => document.removeEventListener('paste', h)
-  }, [selectedRows, pushHistory])
+  }, [selectedRows, pushHistory, showPhotoToast])
 
   /* ── Server save ── */
   const saveToServer = useCallback(async (cid: string, field: string, value: string) => {
