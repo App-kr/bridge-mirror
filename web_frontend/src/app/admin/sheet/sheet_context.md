@@ -1,5 +1,5 @@
 # Canvas Sheet 컨텍스트
-경로: `web_frontend/src/app/admin/sheet/`  최종 수정: 2026-03-20 (v4.1)
+경로: `web_frontend/src/app/admin/sheet/`  최종 수정: 2026-03-20 (v4.2)
 
 ## 파일 구조 및 역할
 
@@ -47,6 +47,12 @@
 - [x] 행 삭제 — 우클릭 컨텍스트 메뉴 추가 (PATCH is_deleted:1, hard-delete 금지)
 - [x] 스타일 버튼 토글 — B/I/S 클릭 시 현재 상태 반전 + 다중 행 전체 적용
 - [x] 서식 적용 완료 토스트 표시 (showPhotoToast 재사용)
+
+### Phase 3.7 — 버그 수정 + 메일모달 개선 ✅ (v4.2)
+- [x] 열 선택 후 스타일 적용 버그 수정 — hasColSelection() 분기로 전체 row 대상 처리
+- [x] MailModal.tsx 구인자 스타일 재작성 — 다크 헤더, 템플릿 탭, 수신자 칩, 미리보기 모드
+  - props: adminKey/apiUrl 직접 전달 (onSend/getHeaders 제거)
+  - 1:1 개별발송 FormData API, {{name}}/{{region}} 변수, 첨부파일 드래그&클릭
 
 ### Phase 4 — 성능/UX
 - [ ] 가상 렌더링 (뷰포트 밖 행 skip)
