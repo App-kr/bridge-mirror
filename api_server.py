@@ -1450,39 +1450,29 @@ _ADMIN_DECRYPT_FIELDS = {
 }
 
 
-def _decrypt_row(row: dict) -> dict:
-    """관리자용: 암호화된 PII 필드를 복호화."""
-    import logging as _log_dec
-    for field in _ADMIN_DECRYPT_FIELDS:
-        val = row.get(field)
-        if not val or not isinstance(val, str):
-            continue
-        # 일부 DB 값에 개행/공백이 삽입될 수 있어 제거 후 검사
-        val_clean = val.strip().replace('\n', '').replace('\r', '').replace(' ', '')
-        if is_encrypted(val_clean):
-            try:
-                row[field] = decrypt_field(val_clean)
-            except Exception as e:
-                _log_dec.getLogger("bridge.security").error(
-                    "PII 복호화 실패 — field=%s row_id=%s: %s",
-                    field, row.get("id", "?"), e,
-                )
-                row[field] = val  # 실패 시 원본값 유지 (에러 문자 표시 금지)
-        elif val_clean != val:
-            row[field] = val_clean
-    return row
-
-
-def _safe_decrypt(val) -> str:
-    """암호화된 필드를 복호화. 실패 시 원본 반환 (에러 숨김)."""
-    if not val or not isinstance(val, str):
+def _safe_decrypt(val):
+    """단일 값 안전 복호화. 실패 시 원본 반환"""
+    if val is None:
         return val
     try:
-        if is_encrypted(val):
-            return decrypt_field(val)
+        cleaned = str(val).strip().replace('\n', '').replace('\r', '').replace('\t', '')
+        if not cleaned:
+            return val
+        if is_encrypted(cleaned):
+            result = decrypt_field(cleaned)
+            return result if result is not None else val
+        return val
     except Exception:
-        pass
-    return val
+        return val
+
+
+def _decrypt_row(row: dict) -> dict:
+    """candidates 행 전체 복호화 — 모든 문자열 필드 자동 감지"""
+    result = dict(row)
+    for key, val in result.items():
+        if val is not None and isinstance(val, str):
+            result[key] = _safe_decrypt(val)
+    return result
 
 
 def _sanitize_str(v):
