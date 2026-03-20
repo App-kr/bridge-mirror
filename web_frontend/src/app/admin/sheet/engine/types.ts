@@ -185,7 +185,7 @@ export function defaultCols(): ColDef[] {
     { key: 'applied', label: '지원/요청', w: 175, type: 'long', v: true },
     { key: 'proposal', label: '포지션제안', w: 175, type: 'long', v: true },
     { key: 'mailAction', label: '메일발송', w: 85, type: 'mail', v: true },
-    { key: 'mailStatus', label: '발송상태', w: 210, type: 'tags', v: true },
+    { key: 'mailStatus', label: '발송상태', w: 210, type: 'tags', v: false },
     { key: 'stage', label: '진행단계', w: 140, type: 'stage', v: true },
     { key: 'curSalary', label: '현급여', w: 62, type: 't', v: true },
     { key: 'hopeSalary', label: '희망', w: 62, type: 't', v: true },

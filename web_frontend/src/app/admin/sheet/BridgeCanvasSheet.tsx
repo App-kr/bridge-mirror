@@ -397,39 +397,41 @@ export default function BridgeCanvasSheet() {
           fd.append('file', blob)
           // FormData needs auto Content-Type (multipart boundary) — only pass auth header
           const { 'Content-Type': _, ...uploadHdrs } = hdrsRef.current()
-          fetch(`${API}/api/admin/upload-image`, {
-            method: 'POST', headers: uploadHdrs, body: fd,
-          }).then(r => r.ok ? r.json() : null).then(async j => {
-            const url: string = j?.data?.url ?? ''
-            if (url) {
-              const fullUrl = url.startsWith('http') ? url : `${API}${url}`
-              pushHistory()
-              setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: fullUrl } : r))
-              if (cid) {
-                await fetch(`${API}/api/admin/candidates/${cid}`, {
-                  method: 'PATCH',
-                  headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ photo_url: url }),
-                }).catch(() => {})
-                const edits = editsRef.current
-                edits[cid] = { ...(edits[cid] || {}), photoUrl: fullUrl } as EditOverride
-                prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
-              }
-              showPhotoToast('사진 저장 완료 ✓')
-            } else {
-              showPhotoToast('사진 업로드 실패', false)
-            }
-          }).catch(() => {
-            // base64 fallback (임시 — 서버 연결 불가 시)
+          const doBase64 = () => {
             const rd = new FileReader()
             rd.onload = ev2 => {
               pushHistory()
               const dataUrl = ev2.target?.result as string
               setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: dataUrl } : r))
-              showPhotoToast('사진 저장 (로컬)')
+              if (cid) {
+                const edits = editsRef.current
+                edits[cid] = { ...(edits[cid] || {}), photoUrl: dataUrl } as EditOverride
+                prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+              }
+              showPhotoToast('사진 저장 완료 ✓')
             }
             rd.readAsDataURL(blob)
-          })
+          }
+          fetch(`${API}/api/admin/upload-image`, {
+            method: 'POST', headers: uploadHdrs, body: fd,
+          }).then(r => r.ok ? r.json() : null).then(async j => {
+            const url: string = j?.data?.url ?? ''
+            if (!url) { doBase64(); return }
+            const fullUrl = url.startsWith('http') ? url : `${API}${url}`
+            pushHistory()
+            setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, photoUrl: fullUrl } : r))
+            if (cid) {
+              await fetch(`${API}/api/admin/candidates/${cid}`, {
+                method: 'PATCH',
+                headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ photo_url: url }),
+              }).catch(() => {})
+              const edits = editsRef.current
+              edits[cid] = { ...(edits[cid] || {}), photoUrl: fullUrl } as EditOverride
+              prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+            }
+            showPhotoToast('사진 저장 완료 ✓')
+          }).catch(() => doBase64())
           break
         }
       }
@@ -602,6 +604,18 @@ export default function BridgeCanvasSheet() {
         const edits = editsRef.current
         edits[cid] = { ...(edits[cid] || {}), stage } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
+      }
+      // 상태별 행 색상 자동 적용
+      const stageInfo = STAGES.find(s => s.key === stage)
+      if (stageInfo && stageInfo.key !== 'none' && cid) {
+        const engine = engineRef.current
+        if (engine) {
+          const visCols = engine.getVisibleCols()
+          const styleCols = visCols.filter(c => c.key !== 'rowNum' && c.key !== 'photo')
+          const entries = styleCols.map(c => ({ cid, colKey: c.key }))
+          engine.styleManager.batchSet(entries, { bgColor: stageInfo.color + '18' })
+          engine.refresh()
+        }
       }
     },
     onTagToggle: (rowIdx: number, tagKey: string) => {

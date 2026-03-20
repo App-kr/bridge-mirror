@@ -867,20 +867,26 @@ export class GridEngine {
     const val = String(row[col.key] ?? '')
     const cid = String(row._cid ?? '')
 
-    // 열 선택 하이라이트: 선택된 열의 모든 셀에 배경 표시
-    if (this.selection.hasColSelection()) {
-      const visIdx = this.visCols.indexOf(col)
-      if (visIdx >= 0 && this.selection.isColSelected(visIdx)) {
-        ctx.fillStyle = SELECTED_BG; ctx.fillRect(x, y, w, h)
-      }
-    }
-
+    // 셀 배경색 (사용자 서식) — 먼저 깔기
     if (col.type === 't' || col.type === 'long' || col.type === 'dropdown') {
       const style = this.styleManager.getStyle(cid, col.key)
       if (style?.bgColor) {
         ctx.fillStyle = style.bgColor
         ctx.fillRect(x, y, w, h)
       }
+    }
+
+    // 열 선택 오버레이 — bgColor 위에 반투명으로 표시
+    if (this.selection.hasColSelection()) {
+      const visIdx = this.visCols.indexOf(col)
+      if (visIdx >= 0 && this.selection.isColSelected(visIdx)) {
+        ctx.fillStyle = 'rgba(219,234,254,0.6)'; ctx.fillRect(x, y, w, h)
+      }
+    }
+
+    // 행 선택 오버레이 — bgColor 위에 반투명으로 표시
+    if (!this.selection.hasColSelection() && this.selection.isRowSelected(rowIdx) && col.type !== 'idx') {
+      ctx.fillStyle = 'rgba(219,234,254,0.5)'; ctx.fillRect(x, y, w, h)
     }
 
     const style = (col.type === 't' || col.type === 'long' || col.type === 'dropdown') ? this.styleManager.getStyle(cid, col.key) : undefined
