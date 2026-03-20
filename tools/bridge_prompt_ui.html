@@ -281,6 +281,7 @@ select.adv-select:focus { border-color: #555; }
 }
 .server-dot.online { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
 .server-dot.offline { background: #ef4444; }
+.server-dot.auth-needed { background: #fbbf24; animation: blink 1.5s infinite; }
 
 /* Card body — two column */
 .pcard-body { display: flex; border-bottom: 1px solid #1a1a1a; }
@@ -1607,7 +1608,8 @@ async function checkServer() {
     const stat = document.getElementById('serverStatus');
     if (serverOnline) {
       dot.className = 'server-dot online';
-      stat.innerHTML = '<span class="server-dot online" id="serverDot"></span>FLUX.1 Ready';
+      const q = d.quota || {};
+      stat.innerHTML = '<span class="server-dot online" id="serverDot"></span>ImageFX ' + (q.hourly || '');
     } else {
       dot.className = 'server-dot offline';
       stat.innerHTML = '<span class="server-dot offline" id="serverDot"></span>Server offline';
