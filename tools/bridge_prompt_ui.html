@@ -1872,14 +1872,13 @@ function renderAll(){
           <div class="ko-row"><span class="ko-label">조명</span><span class="ko-val">${esc(p.ko.lighting)}</span></div>
           <div class="ko-row"><span class="ko-label">색감</span><span class="ko-val">${esc(p.ko.grade)}</span></div>
           <div class="ko-row"><span class="ko-label">분위기</span><span class="ko-val">${esc(p.ko.mood)}</span></div>
-          <div class="ko-row"><span class="ko-label">시즌</span><span class="ko-val">${esc(p.ko.season)}</span></div>
         </div>
       </div>`;
     out.appendChild(card);
   });
 }
 
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function toggle(btn,i){
   const pre=document.getElementById(`pt${i}`);
@@ -2046,12 +2045,21 @@ async function runAutoGenerate() {
   setStatus('working', '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc911\u2026', '\ud504\ub86c\ud504\ud2b8 \uc870\ud569 \uc911');
   btn.textContent = '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc911...';
   await new Promise(r => setTimeout(r, 100));
-  const count = parseInt(document.getElementById('countSlider').value);
-  prompts = generateBatch(count, currentTarget);
-  totalGenerated += prompts.length;
-  renderAll();
-  document.getElementById('s-gen').textContent = totalGenerated;
-  document.getElementById('topCount').textContent = prompts.length;
+  try {
+    const count = parseInt(document.getElementById('countSlider').value);
+    prompts = generateBatch(count, currentTarget);
+    totalGenerated += prompts.length;
+    renderAll();
+    document.getElementById('s-gen').textContent = totalGenerated;
+    document.getElementById('topCount').textContent = prompts.length;
+  } catch (e) {
+    console.error('[generateBatch error]', e);
+    btn.classList.remove('loading');
+    btn.textContent = '\uc790\ub3d9\uc0dd\uc131';
+    _isGenerating = false;
+    setStatus('error', '\ud504\ub86c\ud504\ud2b8 \uc0dd\uc131 \uc2e4\ud328', e.message || String(e));
+    return;
+  }
 
   if (_abortRequested) {
     btn.classList.remove('loading');
