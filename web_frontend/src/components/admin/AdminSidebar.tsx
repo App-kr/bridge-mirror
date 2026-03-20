@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { API_URL } from '@/lib/api'
 import {
   LayoutDashboard,
@@ -127,10 +128,10 @@ export default function AdminSidebar() {
     <nav className="flex flex-col h-full">
       {/* Logo */}
       <div className="px-5 pt-6 pb-4">
-        <a href="/admin" className="block">
+        <Link href="/admin" className="block">
           <span className="text-[17px] font-bold tracking-tight text-[#1d1d1f]">BRIDGE</span>
           <span className="text-[13px] text-[#86868b] ml-1.5 font-medium">Admin</span>
-        </a>
+        </Link>
       </div>
 
       {/* Nav Items */}
@@ -146,7 +147,7 @@ export default function AdminSidebar() {
               {cat.items.map((item) => {
                 const active = isActive(item.href)
                 return (
-                  <a
+                  <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
@@ -170,7 +171,7 @@ export default function AdminSidebar() {
                         {newCount}
                       </span>
                     )}
-                  </a>
+                  </Link>
                 )
               })}
             </div>
@@ -194,14 +195,14 @@ export default function AdminSidebar() {
             <span className="ml-auto text-[11px] opacity-50">↗</span>
           </a>
         ) : (
-          <a
+          <Link
             href="/admin/settings"
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl w-full text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#c0c0c5] hover:text-[#424245] transition-colors"
             onClick={() => setMobileOpen(false)}
           >
             <span className="text-[15px] leading-none">💬</span>
             <span>카카오 채널 설정</span>
-          </a>
+          </Link>
         )}
       </div>
     </nav>

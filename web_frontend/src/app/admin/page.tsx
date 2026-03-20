@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
@@ -307,13 +308,13 @@ export default function AdminDashboardPage() {
             <span className="text-[11px] opacity-50 ml-1">↗</span>
           </a>
         ) : (
-          <a
+          <Link
             href="/admin/settings"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#aaa] hover:text-[#424245] transition-colors"
           >
             <span className="text-[15px] leading-none">💬</span>
             카카오 채널 URL 설정
-          </a>
+          </Link>
         )}
         <a
           href="https://bridgejob.co.kr"
@@ -389,10 +390,10 @@ export default function AdminDashboardPage() {
                                   확인
                                 </button>
                               )}
-                              <a href={`/admin/posts?board=${post.board}&edit=${post.id}`}
+                              <Link href={`/admin/posts?board=${post.board}&edit=${post.id}`}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#0071e3]/10 text-[#0071e3] hover:bg-[#0071e3]/20 transition-colors">
                                 편집
-                              </a>
+                              </Link>
                               <a href={`/community/${post.board}`} target="_blank" rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#f5f5f7] text-[#424245] hover:bg-[#e8e8ed] transition-colors">
                                 보기 &rarr;
