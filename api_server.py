@@ -1451,13 +1451,22 @@ _ADMIN_DECRYPT_FIELDS = {
 
 
 def _safe_decrypt(val):
-    """단일 값 안전 복호화. 실패 시 원본 반환"""
+    """단일 값 안전 복호화. 패딩 자동 보정 포함. 실패 시 원본 반환"""
     if val is None:
         return val
     try:
         cleaned = str(val).strip().replace('\n', '').replace('\r', '').replace('\t', '')
         if not cleaned:
             return val
+        # 패딩 자동 보정 (일부 구버전 암호화는 padding 없이 저장됨)
+        pad = len(cleaned) % 4
+        padded = cleaned + '=' * (4 - pad) if pad else cleaned
+        # padded 버전으로 암호화 여부 체크
+        candidate = padded if padded != cleaned else cleaned
+        if is_encrypted(candidate):
+            result = decrypt_field(candidate)
+            return result if result is not None else val
+        # fallback: 원본 cleaned 도 시도
         if is_encrypted(cleaned):
             result = decrypt_field(cleaned)
             return result if result is not None else val
@@ -1505,6 +1514,45 @@ def _sanitize_data(obj):
 
 _ACTIVE_STATUSES = {"new", "Active", "reviewing", "interviewing", "offered"}
 _PAST_STATUSES = {"placed", "rejected", "withdrawn", "inactive", "Inactive", "Closed", "Deleted"}
+
+
+@app.get("/api/admin/decrypt-check", tags=["admin"])
+async def decrypt_check(request: Request):
+    """복호화 진단 — 첫 5개 후보자의 암호화 필드 원본/복호화 값 비교"""
+    _check_admin(request)
+    import os, hashlib
+    vault_ok = _VAULT_OK
+    key_set = bool(os.environ.get("BRIDGE_FIELD_KEY", "").strip())
+    key_preview = hashlib.sha256(os.environ.get("BRIDGE_FIELD_KEY", "").encode()).hexdigest()[:8] if key_set else "NOT_SET"
+    fields = ["nationality", "current_location", "reference", "dob", "korean_criminal_record"]
+    conn = sqlite3.connect(str(_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        f"SELECT candidate_id, {', '.join(fields)} FROM candidates LIMIT 5"
+    ).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        row_info = {"candidate_id": r["candidate_id"]}
+        for f in fields:
+            raw = r[f]
+            if raw and isinstance(raw, str):
+                dec = _safe_decrypt(raw)
+                row_info[f] = {
+                    "raw_len": len(raw),
+                    "raw_preview": raw[:20] + "..." if len(raw) > 20 else raw,
+                    "decrypted": dec if dec != raw else "[복호화실패-원본반환]",
+                    "changed": dec != raw,
+                }
+            else:
+                row_info[f] = {"raw_len": 0, "decrypted": None, "changed": False}
+        results.append(row_info)
+    return ok(data={
+        "vault_ok": vault_ok,
+        "key_set": key_set,
+        "key_sha256_prefix": key_preview,
+        "samples": results,
+    })
 
 
 @app.get("/api/admin/candidates", tags=["admin"])

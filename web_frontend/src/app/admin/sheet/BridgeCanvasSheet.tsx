@@ -117,6 +117,7 @@ export default function BridgeCanvasSheet() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [newBanner, setNewBanner] = useState(0)  // 신규 접수 배너 카운트
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [pipelineStage, setPipelineStage] = useState<string | null>(null) // 파이프라인 상태표시줄
 
   // Mail modal
   const [mailOpen, setMailOpen] = useState(false)
@@ -809,6 +810,38 @@ export default function BridgeCanvasSheet() {
     return c
   }, [dbAll, data])
 
+  /* ── Pipeline 상태표시줄 데이터 ── */
+  const PIPELINE_STAGES = useMemo(() => [
+    { key: 'interview', label: '인터뷰대기', color: '#d97706' },
+    { key: 'proposal',  label: '제안중',    color: '#ca8a04' },
+    { key: 'signed',    label: '서명완료',  color: '#16a34a' },
+    { key: 'guide_sent',label: '배치대기',  color: '#2563eb' },
+    { key: 'guide_done',label: '완료',      color: '#1d4ed8' },
+  ], [])
+
+  const pipelineData = useMemo(() => {
+    const src = dbAll.length > 0 ? dbAll : [...(data.active || []), ...(data.past || []), ...(data.blacklist || [])]
+    const result: Record<string, { total: number; byCompany: Array<{ company: string; candidates: DataRow[] }> }> = {}
+    for (const ps of PIPELINE_STAGES) {
+      const rows = src.filter(r => r.stage === ps.key)
+      // 업체별 그룹핑: proposal 첫 줄에서 회사명 추출
+      const companyMap = new Map<string, DataRow[]>()
+      for (const r of rows) {
+        const prop = String(r.proposal || r.hired || '').trim()
+        const firstLine = prop.split(/[\n\r]/)[0].trim()
+        const match = firstLine.match(/^([^:\-\(\)]{2,25})/)
+        const company = (match ? match[1].trim() : '') || (r.hired ? String(r.hired).trim() : '미분류')
+        if (!companyMap.has(company)) companyMap.set(company, [])
+        companyMap.get(company)!.push(r)
+      }
+      result[ps.key] = {
+        total: rows.length,
+        byCompany: Array.from(companyMap.entries()).map(([company, candidates]) => ({ company, candidates })),
+      }
+    }
+    return result
+  }, [dbAll, data, PIPELINE_STAGES])
+
   /* ── Filter unique values ── */
   const getFilterOptions = useCallback((colKey: string): string[] => {
     const vals = new Set<string>()
@@ -867,6 +900,92 @@ export default function BridgeCanvasSheet() {
         </div>
       )}
       <style>{`@keyframes bridge-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }`}</style>
+
+      {/* ── Pipeline 상태표시줄 ── */}
+      <div style={{
+        flexShrink: 0, background: '#1e293b', borderBottom: '1px solid #334155',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* 버튼 행 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '4px 8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginRight: 4, letterSpacing: 1 }}>
+            PIPELINE
+          </span>
+          {PIPELINE_STAGES.map(ps => {
+            const pd = pipelineData[ps.key]
+            const isOpen = pipelineStage === ps.key
+            return (
+              <button
+                key={ps.key}
+                onClick={() => setPipelineStage(isOpen ? null : ps.key)}
+                style={{
+                  padding: '2px 10px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 4,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  background: isOpen ? ps.color : 'rgba(255,255,255,0.08)',
+                  color: isOpen ? '#fff' : '#cbd5e1',
+                  outline: isOpen ? `2px solid ${ps.color}` : 'none',
+                }}
+              >
+                {ps.label}
+                <span style={{
+                  marginLeft: 5, fontSize: 10, fontWeight: 800,
+                  background: isOpen ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
+                  padding: '0 5px', borderRadius: 8,
+                }}>
+                  {pd?.total ?? 0}
+                </span>
+              </button>
+            )
+          })}
+          {pipelineStage && (
+            <button
+              onClick={() => setPipelineStage(null)}
+              style={{ marginLeft: 'auto', fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* 펼쳐진 패널 */}
+        {pipelineStage && pipelineData[pipelineStage] && (
+          <div style={{
+            padding: '6px 12px 8px',
+            background: '#0f172a',
+            borderTop: '1px solid #1e293b',
+            display: 'flex', flexWrap: 'wrap', gap: '6px 16px',
+            maxHeight: 120, overflowY: 'auto',
+          }}>
+            {pipelineData[pipelineStage].byCompany.length === 0 ? (
+              <span style={{ fontSize: 12, color: '#475569' }}>해당 단계 후보자 없음</span>
+            ) : pipelineData[pipelineStage].byCompany.map(({ company, candidates }) => (
+              <div key={company} style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {company}
+                </span>
+                <span style={{ fontSize: 10, color: '#334155' }}>—</span>
+                {candidates.map(c => (
+                  <button
+                    key={c._cid || c.id}
+                    onClick={() => {
+                      // 해당 후보자가 있는 탭으로 이동 + 검색
+                      setQ(String(c.mgtNum || c.name || ''))
+                    }}
+                    style={{
+                      fontSize: 11, fontWeight: 700, padding: '1px 6px',
+                      background: 'rgba(255,255,255,0.06)', border: '1px solid #334155',
+                      borderRadius: 4, color: '#e2e8f0', cursor: 'pointer',
+                    }}
+                    title={`${c.name} (${c.nationality})`}
+                  >
+                    #{c.mgtNum || c.id}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Toolbar Row 1: actions ── */}
       <div style={{
