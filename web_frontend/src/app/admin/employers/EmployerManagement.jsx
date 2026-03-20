@@ -3,39 +3,36 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 function mapApiItem(it) {
+  // /api/employers 응답은 이미 camelCase + 복호화된 상태
   return {
     _apiId: it.id,
-    jNumber: it.job_code || it.id || "",
-    region: it.location || "",
+    jNumber: it.jNumber || "",
+    region: it.region || "",
     city: it.city || "",
-    name: it.school_name || it.name || "",
+    name: it.name || "",
     email: it.email || "",
     emails: [it.email].filter(Boolean),
     phone: it.phone || "",
-    contact: it.contact_name || "",
-    teachingAge: it.teaching_age || "",
-    salary: it.salary_raw || "",
+    contact: it.contact || "",
+    kakao: it.kakao || "",
+    teachingAge: it.teachingAge || "",
+    salary: it.salary || "",
+    startDate: it.startDate || "",
+    classSize: it.classSize || "",
+    workingHours: it.workingHours || "",
+    teachHrsWeek: it.teachHrsWeek || "",
+    vacation: it.vacation || "",
+    housing: it.housing || "",
+    nativeCount: it.nativeCount || "",
+    benefits: it.benefits || "",
     status: it.status || "open",
-    blacklist: false,
+    isHot: !!it.isHot,
     active: it.status !== "closed",
-    isNew: it.created_at ? (Date.now() - new Date(it.created_at).getTime()) < 7 * 86400000 : false,
+    isNew: it.createdAt ? (Date.now() - new Date(it.createdAt).getTime()) < 7 * 86400000 : false,
     confirmed: false,
     tags: [],
     memo: it.memo || "",
-    rawText: it.raw_text || [
-      it.location && it.city ? it.location + " " + it.city : it.location || "",
-      it.job_code && "Job. " + it.job_code,
-      it.start_date && "Starting Date : " + it.start_date,
-      it.teaching_age && "Teaching Age : " + it.teaching_age,
-      it.class_size && "Class size : " + it.class_size,
-      it.working_hours && "Working Hours : " + it.working_hours,
-      it.salary_raw && "Monthly Salary : " + it.salary_raw,
-      it.teach_hrs_week && "Average Teaching Hours per Week : " + it.teach_hrs_week,
-      it.vacation && "Vacation : " + it.vacation,
-      it.native_count && "Native Teacher (Numbers can change) : " + it.native_count,
-      it.housing && "Housing : " + it.housing,
-      it.benefits && "Employee Benefits : " + it.benefits,
-    ].filter(Boolean).join("\n"),
+    rawText: it.rawText || "",
   };
 }
 
@@ -1095,17 +1092,11 @@ export default function EmployerManagement(){
     if(adminKey)hdrs["x-admin-key"]=adminKey;
     (async()=>{
       try{
-        let all=[];let pg=1;let more=true;
-        while(more){
-          const res=await fetch(`${API_BASE}/api/admin/applications?type=employer&page=${pg}&limit=500`,{headers:hdrs});
-          if(!res.ok)break;
-          const json=await res.json();
-          console.log(`[employers] page=${pg} items=${(json.data||[]).length} total=${json.total||"?"} has_more=${json.has_more}`);
-          all=[...all,...(json.data||[])];
-          more=json.has_more||false;pg++;
-        }
-        console.log(`[employers] total loaded: ${all.length}`);
-        setData(all.map(mapApiItem));
+        const res=await fetch(`${API_BASE}/api/employers`,{headers:hdrs});
+        if(!res.ok)throw new Error(`HTTP ${res.status}`);
+        const items=await res.json();
+        console.log(`[employers] loaded: ${items.length} jobs`);
+        setData(items.map(mapApiItem));
       }catch(e){console.error("[employers] load failed:",e);}
       finally{setLoading(false);}
     })();
@@ -1180,13 +1171,21 @@ export default function EmployerManagement(){
     setData(p=>[{jNumber:id,region:"서울",city:"강남",name:"NEW 어학원",email:"new@test.com",emails:["new@test.com"],phone:"010-0000-0000",contact:"",teachingAge:"Elementary",salary:"2,500,000",status:"new",blacklist:false,active:true,isNew:true,confirmed:false,tags:[],memo:`(서울 강남 NEW어학원 신규접수)`,rawText:`Seoul Gangnam\nJob. ${id}\nStarting Date : September\nTeaching Age : Elementary`},...p]);
     if(cRef.current)cRef.current.scrollTop=0;
   },[]);
-  const updateItem=useCallback((jn,u)=>setData(p=>p.map(d=>{
-    if(d.jNumber!==jn)return d;
-    const next={...d,...u};
-    // jNumber 변경 시 새 값으로 교체
-    if(u.jNumber&&u.jNumber!==jn)next.jNumber=u.jNumber;
-    return next;
-  })),[]);
+  const updateItem=useCallback((jn,u)=>{
+    setData(p=>p.map(d=>{
+      if(d.jNumber!==jn)return d;
+      const next={...d,...u};
+      if(u.jNumber&&u.jNumber!==jn)next.jNumber=u.jNumber;
+      // PATCH → jobs 테이블 저장
+      if(d._apiId){
+        const adminKey=localStorage.getItem("bridge_admin_key")||"";
+        const hdrs={"Content-Type":"application/json"};
+        if(adminKey)hdrs["x-admin-key"]=adminKey;
+        fetch(`${API_BASE}/api/employers/${d._apiId}`,{method:"PATCH",headers:hdrs,body:JSON.stringify(u)}).catch(e=>console.error("[employers] patch failed:",e));
+      }
+      return next;
+    }));
+  },[]);
 
   // 신규 접수 자동 감지 — seenIds 관리
   const seenIds=useRef(new Set());

@@ -6764,82 +6764,94 @@ async def get_mail_templates(request: Request):
     return ok(data={"templates": templates})
 
 
-# ── 구인자 관리 (employers) CRUD ──────────────────────────────────────────────
-_EMPLOYER_ENC_FIELDS = {"email", "phone", "memo"}
+# ── 구인자 관리 (employers) CRUD — jobs 테이블 기반 ───────────────────────────
 
 
 @app.get("/api/employers", tags=["employers"])
 async def get_employers(request: Request):
-    """구인자 전체 목록 반환 (PII 복호화 포함)."""
+    """구인자 전체 목록 반환 — jobs 테이블에서 PII 복호화 포함."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT * FROM employers WHERE is_deleted = 0 ORDER BY createdAt DESC"
+            "SELECT id, job_code, seq, location, city, district, region_name, "
+            "start_date, teaching_age, class_size, working_hours, salary_raw, "
+            "teach_hrs_week, vacation, housing, housing_type, housing_detail, "
+            "native_count, benefits, internal_notes, status, created_at, "
+            "raw_text, enc_employer_name, enc_contact_name, enc_contact_phone, "
+            "enc_contact_email, enc_contact_kakao, employer_display_name, "
+            "is_hot, is_part_time, source_file "
+            "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
         ).fetchall()
         result = []
-        for r in rows:
-            d = dict(r)
-            # PII 복호화
-            for f in _EMPLOYER_ENC_FIELDS:
-                d[f] = _safe_decrypt(d.get(f)) or ""
-            # JSON 파싱
-            for jf in ("emails", "tags"):
-                try:
-                    d[jf] = _json.loads(d.get(jf) or "[]")
-                except Exception:
-                    d[jf] = []
-            # bool 변환
-            for bf in ("blacklist", "active", "isNew", "confirmed"):
-                d[bf] = bool(d.get(bf, 0))
-            result.append(d)
+        for j in rows:
+            dec_employer = _safe_decrypt(j["enc_employer_name"])
+            dec_contact  = _safe_decrypt(j["enc_contact_name"])
+            dec_phone    = _safe_decrypt(j["enc_contact_phone"])
+            dec_email    = _safe_decrypt(j["enc_contact_email"])
+            dec_kakao    = _safe_decrypt(j["enc_contact_kakao"])
+            display_name = j["employer_display_name"] or ""
+            school = display_name or dec_employer or ""
+            result.append({
+                "id": j["id"],
+                "jNumber": j["job_code"] or "",
+                "region": j["location"] or "",
+                "city": j["city"] or "",
+                "name": school,
+                "email": dec_email or "",
+                "phone": dec_phone or "",
+                "contact": dec_contact or "",
+                "kakao": dec_kakao or "",
+                "teachingAge": j["teaching_age"] or "",
+                "salary": j["salary_raw"] or "",
+                "startDate": j["start_date"] or "",
+                "classSize": j["class_size"] or "",
+                "workingHours": j["working_hours"] or "",
+                "teachHrsWeek": str(j["teach_hrs_week"]) if j["teach_hrs_week"] else "",
+                "vacation": j["vacation"] or "",
+                "housing": j["housing"] or "",
+                "housingType": j["housing_type"] or "",
+                "housingDetail": j["housing_detail"] or "",
+                "nativeCount": j["native_count"] or "",
+                "benefits": j["benefits"] or "",
+                "memo": j["internal_notes"] or "",
+                "status": j["status"] or "open",
+                "isHot": bool(j["is_hot"]),
+                "rawText": j["raw_text"] or "",
+                "createdAt": j["created_at"] or "",
+            })
         return result
     finally:
         conn.close()
 
 
-@app.post("/api/employers", tags=["employers"])
-async def create_employer(request: Request):
-    """구인자 신규 등록."""
-    _check_admin(request)
-    data = await request.json()
-    jn = data.get("jNumber", "").strip()
-    if not jn:
-        raise HTTPException(status_code=400, detail="jNumber 필수")
-
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        row = {}
-        for k, v in data.items():
-            if k in _EMPLOYER_ENC_FIELDS and v:
-                row[k] = _encrypt_if_needed(v)
-            elif k in ("emails", "tags") and isinstance(v, list):
-                row[k] = _json.dumps(v, ensure_ascii=False)
-            elif isinstance(v, bool):
-                row[k] = int(v)
-            else:
-                row[k] = v
-
-        cols = list(row.keys())
-        placeholders = ",".join(["?"] * len(cols))
-        conn.execute(
-            f"INSERT INTO employers ({','.join(cols)}) VALUES ({placeholders})",
-            [row[c] for c in cols],
-        )
-        conn.commit()
-        return {"ok": True, "jNumber": jn}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=409, detail="이미 존재하는 구인번호")
-    finally:
-        conn.close()
+_JOBS_FIELD_MAP = {
+    "memo": "internal_notes",
+    "email": "enc_contact_email",
+    "phone": "enc_contact_phone",
+    "contact": "enc_contact_name",
+    "kakao": "enc_contact_kakao",
+    "name": "employer_display_name",
+    "teachingAge": "teaching_age",
+    "salary": "salary_raw",
+    "startDate": "start_date",
+    "classSize": "class_size",
+    "workingHours": "working_hours",
+    "teachHrsWeek": "teach_hrs_week",
+    "housingType": "housing_type",
+    "housingDetail": "housing_detail",
+    "nativeCount": "native_count",
+    "rawText": "raw_text",
+    "jNumber": "job_code",
+}
+_JOBS_ENC_FIELDS = {"enc_contact_email", "enc_contact_phone", "enc_contact_name", "enc_contact_kakao"}
 
 
-@app.patch("/api/employers/{jNumber}", tags=["employers"])
-async def update_employer(jNumber: str, request: Request):
-    """구인자 정보 수정."""
+@app.patch("/api/employers/{job_id}", tags=["employers"])
+async def update_employer(job_id: int, request: Request):
+    """구인자 정보 수정 — jobs 테이블 기준 (id로 식별)."""
     _check_admin(request)
     data = await request.json()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6848,53 +6860,35 @@ async def update_employer(jNumber: str, request: Request):
         sets = []
         vals = []
         for k, v in data.items():
-            if k == "jNumber":
-                continue  # PK는 별도 처리
-            if k in _EMPLOYER_ENC_FIELDS and v:
-                sets.append(f"{k} = ?")
-                vals.append(_encrypt_if_needed(v))
-            elif k in ("emails", "tags") and isinstance(v, list):
-                sets.append(f"{k} = ?")
-                vals.append(_json.dumps(v, ensure_ascii=False))
-            elif isinstance(v, bool):
-                sets.append(f"{k} = ?")
-                vals.append(int(v))
+            if k == "id":
+                continue
+            db_col = _JOBS_FIELD_MAP.get(k, k)
+            if db_col in _JOBS_ENC_FIELDS and v:
+                sets.append(f"{db_col} = ?")
+                vals.append(_encrypt_if_needed(str(v)))
             else:
-                sets.append(f"{k} = ?")
+                sets.append(f"{db_col} = ?")
                 vals.append(v)
 
         if not sets:
             return {"ok": True}
 
-        vals.append(jNumber)
-        conn.execute(
-            f"UPDATE employers SET {','.join(sets)} WHERE jNumber = ?", vals
-        )
-
-        # jNumber 변경 요청 시
-        new_jn = data.get("jNumber")
-        if new_jn and new_jn != jNumber:
-            conn.execute(
-                "UPDATE employers SET jNumber = ? WHERE jNumber = ?",
-                (new_jn, jNumber),
-            )
-
+        vals.append(job_id)
+        conn.execute(f"UPDATE jobs SET {','.join(sets)} WHERE id = ?", vals)
         conn.commit()
         return {"ok": True}
     finally:
         conn.close()
 
 
-@app.delete("/api/employers/{jNumber}", tags=["employers"])
-async def delete_employer(jNumber: str, request: Request):
-    """구인자 논리 삭제 (is_deleted=1)."""
+@app.delete("/api/employers/{job_id}", tags=["employers"])
+async def delete_employer(job_id: int, request: Request):
+    """구인자 논리 삭제 — jobs 테이블 (is_deleted=1)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        conn.execute(
-            "UPDATE employers SET is_deleted = 1 WHERE jNumber = ?", (jNumber,)
-        )
+        conn.execute("UPDATE jobs SET is_deleted = 1 WHERE id = ?", (job_id,))
         conn.commit()
         return {"ok": True}
     finally:
