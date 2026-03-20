@@ -50,8 +50,7 @@ const NAV_CATEGORIES: NavCategory[] = [
   {
     title: '인력 관리',
     items: [
-      { href: '/admin/candidates', label: '원어민 관리', icon: <Users size={ICON_SIZE} /> },
-      { href: '/admin/sheet', label: '원어민 스프레드시트', icon: <Table2 size={ICON_SIZE} /> },
+      { href: '/admin/sheet', label: '원어민 관리', icon: <Table2 size={ICON_SIZE} /> },
       { href: '/admin/employers', label: '구인자 관리', icon: <Building2 size={ICON_SIZE} /> },
       { href: '/admin/interviews', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
       { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
