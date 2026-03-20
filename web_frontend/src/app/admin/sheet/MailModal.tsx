@@ -9,9 +9,21 @@ const API = API_URL
 
 // 발송자 계정 목록
 const SENDERS = [
-  { value: 'bridgejobkr@gmail.com', label: 'Gmail (bridgejobkr)', color: '#ea4335' },
-  { value: 'bridgejobkr@naver.com', label: 'Naver (bridgejobkr)', color: '#03c75a' },
+  { value: 'bridgejobkr@gmail.com', label: 'Gmail', color: '#ea4335' },
+  { value: 'bridgejobkr@naver.com', label: 'Naver', color: '#03c75a' },
 ]
+
+// 템플릿 한국어 라벨 오버라이드
+const TMPL_KR: Record<string, string> = {
+  interview: '인터뷰 안내',
+  contract: '계약 안내',
+  visa: '비자 안내',
+  settle: '정착 안내',
+  tax: '세금 안내',
+  transfer: '이체 안내',
+  renewal: '갱신 안내',
+  custom: '직접 작성',
+}
 
 interface MailModalProps {
   open: boolean
@@ -123,13 +135,7 @@ export default function MailModal({ open, recipients, onClose, onSend, getHeader
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <b style={{ fontSize: 20 }}>✉ 메일 작성</b>
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-              background: '#dbeafe', color: '#1d4ed8',
-            }}>
-              {recipients.length}명 개별발송
-            </span>
+            <b style={{ fontSize: 20 }}>메일 작성</b>
           </div>
           <button onClick={onClose} style={{
             border: 'none', background: 'transparent', fontSize: 22, cursor: 'pointer', color: '#64748b',
@@ -153,7 +159,7 @@ export default function MailModal({ open, recipients, onClose, onSend, getHeader
                   transition: 'all 0.1s',
                 }}
               >
-                {m.label}
+                {TMPL_KR[m.key] ?? m.label}
               </button>
             ))}
           </div>
@@ -162,17 +168,19 @@ export default function MailModal({ open, recipients, onClose, onSend, getHeader
         {/* Sender toggle */}
         <div style={{ padding: '8px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', minWidth: 40 }}>발신</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {SENDERS.map(s => (
+          <div style={{ display: 'flex', gap: 0, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            {SENDERS.map((s, i) => (
               <button
                 key={s.value}
                 onClick={() => setSender(s.value)}
                 style={{
-                  padding: '5px 14px', fontSize: 13, borderRadius: 6, cursor: 'pointer',
-                  border: sender === s.value ? `2px solid ${s.color}` : '1px solid #e2e8f0',
-                  background: sender === s.value ? s.color + '15' : '#f8fafc',
-                  color: sender === s.value ? s.color : '#374151',
+                  padding: '6px 18px', fontSize: 13, cursor: 'pointer',
+                  background: sender === s.value ? s.color : '#fff',
+                  color: sender === s.value ? '#fff' : '#374151',
                   fontWeight: sender === s.value ? 800 : 500,
+                  transition: 'all 0.15s',
+                  border: 'none',
+                  borderRight: i < SENDERS.length - 1 ? '1px solid #e2e8f0' : 'none',
                 }}
               >
                 {s.label}
@@ -180,12 +188,15 @@ export default function MailModal({ open, recipients, onClose, onSend, getHeader
             ))}
           </div>
           <span style={{
-            fontSize: 13, fontWeight: 700,
-            background: activeSender.color + '20',
+            fontSize: 12, fontWeight: 700,
+            background: activeSender.color + '15',
             color: activeSender.color,
-            padding: '4px 12px', borderRadius: 6,
+            padding: '4px 10px', borderRadius: 6,
           }}>
             {activeSender.value}
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '4px 12px', borderRadius: 20 }}>
+            {recipients.length}명 개별발송
           </span>
         </div>
 
