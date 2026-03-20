@@ -4285,7 +4285,11 @@ async def admin_confirm_interview(body: InterviewConfirm, request: Request):
 
 # ── File Upload System ─────────────────────────────────────────────────────────
 _UPLOAD_BASE = Path(os.getenv("BRIDGE_UPLOAD_DIR", str(Path(__file__).resolve().parent / "uploads")))
-_UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
+try:
+    _UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
+except OSError:
+    _UPLOAD_BASE = Path("/tmp/bridge_uploads")
+    _UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
 _log_upload = logging.getLogger("bridge.upload")
 
@@ -4829,11 +4833,18 @@ _DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
 
 # 제출 백업 디렉터리 (Render: /data/backups/auto, 로컬: ./backups/auto)
 _BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR", str(Path(__file__).resolve().parent / "backups" / "auto")))
-os.makedirs(str(_BACKUP_DIR), exist_ok=True)  # Python 3.14 pathlib mkdir 버그 우회
+try:
+    _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    _BACKUP_DIR = Path("/tmp/bridge_backups/auto")
+    _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 # 카운터 영속화 파일 (재시작 후에도 유지)
-_CHANGE_COUNT_FILE = Path(__file__).resolve().parent / "backups" / "change_count.txt"
-os.makedirs(str(_CHANGE_COUNT_FILE.parent), exist_ok=True)  # Python 3.14 pathlib mkdir 버그 우회
+_CHANGE_COUNT_FILE = _BACKUP_DIR.parent / "change_count.txt"
+try:
+    _CHANGE_COUNT_FILE.parent.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 def _load_change_count() -> int:
     try:
@@ -6201,7 +6212,11 @@ async def testimonials_reorder(request: Request):
 # ── Secure Download Links System ──────────────────────────────────────────────
 
 _DOWNLOAD_DIR = Path(os.getenv("BRIDGE_DOWNLOAD_DIR", str(Path(__file__).resolve().parent / "secure_downloads")))
-_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    _DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    _DOWNLOAD_DIR = Path("/tmp/bridge_downloads")
+    _DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _ensure_download_links_schema():
@@ -6831,6 +6846,118 @@ async def send_mail_single(request: Request):
         raise HTTPException(status_code=401, detail="SMTP 인증 실패")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── 앱 비밀키 관리 (App Secrets) ─────────────────────────────────────────────
+# 외부 API 키 등 민감 정보를 AES-256 암호화 후 SQLite에 저장.
+# 값(value)은 어떤 API 응답에도 절대 포함되지 않음.
+
+def _ensure_app_secrets_table():
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_secrets (
+            key         TEXT PRIMARY KEY,
+            enc_value   TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+try:
+    _ensure_app_secrets_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_app_secrets_table 스킵: %s", _e)
+
+
+def get_secret(key: str) -> "str | None":
+    """내부 전용 — 복호화된 시크릿 값 반환. 없으면 None, env var 폴백 포함."""
+    # 환경변수 우선 (Render 대시보드 설정 값)
+    env_val = os.getenv(key)
+    if env_val:
+        return env_val
+    # DB 조회
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT enc_value FROM app_secrets WHERE key = ?", (key,)
+        ).fetchone()
+        if not row:
+            return None
+        enc = row["enc_value"]
+        if _VAULT_OK:
+            try:
+                return decrypt_field(enc)
+            except Exception:
+                return enc
+        return enc
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/secrets", tags=["admin"])
+async def list_secrets(request: Request):
+    """비밀키 목록 — 키 이름·설명·수정일만 반환. 값은 절대 포함 안 함."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT key, description, updated_at FROM app_secrets ORDER BY key"
+        ).fetchall()
+        return ok(data={"secrets": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/secrets", tags=["admin"])
+async def set_secret(request: Request):
+    """비밀키 등록/수정 — AES-256 암호화 저장. body: {key, value, description}"""
+    _check_admin(request)
+    body = await request.json()
+    key   = str(body.get("key", "")).strip().upper().replace(" ", "_")
+    value = str(body.get("value", "")).strip()
+    desc  = str(body.get("description", "")).strip()
+    if not key or not value:
+        raise HTTPException(400, "key와 value는 필수입니다.")
+    if len(key) > 64 or len(value) > 4096:
+        raise HTTPException(400, "key 또는 value가 너무 깁니다.")
+    enc_value = encrypt_field(value) if _VAULT_OK else value
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            """INSERT INTO app_secrets (key, enc_value, description, updated_at)
+               VALUES (?, ?, ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET
+                 enc_value   = excluded.enc_value,
+                 description = excluded.description,
+                 updated_at  = excluded.updated_at""",
+            (key, enc_value, desc)
+        )
+        conn.commit()
+        return ok(message=f"'{key}' 저장 완료")
+    finally:
+        conn.close()
+
+
+@app.delete("/api/admin/secrets/{key}", tags=["admin"])
+async def delete_secret(key: str, request: Request):
+    """비밀키 삭제."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("DELETE FROM app_secrets WHERE key = ?", (key.upper(),))
+        conn.commit()
+        return ok(message=f"'{key}' 삭제 완료")
+    finally:
+        conn.close()
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
