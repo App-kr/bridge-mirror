@@ -43,3 +43,8 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "refresh") refreshToken();
 });
+
+// content script 요청 시 즉시 실행
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.action === "refreshNow") refreshToken();
+});
