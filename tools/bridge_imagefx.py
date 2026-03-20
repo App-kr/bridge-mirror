@@ -1,8 +1,13 @@
 r"""
-bridge_imagefx.py — Bridge ImageFX v4 (Gemini)
-================================================
-완전 자동 이미지 생성 — BX에 저장된 Gemini API 키 사용
-바탕화면 "Bridge ImageFX" 아이콘 더블클릭 → 자동생성 → 저장 폴더에 자동 저장
+bridge_imagefx.py — Bridge ImageFX v4 (Auto Token via Extension)
+================================================================
+Chrome 확장 프로그램이 25분마다 ImageFX 토큰을 자동 갱신.
+바탕화면 "Bridge ImageFX" 아이콘 더블클릭 → 자동생성 → 바탕화면에 저장.
+
+최초 1회 설정:
+  1. Chrome → chrome://extensions → 개발자 모드 ON
+  2. "압축해제된 확장 프로그램을 로드합니다" → tools/bridge_token_ext 선택
+  3. 끝 — 이후 토큰 자동 갱신
 """
 
 import os
@@ -14,11 +19,17 @@ import base64
 import socket
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import urllib.request
 import urllib.error
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    HAS_PILLOW = True
+except ImportError:
+    HAS_PILLOW = False
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,129 +57,119 @@ def _save_config(cfg):
 _config = _load_config()
 _save_dir = _config.get("save_dir", DEFAULT_SAVE_DIR)
 
-# ── Gemini API Keys (BX에서 로드) ────────────────────────────────────────
-_gemini_keys = []
-_key_index = 0
+# ── Ban Prevention ────────────────────────────────────────────────────────
+DELAY_MIN = 10
+DELAY_MAX = 18
+HOURLY_LIMIT = 8
+DAILY_LIMIT = 40
+MAX_IMAGES = 4
 
-def _load_gemini_keys():
-    global _gemini_keys
-    try:
-        sys.path.insert(0, TOOLS_DIR)
-        from bx import get_gemini_keys
-        keys = get_gemini_keys()
-        _gemini_keys = [k["key"] for k in keys if k.get("key")]
-        print(f"[KEYS] Gemini API keys loaded: {len(_gemini_keys)}")
-    except Exception as e:
-        print(f"[KEYS] Failed to load keys: {e}")
-        _gemini_keys = []
+# ── API ───────────────────────────────────────────────────────────────────
+GENERATE_URL = "https://aisandbox-pa.googleapis.com/v1:runImageFx"
 
-def _next_key():
-    global _key_index
-    if not _gemini_keys:
-        return None
-    key = _gemini_keys[_key_index % len(_gemini_keys)]
-    _key_index += 1
-    return key
-
-# ── Rate Limiting ────────────────────────────────────────────────────────
-DELAY_BETWEEN = 3
-_last_request_time = 0.0
-_gen_lock = threading.Lock()
-
-# ── Gemini Image Generation ─────────────────────────────────────────────
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+API_HEADERS = {
+    "Origin": "https://labs.google",
+    "Content-Type": "application/json",
+    "Referer": "https://labs.google/fx/tools/image-fx",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+}
 
 
-def generate_image(prompt: str) -> dict:
-    global _last_request_time, _save_dir
+# ── Session ───────────────────────────────────────────────────────────────
+class ImageFXSession:
+    def __init__(self):
+        self.token = None
+        self.token_expires = 0
+        self._lock = threading.Lock()
+        self._request_times: list = []
+        self._daily_count = 0
+        self._daily_reset = datetime.now().replace(
+            hour=0, minute=0, second=0
+        ) + timedelta(days=1)
+        self._last_request = 0.0
 
-    if not _gemini_keys:
-        return {"ok": False, "error": "Gemini API key not found. Run: python tools/bx.py ls"}
+    @property
+    def authenticated(self) -> bool:
+        return bool(self.token) and time.time() < self.token_expires
 
-    with _gen_lock:
-        elapsed = time.time() - _last_request_time
-        if _last_request_time > 0 and elapsed < DELAY_BETWEEN:
-            wait = DELAY_BETWEEN - elapsed
-            time.sleep(wait)
+    @property
+    def token_remaining_min(self) -> int:
+        if not self.token:
+            return 0
+        return max(0, int((self.token_expires - time.time()) / 60))
 
-        os.makedirs(_save_dir, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uid = random.randint(1000, 9999)
-
-        api_key = _next_key()
-        url = f"{GEMINI_URL}?key={api_key}"
-
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
-        }).encode("utf-8")
-
-        try:
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-
-            # Extract image from response
-            candidates = result.get("candidates", [])
-            if not candidates:
-                return {"ok": False, "error": "No candidates in response"}
-
-            parts = candidates[0].get("content", {}).get("parts", [])
-            saved = []
-            img_idx = 0
-            for part in parts:
-                inline = part.get("inlineData")
-                if not inline:
-                    continue
-                b64_data = inline.get("data", "")
-                mime = inline.get("mimeType", "image/png")
-                if not b64_data:
-                    continue
-
-                img_bytes = base64.b64decode(b64_data)
-                ext = ".png" if "png" in mime else ".jpg"
-                fname = f"bridge_{ts}_{uid}_{img_idx}{ext}"
-                fpath = os.path.join(_save_dir, fname)
-                with open(fpath, "wb") as f:
-                    f.write(img_bytes)
-
-                saved.append({
-                    "filename": fname,
-                    "url": f"/api/saved-image/{fname}",
-                    "size_kb": round(len(img_bytes) / 1024, 1),
-                })
-                img_idx += 1
-
-            _last_request_time = time.time()
-
-            if saved:
-                return {
-                    "ok": True,
-                    "count": len(saved),
-                    "folder": _save_dir.replace("\\", "/"),
-                    "images": saved,
-                }
+    def set_token(self, token: str, expires=None):
+        with self._lock:
+            self.token = token
+            if expires:
+                try:
+                    if isinstance(expires, str):
+                        dt = datetime.fromisoformat(
+                            expires.replace("Z", "+00:00")
+                        )
+                        self.token_expires = dt.timestamp()
+                    elif isinstance(expires, (int, float)):
+                        ts = float(expires)
+                        if ts > 1e12:
+                            ts /= 1000
+                        self.token_expires = ts
+                    else:
+                        self.token_expires = time.time() + 3000
+                except Exception:
+                    self.token_expires = time.time() + 3000
             else:
-                return {"ok": False, "error": "No image in response (prompt may be filtered)"}
+                self.token_expires = time.time() + 3000
+            print(f"[AUTH] Token set ({self.token_remaining_min}min remaining)")
 
-        except urllib.error.HTTPError as e:
-            body_text = ""
-            try:
-                body_text = e.read().decode("utf-8", errors="replace")[:300]
-            except Exception:
-                pass
-            if e.code == 429:
-                return {"ok": False, "error": "Rate limited. 잠시 후 재시도"}
-            if e.code == 400 and "SAFETY" in body_text.upper():
-                return {"ok": False, "error": "Safety filter blocked this prompt"}
-            return {"ok": False, "error": f"HTTP {e.code}: {body_text[:200]}"}
-        except Exception as e:
-            return {"ok": False, "error": str(e)[:300]}
+    def get_auth_headers(self) -> dict:
+        if not self.authenticated:
+            raise RuntimeError("Token missing or expired")
+        return {
+            **API_HEADERS,
+            "Authorization": f"Bearer {self.token}",
+        }
+
+    def check_rate_limit(self):
+        now = datetime.now()
+        if now >= self._daily_reset:
+            self._daily_count = 0
+            self._daily_reset = now.replace(
+                hour=0, minute=0, second=0
+            ) + timedelta(days=1)
+        if self._daily_count >= DAILY_LIMIT:
+            return f"Daily limit ({DAILY_LIMIT})"
+        cutoff = time.time() - 3600
+        self._request_times = [t for t in self._request_times if t > cutoff]
+        if len(self._request_times) >= HOURLY_LIMIT:
+            wait = int((self._request_times[0] + 3600 - time.time()) / 60) + 1
+            return f"Hourly limit ({HOURLY_LIMIT}). Wait {wait}min"
+        return None
+
+    def record_request(self):
+        self._request_times.append(time.time())
+        self._daily_count += 1
+        self._last_request = time.time()
+
+    def wait_delay(self):
+        elapsed = time.time() - self._last_request
+        if self._last_request > 0 and elapsed < DELAY_MIN:
+            wait = random.uniform(DELAY_MIN, DELAY_MAX) - elapsed
+            if wait > 0:
+                print(f"[SAFE] {wait:.1f}s delay")
+                time.sleep(wait)
+
+    def remaining(self) -> dict:
+        cutoff = time.time() - 3600
+        hourly_used = len([t for t in self._request_times if t > cutoff])
+        return {
+            "hourly": f"{hourly_used}/{HOURLY_LIMIT}",
+            "daily": f"{self._daily_count}/{DAILY_LIMIT}",
+            "token_min": self.token_remaining_min,
+        }
 
 
 # ── Folder Picker ─────────────────────────────────────────────────────────
@@ -189,6 +190,190 @@ def _pick_folder(initial_dir):
     except Exception as e:
         print(f"[FOLDER] Dialog error: {e}")
         return ""
+
+
+# ── BRIDGE Logo Overlay ──────────────────────────────────────────────────
+LOGO_PNG = os.path.join(TOOLS_DIR, "bridge_logo.png")
+
+
+def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
+    """Add BRIDGE logo watermark to bottom-right corner of image."""
+    if not HAS_PILLOW:
+        return img_bytes
+    try:
+        import io
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        w, h = img.size
+
+        if os.path.isfile(LOGO_PNG):
+            logo = Image.open(LOGO_PNG).convert("RGBA")
+            target_w = int(w * 0.15)
+            ratio = target_w / logo.width
+            target_h = int(logo.height * ratio)
+            logo = logo.resize((target_w, target_h), Image.LANCZOS)
+        else:
+            font_size = max(24, int(w * 0.035))
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+            tmp_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+            bbox = tmp_draw.textbbox((0, 0), "BRIDGE", font=font)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+            pad_x, pad_y = int(tw * 0.3), int(th * 0.4)
+            logo = Image.new("RGBA", (tw + pad_x * 2, th + pad_y * 2), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(logo)
+            draw.rounded_rectangle(
+                [(0, 0), (logo.width - 1, logo.height - 1)],
+                radius=int(th * 0.3),
+                fill=(0, 0, 0, 140),
+            )
+            draw.text((pad_x, pad_y), "BRIDGE", fill=(255, 255, 255, 230), font=font)
+
+        margin = int(w * 0.025)
+        pos = (w - logo.width - margin, h - logo.height - margin)
+        img.paste(logo, pos, logo)
+
+        out = io.BytesIO()
+        img.save(out, format="PNG", optimize=True)
+        return out.getvalue()
+    except Exception as e:
+        print(f"[LOGO] Overlay failed: {e}")
+        return img_bytes
+
+
+# ── Image Generation ──────────────────────────────────────────────────────
+_session = ImageFXSession()
+_gen_lock = threading.Lock()
+
+
+def generate_images(prompt: str, count: int = 3) -> dict:
+    global _save_dir
+    if not _session.authenticated:
+        return {
+            "ok": False,
+            "error": "Token not set. Install Chrome extension (bridge_token_ext) or visit ImageFX first.",
+            "need_auth": True,
+        }
+
+    with _gen_lock:
+        limit_msg = _session.check_rate_limit()
+        if limit_msg:
+            return {"ok": False, "error": limit_msg, "quota": _session.remaining()}
+
+        _session.wait_delay()
+        os.makedirs(_save_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        try:
+            headers = _session.get_auth_headers()
+
+            body = json.dumps({
+                "userInput": {
+                    "candidatesCount": min(count, MAX_IMAGES),
+                    "prompts": [prompt],
+                    "seed": random.randint(1, 999999999),
+                },
+                "clientContext": {
+                    "sessionId": f";{int(time.time() * 1000)}",
+                    "tool": "IMAGE_FX",
+                },
+                "modelInput": {
+                    "modelNameType": "IMAGEN_3_5",
+                },
+                "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+            }).encode("utf-8")
+
+            req = urllib.request.Request(GENERATE_URL, data=body, headers=headers)
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+
+            panels = result.get("imagePanels", [])
+            if not panels:
+                return {"ok": False, "error": "No panels — prompt may be filtered"}
+
+            gen_images = panels[0].get("generatedImages", [])
+            if not gen_images:
+                return {"ok": False, "error": "No images generated"}
+
+            saved = []
+            for i, img_data in enumerate(gen_images):
+                encoded = img_data.get("encodedImage", "")
+                if not encoded:
+                    continue
+                try:
+                    img_bytes = base64.b64decode(encoded)
+                except Exception:
+                    img_bytes = _fetch_media(encoded, headers)
+                    if not img_bytes:
+                        continue
+
+                # Apply BRIDGE logo overlay
+                img_bytes = _overlay_bridge_logo(img_bytes)
+
+                fname = f"bridge_{ts}_{i+1}.png"
+                fpath = os.path.join(_save_dir, fname)
+                with open(fpath, "wb") as f:
+                    f.write(img_bytes)
+
+                saved.append({
+                    "filename": fname,
+                    "url": f"/api/saved-image/{fname}",
+                    "size_kb": round(len(img_bytes) / 1024, 1),
+                })
+
+            _session.record_request()
+
+            if saved:
+                return {
+                    "ok": True,
+                    "count": len(saved),
+                    "folder": _save_dir.replace("\\", "/"),
+                    "images": saved,
+                    "quota": _session.remaining(),
+                }
+            else:
+                return {"ok": False, "error": "Failed to save images"}
+
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode("utf-8", errors="replace")[:500]
+            if e.code in (401, 403):
+                _session.token = None
+                return {
+                    "ok": False,
+                    "error": f"Auth expired (HTTP {e.code})",
+                    "need_auth": True,
+                }
+            if e.code == 429:
+                return {"ok": False, "error": "Google rate limit. Wait a moment"}
+            return {"ok": False, "error": f"HTTP {e.code}: {body_text}"}
+        except RuntimeError as e:
+            return {"ok": False, "error": str(e), "need_auth": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:300]}
+
+
+def _fetch_media(media_key: str, headers: dict):
+    try:
+        param = json.dumps({"json": {"mediaKey": media_key}})
+        url = f"https://labs.google/fx/api/trpc/media.fetchMedia?input={quote(param)}"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            nested = data.get("result", {}).get("data", {}).get("json", {})
+            media_url = nested.get("url", "")
+            if media_url:
+                req2 = urllib.request.Request(media_url)
+                with urllib.request.urlopen(req2, timeout=30) as resp2:
+                    return resp2.read()
+            b64 = nested.get("base64", "")
+            if b64:
+                return base64.b64decode(b64)
+    except Exception as e:
+        print(f"[MEDIA] Download failed: {e}")
+    return None
 
 
 # ── HTTP Server ───────────────────────────────────────────────────────────
@@ -213,6 +398,8 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/generate":
             self._handle_generate()
+        elif parsed.path == "/api/set-token":
+            self._handle_set_token()
         elif parsed.path == "/api/pick-folder":
             self._handle_pick_folder()
         elif parsed.path == "/api/open-folder":
@@ -254,7 +441,7 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
         abs_file = os.path.abspath(fpath)
         if os.path.isfile(fpath) and abs_file.startswith(abs_save):
             ext = os.path.splitext(fname)[1].lower()
-            ct = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(ext, "image/jpeg")
+            ct = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(ext, "image/png")
             with open(fpath, "rb") as f:
                 data = f.read()
             self.send_response(200)
@@ -269,11 +456,35 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
     def _status_info(self):
         return {
             "ok": True,
-            "online": bool(_gemini_keys),
-            "provider": f"Gemini ({len(_gemini_keys)} keys)",
+            "online": True,
+            "authenticated": _session.authenticated,
+            "provider": "ImageFX (Imagen 3.5)",
+            "quota": _session.remaining(),
             "save_dir": _save_dir.replace("\\", "/"),
             "port": PORT,
         }
+
+    def _handle_set_token(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            body = json.loads(raw)
+        except Exception:
+            self._json_response({"ok": False, "message": "Bad request"}, 400)
+            return
+        token = body.get("token") or body.get("access_token")
+        expires = body.get("expires")
+        if not token:
+            self._json_response({
+                "ok": False,
+                "message": "Empty token",
+            }, 400)
+            return
+        _session.set_token(token, expires)
+        self._json_response({
+            "ok": True,
+            "message": f"Auth OK! Token valid: {_session.token_remaining_min}min",
+        })
 
     def _handle_generate(self):
         try:
@@ -284,10 +495,13 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
             self._json_response({"ok": False, "error": "Bad request"}, 400)
             return
         prompt = body.get("prompt", "").strip()
+        count = min(int(body.get("count", 3)), MAX_IMAGES)
         if not prompt:
-            self._json_response({"ok": False, "error": "Empty prompt"}, 400)
+            self._json_response(
+                {"ok": False, "error": "Empty prompt"}, 400
+            )
             return
-        result = generate_image(prompt)
+        result = generate_images(prompt, count)
         self._json_response(result)
 
     def _handle_pick_folder(self):
@@ -322,19 +536,26 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
 def main():
     global _save_dir
     os.makedirs(_save_dir, exist_ok=True)
-    _load_gemini_keys()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(("127.0.0.1", PORT)) == 0:
             print(f"Already running: http://localhost:{PORT}")
             return
 
-    print(f"\n{'='*50}")
-    print(f"  Bridge ImageFX v4 (Gemini)")
-    print(f"{'='*50}")
-    print(f"  Server:  http://localhost:{PORT}")
-    print(f"  Save:    {_save_dir}")
-    print(f"  Keys:    {len(_gemini_keys)}")
+    ext_dir = os.path.join(TOOLS_DIR, "bridge_token_ext")
+    ext_ok = os.path.isdir(ext_dir)
+
+    print(f"\n{'='*56}")
+    print(f"  Bridge ImageFX Server v4")
+    print(f"{'='*56}")
+    print(f"  Server:    http://localhost:{PORT}")
+    print(f"  Save:      {_save_dir}")
+    print(f"  Extension: {'OK' if ext_ok else 'MISSING'} ({ext_dir})")
+    print(f"  Limits:    {DELAY_MIN}~{DELAY_MAX}s, {HOURLY_LIMIT}/hr, {DAILY_LIMIT}/day")
+    print()
+    if not ext_ok:
+        print("  [!] Chrome extension not found!")
+    print("  Token will be auto-refreshed by Chrome extension.")
     print(f"\n  Exit: Ctrl+C\n")
 
     server = HTTPServer(("127.0.0.1", PORT), ImageFXHandler)
