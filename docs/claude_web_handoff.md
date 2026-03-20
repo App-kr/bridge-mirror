@@ -1,6 +1,7 @@
 # BRIDGE 프로젝트 — Claude 웹 전달용 핸드오프 문서
-> 작성일: 2026-03-20 | 작성: Claude Code (Sonnet 4.6)
+> 작성일: 2026-03-20 (v2) | 작성: Claude Code (Sonnet 4.6)
 > 다음 세션에서 이 문서를 Claude.ai 웹에 붙여넣어 컨텍스트 이어받기
+> **상세 컨텍스트**: `docs/AI_CONTEXT.md` / **보안 설계**: `docs/AI_SECURITY_DESIGN.md`
 
 ---
 
@@ -21,7 +22,7 @@
 web_frontend/src/app/admin/sheet/
 ├── page.tsx               — 진입점 (AdminAuth 인증)
 ├── BridgeCanvasSheet.tsx  — 메인 React 래퍼 (3000줄+)
-├── MailModal.tsx          — 메일 발송 모달
+├── MailModal.tsx          — 메일 발송 모달 (구인자 스타일 재작성 완료)
 └── engine/
     ├── GridEngine.ts      — Canvas 그리드 코어 (렌더링/스크롤/마우스/키)
     ├── EditManager.ts     — 인라인 편집 (더블클릭 → input overlay)
@@ -43,14 +44,11 @@ web_frontend/src/app/admin/sheet/
 
 ---
 
-## 3. 이번 세션(2026-03-20) 완료된 작업 전체 목록
+## 3. 2026-03-20 세션 완료된 작업 전체 목록
 
-### 3-1. 암호화 필드 복원 (8회차 완결)
-- **문제**: 국적/나이/현위치/레퍼런스/국내범죄 열이 AES-256-GCM Base64 문자열로 표시됨
-- **원인**: 로컬 `.env`의 `BRIDGE_FIELD_KEY=VAULT` (플레이스홀더), 실제 키로 복호화 불가
+### 3-1. 암호화 필드 복원 (완결)
 - **해결**: `web_frontend/master.db` (평문 3057건) → `master.db`에 직접 복원
-  - 복원 필드: nationality, current_location, dob, korean_criminal_record, reference, email, full_name, mobile_phone, kakaotalk, gender, health_info, religion, notes, criminal_record
-- **Render 프로덕션**: 서버에 실제 키 존재 → 서버사이드 복호화 정상 (`남아공`, `미국` 등 한국어 정상 반환)
+- **Render 프로덕션**: 서버에 실제 키 존재 → 서버사이드 복호화 정상
 
 ### 3-2. 집중관리 탭 추가 (commit `224d81a`)
 ```tsx
@@ -60,28 +58,35 @@ const isFocusRow = (r: DataRow): boolean =>
 ```
 
 ### 3-3. Pipeline 상태표시줄 (commit `72c173a`)
-- 화면 상단에 어두운 배경 상태바: 진행단계별 건수 + 업체명 파싱
-- `pipelineData` useMemo: stage별 그룹핑 + proposal 첫줄에서 업체명 추출
+- 화면 상단 어두운 배경 상태바: 진행단계별 건수 + 업체명 파싱
 
 ### 3-4. 열 이동/메모/사진 버그 수정 (commit `3c28b0a`)
-- 헤더 우클릭 → "열 왼쪽으로" / "열 오른쪽으로" 추가
+- 헤더 우클릭 → "열 왼쪽으로" / "열 오른쪽으로"
 - 메모 배경색 color picker + "지우기" 버튼
-- 사진 paste 시 textarea 포커스 충돌 방지 (early return)
+- 사진 paste 시 textarea 포커스 충돌 방지
 
 ### 3-5. 사진 우클릭 업로드 + 완료 토스트 (commit `5149109`)
 - 행 우클릭 → "📷 사진 파일 선택..." / "🗑 사진 삭제"
-- 업로드/붙여넣기 성공 시 하단 초록 토스트 (fadeInUp 0.2s)
+- 업로드/붙여넣기 성공 시 하단 초록 토스트
 
 ### 3-6. 발송상태 열 제거 + 진행단계 배경색 (commit `714974f`)
-- `mailAction`, `mailStatus` 열 v:false (숨김)
-- stage 변경 시 해당 행 전체 배경색 자동 적용 (STAGES[stage].color 사용)
+- `mailAction`, `mailStatus` 열 숨김
+- stage 변경 시 해당 행 전체 배경색 자동 적용
 
 ### 3-7. 사진/행삭제/스타일/mailStatus/stage배경색 (commit `b654f0a`)
-- **사진 셀 cover 채우기**: `GridEngine.drawPhoto` → object-fit:cover 방식 (소스 중앙 크롭 후 셀 전체 채우기)
-- **행 삭제**: 우클릭 컨텍스트 메뉴 "행 삭제" → `PATCH is_deleted:1` (soft delete)
-- **스타일 토글**: B/I/S 버튼 클릭 시 현재 상태 반전 + 선택 전체 행 일괄 적용
-- **mailStatus 열 완전 제거**: `defaultCols()`에서 삭제 (DataRow 인터페이스는 API 호환성 유지)
-- **진행단계 배경색**: stage 값에 따라 행 전체 배경색 자동 적용 (33% 불투명도)
+- 사진 셀 object-fit:cover 방식 (중앙 크롭)
+- 행 삭제: 우클릭 → PATCH is_deleted:1 소프트 삭제
+- B/I/S 버튼 토글: 현재 상태 반전 + 선택 전체 행 일괄 적용
+- mailStatus 열 defaultCols()에서 완전 삭제
+- stage 값에 따라 행 전체 배경색 (33% 불투명도)
+
+### 3-8. 열 선택 스타일 버그 수정 + MailModal 재작성 (commit `60447ee`)
+- `hasColSel` 분기: 열 선택 시 전체 행 × 선택 열 대상 batchSet
+- MailModal 완전 재작성: 구인자 스타일 (다크 헤더, 템플릿 탭, 수신자 칩)
+
+### 3-9. AI 핸드오프 보안 설계 (현재)
+- `docs/AI_CONTEXT.md` — 범용 AI 온보딩 문서
+- `docs/AI_SECURITY_DESIGN.md` — AI 보안 설계
 
 ---
 
@@ -89,10 +94,11 @@ const isFocusRow = (r: DataRow): boolean =>
 
 ```
 GET  /api/admin/candidates?tab={tab}&limit={n}&offset={n}
-PATCH /api/admin/candidates/{cid}          — 필드 수정
+PATCH /api/admin/candidates/{cid}
 POST /api/admin/upload-image               — 사진 업로드 → { data: { url } }
+POST /api/admin/mail/send                  — 메일 발송
 GET  /api/admin/decrypt-check              — 암호화 진단
-POST /api/admin/candidates/bulk-patch      — 대량 평문 복원 (이번 세션 추가)
+POST /api/admin/candidates/bulk-patch      — 대량 평문 복원
 ```
 
 ---
@@ -111,17 +117,6 @@ export const STAGES: Stage[] = [
   { key: 'caution',    label: '주의',    color: '#fecaca', text: '#000000' },
   { key: 'lost',       label: '두절',    color: '#e5e7eb', text: '#666666' },
 ]
-
-export interface DataRow {
-  id: number
-  _cid?: string
-  category: string     // 'active' | 'past' | 'blacklist'
-  stage: string        // STAGES key
-  mailStatus: string   // 쉼표 구분 tag key 목록 (내부 유지, UI 표시 안 함)
-  photoUrl: string
-  photoSize: number
-  [key: string]: string | number | undefined
-}
 ```
 
 ---
@@ -130,28 +125,19 @@ export interface DataRow {
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| 툴바 다중행 스타일 + 토글 | ✅ 완료 (`b654f0a`) | bold/italic/취소선 토글 |
-| 행 삭제 | ✅ 완료 (`b654f0a`) | is_deleted=1 소프트 삭제 |
-| 사진 셀 꽉 채우기 | ✅ 완료 (`b654f0a`) | cover 방식 canvas drawImage |
-| mailStatus 열 제거 | ✅ 완료 (`b654f0a`) | defaultCols에서 완전 삭제 |
-| 진행단계 배경색 | ✅ 완료 (`714974f`, `b654f0a`) | STAGES color 33% 불투명도 적용 |
 | 진행단계 → DB 저장 | 미구현 | 현재 로컬 상태 변경만, PATCH 미연결 |
-| 가상 렌더링 | 미구현 | Phase 4 과제 |
-| Render 프로덕션 배포 | 자동 (autoDeploy: true) | main push 시 자동 배포 |
+| 발송상태 태그 DB 반영 | 미구현 | Phase 3 |
+| 가상 렌더링 | 미구현 | Phase 4 |
 
 ---
 
 ## 7. 로컬 개발 환경
 
 ```bash
-# 프론트 (Next.js) — 이미 실행 중
-# 백엔드 (FastAPI) — 이미 실행 중
-# 서버 시작/종료 금지 (hot reload 중)
+# 프론트 (Next.js) — 이미 실행 중 (서버 시작/종료 금지)
+# 백엔드 (FastAPI) — 이미 실행 중 (서버 시작/종료 금지)
 
-# Python 실행 시 항상 절대경로 사용
-"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe" script.py
-
-# Git push (deploy_gate hook 자동 처리)
+# Git push
 git add 파일 && git commit -m "메시지" && git push origin main
 ```
 
@@ -173,6 +159,14 @@ git add 파일 && git commit -m "메시지" && git push origin main
 - **Scarlett** — 대표 (사용자)
 - **Claude Code** — AI 개발자 (현재 세션)
 - 모델: claude-sonnet-4-6 (Opus 사용 금지)
+
+---
+
+## 10. 다른 AI에서 시작할 때
+
+1. 이 파일 전체 붙여넣기
+2. 또는 더 상세한 컨텍스트: `docs/AI_CONTEXT.md` 전체 붙여넣기
+3. 보안 규칙: `docs/AI_SECURITY_DESIGN.md` 확인
 
 ---
 
