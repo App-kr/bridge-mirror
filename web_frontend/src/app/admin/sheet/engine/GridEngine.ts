@@ -376,6 +376,7 @@ export class GridEngine {
 
     // Row number click → select row (Google Sheets style)
     if (col && col.type === 'idx') {
+      this.selection.selectedCols.clear()  // 열 선택 해제
       this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
       this.cb.onSelectionChange(this.selection.getSelectedRows())
       this.requestRender()
@@ -406,6 +407,7 @@ export class GridEngine {
       return
     }
 
+    this.selection.selectedCols.clear()  // 열 선택 해제
     this.selection.selectRow(hit.row, e.ctrlKey || e.metaKey, e.shiftKey)
     this.selection.selectCell(hit.row, hit.visCol)
     this.cb.onSelectionChange(this.selection.getSelectedRows())
@@ -754,7 +756,8 @@ export class GridEngine {
 
   private drawRowBg(rowIdx: number, y: number, x0: number, x1: number, rowH: number): void {
     const { ctx } = this
-    if (this.selection.isRowSelected(rowIdx)) {
+    // 열 선택 모드에서는 행 전체 하이라이트 없음 (열 단위 그라데이션은 drawCell에서)
+    if (!this.selection.hasColSelection() && this.selection.isRowSelected(rowIdx)) {
       ctx.fillStyle = SELECTED_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
     } else if (rowIdx === this.hoverRow) {
       ctx.fillStyle = HOVER_BG; ctx.fillRect(x0, y, x1 - x0, rowH)
@@ -776,6 +779,14 @@ export class GridEngine {
     const { ctx } = this
     const val = String(row[col.key] ?? '')
     const cid = String(row._cid ?? '')
+
+    // 열 선택 하이라이트: 선택된 열의 모든 셀에 배경 표시
+    if (this.selection.hasColSelection()) {
+      const visIdx = this.visCols.indexOf(col)
+      if (visIdx >= 0 && this.selection.isColSelected(visIdx)) {
+        ctx.fillStyle = SELECTED_BG; ctx.fillRect(x, y, w, h)
+      }
+    }
 
     if (col.type === 't' || col.type === 'long' || col.type === 'dropdown') {
       const style = this.styleManager.getStyle(cid, col.key)
@@ -1050,6 +1061,7 @@ export class GridEngine {
   private drawHeaderCell(col: ColDef, x: number, w: number, colIndex: number): void {
     const { ctx } = this
     const nameY = 38  // vertical center of the column-name row (20..56 → center ≈ 38)
+    const isColSel = this.selection.isColSelected(colIndex)
 
     if (col.type === 'idx') {
       // Corner select-all button (Google Sheets style)
@@ -1060,32 +1072,38 @@ export class GridEngine {
       return
     }
 
+    // 열 선택 시 헤더 하이라이트
+    if (isColSel) {
+      ctx.fillStyle = '#1a73e8'
+      ctx.fillRect(x, 0, w, HEADER_H)
+    }
+
     // ── Alphabet row (top 0-20px) ──
     ctx.font = '10px system-ui, -apple-system, sans-serif'
-    ctx.fillStyle = '#999'
+    ctx.fillStyle = isColSel ? '#fff' : '#999'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillText(colAlphabet(colIndex), x + w / 2, 10)
 
     // ── Column name row (20-56px) ──
-    ctx.fillStyle = '#1e293b'
+    ctx.fillStyle = isColSel ? '#fff' : '#1e293b'
     ctx.font = HEADER_FONT
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     this.drawTruncated(col.label, x + w / 2, nameY, w - 24)
     ctx.textAlign = 'left'
 
     if (col.key === this.sortKey) {
-      ctx.fillStyle = SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
+      ctx.fillStyle = isColSel ? '#cce0ff' : SORT_ARROW; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText(this.sortDir === 'asc' ? '\u25B2' : '\u25BC', x + w - 16, nameY)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
     if (col.type !== 'photo' && col.type !== 'mail') {
-      ctx.fillStyle = '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
+      ctx.fillStyle = isColSel ? 'rgba(255,255,255,0.7)' : '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText('\u25BC', x + w - 5, nameY)
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
-    ctx.strokeStyle = HEADER_BORDER; ctx.lineWidth = 1
+    ctx.strokeStyle = isColSel ? 'rgba(255,255,255,0.3)' : HEADER_BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(x + w - 0.5, 4); ctx.lineTo(x + w - 0.5, HEADER_H - 4); ctx.stroke()
   }
 }

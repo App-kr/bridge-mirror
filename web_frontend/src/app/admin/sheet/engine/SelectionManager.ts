@@ -83,13 +83,22 @@ export class SelectionManager {
     this.anchorRow = row
   }
 
-  /** Select an entire column (alphabet header click) */
-  selectColumn(colIndex: number, rowCount: number): void {
+  /** Select an entire column (alphabet header click) — 행 선택 없이 열만 하이라이트 */
+  selectColumn(colIndex: number, _rowCount: number): void {
     this.selectedRows.clear()
-    for (let i = 0; i < rowCount; i++) this.selectedRows.add(i)
     this.selectedCols = new Set([colIndex])
     this.activeCell = { row: 0, col: colIndex }
-    this.anchorRow = 0
+    this.anchorRow = -1
+  }
+
+  /** Check if a column is selected */
+  isColSelected(colIndex: number): boolean {
+    return this.selectedCols.has(colIndex)
+  }
+
+  /** Check if any column is selected (vs row selection mode) */
+  hasColSelection(): boolean {
+    return this.selectedCols.size > 0
   }
 
   /** Move active cell with keyboard arrows */
