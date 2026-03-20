@@ -574,10 +574,20 @@ def main():
     global _save_dir
     os.makedirs(_save_dir, exist_ok=True)
 
+    # Kill any zombie server on same port
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(("127.0.0.1", PORT)) == 0:
-            print(f"Already running: http://localhost:{PORT}")
-            return
+            print(f"[INIT] Killing previous server on port {PORT}...")
+            try:
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     f"Get-NetTCPConnection -LocalPort {PORT} -State Listen -ErrorAction SilentlyContinue "
+                     f"| ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }}"],
+                    capture_output=True, timeout=5
+                )
+                time.sleep(1)
+            except Exception:
+                pass
 
     ext_dir = os.path.join(TOOLS_DIR, "bridge_token_ext")
     ext_ok = os.path.isdir(ext_dir)
