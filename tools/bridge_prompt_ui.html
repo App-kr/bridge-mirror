@@ -109,7 +109,24 @@ input[type=range]::-webkit-slider-thumb {
 .gen-btn:active { transform: scale(.98); box-shadow: none; }
 .gen-btn.loading {
   opacity: .6; pointer-events: none;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
+}
+.gen-img-btn {
+  background: linear-gradient(135deg, #047857, #065f46) !important;
+  box-shadow: 0 4px 20px rgba(4,120,87,.35) !important;
+  margin-top: 6px !important;
+}
+.gen-img-btn:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  box-shadow: 0 6px 24px rgba(4,120,87,.5) !important;
+}
+.auto-gen-btn {
+  background: linear-gradient(135deg, #d97706, #b45309) !important;
+  box-shadow: 0 4px 20px rgba(217,119,6,.3) !important;
+  margin-top: 6px !important;
+}
+.auto-gen-btn:hover {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  box-shadow: 0 6px 24px rgba(245,158,11,.45) !important;
 }
 
 /* Services — visible buttons */
@@ -182,6 +199,52 @@ select.adv-select:focus { border-color: #555; }
 }
 .topbar-spacer { flex: 1; }
 .topbar-hint { font-size: 13px; color: #666; }
+
+/* ── FOLDER BAR ───────────────────────── */
+.folder-bar {
+  height: 40px;
+  background: linear-gradient(90deg, #0a1a0a, #0d1f0d);
+  border-bottom: 1px solid #1a3a1a;
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.folder-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4ade80;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.folder-path {
+  flex: 1;
+  font-size: 13px;
+  color: #86efac;
+  font-family: 'Consolas', 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.folder-btn {
+  padding: 4px 14px;
+  border: 1px solid #2a5a2a;
+  border-radius: 6px;
+  background: #1a2f1a;
+  color: #6ee7b7;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.folder-btn:hover { background: #234a23; color: #a7f3d0; border-color: #4ade80; }
+.folder-btn.open-btn { border-color: #4ade80; }
+.folder-btn.open-btn:hover { background: #065f46; }
 
 .output {
   flex: 1; overflow-y: auto;
@@ -281,7 +344,7 @@ select.adv-select:focus { border-color: #555; }
 }
 .server-dot.online { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
 .server-dot.offline { background: #ef4444; }
-.server-dot.auth-needed { background: #fbbf24; animation: blink 1.5s infinite; }
+.server-dot.auth-needed { background: #fbbf24; animation: blink 1.5s infinite; } /* unused, kept for compat */
 
 /* Card body — two column */
 .pcard-body { display: flex; border-bottom: 1px solid #1a1a1a; }
@@ -292,28 +355,42 @@ select.adv-select:focus { border-color: #555; }
 }
 .pcard-text {
   font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
-  font-size: 13px; line-height: 1.8; color: #c8c8c8;
+  font-size: 15px; line-height: 1.75; color: #d4d4d4;
+  font-weight: 400;
   white-space: pre-wrap; word-break: break-word;
 }
 
 /* Korean description panel */
 .prompt-ko {
-  width: 220px; min-width: 220px;
-  padding: 14px 15px;
+  width: 300px; min-width: 300px;
+  padding: 16px 20px;
   background: #111;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 0;
 }
 .ko-title {
-  font-size: 11px; font-weight: 700; color: #555;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  margin-bottom: 2px;
+  font-size: 12px; font-weight: 700; color: #4ade80;
+  letter-spacing: 0.06em;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #1e1e1e;
 }
-.ko-row { display: flex; flex-direction: column; gap: 2px; }
-.ko-label { font-size: 11px; color: #555; }
-.ko-val { font-size: 13px; color: #ccc; font-weight: 500; line-height: 1.4; }
+.ko-row {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid #141414;
+}
+.ko-row:last-child { border-bottom: none; }
+.ko-label {
+  font-size: 12px; color: #666; font-weight: 600;
+  width: 36px; min-width: 36px; flex-shrink: 0;
+  text-align: right;
+}
+.ko-val {
+  font-size: 14px; color: #ddd; font-weight: 400; line-height: 1.45;
+  flex: 1; min-width: 0;
+}
 .ko-val.early-c { color: #fbbf24; }
 .ko-val.middle-c { color: #60a5fa; }
-.ko-divider { height: 1px; background: #1e1e1e; margin: 2px 0; }
 
 .pcard-foot {
   padding: 8px 16px 10px;
@@ -379,6 +456,8 @@ select.adv-select:focus { border-color: #555; }
 
   <!-- Generate -->
   <button class="gen-btn" id="genBtn" onclick="runGenerate()">Generate</button>
+  <button class="gen-btn gen-img-btn" id="genImgBtn" onclick="runGenerateImages()">생성하기</button>
+  <button class="gen-btn auto-gen-btn" id="autoBtn" onclick="runAutoGenerate()">자동생성</button>
 
   <!-- Services -->
   <div class="s-section">
@@ -452,7 +531,13 @@ select.adv-select:focus { border-color: #555; }
     <span class="topbar-label">Prompts</span>
     <span class="topbar-badge" id="topCount">0</span>
     <div class="topbar-spacer"></div>
-    <span class="topbar-hint" id="serverStatus"><span class="server-dot offline" id="serverDot"></span>Server offline</span>
+    <span class="topbar-hint" id="serverStatus"><span class="server-dot offline"></span>Server offline</span>
+  </div>
+  <div class="folder-bar" id="folderBar">
+    <span class="folder-label">SAVE</span>
+    <span class="folder-path" id="folderPath">Loading...</span>
+    <button class="folder-btn" onclick="changeFolder()">변경</button>
+    <button class="folder-btn open-btn" onclick="openSaveFolder()">폴더 열기</button>
   </div>
   <div class="output" id="output">
     <div class="empty-state" id="emptyState">
@@ -1510,22 +1595,15 @@ function renderAll(){
           <pre class="pcard-text" id="pt${i}">${esc(p.koText)}</pre>
         </div>
         <div class="prompt-ko">
-          <div class="ko-title">한글 설명</div>
-          <div class="ko-row"><div class="ko-label">대상</div><div class="ko-val ${p.target}-c">${p.ko.target}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">배경·장소</div><div class="ko-val">${esc(p.ko.place)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">강사</div><div class="ko-val">${esc(p.ko.instructor)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">구도·앵글</div><div class="ko-val">${esc(p.ko.composition)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">조명</div><div class="ko-val">${esc(p.ko.lighting)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">색감</div><div class="ko-val">${esc(p.ko.grade)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">분위기</div><div class="ko-val">${esc(p.ko.mood)}</div></div>
-          <div class="ko-divider"></div>
-          <div class="ko-row"><div class="ko-label">시간대</div><div class="ko-val">${esc(p.ko.season)}</div></div>
+          <div class="ko-title">프롬프트 요약</div>
+          <div class="ko-row"><span class="ko-label">대상</span><span class="ko-val ${p.target}-c">${p.ko.target}</span></div>
+          <div class="ko-row"><span class="ko-label">장소</span><span class="ko-val">${esc(p.ko.place)}</span></div>
+          <div class="ko-row"><span class="ko-label">강사</span><span class="ko-val">${esc(p.ko.instructor)}</span></div>
+          <div class="ko-row"><span class="ko-label">구도</span><span class="ko-val">${esc(p.ko.composition)}</span></div>
+          <div class="ko-row"><span class="ko-label">조명</span><span class="ko-val">${esc(p.ko.lighting)}</span></div>
+          <div class="ko-row"><span class="ko-label">색감</span><span class="ko-val">${esc(p.ko.grade)}</span></div>
+          <div class="ko-row"><span class="ko-label">분위기</span><span class="ko-val">${esc(p.ko.mood)}</span></div>
+          <div class="ko-row"><span class="ko-label">시즌</span><span class="ko-val">${esc(p.ko.season)}</span></div>
         </div>
       </div>`;
     out.appendChild(card);
@@ -1594,26 +1672,138 @@ function toast(msg){
 }
 
 // ============================================================
-// IMAGE GENERATION (Imagen 3 via local server)
+// IMAGE GENERATION (ImageFX via local server)
 // ============================================================
 const API_BASE = 'http://localhost:8765';
 let serverOnline = false;
+
+// ── 생성하기: 이미 만들어진 프롬프트로 이미지 생성 ──
+async function runGenerateImages() {
+  if (!prompts.length) {
+    toast('먼저 Generate로 프롬프트를 생성하세요');
+    return;
+  }
+  if (!serverOnline) {
+    toast('서버 오프라인 — 프로그램을 재시작하세요');
+    return;
+  }
+  const btn = document.getElementById('genImgBtn');
+  btn.classList.add('loading');
+  let totalSaved = 0;
+  for (let i = 0; i < prompts.length; i++) {
+    btn.textContent = (i+1) + '/' + prompts.length + ' 생성 중...';
+    try {
+      const r = await fetch(API_BASE + '/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompts[i].text }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        showImagePreview(i, d);
+        totalSaved += d.count;
+      } else {
+        toast((i+1) + '번 실패: ' + (d.error || ''));
+      }
+    } catch (e) {
+      toast('서버 연결 실패');
+      break;
+    }
+  }
+  btn.classList.remove('loading');
+  btn.textContent = '생성하기';
+  if (totalSaved > 0) toast('총 ' + totalSaved + '장 저장 완료');
+}
+
+// ── 자동생성: 프롬프트 생성 + 이미지 생성 + 저장까지 원클릭 ──
+async function runAutoGenerate() {
+  if (!serverOnline) {
+    toast('서버 오프라인 — 프로그램을 재시작하세요');
+    return;
+  }
+  const btn = document.getElementById('autoBtn');
+  btn.classList.add('loading');
+  btn.textContent = '프롬프트 생성 중...';
+
+  // Step 1: Generate prompts
+  await new Promise(r => setTimeout(r, 200));
+  const count = parseInt(document.getElementById('countSlider').value);
+  prompts = generateBatch(count, currentTarget);
+  totalGenerated += prompts.length;
+  renderAll();
+  document.getElementById('s-gen').textContent = totalGenerated;
+  document.getElementById('topCount').textContent = prompts.length;
+
+  // Step 2: Generate images for each prompt (fully automatic)
+  let totalSaved = 0;
+  for (let i = 0; i < prompts.length; i++) {
+    btn.textContent = (i+1) + '/' + prompts.length + ' 사진 생성 중...';
+    try {
+      const r = await fetch(API_BASE + '/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompts[i].text }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        showImagePreview(i, d);
+        totalSaved += d.count;
+      } else {
+        toast((i+1) + '번 실패: ' + (d.error || ''));
+      }
+    } catch (e) {
+      toast('서버 연결 실패');
+      break;
+    }
+  }
+  btn.classList.remove('loading');
+  btn.textContent = '자동생성';
+  if (totalSaved > 0) toast('자동생성 완료: ' + totalSaved + '장 저장');
+}
+
+// ── 폴더 관리 ──
+async function loadFolderInfo() {
+  try {
+    const r = await fetch(API_BASE + '/api/get-folder', { signal: AbortSignal.timeout(2000) });
+    const d = await r.json();
+    const el = document.getElementById('folderPath');
+    if (el && d.folder) el.textContent = d.folder;
+  } catch { /* server not ready yet */ }
+}
+
+async function changeFolder() {
+  try {
+    const r = await fetch(API_BASE + '/api/pick-folder', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('folderPath').textContent = d.folder;
+      toast('\uc800\uc7a5 \ud3f4\ub354 \ubcc0\uacbd: ' + d.folder.split('/').pop());
+    }
+  } catch {
+    toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
+  }
+}
+
+async function openSaveFolder() {
+  try {
+    await fetch(API_BASE + '/api/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+  } catch { /* ignore */ }
+}
 
 async function checkServer() {
   try {
     const r = await fetch(API_BASE + '/api/status', { signal: AbortSignal.timeout(2000) });
     const d = await r.json();
-    serverOnline = !!d.authenticated;
+    serverOnline = !!d.online;
     const stat = document.getElementById('serverStatus');
-    if (d.authenticated) {
-      const q = d.quota || {};
-      stat.innerHTML = '<span class="server-dot online"></span>ImageFX ' + (q.hourly||'') + ' \xb7 ' + (q.token_min||'?') + '\ubd84';
+    if (d.online) {
+      stat.innerHTML = '<span class="server-dot online"></span>Pollinations.ai Ready';
       stat.onclick = null;
       stat.style.cursor = 'default';
-    } else {
-      stat.innerHTML = '<span class="server-dot auth-needed"></span><u>\ud1a0\ud070 \ub4f1\ub85d</u> (\ud074\ub9ad\u2192\ubcf5\uc0ac)';
-      stat.style.cursor = 'pointer';
-      stat.onclick = copyAuthSnippet;
     }
   } catch {
     serverOnline = false;
@@ -1626,58 +1816,41 @@ async function checkServer() {
   }
 }
 
-async function copyAuthSnippet() {
-  try {
-    const r = await fetch(API_BASE + '/api/auth-snippet');
-    const d = await r.json();
-    await clipCopy(d.snippet);
-    toast('\uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428 \u2014 ImageFX \ud398\uc774\uc9c0 Console(F12)\uc5d0 \ubd99\uc5ec\ub123\uae30 \ud6c4 Enter');
-  } catch {
-    toast('\uc11c\ubc84\uc5d0\uc11c \uc778\uc99d \ucf54\ub4dc\ub97c \uac00\uc838\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4');
-  }
-}
-
 async function genImage(btn, i) {
   if (!serverOnline) {
-    copyAuthSnippet();
-    toast('\ud1a0\ud070 \ubbf8\ub4f1\ub85d \u2014 \uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428. ImageFX Console\uc5d0 \ubd99\uc5ec\ub123\uae30');
+    toast('서버 오프라인 — 프로그램을 재시작하세요');
     return;
   }
   if (!prompts[i]) return;
 
   btn.classList.add('loading');
-  btn.textContent = '\uc0dd\uc131 \uc911';
+  btn.textContent = '생성 중';
 
   try {
     const r = await fetch(API_BASE + '/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompts[i].text, count: 3 }),
+      body: JSON.stringify({ prompt: prompts[i].text }),
     });
     const d = await r.json();
 
     if (d.ok) {
-      btn.textContent = d.count + '\uc7a5 \uc644\ub8cc';
+      btn.textContent = d.count + '장 완료';
       btn.classList.remove('loading');
-      setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
+      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
       showImagePreview(i, d);
-      toast(d.count + '\uc7a5 \uc800\uc7a5 \uc644\ub8cc \u2192 ' + d.folder.split('/').pop());
+      toast(d.count + '장 저장 완료');
     } else {
-      btn.textContent = '\uc2e4\ud328';
+      btn.textContent = '실패';
       btn.classList.remove('loading');
-      setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
-      if (d.need_auth) {
-        copyAuthSnippet();
-        toast('\ud1a0\ud070 \ub9cc\ub8cc \u2014 \uc778\uc99d \ucf54\ub4dc \ubcf5\uc0ac\ub428. ImageFX Console\uc5d0 \ubd99\uc5ec\ub123\uae30');
-      } else {
-        toast('\uc0dd\uc131 \uc2e4\ud328: ' + (d.error || '\uc54c \uc218 \uc5c6\ub294 \uc624\ub958'));
-      }
+      setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
+      toast('생성 실패: ' + (d.error || '알 수 없는 오류'));
     }
   } catch (e) {
-    btn.textContent = '\uc624\ub958';
+    btn.textContent = '오류';
     btn.classList.remove('loading');
-    setTimeout(() => { btn.textContent = '\uc0ac\uc9c4 \uc0dd\uc131'; }, 3000);
-    toast('\uc11c\ubc84 \uc5f0\uacb0 \uc2e4\ud328');
+    setTimeout(() => { btn.textContent = '사진 생성'; }, 3000);
+    toast('서버 연결 실패');
   }
 }
 
@@ -1685,29 +1858,25 @@ function showImagePreview(i, data) {
   const card = document.querySelectorAll('.pcard')[i];
   if (!card) return;
 
-  // 기존 프리뷰 제거
   const old = card.querySelector('.img-gallery');
   if (old) old.remove();
   const oldInfo = card.querySelector('.img-gallery-info');
   if (oldInfo) oldInfo.remove();
 
-  // 이미지 갤러리
   const gallery = document.createElement('div');
   gallery.className = 'img-gallery';
   data.images.forEach(img => {
     const el = document.createElement('img');
-    el.src = img.url ? (API_BASE + img.url) : ('data:image/png;base64,' + img.base64_thumb);
+    el.src = API_BASE + img.url;
     el.title = img.filename + ' (' + img.size_kb + 'KB)';
-    el.onclick = () => window.open(img.url ? (API_BASE + img.url) : '#', '_blank');
+    el.onclick = () => window.open(API_BASE + img.url, '_blank');
     gallery.appendChild(el);
   });
 
-  // 폴더 정보
   const info = document.createElement('div');
   info.className = 'img-gallery-info';
-  info.innerHTML = data.count + '장 저장 · <span class="folder-link" onclick="openFolder(\'' + data.folder.replace(/'/g, "\\'") + '\')">' + data.folder.split('/').pop() + '</span>';
+  info.innerHTML = data.count + '\uc7a5 \uc800\uc7a5 \u00b7 <span class="folder-link" onclick="openSaveFolder()">\ud3f4\ub354 \uc5f4\uae30</span>';
 
-  // body 뒤에 삽입
   const body = card.querySelector('.pcard-body');
   if (body) {
     body.after(info);
@@ -1716,16 +1885,6 @@ function showImagePreview(i, data) {
     card.appendChild(info);
     card.appendChild(gallery);
   }
-}
-
-async function openFolder(folder) {
-  try {
-    await fetch(API_BASE + '/api/open-folder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder }),
-    });
-  } catch { /* ignore */ }
 }
 
 // 5초마다 서버 상태 체크
@@ -1752,6 +1911,7 @@ function init(){
     PROPS,SEASONS,MOODS,QUALITY].reduce((s,a)=>s+a.length,0);
   document.getElementById('s-rules').textContent=total;
   checkServer();
+  loadFolderInfo();
 }
 init();
 </script>

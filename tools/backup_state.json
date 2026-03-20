@@ -575,8 +575,32 @@
       "git": "e4a1714",
       "files": 1976,
       "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_113809__대시보드배너네비게이션수정",
+      "task": "대시보드배너네비게이션수정",
+      "ts": "2026.03.20 11:38:13",
+      "git": "675cde5",
+      "files": 1979,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_121310__ImageFX-v4-Pollinations",
+      "task": "ImageFX-v4-Pollinations",
+      "ts": "2026.03.20 12:13:14",
+      "git": "43f101f",
+      "files": 1979,
+      "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_121321__ImageFX-v4-Pollinations",
+      "task": "ImageFX-v4-Pollinations",
+      "ts": "2026.03.20 12:13:25",
+      "git": "43f101f",
+      "files": 1979,
+      "db_hash": "1e8b254a33e2"
     }
   ],
-  "last_backup": "2026.03.20 09:36:35",
-  "total_count": 72
+  "last_backup": "2026.03.20 12:13:25",
+  "total_count": 75
 }
