@@ -123,7 +123,32 @@ class ImageFXSession:
                     self.token_expires = time.time() + 3000
             else:
                 self.token_expires = time.time() + 3000
+            # Persist token to disk for server restart recovery
+            self._persist_token()
             print(f"[AUTH] Token set ({self.token_remaining_min}min remaining)")
+
+    def _persist_token(self):
+        """Save token to config file so it survives server restarts."""
+        try:
+            cfg = _load_config()
+            cfg["_token"] = self.token
+            cfg["_token_expires"] = self.token_expires
+            _save_config(cfg)
+        except Exception:
+            pass
+
+    def load_persisted_token(self):
+        """Restore token from disk if still valid."""
+        try:
+            cfg = _load_config()
+            token = cfg.get("_token")
+            expires = cfg.get("_token_expires", 0)
+            if token and float(expires) > time.time():
+                self.token = token
+                self.token_expires = float(expires)
+                print(f"[AUTH] Restored token from disk ({self.token_remaining_min}min remaining)")
+        except Exception:
+            pass
 
     def get_auth_headers(self) -> dict:
         if not self.authenticated:
@@ -246,6 +271,7 @@ def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
 
 # ── Image Generation ──────────────────────────────────────────────────────
 _session = ImageFXSession()
+_session.load_persisted_token()
 _gen_lock = threading.Lock()
 
 
