@@ -6960,6 +6960,114 @@ async def delete_secret(key: str, request: Request):
         conn.close()
 
 
+# ── 카카오 OAuth 관리자 로그인 ────────────────────────────────────────────────
+# 흐름: 카카오 버튼 → /login redirect → Kakao → /callback →
+#       OTC 발급 → 프론트 redirect → /exchange → api_key 반환
+
+_KAKAO_OTC: "dict[str, dict]" = {}   # otc → {api_key, expires_at}
+
+
+@app.get("/api/admin/kakao/login", tags=["admin"])
+async def kakao_login():
+    """카카오 OAuth 시작 — Kakao 인증 페이지로 redirect."""
+    from fastapi.responses import RedirectResponse
+    client_id = get_secret("KAKAO_CLIENT_ID")
+    if not client_id:
+        raise HTTPException(503, "KAKAO_CLIENT_ID 미설정 — /admin/settings 비밀키 관리에서 등록하세요.")
+    redirect_uri = "https://bridge-n7hk.onrender.com/api/admin/kakao/callback"
+    kakao_url = (
+        "https://kauth.kakao.com/oauth/authorize"
+        f"?client_id={client_id}"
+        f"&redirect_uri={redirect_uri}"
+        "&response_type=code"
+    )
+    return RedirectResponse(url=kakao_url)
+
+
+@app.get("/api/admin/kakao/callback", tags=["admin"])
+async def kakao_callback(code: str = "", error: str = "", error_description: str = ""):
+    """Kakao 인증 콜백 — code → token → user_id → OTC 발급."""
+    from fastapi.responses import RedirectResponse
+    import httpx as _httpx
+
+    front_url = os.getenv("FRONTEND_URL", "https://bridgejob.co.kr")
+
+    if error or not code:
+        logging.getLogger("bridge.api").warning("[KAKAO] 콜백 오류: %s", error)
+        return RedirectResponse(f"{front_url}/admin?kakao_error=cancelled")
+
+    client_id = get_secret("KAKAO_CLIENT_ID")
+    client_secret = get_secret("KAKAO_CLIENT_SECRET")
+    allowed_ids_raw = get_secret("KAKAO_ADMIN_IDS") or ""
+    allowed_ids = {s.strip() for s in allowed_ids_raw.split(",") if s.strip()}
+
+    if not client_id:
+        return RedirectResponse(f"{front_url}/admin?kakao_error=not_configured")
+
+    token_params: dict = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "redirect_uri": "https://bridge-n7hk.onrender.com/api/admin/kakao/callback",
+        "code": code,
+    }
+    if client_secret:
+        token_params["client_secret"] = client_secret
+
+    try:
+        async with _httpx.AsyncClient(timeout=10) as hc:
+            token_res = await hc.post(
+                "https://kauth.kakao.com/oauth/token",
+                data=token_params,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        if token_res.status_code != 200:
+            logging.getLogger("bridge.api").warning("[KAKAO] 토큰 교환 실패: %s", token_res.text)
+            return RedirectResponse(f"{front_url}/admin?kakao_error=token_failed")
+        access_token = token_res.json().get("access_token", "")
+        if not access_token:
+            return RedirectResponse(f"{front_url}/admin?kakao_error=no_token")
+
+        async with _httpx.AsyncClient(timeout=10) as hc:
+            user_res = await hc.get(
+                "https://kapi.kakao.com/v2/user/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if user_res.status_code != 200:
+            return RedirectResponse(f"{front_url}/admin?kakao_error=user_failed")
+        kakao_id = str(user_res.json().get("id", ""))
+    except Exception as _ke:
+        logging.getLogger("bridge.api").error("[KAKAO] 예외: %s", _ke)
+        return RedirectResponse(f"{front_url}/admin?kakao_error=network_error")
+
+    if not allowed_ids:
+        logging.getLogger("bridge.api").warning("[KAKAO] KAKAO_ADMIN_IDS 미설정 — 거부")
+        return RedirectResponse(f"{front_url}/admin?kakao_error=not_configured")
+    if kakao_id not in allowed_ids:
+        logging.getLogger("bridge.api").warning("[KAKAO] 미허가 계정: %s", kakao_id)
+        return RedirectResponse(f"{front_url}/admin?kakao_error=not_allowed")
+
+    import secrets as _sec_mod
+    otc = _sec_mod.token_urlsafe(24)
+    _KAKAO_OTC[otc] = {
+        "api_key": _ADMIN_KEY,
+        "expires_at": datetime.now(timezone.utc).timestamp() + 60,
+    }
+    return RedirectResponse(f"{front_url}/admin?kakao_otc={otc}")
+
+
+@app.post("/api/admin/kakao/exchange", tags=["admin"])
+async def kakao_exchange(request: Request):
+    """OTC → api_key 교환. 코드는 사용 즉시 삭제."""
+    body = await request.json()
+    otc = str(body.get("code", "")).strip()
+    entry = _KAKAO_OTC.pop(otc, None)
+    if not entry:
+        raise HTTPException(401, "유효하지 않은 코드입니다.")
+    if datetime.now(timezone.utc).timestamp() > entry["expires_at"]:
+        raise HTTPException(401, "코드가 만료되었습니다 (60초 초과).")
+    return ok(data={"api_key": entry["api_key"]})
+
+
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
 try:
     from inbox_api import router as inbox_router

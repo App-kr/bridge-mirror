@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { API_URL } from '@/lib/api'
 
 const STORAGE_KEY = 'bridge_admin_key'
@@ -63,6 +63,56 @@ export function useAdminAuth() {
   const [adminKey, setAdminKey] = useState<string>(getStoredKey)
   const [authed, setAuthed] = useState<boolean>(() => !!getStoredKey())
   const [waking, setWaking] = useState(false)
+  const [kakaoError, setKakaoError] = useState<string | null>(null)
+
+  // 카카오 OAuth 콜백 처리: URL에 kakao_otc 또는 kakao_error 파라미터 확인
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const otc = params.get('kakao_otc')
+    const err = params.get('kakao_error')
+
+    // URL 파라미터 즉시 제거 (히스토리에 남지 않도록)
+    if (otc || err) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    if (err) {
+      const msgs: Record<string, string> = {
+        cancelled:      '카카오 로그인이 취소되었습니다.',
+        not_configured: '카카오 로그인이 설정되지 않았습니다.',
+        not_allowed:    '허가되지 않은 카카오 계정입니다.',
+        token_failed:   '인증 토큰 발급에 실패했습니다.',
+        network_error:  '카카오 서버 연결에 실패했습니다.',
+      }
+      setKakaoError(msgs[err] || '카카오 로그인 오류가 발생했습니다.')
+      return
+    }
+
+    if (!otc) return
+
+    // OTC → api_key 교환
+    fetch(`${API_URL}/api/admin/kakao/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: otc }),
+    })
+      .then(r => r.json())
+      .then(json => {
+        const key = json?.data?.api_key
+        if (key) {
+          setAdminKey(key)
+          setAuthed(true)
+          localStorage.setItem(STORAGE_KEY, key)
+          localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
+          document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax'
+        } else {
+          setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
+        }
+      })
+      .catch(() => setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /** 비밀번호로 서버 로그인 → API 키 받아서 저장 */
   const login = useCallback(async (password: string): Promise<string | null> => {
@@ -172,5 +222,5 @@ export function useAdminAuth() {
     return res
   }, [adminKey])
 
-  return { adminKey, authed, waking, login, logout, headers, signedFetch, adminFetch }
+  return { adminKey, authed, waking, kakaoError, login, logout, headers, signedFetch, adminFetch }
 }
