@@ -3069,52 +3069,53 @@ async def community_list(
 ):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    svc = get_svc_client()
-    q = (
-        svc.table('community_posts')
-        .select('id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body')
-        .eq('board', board).eq('is_deleted', 0)
-        .order('pinned', desc=True)
-        .order('sort_order', desc=True)
-        .order('created_at', desc=True)
-        .range(offset, offset + limit - 1)
-    )
-    cq = (
-        svc.table('community_posts')
-        .select('id', count='exact')
-        .eq('board', board).eq('is_deleted', 0)
-    )
-    if category:
-        q = q.eq('category', category)
-        cq = cq.eq('category', category)
-    res       = q.execute()
-    count_res = cq.execute()
-    total     = count_res.count or 0
-    posts = []
-    for row in (res.data or []):
-        row['preview'] = (row.get('body', '') or '')[:200]
-        posts.append(row)
-    return ok(data={"total": total, "posts": posts})
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        where = "board=? AND is_deleted=0"
+        params: list = [board]
+        if category:
+            where += " AND category=?"
+            params.append(category)
+        total = conn.execute(f"SELECT COUNT(*) FROM community_posts WHERE {where}", params).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body "
+            f"FROM community_posts WHERE {where} "
+            f"ORDER BY pinned DESC, sort_order DESC, created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        posts = []
+        for r in rows:
+            d = dict(r)
+            d['preview'] = (d.get('body') or '')[:200]
+            posts.append(d)
+        return ok(data={"total": total, "posts": posts})
+    finally:
+        conn.close()
 
 
 @app.get("/api/community/{board}/{post_id}", tags=["community"])
 async def community_get(board: str, post_id: int):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
-    svc = get_svc_client()
-    res = (
-        svc.table('community_posts')
-        .select('id,board,title,body,pinned,views,created_at,content_type')
-        .eq('id', post_id).eq('board', board).eq('is_deleted', 0)
-        .limit(1).execute()
-    )
-    if not res.data:
-        raise HTTPException(404, "Post not found")
-    row = res.data[0]
-    new_views = (row.get('views') or 0) + 1
-    svc.table('community_posts').update({'views': new_views}).eq('id', post_id).execute()
-    row['views'] = new_views
-    return ok(data=row)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT id,board,title,body,pinned,views,created_at,content_type "
+            "FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
+            (post_id, board),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Post not found")
+        d = dict(row)
+        new_views = (d.get('views') or 0) + 1
+        conn.execute("UPDATE community_posts SET views=? WHERE id=?", (new_views, post_id))
+        conn.commit()
+        d['views'] = new_views
+        return ok(data=d)
+    finally:
+        conn.close()
 
 
 class CommunityPost(BaseModel):
@@ -3146,20 +3147,17 @@ async def community_create(board: str, post: CommunityPost, request: Request):
     if _pii_check.search(pii_check_body) or _pii_check.search(clean_title):
         raise HTTPException(400, "Phone numbers and email addresses are not allowed in posts.")
 
-    svc = get_svc_client()
-    res = svc.table('community_posts').insert({
-        'board':        board,
-        'title':        clean_title,
-        'body':         clean_body,
-        'author_hash':  ip_hash,
-        'content_type': post.content_type,
-        'category':     post.category,
-        'pinned':       0,
-        'views':        0,
-        'is_deleted':   0,
-        'sort_order':   0,
-    }).execute()
-    new_id = res.data[0]['id'] if res.data else None
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        cur = conn.execute(
+            "INSERT INTO community_posts (board,title,body,author_hash,content_type,category,pinned,views,is_deleted,sort_order,created_at) "
+            "VALUES (?,?,?,?,?,?,0,0,0,0,datetime('now'))",
+            (board, clean_title, clean_body, ip_hash, post.content_type, post.category),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    finally:
+        conn.close()
     return ok(data={"id": new_id}, message="Post created")
 
 

@@ -608,7 +608,7 @@ export default function HomePage() {
                                  hover:shadow-[0_8px_32px_rgba(41,151,255,0.12)]"
                     >
                       <div className="mb-5">
-                        <span className="inline-block text-[11px] font-semibold px-3 py-1 rounded-full bg-white/[0.08] text-[#a1a1a6] mb-2">
+                        <span className="inline-block text-[13px] font-bold px-3 py-1 rounded-full bg-white/[0.08] text-white mb-2">
                           {job.location ?? 'Korea'}
                         </span>
                         {job.is_hot && (
@@ -616,8 +616,8 @@ export default function HomePage() {
                             Hot
                           </span>
                         )}
-                        <p className="text-[#2997ff] text-xs font-bold tracking-wide mt-1">
-                          Job #{job.job_id}
+                        <p className="text-white text-[14px] font-bold tracking-wide mt-1">
+                          {job.job_id}
                         </p>
                       </div>
 
