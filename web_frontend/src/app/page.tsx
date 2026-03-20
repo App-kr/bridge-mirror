@@ -19,7 +19,7 @@ import {
   scaleIn,
   defaultViewport,
 } from '@/lib/animations'
-import { useEditMode } from '@/components/EditModeBar'
+import { useEditMode, SectionEditLink } from '@/components/EditModeBar'
 import EarthGlobe from '@/components/EarthGlobe'
 import { RefreshCw } from 'lucide-react'
 import { seededShuffle } from '@/lib/seededShuffle'
@@ -295,6 +295,12 @@ export default function HomePage() {
           1. HERO — "BRIDGE" + tagline + background animations
           ═══════════════════════════════════════════════════════════════════ */}
       <section ref={heroRef} className="relative h-[85vh] min-h-[500px] flex items-center justify-center overflow-hidden">
+        {/* Edit mode: Hero settings */}
+        {editMode && (
+          <div className="absolute top-3 right-4 z-50">
+            <SectionEditLink href="/admin/settings" label="히어로 설정" dark />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#0a0a0a] to-black" />
 
         {/* ── Earth — 3D 구체 상반구 (z:0, 다리 아래) ── */}
@@ -476,7 +482,12 @@ export default function HomePage() {
           2. HEAR FROM OUR TEACHERS — Glassmorphism testimonial cards
           ═══════════════════════════════════════════════════════════════════ */}
       {testimonials.length > 0 && (
-        <section className="bg-black py-24 sm:py-28 border-t border-white/[0.06]">
+        <section className="bg-black py-24 sm:py-28 border-t border-white/[0.06] relative">
+          {editMode && (
+            <div className="absolute top-3 right-4 z-20">
+              <SectionEditLink href="/admin/posts?board=testimonials" label="후기 관리" dark />
+            </div>
+          )}
           <div className="max-w-[1120px] mx-auto px-5 sm:px-8">
             <motion.div
               className="text-center mb-16"
@@ -561,7 +572,12 @@ export default function HomePage() {
           3. FEATURED POSITIONS — 4-card horizontal grid with shimmer
           ═══════════════════════════════════════════════════════════════════ */}
       {jobs.length > 0 && (
-        <section className="bg-[#0a0a0a] py-24 sm:py-28 border-t border-white/[0.06]">
+        <section className="bg-[#0a0a0a] py-24 sm:py-28 border-t border-white/[0.06] relative">
+          {editMode && (
+            <div className="absolute top-3 right-4 z-20">
+              <SectionEditLink href="/admin/jobs" label="채용공고 관리" dark />
+            </div>
+          )}
           <div className="max-w-[1120px] mx-auto px-5 sm:px-8">
             <motion.div
               className="text-center mb-16"
@@ -736,6 +752,11 @@ export default function HomePage() {
           5. CTA — Your Next Chapter (Apple + Kakao MZ style)
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="relative py-24 sm:py-32 border-t border-white/[0.06] overflow-hidden bg-black">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href="/admin/settings" label="CTA 설정" dark />
+          </div>
+        )}
         <div className="relative z-10 max-w-[900px] mx-auto px-5 sm:px-8">
           {/* Headline — Apple bold */}
           <motion.div

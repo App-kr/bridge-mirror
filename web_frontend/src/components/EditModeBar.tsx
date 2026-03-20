@@ -206,3 +206,24 @@ export function NewPostButton({ board }: { board: string }) {
     </Link>
   )
 }
+
+/** Section-level edit button — shows a small labeled edit link in edit mode */
+export function SectionEditLink({ href, label, dark }: { href: string; label: string; dark?: boolean }) {
+  const editMode = useEditMode()
+  if (!editMode) return null
+
+  const bg = dark
+    ? 'bg-amber-500/90 hover:bg-amber-600 text-white'
+    : 'bg-amber-500/90 hover:bg-amber-600 text-white'
+
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg transition-colors shadow-lg ${bg}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Pencil size={11} />
+      {label}
+    </Link>
+  )
+}

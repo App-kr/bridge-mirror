@@ -6,7 +6,7 @@ import Link from 'next/link'
 import MarkdownBody from '@/components/MarkdownBody'
 import HtmlPreview from '@/components/HtmlPreview'
 import { getBoardConfig } from '@/lib/boards'
-import { EditButton } from '@/components/EditModeBar'
+import { EditButton, SectionEditLink, useEditMode } from '@/components/EditModeBar'
 import { API_URL } from '@/lib/api'
 
 const API = API_URL
@@ -26,6 +26,7 @@ interface Post {
 export default function PostDetailPage() {
   const { board, id } = useParams<{ board: string; id: string }>()
   const config = getBoardConfig(board)
+  const editMode = useEditMode()
 
   const [post, setPost] = useState<Post | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,7 +64,14 @@ export default function PostDetailPage() {
 
   return (
     <>
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 relative">
+      {/* Edit mode: full post editing */}
+      {editMode && (
+        <div className="absolute top-3 right-4 z-20 flex gap-2">
+          <SectionEditLink href={`/admin/posts?edit=${post.id}&board=${board}`} label="게시물 편집" />
+          <SectionEditLink href={`/admin/posts?board=${board}`} label="게시판 관리" />
+        </div>
+      )}
       {/* Disclaimer notice */}
       <div className="disclaimer-notice">
         <p style={{ marginBottom: '6px' }}>

@@ -18,7 +18,7 @@ import {
   slideInRight,
   defaultViewport,
 } from '@/lib/animations'
-import { useEditMode, NewPostButton } from '@/components/EditModeBar'
+import { useEditMode, NewPostButton, SectionEditLink } from '@/components/EditModeBar'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData, type ContentType } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
@@ -847,7 +847,13 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
   }
 
   return (
-    <div>
+    <div className="relative">
+      {/* Edit mode: board-level admin link */}
+      {editMode && (
+        <div className="absolute top-3 right-4 z-20">
+          <SectionEditLink href={`/admin/posts?board=${board}`} label="게시판 관리" />
+        </div>
+      )}
       {/* ── FAQ Accordion Section ── */}
       {faqConfig && faqConfig.items.length > 0 && (
         <section className={`${faqConfig.bg} py-16 sm:py-20`}>
@@ -1251,7 +1257,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
   return (
     <div>
       {/* ── Section A: Hero ── */}
-      <section className="bg-[#f5f5f7] py-20 sm:py-28">
+      <section className="bg-[#f5f5f7] py-20 sm:py-28 relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href="/admin/settings" label="사이트 설정" />
+          </div>
+        )}
         <motion.div
           className="max-w-[980px] mx-auto px-5 sm:px-8 text-center"
           initial={{ opacity: 0, y: 40 }}
@@ -1268,7 +1279,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
       </section>
 
       {/* ── Section B: Company Intro ── */}
-      <section className="py-20 sm:py-28">
+      <section className="py-20 sm:py-28 relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href={`/admin/posts?board=${board}`} label="소개 편집" />
+          </div>
+        )}
         <div className="max-w-[680px] mx-auto px-5 sm:px-8">
           <motion.div
             variants={fadeInUp}
@@ -1303,7 +1319,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
       </section>
 
       {/* ── Section C: Why BRIDGE — 4 cards ── */}
-      <section className="bg-[#f5f5f7] py-20 sm:py-28">
+      <section className="bg-[#f5f5f7] py-20 sm:py-28 relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href={`/admin/posts?board=${board}`} label="강점 편집" />
+          </div>
+        )}
         <div className="max-w-[980px] mx-auto px-5 sm:px-8">
           <motion.div
             className="text-center mb-14"
@@ -1336,7 +1357,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
       </section>
 
       {/* ── Section D: Stats — animated counters ── */}
-      <section className="py-20 sm:py-28" ref={statsRef}>
+      <section className="py-20 sm:py-28 relative" ref={statsRef}>
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href="/admin/settings" label="통계 설정" />
+          </div>
+        )}
         <div className="max-w-[980px] mx-auto px-5 sm:px-8">
           <motion.div
             className="grid grid-cols-2 md:grid-cols-4 gap-8"
@@ -1356,7 +1382,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 
       {/* ── Posts grid ── */}
       {aboutPosts.length > 0 && (
-        <section className="bg-[#f5f5f7] py-20 sm:py-28">
+        <section className="bg-[#f5f5f7] py-20 sm:py-28 relative">
+          {editMode && (
+            <div className="absolute top-3 right-4 z-20">
+              <SectionEditLink href={`/admin/posts?board=${board}`} label="게시물 관리" />
+            </div>
+          )}
           <div className="max-w-[980px] mx-auto px-5 sm:px-8">
             <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
               <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-6">Information</p>
@@ -1421,7 +1452,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
       )}
 
       {/* ── Settling In — Internet & Social ── */}
-      <section className="py-20 sm:py-28">
+      <section className="py-20 sm:py-28 relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href="/admin/settings" label="생활정보 편집" />
+          </div>
+        )}
         <div className="max-w-[980px] mx-auto px-5 sm:px-8">
           <motion.div
             className="text-center mb-12"
@@ -1493,7 +1529,12 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
       </section>
 
       {/* ── Contact + Registration ── */}
-      <section className="bg-[#f5f5f7] py-20 sm:py-28">
+      <section className="bg-[#f5f5f7] py-20 sm:py-28 relative">
+        {editMode && (
+          <div className="absolute top-3 right-4 z-20">
+            <SectionEditLink href="/admin/settings" label="연락처 편집" />
+          </div>
+        )}
         <div className="max-w-[680px] mx-auto px-5 sm:px-8 text-center">
           <motion.div variants={fadeInUp} initial="hidden" whileInView="visible" viewport={defaultViewport}>
             <p className="text-[#6e6e73] text-xs font-semibold uppercase tracking-[0.2em] mb-3">Contact</p>
@@ -1558,7 +1599,12 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
   )
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 relative">
+      {editMode && (
+        <div className="absolute top-3 right-4 z-20">
+          <SectionEditLink href={`/admin/posts?board=${board}`} label="게시판 관리" />
+        </div>
+      )}
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
       {editMode ? (
         <SortableContainer
@@ -1632,7 +1678,12 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
   const uncategorized = posts.filter(p => !p.category || !KOREA_SECTIONS.find(s => s.key === p.category))
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 relative">
+      {editMode && (
+        <div className="absolute top-3 right-4 z-20">
+          <SectionEditLink href={`/admin/posts?board=${board}`} label="게시판 관리" />
+        </div>
+      )}
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
       {editMode ? (
         /* Edit mode: flat sortable list with category badge */
@@ -1760,7 +1811,12 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
   })()
 
   return (
-    <div>
+    <div className="relative">
+      {editMode && (
+        <div className="absolute top-3 right-4 z-20">
+          <SectionEditLink href={`/admin/posts?board=${board}`} label="후기 관리" />
+        </div>
+      )}
       {/* ── Hero header ── */}
       <section className="bg-gradient-to-b from-[#f5f5f7] to-white py-16 sm:py-20">
         <div className="max-w-[980px] mx-auto px-5 sm:px-8 text-center">
