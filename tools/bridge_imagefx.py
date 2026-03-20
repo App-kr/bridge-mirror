@@ -223,7 +223,7 @@ LOGO_PNG = os.path.join(TOOLS_DIR, "bridge_logo.png")
 
 
 def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
-    """Add BRIDGE text watermark — no background, upper-left area."""
+    """Add BRIDGE text watermark — left-center, clearly visible on any background."""
     if not HAS_PILLOW:
         return img_bytes
     try:
@@ -233,26 +233,41 @@ def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
 
         if os.path.isfile(LOGO_PNG):
             logo = Image.open(LOGO_PNG).convert("RGBA")
-            target_w = int(w * 0.15)
+            target_w = int(w * 0.18)
             ratio = target_w / logo.width
             target_h = int(logo.height * ratio)
             logo = logo.resize((target_w, target_h), Image.LANCZOS)
-            margin = int(w * 0.03)
-            pos = (margin, int(h * 0.06))
+            margin = int(w * 0.035)
+            # Left-center: vertically centered
+            pos = (margin, (h - target_h) // 2)
             img.paste(logo, pos, logo)
         else:
-            font_size = max(28, int(w * 0.04))
-            try:
-                font = ImageFont.truetype("arial.ttf", font_size)
-            except OSError:
+            # Larger font for visibility
+            font_size = max(36, int(w * 0.055))
+            font = None
+            for fpath in ["arial.ttf", "C:/Windows/Fonts/arial.ttf",
+                          "C:/Windows/Fonts/arialbd.ttf"]:
+                try:
+                    font = ImageFont.truetype(fpath, font_size)
+                    break
+                except OSError:
+                    continue
+            if font is None:
                 font = ImageFont.load_default()
 
             draw = ImageDraw.Draw(img)
-            margin = int(w * 0.03)
-            tx, ty = margin, int(h * 0.06)
-            # White text with subtle drop shadow — no black box
-            draw.text((tx + 2, ty + 2), "BRIDGE", fill=(0, 0, 0, 120), font=font)
-            draw.text((tx, ty), "BRIDGE", fill=(255, 255, 255, 230), font=font)
+            margin = int(w * 0.035)
+            # Left-center position: y = 45% from top
+            tx = margin
+            ty = int(h * 0.45)
+
+            # Multi-layer shadow for visibility on any background
+            for ox, oy in [(4, 4), (3, 3), (2, 2), (-1, -1), (0, 2)]:
+                draw.text((tx + ox, ty + oy), "BRIDGE",
+                          fill=(0, 0, 0, 140), font=font)
+            # Main white text — high opacity
+            draw.text((tx, ty), "BRIDGE",
+                      fill=(255, 255, 255, 245), font=font)
 
         out = io.BytesIO()
         img.save(out, format="PNG", optimize=True)
@@ -295,49 +310,75 @@ def _naturalize_photo(img_bytes: bytes, quality: int = 88) -> bytes:
         w, h = img.size
         arr = np.array(img, dtype=np.float32)
 
-        # 1. Sensor noise — subtle Gaussian grain (ISO 200-400 feel)
-        noise_strength = random.uniform(2.5, 5.0)
+        # 1. Sensor noise — Gaussian grain (ISO 400-800 feel, stronger than before)
+        noise_strength = random.uniform(3.5, 7.0)
         noise = np.random.normal(0, noise_strength, arr.shape).astype(np.float32)
-        # Slightly more noise in blue channel (real sensors)
-        noise[:, :, 2] *= 1.3
+        # More noise in blue channel (real Bayer sensor characteristic)
+        noise[:, :, 2] *= 1.4
+        # Slightly more noise in shadows (realistic sensor behavior)
+        shadow_mask = (arr.mean(axis=2, keepdims=True) < 80).astype(np.float32)
+        noise *= (1.0 + shadow_mask * 0.5)
         arr = np.clip(arr + noise, 0, 255)
 
-        # 2. Micro white-balance drift — subtle warm/cool shift
-        wb_r = random.uniform(0.995, 1.008)
-        wb_g = random.uniform(0.997, 1.003)
-        wb_b = random.uniform(0.992, 1.005)
+        # 2. White-balance drift — warm/cool color cast (every real camera has one)
+        wb_r = random.uniform(0.992, 1.012)
+        wb_g = random.uniform(0.996, 1.004)
+        wb_b = random.uniform(0.988, 1.008)
         arr[:, :, 0] *= wb_r
         arr[:, :, 1] *= wb_g
         arr[:, :, 2] *= wb_b
         arr = np.clip(arr, 0, 255)
 
-        # 3. Subtle vignette — darker corners like a real lens
+        # 3. Chromatic aberration — slight RGB channel offset at edges (real lens defect)
+        ca_strength = random.uniform(0.5, 1.5)
+        try:
+            from scipy.ndimage import shift as ndshift
+            arr[:, :, 0] = ndshift(arr[:, :, 0], [0, ca_strength], mode='nearest')
+            arr[:, :, 2] = ndshift(arr[:, :, 2], [0, -ca_strength * 0.7], mode='nearest')
+        except ImportError:
+            ca_px = max(1, int(ca_strength))
+            arr[:, ca_px:, 0] = arr[:, :-ca_px, 0]  # shift red right
+            arr[:, :-ca_px, 2] = arr[:, ca_px:, 2]  # shift blue left
+
+        # 4. Subtle vignette — darker corners like a real lens
         Y, X = np.ogrid[:h, :w]
         cx, cy = w / 2, h / 2
         max_dist = np.sqrt(cx ** 2 + cy ** 2)
         dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2) / max_dist
-        vignette_strength = random.uniform(0.08, 0.18)
+        vignette_strength = random.uniform(0.10, 0.22)
         vignette = 1.0 - (dist ** 2) * vignette_strength
         arr *= vignette[:, :, np.newaxis]
         arr = np.clip(arr, 0, 255)
 
+        # 5. Subtle contrast reduction (AI images are too contrasty)
+        contrast_factor = random.uniform(0.93, 0.98)
+        mean_val = arr.mean()
+        arr = mean_val + (arr - mean_val) * contrast_factor
+        arr = np.clip(arr, 0, 255)
+
         img = Image.fromarray(arr.astype(np.uint8))
 
-        # 4. Micro sharpness variation — slight unsharp mask
-        if random.random() < 0.6:
+        # 6. Micro sharpness variation
+        if random.random() < 0.7:
             enhancer = ImageEnhance.Sharpness(img)
-            img = enhancer.enhance(random.uniform(0.92, 1.08))
+            img = enhancer.enhance(random.uniform(0.88, 1.06))
 
-        # 5. Very subtle brightness micro-drift
+        # 7. Very subtle brightness micro-drift
         enhancer = ImageEnhance.Brightness(img)
-        img = enhancer.enhance(random.uniform(0.985, 1.015))
+        img = enhancer.enhance(random.uniform(0.98, 1.02))
 
-        # 6. Save as JPEG with realistic quality (not perfect PNG)
+        # 8. Slight saturation reduction (AI images over-saturate)
+        if random.random() < 0.5:
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(random.uniform(0.92, 0.98))
+
+        # 9. Save as JPEG with lower quality (real cameras: 80-90)
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=quality, subsampling=0, optimize=True)
         print(f"[NATURALIZE] {w}x{h} | noise={noise_strength:.1f} | "
               f"wb=({wb_r:.3f},{wb_g:.3f},{wb_b:.3f}) | "
-              f"vignette={vignette_strength:.2f} | jpg_q={quality}")
+              f"vignette={vignette_strength:.2f} | contrast={contrast_factor:.3f} | "
+              f"jpg_q={quality}")
         return out.getvalue()
 
     except Exception as e:
@@ -476,7 +517,7 @@ def generate_images(prompt: str, count: int = 3) -> dict:
                     img_bytes = _overlay_bridge_logo(img_bytes)
 
                     # Naturalize: add real-camera imperfections + convert to JPG
-                    img_bytes = _naturalize_photo(img_bytes, quality=random.randint(85, 92))
+                    img_bytes = _naturalize_photo(img_bytes, quality=random.randint(78, 88))
 
                     fname = f"BRIDGE_{next_n + i}.jpg"
                     fpath = os.path.join(_save_dir, fname)

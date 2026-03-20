@@ -888,20 +888,20 @@ const CLOTHING=[
 "a fitted dark navy suit jacket over a white dress shirt — completely plain, no logos, no text",
 "light grey marl sweatshirt — strictly no logos, no text, no patches, no printed graphics",
 "smart casual checked flannel shirt in earth tones — strictly no logos, no text, pattern-only fabric",
-"tailored black mock-neck top — strictly no logos, no text, no emblems, completely plain",
+"tailored black mock-neck top — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery, completely plain",
 "bright red crewneck sweater — strictly no logos, no text, no patches, solid plain knit",
 "structured plum-colored blazer — strictly no logos, no text, no patches, no brand marks",
 "oversized cream knit cardigan with pockets — strictly no logos, no text, no patches, plain knit",
-"slim-fit cobalt blue dress shirt — strictly no logos, no text, no emblems, solid color only",
-"sporty performance polo in charcoal — strictly no logos, no text, no brand marks, plain fabric",
+"slim-fit cobalt blue dress shirt — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery, solid color only",
+"sporty performance polo in charcoal — strictly no logos, no text, no brand marks, no school crests, no badges, plain fabric",
 "lightweight khaki utility shirt — strictly no logos, no text, no patches, no printed words",
-"mock-neck fitted ribbed top in olive — strictly no logos, no text, no emblems, plain ribbed fabric",
+"mock-neck fitted ribbed top in olive — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery, plain ribbed fabric",
 "classic teacher cardigan in soft mustard — strictly no logos, no text, no patches, plain knit",
 "corduroy overshirt in warm rust — strictly no logos, no text, no patches, no embroidered marks",
 "short-sleeve linen shirt in washed indigo — strictly no logos, no text, no patches, solid linen",
-"sleek black button-through dress shirt — strictly no logos, no text, no emblems, plain fabric",
+"sleek black button-through dress shirt — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery, plain fabric",
 "cozy chunky knit pullover in oatmeal — strictly no logos, no text, no patches, plain cable knit",
-"slim cashmere V-neck in forest green — strictly no logos, no text, no emblems, plain solid",
+"slim cashmere V-neck in forest green — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery, plain solid",
 "soft cotton jersey top in dusty rose — strictly no logos, no text, no patches, solid plain cotton",
 "lightweight chambray shirt in soft blue — strictly no logos, no text, no patches, plain chambray",
 "formal waistcoat over light dress shirt — strictly no logos, no text, no patches on either layer",
@@ -1491,23 +1491,23 @@ const ACTIVITIES_MIDDLE=[
 
 // ── Matching uniforms (깔끔한 매칭 원복) ──
 const KO_UNIFORMS=[
-"matching plain solid beige overalls over plain ivory shirts — strictly no logos, no text, no emblems",
-"matching plain solid navy smocks over plain white shirts — strictly no logos, no text, no emblems",
-"matching plain solid mint-green aprons over plain cream tops — strictly no logos, no text, no emblems",
-"matching plain solid sky-blue jumpers over plain white undershirts — strictly no logos, no text, no emblems",
-"matching plain solid light-yellow vests over plain white tops — strictly no logos, no text, no emblems",
-"matching plain solid soft-pink pinafores over plain white shirts — strictly no logos, no text, no emblems",
-"matching plain solid lavender overalls over plain ivory tops — strictly no logos, no text, no emblems",
-"matching plain solid sage-green smocks over plain cream shirts — strictly no logos, no text, no emblems",
+"matching plain solid beige overalls over plain ivory shirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid navy smocks over plain white shirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid mint-green aprons over plain cream tops — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid sky-blue jumpers over plain white undershirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid light-yellow vests over plain white tops — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid soft-pink pinafores over plain white shirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid lavender overalls over plain ivory tops — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid sage-green smocks over plain cream shirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
 ];
 
 const KO_UNIFORMS_MIDDLE=[
-"matching plain solid navy blazers over plain white shirts — strictly no logos, no text, no emblems",
-"matching plain solid charcoal sweaters over plain white collared shirts — strictly no logos, no text",
-"matching plain solid cream cardigans over plain light-blue shirts — strictly no logos, no text",
-"matching plain solid dark-green vests over plain white shirts — strictly no logos, no text",
-"plain coordinated solid-color tops in earth tones — strictly no logos, no text, no brand marks",
-"matching plain solid grey hoodies — strictly no logos, no text, no graphics, no patches",
+"matching plain solid navy blazers over plain white shirts — strictly no logos, no text, no emblems, no school crests, no badges, no embroidery",
+"matching plain solid charcoal sweaters over plain white collared shirts — strictly no logos, no text, no school crests, no badges, no embroidery",
+"matching plain solid cream cardigans over plain light-blue shirts — strictly no logos, no text, no school crests, no badges, no embroidery",
+"matching plain solid dark-green vests over plain white shirts — strictly no logos, no text, no school crests, no badges, no embroidery",
+"plain coordinated solid-color tops in earth tones — strictly no logos, no text, no brand marks, no school crests, no badges",
+"matching plain solid grey hoodies — strictly no logos, no text, no graphics, no patches, no school crests, no badges",
 ];
 
 // ── Korean student clothing (all explicitly plain, no logos) ──
@@ -1786,7 +1786,7 @@ function generateBatch(count, targetMode){
     if (useUniform) {
       clothingDesc = "They wear " + uniformText + ".";
     } else {
-      clothingDesc = "Each student wears a completely different casual outfit in a different color and style — no two students dressed alike — strictly no logos, no text, no brand marks on any clothing.";
+      clothingDesc = "Each student wears a completely different casual outfit in a different color and style — no two students dressed alike — strictly no logos, no text, no brand marks, no school crests, no badges on any clothing.";
     }
 
     // Diverse kid appearances — pick one unique feature per child
@@ -1814,7 +1814,7 @@ function generateBatch(count, targetMode){
 
     // English prompt — photorealistic, stock-photo quality, natural
     const text=
-`Shot on ${cameraShort}. ${shotType}. ${place.d}. A ${raceDesc} ${finalGender} English teacher with ${hair}, wearing ${clothing}, is ${teacherAction}. ${studentWord} ${activity} ${kidDesc} ${clothingDesc} ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture. The scene looks like a real professional stock photograph, not AI-generated. No books with visible covers or titles. No sheet music. No papers with writing. No posters, no signs, no charts on walls. Walls are completely bare and clean. CRITICAL: absolutely zero text, zero letters, zero numbers, zero Korean characters anywhere in the image — not on walls, clothing, objects, or any surface. All clothing completely plain — zero logos, zero emblems, zero patches, zero graphics.${shoesRule} Aspect ratio 16:9.`;
+`Shot on ${cameraShort}. ${shotType}. ${place.d}. A ${raceDesc} ${finalGender} English teacher with ${hair}, wearing ${clothing}, is ${teacherAction}. ${studentWord} ${activity} ${kidDesc} ${clothingDesc} ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture, subtle film grain. The scene looks like a real professional stock photograph taken with a DSLR camera, not AI-generated. No books anywhere — no stacked books, no book spines, no book covers, no textbooks on tables or shelves. No sheet music, no papers with writing, no notebooks with visible writing. No posters, no signs, no charts, no stickers on any wall — all walls completely bare and clean. No screens showing content — all monitors and screens turned off or absent. CRITICAL: absolutely zero text, zero letters, zero numbers, zero Korean characters, zero hangul anywhere in the image — not on walls, floors, clothing, objects, furniture, or any surface. All clothing completely plain with zero logos, zero school crests, zero school badges, zero embroidered emblems, zero patches, zero stars, zero graphics of any kind. Uniforms must be completely blank solid color with no markings.${shoesRule} Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koClothingLabel = useUniform ? uniformText : '개별 캐주얼 (각자 다른 색상·스타일)';
