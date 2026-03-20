@@ -1455,23 +1455,22 @@ def _safe_decrypt(val):
     if val is None:
         return val
     try:
-        cleaned = str(val).strip().replace('\n', '').replace('\r', '').replace('\t', '')
+        # 공백·개행·탭 모두 제거 (base64에는 공백 없음)
+        cleaned = str(val).strip().replace('\n', '').replace('\r', '').replace('\t', '').replace(' ', '')
         if not cleaned:
             return val
         # 패딩 자동 보정 (일부 구버전 암호화는 padding 없이 저장됨)
         pad = len(cleaned) % 4
         padded = cleaned + '=' * (4 - pad) if pad else cleaned
         # padded 버전으로 암호화 여부 체크
-        candidate = padded if padded != cleaned else cleaned
-        if is_encrypted(candidate):
-            result = decrypt_field(candidate)
-            return result if result is not None else val
-        # fallback: 원본 cleaned 도 시도
-        if is_encrypted(cleaned):
-            result = decrypt_field(cleaned)
-            return result if result is not None else val
+        for candidate in [padded, cleaned]:
+            if is_encrypted(candidate):
+                result = decrypt_field(candidate)
+                return result if result is not None else val
         return val
-    except Exception:
+    except Exception as exc:
+        _log = logging.getLogger("bridge.decrypt")
+        _log.debug("_safe_decrypt 실패 (len=%d): %s", len(str(val)), type(exc).__name__)
         return val
 
 

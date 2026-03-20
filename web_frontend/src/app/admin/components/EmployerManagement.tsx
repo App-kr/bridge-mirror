@@ -187,7 +187,6 @@ function saveOrder(ids: string[]) {
 
 /* ══════ 기본 열 정의 ══════ */
 const DEFAULT_COLUMNS: ColumnDef[] = [
-  { key: 'no', label: 'No.', visible: true, width: 90 },
   { key: 'province', label: '지역', visible: true, width: 70 },
   { key: 'city', label: '도시', visible: true, width: 90 },
   { key: 'name', label: '업체명', visible: true, width: 160 },
@@ -516,7 +515,6 @@ export default function EmployerManagement() {
     const province = extractProvince(app.location)
     const city = extractCity(app.location)
     switch (key) {
-      case 'no': return jobNo(app)
       case 'province': return province
       case 'city': return city
       case 'name': {
@@ -547,8 +545,6 @@ export default function EmployerManagement() {
     <div className="space-y-5">
       {/* 애니메이션 */}
       <style>{`
-        @keyframes employer-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        .employer-blink { animation: employer-blink 0.8s ease-in-out infinite; }
         @keyframes search-pop { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
 
@@ -585,65 +581,53 @@ export default function EmployerManagement() {
           <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">구인자관리</h1>
           <p className="text-[13px] text-[#86868b] mt-0.5">
             {hasFilters || searchQuery
-              ? `${filtered.length} / ${employers.length}건 · 표시 ${Math.min(visibleCount, filtered.length)}건`
-              : `${employers.length}건 · 표시 ${Math.min(visibleCount, filtered.length)}건`}
+              ? `${filtered.length} / ${employers.length}건`
+              : `${employers.length}건`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {actionMsg && <span className="text-[12px] text-green-600 font-medium bg-green-50 px-3 py-1 rounded-lg">{actionMsg}</span>}
 
-          {/* 순서 저장 버튼 (순서가 변경됐을 때만 표시) */}
           {orderChanged && (
-            <button
-              type="button"
-              onClick={() => {
-                saveOrder(employers.map(e => e.id))
-                setOrderChanged(false)
-                flash('순서 저장 완료!')
-              }}
-              className="px-5 py-2 bg-blue-600 text-white text-[13px] font-bold rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              💾 순서 저장
+            <button type="button"
+              onClick={() => { saveOrder(employers.map(e => e.id)); setOrderChanged(false); flash('저장 완료') }}
+              className="px-3 py-1.5 bg-blue-600 text-white text-[12px] font-semibold rounded-lg hover:bg-blue-700">
+              저장
             </button>
           )}
 
-          {/* 전체 NEW 확인 버튼 */}
           {newUnconfirmedCount > 0 && (
-            <button
-              type="button"
-              onClick={confirmAll}
-              className="px-6 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition-colors employer-blink"
-              style={{ minWidth: 180 }}
-            >
-              ★ 전체 NEW 확인 ({newUnconfirmedCount})
+            <button type="button" onClick={confirmAll}
+              className="px-3 py-1.5 bg-gray-800 text-white text-[12px] font-semibold rounded-lg hover:bg-gray-900">
+              NEW 전체확인 ({newUnconfirmedCount})
             </button>
           )}
 
-          <button type="button" onClick={fetchEmployers} className="text-[12px] text-[#0071e3] hover:underline font-medium">새로고침</button>
+          <button type="button" onClick={fetchEmployers}
+            className="px-3 py-1.5 border border-gray-200 text-[12px] text-gray-600 font-medium rounded-lg hover:bg-gray-50">
+            새로고침
+          </button>
         </div>
       </div>
 
-      {/* ── 탭 3개 ── */}
+      {/* ── 탭 ── */}
       <div className="flex items-end gap-1">
         {TABS.map(t => (
-          <div key={t.key} className="relative">
+          <button key={t.key} type="button"
+            onClick={() => { setTab(t.key); setSearchQuery('') }}
+            className={`px-4 py-2 text-[13px] font-semibold rounded-t-lg transition-colors border border-b-0 ${
+              tab === t.key
+                ? 'bg-white text-[#1d1d1f] border-gray-200'
+                : 'bg-gray-50 text-gray-400 border-transparent hover:text-gray-600'
+            }`}
+          >
+            {t.label}
             {t.key === 'active' && newUnconfirmedCount > 0 && (
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full employer-blink whitespace-nowrap">
-                NEW {newUnconfirmedCount}
+              <span className="ml-1.5 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {newUnconfirmedCount}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => { setTab(t.key); setSearchQuery('') }}
-              className={`px-4 py-2.5 text-[13px] font-semibold rounded-t-xl transition-colors border border-b-0 ${
-                tab === t.key
-                  ? 'bg-white text-[#1d1d1f] border-gray-200'
-                  : 'bg-gray-100 text-gray-500 border-transparent hover:text-gray-700'
-              }`}
-            >
-              {t.label}
-            </button>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -810,28 +794,13 @@ export default function EmployerManagement() {
                           key={app.id}
                           className={`transition-colors ${
                             isBlacklist ? 'bg-[rgba(220,38,38,0.04)]' : isHl ? 'bg-yellow-50' : 'hover:bg-[#f0f4ff]'
-                          } ${isNew ? 'employer-blink' : ''}`}
+                          } ${isNew ? '' : ''}`}
                           style={isBlacklist ? { borderLeft: '3px solid rgba(220,38,38,0.4)' } : undefined}
                         >
                           <td className="px-1 py-2.5 text-center text-[10px] text-gray-300 border-r border-gray-100 select-none">{rowIdx + 1}</td>
                           {visibleCols.map(c => (
                             <td key={c.key} className="px-3 py-2.5 text-[13px] truncate" title={cellValue(app, c.key)}>
-                              {c.key === 'no' ? (
-                                <>
-                                  <code className={`px-1.5 py-0.5 text-[11px] font-bold rounded ${
-                                    isNewCode ? 'bg-blue-600 text-white' : 'bg-[#1d1d1f] text-white'
-                                  }`} style={{ fontFamily: 'Consolas, monospace' }}>{no}</code>
-                                  {isNew && (
-                                    <button
-                                      type="button"
-                                      onClick={() => confirmNew(app.id)}
-                                      className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded hover:bg-red-600 employer-blink"
-                                    >
-                                      NEW
-                                    </button>
-                                  )}
-                                </>
-                              ) : c.key === 'status' ? (
+                              {c.key === 'status' ? (
                                 <select
                                   className={`text-[11px] px-2 py-1 rounded-full font-semibold border-0 cursor-pointer ${
                                     STATUS_COLORS[app.status] || 'bg-gray-100 text-gray-600'
