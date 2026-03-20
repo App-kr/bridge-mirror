@@ -326,27 +326,17 @@ export default function AdminDashboardPage() {
           <span className="text-[14px] leading-none">✏️</span>
           메인바로가기
         </button>
-        {kakaoUrl ? (
-          <a
-            href={kakaoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#191919] shadow-sm hover:brightness-95 active:scale-[0.98] transition-all"
-            style={{ background: '#FEE500' }}
-          >
-            <span className="text-[16px] leading-none">💬</span>
-            카카오 채널 관리
-            <span className="text-[11px] opacity-50 ml-1">↗</span>
-          </a>
-        ) : (
-          <Link
-            href="/admin/settings"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#aaa] hover:text-[#424245] transition-colors"
-          >
-            <span className="text-[15px] leading-none">💬</span>
-            카카오 채널 URL 설정
-          </Link>
-        )}
+        <a
+          href="https://business.kakao.com/_tBxhxkK/chats"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#191919] shadow-sm hover:brightness-95 active:scale-[0.98] transition-all"
+          style={{ background: '#FEE500' }}
+        >
+          <span className="text-[16px] leading-none">💬</span>
+          카카오 채널바로가기
+          <span className="text-[11px] opacity-50 ml-1">↗</span>
+        </a>
         <a
           href="https://bridgejob.co.kr"
           target="_blank"
