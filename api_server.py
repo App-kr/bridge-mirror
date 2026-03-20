@@ -365,6 +365,16 @@ app = FastAPI(
 # 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
 try:
     from security_middleware import SecurityMiddleware, security_router, admin_security_router
+    # 배포 직후 블랙리스트 초기화 — 이전 세션 잔여 차단 해제
+    try:
+        from security_middleware import ip_blacklist
+        if ip_blacklist._list or ip_blacklist._permanent:
+            ip_blacklist._list.clear()
+            ip_blacklist._permanent.clear()
+            ip_blacklist._save()
+            print("[STARTUP] IP blacklist cleared (fresh deploy)")
+    except Exception:
+        pass
     app.add_middleware(SecurityMiddleware)
     app.include_router(security_router)
     app.include_router(admin_security_router)
@@ -1050,6 +1060,11 @@ except OSError as _mkdir_err:
     logging.getLogger("bridge.api").warning("[STARTUP] DB 경로 디렉터리 생성 실패 (계속 진행): %s", _mkdir_err)
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
+
+# 시작 진단 (값 노출 없이 상태만 출력)
+print(f"[STARTUP] ADMIN_API_KEY={'SET' if _ADMIN_KEY else 'EMPTY'} "
+      f"ADMIN_PASSWORD={'SET(pbkdf2)' if _ADMIN_PW.startswith('pbkdf2:') else 'SET(plain)' if _ADMIN_PW else 'EMPTY'} "
+      f"DB={_ADMIN_DB_PATH}")
 
 # SQLite WAL 모드 활성화 (다중 스레드 동시 읽기/쓰기 성능 향상)
 try:
