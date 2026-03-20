@@ -137,7 +137,7 @@ export default function BridgeCanvasSheet() {
 
   // Memo area
   const [memo, setMemo] = useState('')
-  const [memoStyle, setMemoStyle] = useState({ fontSize: 13, bold: false, color: '#111' })
+  const [memoStyle, setMemoStyle] = useState({ fontSize: 13, bold: false, color: '#111', bgColor: '#FFFDE7' })
   const [memoHeight, setMemoHeight] = useState(60)
   const memoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -210,7 +210,7 @@ export default function BridgeCanvasSheet() {
       if (savedMemo) {
         const mp = JSON.parse(savedMemo)
         if (mp.memo) setMemo(mp.memo)
-        if (mp.style) setMemoStyle(mp.style)
+        if (mp.style) setMemoStyle({ fontSize: 13, bold: false, color: '#111', bgColor: '#FFFDE7', ...mp.style })
       }
     } catch { /* ignore */ }
 
@@ -365,6 +365,10 @@ export default function BridgeCanvasSheet() {
   /* ── Clipboard paste (image) — 사진 칸 캡쳐 붙여넣기 ── */
   useEffect(() => {
     const h = (e: ClipboardEvent) => {
+      // 메모 textarea에 포커스가 있을 때는 일반 붙여넣기 허용
+      const target = e.target as HTMLElement
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
+
       const items = e.clipboardData?.items
       if (!items) return
       for (const item of Array.from(items)) {
@@ -773,7 +777,7 @@ export default function BridgeCanvasSheet() {
   const fullReload = useCallback(() => { setDbAll([]); setLoaded(0); loadAllData() }, [loadAllData])
 
   /* ── Memo save ── */
-  const saveMemo = useCallback((m: string, s: { fontSize: number; bold: boolean; color: string }) => {
+  const saveMemo = useCallback((m: string, s: { fontSize: number; bold: boolean; color: string; bgColor: string }) => {
     const data = { memo: m, style: s }
     localStorage.setItem('bridge_sheet_memo', JSON.stringify(data))
   }, [])
@@ -864,6 +868,40 @@ export default function BridgeCanvasSheet() {
 
   const showAllCols = useCallback(() => {
     setCols(prev => prev.map(c => ({ ...c, v: true })))
+  }, [])
+
+  /* ── Column reorder (left / right) ── */
+  const moveColLeft = useCallback((colKey: string) => {
+    setCols(prev => {
+      const visCols = prev.filter(c => c.v !== false)
+      const visIdx = visCols.findIndex(c => c.key === colKey)
+      if (visIdx <= 0) return prev  // already leftmost or not found
+      // swap with previous visible column
+      const swapKey = visCols[visIdx - 1].key
+      const allIdx = prev.findIndex(c => c.key === colKey)
+      const swapAllIdx = prev.findIndex(c => c.key === swapKey)
+      if (allIdx < 0 || swapAllIdx < 0) return prev
+      const next = [...prev]
+      ;[next[allIdx], next[swapAllIdx]] = [next[swapAllIdx], next[allIdx]]
+      return next
+    })
+    setHeaderMenu(null)
+  }, [])
+
+  const moveColRight = useCallback((colKey: string) => {
+    setCols(prev => {
+      const visCols = prev.filter(c => c.v !== false)
+      const visIdx = visCols.findIndex(c => c.key === colKey)
+      if (visIdx < 0 || visIdx >= visCols.length - 1) return prev  // already rightmost
+      const swapKey = visCols[visIdx + 1].key
+      const allIdx = prev.findIndex(c => c.key === colKey)
+      const swapAllIdx = prev.findIndex(c => c.key === swapKey)
+      if (allIdx < 0 || swapAllIdx < 0) return prev
+      const next = [...prev]
+      ;[next[allIdx], next[swapAllIdx]] = [next[swapAllIdx], next[allIdx]]
+      return next
+    })
+    setHeaderMenu(null)
   }, [])
 
   if (!adminKey) {
@@ -1154,7 +1192,7 @@ export default function BridgeCanvasSheet() {
 
       {/* ── Memo Area ── */}
       <div style={{
-        flexShrink: 0, background: '#FFFDE7',
+        flexShrink: 0, background: memoStyle.bgColor || '#FFFDE7',
         borderBottom: '2px solid #F9A825',
         display: 'flex', flexDirection: 'column',
         height: memoHeight, minHeight: 40, maxHeight: 200,
@@ -1178,6 +1216,17 @@ export default function BridgeCanvasSheet() {
             style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer' }}
             title="글자색"
           />
+          <input
+            type="color" value={memoStyle.bgColor || '#FFFDE7'}
+            onChange={e => { const s = { ...memoStyle, bgColor: e.target.value }; setMemoStyle(s); saveMemo(memo, s) }}
+            style={{ width: 22, height: 22, border: 'none', padding: 0, cursor: 'pointer' }}
+            title="메모 배경색"
+          />
+          <button
+            onClick={() => { setMemo(''); saveMemo('', memoStyle) }}
+            style={{ marginLeft: 4, padding: '1px 6px', fontSize: 11, border: '1px solid #e0d78a', borderRadius: 3, background: 'transparent', cursor: 'pointer', color: '#b45309' }}
+            title="메모 초기화"
+          >지우기</button>
         </div>
         <textarea
           value={memo}
@@ -1349,6 +1398,9 @@ export default function BridgeCanvasSheet() {
           {hiddenCount > 0 && (
             <CtxItem label="숨긴 열 모두 표시" onClick={() => { showAllCols(); setHeaderMenu(null) }} />
           )}
+          <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
+          <CtxItem label="열 왼쪽으로" onClick={() => moveColLeft(headerMenu.colKey)} />
+          <CtxItem label="열 오른쪽으로" onClick={() => moveColRight(headerMenu.colKey)} />
           <div style={{ height: 1, background: '#f3f4f6', margin: '3px 0' }} />
           <CtxItem label={frozenCols > 0 ? '틀 고정 해제' : '이 열까지 틀 고정'} onClick={() => {
             if (frozenCols > 0) {
