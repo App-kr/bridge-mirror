@@ -73,6 +73,10 @@ export class GridEngine {
   private sortDir: 'asc' | 'desc' = 'asc'
   private colResizeDrag: { visIdx: number; startX: number; startW: number } | null = null
   private rowResizeDrag: { rowIdx: number; startClientY: number; startH: number; cid: string } | null = null
+  private colDrag: { srcVisIdx: number; startX: number; currentX: number; dragging: boolean } | null = null
+
+  /* ── ColReorder callback ── */
+  onColReorder: ((cols: ColDef[]) => void) | null = null
 
   /* ── Photo cache ── */
   private photoCache = new Map<string, HTMLImageElement>()
@@ -537,9 +541,17 @@ export class GridEngine {
 
   private onHeaderMouseDown = (e: MouseEvent): void => {
     const hit = this.headerHitVisCol(e)
-    if (!hit || !hit.nearBorder) return
-    e.preventDefault()
-    this.colResizeDrag = { visIdx: hit.visCol, startX: e.clientX, startW: this.visCols[hit.visCol].w }
+    if (!hit) return
+    if (hit.nearBorder) {
+      e.preventDefault()
+      this.colResizeDrag = { visIdx: hit.visCol, startX: e.clientX, startW: this.visCols[hit.visCol].w }
+      return
+    }
+    // 컬럼 드래그 시작 (리사이즈 존 아닌 경우 — 알파벳 행 localY < 20)
+    if (hit.localY < 20 && this.visCols[hit.visCol]?.type !== 'idx') {
+      e.preventDefault()
+      this.colDrag = { srcVisIdx: hit.visCol, startX: e.clientX, currentX: e.clientX, dragging: false }
+    }
   }
 
   private onHeaderMouseMove = (e: MouseEvent): void => {
@@ -592,6 +604,18 @@ export class GridEngine {
   }
 
   private onDocMouseMove = (e: MouseEvent): void => {
+    // Column drag reorder
+    if (this.colDrag) {
+      const dx = Math.abs(e.clientX - this.colDrag.startX)
+      if (dx > 5) this.colDrag.dragging = true
+      this.colDrag.currentX = e.clientX
+      if (this.colDrag.dragging) {
+        this.headerHit.style.cursor = 'grabbing'
+        this.requestRender()
+      }
+      return
+    }
+
     // Column resize drag
     if (this.colResizeDrag) {
       const dx = e.clientX - this.colResizeDrag.startX
@@ -625,7 +649,33 @@ export class GridEngine {
     }
   }
 
-  private onDocMouseUp = (): void => {
+  private onDocMouseUp = (e: MouseEvent): void => {
+    // Column drag reorder
+    if (this.colDrag) {
+      this.headerHit.style.cursor = 'default'
+      if (this.colDrag.dragging) {
+        const tgtVisIdx = this.getDropColIdx(e.clientX)
+        if (tgtVisIdx !== null && tgtVisIdx !== this.colDrag.srcVisIdx) {
+          // Reorder visCols
+          const newVisCols = [...this.visCols]
+          const [moved] = newVisCols.splice(this.colDrag.srcVisIdx, 1)
+          const insertAt = tgtVisIdx > this.colDrag.srcVisIdx ? tgtVisIdx - 1 : tgtVisIdx
+          newVisCols.splice(insertAt, 0, moved)
+          this.visCols = newVisCols
+          // Sync to cols (full list)
+          const newCols: ColDef[] = []
+          const usedKeys = new Set(newVisCols.map(c => c.key))
+          for (const vc of newVisCols) newCols.push(vc)
+          for (const c of this.cols) { if (!usedKeys.has(c.key)) newCols.push(c) }
+          this.cols = newCols
+          if (this.onColReorder) this.onColReorder([...newCols])
+        }
+      }
+      this.colDrag = null
+      this.requestRender()
+      return
+    }
+
     if (this.colResizeDrag) {
       const col = this.visCols[this.colResizeDrag.visIdx]
       this.cb.onColumnResize(col.key, col.w)
@@ -681,6 +731,18 @@ export class GridEngine {
   /* ══════════════════════════════════════════════
      RENDERING
      ══════════════════════════════════════════════ */
+
+  /** 마우스 X 좌표에서 드롭 대상 열 인덱스 계산 (열 경계 기준) */
+  private getDropColIdx(clientX: number): number | null {
+    const rect = this.headerHit.getBoundingClientRect()
+    const mx = clientX - rect.left + this.scrollLeft
+    let cx = 0
+    for (let i = 0; i <= this.visCols.length; i++) {
+      if (mx < cx + (i < this.visCols.length ? this.visCols[i].w / 2 : 0)) return i
+      if (i < this.visCols.length) cx += this.visCols[i].w
+    }
+    return this.visCols.length
+  }
 
   private requestRender(): void {
     if (this.rafId || this.destroyed) return
@@ -752,6 +814,31 @@ export class GridEngine {
     }
 
     this.drawHeader(frozenW, frozenN)
+
+    // ── 열 드래그 인디케이터 ──
+    if (this.colDrag?.dragging) {
+      const rect = this.headerHit.getBoundingClientRect()
+      const mx = this.colDrag.currentX - rect.left + this.scrollLeft
+      // 드롭 위치 계산 → 파란 세로선
+      let cx = 0, lineX = 0
+      for (let i = 0; i < this.visCols.length; i++) {
+        const mid = cx + this.visCols[i].w / 2
+        if (mx < mid) { lineX = cx - this.scrollLeft; break }
+        cx += this.visCols[i].w
+        lineX = cx - this.scrollLeft
+      }
+      ctx.strokeStyle = '#1a73e8'; ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(lineX, 0)
+      ctx.lineTo(lineX, viewH)
+      ctx.stroke()
+      // 드래그 중인 열 반투명 오버레이
+      let srcX = -this.scrollLeft
+      for (let i = 0; i < this.colDrag.srcVisIdx; i++) srcX += this.visCols[i].w
+      const srcW = this.visCols[this.colDrag.srcVisIdx]?.w ?? 0
+      ctx.fillStyle = 'rgba(26,115,232,0.12)'
+      ctx.fillRect(srcX, 0, srcW, viewH)
+    }
   }
 
   private drawRowBg(rowIdx: number, y: number, x0: number, x1: number, rowH: number): void {

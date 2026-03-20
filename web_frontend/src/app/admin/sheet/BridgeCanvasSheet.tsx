@@ -621,6 +621,11 @@ export default function BridgeCanvasSheet() {
     if (!containerRef.current || !ready) return
     const engine = new GridEngine(containerRef.current, stableCallbacks)
     engine.setHeaderGetter(() => hdrsRef.current())
+    // 열 드래그 순서 변경 콜백
+    engine.onColReorder = (newCols) => {
+      setCols(newCols.filter(c => defaultCols().some(d => d.key === c.key)) as typeof newCols)
+      prefsRef.current.save(newCols as ColDef[], frozenCols)
+    }
     engineRef.current = engine
     return () => { engine.destroy(); engineRef.current = null }
   // eslint-disable-next-line react-hooks/exhaustive-deps
