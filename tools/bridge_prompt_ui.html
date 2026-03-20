@@ -823,10 +823,6 @@ const INSTRUCTOR_RG=[
 ["Mexican-American","male"],["Mexican-American","female"],
 ["Colombian","male"],["Colombian","female"],
 ["Brazilian","male"],["Brazilian","female"],
-// Native / Indigenous
-["Native American","male"],["Native American","female"],
-["Indigenous Australian","male"],["Indigenous Australian","female"],
-["Māori","male"],["Māori","female"],
 // Mixed
 ["Mixed-race (White and Black)","male"],["Mixed-race (White and Black)","female"],
 ["Mixed-race (White and Latino)","male"],["Mixed-race (White and Latino)","female"],
@@ -1069,13 +1065,13 @@ const PLACES_EARLY=[
 {n:"Story Circle Room",d:"cozy story-time circle area with semicircular cushioned seating on a soft rug, plush animal characters on display shelves, warm plain walls with no decorations, no screens, no posters"},
 {n:"Art & Craft Room",d:"bright art and craft room with child-height tables covered in colorful materials, walls showing children's abstract paintings only (no words), paint supply stations, drying racks with paper crafts"},
 {n:"Indoor Village Town Square",d:"indoor themed miniature colorful Western small town, miniature storefronts with awnings only (no signs, no text), cobblestone-patterned floor tiles, decorative street lamps, plain colorful facades"},
-{n:"Indoor Village Airport Zone",d:"realistic mock airport terminal with plain counters, prop luggage conveyor, plain departure board (no text on it), customs desk with passport props, clean minimalist walls"},
-{n:"Indoor Village Restaurant Zone",d:"themed mock restaurant with diner-style booths and counter stools, plain menu boards (no writing), plastic food props, plain aprons for children, clean walls"},
+{n:"Indoor Village Bakery Zone",d:"miniature bakery-themed play area with child-height counter, pretend bread and pastry props, small aprons for children, colorful tiled walls, warm cozy lighting"},
+{n:"Indoor Village Flower Shop",d:"charming miniature flower shop play area with small buckets of fabric flowers, ribbon rolls, wrapping paper, child-height counter, pastel walls with no decorations"},
 {n:"Modern Learning Center Classroom",d:"modern Korean language center classroom with clean plain walls, tiered seating, large blank interactive screen, bright overhead LED panels, no posters, no charts, no decorations on walls"},
 {n:"Indoor Village Market Zone",d:"colorful indoor market-themed play area with miniature stalls, play cash register, fabric canopy decorations, toy fruit and vegetable displays, clean walls"},
-{n:"Cozy Reading Zone",d:"cozy picture book library with floor-to-ceiling shelves of colorful books (spines facing inward), bean bag chairs and reading nooks, soft rug with geometric patterns only (no letters)"},
+{n:"Cozy Reading Zone",d:"cozy picture book library with floor-to-ceiling shelves of colorful books with spines facing inward so no titles are visible, bean bag chairs and reading nooks, soft rug with geometric patterns only, plain walls"},
 {n:"Science Discovery Zone",d:"interactive science zone with hands-on experiment stations, volcano model, simple circuit boards, plant growth experiments, plain lab tables, no labels anywhere"},
-{n:"Indoor Mini Supermarket",d:"themed indoor mini supermarket with color-coded aisles, shopping baskets sized for children, mock cashier station with conveyor belt prop, plain shelf dividers (no product labels visible)"},
+{n:"Indoor Mini Supermarket",d:"themed indoor mini supermarket play area with color-coded plain shelves, small shopping baskets sized for children, toy cash register, plain shelf dividers, clean walls with no decorations"},
 {n:"Indoor Play Village Zone",d:"colorful miniature play village with small storefronts, dress-up costumes, pretend play kitchen and shop counters, bright colored walls"},
 {n:"Sensory Play Room",d:"soft-play sensory exploration room with plain tactile panels, sand and water tables, bubble walls, soft padded flooring, clean pastel walls with no decorations"},
 {n:"Music Room",d:"small music room with colorful percussion instruments, rhythm carpet with geometric patterns, a piano keyboard along one wall, acoustic ceiling tiles, plain walls"},
@@ -1083,7 +1079,7 @@ const PLACES_EARLY=[
 {n:"Nature Discovery Garden",d:"rooftop or ground-level school garden with planters, butterfly observation dome, weather station instruments, outdoor classroom seating, clear sky above, no signs"},
 {n:"Cooking Studio",d:"child-height cooking studio with low countertops, ingredient jars with colored lids, aprons sized for children, stainless steel surfaces, clean walls"},
 {n:"Block Building Room",d:"open play room with giant foam building blocks in primary colors, low bins of colored materials, soft padded flooring, plain walls with no decorations"},
-{n:"Morning Circle Classroom",d:"early morning assembly-style classroom with weather instruments on the wall (no text), plain attendance board with photo cards only, warm lighting, clean bare walls"},
+{n:"Morning Circle Classroom",d:"early morning assembly-style classroom with plain attendance board with photo cards only, warm lighting, clean bare walls with no decorations"},
 {n:"STEAM Discovery Lab",d:"early childhood STEAM lab with age-appropriate robotics toys, magnetic tile sets, coding block puzzles, plain tables, clean walls with no posters"},
 {n:"Camp Cabin Room",d:"camp-style cabin room with bunk-bed style cubbies, each with a small flag (solid color, no text), group activity tables, nature-themed murals of trees and mountains (no text)"},
 ];
@@ -1435,21 +1431,21 @@ const NO_TEXT_RULE="ABSOLUTE RULE — ZERO TEXT IN IMAGE: There must be NO text,
 
 // ── Shot types (촬영 스타일 다양화) ──
 const SHOT_TYPES=[
-"wide-angle cinematic photograph",
-"environmental editorial photograph",
-"wide establishing shot",
-"documentary-style photograph",
-"medium-wide editorial photograph",
-"ultra-wide immersive photograph",
-"environmental portrait photograph",
-"expansive editorial photograph",
-"full-room wide-angle photograph",
-"photojournalistic wide shot",
-"lifestyle editorial photograph",
-"natural-light documentary photograph",
-"cinematic wide-angle shot",
-"editorial room-revealing photograph",
-"professional candid photograph",
+"wide-angle cinematic photograph taken from across the room",
+"ultra-wide establishing shot showing the entire space and all people",
+"wide documentary-style photograph capturing the full room from a distance",
+"expansive wide-angle editorial shot revealing the complete environment",
+"full-room environmental photograph shot from the far corner",
+"ultra-wide immersive photograph showing floor to ceiling",
+"wide establishing shot with the camera pulled far back from the subjects",
+"photojournalistic wide shot showing the entire scene in context",
+"cinematic wide-angle shot capturing the room and all its occupants from afar",
+"editorial room-revealing photograph with generous negative space around subjects",
+"wide candid photograph taken from several meters away",
+"environmental wide shot showing the architecture and people together",
+"panoramic-style wide photograph of the entire classroom scene",
+"distant observational photograph showing the whole activity from across the room",
+"wide-angle lifestyle photograph with the full space visible edge to edge",
 ];
 
 // ── Activities (생동감 넘치는 교육 활동) ──
@@ -1549,30 +1545,34 @@ const EYE_COLORS=[
 
 // ── Kid features (아이 외모 다양성 — 모든 아이 다르게) ──
 const KID_FEATURES=[
-"one wearing small round glasses",
-"one with a pink satin headband",
-"one with very short spiky hair",
-"one with long straight hair past the shoulders",
-"one with twin braids tied with colorful ribbons",
-"one with a small high ponytail",
-"one with a butterfly hair clip",
-"one with chubby cheeks grinning wide",
-"one squinting happily with small narrow eyes",
-"one with large round curious eyes",
-"one with a neat bowl cut",
-"one with hair styled in two buns",
-"one noticeably taller than the others",
-"one showing dimples while smiling",
-"one with bangs neatly covering the forehead",
-"one with a wide cheerful grin showing bright teeth",
-"one wearing a small yellow hair pin",
-"one with slightly curly permed hair",
-"one with a tidy side-parted hairstyle",
-"one with messy natural windswept hair",
-"one with a tiny star-shaped hair clip",
-"one wearing thin-framed rectangular glasses",
-"one with a red polka-dot hair bow",
-"one with very short cropped hair close to the scalp",
+// 안경/액세서리
+"one wearing small round glasses with a round chubby face",
+"one wearing thin-framed rectangular glasses with a long narrow face",
+// 머리 — 긴/짧은/묶은/풀은
+"one with very short spiky hair and a square jaw",
+"one with long straight hair past the shoulders and a delicate oval face",
+"one with twin braids tied with colorful ribbons, noticeably shorter than the others",
+"one with a small high ponytail and a wide flat nose",
+"one with a neat bowl cut and a round moon-shaped face",
+"one with hair styled in two buns, the tallest child in the group",
+"one with messy natural windswept hair and freckles across the nose",
+"one with very short cropped hair close to the scalp and prominent ears",
+"one with slightly curly permed hair and a pointed chin",
+"one with a tidy side-parted hairstyle and thin eyebrows",
+"one with bangs neatly covering the forehead and plump lips",
+// 체형/키/얼굴형 차이
+"one noticeably chubbier than the others with a big cheerful smile",
+"one very slim and lanky with long arms",
+"one with a broad flat face and small narrow eyes squinting happily",
+"one with large round curious eyes and a tiny button nose",
+"one showing dimples while smiling with a heart-shaped face",
+"one with a wide cheerful grin showing bright teeth and a square chin",
+// 장식
+"one with a pink satin headband and a long oval face",
+"one with a butterfly hair clip and rosy round cheeks",
+"one wearing a small yellow hair pin, the shortest child in the group",
+"one with a tiny star-shaped hair clip and a sharp angular jawline",
+"one with a red polka-dot hair bow and a soft double chin",
 ];
 
 // ── Teacher actions — natural interaction (자연스러운 교사 행동) ──
@@ -1668,6 +1668,15 @@ const RACE_KO={
   'Mixed-race (White and Latino)':'혼혈(백인+라틴)',
 };
 
+// Safe broad race descriptor for English prompt (avoids PROMINENT_PEOPLE filter)
+function getRaceDesc(race){
+  if(race.includes('White')||race==='Caucasian'||race==='Australian'||race==='New Zealander'||race==='Canadian'||race==='Irish'||race.includes('South African White')) return 'Caucasian';
+  if(race.includes('Black')||race==='African'||race.includes('Afro')) return 'Black';
+  if(race.includes('Latino')||race.includes('Latina')||race.includes('Mexican')||race.includes('Colombian')||race.includes('Brazilian')) return 'Latino';
+  if(race.includes('Mixed')) return 'mixed-race Western';
+  return 'Western';
+}
+
 // Generate a batch where every prompt has a UNIQUE place
 function generateBatch(count, targetMode){
   const earlyShuffled = shuffle(PLACES_EARLY);
@@ -1724,9 +1733,8 @@ function generateBatch(count, targetMode){
     const composition=pick(COMPOSITION);
     const mood=pick(MOODS);
 
-    // Teacher details
-    const eyeColor=pick(EYE_COLORS);
-    const ageDesc=pick(AGES).split('—')[0].trim(); // "appearing to be in their mid-30s"
+    // Teacher race descriptor (safe broad term)
+    const raceDesc=getRaceDesc(race);
 
     // Activity & kids
     const activity = pick(isEarly ? ACTIVITIES_EARLY : ACTIVITIES_MIDDLE);
@@ -1734,9 +1742,9 @@ function generateBatch(count, targetMode){
     const uniform = pick(isEarly ? KO_UNIFORMS : KO_UNIFORMS_MIDDLE);
     const kidCount = isEarly ? (3 + Math.floor(Math.random()*4)) : (4 + Math.floor(Math.random()*3));
 
-    // Diverse kid appearances — pick unique features
+    // Diverse kid appearances — pick one unique feature per child
     const featurePool = shuffle([...KID_FEATURES]);
-    const kidFeats = featurePool.slice(0, Math.min(kidCount, 5)).join(', ');
+    const kidFeats = featurePool.slice(0, kidCount).join('; ');
 
     // Camera short form
     const shotType = pick(SHOT_TYPES);
@@ -1745,31 +1753,33 @@ function generateBatch(count, targetMode){
     const raceKo = RACE_KO[race]||race;
     const genderKo = finalGender==='male'?'남성':'여성';
 
-    // English prompt — photorealistic, coherent, natural
-    // NOTE: eye color + specific age removed — triggers Google PROMINENT_PEOPLE filter
+    // English prompt — photorealistic, wide shot, coherent, natural
     const text=
-`Shot on ${cameraShort}. ${shotType} of ${place.d}. ${kidCount} Korean young learners are enjoying ${activity}. Their foreign teacher, a friendly ${finalGender} with ${hair}, wearing ${clothing}, is ${teacherAction}. The children have visibly diverse appearances: ${kidFeats}. They wear ${uniform}. ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture. No text, no logos, no watermarks, no symbols anywhere in the image. All clothing completely plain and solid-colored. Aspect ratio 16:9.`;
+`Shot on ${cameraShort}. ${shotType}. ${place.d}. ${kidCount} Korean young learners are enjoying ${activity}. Their foreign English teacher, a friendly ${raceDesc} ${finalGender} with ${hair}, wearing ${clothing}, is ${teacherAction}. Every child looks completely different from every other child — different face shape, different height, different build, different hairstyle: ${kidFeats}. They wear ${uniform}. Everyone is in socks or barefoot on the indoor floor — absolutely no outdoor shoes visible anywhere. ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture, natural imperfections. CRITICAL: absolutely zero text, zero letters, zero numbers, zero Korean characters, zero hangul, zero symbols, zero writing of any kind anywhere in the entire image. No passports, no documents, no ID cards, no posters, no signs, no certificates, no name tags, no labels, no stickers with writing. All walls completely bare and clean. All clothing completely plain solid-colored — zero logos, zero brand marks, zero emblems, zero patches, zero graphics, zero printed designs on any garment. The camera is positioned far from the subjects showing the full room. Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koText=
 `${shotType} — ${place.n}
 
-◆ 외국인 강사 (${genderKo})
+◆ 외국인 강사 (${raceDesc} ${genderKo})
 ${hair}, ${clothing} 착용
 행동: ${teacherAction}
 
 ◆ 한국인 아이들 (${kidCount}명)
 활동: ${activity}
-외모: ${kidFeats}
+외모 다양성: ${kidFeats}
 의상: ${uniform}
+신발: 실내 — 양말/맨발 (신발 없음)
 
 ◆ 촬영
-카메라: ${cameraShort}
+카메라: ${cameraShort} (와이드 — 멀리서 촬영)
 조명: ${lighting}
 컬러: ${grade}
 
 ◆ 금지 사항
-텍스트·로고·심볼 일절 없음. 의류 완전 무지.`;
+텍스트·한글·로고·여권·문서·벽 장식 일절 없음
+의류 완전 무지 — 로고·그래픽·패치 없음
+실외 신발 금지`;
 
     return {
       target: t,
@@ -1781,7 +1791,7 @@ ${hair}, ${clothing} 착용
       ko: {
         target: isEarly?'유치·초등 대상':'중·고등 대상',
         place: place.n,
-        instructor: (RACE_KO[race]||race)+' '+(finalGender==='male'?'남성':'여성'),
+        instructor: raceDesc+' '+(finalGender==='male'?'남성':'여성'),
         composition: composition.split(' — ')[0].trim(),
         lighting: lighting.length>38 ? lighting.slice(0,38)+'…' : lighting,
         grade: grade.split(' — ')[0].split(' with ')[0].trim(),
