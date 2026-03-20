@@ -11,6 +11,14 @@
 ## 현재 진행 중인 작업
 없음 (세션 종료)
 
+## 2026-03-20 세션 완료 (홈페이지 불안정요소 수정)
+- fix(CSP): connect-src *.onrender.com 와일드카드 (CRITICAL-2)
+- fix(MegaMenu): DOM createElement 링크 → router.push() SPA 네비게이션 복구 (CRITICAL-3)
+- fix(manifest): "BRIDGE Admin" → "BRIDGE", start_url /admin → / (BUG-18)
+- feat(api/track): /api/track POST 엔드포인트 신규 (BUG-12)
+- fix(api/jobs): 로컬 JSON 없으면 Render API 프록시 (BUG-1/2)
+- fix(layout): og:image 추가 (UX)
+
 ## 2026-03-20 세션 완료 (EmployerManagement 기능 머지)
 - feat(DocBlock): Job번호·업체명 더블클릭 인라인 편집 (onEditJobCode / onEditName 콜백)
 - feat(DocBlock): 이메일 클릭 → 메일 팝업 자동 오픈 (onOpenMail 콜백)

@@ -697,7 +697,8 @@
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 -c \"\nimport sys\nsys.path.insert\\(0, r''Q:\\\\Claudework\\\\bridge base''\\)\nfrom tools.bx import load_to_env\nn = load_to_env\\(\\)\nprint\\(f''ClaudeBlog venv: {n} keys loaded \\(no pip install\\)''\\)\n\")",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"api-error-structure+claude-rules\" --type pre-task)",
       "Bash(GIT_DIR=\"Q:/Claudework/bridge base/.git\" git log:*)",
-      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"security-fix-auth\" --type pre-task:*)"
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"security-fix-auth\" --type pre-task:*)",
+      "Bash(\"Q:/Claudework/bridge base/tools/auto_finalize.py\")"
     ]
   }
 }

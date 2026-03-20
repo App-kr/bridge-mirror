@@ -535,8 +535,16 @@
       "git": "e9a981f",
       "files": 1976,
       "db_hash": "1e8b254a33e2"
+    },
+    {
+      "dir": "20260320_091112__홈페이지_불안정요소_수정_+_EmployerManagement_머지_+_Render_배포_수정",
+      "task": "홈페이지 불안정요소 수정 + EmployerManagement 머지 + Render 배포 수정",
+      "ts": "2026.03.20 09:11:16",
+      "git": "3769a3e",
+      "files": 1955,
+      "db_hash": "1e8b254a33e2"
     }
   ],
-  "last_backup": "2026.03.20 06:58:58",
-  "total_count": 67
+  "last_backup": "2026.03.20 09:11:16",
+  "total_count": 68
 }
