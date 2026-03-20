@@ -736,12 +736,6 @@ export default function HomePage() {
           5. CTA — Your Next Chapter (Apple + Kakao MZ style)
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="relative py-24 sm:py-32 border-t border-white/[0.06] overflow-hidden bg-black">
-        {/* Ambient glow blobs */}
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[120px]"
-          style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[120px]"
-          style={{ background: 'radial-gradient(circle, #f59e0b, transparent 70%)' }} />
-
         <div className="relative z-10 max-w-[900px] mx-auto px-5 sm:px-8">
           {/* Headline — Apple bold */}
           <motion.div
@@ -759,10 +753,11 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          {/* Two cards */}
+          {/* Two cards — equal height */}
           <div className="grid sm:grid-cols-2 gap-5 sm:gap-6">
             {/* Teacher Card */}
             <motion.div
+              className="flex"
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -770,27 +765,27 @@ export default function HomePage() {
             >
               <Link
                 href="/apply"
-                className="group relative block rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500
+                className="cta-card group relative flex flex-col rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500 w-full
                            hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(59,130,246,0.25)] active:scale-[0.98]"
                 style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1a1a2e 100%)' }}
               >
-                {/* Gradient border glow */}
+                {/* Hover glow overlay */}
                 <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                   style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.2), transparent 60%)', pointerEvents: 'none' }} />
-                {/* Emoji icon */}
-                <div className="text-[48px] mb-5 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-[-5deg] select-none leading-none"
-                  style={{ filter: 'drop-shadow(0 4px 12px rgba(59,130,246,0.4))' }}>
+                {/* Emoji — floats on hover */}
+                <div className="cta-emoji text-[48px] mb-5 select-none leading-none w-fit transition-[filter] duration-500"
+                  style={{ filter: 'drop-shadow(0 2px 6px rgba(59,130,246,0.15))' }}>
                   🎓
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight">
                   I&apos;m a Teacher
                 </h3>
-                <p className="text-white/50 text-[15px] leading-relaxed mb-8">
+                <p className="text-white/50 text-[15px] leading-relaxed mb-8 flex-1">
                   Find your dream ESL position in Korea. We connect you with top schools and academies.
                 </p>
                 <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14px] font-semibold
-                               bg-[#3b82f6] text-white shadow-[0_4px_20px_rgba(59,130,246,0.4)]
-                               transition-all duration-300 group-hover:shadow-[0_6px_28px_rgba(59,130,246,0.55)] group-hover:gap-3">
+                               bg-[#3b82f6] text-white shadow-none
+                               transition-all duration-300 group-hover:shadow-[0_6px_28px_rgba(59,130,246,0.5)] group-hover:gap-3 w-fit">
                   Apply Now
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M12 5l7 7-7 7" />
@@ -801,6 +796,7 @@ export default function HomePage() {
 
             {/* Employer Card */}
             <motion.div
+              className="flex"
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -808,29 +804,29 @@ export default function HomePage() {
             >
               <Link
                 href="/inquiry"
-                className="group relative block rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500
+                className="cta-card group relative flex flex-col rounded-3xl p-8 sm:p-10 overflow-hidden transition-all duration-500 w-full
                            hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(245,158,11,0.25)] active:scale-[0.98]"
                 style={{ background: 'linear-gradient(135deg, #422006 0%, #1a1a2e 100%)' }}
               >
                 <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                   style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.2), transparent 60%)', pointerEvents: 'none' }} />
-                {/* Emoji icon */}
-                <div className="text-[48px] mb-5 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-[5deg] select-none leading-none"
-                  style={{ filter: 'drop-shadow(0 4px 12px rgba(245,158,11,0.4))' }}>
+                {/* Emoji — floats on hover */}
+                <div className="cta-emoji text-[48px] mb-5 select-none leading-none w-fit transition-[filter] duration-500"
+                  style={{ filter: 'drop-shadow(0 2px 6px rgba(245,158,11,0.15))' }}>
                   🏫
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">
                   I&apos;m Hiring
                 </h3>
-                <p className="text-[13px] text-white/30 font-medium mb-3">
+                <p className="text-[15px] text-white/70 font-semibold mb-3 tracking-wide">
                   원어민 구인신청
                 </p>
-                <p className="text-white/50 text-[15px] leading-relaxed mb-8">
+                <p className="text-white/50 text-[15px] leading-relaxed mb-8 flex-1">
                   Find qualified native English teachers. Fast, reliable, zero hassle recruitment.
                 </p>
                 <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14px] font-semibold
-                               bg-[#f59e0b] text-black shadow-[0_4px_20px_rgba(245,158,11,0.4)]
-                               transition-all duration-300 group-hover:shadow-[0_6px_28px_rgba(245,158,11,0.55)] group-hover:gap-3">
+                               bg-[#f59e0b] text-black shadow-none
+                               transition-all duration-300 group-hover:shadow-[0_6px_28px_rgba(245,158,11,0.5)] group-hover:gap-3 w-fit">
                   Request Teachers
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M12 5l7 7-7 7" />

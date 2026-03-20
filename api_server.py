@@ -3372,14 +3372,28 @@ async def admin_list_applications(
                 "SELECT id, job_code, seq, location, city, district, region_name, "
                 "start_date, teaching_age, class_size, working_hours, salary_raw, "
                 "teach_hrs_week, vacation, housing, housing_type, housing_detail, "
-                "native_count, benefits, internal_notes, status, created_at, source_file, raw_text "
+                "native_count, benefits, internal_notes, status, created_at, source_file, raw_text, "
+                "enc_employer_name, enc_contact_name, enc_contact_phone, enc_contact_email, "
+                "enc_contact_kakao, employer_display_name "
                 "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
             ).fetchall()
             for j in job_rows:
+                # 암호화된 PII 필드 복호화
+                dec_employer = _safe_decrypt(j["enc_employer_name"])
+                dec_contact  = _safe_decrypt(j["enc_contact_name"])
+                dec_phone    = _safe_decrypt(j["enc_contact_phone"])
+                dec_email    = _safe_decrypt(j["enc_contact_email"])
+                dec_kakao    = _safe_decrypt(j["enc_contact_kakao"])
+                display_name = j["employer_display_name"] or ""
+                # school_name: display_name 우선 → 복호화된 employer_name fallback
+                school = display_name or dec_employer or ""
                 apps.append({
                     "id": str(j["id"]), "type": "employer",
-                    "name": "", "email": "",
-                    "school_name": "",
+                    "name": school, "email": dec_email or "",
+                    "school_name": school,
+                    "contact_name": dec_contact,
+                    "phone": dec_phone,
+                    "kakao": dec_kakao,
                     "job_code": j["job_code"] or "",
                     "source_file": j["source_file"],
                     "location": j["location"] or "",
