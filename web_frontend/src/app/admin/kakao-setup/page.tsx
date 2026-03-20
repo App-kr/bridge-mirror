@@ -130,8 +130,12 @@ export default function KakaoSetupPage() {
                   value={values[field.key] || ''}
                   onChange={e => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter') handleSave(field.key, field.label) }}
+                  onCopy={e => e.preventDefault()}
+                  onCut={e => e.preventDefault()}
+                  onContextMenu={e => e.preventDefault()}
                   className="flex-1 px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:border-[#0071e3] transition-colors"
                   autoComplete="new-password"
+                  data-form-type="other"
                 />
                 <button
                   type="button"

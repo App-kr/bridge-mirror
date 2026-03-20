@@ -83,11 +83,11 @@ const NAV_CATEGORIES: NavCategory[] = [
   {
     title: '사이트 관리',
     items: [
+      { href: '/admin/kakao-setup', label: '카카오 로그인 설정', icon: <KeyRound size={ICON_SIZE} /> },
       { href: '/admin/partners', label: '파트너', icon: <Handshake size={ICON_SIZE} /> },
       { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
       { href: '/admin/payments', label: '결제', icon: <CreditCard size={ICON_SIZE} /> },
       { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
-      { href: '/admin/kakao-setup', label: '카카오 로그인 설정', icon: <KeyRound size={ICON_SIZE} /> },
     ],
   },
 ]
@@ -156,11 +156,37 @@ export default function AdminSidebar() {
         {NAV_CATEGORIES.map((cat) => (
           <div key={cat.title || '_dashboard'}>
             {cat.title && (
-              <div className="px-2 mb-1 mt-5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              <div className="px-2 mb-1 mt-5 text-[12px] font-semibold uppercase tracking-wider text-zinc-400">
                 {cat.title}
               </div>
             )}
             <div className="space-y-0.5">
+              {/* 사이트 관리 섹션 최상단: 카카오 채널 */}
+              {cat.title === '사이트 관리' && (
+                kakaoUrl ? (
+                  <a
+                    href={kakaoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full font-medium text-[14px] text-[#191919] transition-all hover:brightness-95 active:scale-[0.98]"
+                    style={{ background: '#FEE500' }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="text-[15px] leading-none shrink-0">💬</span>
+                    <span>카카오 채널 설정</span>
+                    <span className="ml-auto text-[11px] opacity-50">↗</span>
+                  </a>
+                ) : (
+                  <Link
+                    href="/admin/settings"
+                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:text-[#424245] transition-colors"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="text-[15px] leading-none shrink-0">💬</span>
+                    <span>카카오 채널 설정</span>
+                  </Link>
+                )
+              )}
               {cat.items.map((item) => {
                 const active = isActive(item.href)
                 return (
@@ -191,35 +217,6 @@ export default function AdminSidebar() {
                   </Link>
                 )
               })}
-
-              {/* 사이트 관리 섹션 하단: 카카오 채널 */}
-              {cat.title === '사이트 관리' && (
-                <div className="mt-1">
-                  {kakaoUrl ? (
-                    <a
-                      href={kakaoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full font-medium text-[14px] text-[#191919] transition-all hover:brightness-95 active:scale-[0.98]"
-                      style={{ background: '#FEE500' }}
-                      onClick={() => setMobileOpen(false)}
-                    >
-                      <span className="text-[15px] leading-none shrink-0">💬</span>
-                      <span>카카오 채널</span>
-                      <span className="ml-auto text-[11px] opacity-50">↗</span>
-                    </a>
-                  ) : (
-                    <Link
-                      href="/admin/settings"
-                      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:text-[#424245] transition-colors"
-                      onClick={() => setMobileOpen(false)}
-                    >
-                      <span className="text-[15px] leading-none shrink-0">💬</span>
-                      <span>카카오 채널 설정</span>
-                    </Link>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         ))}
