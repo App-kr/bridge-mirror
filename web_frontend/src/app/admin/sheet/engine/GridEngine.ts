@@ -850,15 +850,15 @@ export class GridEngine {
     ctx.font = FONT
   }
 
-  /** Google Sheets style row number cell */
-  private drawRowNum(row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
+  /** Google Sheets style row number cell — 순수 행번호 1,2,3... */
+  private drawRowNum(_row: DataRow, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
     ctx.fillStyle = this.selection.isRowSelected(rowIdx) ? ROW_NUM_SEL_BG : ROW_NUM_BG
     ctx.fillRect(x, y, w, h)
     ctx.fillStyle = '#555'
     ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(String(row.mgtNum || row.id), x + w / 2, y + h / 2)
+    ctx.fillText(String(rowIdx + 1), x + w / 2, y + h / 2)
     ctx.textAlign = 'left'; ctx.font = FONT
   }
 
