@@ -384,8 +384,10 @@ export default function BridgeCanvasSheet() {
           // Try server upload first
           const fd = new FormData()
           fd.append('file', blob)
+          // FormData needs auto Content-Type (multipart boundary) — only pass auth header
+          const { 'Content-Type': _, ...uploadHdrs } = hdrsRef.current()
           fetch(`${API}/api/admin/upload-image`, {
-            method: 'POST', headers: hdrsRef.current(), body: fd,
+            method: 'POST', headers: uploadHdrs, body: fd,
           }).then(r => r.ok ? r.json() : null).then(j => {
             const url: string = j?.data?.url ?? ''
             if (url) {
@@ -439,8 +441,9 @@ export default function BridgeCanvasSheet() {
 
     const fd = new FormData()
     fd.append('file', file)
+    const { 'Content-Type': _ct, ...fileHdrs } = hdrsRef.current()
     fetch(`${API}/api/admin/upload-image`, {
-      method: 'POST', headers: hdrsRef.current(), body: fd,
+      method: 'POST', headers: fileHdrs, body: fd,
     }).then(r => r.ok ? r.json() : null).then(async j => {
       const url: string = j?.data?.url ?? ''
       const fullUrl = url.startsWith('http') ? url : `${API}${url}`
@@ -486,33 +489,28 @@ export default function BridgeCanvasSheet() {
     const visCols = engine.getVisibleCols()
     const ac = engine.selection.getActiveCell()
     const selectedRowSet = engine.selection.getSelectedRows()
+    const isAllRows = selectedRowSet.size >= rows.length && rows.length > 0
+    const styleCols = visCols.filter(c => c.key !== 'rowNum' && c.key !== 'photo')
 
-    if (ac) {
-      // 셀/컬럼 선택 모드: ac.col 기준 컬럼에 색상 적용
-      const colKey = visCols[ac.col]?.key
-      if (!colKey) return
-      // 전체 행 선택(열 헤더 클릭) → 전체 열 / 부분 선택 → 선택 행만
-      const isAllRows = selectedRowSet.size >= rows.length && rows.length > 0
+    if (isAllRows || selectedRowSet.size > 0) {
+      // 전체 선택 또는 행 선택 → 선택된 행 × 모든 컬럼에 일괄 적용
       const targetRows = isAllRows
         ? rows
         : [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
+      const entries: Array<{ cid: string; colKey: string }> = []
       for (const row of targetRows) {
         const cid = String(row._cid ?? '')
-        if (cid) engine.styleManager.setStyle(cid, colKey, style)
+        if (!cid) continue
+        for (const col of styleCols) entries.push({ cid, colKey: col.key })
       }
-    } else if (selectedRowSet.size > 0) {
-      // 행 체크박스 선택 모드: 선택된 행의 모든 컬럼에 색상 적용 (Excel 행 색상 동작)
-      const targetRows = [...selectedRowSet].map(ri => rows[ri]).filter((r): r is DataRow => Boolean(r))
-      for (const row of targetRows) {
-        const cid = String(row._cid ?? '')
-        if (cid) {
-          for (const col of visCols) {
-            if (col.key !== 'rowNum' && col.key !== 'photo') {
-              engine.styleManager.setStyle(cid, col.key, style)
-            }
-          }
-        }
-      }
+      if (entries.length > 0) engine.styleManager.batchSet(entries, style)
+    } else if (ac) {
+      // 단일 셀 선택 → 해당 셀만 적용
+      const colKey = visCols[ac.col]?.key
+      if (!colKey) return
+      const row = rows[ac.row]
+      const cid = String(row?._cid ?? '')
+      if (cid) engine.styleManager.setStyle(cid, colKey, style)
     }
     engine.refresh()
   }, [])

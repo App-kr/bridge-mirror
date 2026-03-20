@@ -38,12 +38,24 @@ export class StyleManager {
     this.persist()
   }
 
+  /** Batch set — only persists once at the end (for bulk operations) */
+  batchSet(entries: Array<{ cid: string; colKey: string }>, style: CellStyle): void {
+    for (const { cid, colKey } of entries) {
+      const k = this.key(cid, colKey)
+      const existing = this.styles.get(k) || {}
+      this.styles.set(k, { ...existing, ...style })
+    }
+    this.persist()
+  }
+
   applyToSelection(cids: string[], colKeys: string[], style: CellStyle): void {
+    const entries: Array<{ cid: string; colKey: string }> = []
     for (const cid of cids) {
       for (const colKey of colKeys) {
-        this.setStyle(cid, colKey, style)
+        entries.push({ cid, colKey })
       }
     }
+    this.batchSet(entries, style)
   }
 
   clearStyle(cid: string, colKey: string): void {
