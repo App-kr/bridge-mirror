@@ -282,6 +282,19 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* IP 경고 바 */}
+      <div
+        className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-[13px]"
+        style={{ background: 'rgba(255, 59, 48, 0.06)', color: 'rgba(180, 40, 32, 0.85)' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+          <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+          <path d="M7 4.5V7.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          <circle cx="7" cy="9.5" r="0.7" fill="currentColor"/>
+        </svg>
+        <span>IP 로그 기록 중 — 관리자가 아닌 경우 즉시 종료하십시오</span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

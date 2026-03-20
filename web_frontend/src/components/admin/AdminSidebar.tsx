@@ -206,7 +206,7 @@ export default function AdminSidebar() {
                   ) : (
                     <Link
                       href="/admin/settings"
-                      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#b0b0b5] hover:text-[#424245] transition-colors"
+                      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:text-[#424245] transition-colors"
                       onClick={() => setMobileOpen(false)}
                     >
                       <span className="text-[15px] leading-none shrink-0">💬</span>
@@ -225,9 +225,10 @@ export default function AdminSidebar() {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:bg-red-50 hover:text-red-500 transition-colors group"
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-red-400 transition-colors"
+          style={{ background: 'rgba(255, 59, 48, 0.06)' }}
         >
-          <LogOut size={ICON_SIZE} className="shrink-0 text-zinc-400 group-hover:text-red-400" />
+          <LogOut size={ICON_SIZE} className="shrink-0 text-red-300" />
           <span>로그아웃</span>
         </button>
       </div>
