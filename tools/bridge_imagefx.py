@@ -223,7 +223,7 @@ LOGO_PNG = os.path.join(TOOLS_DIR, "bridge_logo.png")
 
 
 def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
-    """Add BRIDGE logo watermark to bottom-right corner of image."""
+    """Add BRIDGE text watermark — no background, upper-left area."""
     if not HAS_PILLOW:
         return img_bytes
     try:
@@ -237,30 +237,22 @@ def _overlay_bridge_logo(img_bytes: bytes) -> bytes:
             ratio = target_w / logo.width
             target_h = int(logo.height * ratio)
             logo = logo.resize((target_w, target_h), Image.LANCZOS)
+            margin = int(w * 0.03)
+            pos = (margin, int(h * 0.06))
+            img.paste(logo, pos, logo)
         else:
-            font_size = max(24, int(w * 0.035))
+            font_size = max(28, int(w * 0.04))
             try:
                 font = ImageFont.truetype("arial.ttf", font_size)
             except OSError:
                 font = ImageFont.load_default()
 
-            tmp_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-            bbox = tmp_draw.textbbox((0, 0), "BRIDGE", font=font)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-
-            pad_x, pad_y = int(tw * 0.3), int(th * 0.4)
-            logo = Image.new("RGBA", (tw + pad_x * 2, th + pad_y * 2), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(logo)
-            draw.rounded_rectangle(
-                [(0, 0), (logo.width - 1, logo.height - 1)],
-                radius=int(th * 0.3),
-                fill=(0, 0, 0, 140),
-            )
-            draw.text((pad_x, pad_y), "BRIDGE", fill=(255, 255, 255, 230), font=font)
-
-        margin = int(w * 0.025)
-        pos = (w - logo.width - margin, h - logo.height - margin)
-        img.paste(logo, pos, logo)
+            draw = ImageDraw.Draw(img)
+            margin = int(w * 0.03)
+            tx, ty = margin, int(h * 0.06)
+            # White text with subtle drop shadow — no black box
+            draw.text((tx + 2, ty + 2), "BRIDGE", fill=(0, 0, 0, 120), font=font)
+            draw.text((tx, ty), "BRIDGE", fill=(255, 255, 255, 230), font=font)
 
         out = io.BytesIO()
         img.save(out, format="PNG", optimize=True)

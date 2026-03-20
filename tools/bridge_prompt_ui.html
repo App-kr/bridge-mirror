@@ -1441,36 +1441,36 @@ const SHOT_TYPES=[
 
 // ── Activities (생동감 넘치는 교육 활동) ──
 const ACTIVITIES_EARLY=[
-"a fun sensory play activity with colorful kinetic sand and molds",
-"a rice puff making activity, pressing and shaping with small hands",
-"finger painting with vibrant watercolors on large paper sheets",
-"a tactile play activity with soft clay, rolling and shaping figures",
-"building colorful wooden block towers together",
-"a bubble-making activity with giant wands in the play area",
-"a paper collage craft activity with scissors and colored paper",
-"planting seeds in small pots during a nature activity",
-"a music and rhythm activity with tambourines and maracas",
-"a water play activity with cups, funnels, and floating toys",
-"a baking activity, decorating cookies with colorful icing",
-"a puppet show activity with hand puppets and a small stage",
-"a treasure hunt activity, searching for hidden objects around the room",
-"a balancing and movement activity with stepping stones and hoops",
-"a magnet play activity, exploring which objects stick together",
+"colorful clay modeling, shaping small animal figures with their hands",
+"building tall towers with large wooden blocks on the floor",
+"watercolor finger painting on big sheets of paper spread across the table",
+"a sensory play activity with colorful kinetic sand and molds",
+"playing with toy animals and wooden figurines on a play mat",
+"threading large colorful beads onto thick strings",
+"building creative shapes with magnetic tiles",
+"drawing with thick crayons and colored pencils on paper",
+"pressing shapes into soft play-dough with cookie cutters",
+"stacking and sorting colorful cups by size and color",
+"a fun matching game with picture cards on the floor",
+"rolling and bouncing soft foam balls in a circle game",
+"working together on a large floor puzzle",
+"a rhythm and clapping game, following the teacher's beat",
+"playing with colorful stacking rings and nesting cups",
 ];
 
 const ACTIVITIES_MIDDLE=[
-"a group discussion seated in a circle, sharing ideas animatedly",
-"a science experiment with colorful liquids in beakers and test tubes",
-"a collaborative art project, painting a large canvas together",
-"a coding activity with laptop screens showing colorful blocks",
-"a debate activity, one student presenting while others listen intently",
-"a team-building exercise with building materials and challenges",
-"a music jam session with guitars, keyboards, and drums",
-"a creative writing workshop, brainstorming ideas on large paper",
-"a photography activity with cameras, framing and composing shots",
-"a robotics project, assembling and testing a small robot",
-"a cooking class, preparing a dish together at a counter",
-"a drama rehearsal, practicing a scene with props",
+"a collaborative group project with materials spread across desks",
+"a lively group discussion, sharing ideas with animated hand gestures",
+"a creative art project with paints and mixed media on a large table",
+"a hands-on experiment with interesting materials and tools",
+"a team challenge involving building and problem-solving",
+"a group reading and discussion session",
+"a brainstorming workshop on a creative project",
+"a strategy game with cards and tokens at a round table",
+"a practical activity with building blocks and craft supplies",
+"a collaborative presentation preparation exercise",
+"a team problem-solving challenge with real-world scenarios",
+"a cultural exchange activity with visual aids and maps",
 ];
 
 // ── Matching uniforms (깔끔한 매칭 원복) ──
@@ -1525,6 +1525,71 @@ const KO_STUDENT_BOTTOMS=[
 "beige wide-leg trousers — plain, no logos",
 "black straight-leg pants — plain, no logos, no patches",
 "dark olive cargo pants — plain, no logos",
+];
+
+// ── Eye colors (강사 눈 색상) ──
+const EYE_COLORS=[
+"bright blue eyes","warm brown eyes","deep green eyes","hazel eyes",
+"grey-blue eyes","amber eyes","dark brown eyes","light blue eyes",
+"olive green eyes","honey-brown eyes",
+];
+
+// ── Kid features (아이 외모 다양성 — 모든 아이 다르게) ──
+const KID_FEATURES=[
+"one wearing small round glasses",
+"one with a pink satin headband",
+"one with very short spiky hair",
+"one with long straight hair past the shoulders",
+"one with twin braids tied with colorful ribbons",
+"one with a small high ponytail",
+"one with a butterfly hair clip",
+"one with chubby cheeks grinning wide",
+"one squinting happily with small narrow eyes",
+"one with large round curious eyes",
+"one with a neat bowl cut",
+"one with hair styled in two buns",
+"one noticeably taller than the others",
+"one showing dimples while smiling",
+"one with bangs neatly covering the forehead",
+"one with a missing front tooth grinning proudly",
+"one wearing a small yellow hair pin",
+"one with slightly curly permed hair",
+"one with a tidy side-parted hairstyle",
+"one with messy natural windswept hair",
+"one with a tiny star-shaped hair clip",
+"one wearing thin-framed rectangular glasses",
+"one with a red polka-dot hair bow",
+"one with very short cropped hair close to the scalp",
+];
+
+// ── Teacher actions — natural interaction (자연스러운 교사 행동) ──
+const TEACHER_ACTIONS_EARLY=[
+"kneeling at a child's eye level, gently guiding their hands during the activity",
+"sitting cross-legged on the floor among the children, joining in the activity together",
+"bending down with a warm smile, showing a child how to do the next step",
+"clapping and cheering as children excitedly work on their creations",
+"handing out materials with bright eyes, getting everyone ready to start",
+"laughing warmly as a child proudly holds up their finished work",
+"sitting at the small table alongside the children, working on the activity together",
+"leaning in close and whispering encouragement to a focused child",
+"making a playful surprised face at a child's work while others giggle",
+"gently adjusting a child's grip while patiently teaching the technique",
+"gathered on the floor with children in a cozy half-circle, leading the group",
+"pointing at the materials and explaining the next step as children watch eagerly",
+"holding a child's hand and guiding them through the activity step by step",
+"crouching beside a child and giving a thumbs-up for their effort",
+"wrapping an arm around a child's shoulder in a moment of encouragement",
+];
+
+const TEACHER_ACTIONS_MIDDLE=[
+"standing at the front, gesturing enthusiastically while explaining a concept to students",
+"walking between desks and leaning over to check on individual student progress",
+"sitting in a circle with students, facilitating a lively group discussion",
+"pointing at study materials on the desk while a student nods in understanding",
+"leading a hands-on group activity at a large central table with students gathered around",
+"standing among the students, engaging them in animated back-and-forth conversation",
+"reviewing a student's work with an encouraging nod and a smile",
+"facilitating a team exercise as students collaborate and debate excitedly",
 ];
 
 // ── Build individual Korean student descriptions ──────────────
@@ -1639,63 +1704,59 @@ function generateBatch(count, targetMode){
     const expression=exprShuffled[exprIdx++%exprShuffled.length];
     const age=pick(AGES);
 
-    // All other dims fully random
-    const floor=pick(FLOORS);
-    const wall=pick(WALLS);
-    const ceiling=pick(CEILINGS);
+    // Randomized dimensions
     const lighting=pick(LIGHTING);
-    const sceneDesc=pick(isEarly?STUDENTS_EARLY:STUDENTS_MIDDLE);
-    const bokeh=pick(BOKEH);
     const camera=pick(CAMERAS);
     const grade=pick(GRADES);
-    const prop=pick(PROPS);
-    const season=pick(SEASONS);
-    const mood=pick(MOODS);
-    const quality=pick(QUALITY);
     const composition=pick(COMPOSITION);
+    const mood=pick(MOODS);
 
-    // Pick elements for diverse prompt
-    const boyHair1 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
-    const boyHair2 = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
-    const girlHair1 = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
-    const girlHair2 = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
+    // Teacher details
+    const eyeColor=pick(EYE_COLORS);
+    const ageDesc=pick(AGES).split('—')[0].trim(); // "appearing to be in their mid-30s"
+
+    // Activity & kids
     const activity = pick(isEarly ? ACTIVITIES_EARLY : ACTIVITIES_MIDDLE);
+    const teacherAction = pick(isEarly ? TEACHER_ACTIONS_EARLY : TEACHER_ACTIONS_MIDDLE);
     const uniform = pick(isEarly ? KO_UNIFORMS : KO_UNIFORMS_MIDDLE);
-    const kidCount = isEarly ? (3 + Math.floor(Math.random()*3)) : (4 + Math.floor(Math.random()*3));
-    const ageMin = isEarly ? 4 : 12;
-    const ageMax = isEarly ? 7 : 18;
+    const kidCount = isEarly ? (3 + Math.floor(Math.random()*4)) : (4 + Math.floor(Math.random()*3));
 
+    // Diverse kid appearances — pick unique features
+    const featurePool = shuffle([...KID_FEATURES]);
+    const kidFeats = featurePool.slice(0, Math.min(kidCount, 5)).join(', ');
+
+    // Camera short form
     const shotType = pick(SHOT_TYPES);
     const cameraShort = camera.split(',').slice(0,2).join(',').trim();
-    const seasonShort = season.split(',')[0].trim();
 
     const raceKo = RACE_KO[race]||race;
     const genderKo = finalGender==='male'?'남성':'여성';
 
-    // English prompt — diverse style (randomized camera, lighting, grade, composition)
+    // English prompt — photorealistic, coherent, natural
     const text=
-`A high-resolution ${shotType} of ${place.d}. Shot on ${cameraShort}. A warm ${race} ${finalGender} teacher with ${hair}, wearing ${clothing}, is ${pose.toLowerCase().replace(/^[a-z]/, c=>c)}. ${expression}. The teacher is guiding ${kidCount} happy Korean children (aged ${ageMin}-${ageMax}) in ${activity}. The children have diverse 2025-2026 Korean trendy hairstyles: ${boyHair1}, ${girlHair1}, ${boyHair2}, ${girlHair2}. They are wearing ${uniform}. ${lighting}. ${seasonShort}. ${floor}. ${wall}. ${ceiling}. ${bokeh}. No text, no letters, no logos, no symbols on any surface or clothing. All walls completely clean and bare. ${grade}. Aspect ratio 16:9.`;
+`Shot on ${cameraShort}. ${shotType} of ${place.d}. ${kidCount} Korean young learners are enjoying ${activity}. Their teacher, a warm ${race} ${finalGender} ${ageDesc}, with ${hair} and ${eyeColor}, wearing ${clothing}, is ${teacherAction}. The children have visibly diverse appearances: ${kidFeats}. They wear ${uniform}. ${lighting}. ${grade}. Photorealistic, 4K UHD, natural skin texture and pores. No text, no logos, no watermarks, no symbols anywhere in the image. All clothing completely plain and solid-colored. Aspect ratio 16:9.`;
 
     // Korean display text — shown in UI
     const koText=
 `${shotType} — ${place.n}
 
 ◆ 외국인 강사 (${raceKo} ${genderKo})
-${hair}, ${clothing} 착용. ${pose}. ${expression}.
+${ageDesc}, ${hair}, ${eyeColor}
+${clothing} 착용
+행동: ${teacherAction}
 
-◆ 한국인 아이들 (${kidCount}명, ${ageMin}-${ageMax}세)
+◆ 한국인 아이들 (${kidCount}명)
 활동: ${activity}
-헤어: ${boyHair1}, ${girlHair1}, ${boyHair2}, ${girlHair2} — 2025-2026 트렌드
+외모: ${kidFeats}
 의상: ${uniform}
 
-◆ 조명·카메라
-${lighting}
-${seasonShort}
+◆ 촬영
 카메라: ${cameraShort}
+조명: ${lighting}
 컬러: ${grade}
 
 ◆ 금지 사항
-텍스트·로고·심볼 일절 없음. 벽면 완전 깨끗. 의류 완전 무지.`;
+텍스트·로고·심볼 일절 없음. 의류 완전 무지.`;
 
     return {
       target: t,
@@ -1712,7 +1773,6 @@ ${seasonShort}
         lighting: lighting.length>38 ? lighting.slice(0,38)+'…' : lighting,
         grade: grade.split(' — ')[0].split(' with ')[0].trim(),
         mood: mood.split(' — ')[0].trim(),
-        season: season.split(',')[0].split('—')[0].trim(),
       },
     };
   });
