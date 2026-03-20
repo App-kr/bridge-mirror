@@ -15,6 +15,10 @@ let _nxt=1101;
 function nextId(){const n=_nxt;_nxt+=2;return`N${n}`;}
 function uniq(a,k){return[...new Set(a.map(d=>d[k]).filter(Boolean))].sort();}
 
+// 암호화된 값 감지 (Base64 + 최소 40자 이상 = AES-GCM 암호문)
+function isEncrypted(v){if(!v||typeof v!=="string")return false;return/^[A-Za-z0-9+/=]{40,}$/.test(v.trim());}
+function safeDisplay(v){if(!v)return"";return isEncrypted(v)?"(암호화됨 — 서버 복호화 필요)":v;}
+
 // ─── 양식 ───────────────────────────────────────────────
 // teachingAge 한글 번역
 const AGE_MAP={
@@ -541,7 +545,7 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
           </div>
           {editMemo
             ?<textarea value={tmpMemo} onChange={e=>setTmpMemo(e.target.value)} rows={3} style={{width:"100%",padding:"6px 8px",borderRadius:4,border:"1px solid #f59e0b",fontSize:"0.88rem",lineHeight:1.6,background:"#fffef5",resize:"vertical",fontFamily:"inherit",outline:"none"}}/>
-            :<span style={{fontSize:`${fontMemo}px`,lineHeight:1.6,color:"#111"}}>{item.memo||<span style={{color:"#ccc",fontStyle:"italic"}}>없음</span>}</span>
+            :<span style={{fontSize:`${fontMemo}px`,lineHeight:1.6,color:isEncrypted(item.memo)?"#999":"#111"}}>{safeDisplay(item.memo)||<span style={{color:"#ccc",fontStyle:"italic"}}>없음</span>}</span>
           }
         </div>
 
@@ -965,7 +969,7 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
                     );
                     if(col.key==="memo")return(
                       <td key="memo" style={{padding:0,border:"1px solid #e8e8e8",background:cs.bg||"#fffde7"}}>
-                        <XCell value={item.memo||""} onChange={v=>onUpdate(item.jNumber,{memo:v})} multiline
+                        <XCell value={safeDisplay(item.memo)||""} onChange={v=>onUpdate(item.jNumber,{memo:v})} multiline
                           selected={isSel} onSelect={()=>{setSelCell({ri,ci});setSelRow(null);setSelCol(null);}}
                           style={{fontSize:`${fontSize}px`,color:cs.color||"#5d4e0f",textAlign:cs.align||"left"}}/>
                       </td>
