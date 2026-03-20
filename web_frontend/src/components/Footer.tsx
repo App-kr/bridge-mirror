@@ -13,7 +13,7 @@ interface SiteSettings {
 }
 
 const FALLBACK_NAV: NavItem[] = [
-  { href: '/community/about', label: 'About us' },
+  { href: '/about', label: 'About us' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
   { href: '/jobs', label: 'Job Board' },
