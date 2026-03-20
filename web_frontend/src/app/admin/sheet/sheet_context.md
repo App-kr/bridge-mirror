@@ -1,5 +1,5 @@
 # Canvas Sheet 컨텍스트
-경로: `web_frontend/src/app/admin/sheet/`  최종 수정: 2026-03-20
+경로: `web_frontend/src/app/admin/sheet/`  최종 수정: 2026-03-20 (v4.1)
 
 ## 파일 구조 및 역할
 
@@ -31,8 +31,9 @@
 ### Phase 3 — 데이터 연동 ✅
 - [x] API 연결 + 전체 로드
 - [x] MailModal 발송 UI
-- [ ] 발송상태 태그 토글 → DB PATCH 반영
-- [ ] 진행단계 드롭다운 → DB 저장
+- [x] mailStatus 열 제거 (defaultCols에서 삭제, DataRow 필드는 유지)
+- [x] 진행단계 배경색 — stage 값에 따라 행 배경 자동 적용 (drawRowBg)
+- [ ] 진행단계 드롭다운 → DB 저장 (서버 PATCH 미구현)
 
 ### Phase 3.5 — Google Sheets 스타일 ✅ (v4)
 - [x] 체크박스 제거 → 순수 행번호 (Google Sheets style)
@@ -40,6 +41,12 @@
 - [x] 행번호 클릭 = 행 선택 (Ctrl/Shift 지원)
 - [x] 툴바 개선: Undo/Redo 전면 배치 + 줌 + 폰트 드롭다운
 - [x] 줌 기능 (50%~150%, CSS transform 기반)
+
+### Phase 3.6 — UX 개선 ✅ (v4.1)
+- [x] 사진 셀 cover 채우기 (object-fit:cover 방식, 행 높이/열 너비에 맞게)
+- [x] 행 삭제 — 우클릭 컨텍스트 메뉴 추가 (PATCH is_deleted:1, hard-delete 금지)
+- [x] 스타일 버튼 토글 — B/I/S 클릭 시 현재 상태 반전 + 다중 행 전체 적용
+- [x] 서식 적용 완료 토스트 표시 (showPhotoToast 재사용)
 
 ### Phase 4 — 성능/UX
 - [ ] 가상 렌더링 (뷰포트 밖 행 skip)
