@@ -23,6 +23,7 @@ import {
   Table2,
   HelpCircle,
   LogOut,
+  KeyRound,
 } from 'lucide-react'
 
 interface NavItem {
@@ -86,6 +87,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
       { href: '/admin/payments', label: '결제', icon: <CreditCard size={ICON_SIZE} /> },
       { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
+      { href: '/admin/kakao-setup', label: '카카오 로그인 설정', icon: <KeyRound size={ICON_SIZE} /> },
     ],
   },
 ]
