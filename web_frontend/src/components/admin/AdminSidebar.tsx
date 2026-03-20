@@ -22,7 +22,9 @@ import {
   Brain,
   Table2,
   HelpCircle,
+  LogOut,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface NavItem {
   href: string
@@ -89,11 +91,21 @@ const NAV_CATEGORIES: NavCategory[] = [
   },
 ]
 
+const ADMIN_EXPIRY_STORAGE = 'bridge_admin_key_expiry'
+
 export default function AdminSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [kakaoUrl, setKakaoUrl] = useState<string>('')
   const [newCount, setNewCount] = useState(0)
+
+  const handleLogout = () => {
+    localStorage.removeItem(ADMIN_KEY_STORAGE)
+    localStorage.removeItem(ADMIN_EXPIRY_STORAGE)
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    router.push('/')
+  }
 
   useEffect(() => {
     fetch(`${API_URL}/api/settings`)
@@ -174,36 +186,50 @@ export default function AdminSidebar() {
                   </Link>
                 )
               })}
+
+              {/* 사이트 관리 섹션 하단: 카카오 채널 */}
+              {cat.title === '사이트 관리' && (
+                <div className="mt-1">
+                  {kakaoUrl ? (
+                    <a
+                      href={kakaoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full font-medium text-[14px] text-[#191919] transition-all hover:brightness-95 active:scale-[0.98]"
+                      style={{ background: '#FEE500' }}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <span className="text-[15px] leading-none shrink-0">💬</span>
+                      <span>카카오 채널</span>
+                      <span className="ml-auto text-[11px] opacity-50">↗</span>
+                    </a>
+                  ) : (
+                    <Link
+                      href="/admin/settings"
+                      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#b0b0b5] hover:text-[#424245] transition-colors"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <span className="text-[15px] leading-none shrink-0">💬</span>
+                      <span>카카오 채널 설정</span>
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* 카카오 채널 바로가기 — 하단 고정 */}
+      {/* 하단: 로그아웃 */}
       <div className="px-3 pb-4 pt-2 border-t border-[#f0f0f2]">
-        {kakaoUrl ? (
-          <a
-            href={kakaoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl w-full font-semibold text-[13px] text-[#191919] transition-all duration-150 hover:brightness-95 active:scale-[0.98]"
-            style={{ background: '#FEE500' }}
-            onClick={() => setMobileOpen(false)}
-          >
-            <span className="text-[17px] leading-none">💬</span>
-            <span>카카오 채널</span>
-            <span className="ml-auto text-[11px] opacity-50">↗</span>
-          </a>
-        ) : (
-          <Link
-            href="/admin/settings"
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl w-full text-[13px] text-[#86868b] border border-dashed border-[#d1d1d6] hover:border-[#c0c0c5] hover:text-[#424245] transition-colors"
-            onClick={() => setMobileOpen(false)}
-          >
-            <span className="text-[15px] leading-none">💬</span>
-            <span>카카오 채널 설정</span>
-          </Link>
-        )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg w-full text-[14px] font-medium text-[#86868b] hover:bg-red-50 hover:text-red-500 transition-colors group"
+        >
+          <LogOut size={ICON_SIZE} className="shrink-0 text-zinc-400 group-hover:text-red-400" />
+          <span>로그아웃</span>
+        </button>
       </div>
     </nav>
   )
