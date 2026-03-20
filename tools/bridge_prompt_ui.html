@@ -620,7 +620,7 @@ const FLOORS=[
 "non-slip rubber athletic flooring in charcoal gray",
 "sprung maple hardwood sports floor",
 "cobblestone-patterned decorative tile (indoor themed area)",
-"soft carpet in warm grey with alphabet border stitching",
+"soft carpet in warm grey with geometric border stitching",
 "large-format porcelain tiles in light cream",
 "warm terracotta-toned ceramic tile",
 "bamboo flooring panels in natural green-tan hue",
@@ -657,16 +657,16 @@ const WALLS=[
 "raw exposed brick in natural terracotta tones",
 "floor-to-ceiling glass curtain wall overlooking a green campus",
 "acoustic foam panels in charcoal arranged in a grid",
-"colorful phonics alphabet posters covering one wall",
+"clean plain wall painted in soft warm yellow",
 "world map mural spanning the entire back wall",
-"chalkboard-painted feature wall covered in student notes",
-"whiteboard wall with colorful dry-erase writing",
+"dark green feature wall with clean matte finish",
+"plain white wall with clean smooth finish",
 "warm wood slat paneling running horizontally",
 "deep navy blue accent wall with star constellation decals",
 "pale sage green painted walls with white trim",
 "full-length mirror wall reflecting the entire room",
 "concrete block wall with industrial grey finish",
-"pastel yellow walls with cartoon English-learning stickers",
+"pastel yellow walls with simple geometric stickers",
 "glass-walled partition dividing lab zones",
 "corrugated metal cladding painted in muted grey-blue",
 "light-grey textured plaster walls with shadow gaps",
@@ -684,20 +684,20 @@ const WALLS=[
 "warm sand-colored stucco wall with recessed LED niches",
 "high-gloss white walls with color-band wayfinding stripes",
 "scientific periodic table wall print from floor to ceiling",
-"motivational English quotes typography wall in black and gold",
+"elegant plain wall in black and gold geometric pattern",
 "reclaimed wood shiplap paneling in weathered grey",
-"vibrant cartoon English village scene mural",
+"vibrant cartoon nature scene mural with trees and animals",
 "dark charcoal walls with neon accent lines",
 "pastel pink walls with framed children's artwork gallery",
 "exposed structural steel columns against off-white plaster",
 "pale turquoise walls with white wave-form acoustic baffles",
 "bold color-blocked walls — yellow left panel, white right",
-"deep forest-green walls with gold leaf framed learning charts",
+"deep forest-green walls with gold leaf framed abstract art",
 "soft lilac walls with floating white cloud sculptures",
 "warm amber-lit wood-panel walls in library reading room",
 "mint green walls with educational number-line border frieze",
 "soft-grey noise-reducing fabric wall panels with stitched pattern",
-"iridescent tile mosaic accent wall behind the whiteboard",
+"iridescent tile mosaic accent wall behind the instructor",
 "concrete wall with large-format school crest relief",
 "heritage brick restored with clear protective sealer",
 "holographic interactive display wall",
@@ -722,7 +722,7 @@ const CEILINGS=[
 "dome-shaped ceiling with star-field projection",
 "cathedral ceiling with dramatic arched wooden beams",
 "flat white ceiling with minimalist recessed downlights",
-"hanging mobile artwork installation of English alphabet letters",
+"hanging mobile artwork installation of colorful geometric shapes",
 "LED strip lighting in warm white tracing the ceiling perimeter",
 "undulating wave-form white acoustic ceiling panels",
 "hanging origami bird installation above the reading circle",
@@ -759,7 +759,7 @@ const LIGHTING=[
 "mixed daylight and warm incandescent — natural color contrast",
 "fairy lights creating a warm twinkling ambient background",
 "skylight overhead producing a natural fill with soft shadows",
-"spotlit single beam on whiteboard, room in shadow",
+"spotlit single beam on instructor, room in shadow",
 "soft ring-light frontal fill creating catchlights in eyes",
 "moody Rembrandt-style single side key light",
 "twin key-fill balanced studio setup",
@@ -942,19 +942,19 @@ const CLOTHING=[
 
 const POSES=[
 // — 정면 (카메라 바라보는 방향)
-"gesturing enthusiastically toward a whiteboard, facing the class front-on",
+"gesturing enthusiastically toward the front of the room, facing the class",
 "standing with arms open in an inviting gesture, directly facing students",
-"holding up a large colorful flashcard toward the front of the room",
+"holding up a large colorful picture card toward the students",
 "conducting students with both hands like an orchestra, full frontal stance",
 "standing tall at the front of the room, confident upright posture facing forward",
 "spreading both arms wide in an expressive storytelling pose facing the class",
 "mid-clap celebrating a student achievement, full body facing forward",
 "using sign language alongside spoken words, directly facing students",
 // — 측면 왼쪽 (왼쪽 옆모습)
-"left-side profile view — gesturing toward a smartboard on the left wall",
-"left profile, pointing to something on the board with right arm extended",
+"left-side profile view — gesturing toward the left side of the room",
+"left profile, pointing at something with right arm extended",
 "viewed from the left side, walking briskly between rows of desks",
-"left three-quarter angle, writing on whiteboard mid-sentence",
+"left three-quarter angle, making a drawing gesture in the air",
 "facing left, handing materials to a student seated on that side",
 "left profile — leaning over a student's desk to review work closely",
 // — 측면 오른쪽 (오른쪽 옆모습)
@@ -965,9 +965,9 @@ const POSES=[
 "facing right, mid-laugh sharing a genuine moment of humor",
 "right profile — pausing thoughtfully with one hand raised near the chin",
 // — 후면 / 등 (뒤에서 보는 방향)
-"seen from behind at a slight angle, writing on a chalkboard, back to camera",
+"seen from behind at a slight angle, gesturing toward the front wall, back to camera",
 "viewed from behind, arms extended outward addressing the full class",
-"back-view angle — instructor facing the whiteboard, students visible ahead",
+"back-view angle — instructor facing the class, students visible ahead",
 "rear three-quarter view — walking toward students gathered at the far end",
 "seen from behind, pointing up at a projected screen, students in view ahead",
 "back turned slightly toward camera, orchestrating student activity ahead",
@@ -1050,99 +1050,96 @@ const AGES=[
 ];
 
 const PLACES_EARLY=[
-{n:"Colorful English Kindergarten Classroom",d:"bright pastel-colored Korean English kindergarten classroom with low round tables, alphabet posters, colorful chairs sized for young children, picture books on low shelves"},
-{n:"English Play Room",d:"cheerful English play-learning room with soft foam flooring in primary colors, interactive phonics wall panels, a pretend-play corner with costumes, stuffed animals and English-labeled props"},
-{n:"Outdoor Playground Learning Area",d:"modern preschool outdoor learning area with bright artificial turf, colorful wooden playground structures, nature exploration stations, low garden beds, clear sky above"},
-{n:"Story Circle Room",d:"cozy story-time circle area with semicircular cushioned seating on a soft rug, a large interactive smartboard showing English storybook illustrations, plush animal characters on display shelves"},
-{n:"Art & Craft Learning Room",d:"bright art and craft room with child-height tables covered in colorful materials, walls lined with children's finished artwork, paint supply stations, drying racks with paper crafts"},
-{n:"English Village Town Square",d:"indoor themed English village modeled as a colorful Western small town, miniature storefronts — bakery, post office, toy shop — cobblestone-patterned floor tiles, decorative street lamps, English signage everywhere"},
-{n:"English Village Airport Zone",d:"realistic mock airport terminal inside a Korean English experience center, check-in counters with English signage, prop luggage conveyor, departure board showing English city names, customs desk with passport props"},
-{n:"English Experience Center Restaurant Zone",d:"themed mock restaurant inside a Korean English immersion center, diner-style booths and counter stools, chalkboard menu in English, plastic food props, wait-staff uniforms for children"},
-{n:"English Learning Center Classroom",d:"modern Korean English language center classroom, wall-to-wall English phonics charts and world maps, tiered seating with individual whiteboards, interactive smartboard with animated lessons"},
-{n:"English Village Hospital Zone",d:"realistic mock hospital ward inside a Korean English village center, examination beds with curtain dividers, doctor's desk with English medical charts, nurse station, medical equipment props"},
-{n:"English Library Reading Zone",d:"cozy English picture book library inside a Korean early learning center, floor-to-ceiling shelves of colorful English books, bean bag chairs and reading nooks, alphabet-border story-time rug"},
-{n:"English Village Science Lab Zone",d:"interactive science zone inside a Korean English experience center, hands-on experiment stations labeled in English, volcano model, simple circuit boards, plant growth experiments"},
-{n:"English Village Supermarket Zone",d:"themed indoor mini supermarket, color-coded aisles with English-labeled product categories, shopping baskets sized for children, mock cashier station with conveyor belt prop"},
-{n:"English Village Fire Station Zone",d:"miniature fire station themed room, fire truck prop vehicle, English-labeled safety equipment display, firefighter uniforms for children, safety-information posters in English"},
-{n:"English Village Post Office Zone",d:"miniature post office with service counter, English address labels, prop postboxes, parcel-packaging table, postal worker uniforms, sorting station"},
-{n:"Sensory Play English Room",d:"soft-play sensory exploration room with English-labeled tactile panels, sand and water tables with bilingual instructions, bubble walls"},
-{n:"English Phonics Music Room",d:"small music and phonics room with colorful percussion instruments, rhythm carpet, English song posters, a piano keyboard along one wall, acoustic ceiling tiles"},
-{n:"English Drama Mini-Stage",d:"small performance stage built inside an English kindergarten, mini stage risers, colorful curtain, prop costume rack, audience seating of low cushions for classmates"},
-{n:"Nature Discovery English Garden",d:"rooftop or ground-level school garden with labeled planters in English, butterfly observation dome, weather station, outdoor classroom seating, clear sky above"},
-{n:"English Cooking Studio",d:"child-height cooking studio with low countertops, English-labeled ingredient jars, aprons sized for children, sample recipe posters in English"},
-{n:"English Block Building Room",d:"open play room with giant foam building blocks in primary colors, English-labeled construction challenge cards on display, low bins of colored materials"},
-{n:"Morning Circle English Classroom",d:"early morning assembly-style classroom, day-of-week and weather chart on the wall, attendance board with student photo cards, calendar in English"},
-{n:"English STEAM Discovery Lab",d:"early childhood STEAM lab with age-appropriate robotics toys, magnetic tile sets, coding puzzles with English instructions"},
-{n:"English Immersion Camp Cabin Room",d:"English immersion camp-style cabin room with bunk-bed style cubbies, each with a flag and English name card, group activity tables, camp-theme murals"},
-{n:"English Village Bank Zone",d:"themed mini bank inside an English experience center, teller windows with English signage, prop currency and banking forms, vault door prop"},
+{n:"Colorful Kindergarten Classroom",d:"bright pastel-colored Korean kindergarten classroom with low round tables, colorful chairs sized for young children, plain clean walls painted in soft pastels, wooden toy shelves — absolutely no posters, no charts, no alphabet decorations, all walls completely bare and clean"},
+{n:"Play Learning Room",d:"cheerful play-learning room with soft foam flooring in primary colors, a pretend-play corner with costumes and stuffed animals, plain walls with no decorations — no wall panels, no posters, no charts"},
+{n:"Outdoor Playground Learning Area",d:"modern preschool outdoor learning area with bright artificial turf, colorful wooden playground structures, nature exploration stations, low garden beds, clear sky above, no signs anywhere"},
+{n:"Story Circle Room",d:"cozy story-time circle area with semicircular cushioned seating on a soft rug, plush animal characters on display shelves, warm plain walls with no decorations, no screens, no posters"},
+{n:"Art & Craft Room",d:"bright art and craft room with child-height tables covered in colorful materials, walls showing children's abstract paintings only (no words), paint supply stations, drying racks with paper crafts"},
+{n:"Indoor Village Town Square",d:"indoor themed miniature colorful Western small town, miniature storefronts with awnings only (no signs, no text), cobblestone-patterned floor tiles, decorative street lamps, plain colorful facades"},
+{n:"Indoor Village Airport Zone",d:"realistic mock airport terminal with plain counters, prop luggage conveyor, plain departure board (no text on it), customs desk with passport props, clean minimalist walls"},
+{n:"Indoor Village Restaurant Zone",d:"themed mock restaurant with diner-style booths and counter stools, plain menu boards (no writing), plastic food props, plain aprons for children, clean walls"},
+{n:"Modern Learning Center Classroom",d:"modern Korean language center classroom with clean plain walls, tiered seating, large blank interactive screen, bright overhead LED panels, no posters, no charts, no decorations on walls"},
+{n:"Indoor Village Hospital Zone",d:"realistic mock hospital ward with examination beds and curtain dividers, plain doctor's desk, nurse station, medical equipment props, clean white walls with no charts"},
+{n:"Cozy Reading Zone",d:"cozy picture book library with floor-to-ceiling shelves of colorful books (spines facing inward), bean bag chairs and reading nooks, soft rug with geometric patterns only (no letters)"},
+{n:"Science Discovery Zone",d:"interactive science zone with hands-on experiment stations, volcano model, simple circuit boards, plant growth experiments, plain lab tables, no labels anywhere"},
+{n:"Indoor Mini Supermarket",d:"themed indoor mini supermarket with color-coded aisles, shopping baskets sized for children, mock cashier station with conveyor belt prop, plain shelf dividers (no product labels visible)"},
+{n:"Indoor Fire Station Zone",d:"miniature fire station themed room, fire truck prop vehicle, plain equipment display, firefighter uniforms for children, solid-colored walls with no posters"},
+{n:"Sensory Play Room",d:"soft-play sensory exploration room with plain tactile panels, sand and water tables, bubble walls, soft padded flooring, clean pastel walls with no decorations"},
+{n:"Music Room",d:"small music room with colorful percussion instruments, rhythm carpet with geometric patterns, a piano keyboard along one wall, acoustic ceiling tiles, plain walls"},
+{n:"Drama Mini-Stage",d:"small performance stage with mini stage risers, colorful curtain, prop costume rack, audience seating of low cushions for classmates, plain backdrop"},
+{n:"Nature Discovery Garden",d:"rooftop or ground-level school garden with planters, butterfly observation dome, weather station instruments, outdoor classroom seating, clear sky above, no signs"},
+{n:"Cooking Studio",d:"child-height cooking studio with low countertops, ingredient jars with colored lids, aprons sized for children, stainless steel surfaces, clean walls"},
+{n:"Block Building Room",d:"open play room with giant foam building blocks in primary colors, low bins of colored materials, soft padded flooring, plain walls with no decorations"},
+{n:"Morning Circle Classroom",d:"early morning assembly-style classroom with weather instruments on the wall (no text), plain attendance board with photo cards only, warm lighting, clean bare walls"},
+{n:"STEAM Discovery Lab",d:"early childhood STEAM lab with age-appropriate robotics toys, magnetic tile sets, coding block puzzles, plain tables, clean walls with no posters"},
+{n:"Camp Cabin Room",d:"camp-style cabin room with bunk-bed style cubbies, each with a small flag (solid color, no text), group activity tables, nature-themed murals of trees and mountains (no text)"},
 ];
 
 const PLACES_MIDDLE=[
-{n:"International School Gymnasium",d:"modern international school indoor gymnasium with polished hardwood floors, basketball court markings, athletic equipment racks, tall clerestory windows"},
-{n:"Music Rehearsal Room",d:"intimate acoustic rehearsal room, sound-absorbing wall panels, diverse instruments — drums, keyboard, violins — music stands with sheet music"},
-{n:"Auditorium Stage",d:"large performance stage with dramatic spotlights, professional lighting towers, theatrical set pieces, dark auditorium seating in background"},
-{n:"IB Curriculum Classroom",d:"bright contemporary IB classroom with modular movable desks, large interactive whiteboard, student tablets, world-map graphics, floor-to-ceiling windows overlooking a green campus"},
-{n:"Science Laboratory",d:"cutting-edge high school science lab, glass-partitioned research spaces, microscopes, colorful glassware and flasks, safety equipment stations, periodic table mural"},
-{n:"International Study Hall",d:"quiet study hall with independent study booth style, individual desk lamps, stacked reference books, clean minimal aesthetic, motivational quotes on the wall"},
-{n:"Dance Practice Room",d:"professional dance practice room, full-length mirrored walls, ballet barre along one side, sprung hardwood floor, scattered dance props"},
-{n:"Makerspace",d:"creative makerspace with 3D printers, laser cutters behind safety glass, electronics workbenches, soldering stations, colorful project materials, industrial pipe shelving"},
-{n:"Debate Classroom",d:"specialized debate classroom with circular table arrangement, presentation screens, a podium at front, subtle acoustic paneling, professional conference atmosphere"},
-{n:"High School Art Studio",d:"spacious high school art studio, easels with student work-in-progress, wall of completed paintings, art supply trolleys, north-facing skylight"},
-{n:"Computer Science Lab",d:"modern computer science lab, dual-monitor workstations, visible server racks behind glass, students coding, soft blue underglow from screens"},
-{n:"School Library",d:"modern school library with high shelves of books, comfortable reading chairs, globe displays, study pods with privacy screens, warm wood tones and soft lighting"},
-{n:"Indoor Swimming Pool",d:"indoor Olympic-standard swimming pool, lane markers, starting blocks, viewing gallery, high ceiling with ventilation, aqua water reflections on walls"},
-{n:"School Commons / Cafeteria",d:"bright modern school cafeteria with long communal tables, natural light from full-wall windows, international food station signage, student artwork on walls"},
-{n:"Outdoor Sports Field",d:"international school artificial turf football field, surrounding track, stadium flood lights, clear sky, goal posts visible, students in team jerseys"},
-{n:"Robotics Lab",d:"dedicated robotics classroom, competition-spec robots on tables, coding stations, arena floor for robot testing, trophies from previous competitions displayed"},
+{n:"International School Gymnasium",d:"modern school indoor gymnasium with polished hardwood floors, basketball court markings, athletic equipment racks, tall clerestory windows, plain walls with no banners"},
+{n:"Music Rehearsal Room",d:"intimate acoustic rehearsal room, sound-absorbing wall panels, diverse instruments — drums, keyboard, violins — music stands with blank pages, no posters on walls"},
+{n:"Auditorium Stage",d:"large performance stage with dramatic spotlights, professional lighting towers, theatrical set pieces, dark auditorium seating in background, plain curtain backdrop"},
+{n:"Modern Classroom",d:"bright contemporary classroom with modular movable desks, large blank interactive screen (turned off), floor-to-ceiling windows overlooking a green campus, clean bare walls"},
+{n:"Science Laboratory",d:"cutting-edge high school science lab, glass-partitioned research spaces, microscopes, colorful glassware and flasks, safety equipment stations, plain white walls"},
+{n:"Study Hall",d:"quiet study hall with independent study booths, individual desk lamps, stacked reference books, clean minimal aesthetic, plain walls with no decorations"},
+{n:"Dance Practice Room",d:"professional dance practice room, full-length mirrored walls, ballet barre along one side, sprung hardwood floor, scattered dance props, no posters"},
+{n:"Makerspace",d:"creative makerspace with 3D printers, laser cutters behind safety glass, electronics workbenches, soldering stations, colorful project materials, industrial pipe shelving, no signs"},
+{n:"Debate Classroom",d:"specialized debate classroom with circular table arrangement, blank screens, a podium at front, subtle acoustic paneling, professional conference atmosphere, bare walls"},
+{n:"High School Art Studio",d:"spacious art studio, easels with student abstract paintings (no text in artwork), art supply trolleys, north-facing skylight, plain walls"},
+{n:"Computer Science Lab",d:"modern computer science lab, dual-monitor workstations showing blank screens, visible server racks behind glass, soft blue underglow, plain walls"},
+{n:"School Library",d:"modern school library with high shelves of books (spines not visible), comfortable reading chairs, globe displays, study pods, warm wood tones and soft lighting, no posters"},
+{n:"Indoor Swimming Pool",d:"indoor Olympic-standard swimming pool, lane markers, starting blocks, viewing gallery, high ceiling with ventilation, aqua water reflections on walls, no banners"},
+{n:"School Cafeteria",d:"bright modern school cafeteria with long communal tables, natural light from full-wall windows, plain food station counters (no signs), student abstract artwork on walls (no text)"},
+{n:"Outdoor Sports Field",d:"school artificial turf football field, surrounding track, stadium flood lights, clear sky, goal posts visible, plain uniforms with no text"},
+{n:"Robotics Lab",d:"dedicated robotics classroom, robots on tables, coding stations with blank screens, arena floor for robot testing, plain shelving, no posters"},
 {n:"Ceramics Studio",d:"hands-on ceramics studio, potter's wheels, shelves of drying clay forms, kiln area, earthy textures, clay-dusted surfaces, natural light from high windows"},
-{n:"Video Production Suite",d:"professional-grade school video production room, green screen backdrop, camera rigs, editing workstations with dual monitors, broadcast-quality lighting equipment"},
-{n:"Student Lounge",d:"modern student common area, colorful modular seating, collaborative work tables, large screens showing school news, energetic social hub"},
-{n:"Yoga & Mindfulness Room",d:"serene yoga and mindfulness studio, bamboo mats rolled out, calming neutral tones, nature mural feature wall, plants, diffuse soft lighting"},
-{n:"Orchestra Rehearsal Hall",d:"full-size orchestra rehearsal hall with tiered risers, music stands for 40+ musicians, conductor's podium, acoustic shell panels, instrument storage cabinets"},
-{n:"ESL Conversation Room",d:"small-group English conversation room, round table for 6 students, vocabulary cards on walls, a language lab headset station along one wall"},
-{n:"Innovation Hub",d:"open-plan innovation and design thinking space, movable whiteboards, mood boards, prototype materials, standing-height tables, natural light from skylights"},
-{n:"Photography Darkroom",d:"traditional photography darkroom, red safelight glow, developing trays, enlargers, prints drying on wire lines — rare and atmospheric teaching space"},
-{n:"Nursing & Health Suite",d:"bright modern school health suite, examination beds behind privacy curtains, health posters in English and Korean, medical supplies cabinet, welcoming reception area"},
+{n:"Video Production Suite",d:"professional-grade school video production room, green screen backdrop, camera rigs, editing workstations with blank monitors, broadcast-quality lighting equipment"},
+{n:"Student Lounge",d:"modern student common area, colorful modular seating, collaborative work tables, plain walls with geometric art (no text), energetic social hub"},
+{n:"Yoga & Mindfulness Room",d:"serene yoga and mindfulness studio, bamboo mats rolled out, calming neutral tones, nature mural of mountains and trees (no text), plants, diffuse soft lighting"},
+{n:"Orchestra Rehearsal Hall",d:"full-size orchestra rehearsal hall with tiered risers, music stands with blank pages, conductor's podium, acoustic shell panels, instrument storage cabinets"},
+{n:"Conversation Room",d:"small-group conversation room, round table for 6, plain walls with no cards or posters, headset station along one wall, clean minimalist design"},
+{n:"Innovation Hub",d:"open-plan innovation and design thinking space, plain blank boards, prototype materials, standing-height tables, natural light from skylights, no posters"},
+{n:"Photography Darkroom",d:"traditional photography darkroom, red safelight glow, developing trays, enlargers, prints drying on wire lines, atmospheric dim lighting"},
 ];
 
 const STUDENTS_EARLY=[
-"5 Korean preschoolers (ages 3–5) sitting cross-legged on the floor, clapping along to an English song",
+"5 Korean preschoolers (ages 3–5) sitting cross-legged on the floor, clapping along to an song",
 "6 Korean kindergartners (ages 4–6) gathered in a semicircle on colorful cushions, eyes wide with curiosity",
-"7 Korean children (ages 5–7) at low tables, heads bent, focused on an English worksheet",
+"7 Korean children (ages 5–7) at low tables, heads bent, focused on an classroom activity",
 "5 Korean children (ages 4–5) in matching school uniforms, lined up and smiling, ready for their turn",
-"8 Korean students (ages 6–8) standing in a line, practicing English phonics chants with big arm gestures",
-"6 Korean toddlers (ages 3–4) waving colorful English flashcards in the air with excitement",
-"5 Korean early learners (ages 6–7) taking turns performing an English skit, classmates watching eagerly",
-"7 Korean early childhood students making English letter crafts at tables, fully absorbed in their work",
-"4 Korean children (ages 5–6) in a tight small group, one child standing confidently saying English words",
-"6 Korean preschoolers in activity aprons, working through an English cooking vocabulary lesson together",
+"8 Korean students (ages 6–8) standing in a line, practicing action songs with big arm gestures",
+"6 Korean toddlers (ages 3–4) waving colorful colorful picture cards in the air with excitement",
+"5 Korean early learners (ages 6–7) taking turns performing an short performance, classmates watching eagerly",
+"7 Korean early childhood students making colorful paper crafts at tables, fully absorbed in their work",
+"4 Korean children (ages 5–6) in a tight small group, one child standing confidently speaking confidently",
+"6 Korean preschoolers in activity aprons, working through an cooking activity lesson together",
 "5 Korean kindergartners crowded around a world map, animated and pointing at countries",
-"8 Korean children (ages 6–7) laughing and participating in a lively team English game",
-"5 Korean children (ages 4–5) each holding up a letter card, spelling out E-N-G-L-I-S-H",
-"7 Korean early learners (ages 6–8) racing to match English word-picture pairs on the floor",
-"4 Korean preschoolers listening attentively while one child stands up to speak English to the group",
-"6 Korean children (ages 5–7) at an outdoor station examining nature props with English-labeled cards",
-"8 energetic Korean kindergartners (ages 5–6) jumping up to answer English questions enthusiastically",
-"5 Korean children (ages 6–8) at the English drama mini-stage, one in costume performing proudly",
-"6 Korean young students with colorful English storybooks, each reading a page aloud in turn",
-"4 Korean toddlers (ages 3–4) fitting giant foam puzzle letters together on the floor, laughing",
-"7 Korean mixed-age early learners (ages 5–8) in a circle, passing an English talking stick",
-"5 Korean students (ages 6–7) fully engaged in role-play in front of an English village storefront prop",
-"6 Korean preschoolers proudly holding up their finished English alphabet collage artwork",
+"8 Korean children (ages 6–7) laughing and participating in a lively team team game",
+"5 Korean children (ages 4–5) each holding up colorful cards, playing a matching game",
+"7 Korean early learners (ages 6–8) racing to match color-picture matching pairs on the floor",
+"4 Korean preschoolers listening attentively while one child stands up to speak to the group",
+"6 Korean children (ages 5–7) at an outdoor station examining nature props with picture cards",
+"8 energetic Korean kindergartners (ages 5–6) jumping up to answer questions enthusiastically",
+"5 Korean children (ages 6–8) at the drama mini-stage, one in costume performing proudly",
+"6 Korean young students with colorful colorful storybooks, each reading a page aloud in turn",
+"4 Korean toddlers (ages 3–4) fitting giant foam shape puzzles together on the floor, laughing",
+"7 Korean mixed-age early learners (ages 5–8) in a circle, passing an colorful talking stick",
+"5 Korean students (ages 6–7) fully engaged in role-play in front of an miniature storefront prop",
+"6 Korean preschoolers proudly holding up their finished colorful collage artwork",
 "8 Korean young students (ages 4–6) in a bilingual call-and-response game, voices raised happily",
 "4 Korean children (ages 5–7) at individual tablet stations completing English phonics exercises",
 "7 Korean kindergartners in chef hats, doing an English cooking vocabulary role-play at the counter",
-"6 Korean early learners (ages 6–8) paired up — one asking, one answering English questions",
+"6 Korean early learners (ages 6–8) paired up — one asking, one answering questions",
 "5 Korean preschoolers building with giant blocks labeled with English words, deep in concentration",
 "8 Korean children (ages 5–7) raising hands high — every single child eager to answer in English",
-"4 Korean students (ages 6–8) at the role-play airport check-in desk, speaking English confidently",
+"4 Korean students (ages 6–8) at the role-play airport check-in desk, speaking confidently",
 "6 Korean preschool children at the English science experiment table, wide-eyed with wonder",
 "7 Korean young learners (ages 5–6) wearing doctor costumes in the English hospital zone, playing seriously",
 "5 Korean children (ages 6–8) reading quietly in the English book nook, completely absorbed",
 "8 Korean kindergartners (ages 4–6) doing TPR actions for English verbs with full-body movements",
-"4 Korean preschool children (ages 3–5) singing an English counting song with hand gestures",
-"6 Korean early learners at a sensory water table, sorting objects by English vocabulary category",
-"5 Korean early childhood students doing fingerpainting while listening carefully to English narration",
+"4 Korean preschool children (ages 3–5) singing an counting song with hand gestures",
+"6 Korean early learners at a sensory water table, sorting objects by color category",
+"5 Korean early childhood students doing fingerpainting while listening carefully to narration",
 ];
 
 const STUDENTS_MIDDLE=[
@@ -1597,11 +1594,11 @@ function generateBatch(count, targetMode){
     const quality=pick(QUALITY);
     const composition=pick(COMPOSITION);
 
-    // Build individual Korean student descriptions
-    const studentCount = isEarly ? (3 + Math.floor(Math.random()*4)) : (4 + Math.floor(Math.random()*4));
-    const studentDescs = buildStudentDesc(studentCount, isEarly);
-    const studentListEn = studentDescs.map((s,i) => `  ${i+1}. ${s.en}`).join('\n');
-    const studentListKo = studentDescs.map((s,i) => `  ${i+1}. ${s.ko}`).join('\n');
+    // Pick Korean hairstyle keywords for group description (not per-child)
+    const boyHair = pick(KO_HAIR_BOYS).split(',')[0].split('—')[0].trim();
+    const girlHair = pick(KO_HAIR_GIRLS).split(',')[0].split('—')[0].trim();
+    const studentTop1 = pick(KO_STUDENT_TOPS).split('—')[0].trim();
+    const studentTop2 = pick(KO_STUDENT_TOPS).split('—')[0].trim();
 
     const raceKo = RACE_KO[race]||race;
     const genderKo = finalGender==='male'?'남성':'여성';
@@ -1610,9 +1607,9 @@ function generateBatch(count, targetMode){
     const text=
 `${NO_TEXT_RULE}
 
-Photorealistic 4K editorial documentary photograph. Candid, unposed — a real classroom moment, not a photoshoot.
+Photorealistic 4K editorial documentary photograph. Candid, unposed — a real classroom moment, not a photoshoot. Every surface, wall, board, and object must be completely free of any writing, letters, numbers, or symbols.
 
-SETTING: ${place.d}. ${floor}. ${wall}. ${ceiling}. ${prop}.
+SETTING: ${place.d}. ${floor}. ${wall}. ${ceiling}. ${prop}. All walls are clean — no posters, no charts, no alphabet decorations, no written materials visible anywhere.
 
 COMPOSITION: ${composition}. The full classroom environment must be clearly visible. Both instructor and students are naturally distributed within the space.
 
@@ -1620,24 +1617,22 @@ TIME & ATMOSPHERE: ${season}. ${lighting}. Mood: ${mood}.
 
 INSTRUCTOR: A ${race} ${finalGender} foreign English instructor (${age}, ${hair}, ${clothing}) ${pose}. ${expression}. The instructor is naturally present within the room — not posed for camera, not isolated in the foreground. The instructor is clearly a foreigner — Western or non-Asian in appearance, such as American, Australian, Canadian, British, African, or Latino.
 
-KOREAN STUDENTS (${studentCount} students — each described individually):
-${studentListEn}
-All students are Korean. They are actively engaged in the lesson — full of personality, confident, stylish in 2025 Korean youth fashion. ${sceneDesc}. ${bokeh}. Every single piece of student clothing must be completely plain — zero logos, zero text, zero graphics, zero brand marks, zero patches.
+STUDENTS: ${sceneDesc}. All students are Korean with 2025 trending Korean hairstyles — boys with styles like ${boyHair}, girls with styles like ${girlHair}. Students wear plain solid-color clothing such as ${studentTop1} and ${studentTop2}. Every piece of clothing is completely plain with zero logos, zero text, zero graphics. Students are stylish, confident, and full of personality. ${bokeh}.
 
-CRITICAL REMINDERS: This is a natural candid documentary shot. No studio-style subject isolation. No artificial foreground/background separation. All clothing on every person must be completely plain with absolutely no text, logos, brand names, graphics, or patches. No text of any kind anywhere in the entire image.
+CRITICAL: No text anywhere in the entire image. No letters on walls, boards, clothing, books, or any surface. All clothing completely plain. All walls bare and clean. This is a natural candid documentary shot.
 
 TECHNICAL: ${camera}. Color grade: ${grade}. ${quality}. Aspect ratio 16:9. Award-winning editorial education photography.`;
 
     // Korean display text — shown in UI
     const koText=
 `◆ 텍스트·로고 절대 금지 (최우선 규칙)
-이미지 어디에도 글자·문자·숫자·로고·워터마크 일절 없음. 벽, 칠판, 의류, 소품 포함 완전 텍스트 프리. 모든 의류는 완전 무지 — 프린트·로고·패치 일절 없음.
+이미지 어디에도 글자·문자·숫자·로고·워터마크 일절 없음. 벽, 칠판, 의류, 소품 포함 완전 텍스트 프리. 모든 의류는 완전 무지.
 
 포토리얼리스틱 4K 에디토리얼 다큐멘터리 사진
 연출 없는 실제 수업 장면 — 자연스럽고 솔직한 한 컷.
 
 ◆ 배경·장소
-${place.n}. ${floor}. ${wall}. ${ceiling}. ${prop}.
+${place.n}. ${floor}. ${wall}. ${ceiling}. ${prop}. 벽면 완전 깨끗 — 포스터·차트·알파벳 장식 없음.
 
 ◆ 구도·앵글
 ${composition}. 교실 전체 환경이 충분히 보여야 함. 강사와 학생이 공간 안에 자연스럽게 배치.
@@ -1646,14 +1641,13 @@ ${composition}. 교실 전체 환경이 충분히 보여야 함. 강사와 학�
 ${season}. 조명: ${lighting}. 분위기: ${mood}.
 
 ◆ 외국인 강사 (${raceKo} ${genderKo})
-${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습. 명확하게 비(非)한국인 외국인 강사.
+${age}, ${hair}, ${clothing} 착용. ${pose}. ${expression}. 카메라를 의식하지 않고 수업에 완전히 몰입한 모습.
 
-◆ 한국인 학생들 (${studentCount}명 — 개별 묘사)
-${studentListKo}
-학생들은 모두 한국인. 2025년 한국 청소년 트렌드 헤어스타일. 수업에 적극 참여 중. ${bokeh}.
+◆ 한국인 학생들
+${sceneDesc}. 2025년 한국 청소년 트렌드 헤어 — 남학생 ${boyHair}, 여학생 ${girlHair} 등. 무지 단색 옷 착용. 수업에 적극 참여 중. ${bokeh}.
 
-◆ 핵심 요구사항
-스튜디오식 인물 분리 없음. 인위적 전경/배경 분리 없음. 강사와 학생이 같은 공간·같은 순간을 공유.
+◆ 핵심
+모든 벽면 깨끗, 모든 옷 완전 무지, 이미지 전체 텍스트 0.
 
 ◆ 카메라·기술 설정
 ${camera}. 색감: ${grade}. ${quality}. 화면비 16:9.`;
