@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/api'
 
 /* ── 드롭다운 데이터 ── */
@@ -72,6 +72,7 @@ export default function MegaMenu() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [navKey, setNavKey] = useState(0)
   const pathname = usePathname()
+  const router = useRouter()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isAdminPage = pathname?.startsWith('/admin')
 
@@ -118,12 +119,16 @@ export default function MegaMenu() {
           const existingLinks = navContainer.querySelectorAll<HTMLAnchorElement>('.nav-link')
           // Remove existing
           existingLinks.forEach(el => el.remove())
-          // Insert new
+          // Insert new — use router.push for SPA navigation (prevents full-page reload)
           navData.forEach(item => {
             const a = document.createElement('a')
             a.href = item.href
             a.className = 'nav-link'
             a.textContent = item.label
+            a.addEventListener('click', (e) => {
+              e.preventDefault()
+              router.push(item.href)
+            })
             navContainer.appendChild(a)
           })
         }

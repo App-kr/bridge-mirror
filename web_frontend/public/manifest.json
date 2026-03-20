@@ -1,11 +1,11 @@
 {
-  "name": "BRIDGE Admin",
+  "name": "BRIDGE",
   "short_name": "BRIDGE",
-  "description": "BRIDGE Recruitment — Ad Posts Dashboard",
-  "start_url": "/admin",
+  "description": "BRIDGE Recruitment — ESL Teaching Jobs in Korea",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#3b82f6",
+  "background_color": "#ffffff",
+  "theme_color": "#1d1d1f",
   "orientation": "portrait-primary",
   "icons": [
     {

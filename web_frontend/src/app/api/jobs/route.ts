@@ -146,6 +146,8 @@ function rowToPublic(row: Record<string, unknown>) {
   }
 }
 
+const RENDER_API = process.env.NEXT_PUBLIC_API_URL || 'https://bridge-n7hk.onrender.com'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
@@ -156,6 +158,21 @@ export async function GET(request: NextRequest) {
     const includeAll = searchParams.get('include_all') === 'true'
 
     let rows = getJobs()
+
+    // 로컬 JSON 없으면 Render API 프록시 (Vercel 배포 환경)
+    if (rows.length === 0) {
+      try {
+        const proxyUrl = `${RENDER_API}/api/jobs?${searchParams.toString()}`
+        const resp = await fetch(proxyUrl, { next: { revalidate: 300 } })
+        if (resp.ok) {
+          const json = await resp.json()
+          return NextResponse.json(json)
+        }
+      } catch {
+        // Render API 실패 시 빈 배열 반환
+      }
+      return NextResponse.json({ success: true, message: '0건 조회', data: [] })
+    }
 
     // Public: only open, non-deleted jobs
     if (!includeAll) {

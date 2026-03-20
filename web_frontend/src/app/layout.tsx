@@ -26,6 +26,7 @@ export const metadata: Metadata = {
     siteName: 'BRIDGE',
     locale: 'en_US',
     type: 'website',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'BRIDGE — ESL Teaching Jobs in Korea' }],
   },
 }
 
