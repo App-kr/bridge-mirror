@@ -3,34 +3,27 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 function mapApiItem(it) {
-  // /api/employers 응답은 이미 camelCase + 복호화된 상태
+  // /api/employers → employers 테이블 직접 반환 (복호화 완료)
+  const emails = Array.isArray(it.emails) ? it.emails : [it.email].filter(Boolean);
+  const tags = Array.isArray(it.tags) ? it.tags : [];
   return {
-    _apiId: it.id,
     jNumber: it.jNumber || "",
     region: it.region || "",
     city: it.city || "",
     name: it.name || "",
     email: it.email || "",
-    emails: [it.email].filter(Boolean),
+    emails,
     phone: it.phone || "",
     contact: it.contact || "",
     kakao: it.kakao || "",
     teachingAge: it.teachingAge || "",
     salary: it.salary || "",
-    startDate: it.startDate || "",
-    classSize: it.classSize || "",
-    workingHours: it.workingHours || "",
-    teachHrsWeek: it.teachHrsWeek || "",
-    vacation: it.vacation || "",
-    housing: it.housing || "",
-    nativeCount: it.nativeCount || "",
-    benefits: it.benefits || "",
-    status: it.status || "open",
-    isHot: !!it.isHot,
-    active: it.status !== "closed",
-    isNew: it.createdAt ? (Date.now() - new Date(it.createdAt).getTime()) < 7 * 86400000 : false,
-    confirmed: false,
-    tags: [],
+    status: it.status || "active",
+    blacklist: !!it.blacklist,
+    active: it.active !== undefined ? !!it.active : true,
+    isNew: !!it.isNew,
+    confirmed: !!it.confirmed,
+    tags,
     memo: it.memo || "",
     rawText: it.rawText || "",
   };
@@ -1095,7 +1088,7 @@ export default function EmployerManagement(){
         const res=await fetch(`${API_BASE}/api/employers`,{headers:hdrs});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const items=await res.json();
-        console.log(`[employers] loaded: ${items.length} jobs`);
+        console.log(`[employers] loaded: ${items.length} employers`);
         setData(items.map(mapApiItem));
       }catch(e){console.error("[employers] load failed:",e);}
       finally{setLoading(false);}
@@ -1176,12 +1169,12 @@ export default function EmployerManagement(){
       if(d.jNumber!==jn)return d;
       const next={...d,...u};
       if(u.jNumber&&u.jNumber!==jn)next.jNumber=u.jNumber;
-      // PATCH → jobs 테이블 저장
-      if(d._apiId){
+      // PATCH → employers 테이블 저장 (jNumber 기준)
+      if(d.jNumber){
         const adminKey=localStorage.getItem("bridge_admin_key")||"";
         const hdrs={"Content-Type":"application/json"};
         if(adminKey)hdrs["x-admin-key"]=adminKey;
-        fetch(`${API_BASE}/api/employers/${d._apiId}`,{method:"PATCH",headers:hdrs,body:JSON.stringify(u)}).catch(e=>console.error("[employers] patch failed:",e));
+        fetch(`${API_BASE}/api/employers/${d.jNumber}`,{method:"PATCH",headers:hdrs,body:JSON.stringify(u)}).catch(e=>console.error("[employers] patch failed:",e));
       }
       return next;
     }));
@@ -1189,7 +1182,7 @@ export default function EmployerManagement(){
 
   // 신규 접수 자동 감지 — seenIds 관리
   const seenIds=useRef(new Set());
-  useEffect(()=>{seenIds.current=new Set(data.map(d=>d._apiId||d.jNumber));},[data]);
+  useEffect(()=>{seenIds.current=new Set(data.map(d=>d.jNumber));},[data]);
   const moveItem=useCallback((jn,dir)=>{setData(p=>{const idx=p.findIndex(d=>d.jNumber===jn);if(idx<0)return p;const n=[...p];if(dir==="top"){const it=n.splice(idx,1)[0];n.unshift(it);}else if(dir==="up"&&idx>0)[n[idx-1],n[idx]]=[n[idx],n[idx-1]];else if(dir==="down"&&idx<n.length-1)[n[idx],n[idx+1]]=[n[idx+1],n[idx]];return n;});},[]);
   const toggleCheck=useCallback(jn=>setChecked(p=>{const n=new Set(p);n.has(jn)?n.delete(jn):n.add(jn);return n;}),[]);
   const checkAll=useCallback(()=>setChecked(new Set(filtered.map(d=>d.jNumber))),[filtered]);
