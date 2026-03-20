@@ -291,7 +291,18 @@ def generate_images(prompt: str, count: int = 3) -> dict:
 
         _session.wait_delay()
         os.makedirs(_save_dir, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Find next BRIDGE_N sequence number
+        existing = [f for f in os.listdir(_save_dir) if f.startswith("BRIDGE_") and f.endswith(".png")]
+        max_n = 0
+        for f in existing:
+            try:
+                n = int(f.replace("BRIDGE_", "").replace(".png", ""))
+                if n > max_n:
+                    max_n = n
+            except ValueError:
+                pass
+        next_n = max_n + 1
 
         try:
             headers = _session.get_auth_headers()
@@ -339,7 +350,7 @@ def generate_images(prompt: str, count: int = 3) -> dict:
                 # Apply BRIDGE logo overlay
                 img_bytes = _overlay_bridge_logo(img_bytes)
 
-                fname = f"bridge_{ts}_{i+1}.png"
+                fname = f"BRIDGE_{next_n + i}.png"
                 fpath = os.path.join(_save_dir, fname)
                 with open(fpath, "wb") as f:
                     f.write(img_bytes)
