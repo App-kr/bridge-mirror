@@ -2,11 +2,180 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+// ─── region code → 한글 매핑 ───────────────────────────
+const REGION_KO = {
+  SE:"서울",BS:"부산",DG:"대구",IC:"인천",GJ:"광주",DJ:"대전",US:"울산",SJ:"세종",
+  GG:"경기",GW:"강원",CB:"충북",CN:"충남",JB:"전북",JN:"전남",KB:"경북",KN:"경남",
+  JJ:"제주",XX:"기타",
+};
+// ─── English city → 한글 매핑 ──────────────────────────
+const CITY_EN_KO = {
+  Seoul:"서울",Busan:"부산",Daegu:"대구",Incheon:"인천",Gwangju:"광주",
+  Daejeon:"대전",Ulsan:"울산",Sejong:"세종",Suwon:"수원",Goyang:"고양",
+  Yongin:"용인",Seongnam:"성남",Hwaseong:"화성",Bucheon:"부천",Anyang:"안양",
+  Ansan:"안산",Namyangju:"남양주",Pyeongtaek:"평택",Uijeongbu:"의정부",
+  Siheung:"시흥",Paju:"파주",Gimpo:"김포",Gwangmyeong:"광명",Gunpo:"군포",
+  Uiwang:"의왕",Hanam:"하남",Yangju:"양주",Icheon:"이천",Osan:"오산",Guri:"구리",
+  Cheongju:"청주",Cheonan:"천안",Asan:"아산",Jeonju:"전주",Yeosu:"여수",
+  Suncheon:"순천",Mokpo:"목포",Changwon:"창원",Gimhae:"김해",Jinju:"진주",
+  Yangsan:"양산",Gumi:"구미",Pohang:"포항",Gyeongsan:"경산",Gangneung:"강릉",
+  Wonju:"원주",Chuncheon:"춘천",Jeju:"제주",Seogwipo:"서귀포",
+};
+const METRO_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종"]);
+// ─── memo PII 파서 (backend _parse_memo_pii 동일 로직) ──
+const _TITLES = ["원장","부원장","대표","이사","부장","실장","팀장","담당","선생","매니저","관장","사장"];
+const _LOCATIONS = [
+  "서울","부산","대구","인천","광주","대전","울산","세종",
+  "경기","강원","충북","충남","전북","전남","경북","경남","제주",
+  "해운대","동래","사직","고양","일산","수지","용인","기흥",
+  "송도","화성","남동탄","동탄","분당","성남","수원","안양",
+  "의정부","구로","강남","마포","잠실","종로","신촌","홍대",
+  "부천","광명","시흥","안산","군포","의왕","평택","파주",
+  "김포","양주","구미","포항","경산","창원","청주","천안",
+  "아산","전주","순천","여수","목포","서귀포",
+];
+const _REGION_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종",
+  "경기","강원","충북","충남","전북","전남","경북","경남","제주"]);
+
+function parseMemoPII(memo) {
+  const r = { name:"", contact:"", phone:"", email:"", city:"" };
+  if (!memo) return r;
+  const full = memo.trim();
+  // 이메일
+  const em = full.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  if (em) r.email = em[0];
+  // 전화
+  const ph = full.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/);
+  if (ph) {
+    const raw = ph[0].replace(/[-\s]/g, "");
+    if (raw.length === 11) r.phone = `${raw.slice(0,3)}-${raw.slice(3,7)}-${raw.slice(7)}`;
+    else if (raw.length === 10) r.phone = `${raw.slice(0,3)}-${raw.slice(3,6)}-${raw.slice(6)}`;
+    else r.phone = raw;
+  }
+  // 담당자 직함
+  for (const t of _TITLES) {
+    const p1 = new RegExp("([가-힣]{1,5})?" + t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "(?:\\s*01[016789])");
+    const m1 = full.match(p1);
+    if (m1) { r.contact = (m1[1]||"") + t; break; }
+    const p2 = new RegExp("01[016789][-\\s]?\\d{3,4}[-\\s]?\\d{4}\\s*([가-힣]{0,5})" + t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+    const m2 = full.match(p2);
+    if (m2) { r.contact = (m2[1]||"") + t; break; }
+  }
+  // 업체명: 괄호 안 내용에서 지역 키워드 제거 후 첫 PII 앞까지
+  let inner = full;
+  let mp = inner.match(/^\((.+)\)\s*$/s);
+  if (!mp) mp = inner.match(/^\((.+?)\)/s);
+  if (!mp) mp = inner.match(/^\((.+)/s);
+  if (mp) inner = mp[1].trim();
+  let nameSrc = inner;
+  let lastCity = "";
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const loc of _LOCATIONS) {
+      const re = new RegExp("^" + loc.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "\\s*");
+      const lm = nameSrc.match(re);
+      if (lm) { if (!_REGION_SET.has(loc)) lastCity = loc; nameSrc = nameSrc.slice(lm[0].length); changed = true; break; }
+    }
+  }
+  r.city = lastCity;
+  const titlePat = _TITLES.map(t => t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
+  const stop = nameSrc.match(new RegExp("(01[016789][-\\s]?\\d|[A-Za-z0-9._%+-]+@|" + titlePat + ")"));
+  if (stop) { const c = nameSrc.slice(0, stop.index).trim().replace(/[\/,;]+$/, ""); if (c && c.length <= 30) r.name = c; }
+  return r;
+}
+
+// ─── rawText 서버 정규화 (백틱·따옴표 제거) ──────────────
+function cleanRawText(raw) {
+  if (!raw) return "";
+  return raw.split("\n").map(line => {
+    let s = line.trim();
+    while (s.length && (s[0] === '`' || s[0] === '"')) s = s.slice(1);
+    while (s.length && (s[s.length-1] === '`' || s[s.length-1] === '"')) s = s.slice(0, -1);
+    return s;
+  }).join("\n");
+}
+
+const _STATUS_MAP = { open:"active", closed:"paused", hot:"new", filled:"paused" };
+
+// ─── /api/admin/jobs/v2 raw row → 프론트엔드 포맷 변환 ──
+function mapJobsV2(r) {
+  // jNumber
+  const jcode = r.job_code || "";
+  const jnum = jcode.replace("Job.","").replace("Job","").trim() || r.brj_id || String(r.id || "");
+  // region 한글
+  const regionKo = r.region_name || REGION_KO[r.region] || r.region || "";
+  // city 한글
+  const locRaw = r.location || r.city || "";
+  const locParts = locRaw ? locRaw.split(/\s+/) : [];
+  let cityKo = "";
+  if (locParts.length >= 2) {
+    cityKo = CITY_EN_KO[locParts[1]] || locParts[1];
+  } else if (locParts.length === 1) {
+    cityKo = CITY_EN_KO[locParts[0]] || locParts[0];
+    if (cityKo === regionKo) cityKo = "";
+  }
+  // PII: 암호화 필드 → memo fallback
+  let name = r.employer_display_name || "";
+  let contact = ""; let phone = ""; let email = "";
+  let parsedCity = "";
+  const memoText = r.internal_notes || "";
+  let memoForParse = memoText;
+  if (!memoForParse) {
+    const raw = r.raw_text || "";
+    const tail = raw.match(/\([^)]{10,}\)\s*["'`]*\s*$/) || raw.match(/\(.{10,}$/);
+    if (tail) memoForParse = tail[0];
+  }
+  if (memoForParse) {
+    const p = parseMemoPII(memoForParse);
+    if (!name) name = p.name;
+    if (!contact) contact = p.contact;
+    if (!phone) phone = p.phone;
+    if (!email) email = p.email;
+    parsedCity = p.city;
+  }
+  if (!cityKo && parsedCity) cityKo = parsedCity;
+  // status
+  const statusRaw = r.status || "open";
+  const status = _STATUS_MAP[statusRaw] || statusRaw;
+  return {
+    brjId:       r.brj_id || "",
+    jNumber:     jnum,
+    region:      regionKo,
+    city:        cityKo,
+    name,
+    email,
+    emails:      email ? [email] : [],
+    phone,
+    contact,
+    kakao:       "",
+    teachingAge: r.teaching_age || "",
+    salary:      r.salary_raw || "",
+    status,
+    blacklist:   false,
+    active:      statusRaw === "open" || statusRaw === "hot",
+    isNew:       !!r.is_hot,
+    confirmed:   !r.is_hot,
+    tags:        [],
+    memo:        memoText,
+    rawText:     cleanRawText(r.raw_text || ""),
+    createdAt:   r.created_at || "",
+  };
+}
+
+// ─── PATCH 필드명 변환 (프론트엔드 → DB 컬럼) ───────────
+const _PATCH_MAP = {
+  rawText:"raw_text", memo:"internal_notes", name:"employer_display_name",
+  teachingAge:"teaching_age", salary:"salary_raw", status:"status",
+  region:"region", city:"city",
+};
+
 function mapApiItem(it) {
-  // /api/employers → employers 테이블 직접 반환 (복호화 완료)
+  // fallback: 이미 변환된 데이터 또는 /api/employers 형식
   const emails = Array.isArray(it.emails) ? it.emails : [it.email].filter(Boolean);
   const tags = Array.isArray(it.tags) ? it.tags : [];
   return {
+    brjId: it.brjId || it.brj_id || "",
     jNumber: it.jNumber || "",
     region: it.region || "",
     city: it.city || "",
@@ -1086,12 +1255,12 @@ export default function EmployerManagement(){
     if(adminKey)hdrs["x-admin-key"]=adminKey;
     (async()=>{
       try{
-        const res=await fetch(`${API_BASE}/api/employers`,{headers:hdrs});
+        const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const body=await res.json();
-        const items=Array.isArray(body)?body:(Array.isArray(body?.data)?body.data:[]);
-        console.log(`[employers] loaded: ${items.length} jobs`);
-        setData(items.map(mapApiItem));
+        const jobs=body?.data?.jobs||[];
+        console.log(`[employers] loaded via /api/admin/jobs/v2: ${jobs.length} jobs`);
+        setData(jobs.map(mapJobsV2));
       }catch(e){console.error("[employers] load failed:",e);}
       finally{setLoading(false);}
     })();
@@ -1187,7 +1356,9 @@ export default function EmployerManagement(){
         const adminKey=localStorage.getItem("bridge_admin_key")||"";
         const hdrs={"Content-Type":"application/json"};
         if(adminKey)hdrs["x-admin-key"]=adminKey;
-        fetch(`${API_BASE}/api/employers/${d.jNumber}`,{method:"PATCH",headers:hdrs,body:JSON.stringify(u)}).catch(e=>console.error("[employers] patch failed:",e));
+        const dbBody={};for(const[k,v]of Object.entries(u)){if(_PATCH_MAP[k])dbBody[_PATCH_MAP[k]]=v;else dbBody[k]=v;}
+        const patchId=d.brjId||d.jNumber;
+        fetch(`${API_BASE}/api/admin/jobs/v2/${encodeURIComponent(patchId)}`,{method:"PATCH",headers:hdrs,body:JSON.stringify(dbBody)}).catch(e=>console.error("[employers] patch failed:",e));
       }
       return next;
     }));
