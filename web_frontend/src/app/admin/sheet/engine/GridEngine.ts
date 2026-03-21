@@ -88,6 +88,12 @@ export class GridEngine {
   private ro: ResizeObserver
   private getHeaders: (() => Record<string, string>) | null = null
 
+  /** Snap a CSS-pixel coordinate to the nearest physical pixel center for crisp 1px lines */
+  private snap(v: number): number {
+    const d = this.dpr
+    return (Math.round(v * d) + 0.5) / d
+  }
+
   constructor(container: HTMLDivElement, cb: GridCallbacks) {
     this.container = container
     this.cb = cb
@@ -783,9 +789,9 @@ export class GridEngine {
     ctx.clip()
     for (let r = startRow; r < endRow; r++) {
       const rowH = this.getRowH(r)
-      const y = HEADER_H + this.rowYs[r] - this.scrollTop
+      const y = Math.round(HEADER_H + this.rowYs[r] - this.scrollTop)
       this.drawRowBg(r, y, frozenW, viewW, rowH)
-      let cx = -this.scrollLeft
+      let cx = Math.round(-this.scrollLeft)
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
         if (c < frozenN) { cx += col.w; continue }
@@ -798,22 +804,23 @@ export class GridEngine {
     }
     ctx.restore()
 
-    // ── PASS 2: Scrollable grid lines (separate from content) ──
+    // ── PASS 2: Scrollable grid lines (snap to physical pixels) ──
     ctx.save()
     ctx.beginPath()
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
     ctx.clip()
     ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
-    { let lx = -this.scrollLeft
+    { let lx = Math.round(-this.scrollLeft)
       for (let c = 0; c < this.visCols.length; c++) {
         if (c < frozenN) { lx += this.visCols[c].w; continue }
         lx += this.visCols[c].w
-        ctx.beginPath(); ctx.moveTo(lx - 0.5, HEADER_H); ctx.lineTo(lx - 0.5, viewH); ctx.stroke()
+        const sx = this.snap(lx)
+        ctx.beginPath(); ctx.moveTo(sx, HEADER_H); ctx.lineTo(sx, viewH); ctx.stroke()
       }
     }
     for (let r = startRow; r < endRow; r++) {
-      const y = HEADER_H + this.rowYs[r + 1] - this.scrollTop
-      ctx.beginPath(); ctx.moveTo(frozenW, y - 0.5); ctx.lineTo(viewW, y - 0.5); ctx.stroke()
+      const sy = this.snap(HEADER_H + this.rowYs[r + 1] - this.scrollTop)
+      ctx.beginPath(); ctx.moveTo(frozenW, sy); ctx.lineTo(viewW, sy); ctx.stroke()
     }
     ctx.restore()
 
@@ -825,7 +832,7 @@ export class GridEngine {
       ctx.clip()
       for (let r = startRow; r < endRow; r++) {
         const rowH = this.getRowH(r)
-        const y = HEADER_H + this.rowYs[r] - this.scrollTop
+        const y = Math.round(HEADER_H + this.rowYs[r] - this.scrollTop)
         this.drawRowBg(r, y, 0, frozenW, rowH)
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
@@ -839,7 +846,7 @@ export class GridEngine {
       }
       ctx.restore()
 
-      // Frozen grid lines
+      // Frozen grid lines (snap to physical pixels)
       ctx.save()
       ctx.beginPath()
       ctx.rect(0, HEADER_H, frozenW, dataH)
@@ -848,12 +855,13 @@ export class GridEngine {
       { let fx = 0
         for (let c = 0; c < frozenN; c++) {
           fx += this.visCols[c].w
-          ctx.beginPath(); ctx.moveTo(fx - 0.5, HEADER_H); ctx.lineTo(fx - 0.5, viewH); ctx.stroke()
+          const sx = this.snap(fx)
+          ctx.beginPath(); ctx.moveTo(sx, HEADER_H); ctx.lineTo(sx, viewH); ctx.stroke()
         }
       }
       for (let r = startRow; r < endRow; r++) {
-        const y = HEADER_H + this.rowYs[r + 1] - this.scrollTop
-        ctx.beginPath(); ctx.moveTo(0, y - 0.5); ctx.lineTo(frozenW, y - 0.5); ctx.stroke()
+        const sy = this.snap(HEADER_H + this.rowYs[r + 1] - this.scrollTop)
+        ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(frozenW, sy); ctx.stroke()
       }
       ctx.restore()
 
