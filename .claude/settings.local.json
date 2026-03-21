@@ -774,7 +774,8 @@
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"P0-강사ID5자리+Telegram연결\" --type pre-task)",
       "Bash(GIT_TRACE=1 git push:*)",
       "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -c \"import telegram; print\\(telegram.__version__\\)\")",
-      "Bash(where.exe:*)"
+      "Bash(where.exe:*)",
+      "Bash(node_modules/.bin/tsc:*)"
     ]
   }
 }

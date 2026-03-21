@@ -782,7 +782,7 @@ export class GridEngine {
     while (endRow < this.rows.length && this.rowYs[endRow] < this.scrollTop + dataH + 100) endRow++
     endRow = Math.min(endRow + 1, this.rows.length)
 
-    // ── PASS 1: Scrollable cell content (clipped per cell) ──
+    // ── PASS 1: Scrollable cell content (NO per-cell clip — eliminates anti-alias artifacts) ──
     ctx.save()
     ctx.beginPath()
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
@@ -795,10 +795,7 @@ export class GridEngine {
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
         if (c < frozenN) { cx += col.w; continue }
-        ctx.save()
-        ctx.beginPath(); ctx.rect(cx, y, col.w, rowH); ctx.clip()
         this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
-        ctx.restore()
         cx += col.w
       }
     }
@@ -824,7 +821,7 @@ export class GridEngine {
     }
     ctx.restore()
 
-    // ── PASS 3: Frozen cell content ──
+    // ── PASS 3: Frozen cell content (NO per-cell clip) ──
     if (frozenN > 0) {
       ctx.save()
       ctx.beginPath()
@@ -837,10 +834,7 @@ export class GridEngine {
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
           const col = this.visCols[c]
-          ctx.save()
-          ctx.beginPath(); ctx.rect(cx, y, col.w, rowH); ctx.clip()
           this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
-          ctx.restore()
           cx += col.w
         }
       }
@@ -1124,11 +1118,11 @@ export class GridEngine {
     else if (align === 'center') baseX = cellX + cellW / 2
     else baseX = cellX + PAD
 
-    // Render text — fillText ONLY, absolutely no stroke/line/rect
+    // Render text — fillText ONLY, no stroke/line/rect, no maxWidth param (avoids browser scaling artifacts)
     for (let i = 0; i < lines.length; i++) {
       const lineY = cellY + PAD + i * lineH
       if (lineY >= cellY + cellH) break
-      ctx.fillText(lines[i], baseX, lineY, maxW)
+      ctx.fillText(lines[i], baseX, lineY)
     }
 
     // Strikethrough — only when explicitly requested, uses fillRect (no stroke)
