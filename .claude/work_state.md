@@ -64,12 +64,19 @@
 
 ## 미완료 (다음 세션 우선순위)
 
-| 우선순위 | 항목 |
-|---------|------|
-| High | Canvas Sheet: 진행단계 변경 → DB PATCH 연결 |
-| Medium | Canvas Sheet: 발송상태 태그 → DB 반영 |
-| Medium | Canvas Sheet: 가상 렌더링 (Phase 4) |
-| Low | CSV/Excel 내보내기 |
+| 우선순위 | 항목 | 비고 |
+|---------|------|------|
+| Medium | Canvas Sheet: 가상 렌더링 (Phase 4) | 3000행 성능 |
+| Medium | Render 수동 재배포 | autoDeploy=false, stage/mail_tags 반영 |
+| Low | CSV/Excel 내보내기 | |
+| Low | Supabase 보안 경고 2건 | |
+
+### 최근 완료 확인 (3/21)
+- ~~진행단계 드롭다운 → DB PATCH~~ ✅ `086d867`
+- ~~발송상태 태그 → DB 반영~~ ✅ `086d867`
+- ~~korea_experience DB 컬럼~~ ✅ `086d867`
+- ~~/about 독립 페이지~~ ✅ `3225325`
+- ~~.github/ CI/CD 커밋~~ ✅ `8d96bb3`
 
 ---
 
@@ -84,8 +91,8 @@
 ---
 
 ## 특이 사항 (현재 유효)
-- Render autoDeploy: main push 시 자동 배포
+- Render autoDeploy: false → 수동 배포만
 - deploy_skip.json: expire=9999999999 → 모든 push 자동 승인
 - python3 경로 broken → 항상 절대경로 사용
 - 서버 Hot Reload 중 → 시작/종료 금지
-- PAT workflow scope 없음 → .github/ push 불가
+- DB 87컬럼 (stage, mail_tags, korea_experience 추가됨)

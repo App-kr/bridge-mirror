@@ -763,7 +763,14 @@
       "WebFetch(domain:app.daily4senior.com)",
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:blog.hashscraper.com)",
-      "WebFetch(domain:10wontips.blogspot.com)"
+      "WebFetch(domain:10wontips.blogspot.com)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"employers_복원\" --type pre-task)",
+      "WebFetch(domain:uber-mensch1.com)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" -X utf8 -c \"\nimport sys\nsys.path.insert\\(0, ''Q:/Claudework/bridge base''\\)\nfrom security_vault import decrypt_field, is_encrypted\nimport sqlite3\n\nconn = sqlite3.connect\\(''Q:/Claudework/bridge base/master.db''\\)\nconn.row_factory = sqlite3.Row\ncur = conn.cursor\\(\\)\ncur.execute\\(''SELECT jNumber, email, phone, memo FROM employers LIMIT 3''\\)\nfor r in cur.fetchall\\(\\):\n    jn = r[''jNumber'']\n    email_raw = r[''email''] or ''''\n    phone_raw = r[''phone''] or ''''\n    memo_raw = r[''memo''] or ''''\n    \n    # Try decrypt\n    email_dec = ''''\n    phone_dec = ''''\n    memo_dec = ''''\n    \n    if email_raw and is_encrypted\\(email_raw\\):\n        try:\n            email_dec = decrypt_field\\(email_raw\\)\n        except Exception as e:\n            email_dec = f''FAIL: {e}''\n    else:\n        email_dec = email_raw\n        \n    if phone_raw and is_encrypted\\(phone_raw\\):\n        try:\n            phone_dec = decrypt_field\\(phone_raw\\)\n        except Exception as e:\n            phone_dec = f''FAIL: {e}''\n    else:\n        phone_dec = phone_raw\n        \n    if memo_raw and is_encrypted\\(memo_raw\\):\n        try:\n            memo_dec = decrypt_field\\(memo_raw\\)\n        except Exception as e:\n            memo_dec = f''FAIL: {e}''\n    else:\n        memo_dec = memo_raw\n    \n    print\\(f''=== {jn} ===''\\)\n    print\\(f''  email: {email_dec[:60]}''\\)\n    print\\(f''  phone: {phone_dec[:40]}''\\)\n    print\\(f''  memo: {memo_dec[:80]}''\\)\n    print\\(\\)\nconn.close\\(\\)\n\")",
+      "WebFetch(domain:brunch.co.kr)",
+      "WebFetch(domain:studio24.kr)",
+      "WebFetch(domain:tamblemarketing.com)",
+      "WebFetch(domain:catchdon.com)"
     ]
   }
 }
