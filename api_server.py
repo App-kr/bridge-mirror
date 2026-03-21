@@ -323,11 +323,12 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
             self._add_sec_headers(response)
             return response
 
-        # 관리자 인증된 /api/admin/ 요청은 PII 마스킹 통과 (원본 데이터 반환)
+        # 관리자 인증된 요청은 PII 마스킹 통과 (원본 데이터 반환)
         _ak = os.getenv("ADMIN_API_KEY", "")
-        if (request.url.path.startswith("/api/admin/")
-                and _ak
-                and request.headers.get("x-admin-key", "") == _ak):
+        _admin_paths = ("/api/admin/", "/api/employers", "/api/send-mail")
+        if (_ak
+                and request.headers.get("x-admin-key", "") == _ak
+                and any(request.url.path.startswith(p) for p in _admin_paths)):
             self._add_sec_headers(response)
             return response
 
@@ -6850,7 +6851,7 @@ def _parse_memo_pii(memo: str) -> dict:
       (경기 고양 일산 GE어학원 010-2343-0601 ge.ilsan7@gmail.com 숙소만)
     """
     import re
-    result = {"name": "", "contact": "", "phone": "", "email": ""}
+    result = {"name": "", "contact": "", "phone": "", "email": "", "city": ""}
     if not memo:
         return result
 
@@ -6915,16 +6916,22 @@ def _parse_memo_pii(memo: str) -> dict:
     ]
 
     name_src = inner
-    # 반복 제거: 앞에서부터 지역/도시 키워드를 계속 제거
+    _REGIONS = {"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+                "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"}
+    # 반복 제거: 앞에서부터 지역/도시 키워드를 계속 제거 (마지막 도시 = city)
+    last_city = ""
     changed = True
     while changed:
         changed = False
         for loc in _LOCATIONS:
             m = re.match(r"^" + re.escape(loc) + r"\s*", name_src)
             if m:
+                if loc not in _REGIONS:
+                    last_city = loc
                 name_src = name_src[m.end():]
                 changed = True
                 break
+    result["city"] = last_city
 
     # 첫 번째 전화·이메일·직함까지의 텍스트 = 업체명
     _TITLE_PAT = "|".join(re.escape(t) for t in _TITLES)
@@ -6938,6 +6945,41 @@ def _parse_memo_pii(memo: str) -> dict:
             result["name"] = candidate
 
     return result
+
+
+_CITY_EN_KO = {
+    "Seoul": "서울", "Busan": "부산", "Daegu": "대구", "Incheon": "인천",
+    "Gwangju": "광주", "Daejeon": "대전", "Ulsan": "울산", "Sejong": "세종",
+    "Suwon": "수원", "Goyang": "고양", "Yongin": "용인", "Seongnam": "성남",
+    "Hwaseong": "화성", "Bucheon": "부천", "Anyang": "안양", "Ansan": "안산",
+    "Namyangju": "남양주", "Pyeongtaek": "평택", "Uijeongbu": "의정부",
+    "Siheung": "시흥", "Paju": "파주", "Gimpo": "김포", "Gwangmyeong": "광명",
+    "Gunpo": "군포", "Uiwang": "의왕", "Hanam": "하남", "Yangju": "양주",
+    "Icheon": "이천", "Osan": "오산", "Guri": "구리",
+    "Cheongju": "청주", "Cheonan": "천안", "Asan": "아산",
+    "Jeonju": "전주", "Yeosu": "여수", "Suncheon": "순천", "Mokpo": "목포",
+    "Changwon": "창원", "Gimhae": "김해", "Jinju": "진주", "Yangsan": "양산",
+    "Gumi": "구미", "Pohang": "포항", "Gyeongsan": "경산",
+    "Gangneung": "강릉", "Wonju": "원주", "Chuncheon": "춘천",
+    "Jeju": "제주", "Seogwipo": "서귀포",
+}
+
+
+def _normalize_raw_text(raw: str) -> str:
+    """rawText 백틱·따옴표 정리. 줄 앞뒤 백틱/따옴표 모두 제거."""
+    if not raw:
+        return raw
+    lines = raw.split("\n")
+    cleaned = []
+    for line in lines:
+        s = line.strip()
+        # 앞뒤 백틱·따옴표 반복 제거
+        while s and s[0] in '`"':
+            s = s[1:]
+        while s and s[-1] in '`"':
+            s = s[:-1]
+        cleaned.append(s)
+    return "\n".join(cleaned)
 
 
 @app.get("/api/employers", tags=["employers"])
@@ -6990,13 +7032,37 @@ async def get_employers(request: Request):
                     phone = parsed["phone"]
                 if not email:
                     email = parsed["email"]
+                parsed_city = parsed.get("city", "")
+            else:
+                parsed_city = ""
 
             status_raw = r["status"] or "open"
             status = _STATUS_MAP.get(status_raw, status_raw)
+            # 도시명 영→한 변환 + 광역시 중복 방지
+            # location에 더 세부 지역정보 있으면 사용 (Seoul Gangnam → 강남)
+            loc_raw = r["location"] or r["city"] or ""
+            loc_parts = loc_raw.split() if loc_raw else []
+            region_ko = r["region_name"] or r["region"] or ""
+            if len(loc_parts) >= 2:
+                # "Seoul Gangnam" → 두 번째 단어가 세부 지역
+                sub = loc_parts[1]
+                city_ko = _CITY_EN_KO.get(sub, sub)
+            elif loc_parts:
+                city_first = loc_parts[0]
+                city_ko = _CITY_EN_KO.get(city_first, city_first)
+                # 광역시: region과 city가 같으면 city 비움 (부산/부산 → 부산만)
+                if city_ko == region_ko:
+                    city_ko = ""
+            else:
+                city_ko = ""
+            # DB city가 비면 메모에서 추출한 도시명 사용 (부산 → 해운대)
+            if not city_ko and parsed_city:
+                city_ko = parsed_city
+
             result.append({
                 "jNumber":     jnum,
                 "region":      r["region_name"] or r["region"] or "",
-                "city":        r["city"] or r["location"] or "",
+                "city":        city_ko,
                 "name":        name,
                 "email":       email,
                 "emails":      [email] if email else [],
@@ -7011,7 +7077,7 @@ async def get_employers(request: Request):
                 "confirmed":   not bool(r["is_hot"]),
                 "tags":        [],
                 "memo":        r["internal_notes"] or "",
-                "rawText":     r["raw_text"] or "",
+                "rawText":     _normalize_raw_text(r["raw_text"] or ""),
                 "createdAt":   r["created_at"] or "",
             })
         return result
