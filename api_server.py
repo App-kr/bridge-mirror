@@ -359,11 +359,13 @@ _DEV_ORIGINS = [
 ]
 _cors_env = os.getenv("CORS_ORIGINS", "")
 _extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
-ALLOWED_ORIGINS = list(dict.fromkeys(_CORE_ORIGINS + _extra + _DEV_ORIGINS))
+_IS_PROD = os.getenv("BRIDGE_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
+ALLOWED_ORIGINS = list(dict.fromkeys(
+    _CORE_ORIGINS + _extra + ([] if _IS_PROD else _DEV_ORIGINS)
+))
 
 # ── 앱 초기화 ─────────────────────────────────────────────────────────────────
 # 프로덕션에서는 API 문서 비활성화 (BRIDGE_ENV=production 설정 시)
-_IS_PROD = os.getenv("BRIDGE_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
 
 app = FastAPI(
     title="BRIDGE Recruitment API",
@@ -639,7 +641,6 @@ async def health_check():
     return {
         "status": "ok",
         "version": "v2.3.2",
-        "db": str(_ADMIN_DB_PATH),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1524,7 +1525,7 @@ async def decrypt_check(request: Request):
     key_set = bool(os.environ.get("BRIDGE_FIELD_KEY", "").strip())
     key_preview = hashlib.sha256(os.environ.get("BRIDGE_FIELD_KEY", "").encode()).hexdigest()[:8] if key_set else "NOT_SET"
     fields = ["nationality", "current_location", "reference", "dob", "korean_criminal_record"]
-    conn = sqlite3.connect(str(_DB_PATH))
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         f"SELECT candidate_id, {', '.join(fields)} FROM candidates LIMIT 5"
@@ -2699,7 +2700,7 @@ async def admin_bulk_patch(request: Request, body: dict = None):
         "gender", "health_info", "religion", "notes", "criminal_record",
         "criminal_record_check",
     }
-    conn = sqlite3.connect(str(_DB_PATH))
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 30000")
     updated = 0
     skipped = 0
