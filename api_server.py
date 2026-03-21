@@ -98,6 +98,25 @@ class SafeJSONResponse(Response):
             return obj.decode('utf-8', errors='replace')
         return obj
 
+
+def bridge_error(
+    category: str,
+    context: str,
+    retryable: bool = False,
+    status: int = 500,
+):
+    """구조화된 에러 응답 — isError/errorCategory/isRetryable/context 포함"""
+    return JSONResponse(
+        status_code=status,
+        content={
+            "isError": True,
+            "errorCategory": category,
+            "isRetryable": retryable,
+            "context": context,
+        },
+    )
+
+
 try:
     from PIL import Image as PILImage
     _PILLOW_OK = True
