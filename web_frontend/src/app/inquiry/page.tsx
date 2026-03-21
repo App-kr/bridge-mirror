@@ -444,8 +444,8 @@ export default function InquiryPage() {
               <span className="font-bold text-gray-900">Bank Transfer</span>
             </div>
             <div className="space-y-0.5 text-sm">
-              <p className="font-mono text-gray-800 font-semibold">국민은행 123-456-789012</p>
-              <p className="text-gray-500">예금주: 브릿지 리크루트먼트</p>
+              <p className="font-mono text-gray-800 font-semibold">계좌 정보는 문의 시 안내드립니다</p>
+              <p className="text-gray-500">bridgejobkr@gmail.com</p>
             </div>
             <p className="text-xs text-gray-400">무통장 입금 후 이메일로 입금 확인 요청</p>
           </div>

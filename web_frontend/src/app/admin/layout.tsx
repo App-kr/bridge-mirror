@@ -7,7 +7,7 @@ import AdminAuthModal from "@/components/admin/AdminAuthModal"
 import { useAdminAuth } from "@/hooks/useAdminAuth"
 
 // DEV_MODE: true = 캡쳐 보호 OFF (개발용), false = 보호 ON (운영용)
-const DEV_MODE = true
+const DEV_MODE = false
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { authed, login, waking } = useAdminAuth()

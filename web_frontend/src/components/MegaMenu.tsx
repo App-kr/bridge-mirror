@@ -15,13 +15,8 @@ import { API_URL } from '@/lib/api'
 interface SubItem { href: string; label: string; labelKr?: string }
 
 const DROPDOWNS: Record<string, SubItem[]> = {
-  '/community/about': [
-    { href: '/community/about', label: 'About BRIDGE', labelKr: '회사 소개' },
-  ],
-  '/community/information': [
-    { href: '/community/information', label: 'Team', labelKr: '팀 소개' },
-    { href: '/community/information#services', label: 'Services', labelKr: '서비스 안내' },
-    { href: '/community/information#agency', label: 'About Agency', labelKr: '소개소 안내' },
+  '/about': [
+    { href: '/about', label: 'About BRIDGE', labelKr: '회사 소개' },
   ],
   '/community/korea': [
     { href: '/community/korea', label: 'Living in Korea', labelKr: '한국 생활' },
@@ -35,7 +30,7 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
   '/community/support': [
     { href: '/community/support', label: 'FAQ (Teachers)', labelKr: '강사용 FAQ' },
-    { href: '/community/information', label: 'Information', labelKr: '팀·서비스 안내' },
+    { href: '/about', label: 'About us', labelKr: '회사 소개' },
     { href: '/inquiry', label: 'Contact Us', labelKr: '문의하기' },
   ],
   '/community/support_kr': [
@@ -53,7 +48,7 @@ interface NavItem { href: string; label: string }
 interface CtaButton { href: string; label: string }
 
 const DEFAULT_MOBILE_LINKS: NavItem[] = [
-  { href: '/community/about', label: 'About us' },
+  { href: '/about', label: 'About us' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
   { href: '/jobs', label: 'Job Board' },
