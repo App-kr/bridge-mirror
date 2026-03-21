@@ -6842,6 +6842,104 @@ _EMPLOYERS_JOB_FIELD_MAP: dict[str, tuple[str, bool]] = {
 }
 
 
+def _parse_memo_pii(memo: str) -> dict:
+    """internal_notes 메모에서 업체명·담당자·전화·이메일 추출.
+
+    메모 형식 예시:
+      (부산 해운대 브릿지영어1호점 원장0104560333 bridge@nave.com ...)
+      (경기 고양 일산 GE어학원 010-2343-0601 ge.ilsan7@gmail.com 숙소만)
+    """
+    import re
+    result = {"name": "", "contact": "", "phone": "", "email": ""}
+    if not memo:
+        return result
+
+    full_text = memo.strip()
+
+    # 이메일 추출 — 전체 메모에서 (ASCII 로컬파트만 매칭)
+    emails = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", full_text)
+    if emails:
+        result["email"] = emails[0]
+
+    # 전화번호 추출 — 전체 메모에서
+    phones = re.findall(r"01[016789][-\s]?\d{3,4}[-\s]?\d{4}", full_text)
+    if phones:
+        raw_ph = re.sub(r"[\s-]", "", phones[0])
+        if len(raw_ph) == 11:
+            result["phone"] = f"{raw_ph[:3]}-{raw_ph[3:7]}-{raw_ph[7:]}"
+        elif len(raw_ph) == 10:
+            result["phone"] = f"{raw_ph[:3]}-{raw_ph[3:6]}-{raw_ph[6:]}"
+        else:
+            result["phone"] = raw_ph
+
+    # 담당자 직함 추출 — 전체 메모에서
+    _TITLES = ["원장", "부원장", "대표", "이사", "부장", "실장", "팀장", "담당", "선생", "매니저", "관장", "사장"]
+    for title in _TITLES:
+        # 패턴1: "이름+직함+전화" (직함 앞에 이름, 뒤에 전화)
+        pat = re.search(
+            r"([\uAC00-\uD7AF]{1,5})?" + re.escape(title) + r"(?:\s*01[016789])",
+            full_text,
+        )
+        if pat:
+            result["contact"] = (pat.group(1) or "") + title
+            break
+        # 패턴2: "전화+직함" (전화 뒤에 직함)
+        pat2 = re.search(
+            r"01[016789][-\s]?\d{3,4}[-\s]?\d{4}\s*([\uAC00-\uD7AF]{0,5})" + re.escape(title),
+            full_text,
+        )
+        if pat2:
+            result["contact"] = (pat2.group(1) or "") + title
+            break
+
+    # 업체명 추출: 괄호 안 내용 → 지역·도시 키워드 제거 → 첫 전화/이메일/직함까지
+    # 가장 바깥쪽 괄호 내용 사용
+    inner = full_text
+    m_paren = re.match(r"^\((.+)\)\s*$", inner, re.DOTALL)
+    if not m_paren:
+        m_paren = re.match(r"^\((.+?)\)", inner, re.DOTALL)
+    if not m_paren:
+        # 닫는 괄호 없는 경우도 처리
+        m_paren = re.match(r"^\((.+)", inner, re.DOTALL)
+    if m_paren:
+        inner = m_paren.group(1).strip()
+    _LOCATIONS = [
+        "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+        "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+        "해운대", "동래", "사직", "고양", "일산", "수지", "용인", "기흥",
+        "송도", "화성", "남동탄", "동탄", "분당", "성남", "수원", "안양",
+        "의정부", "구로", "강남", "마포", "잠실", "종로", "신촌", "홍대",
+        "부천", "광명", "시흥", "안산", "군포", "의왕", "평택", "파주",
+        "김포", "양주", "구미", "포항", "경산", "창원", "청주", "천안",
+        "아산", "전주", "순천", "여수", "목포", "서귀포",
+    ]
+
+    name_src = inner
+    # 반복 제거: 앞에서부터 지역/도시 키워드를 계속 제거
+    changed = True
+    while changed:
+        changed = False
+        for loc in _LOCATIONS:
+            m = re.match(r"^" + re.escape(loc) + r"\s*", name_src)
+            if m:
+                name_src = name_src[m.end():]
+                changed = True
+                break
+
+    # 첫 번째 전화·이메일·직함까지의 텍스트 = 업체명
+    _TITLE_PAT = "|".join(re.escape(t) for t in _TITLES)
+    stop = re.search(
+        r"(01[016789][-\s]?\d|[A-Za-z0-9._%+-]+@|" + _TITLE_PAT + ")",
+        name_src,
+    )
+    if stop:
+        candidate = name_src[: stop.start()].strip().rstrip("/ ,;")
+        if candidate and len(candidate) <= 30:
+            result["name"] = candidate
+
+    return result
+
+
 @app.get("/api/employers", tags=["employers"])
 async def get_employers(request: Request):
     """구인자 전체 목록 — jobs 테이블 기반 (PII 복호화 포함)."""
@@ -6861,16 +6959,43 @@ async def get_employers(request: Request):
         result = []
         _STATUS_MAP = {"open": "active", "closed": "paused", "hot": "new", "filled": "paused"}
         for r in rows:
-            jnum = r["brj_id"] or r["job_code"] or str(r["id"])
+            # jNumber: Job.1003 → 1003 (숫자만)
+            jcode = r["job_code"] or ""
+            jnum = jcode.replace("Job.", "").replace("Job", "").strip() or r["brj_id"] or str(r["id"])
+
+            # 암호화 필드 복호화
             name    = _safe_decrypt(r["enc_employer_name"]) or r["employer_display_name"] or ""
             contact = _safe_decrypt(r["enc_contact_name"]) or ""
             phone   = _safe_decrypt(r["enc_contact_phone"]) or ""
             email   = _safe_decrypt(r["enc_contact_email"]) or ""
+
+            # 암호화 필드가 비어있으면 메모에서 PII 추출 (fallback)
+            if not name or not phone or not email:
+                memo_text = r["internal_notes"] or ""
+                # 메모가 없으면 rawText 끝 괄호 블록에서 추출
+                # (괄호가 닫히지 않은 경우도 포함)
+                if not memo_text:
+                    raw = r["raw_text"] or ""
+                    _tail = re.search(r"\([^)]{10,}\)\s*[\"'`]*\s*$", raw)
+                    if not _tail:
+                        _tail = re.search(r"\(.{10,}$", raw)
+                    if _tail:
+                        memo_text = _tail.group(0)
+                parsed = _parse_memo_pii(memo_text)
+                if not name:
+                    name = parsed["name"]
+                if not contact:
+                    contact = parsed["contact"]
+                if not phone:
+                    phone = parsed["phone"]
+                if not email:
+                    email = parsed["email"]
+
             status_raw = r["status"] or "open"
             status = _STATUS_MAP.get(status_raw, status_raw)
             result.append({
                 "jNumber":     jnum,
-                "region":      r["region"] or r["region_name"] or "",
+                "region":      r["region_name"] or r["region"] or "",
                 "city":        r["city"] or r["location"] or "",
                 "name":        name,
                 "email":       email,
@@ -6896,7 +7021,7 @@ async def get_employers(request: Request):
 
 @app.patch("/api/employers/{j_number}", tags=["employers"])
 async def update_employer(j_number: str, request: Request):
-    """구인자 정보 수정 — jobs 테이블 (brj_id로 식별)."""
+    """구인자 정보 수정 — jobs 테이블 (job_code 또는 brj_id로 식별)."""
     _check_admin(request)
     data = await request.json()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6916,8 +7041,13 @@ async def update_employer(j_number: str, request: Request):
                 vals.append(v)
         if not sets:
             return {"ok": True}
-        vals.append(j_number)
-        conn.execute(f"UPDATE jobs SET {','.join(sets)} WHERE brj_id = ?", vals)
+        # job_code 숫자("1003") 또는 brj_id("BRJ-BS-2602-001") 모두 지원
+        job_code_val = f"Job.{j_number}" if not j_number.startswith("BRJ") else ""
+        vals.extend([j_number, job_code_val])
+        conn.execute(
+            f"UPDATE jobs SET {','.join(sets)} WHERE brj_id = ? OR job_code = ?",
+            vals,
+        )
         conn.commit()
         return {"ok": True}
     finally:
@@ -6931,7 +7061,11 @@ async def delete_employer(j_number: str, request: Request):
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        conn.execute("UPDATE jobs SET is_deleted = 1 WHERE brj_id = ?", (j_number,))
+        job_code_val = f"Job.{j_number}" if not j_number.startswith("BRJ") else ""
+        conn.execute(
+            "UPDATE jobs SET is_deleted = 1 WHERE brj_id = ? OR job_code = ?",
+            (j_number, job_code_val),
+        )
         conn.commit()
         return {"ok": True}
     finally:
