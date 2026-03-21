@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-20 (22:00)
+최근 업데이트: 2026-03-21 (04:20)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -9,7 +9,19 @@
 ---
 
 ## 현재 진행 중인 작업
-없음 (세션 종료)
+없음
+
+## 2026-03-21 세션 완료 (웹사이트 누락작업 P0-P4)
+- chore: .github/workflows CI/CD 커밋 (`8d96bb3`) — P0
+- feat(sheet): stage + mail_tags DB persist Phase 3 완료 (`086d867`) — P1+P2
+  - ALTER TABLE: stage, mail_tags, korea_experience 3컬럼 추가 (87컬럼)
+  - api_server.py EDITABLE + MUTABLE_COLS 추가
+  - onStageChange/onTagToggle/컨텍스트메뉴/tagPopup → 모두 PATCH 연결
+  - mapRow: DB에서 stage/mail_tags 읽기 (localStorage 폴백 유지)
+- feat(about): /about 독립 페이지 생성 (`3225325`) — P3
+  - Hero + Mission + Stats + Values + Team + CTA 6섹션
+  - Nav 링크: /community/about → /about
+- DB: korea_experience 컬럼 추가 — P4
 
 ---
 

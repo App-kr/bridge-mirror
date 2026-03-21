@@ -791,8 +791,24 @@
       "git": "be14905",
       "files": 1999,
       "db_hash": "26bbe3d6b1f7"
+    },
+    {
+      "dir": "20260320_191059__employers_복원",
+      "task": "employers_복원",
+      "ts": "2026.03.20 19:11:03",
+      "git": "086d867",
+      "files": 1999,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260320_191929__website-gap-P0-P4",
+      "task": "website-gap-P0-P4",
+      "ts": "2026.03.20 19:19:34",
+      "git": "3225325",
+      "files": 2000,
+      "db_hash": "6ee8da5ae0a1"
     }
   ],
-  "last_backup": "2026.03.20 19:02:40",
-  "total_count": 99
+  "last_backup": "2026.03.20 19:19:34",
+  "total_count": 101
 }
