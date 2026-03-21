@@ -46,6 +46,11 @@ from bridge_agent.storage.database import ConversationDB
 from bridge_agent.llm.registry import create_provider, list_providers
 from bridge_agent.agents.orchestrator import Orchestrator
 
+# Prompt injection defense
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+from prompt_guard import sanitize, scan
+
 # ── Setup ─────────────────────────────────────────────────────
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
@@ -402,6 +407,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text
     if not user_text:
+        return
+
+    # ── Prompt injection defense ──
+    user_text = sanitize(user_text)
+    guard = scan(user_text)
+    if guard.blocked:
+        logger.warning("Prompt injection blocked: %s (score=%d)", guard.matched_patterns, guard.risk_score)
+        await update.message.reply_text("⚠️ 처리할 수 없는 입력입니다.")
         return
 
     await update.message.reply_chat_action(ChatAction.TYPING)

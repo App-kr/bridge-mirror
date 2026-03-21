@@ -8,6 +8,12 @@ from bridge_agent.tools.base import BaseTool, ToolResult
 from bridge_agent.tools.registry import tools_to_dicts, find_tool
 from bridge_agent.config import MAX_TOOL_ITERATIONS
 
+# Prompt injection defense
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent / "tools"))
+from prompt_guard import sanitize, build_safe_prompt
+
 
 class BaseAgent:
     """Base agent with system prompt + tool execution loop."""
@@ -78,7 +84,11 @@ class BaseAgent:
 
     def chat(self, user_input: str) -> str:
         """Send a message and get a response, executing tools as needed."""
-        self._conversation.append(LLMMessage(role="user", content=user_input))
+        # ── Prompt injection defense: sanitize + XML wrap ──
+        safe_input = build_safe_prompt(user_input, context="telegram", auto_scan=False)
+        guarded_input = safe_input if safe_input is not None else sanitize(user_input)
+
+        self._conversation.append(LLMMessage(role="user", content=guarded_input))
         messages = [LLMMessage(role="system", content=self._system_prompt)]
         messages.extend(self._conversation)
 
