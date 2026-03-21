@@ -622,8 +622,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = req_id
             return response
 
-        # 1. IP 블랙리스트 차단
-        if ip_blacklist.is_blocked(client_ip):
+        # 1. IP 블랙리스트 차단 (로그인 경로는 자체 brute-force 보호 사용)
+        if ip_blacklist.is_blocked(client_ip) and path != "/api/admin/login":
             audit.log("BLOCKED_IP", {"ip": client_ip, "path": path}, "WARNING")
             return JSONResponse(
                 status_code=403,

@@ -395,6 +395,39 @@ app = FastAPI(
     default_response_class=SafeJSONResponse,
 )
 
+# ── 글로벌 HTTPException 핸들러 — 모든 에러를 구조화된 JSON으로 자동 변환 ───
+# 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}
+# 이미 구조화된 detail(dict)은 그대로 통과. 향후 새 엔드포인트도 자동 적용.
+_STATUS_TO_CATEGORY = {
+    400: "VALIDATION_ERROR",
+    401: "AUTH_ERROR",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
+    429: "RATE_LIMIT",
+    500: "INTERNAL_ERROR",
+    503: "SERVICE_UNAVAILABLE",
+}
+_RETRYABLE_STATUSES = {429, 500, 503}
+
+
+@app.exception_handler(HTTPException)
+async def _structured_error_handler(request: Request, exc: HTTPException):
+    # 이미 구조화된 응답(bridge_error 또는 수동 dict)은 그대로 통과
+    if isinstance(exc.detail, dict) and "isError" in exc.detail:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "isError": True,
+            "errorCategory": _STATUS_TO_CATEGORY.get(exc.status_code, "UNKNOWN"),
+            "isRetryable": exc.status_code in _RETRYABLE_STATUSES,
+            "context": str(exc.detail) if exc.detail else "Unknown error",
+        },
+    )
+
+
 # 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
 try:
     from security_middleware import SecurityMiddleware, security_router, admin_security_router
@@ -1175,10 +1208,7 @@ async def admin_login(request: Request):
     except Exception:
         real_ip = request.client.host if request.client else "unknown"
 
-    # IP 블랙리스트 선제 차단
-    if ip_blacklist.is_blocked(real_ip):
-        raise HTTPException(403, "Access denied.")
-
+    # Rate limit (brute-force 보호는 AdminLoginGuard가 담당)
     ip = _ip_hash(request)
     if not _rate_ok(ip, window=300, max_posts=10):
         return bridge_error("RATE_LIMIT", "Too many login attempts.", retryable=True, status=429)
