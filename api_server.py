@@ -732,7 +732,7 @@ async def list_jobs(
     - limit / offset: 페이지네이션
     """
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
-        raise HTTPException(429, "Too many requests. Please slow down.")
+        return bridge_error("RATE_LIMIT", "Too many requests. Please slow down.", retryable=True, status=429)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout=5000")
@@ -778,7 +778,7 @@ async def list_jobs(
 async def get_job(job_id: str, request: Request):
     """포지션 상세 조회 — 민감 필드(구인처 연락처/주소 등) 제외, SQLite"""
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
-        raise HTTPException(429, "Too many requests. Please slow down.")
+        return bridge_error("RATE_LIMIT", "Too many requests. Please slow down.", retryable=True, status=429)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout=5000")
@@ -1141,10 +1141,10 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
 def _check_admin(request: Request):
     """ADMIN_API_KEY 헤더 검증. 키 미설정 시 항상 접근 차단 (개발/프로덕션 구분 없음)."""
     if not _ADMIN_KEY:
-        raise HTTPException(status_code=503, detail="관리자 기능이 비활성화되어 있습니다.")
+        raise HTTPException(status_code=503, detail={"isError": True, "errorCategory": "DB_UNAVAILABLE", "isRetryable": True, "context": "관리자 기능이 비활성화되어 있습니다."})
     if not hmac.compare_digest(request.headers.get("x-admin-key", "").strip(), _ADMIN_KEY.strip()):
         _log_unauthorized_access(request)
-        raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
+        raise HTTPException(status_code=403, detail={"isError": True, "errorCategory": "ADMIN_KEY_INVALID", "isRetryable": False, "context": "관리자 키가 올바르지 않습니다."})
 
 
 @app.post("/api/admin/login", tags=["admin"])
@@ -1162,7 +1162,7 @@ async def admin_login(request: Request):
 
     ip = _ip_hash(request)
     if not _rate_ok(ip, window=300, max_posts=10):
-        raise HTTPException(429, "Too many login attempts.")
+        return bridge_error("RATE_LIMIT", "Too many login attempts.", retryable=True, status=429)
 
     try:
         body = await request.json()
