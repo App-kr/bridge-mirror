@@ -6825,65 +6825,69 @@ async def get_mail_templates(request: Request):
 
 _EMPLOYERS_ENC_FIELDS = {"email", "phone", "memo"}
 
+# jobs 테이블 필드 → 프론트엔드 필드 역매핑 (PATCH용)
+_EMPLOYERS_JOB_FIELD_MAP: dict[str, tuple[str, bool]] = {
+    "name":        ("enc_employer_name",  True),
+    "email":       ("enc_contact_email",  True),
+    "phone":       ("enc_contact_phone",  True),
+    "contact":     ("enc_contact_name",   True),
+    "kakao":       ("enc_contact_kakao",  True),
+    "teachingAge": ("teaching_age",       False),
+    "salary":      ("salary_raw",         False),
+    "memo":        ("internal_notes",     False),
+    "rawText":     ("raw_text",           False),
+    "status":      ("status",             False),
+    "region":      ("region",             False),
+    "city":        ("city",               False),
+}
+
 
 @app.get("/api/employers", tags=["employers"])
 async def get_employers(request: Request):
-    """구인자 전체 목록 반환 — employers 테이블 (PII 복호화 포함)."""
+    """구인자 전체 목록 — jobs 테이블 기반 (PII 복호화 포함)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT jNumber, region, city, name, email, emails, phone, contact, "
-            "teachingAge, salary, status, blacklist, active, isNew, confirmed, "
-            "tags, memo, rawText, createdAt, is_deleted "
-            "FROM employers WHERE is_deleted = 0 ORDER BY rowid ASC"
+            "SELECT id, brj_id, job_code, region, region_name, city, location, "
+            "teaching_age, salary_raw, "
+            "enc_employer_name, employer_display_name, "
+            "enc_contact_name, enc_contact_phone, enc_contact_email, enc_contact_kakao, "
+            "status, is_hot, internal_notes, raw_text, created_at "
+            "FROM jobs WHERE is_deleted = 0 ORDER BY created_at DESC"
         ).fetchall()
         result = []
+        _STATUS_MAP = {"open": "active", "closed": "paused", "hot": "new", "filled": "paused"}
         for r in rows:
-            # emails JSON 배열에서 평문 이메일 추출
-            emails_raw = r["emails"] or "[]"
-            try:
-                emails_list = json.loads(emails_raw) if isinstance(emails_raw, str) else []
-            except Exception:
-                emails_list = []
-
-            # 암호화 필드 복호화 (Render 서버에서만 정상 동작)
-            dec_email = _safe_decrypt(r["email"])
-            dec_phone = _safe_decrypt(r["phone"])
-            dec_memo = _safe_decrypt(r["memo"])
-
-            # 이메일: emails JSON 우선, 복호화 email 폴백
-            display_email = emails_list[0] if emails_list else dec_email
-
-            # tags JSON
-            tags_raw = r["tags"] or "[]"
-            try:
-                tags_list = json.loads(tags_raw) if isinstance(tags_raw, str) else []
-            except Exception:
-                tags_list = []
-
+            jnum = r["brj_id"] or r["job_code"] or str(r["id"])
+            name    = _safe_decrypt(r["enc_employer_name"]) or r["employer_display_name"] or ""
+            contact = _safe_decrypt(r["enc_contact_name"]) or ""
+            phone   = _safe_decrypt(r["enc_contact_phone"]) or ""
+            email   = _safe_decrypt(r["enc_contact_email"]) or ""
+            status_raw = r["status"] or "open"
+            status = _STATUS_MAP.get(status_raw, status_raw)
             result.append({
-                "jNumber": r["jNumber"] or "",
-                "region": r["region"] or "",
-                "city": r["city"] or "",
-                "name": r["name"] or "",
-                "email": display_email or "",
-                "emails": emails_list,
-                "phone": dec_phone or "",
-                "contact": r["contact"] or "",
-                "teachingAge": r["teachingAge"] or "",
-                "salary": r["salary"] or "",
-                "status": r["status"] or "active",
-                "blacklist": bool(r["blacklist"]),
-                "active": bool(r["active"]),
-                "isNew": bool(r["isNew"]),
-                "confirmed": bool(r["confirmed"]),
-                "tags": tags_list,
-                "memo": dec_memo or "",
-                "rawText": r["rawText"] or "",
-                "createdAt": r["createdAt"] or "",
+                "jNumber":     jnum,
+                "region":      r["region"] or r["region_name"] or "",
+                "city":        r["city"] or r["location"] or "",
+                "name":        name,
+                "email":       email,
+                "emails":      [email] if email else [],
+                "phone":       phone,
+                "contact":     contact,
+                "teachingAge": r["teaching_age"] or "",
+                "salary":      r["salary_raw"] or "",
+                "status":      status,
+                "blacklist":   False,
+                "active":      status_raw in ("open", "hot"),
+                "isNew":       bool(r["is_hot"]),
+                "confirmed":   not bool(r["is_hot"]),
+                "tags":        [],
+                "memo":        r["internal_notes"] or "",
+                "rawText":     r["raw_text"] or "",
+                "createdAt":   r["created_at"] or "",
             })
         return result
     finally:
@@ -6892,32 +6896,28 @@ async def get_employers(request: Request):
 
 @app.patch("/api/employers/{j_number}", tags=["employers"])
 async def update_employer(j_number: str, request: Request):
-    """구인자 정보 수정 — employers 테이블 (jNumber로 식별)."""
+    """구인자 정보 수정 — jobs 테이블 (brj_id로 식별)."""
     _check_admin(request)
     data = await request.json()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        sets = []
-        vals = []
+        sets: list[str] = []
+        vals: list = []
         for k, v in data.items():
-            if k in ("jNumber", "emails", "createdAt"):
+            if k not in _EMPLOYERS_JOB_FIELD_MAP:
                 continue
-            if k in _EMPLOYERS_ENC_FIELDS and v:
-                sets.append(f"{k} = ?")
+            col, do_encrypt = _EMPLOYERS_JOB_FIELD_MAP[k]
+            if do_encrypt and v:
+                sets.append(f"{col} = ?")
                 vals.append(_encrypt_if_needed(str(v)))
-            elif k == "tags" and isinstance(v, list):
-                sets.append("tags = ?")
-                vals.append(json.dumps(v, ensure_ascii=False))
             else:
-                sets.append(f"{k} = ?")
+                sets.append(f"{col} = ?")
                 vals.append(v)
-
         if not sets:
             return {"ok": True}
-
         vals.append(j_number)
-        conn.execute(f"UPDATE employers SET {','.join(sets)} WHERE jNumber = ?", vals)
+        conn.execute(f"UPDATE jobs SET {','.join(sets)} WHERE brj_id = ?", vals)
         conn.commit()
         return {"ok": True}
     finally:
@@ -6926,12 +6926,12 @@ async def update_employer(j_number: str, request: Request):
 
 @app.delete("/api/employers/{j_number}", tags=["employers"])
 async def delete_employer(j_number: str, request: Request):
-    """구인자 논리 삭제 — employers 테이블 (is_deleted=1)."""
+    """구인자 논리 삭제 — jobs 테이블 (is_deleted=1)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        conn.execute("UPDATE employers SET is_deleted = 1 WHERE jNumber = ?", (j_number,))
+        conn.execute("UPDATE jobs SET is_deleted = 1 WHERE brj_id = ?", (j_number,))
         conn.commit()
         return {"ok": True}
     finally:

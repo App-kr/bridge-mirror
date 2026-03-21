@@ -476,8 +476,9 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
             <button onClick={()=>setEditHeader(false)} style={{padding:"3px 8px",borderRadius:4,border:"1px solid #ccc",background:"#fff",fontSize:"0.78rem",color:"#888",cursor:"pointer"}}>취소</button>
           </>
           :<>
-            <span style={{fontSize:"0.72rem",color:"#bbb",fontFamily:"monospace",userSelect:"none"}}>{item.jNumber}</span>
-            <span style={{fontSize:"1rem",color:"#555",fontWeight:400}}>{item.region} {item.city}</span>
+            <span style={{fontSize:"1rem",color:"#2563eb",fontFamily:"monospace",fontWeight:700,userSelect:"none",background:"#eff6ff",padding:"2px 8px",borderRadius:5}}>{item.jNumber}</span>
+            <span style={{fontSize:"1.15rem",color:"#111",fontWeight:700}}>{item.region}</span>
+            {item.city&&<span style={{fontSize:"1rem",color:"#555",fontWeight:400}}>{item.city}</span>}
             <span onDoubleClick={()=>{setTmpJNumber(item.jNumber);setTmpName(item.name);setEditHeader(true);}} title="더블클릭으로 업체명 편집" style={{fontSize:"1rem",color:"#111",fontWeight:500,cursor:"text"}}>{item.name}</span>
           </>
         }
@@ -635,8 +636,8 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
 const EXCEL_COLS_DEF=[
   {key:"rowNum",label:"",w:44,fixed:true},
   {key:"sel",label:"",w:32,fixed:true},
-  {key:"jNumber",label:"번호",w:64},
-  {key:"region",label:"지역",w:72},
+  {key:"jNumber",label:"번호",w:100},
+  {key:"region",label:"지역",w:90},
   {key:"city",label:"도시",w:84},
   {key:"name",label:"업체명",w:150},
   {key:"email",label:"이메일",w:210},
@@ -964,7 +965,7 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
                       <td key="jNumber" style={{padding:0,border:"1px solid #e8e8e8",background:cellBg}}>
                         <XCell value={item.jNumber} onChange={v=>onUpdate(item.jNumber,{jNumber:v,rawText:(item.rawText||"").replace(/Job\.\s*\S+/,`Job. ${v}`)})}
                           selected={isSel} onSelect={()=>{setSelCell({ri,ci});setSelRow(null);setSelCol(null);}}
-                          style={{fontFamily:"monospace",fontWeight:"600",color:cs.color||"#888",fontSize:`${Math.max(10,fontSize-2)}px`,textAlign:"center"}}/>
+                          style={{fontFamily:"monospace",fontWeight:"700",color:cs.color||"#2563eb",fontSize:`${fontSize}px`,textAlign:"center"}}/>
                       </td>
                     );
                     if(col.key==="email")return(
@@ -1087,8 +1088,9 @@ export default function EmployerManagement(){
       try{
         const res=await fetch(`${API_BASE}/api/employers`,{headers:hdrs});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
-        const items=await res.json();
-        console.log(`[employers] loaded: ${items.length} employers`);
+        const body=await res.json();
+        const items=Array.isArray(body)?body:(Array.isArray(body?.data)?body.data:[]);
+        console.log(`[employers] loaded: ${items.length} jobs`);
         setData(items.map(mapApiItem));
       }catch(e){console.error("[employers] load failed:",e);}
       finally{setLoading(false);}
@@ -1159,9 +1161,20 @@ export default function EmployerManagement(){
     a.click();
     URL.revokeObjectURL(url);
   },[data]);
-  const addNew=useCallback(()=>{
-    const id=nextId();
-    setData(p=>[{jNumber:id,region:"서울",city:"강남",name:"NEW 어학원",email:"new@test.com",emails:["new@test.com"],phone:"010-0000-0000",contact:"",teachingAge:"Elementary",salary:"2,500,000",status:"new",blacklist:false,active:true,isNew:true,confirmed:false,tags:[],memo:`(서울 강남 NEW어학원 신규접수)`,rawText:`Seoul Gangnam\nJob. ${id}\nStarting Date : September\nTeaching Age : Elementary`},...p]);
+  const addNew=useCallback(async()=>{
+    const adminKey=localStorage.getItem("bridge_admin_key")||"";
+    const hdrs={"Content-Type":"application/json"};
+    if(adminKey)hdrs["x-admin-key"]=adminKey;
+    try{
+      const res=await fetch(`${API_BASE}/api/admin/jobs/v2`,{method:"POST",headers:hdrs,body:JSON.stringify({city:"강남",region:"서울",location:"Seoul Gangnam",employer_display_name:"NEW 어학원",teaching_age:"Elementary",salary_raw:"2,500,000",status:"open",raw_text:`Seoul Gangnam\nStarting Date : September\nTeaching Age : Elementary`,internal_notes:"신규접수"})});
+      const r=await res.json();
+      const newId=r?.data?.brj_id||r?.data?.job_code||nextId();
+      setData(p=>[{jNumber:newId,region:"서울",city:"강남",name:"NEW 어학원",email:"",emails:[],phone:"",contact:"",teachingAge:"Elementary",salary:"2,500,000",status:"new",blacklist:false,active:true,isNew:true,confirmed:false,tags:[],memo:"신규접수",rawText:`Seoul Gangnam\nStarting Date : September\nTeaching Age : Elementary`},...p]);
+    }catch(e){
+      console.error("[employers] addNew failed:",e);
+      const id=nextId();
+      setData(p=>[{jNumber:id,region:"서울",city:"강남",name:"NEW 어학원",email:"",emails:[],phone:"",contact:"",teachingAge:"Elementary",salary:"2,500,000",status:"new",blacklist:false,active:true,isNew:true,confirmed:false,tags:[],memo:"신규접수",rawText:"Seoul Gangnam\nTeaching Age : Elementary"},...p]);
+    }
     if(cRef.current)cRef.current.scrollTop=0;
   },[]);
   const updateItem=useCallback((jn,u)=>{
