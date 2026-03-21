@@ -775,16 +775,41 @@ export default function BridgeCanvasSheet() {
     switch (action) {
       case 'to_active': case 'to_past': case 'to_blacklist': {
         const newCat = action.replace('to_', '') as CategoryKey
-        setDbAll(prev => prev.map(r => r._cid === cid ? { ...r, category: newCat } : r))
+        // 선택된 모든 행 이동 (단일행이면 ctx.row만)
+        const engine = engineRef.current
+        const selRows = engine?.selection.getSelectedRows() ?? new Set<number>()
+        const targetCids = new Set<string>()
+        if (selRows.size > 1) {
+          for (const ri of selRows) {
+            const r = displayRowsRef.current[ri]
+            if (r) targetCids.add(String(r._cid ?? ''))
+          }
+        } else {
+          targetCids.add(cid)
+        }
+        setDbAll(prev => prev.map(r => targetCids.has(String(r._cid ?? '')) ? { ...r, category: newCat } : r))
         setData(prev => {
           const u: DataStore = { active: [], past: [], blacklist: [] }
           for (const k of ['active', 'past', 'blacklist'] as CategoryKey[])
-            u[k] = prev[k].filter(r => r._cid !== cid)
-          u[newCat] = [...u[newCat], { ...row, category: newCat }]
+            u[k] = prev[k].filter(r => !targetCids.has(String(r._cid ?? '')))
+          for (const tc of targetCids) {
+            const found = dbAllRef.current.find(r => String(r._cid ?? '') === tc)
+            if (found) u[newCat].push({ ...found, category: newCat })
+          }
           return u
         })
         const edits = editsRef.current
-        edits[cid] = { ...(edits[cid] || {}), category: newCat } as EditOverride
+        for (const tc of targetCids) {
+          edits[tc] = { ...(edits[tc] || {}), category: newCat } as EditOverride
+          // DB에도 category PATCH (status 필드)
+          if (tc) {
+            fetch(`${API}/api/admin/candidates/${encodeURIComponent(tc)}`, {
+              method: 'PATCH',
+              headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: newCat === 'active' ? 'Active' : newCat === 'past' ? 'Past' : 'Blacklist' }),
+            }).catch(() => {})
+          }
+        }
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
         break
       }
@@ -1329,6 +1354,37 @@ export default function BridgeCanvasSheet() {
           <option value={56}>높게</option>
           <option value={72}>사진</option>
         </select>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, borderLeft: '1px solid #ddd', paddingLeft: 8 }}>
+          <span style={{ fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>행높이</span>
+          <input
+            type="number" min={4} max={400}
+            value={rowHeight}
+            onChange={e => {
+              const v = Number(e.target.value)
+              if (v >= 4 && v <= 400) {
+                setRowHeight(v)
+                setRowHeights({})
+                prefsRef.current.saveRowHeights({})
+              }
+            }}
+            style={{ width: 44, height: 22, textAlign: 'center', border: '1px solid #ddd', borderRadius: 3, fontSize: 11 }}
+          />
+          <span style={{ fontSize: 11, color: '#555', whiteSpace: 'nowrap', marginLeft: 4 }}>열너비</span>
+          <input
+            type="number" min={4} max={600}
+            placeholder="일괄"
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const v = Number((e.target as HTMLInputElement).value)
+                if (v >= 4 && v <= 600) {
+                  setCols(prev => prev.map(c => c.type === 'idx' ? c : { ...c, w: v }))
+                }
+              }
+            }}
+            style={{ width: 44, height: 22, textAlign: 'center', border: '1px solid #ddd', borderRadius: 3, fontSize: 11 }}
+          />
+        </div>
       </div>
 
       {/* ── Memo Area ── */}
