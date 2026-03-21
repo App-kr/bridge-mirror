@@ -807,8 +807,72 @@
       "git": "3225325",
       "files": 2000,
       "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_153754__prompt-guard-install",
+      "task": "prompt-guard-install",
+      "ts": "2026.03.21 15:37:59",
+      "git": "6c8056f",
+      "files": 2000,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_205904__P0-ID5자리+텔레그램",
+      "task": "P0-ID5자리+텔레그램",
+      "ts": "2026.03.21 20:59:09",
+      "git": "89615f3",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_205922__security-hardening",
+      "task": "security-hardening",
+      "ts": "2026.03.21 20:59:26",
+      "git": "89615f3",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_211302__P0-강사ID5자리+Telegram연결",
+      "task": "P0-강사ID5자리+Telegram연결",
+      "ts": "2026.03.21 21:13:05",
+      "git": "7a085ea",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_211354__P0-강사ID5자리+Telegram연결",
+      "task": "P0-강사ID5자리+Telegram연결",
+      "ts": "2026.03.21 21:13:58",
+      "git": "b33da12",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_211605__P0-ID5digit-Telegram",
+      "task": "P0-ID5digit-Telegram",
+      "ts": "2026.03.21 21:16:09",
+      "git": "7a085ea",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_225053__P0-ID5digit-Telegram",
+      "task": "P0-ID5digit-Telegram",
+      "ts": "2026.03.21 22:50:56",
+      "git": "69b80b7",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
+    },
+    {
+      "dir": "20260321_230251__pre-inspection",
+      "task": "pre-inspection",
+      "ts": "2026.03.21 23:02:55",
+      "git": "69b80b7",
+      "files": 2001,
+      "db_hash": "6ee8da5ae0a1"
     }
   ],
-  "last_backup": "2026.03.20 19:19:34",
-  "total_count": 101
+  "last_backup": "2026.03.21 23:02:55",
+  "total_count": 109
 }

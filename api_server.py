@@ -1760,18 +1760,23 @@ async def admin_create_candidate(request: Request, body: dict):
     record["source"] = record.get("source", "admin_manual")
     record["source_file"] = "admin_manual"
     record["status"] = record.get("status", "Active")
-    cols = ", ".join(record.keys())
-    placeholders = ", ".join("?" for _ in record)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
+            # sheet_number 자동 할당: 현재 MAX 이상 + 5자리 체계 보장 (10000~)
+            cur_max = conn.execute(
+                "SELECT MAX(sheet_number) FROM candidates"
+            ).fetchone()[0] or 0
+            record["sheet_number"] = max(int(cur_max) + 1, 10000)
+            cols = ", ".join(record.keys())
+            placeholders = ", ".join("?" for _ in record)
             conn.execute(
                 f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
                 list(record.values()),
             )
             conn.commit()
-            return ok(data={"candidate_id": cid}, message="후보자 등록 완료")
+            return ok(data={"candidate_id": cid, "sheet_number": record["sheet_number"]}, message="후보자 등록 완료")
         finally:
             conn.close()
     except Exception as e:

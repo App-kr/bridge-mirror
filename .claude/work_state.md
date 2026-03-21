@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-21 (04:20)
+최근 업데이트: 2026-03-21 (12:30)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,16 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-21 세션 2 완료 (홈페이지 전수점검 + 보안수정)
+- fix(frontend): 보안/SEO 수정 5건 (`5464736`)
+  - DEV_MODE=false, MegaMenu /about 링크 수정, sitemap /about 추가
+  - inquiry 가짜계좌 제거, 카카오 http→https
+- fix(api): backend security 4건 (`269870d`)
+  - _DB_PATH→_ADMIN_DB_PATH (decrypt-check/bulk-patch 크래시 수정)
+  - /health DB경로 노출 제거
+  - CORS localhost 프로덕션 제외 (_IS_PROD 게이트)
+- .github/workflows 커밋: PAT workflow scope 부재로 rebase 분리 (로컬 보존)
 
 ## 2026-03-21 세션 완료 (웹사이트 누락작업 P0-P4)
 - chore: .github/workflows CI/CD 커밋 (`8d96bb3`) — P0
@@ -64,12 +74,30 @@
 
 ## 미완료 (다음 세션 우선순위)
 
+### 핵심 기능
 | 우선순위 | 항목 | 비고 |
 |---------|------|------|
-| Medium | Canvas Sheet: 가상 렌더링 (Phase 4) | 3000행 성능 |
-| Medium | Render 수동 재배포 | autoDeploy=false, stage/mail_tags 반영 |
+| High | Canvas Sheet: 가상 렌더링 (Phase 4) + PATCH 연결 점검 | 3000행 성능 + DB 동기화 |
+| High | Social Auto Platform | 계정 준비 후 시작 |
+| High | YouTube Shorts 환경 준비 | 계정 준비 후 시작 |
+
+### 보안/인프라
+| 우선순위 | 항목 | 비고 |
+|---------|------|------|
+| High | prompt_guard.py → social_auto 적용 예정 | 구조적 프롬프트 인젝션 방어 |
+| High | og-image.png 누락 | SNS 공유 시 이미지 깨짐 |
+| High | securityGuard /api/security/report 라우트 없음 | 보안위협 리포트 무시됨 |
+| Medium | Cookie Secure 플래그 추가 (useAdminAuth.ts) | |
+| Medium | CSP unsafe-eval 제거 (빌드 테스트 필요) | |
+
+### SEO/코드 정리
+| 우선순위 | 항목 | 비고 |
+|---------|------|------|
+| Medium | 공개페이지 SEO metadata (about/apply/inquiry/jobs) | 검색엔진 최적화 |
+| Medium | sql.js 미사용 의존성 제거 (1.4MB 번들) | |
+| Low | AdminAuthContext.tsx 데드코드 삭제 | |
 | Low | CSV/Excel 내보내기 | |
-| Low | Supabase 보안 경고 2건 | |
+| Low | .github/workflows push (PAT workflow scope 필요) | |
 
 ### 최근 완료 확인 (3/21)
 - ~~진행단계 드롭다운 → DB PATCH~~ ✅ `086d867`

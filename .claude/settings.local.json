@@ -770,7 +770,9 @@
       "WebFetch(domain:brunch.co.kr)",
       "WebFetch(domain:studio24.kr)",
       "WebFetch(domain:tamblemarketing.com)",
-      "WebFetch(domain:catchdon.com)"
+      "WebFetch(domain:catchdon.com)",
+      "Bash(\"Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe\" \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"P0-강사ID5자리+Telegram연결\" --type pre-task)",
+      "Bash(GIT_TRACE=1 git push:*)"
     ]
   }
 }
