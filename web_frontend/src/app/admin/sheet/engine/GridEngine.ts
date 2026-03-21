@@ -282,6 +282,7 @@ export class GridEngine {
     this.headerHit.addEventListener('mousedown', this.onHeaderMouseDown)
     this.headerHit.addEventListener('mousemove', this.onHeaderMouseMove)
     this.headerHit.addEventListener('click', this.onHeaderClick)
+    this.headerHit.addEventListener('dblclick', this.onHeaderDblClick)
     this.headerHit.addEventListener('contextmenu', this.onHeaderContextMenu)
     document.addEventListener('mousemove', this.onDocMouseMove)
     document.addEventListener('mouseup', this.onDocMouseUp)
@@ -587,12 +588,23 @@ export class GridEngine {
       return
     }
 
-    // Column name click: select all + sort
+    // Column name click: select only (sort moved to dblclick)
     this.selection.selectAll(this.rows.length)
     this.selection.selectCell(0, hit.visCol)
     this.cb.onSelectionChange(this.selection.getSelectedRows())
-    this.cb.onSort(col.key)
     this.requestRender()
+  }
+
+  private onHeaderDblClick = (e: MouseEvent): void => {
+    const hit = this.headerHitVisCol(e)
+    if (!hit || hit.nearBorder) return
+    const col = this.visCols[hit.visCol]
+    if (!col || col.type === 'idx') return
+    // Column name row only (localY >= 20)
+    if (hit.localY >= 20) {
+      this.cb.onSort(col.key)
+      this.requestRender()
+    }
   }
 
   private onHeaderContextMenu = (e: MouseEvent): void => {
@@ -619,7 +631,7 @@ export class GridEngine {
     // Column resize drag
     if (this.colResizeDrag) {
       const dx = e.clientX - this.colResizeDrag.startX
-      const newW = Math.max(30, this.colResizeDrag.startW + dx)
+      const newW = Math.max(4, this.colResizeDrag.startW + dx)
       this.visCols[this.colResizeDrag.visIdx].w = newW
       const key = this.visCols[this.colResizeDrag.visIdx].key
       const src = this.cols.find(c => c.key === key)
@@ -632,7 +644,7 @@ export class GridEngine {
     // Row resize drag — apply to all selected rows if the dragged row is selected
     if (this.rowResizeDrag) {
       const dy = e.clientY - this.rowResizeDrag.startClientY
-      const newH = Math.max(24, this.rowResizeDrag.startH + dy)
+      const newH = Math.max(4, this.rowResizeDrag.startH + dy)
       const selectedRows = this.selection.getSelectedRows()
       if (selectedRows.has(this.rowResizeDrag.rowIdx) && selectedRows.size > 1) {
         for (const ri of selectedRows) {
@@ -764,7 +776,7 @@ export class GridEngine {
     while (endRow < this.rows.length && this.rowYs[endRow] < this.scrollTop + dataH + 100) endRow++
     endRow = Math.min(endRow + 1, this.rows.length)
 
-    // ── Scrollable columns (clipped) ──
+    // ── PASS 1: Scrollable cell content (clipped per cell) ──
     ctx.save()
     ctx.beginPath()
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
@@ -777,17 +789,35 @@ export class GridEngine {
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
         if (c < frozenN) { cx += col.w; continue }
+        ctx.save()
+        ctx.beginPath(); ctx.rect(cx, y, col.w, rowH); ctx.clip()
         this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
-        ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
-        ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
+        ctx.restore()
         cx += col.w
       }
-      ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(frozenW, y + rowH - 0.5); ctx.lineTo(viewW, y + rowH - 0.5); ctx.stroke()
     }
     ctx.restore()
 
-    // ── Frozen columns ──
+    // ── PASS 2: Scrollable grid lines (separate from content) ──
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
+    ctx.clip()
+    ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
+    { let lx = -this.scrollLeft
+      for (let c = 0; c < this.visCols.length; c++) {
+        if (c < frozenN) { lx += this.visCols[c].w; continue }
+        lx += this.visCols[c].w
+        ctx.beginPath(); ctx.moveTo(lx - 0.5, HEADER_H); ctx.lineTo(lx - 0.5, viewH); ctx.stroke()
+      }
+    }
+    for (let r = startRow; r < endRow; r++) {
+      const y = HEADER_H + this.rowYs[r + 1] - this.scrollTop
+      ctx.beginPath(); ctx.moveTo(frozenW, y - 0.5); ctx.lineTo(viewW, y - 0.5); ctx.stroke()
+    }
+    ctx.restore()
+
+    // ── PASS 3: Frozen cell content ──
     if (frozenN > 0) {
       ctx.save()
       ctx.beginPath()
@@ -800,15 +830,33 @@ export class GridEngine {
         let cx = 0
         for (let c = 0; c < frozenN; c++) {
           const col = this.visCols[c]
+          ctx.save()
+          ctx.beginPath(); ctx.rect(cx, y, col.w, rowH); ctx.clip()
           this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
-          ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
-          ctx.beginPath(); ctx.moveTo(cx + col.w - 0.5, y); ctx.lineTo(cx + col.w - 0.5, y + rowH); ctx.stroke()
+          ctx.restore()
           cx += col.w
         }
-        ctx.strokeStyle = GRID_LINE
-        ctx.beginPath(); ctx.moveTo(0, y + rowH - 0.5); ctx.lineTo(frozenW, y + rowH - 0.5); ctx.stroke()
       }
       ctx.restore()
+
+      // Frozen grid lines
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, HEADER_H, frozenW, dataH)
+      ctx.clip()
+      ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
+      { let fx = 0
+        for (let c = 0; c < frozenN; c++) {
+          fx += this.visCols[c].w
+          ctx.beginPath(); ctx.moveTo(fx - 0.5, HEADER_H); ctx.lineTo(fx - 0.5, viewH); ctx.stroke()
+        }
+      }
+      for (let r = startRow; r < endRow; r++) {
+        const y = HEADER_H + this.rowYs[r + 1] - this.scrollTop
+        ctx.beginPath(); ctx.moveTo(0, y - 0.5); ctx.lineTo(frozenW, y - 0.5); ctx.stroke()
+      }
+      ctx.restore()
+
       ctx.strokeStyle = FROZEN_SEP; ctx.lineWidth = 2
       ctx.beginPath(); ctx.moveTo(frozenW, HEADER_H); ctx.lineTo(frozenW, viewH); ctx.stroke()
     }
@@ -1004,27 +1052,59 @@ export class GridEngine {
 
   private drawWrapped(text: string, x: number, y: number, maxW: number, maxH: number): void {
     const { ctx } = this
-    if (!text || maxW <= 0) return
-    const lineH = 15
+    if (!text || maxW <= 0 || maxH <= 0) return
+
+    // Dynamic lineHeight from current font size
+    const fm = ctx.font.match(/(\d+)px/)
+    const fs = fm ? parseInt(fm[1]) : 13
+    const lineH = Math.ceil(fs * 1.4)
     const maxLines = Math.max(1, Math.floor(maxH / lineH))
-    let line = 0
+
     ctx.textBaseline = 'top'
+
+    // Word-level wrapping with newline support
+    const lines: string[] = []
     for (const raw of text.split('\n')) {
-      if (line >= maxLines) break
-      if (ctx.measureText(raw).width <= maxW) {
-        ctx.fillText(raw, x, y + line * lineH); line++
-      } else {
-        let seg = ''
-        for (const ch of raw) {
-          if (ctx.measureText(seg + ch).width > maxW) {
-            ctx.fillText(seg, x, y + line * lineH); line++
-            if (line >= maxLines) break
-            seg = ch
-          } else { seg += ch }
-        }
-        if (line < maxLines && seg) { ctx.fillText(seg, x, y + line * lineH); line++ }
+      if (lines.length >= maxLines) break
+      if (!raw) { lines.push(''); continue }
+      if (ctx.measureText(raw).width <= maxW) { lines.push(raw); continue }
+      const words = raw.split(' ')
+      let cur = ''
+      for (const word of words) {
+        if (!word) continue
+        const test = cur ? cur + ' ' + word : word
+        if (ctx.measureText(test).width > maxW && cur) {
+          lines.push(cur)
+          if (lines.length >= maxLines) break
+          cur = word
+        } else { cur = test }
       }
+      if (lines.length < maxLines && cur) lines.push(cur)
     }
+
+    let renderLines = lines.slice(0, maxLines)
+
+    // Narrow cell: character-level truncation with ellipsis
+    if (renderLines.length > 0 && renderLines[0] && ctx.measureText(renderLines[0]).width > maxW) {
+      let truncated = ''
+      for (const ch of String(text).replace(/\n/g, ' ')) {
+        if (ctx.measureText(truncated + ch + '\u2026').width > maxW) break
+        truncated += ch
+      }
+      renderLines = truncated ? [truncated + '\u2026'] : []
+    } else if (lines.length > maxLines && renderLines.length > 0) {
+      let last = renderLines[renderLines.length - 1]
+      while (last.length > 0 && ctx.measureText(last + '\u2026').width > maxW) last = last.slice(0, -1)
+      renderLines[renderLines.length - 1] = last + (last ? '\u2026' : '')
+    }
+
+    // Text only — no stroke/line/rect
+    for (let i = 0; i < renderLines.length; i++) {
+      const lineY = y + i * lineH
+      if (lineY + lineH > y + maxH) break
+      ctx.fillText(renderLines[i], x, lineY, maxW)
+    }
+
     ctx.textBaseline = 'middle'
   }
 
