@@ -925,28 +925,27 @@ export class GridEngine {
     if (ac && ac.row === rowIdx) {
       const rect = this.getCellRect(rowIdx, ac.col)
       if (rect) {
+        ctx.save()
         ctx.strokeStyle = ACTIVE_BORDER; ctx.lineWidth = 2
         ctx.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2)
+        ctx.restore()
       }
     }
   }
 
-  /* ── Cell Drawing ── */
+  /* ── Cell Drawing — fillText/fillRect only, stroke 절대 금지 ── */
   private drawCell(row: DataRow, col: ColDef, x: number, y: number, w: number, h: number, rowIdx: number): void {
     const { ctx } = this
     const val = String(row[col.key] ?? '')
     const cid = String(row._cid ?? '')
 
-    // 셀 배경색 (사용자 서식) — 먼저 깔기
+    // 셀 배경색 (사용자 서식) — fillRect only
     if (col.type === 't' || col.type === 'long' || col.type === 'dropdown') {
-      const style = this.styleManager.getStyle(cid, col.key)
-      if (style?.bgColor) {
-        ctx.fillStyle = style.bgColor
-        ctx.fillRect(x, y, w, h)
-      }
+      const s = this.styleManager.getStyle(cid, col.key)
+      if (s?.bgColor) { ctx.fillStyle = s.bgColor; ctx.fillRect(x, y, w, h) }
     }
 
-    // 열 선택 오버레이 — bgColor 위에 반투명으로 표시
+    // 열 선택 오버레이
     if (this.selection.hasColSelection()) {
       const visIdx = this.visCols.indexOf(col)
       if (visIdx >= 0 && this.selection.isColSelected(visIdx)) {
@@ -954,22 +953,14 @@ export class GridEngine {
       }
     }
 
-    // 행 선택 오버레이 — bgColor 위에 반투명으로 표시
+    // 행 선택 오버레이
     if (!this.selection.hasColSelection() && this.selection.isRowSelected(rowIdx) && col.type !== 'idx') {
       ctx.fillStyle = 'rgba(219,234,254,0.5)'; ctx.fillRect(x, y, w, h)
     }
 
-    const style = (col.type === 't' || col.type === 'long' || col.type === 'dropdown') ? this.styleManager.getStyle(cid, col.key) : undefined
+    const style = (col.type === 't' || col.type === 'long' || col.type === 'dropdown')
+      ? this.styleManager.getStyle(cid, col.key) : undefined
     const fontSize = style?.fontSize || 13
-    const bold = style?.bold ? 'bold ' : ''
-    const italic = style?.italic ? 'italic ' : ''
-    const customFont = (style?.fontSize || style?.bold || style?.italic)
-      ? `${italic}${bold}${fontSize}px -apple-system,"Segoe UI",sans-serif`
-      : FONT
-
-    ctx.font = customFont
-    ctx.textBaseline = 'middle'
-    const ty = y + h / 2
 
     switch (col.type) {
       case 'idx':
@@ -988,37 +979,31 @@ export class GridEngine {
         this.drawMailBtn(x, y, w, h)
         break
       case 'dropdown':
-        ctx.save()
-        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
-        ctx.fillStyle = style?.color || '#1e293b'
-        this.drawWrapped(val, x + 4, y + 4, w - 20, h - 8)
-        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 20)
-        ctx.restore()
+        this.drawWrappedText(val, x, y, w - 12, h, {
+          fontSize, bold: style?.bold, italic: style?.italic,
+          color: style?.color, strikethrough: style?.strikethrough,
+        })
+        // dropdown arrow
         ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'
-        ctx.fillText('\u25BE', x + w - 14, ty); ctx.font = customFont
+        ctx.textBaseline = 'middle'
+        ctx.fillText('\u25BE', x + w - 14, y + h / 2)
+        ctx.font = FONT
         break
       case 'long':
-        ctx.save()
-        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
-        ctx.fillStyle = style?.color || '#334155'
-        this.drawWrapped(val, x + 4, y + 4, w - 8, h - 8)
-        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 8)
-        ctx.restore()
+        this.drawWrappedText(val, x, y, w, h, {
+          fontSize, bold: style?.bold, italic: style?.italic,
+          color: style?.color || '#334155', strikethrough: style?.strikethrough,
+        })
         break
       default: {
-        // All text cells: clip + wrapped text
-        ctx.save()
-        ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
         const isKey = KEY_COLS.has(col.key)
-        if (isKey) ctx.font = KEY_COL_FONT
-        ctx.fillStyle = style?.color || '#1e293b'
-        const align = style?.align || (isKey ? 'center' : 'left')
-        ctx.textAlign = align
-        const tx = align === 'center' ? x + w / 2 : align === 'right' ? x + w - 4 : x + 4
-        this.drawWrapped(val, tx, y + 4, w - 8, h - 8)
-        if (style?.strikethrough) this.drawStrikethrough(val, x + 4, ty, w - 8)
-        ctx.textAlign = 'left'
-        ctx.restore()
+        this.drawWrappedText(val, x, y, w, h, {
+          fontSize: isKey ? 14 : fontSize,
+          bold: style?.bold, italic: style?.italic,
+          color: style?.color,
+          strikethrough: style?.strikethrough,
+          align: style?.align || (isKey ? 'center' : 'left'),
+        })
       }
     }
     ctx.font = FONT
@@ -1036,19 +1021,6 @@ export class GridEngine {
     ctx.textAlign = 'left'; ctx.font = FONT
   }
 
-  /** Draw strikethrough line over text */
-  private drawStrikethrough(text: string, x: number, y: number, maxW: number): void {
-    const w = Math.min(this.ctx.measureText(text).width, maxW)
-    this.ctx.save()
-    this.ctx.strokeStyle = this.ctx.fillStyle as string
-    this.ctx.lineWidth = 1
-    this.ctx.beginPath()
-    this.ctx.moveTo(x, y)
-    this.ctx.lineTo(x + w, y)
-    this.ctx.stroke()
-    this.ctx.restore()
-  }
-
   private drawTruncated(text: string, x: number, y: number, maxW: number): void {
     const { ctx } = this
     if (!text || maxW <= 0) return
@@ -1058,61 +1030,118 @@ export class GridEngine {
     ctx.fillText(t + '\u2026', x, y)
   }
 
-  private drawWrapped(text: string, x: number, y: number, maxW: number, maxH: number): void {
+  /**
+   * drawWrappedText — 셀 텍스트 렌더링 (fillText만 사용, stroke 절대 금지)
+   * CJK(한국어) + 영문 혼합 줄바꿈, 말줄임, 취소선 처리
+   */
+  private drawWrappedText(
+    rawText: string | number | null | undefined,
+    cellX: number, cellY: number, cellW: number, cellH: number,
+    styleOpts: {
+      fontSize?: number; bold?: boolean; italic?: boolean;
+      fontFamily?: string; color?: string; align?: string;
+      strikethrough?: boolean
+    } = {}
+  ): void {
+    if (rawText === null || rawText === undefined || rawText === '') return
+    const text = String(rawText)
+    if (!text.trim()) return
+
     const { ctx } = this
-    if (!text || maxW <= 0 || maxH <= 0) return
 
-    // Dynamic lineHeight from current font size
-    const fm = ctx.font.match(/(\d+)px/)
-    const fs = fm ? parseInt(fm[1]) : 13
-    const lineH = Math.ceil(fs * 1.4)
-    const maxLines = Math.max(1, Math.floor(maxH / lineH))
-
+    // Font setup
+    const fs = styleOpts.fontSize || 13
+    const fontStr = [
+      styleOpts.italic ? 'italic' : '',
+      styleOpts.bold ? 'bold' : '',
+      fs + 'px',
+      styleOpts.fontFamily || '-apple-system,"Segoe UI",sans-serif'
+    ].filter(Boolean).join(' ')
+    ctx.font = fontStr
+    ctx.fillStyle = styleOpts.color || '#1e293b'
     ctx.textBaseline = 'top'
 
-    // Word-level wrapping with newline support
-    const lines: string[] = []
-    for (const raw of text.split('\n')) {
-      if (lines.length >= maxLines) break
-      if (!raw) { lines.push(''); continue }
-      if (ctx.measureText(raw).width <= maxW) { lines.push(raw); continue }
-      const words = raw.split(' ')
-      let cur = ''
-      for (const word of words) {
-        if (!word) continue
-        const test = cur ? cur + ' ' + word : word
-        if (ctx.measureText(test).width > maxW && cur) {
-          lines.push(cur)
-          if (lines.length >= maxLines) break
-          cur = word
-        } else { cur = test }
+    const PAD = 3
+    const maxW = Math.max(1, cellW - PAD * 2)
+    const maxH = Math.max(1, cellH - PAD * 2)
+    const lineH = Math.ceil(fs * 1.5)
+    const maxLines = Math.max(1, Math.floor(maxH / lineH))
+
+    // Line-building: handles CJK (no spaces) + English (word-level) + mixed
+    const buildLines = (t: string): string[] => {
+      const paragraphs = t.split(/\r?\n/)
+      const result: string[] = []
+      for (const para of paragraphs) {
+        if (result.length >= maxLines) break
+        if (!para) { result.push(''); continue }
+        if (ctx.measureText(para).width <= maxW) { result.push(para); continue }
+        const hasSpaces = para.includes(' ')
+        if (hasSpaces) {
+          // English/mixed: word-level wrapping
+          const words = para.split(' ')
+          let cur = ''
+          for (const w of words) {
+            const test = cur ? cur + ' ' + w : w
+            if (ctx.measureText(test).width > maxW && cur) {
+              result.push(cur)
+              if (result.length >= maxLines) break
+              cur = w
+            } else { cur = test }
+          }
+          if (result.length < maxLines && cur) result.push(cur)
+        } else {
+          // CJK/no-space: character-level wrapping
+          let cur = ''
+          for (const ch of para) {
+            const test = cur + ch
+            if (ctx.measureText(test).width > maxW && cur) {
+              result.push(cur)
+              if (result.length >= maxLines) break
+              cur = ch
+            } else { cur = test }
+          }
+          if (result.length < maxLines && cur) result.push(cur)
+        }
       }
-      if (lines.length < maxLines && cur) lines.push(cur)
+      return result
     }
 
-    let renderLines = lines.slice(0, maxLines)
+    let lines = buildLines(text)
 
-    // Narrow cell: character-level truncation with ellipsis
-    if (renderLines.length > 0 && renderLines[0] && ctx.measureText(renderLines[0]).width > maxW) {
-      let truncated = ''
-      for (const ch of String(text).replace(/\n/g, ' ')) {
-        if (ctx.measureText(truncated + ch + '\u2026').width > maxW) break
-        truncated += ch
-      }
-      renderLines = truncated ? [truncated + '\u2026'] : []
-    } else if (lines.length > maxLines && renderLines.length > 0) {
-      let last = renderLines[renderLines.length - 1]
+    // Ellipsis for overflow
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines)
+      let last = lines[maxLines - 1] || ''
       while (last.length > 0 && ctx.measureText(last + '\u2026').width > maxW) last = last.slice(0, -1)
-      renderLines[renderLines.length - 1] = last + (last ? '\u2026' : '')
+      lines[maxLines - 1] = last + (last ? '\u2026' : '')
     }
 
-    // Text only — no stroke/line/rect
-    for (let i = 0; i < renderLines.length; i++) {
-      const lineY = y + i * lineH
-      if (lineY + lineH > y + maxH) break
-      ctx.fillText(renderLines[i], x, lineY, maxW)
+    // Alignment
+    const align = styleOpts.align || 'left'
+    ctx.textAlign = align as CanvasTextAlign
+    let baseX: number
+    if (align === 'right') baseX = cellX + cellW - PAD
+    else if (align === 'center') baseX = cellX + cellW / 2
+    else baseX = cellX + PAD
+
+    // Render text — fillText ONLY, absolutely no stroke/line/rect
+    for (let i = 0; i < lines.length; i++) {
+      const lineY = cellY + PAD + i * lineH
+      if (lineY >= cellY + cellH) break
+      ctx.fillText(lines[i], baseX, lineY, maxW)
     }
 
+    // Strikethrough — only when explicitly requested, uses fillRect (no stroke)
+    if (styleOpts.strikethrough === true && lines.length > 0) {
+      const strikeY = Math.round(cellY + PAD + lineH * 0.55)
+      const textW = Math.min(ctx.measureText(lines[0]).width, maxW)
+      const sx = align === 'center' ? cellX + (cellW - textW) / 2
+              : align === 'right' ? cellX + cellW - PAD - textW
+              : cellX + PAD
+      ctx.fillRect(sx, strikeY, textW, 1)
+    }
+
+    ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
   }
 
@@ -1217,12 +1246,13 @@ export class GridEngine {
     const { ctx } = this
     const bw = Math.min(w - 8, 60), bh = 24
     const bx = x + (w - bw) / 2, by = y + (h - bh) / 2
+    ctx.save()
     ctx.fillStyle = '#eff6ff'; this.roundRect(bx, by, bw, bh, 4); ctx.fill()
     ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1; this.roundRect(bx, by, bw, bh, 4); ctx.stroke()
     ctx.fillStyle = '#2563eb'; ctx.font = '11px -apple-system,"Segoe UI",sans-serif'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillText('\u2709 \uBC1C\uC1A1', bx + bw / 2, by + bh / 2)
-    ctx.font = FONT; ctx.textAlign = 'left'
+    ctx.restore()
   }
 
   private roundRect(x: number, y: number, w: number, h: number, r: number): void {
