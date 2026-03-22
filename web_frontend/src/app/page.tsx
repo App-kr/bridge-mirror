@@ -123,8 +123,10 @@ interface Testimonial {
 
 export default function HomePage() {
   const heroRef = useRef<HTMLElement>(null)
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
-  const [jobs, setJobs] = useState<PublicJob[]>([])
+  const [testimonials, setTestimonials] = useState<Testimonial[]>(
+    FALLBACK_TESTIMONIALS.map(t => ({ text: t.text, stars: t.stars, name: t.name, country: t.country }))
+  )
+  const [jobs, setJobs] = useState<PublicJob[]>(FALLBACK_JOBS)
   const [showBridge, setShowBridge] = useState(false)
   const [showTagline, setShowTagline] = useState(false)
   const [academyNames, setAcademyNames] = useState<string[]>(FALLBACK_ACADEMIES)
@@ -154,8 +156,7 @@ export default function HomePage() {
 
   // ── Fetch site settings for dynamic hero ──
   useEffect(() => {
-    const url = API_URL ? `${API_URL}/api/settings` : '/api/settings'
-    fetch(url)
+    fetch('/api/settings')
       .then(r => r.json())
       .then(d => {
         if (!d?.data?.settings) return
@@ -177,8 +178,7 @@ export default function HomePage() {
 
   // ── Testimonials from DB API (random 6), fallback to static pool ──
   const fetchTestimonials = useCallback(() => {
-    const apiBase = API_URL || ''
-    fetch(`${apiBase}/api/testimonials?limit=6&random=1`)
+    fetch('/api/testimonials')
       .then(r => r.json())
       .then(d => {
         if (d?.success && d.data?.testimonials?.length > 0) {
@@ -229,7 +229,7 @@ export default function HomePage() {
 
   // ── Fetch partners from API ──
   useEffect(() => {
-    fetch(`${API_URL}/api/partners`)
+    fetch('/api/partners')
       .then(r => r.json())
       .then(d => {
         const partners = d?.data?.partners ?? []
@@ -250,8 +250,7 @@ export default function HomePage() {
   }, [])
 
   const handleRefreshTestimonials = useCallback(() => {
-    const apiBase = API_URL || ''
-    fetch(`${apiBase}/api/testimonials?limit=6&random=1`)
+    fetch(`${API_URL || ''}/api/testimonials?limit=6&random=1`)
       .then(r => r.json())
       .then(d => {
         if (d?.success && d.data?.testimonials?.length > 0) {

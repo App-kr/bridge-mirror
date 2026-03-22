@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
     if (rows.length === 0) {
       try {
         const proxyUrl = `${RENDER_API}/api/jobs?${searchParams.toString()}`
-        const resp = await fetch(proxyUrl, { next: { revalidate: 300 } })
+        const resp = await fetch(proxyUrl, { next: { revalidate: 1800 } })
         if (resp.ok) {
           const json = await resp.json()
           return NextResponse.json(json)

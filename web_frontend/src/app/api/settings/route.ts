@@ -11,7 +11,7 @@ export async function GET() {
   }
   try {
     const res = await fetch(`${API}/api/settings`, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
     })
     const data = await res.json()
     return NextResponse.json(data)
