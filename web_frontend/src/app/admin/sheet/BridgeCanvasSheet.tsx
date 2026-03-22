@@ -169,7 +169,6 @@ export default function BridgeCanvasSheet() {
   const [ivResult, setIvResult] = useState<{ id: number; emailSent: boolean; meetLink: string } | null>(null)
   const [ivMeetPool, setIvMeetPool] = useState<string[]>([])
   const [ivNewLink, setIvNewLink] = useState('')
-  const [ivShowPool, setIvShowPool] = useState(false)
 
   // Filter popup
   const [filterPopup, setFilterPopup] = useState<FilterPopup | null>(null)
@@ -1845,9 +1844,6 @@ export default function BridgeCanvasSheet() {
       {/* ── Interview Modal — Apple Clean Style ── */}
       {ivModal && ivTarget && (() => {
         const pool = ivMeetPool.length ? ivMeetPool : loadMeetPool()
-        const currentIdx = pool.indexOf(ivMeetLink)
-        const rollNext = () => { const next = (currentIdx + 1) % pool.length; setIvMeetLink(pool[next]) }
-        const rollRandom = () => { const r = pool[Math.floor(Math.random() * pool.length)]; setIvMeetLink(r) }
         const removeLink = (i: number) => {
           if (pool.length <= 1) return
           const np = pool.filter((_, idx) => idx !== i)
@@ -1861,72 +1857,74 @@ export default function BridgeCanvasSheet() {
           setIvMeetPool(np); localStorage.setItem(MEET_POOL_KEY, JSON.stringify(np))
           setIvNewLink('')
         }
-        // Default email template
+        const getMeetCode = (url: string) => { const m = url.match(/meet\.google\.com\/([a-z\-]+)/); return m ? m[1] : '' }
+        const getCalendarSettingsUrl = (url: string) => {
+          const code = getMeetCode(url)
+          return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Bridge+Interview&location=${encodeURIComponent(url)}&details=${encodeURIComponent('Meet code: ' + code + '\n\n회의 엑세스 유형: 항상 열기\n사진 체크: ON')}`
+        }
         const defaultSubject = `[BRIDGE] Interview — ${ivTarget.name || 'Candidate'}`
         const defaultBody = `Dear ${ivTarget.name || 'Candidate'},\n\nYour interview has been scheduled.\n\nDate: ${ivDate || '(TBD)'}\nTime: ${ivTime || '(TBD)'} KST\nDuration: ${ivDuration} minutes\n\nMeet Link: ${ivMeetLink}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
         return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setIvModal(false) }}>
-          <div style={{ background: '#fff', borderRadius: 20, width: '94vw', maxWidth: 720, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 100px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-            {/* Header — Clean Apple */}
-            <div style={{ padding: '20px 28px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ background: '#fff', borderRadius: 20, width: '96vw', maxWidth: 780, maxHeight: '96vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 100px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '22px 32px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 22, color: '#111', letterSpacing: '-0.02em' }}>인터뷰 생성</div>
-                <div style={{ fontSize: 14, color: '#6b7280', marginTop: 2 }}>후보자 #{ivTarget.mgtNum || ivTarget._cid || ivTarget.id}</div>
+                <div style={{ fontWeight: 800, fontSize: 26, color: '#000', letterSpacing: '-0.02em' }}>인터뷰 생성</div>
+                <div style={{ fontSize: 16, color: '#374151', fontWeight: 600, marginTop: 3 }}>후보자 #{ivTarget.mgtNum || ivTarget._cid || ivTarget.id}</div>
               </div>
-              <button onClick={() => setIvModal(false)} style={{ width: 36, height: 36, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#9ca3af', cursor: 'pointer', border: 'none', background: '#f3f4f6' }}>&times;</button>
+              <button onClick={() => setIvModal(false)} style={{ width: 40, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#6b7280', cursor: 'pointer', border: 'none', background: '#f3f4f6' }}>&times;</button>
             </div>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: '24px 28px' }}>
+            <div style={{ flex: 1, overflow: 'auto', padding: '28px 32px' }}>
               {ivResult ? (
-                /* ── Success ── */
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
                   <div style={{ fontSize: 72, marginBottom: 20 }}>✅</div>
-                  <div style={{ fontWeight: 700, fontSize: 24, color: '#111', letterSpacing: '-0.02em' }}>인터뷰 #{ivResult.id} 생성 완료</div>
-                  <div style={{ fontSize: 16, color: '#6b7280', marginTop: 10 }}>
+                  <div style={{ fontWeight: 800, fontSize: 26, color: '#000' }}>인터뷰 #{ivResult.id} 생성 완료</div>
+                  <div style={{ fontSize: 17, color: '#374151', fontWeight: 600, marginTop: 10 }}>
                     {ivResult.emailSent ? '후보자에게 이메일이 발송되었습니다' : '이메일은 별도로 발송해주세요'}
                   </div>
                   <div style={{ marginTop: 32, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <a href={ivResult.meetLink} target="_blank" rel="noopener noreferrer"
-                      style={{ padding: '14px 32px', background: '#111', color: '#fff', borderRadius: 12, fontSize: 16, fontWeight: 600, textDecoration: 'none' }}>
+                      style={{ padding: '14px 32px', background: '#000', color: '#fff', borderRadius: 12, fontSize: 17, fontWeight: 700, textDecoration: 'none' }}>
                       Meet 참가
                     </a>
                     <a href="/admin/interviews" target="_blank" rel="noopener noreferrer"
-                      style={{ padding: '14px 32px', background: '#f3f4f6', color: '#111', borderRadius: 12, fontSize: 16, fontWeight: 600, textDecoration: 'none' }}>
+                      style={{ padding: '14px 32px', background: '#f3f4f6', color: '#000', borderRadius: 12, fontSize: 17, fontWeight: 700, textDecoration: 'none' }}>
                       관리 페이지
                     </a>
                     <button onClick={() => setIvModal(false)}
-                      style={{ padding: '14px 32px', background: '#f3f4f6', color: '#111', borderRadius: 12, fontSize: 16, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      style={{ padding: '14px 32px', background: '#f3f4f6', color: '#000', borderRadius: 12, fontSize: 17, fontWeight: 700, border: 'none', cursor: 'pointer' }}>
                       닫기
                     </button>
                   </div>
                 </div>
               ) : (
-                /* ── Form ── */
                 <>
-                  {/* Candidate info card */}
-                  <div style={{ background: '#fafafa', borderRadius: 14, padding: '18px 22px', marginBottom: 24, border: '1px solid #e5e7eb' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>후보자 정보</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>번호</div><div style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>#{ivTarget.mgtNum || ivTarget._cid || ivTarget.id}</div></div>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>이름</div><div style={{ fontSize: 18, fontWeight: 700, color: '#111' }}>{ivTarget.name || '-'}</div></div>
-                      <div style={{ gridColumn: '1/3' }}><div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>이메일</div><div style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>{ivTarget.email || '(없음)'}</div></div>
-                      {ivTarget.phone && <div><div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>전화</div><div style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>{String(ivTarget.phone)}</div></div>}
-                      {ivTarget.nationality && <div><div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>국적</div><div style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>{String(ivTarget.nationality)}</div></div>}
+                  {/* ── Candidate info ── */}
+                  <div style={{ background: '#f8f8f8', borderRadius: 14, padding: '20px 24px', marginBottom: 28, border: '1px solid #e5e7eb' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#000', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>후보자 정보</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 28px' }}>
+                      <div><div style={{ fontSize: 14, color: '#374151', fontWeight: 600, marginBottom: 3 }}>번호</div><div style={{ fontSize: 20, fontWeight: 800, color: '#000' }}>#{ivTarget.mgtNum || ivTarget._cid || ivTarget.id}</div></div>
+                      <div><div style={{ fontSize: 14, color: '#374151', fontWeight: 600, marginBottom: 3 }}>이름</div><div style={{ fontSize: 20, fontWeight: 800, color: '#000' }}>{ivTarget.name || '-'}</div></div>
+                      <div style={{ gridColumn: '1/3' }}><div style={{ fontSize: 14, color: '#374151', fontWeight: 600, marginBottom: 3 }}>이메일</div><div style={{ fontSize: 18, fontWeight: 700, color: '#000' }}>{ivTarget.email || '(없음)'}</div></div>
+                      {ivTarget.phone && <div><div style={{ fontSize: 14, color: '#374151', fontWeight: 600, marginBottom: 3 }}>전화</div><div style={{ fontSize: 18, fontWeight: 700, color: '#000' }}>{String(ivTarget.phone)}</div></div>}
+                      {ivTarget.nationality && <div><div style={{ fontSize: 14, color: '#374151', fontWeight: 600, marginBottom: 3 }}>국적</div><div style={{ fontSize: 18, fontWeight: 700, color: '#000' }}>{String(ivTarget.nationality)}</div></div>}
                     </div>
                   </div>
 
-                  {/* Date & Time */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                  {/* ── Date & Time ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
                     <div>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>날짜</label>
+                      <label style={{ fontSize: 15, fontWeight: 700, color: '#000', display: 'block', marginBottom: 8 }}>날짜</label>
                       <input type="date" value={ivDate} onChange={e => setIvDate(e.target.value)}
-                        style={{ width: '100%', padding: '14px 16px', border: '1px solid #d1d5db', borderRadius: 12, fontSize: 17, color: '#111', background: '#fff', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '16px 18px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 18, fontWeight: 600, color: '#000', background: '#fff', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>시간 (KST)</label>
+                      <label style={{ fontSize: 15, fontWeight: 700, color: '#000', display: 'block', marginBottom: 8 }}>시간 (KST)</label>
                       <input type="time" value={ivTime} onChange={e => setIvTime(e.target.value)}
-                        style={{ width: '100%', padding: '14px 16px', border: '1px solid #d1d5db', borderRadius: 12, fontSize: 17, color: '#111', background: '#fff', boxSizing: 'border-box' }} />
+                        style={{ width: '100%', padding: '16px 18px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 18, fontWeight: 600, color: '#000', background: '#fff', boxSizing: 'border-box' }} />
                     </div>
                   </div>
 
@@ -1934,130 +1932,140 @@ export default function BridgeCanvasSheet() {
                   {ivDate && ivTime && (() => {
                     const d = new Date(`${ivDate}T${ivTime}`)
                     const weekdays = ['일', '월', '화', '수', '목', '금', '토']
-                    const m = d.getMonth() + 1, day = d.getDate(), wd = weekdays[d.getDay()]
+                    const mo = d.getMonth() + 1, day = d.getDate(), wd = weekdays[d.getDay()]
                     const [h, min] = ivTime.split(':').map(Number)
                     const ampm = h < 12 ? '오전' : '오후'
                     const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
                     return (
-                      <div style={{ marginBottom: 24, padding: '14px 18px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 17, fontWeight: 600, color: '#111', textAlign: 'center' }}>
-                        {m}월 {day}일 ({wd}) {ampm} {h12}:{String(min).padStart(2,'0')} KST &middot; {ivDuration}분
+                      <div style={{ marginBottom: 28, padding: '16px 20px', background: '#f0f4ff', border: '1.5px solid #c7d2fe', borderRadius: 12, fontSize: 19, fontWeight: 700, color: '#000', textAlign: 'center' }}>
+                        {mo}월 {day}일 ({wd}) {ampm} {h12}:{String(min).padStart(2,'0')} KST &middot; {ivDuration}분
                       </div>
                     )
                   })()}
 
-                  {/* Duration */}
-                  <div style={{ marginBottom: 24 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>면접 시간</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                  {/* ── Duration ── */}
+                  <div style={{ marginBottom: 28 }}>
+                    <label style={{ fontSize: 15, fontWeight: 700, color: '#000', display: 'block', marginBottom: 10 }}>면접 시간</label>
+                    <div style={{ display: 'flex', gap: 10 }}>
                       {[15, 20, 30, 45].map(d => (
                         <button key={d} onClick={() => setIvDuration(d)}
                           style={{
-                            padding: '12px 24px', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer',
-                            border: ivDuration === d ? '2px solid #111' : '1px solid #d1d5db',
-                            background: ivDuration === d ? '#111' : '#fff',
-                            color: ivDuration === d ? '#fff' : '#374151',
+                            padding: '14px 28px', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer',
+                            border: ivDuration === d ? '2px solid #000' : '1.5px solid #d1d5db',
+                            background: ivDuration === d ? '#000' : '#fff',
+                            color: ivDuration === d ? '#fff' : '#000',
                             transition: 'all 0.15s',
                           }}>{d}분</button>
                       ))}
                     </div>
                   </div>
 
-                  {/* ── Meet Link Section ── */}
-                  <div style={{ marginBottom: 24 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Google Meet 링크</label>
-                      <button onClick={() => setIvShowPool(!ivShowPool)}
-                        style={{ fontSize: 12, color: '#6b7280', cursor: 'pointer', border: 'none', background: 'none', textDecoration: 'underline' }}>
-                        {ivShowPool ? '접기' : `링크 관리 (${pool.length})`}
-                      </button>
-                    </div>
-                    {/* Current link display */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <div style={{ flex: 1, padding: '14px 16px', background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 15, color: '#111', fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ivMeetLink}
+                  {/* ── Meet Link — Scrollable Pool ── */}
+                  <div style={{ marginBottom: 28 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <label style={{ fontSize: 15, fontWeight: 700, color: '#000' }}>Google Meet 회의실 ({pool.length}개)</label>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => { const r = pool[Math.floor(Math.random() * pool.length)]; setIvMeetLink(r) }}
+                          style={{ padding: '8px 16px', background: '#f3f4f6', color: '#000', borderRadius: 10, fontSize: 14, fontWeight: 700, border: '1px solid #e5e7eb', cursor: 'pointer' }}>
+                          🎲 랜덤 선택
+                        </button>
                       </div>
-                      <button onClick={rollNext} title="다음 링크"
-                        style={{ padding: '12px 16px', background: '#f3f4f6', color: '#111', borderRadius: 12, fontSize: 15, fontWeight: 600, border: '1px solid #e5e7eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        ▶ 다음
-                      </button>
-                      <button onClick={rollRandom} title="랜덤 선택"
-                        style={{ padding: '12px 16px', background: '#f3f4f6', color: '#111', borderRadius: 12, fontSize: 15, fontWeight: 600, border: '1px solid #e5e7eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        🎲 랜덤
-                      </button>
-                      <a href={ivMeetLink} target="_blank" rel="noopener noreferrer"
-                        style={{ padding: '12px 16px', background: '#111', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                        열기
-                      </a>
                     </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>{currentIdx + 1} / {pool.length} &middot; 허가 없이 누구나 참여 가능한 열린 방</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 10 }}>
+                      회의 엑세스: 항상 열기 &middot; 허가 없이 누구나 참여 가능
+                    </div>
 
-                    {/* Pool management (collapsible) */}
-                    {ivShowPool && (
-                      <div style={{ marginTop: 12, padding: '16px', background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 10 }}>등록된 Meet 링크</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflow: 'auto' }}>
-                          {pool.map((link, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <button onClick={() => setIvMeetLink(link)}
-                                style={{ flex: 1, textAlign: 'left', padding: '8px 12px', background: link === ivMeetLink ? '#111' : '#fff', color: link === ivMeetLink ? '#fff' : '#111', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'ui-monospace, monospace', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {link}
-                              </button>
-                              <button onClick={() => removeLink(i)} disabled={pool.length <= 1} title="삭제"
-                                style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: pool.length <= 1 ? '#d1d5db' : '#ef4444', fontSize: 14, cursor: pool.length <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                &times;
-                              </button>
+                    {/* Pool list — scrollable */}
+                    <div style={{ maxHeight: 240, overflow: 'auto', border: '1.5px solid #e5e7eb', borderRadius: 14, background: '#fafafa' }}>
+                      {pool.map((link, i) => {
+                        const code = getMeetCode(link)
+                        const selected = link === ivMeetLink
+                        return (
+                          <div key={i} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+                            background: selected ? '#e8f4fd' : (i % 2 === 0 ? '#fff' : '#fafafa'),
+                            borderBottom: i < pool.length - 1 ? '1px solid #f0f0f0' : 'none',
+                            cursor: 'pointer',
+                          }} onClick={() => setIvMeetLink(link)}>
+                            {/* Selection indicator */}
+                            <div style={{ width: 22, height: 22, borderRadius: 11, border: selected ? '2px solid #000' : '2px solid #d1d5db', background: selected ? '#000' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {selected && <div style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />}
                             </div>
-                          ))}
-                        </div>
-                        {/* Add new link */}
-                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                          <input value={ivNewLink} onChange={e => setIvNewLink(e.target.value)} placeholder="https://meet.google.com/..."
-                            style={{ flex: 1, padding: '10px 14px', border: '1px solid #d1d5db', borderRadius: 10, fontSize: 14, color: '#111', boxSizing: 'border-box' }}
-                            onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
-                          <button onClick={addLink}
-                            style={{ padding: '10px 18px', background: '#111', color: '#fff', borderRadius: 10, fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            + 추가
-                          </button>
-                        </div>
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>유출 시 해당 링크를 삭제하고 새 링크를 추가하세요</div>
-                      </div>
-                    )}
+                            {/* Room info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: '#000', fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                Room {i + 1}: {code || link}
+                              </div>
+                              <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, marginTop: 2 }}>
+                                엑세스: 항상 열기 &middot; 사진 체크 ON
+                              </div>
+                            </div>
+                            {/* Action buttons */}
+                            <a href={link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                              style={{ padding: '6px 12px', background: '#000', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                              입장
+                            </a>
+                            <a href={getCalendarSettingsUrl(link)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Google Calendar에서 회의 설정 (엑세스 유형/사진 체크)"
+                              style={{ padding: '6px 12px', background: '#f3f4f6', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', border: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                              설정
+                            </a>
+                            <button onClick={e => { e.stopPropagation(); removeLink(i) }} disabled={pool.length <= 1} title="삭제"
+                              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: pool.length <= 1 ? '#d1d5db' : '#ef4444', fontSize: 16, fontWeight: 700, cursor: pool.length <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              &times;
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Add new link */}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                      <input value={ivNewLink} onChange={e => setIvNewLink(e.target.value)} placeholder="https://meet.google.com/새-링크-입력"
+                        style={{ flex: 1, padding: '14px 16px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 16, fontWeight: 600, color: '#000', boxSizing: 'border-box' }}
+                        onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
+                      <button onClick={addLink}
+                        style={{ padding: '14px 24px', background: '#000', color: '#fff', borderRadius: 12, fontSize: 16, fontWeight: 700, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        + 추가
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginTop: 8 }}>
+                      링크 유출 시 삭제 후 새 링크 추가 &middot; 설정 버튼으로 캘린더에서 직접 열기 가능
+                    </div>
                   </div>
 
-                  {/* Notes */}
-                  <div style={{ marginBottom: 24 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>메모 (선택)</label>
+                  {/* ── Notes ── */}
+                  <div style={{ marginBottom: 28 }}>
+                    <label style={{ fontSize: 15, fontWeight: 700, color: '#000', display: 'block', marginBottom: 8 }}>메모 (선택)</label>
                     <textarea value={ivNotes} onChange={e => setIvNotes(e.target.value)} rows={2} placeholder="추가 메모..."
-                      style={{ width: '100%', padding: '14px 16px', border: '1px solid #d1d5db', borderRadius: 12, fontSize: 16, color: '#111', resize: 'vertical', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '16px 18px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 17, fontWeight: 600, color: '#000', resize: 'vertical', boxSizing: 'border-box' }} />
                   </div>
 
-                  {/* Auto send toggle + Email editor */}
-                  <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '14px 18px', background: ivAutoSend ? '#f0f9ff' : '#fafafa', borderRadius: 14, border: ivAutoSend ? '1px solid #bae6fd' : '1px solid #e5e7eb' }}>
+                  {/* ── Auto send + Email editor ── */}
+                  <div style={{ marginBottom: 28 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '16px 20px', background: ivAutoSend ? '#f0f9ff' : '#f8f8f8', borderRadius: 14, border: ivAutoSend ? '1.5px solid #93c5fd' : '1.5px solid #e5e7eb' }}>
                       <input type="checkbox" checked={ivAutoSend} onChange={e => setIvAutoSend(e.target.checked)}
-                        style={{ width: 22, height: 22, accentColor: '#111' }} />
-                      <span style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>후보자에게 이메일 자동 발송</span>
-                      {!ivTarget.email && <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>(이메일 없음)</span>}
+                        style={{ width: 24, height: 24, accentColor: '#000' }} />
+                      <span style={{ fontSize: 17, fontWeight: 700, color: '#000' }}>후보자에게 이메일 자동 발송</span>
+                      {!ivTarget.email && <span style={{ fontSize: 15, color: '#ef4444', fontWeight: 700 }}>(이메일 없음)</span>}
                     </label>
 
-                    {/* Email content editor (visible when auto-send is on) */}
                     {ivAutoSend && ivTarget.email && (
-                      <div style={{ marginTop: 12, padding: '16px 18px', background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 10 }}>발송 이메일 내용</div>
-                        <div style={{ marginBottom: 10 }}>
-                          <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>제목</label>
+                      <div style={{ marginTop: 14, padding: '20px 22px', background: '#f8f8f8', border: '1.5px solid #e5e7eb', borderRadius: 14 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#000', marginBottom: 14 }}>발송 이메일 내용</div>
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 14, color: '#374151', fontWeight: 600, display: 'block', marginBottom: 6 }}>제목</label>
                           <input
                             id="iv-email-subject"
                             defaultValue={defaultSubject}
-                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #d1d5db', borderRadius: 10, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                            style={{ width: '100%', padding: '14px 16px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 17, fontWeight: 600, color: '#000', boxSizing: 'border-box' }} />
                         </div>
                         <div>
-                          <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>본문</label>
+                          <label style={{ fontSize: 14, color: '#374151', fontWeight: 600, display: 'block', marginBottom: 6 }}>본문</label>
                           <textarea
                             id="iv-email-body"
                             defaultValue={defaultBody}
-                            rows={6}
-                            style={{ width: '100%', padding: '12px 14px', border: '1px solid #d1d5db', borderRadius: 10, fontSize: 14, color: '#111', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', lineHeight: 1.6 }} />
+                            rows={7}
+                            style={{ width: '100%', padding: '16px 16px', border: '1.5px solid #d1d5db', borderRadius: 12, fontSize: 16, fontWeight: 600, color: '#000', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', lineHeight: 1.7 }} />
                         </div>
                       </div>
                     )}
@@ -2068,9 +2076,9 @@ export default function BridgeCanvasSheet() {
 
             {/* Footer */}
             {!ivResult && (
-              <div style={{ padding: '16px 28px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <div style={{ padding: '18px 32px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
                 <button onClick={() => setIvModal(false)}
-                  style={{ padding: '14px 28px', background: '#f3f4f6', color: '#374151', borderRadius: 12, fontSize: 16, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                  style={{ padding: '16px 32px', background: '#f3f4f6', color: '#000', borderRadius: 12, fontSize: 17, fontWeight: 700, border: 'none', cursor: 'pointer' }}>
                   취소
                 </button>
                 <button
@@ -2110,8 +2118,8 @@ export default function BridgeCanvasSheet() {
                     }
                   }}
                   style={{
-                    padding: '14px 36px', borderRadius: 12, fontSize: 17, fontWeight: 700, border: 'none', cursor: 'pointer',
-                    background: ivLoading ? '#9ca3af' : '#111', color: '#fff',
+                    padding: '16px 40px', borderRadius: 12, fontSize: 18, fontWeight: 800, border: 'none', cursor: 'pointer',
+                    background: ivLoading ? '#9ca3af' : '#000', color: '#fff',
                     opacity: (!ivDate || !ivTime) ? 0.4 : 1,
                     transition: 'all 0.15s',
                   }}>
