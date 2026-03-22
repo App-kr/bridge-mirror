@@ -4,9 +4,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ─── region code → 한글 매핑 ───────────────────────────
 const REGION_KO = {
-  SE:"서울",BS:"부산",DG:"대구",IC:"인천",GJ:"광주",DJ:"대전",US:"울산",SJ:"세종",
-  GG:"경기",GW:"강원",CB:"충북",CN:"충남",JB:"전북",JN:"전남",KB:"경북",KN:"경남",
-  JJ:"제주",XX:"기타",
+  SE:"서울",SL:"서울",BS:"부산",DG:"대구",IC:"인천",GJ:"광주",DJ:"대전",US:"울산",SJ:"세종",
+  GG:"경기",GW:"강원",CB:"충북",CN:"충남",JB:"전북",JN:"전남",
+  KB:"경북",KN:"경남",GB:"경북",GN:"경남",
+  JJ:"제주",XX:"기타",ETC:"기타",
 };
 // ─── English city → 한글 매핑 ──────────────────────────
 const CITY_EN_KO = {
@@ -81,7 +82,13 @@ function parseMemoPII(memo) {
   r.city = lastCity;
   const titlePat = _TITLES.map(t => t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
   const stop = nameSrc.match(new RegExp("(01[016789][-\\s]?\\d|[A-Za-z0-9._%+-]+@|" + titlePat + ")"));
-  if (stop) { const c = nameSrc.slice(0, stop.index).trim().replace(/[\/,;]+$/, ""); if (c && c.length <= 30) r.name = c; }
+  if (stop) {
+    let c = nameSrc.slice(0, stop.index).trim().replace(/[\/,;!]+$/, "");
+    // "YBM ECC/ 무관하나 성실하고..." → "/" 뒤 5자 이상이면 메모 잡음 → 업체명만 추출
+    const slashM = c.match(/^(.+?)\/\s*(.+)$/);
+    if (slashM && slashM[2].length > 4) c = slashM[1].trim();
+    if (c && c.length <= 30) r.name = c;
+  }
   return r;
 }
 
@@ -119,12 +126,17 @@ function mapJobsV2(r) {
   let name = r.employer_display_name || "";
   let contact = ""; let phone = ""; let email = "";
   let parsedCity = "";
-  const memoText = r.internal_notes || "";
-  let memoForParse = memoText;
+  let memoDisplay = r.internal_notes || "";
+  let memoForParse = memoDisplay;
+  let tailBlock = "";  // rawText 끝 PII 블록
   if (!memoForParse) {
     const raw = r.raw_text || "";
     const tail = raw.match(/\([^)]{10,}\)\s*["'`]*\s*$/) || raw.match(/\(.{10,}$/);
-    if (tail) memoForParse = tail[0];
+    if (tail) {
+      memoForParse = tail[0];
+      tailBlock = tail[0];
+      memoDisplay = tail[0];  // rawText PII → memo로 이동 표시
+    }
   }
   if (memoForParse) {
     const p = parseMemoPII(memoForParse);
@@ -135,6 +147,13 @@ function mapJobsV2(r) {
     parsedCity = p.city;
   }
   if (!cityKo && parsedCity) cityKo = parsedCity;
+  // rawText 정리: PII 블록 제거 + 백틱/따옴표 정리
+  let rawTextClean = cleanRawText(r.raw_text || "");
+  if (tailBlock) {
+    // rawText에서 PII 블록 제거 (본문에 중복 노출 방지)
+    const cleaned = cleanRawText(tailBlock);
+    rawTextClean = rawTextClean.replace(cleaned, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
   // status
   const statusRaw = r.status || "open";
   const status = _STATUS_MAP[statusRaw] || statusRaw;
@@ -157,8 +176,8 @@ function mapJobsV2(r) {
     isNew:       !!r.is_hot,
     confirmed:   !r.is_hot,
     tags:        [],
-    memo:        memoText,
-    rawText:     cleanRawText(r.raw_text || ""),
+    memo:        memoDisplay,
+    rawText:     rawTextClean,
     createdAt:   r.created_at || "",
   };
 }
