@@ -33,6 +33,12 @@
       "short_name": "채용",
       "url": "/jobs",
       "description": "공개 채용 공고"
+    },
+    {
+      "name": "Admin Mobile",
+      "short_name": "Admin",
+      "url": "/admin/m",
+      "description": "Mobile Admin Dashboard"
     }
   ],
   "categories": ["business", "productivity"]

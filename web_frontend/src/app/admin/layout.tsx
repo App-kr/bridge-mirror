@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import AdminSidebar from "@/components/admin/AdminSidebar"
 import AdminAuthModal from "@/components/admin/AdminAuthModal"
 import { useAdminAuth } from "@/hooks/useAdminAuth"
@@ -12,11 +12,24 @@ const DEV_MODE = false
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { authed, login, waking } = useAdminAuth()
   const pathname = usePathname()
+  const router = useRouter()
   const isFullWidth = pathname === '/admin/sheet' || pathname === '/admin/employers'
+  const isMobilePath = pathname?.startsWith('/admin/m')
 
   useEffect(() => {
     document.body.style.filter = ""
   }, [])
+
+  // Auto-redirect mobile devices to /admin/m
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (pathname?.startsWith('/admin/m')) return
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && window.innerWidth < 768
+    const preferDesktop = localStorage.getItem('bridge_prefer_desktop')
+    if (isMobile && !preferDesktop) {
+      router.replace('/admin/m')
+    }
+  }, [pathname, router])
 
   if (!authed) {
     return (
@@ -28,6 +41,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         />
       </div>
     )
+  }
+
+  // Mobile paths: skip desktop sidebar, let mobile layout handle UI
+  if (isMobilePath) {
+    return <>{children}</>
   }
 
   return (

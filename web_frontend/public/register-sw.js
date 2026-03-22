@@ -1,15 +1,21 @@
-/**
- * BRIDGE — Service Worker cleanup
- * 기존 서비스워커를 해제하고 모든 캐시를 삭제합니다.
- * dev 환경에서 캐시 꼬임 방지.
- */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function (regs) {
-    regs.forEach(function (r) { r.unregister(); });
-  });
-  if ('caches' in window) {
-    caches.keys().then(function (keys) {
-      keys.forEach(function (k) { caches.delete(k); });
-    });
-  }
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js')
+      .then(function (reg) {
+        console.log('[SW] registered:', reg.scope)
+        setInterval(function () { reg.update() }, 60 * 60 * 1000)
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing
+          if (!nw) return
+          nw.addEventListener('statechange', function () {
+            if (nw.state === 'activated' && navigator.serviceWorker.controller) {
+              console.log('[SW] New version available')
+            }
+          })
+        })
+      })
+      .catch(function (err) {
+        console.error('[SW] registration failed:', err)
+      })
+  })
 }
