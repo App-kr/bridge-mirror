@@ -136,6 +136,9 @@ function mapJobsV2(r) {
   }
   // PII: 암호화 필드 → memo fallback
   let name = r.employer_display_name || "";
+  // 슬래시 뒤 5자 이상 잡음 제거 (DB 미정리 데이터 방어)
+  const _slashN = name.match(/^(.+?)\/\s*(.+)$/);
+  if (_slashN && _slashN[2].length > 4) name = _slashN[1].trim();
   let contact = ""; let phone = ""; let email = "";
   let parsedCity = "";
   let memoDisplay = r.internal_notes || "";
