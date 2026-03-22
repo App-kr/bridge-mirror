@@ -724,6 +724,17 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
 
   // rawText: 백틱 줄 제거 후 파싱
   const lines=normalizeRawText(item.rawText).split("\n");
+  const[copied,setCopied]=useState(false);
+  // 복사용 텍스트: 지역+본문을 깔끔한 "Key : Value" 한줄 형식으로
+  const copyText=()=>{
+    const loc=item.locationEn||"";
+    const normalized=normalizeRawText(item.rawText);
+    // rawText 첫줄이 이미 도시명이면 locationEn 중복 주입 안 함
+    const firstLine=(normalized.split("\n")[0]||"").trim();
+    const hasLoc=firstLine&&!/^Job\.?\s*\d/.test(firstLine)&&firstLine.length<40&&!/[:\d]{4}/.test(firstLine);
+    const txt=(!hasLoc&&loc?loc+"\n":"")+normalized;
+    navigator.clipboard.writeText(txt).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1500);});
+  };
 
   return(
     <div style={{marginBottom:0,padding:"20px 24px 22px",background:isHighlighted?"#fffde7":"#fff",borderRadius:0,boxShadow:"none",borderBottom:"none",boxShadow:"none",position:"relative",borderLeft:item.blacklist?"4px solid #dc2626":isNewBlink?"4px solid #fecaca":"4px solid #e5e5e5",outline:isHighlighted?"2px solid #fbbf24":"none",outlineOffset:0,animation:isNewBlink?"newBarBlink 1s ease-in-out infinite":undefined}}>
@@ -820,7 +831,8 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
           <div style={{position:"absolute",top:14,right:0,display:"flex",gap:6,alignItems:"center"}}>
 
             {!editRaw
-              ?<SmallBtn onClick={()=>{setTmpRaw(item.rawText);setEditRaw(true);}} color="#2563eb">✏ 본문수정</SmallBtn>
+              ?<><SmallBtn onClick={copyText} color={copied?"#16a34a":"#888"}>{copied?"✓ 복사됨":"📋 복사"}</SmallBtn>
+                <SmallBtn onClick={()=>{setTmpRaw(item.rawText);setEditRaw(true);}} color="#2563eb">✏ 본문수정</SmallBtn></>
               :<>
                 <SmallBtn onClick={()=>{onUpdate(item.jNumber,{rawText:normalizeRawText(tmpRaw)});setEditRaw(false);}} color="#16a34a">저장</SmallBtn>
                 <SmallBtn onClick={()=>setEditRaw(false)}>취소</SmallBtn>
