@@ -28,7 +28,24 @@ const CITY_EN_KO = {
   Gangwon:"강원","Gangwon-do":"강원",Gangwondo:"강원",
   Chungbuk:"충북",Gyeongbuk:"경북",Gyeongsang:"경상",
   "Chungcheongnam-do":"충남",Jeonlado:"전라","Jeju-do":"제주",
+  // 서울 구 단위
+  Gangnam:"강남",Gangbuk:"강북",Gangdong:"강동",Gangseo:"강서",Gwanak:"관악",
+  Gwangjin:"광진",Guro:"구로",Geumcheon:"금천",Nowon:"노원",Dobong:"도봉",
+  Dongdaemun:"동대문",Dongjak:"동작",Mapo:"마포",Seodaemun:"서대문",Seocho:"서초",
+  Seongdong:"성동",Seongbuk:"성북",Songpa:"송파",Yangcheon:"양천",Yeongdeungpo:"영등포",
+  Yongsan:"용산",Eunpyeong:"은평",Jongno:"종로",Jungnang:"중랑",Jamsil:"잠실",
+  Sinchon:"신촌",Hongdae:"홍대",
+  // 부산 구 단위
+  Haeundae:"해운대",Dongnae:"동래",Sajik:"사직",Sasang:"사상",Saha:"사하",
+  Suyeong:"수영",Yeonje:"연제",Geumjeong:"금정",
+  // 인천
+  Songdo:"송도",
+  // 경기 세부
+  Ilsan:"일산",Suji:"수지",Giheung:"기흥",Bundang:"분당",
 };
+// 한글 → 영문 역매핑 (rawText 영문 표시용)
+const CITY_KO_EN = {};
+for (const [en, ko] of Object.entries(CITY_EN_KO)) { if (!CITY_KO_EN[ko]) CITY_KO_EN[ko] = en; }
 const METRO_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종"]);
 // ─── 도시 → 광역시/도 역매핑 (메모 지역 보정용) ────────
 const CITY_REGION = {
@@ -149,6 +166,8 @@ function mapJobsV2(r) {
   const locRaw = r.location || r.city || "";
   const locParts = locRaw ? locRaw.split(/\s+/) : [];
   let cityKo = "";
+  // 영문 location (rawText 첫줄 표시용)
+  let locationEn = locParts.length >= 2 ? locParts[1] : (locParts[0] || "");
   if (locParts.length >= 2) {
     cityKo = CITY_EN_KO[locParts[1]] || locParts[1];
   } else if (locParts.length === 1) {
@@ -186,6 +205,7 @@ function mapJobsV2(r) {
   // 메모에서 파싱된 도시가 있으면 → DB값 무시하고 메모 우선
   if (parsedCity) {
     cityKo = parsedCity;
+    locationEn = CITY_KO_EN[parsedCity] || parsedCity;  // 영문명 갱신
     // 메모 도시에서 region도 보정
     if (METRO_SET.has(parsedCity)) {
       regionKo = parsedCity;
@@ -211,6 +231,7 @@ function mapJobsV2(r) {
     jNumber:     jnum,
     region:      regionKo,
     city:        cityKo,
+    locationEn,
     name,
     email,
     emails:      email ? [email] : [],
@@ -647,20 +668,27 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
 function normalizeRawText(text){
   // 1단계: 줄 앞 백틱·공백 제거
   const lines=text.split("\n").map(line=>line.replace(/^[\s`]+/,"").trimEnd());
-  // 2단계: "Key :\n값" 패턴 → "Key : 값" 으로 병합
+  // 2단계: "Key :\n값" 또는 "Key :\n\n값" 패턴 → "Key : 값" 으로 병합
   const merged=[];
-  let skip=false;
+  let skipTo=-1;
   for(let i=0;i<lines.length;i++){
-    if(skip){skip=false;continue;}
+    if(i<=skipTo)continue;
     const cur=lines[i];
-    const next=lines[i+1]??null;
-    // 현재 줄이 "Something :" 으로 끝나고 (값 없음), 다음 줄이 비어있지 않으면 병합
-    if(/^.+?\s*:\s*$/.test(cur)&&next!==null&&next.trim()!==""){
-      merged.push(cur.trimEnd()+" "+next.trim());
-      skip=true;
-    } else {
-      merged.push(cur);
+    if(/^.+?\s*:\s*$/.test(cur)){
+      // 바로 다음 줄에 값이 있으면 병합
+      const next=lines[i+1]??null;
+      if(next!==null&&next.trim()!==""){
+        merged.push(cur.trimEnd()+" "+next.trim());
+        skipTo=i+1;continue;
+      }
+      // 빈 줄 1개 건너뛰고 값이 있으면 병합
+      const next2=lines[i+2]??null;
+      if(next!==null&&next.trim()===""&&next2!==null&&next2.trim()!==""){
+        merged.push(cur.trimEnd()+" "+next2.trim());
+        skipTo=i+2;continue;
+      }
     }
+    merged.push(cur);
   }
   return merged.join("\n");
 }
@@ -819,23 +847,27 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
             :<div style={{fontSize:`${fontBody}px`,lineHeight:1.9,color:"#111",paddingRight:130}}>
               {(()=>{
                 const merged=[];
-                let skip=false;
+                let skipTo=-1;
                 for(let i=0;i<lines.length;i++){
-                  if(skip){skip=false;continue;}
+                  if(i<=skipTo)continue;
                   const t=lines[i].trim();
                   if(!t){merged.push({type:"empty",key:i});continue;}
                   const kvFull=t.match(/^(.+?)\s*:\s*(.+)$/);
                   if(kvFull){merged.push({type:"kv",key:i,k:kvFull[1],v:kvFull[2]});continue;}
                   const kvEmpty=t.match(/^(.+?)\s*:\s*$/);
-                  if(kvEmpty&&i+1<lines.length){
-                    const nextT=lines[i+1].trim();
-                    if(nextT){merged.push({type:"kv",key:i,k:kvEmpty[1],v:nextT});skip=true;continue;}
+                  if(kvEmpty){
+                    // 바로 다음 줄에 값 있으면 병합
+                    const n1=(lines[i+1]||"").trim();
+                    if(n1){merged.push({type:"kv",key:i,k:kvEmpty[1],v:n1});skipTo=i+1;continue;}
+                    // 빈 줄 1개 건너뛰고 값 있으면 병합
+                    const n2=(lines[i+2]||"").trim();
+                    if(!n1&&n2){merged.push({type:"kv",key:i,k:kvEmpty[1],v:n2});skipTo=i+2;continue;}
                   }
                   merged.push({type:"text",key:i,v:t});
                 }
                 // 지역 첫줄 보장: rawText에 지역/도시 라인이 없으면 item 데이터에서 주입
                 const _hasLoc=(()=>{for(const row of merged){if(row.type==="empty")continue;if(row.type==="kv")return false;if(row.type==="text"){if(!/^Job\.?\s*\d/.test(row.v)&&row.v.length<40&&!/[:\d]{4}/.test(row.v))return true;}};return false;})();
-                if(!_hasLoc&&(item.region||item.city)){merged.unshift({type:"loc",key:"_loc",v:[item.region,item.city].filter(Boolean).join(" ")});}
+                if(!_hasLoc&&item.locationEn){merged.unshift({type:"loc",key:"_loc",v:item.locationEn});}
                 let seenKv=false;
                 return merged.map(row=>{
                   if(row.type==="loc")return <div key={row.key} style={{color:"#1a57c8",fontSize:"1.15rem",fontWeight:700,marginBottom:4,paddingLeft:2}}>{row.v}</div>;

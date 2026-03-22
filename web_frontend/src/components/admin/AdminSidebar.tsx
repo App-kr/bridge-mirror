@@ -65,9 +65,8 @@ const NAV_CATEGORIES: NavCategory[] = [
     title: '메일 관리',
     items: [
       { href: '/admin/inbox', label: '통합 수신함', icon: <Inbox size={ICON_SIZE} /> },
-      { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
-      { href: '/admin/mail-send', label: '메일 발송', icon: <Mail size={ICON_SIZE} /> },
       { href: '/admin/mail-logs', label: '메일 수발신 관리', icon: <MailCheck size={ICON_SIZE} /> },
+      { href: '/admin/mail-send', label: '메일 발송', icon: <Mail size={ICON_SIZE} /> },
     ],
   },
   {
@@ -93,6 +92,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/kakao-setup', label: '카카오 로그인 설정', icon: <KeyRound size={ICON_SIZE} /> },
       { href: '/admin/partners', label: '파트너', icon: <Handshake size={ICON_SIZE} /> },
       { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
+      { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
       { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
     ],
   },
