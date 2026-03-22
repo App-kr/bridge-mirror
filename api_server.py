@@ -1045,11 +1045,24 @@ async def inquiry(request: Request, body: ClientInquiry):
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
-            cols = ", ".join(payload.keys())
-            placeholders = ", ".join("?" * len(payload))
+            # DB 실제 컬럼만 INSERT, 나머지는 parsed_data JSON에 보관
+            db_cols = {r[1] for r in conn.execute("PRAGMA table_info(client_inquiries)").fetchall()}
+            insert_payload = {}
+            extra_fields = {}
+            for k, v in payload.items():
+                if k in db_cols:
+                    insert_payload[k] = v
+                else:
+                    extra_fields[k] = v
+            if extra_fields:
+                import json as _json_inq
+                insert_payload["parsed_data"] = _json_inq.dumps(extra_fields, ensure_ascii=False)
+
+            cols = ", ".join(insert_payload.keys())
+            placeholders = ", ".join("?" * len(insert_payload))
             cur = conn.execute(
                 f"INSERT INTO client_inquiries ({cols}) VALUES ({placeholders})",
-                list(payload.values()),
+                list(insert_payload.values()),
             )
             conn.commit()
             new_id = cur.lastrowid
@@ -5188,17 +5201,48 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             loc = inq["location"] or ""
             city = loc.split(",")[0].split(" ")[0].strip() if loc else ""
 
+            # memo / contact 정보를 internal_notes에 보관 (employers 페이지 PII 파싱용)
+            memo_raw = inq["memo"] or ""
+            parsed_data_json = inq["parsed_data"] or ""
+            # parsed_data에 저장된 추가 필드 복원
+            extra = {}
+            if parsed_data_json:
+                try:
+                    import json as _json_aj
+                    extra = _json_aj.loads(parsed_data_json)
+                except Exception:
+                    pass
+            contact_name = extra.get("contact_name") or ""
+            phone_val = inq["phone"] or ""
+            email_val = inq["email"] or ""
+            school_loc = extra.get("school_location") or ""
+            internal_notes = memo_raw
+            if not internal_notes and (contact_name or school_loc):
+                internal_notes = f"{school_name} / {contact_name} / {phone_val} / {email_val} / {school_loc}"
+            # raw_text: 전체 inquiry 요약
+            raw_parts = [f"School: {school_name}", f"Location: {loc}"]
+            if inq["start_date"]:  raw_parts.append(f"Starting Date : {inq['start_date']}")
+            if inq["teaching_age"]: raw_parts.append(f"Teaching Age : {inq['teaching_age']}")
+            if salary_raw:         raw_parts.append(f"Salary : {salary_raw}")
+            if wh:                 raw_parts.append(f"Working Hours : {wh}")
+            housing_val = inq["housing_detail"] or inq["housing_type"] or ""
+            if housing_val:        raw_parts.append(f"Housing : {housing_val}")
+            if inq["benefits"]:    raw_parts.append(f"Benefits : {inq['benefits']}")
+            raw_text = "\n".join(raw_parts)
+
             # job_code: INSERT 후 lastrowid로 생성 (race condition 방지)
             cur = conn.execute(
                 """INSERT INTO jobs (seq, location, city, start_date, teaching_age,
                    working_hours, daily_hours, salary_min, salary_max, salary_raw,
-                   vacation, housing, benefits, status, is_hot, is_deleted, created_at)
-                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 0, 0, ?)""",
+                   vacation, housing, benefits, status, is_hot, is_deleted, created_at,
+                   internal_notes, raw_text, employer_display_name)
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 1, 0, ?, ?, ?, ?)""",
                 (
                     loc, city, inq["start_date"], inq["teaching_age"],
                     wh, daily_hours, salary_min, salary_max, salary_raw,
-                    inq["vacation"], inq["housing_detail"] or inq["housing_type"],
+                    inq["vacation"], housing_val,
                     inq["benefits"], datetime.now(timezone.utc).isoformat(),
+                    internal_notes, raw_text, school_name,
                 ),
             )
             new_row_id = cur.lastrowid
