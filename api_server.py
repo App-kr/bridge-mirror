@@ -2479,6 +2479,32 @@ except Exception:
     pass
 
 
+def _ensure_candidates_extra_cols():
+    """candidates 테이블에 stage/mail_tags/korea_experience 컬럼 추가 (없으면)."""
+    _cols = [
+        ("stage", "TEXT", "'none'"),
+        ("mail_tags", "TEXT", "''"),
+        ("korea_experience", "TEXT", "''"),
+    ]
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        for col_name, col_type, default in _cols:
+            try:
+                conn.execute(f"ALTER TABLE candidates ADD COLUMN {col_name} {col_type} DEFAULT {default}")
+            except Exception:
+                pass  # already exists
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+try:
+    _ensure_candidates_extra_cols()
+except Exception:
+    pass
+
+
 def _build_profile_card_v2(c: dict) -> str:
     """실사례(02.JPG, 03.JPG) 기준 프로필 카드. 기존 _build_profile_card() 건드리지 않음."""
     num = c.get("sheet_number") or c.get("candidate_id", "")
@@ -4030,14 +4056,17 @@ except Exception as _e:
 
 
 class InterviewCreate(BaseModel):
-    candidate_name:  str = Field("", max_length=200)
-    candidate_email: str = Field("", max_length=200)
-    employer_name:   str = Field("", max_length=200)
-    employer_email:  str = Field("", max_length=200)
-    interview_date:  str = Field(..., min_length=8, max_length=20)
-    interview_time:  str = Field(..., min_length=3, max_length=20)
-    meet_link:       str = Field(..., min_length=5, max_length=500)
-    notes:           str = Field("", max_length=2000)
+    candidate_name:    str = Field("", max_length=200)
+    candidate_email:   str = Field("", max_length=200)
+    candidate_id:      str = Field("", max_length=50)
+    employer_name:     str = Field("", max_length=200)
+    employer_email:    str = Field("", max_length=200)
+    interview_date:    str = Field(..., min_length=8, max_length=20)
+    interview_time:    str = Field(..., min_length=3, max_length=20)
+    meet_link:         str = Field(..., min_length=5, max_length=500)
+    notes:             str = Field("", max_length=2000)
+    duration_minutes:  int = Field(20, ge=10, le=240)
+    auto_send_email:   bool = Field(False)
 
 
 @app.get("/api/admin/interviews", tags=["admin"])
@@ -4062,27 +4091,51 @@ async def admin_list_interviews(request: Request, status: Optional[str] = None):
 
 @app.post("/api/admin/interviews", status_code=201, tags=["admin"])
 async def admin_create_interview(body: InterviewCreate, request: Request):
-    """인터뷰 생성 (이메일은 별도 엔드포인트로 발송)."""
+    """인터뷰 생성. auto_send_email=true면 후보자에게 자동 발송."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
+    email_result = None
     try:
         cur = conn.execute(
             """INSERT INTO interviews
-               (candidate_name, candidate_email, employer_name, employer_email,
-                interview_date, interview_time, meet_link, notes)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (body.candidate_name, body.candidate_email,
+               (candidate_name, candidate_email, candidate_id, employer_name, employer_email,
+                interview_date, interview_time, meet_link, notes, duration_minutes)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (body.candidate_name, body.candidate_email, body.candidate_id,
              body.employer_name, body.employer_email,
              body.interview_date, body.interview_time,
-             body.meet_link, body.notes),
+             body.meet_link, body.notes, body.duration_minutes),
         )
         interview_id = cur.lastrowid
         conn.commit()
+
+        # auto-send email to candidate if requested
+        if body.auto_send_email and body.candidate_email:
+            try:
+                iv = conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
+                if iv:
+                    conn.row_factory = sqlite3.Row
+                    iv = conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
+                    subject, html, to_email = _render_interview_email(dict(iv), "candidate")
+                    if to_email:
+                        sent = _smtp_send(to_email, subject, html)
+                        if sent:
+                            conn.execute(
+                                "UPDATE interviews SET email_sent_candidate=1, candidate_email_sent=1, candidate_email_sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                                (interview_id,),
+                            )
+                            conn.commit()
+                            email_result = {"sent_to": to_email, "status": "sent"}
+                        else:
+                            email_result = {"status": "smtp_failed"}
+            except Exception as _e:
+                logging.getLogger("bridge.api").warning("auto-send email failed for interview #%d: %s", interview_id, _e)
+                email_result = {"status": "error", "detail": str(_e)}
     finally:
         conn.close()
     return ok(
-        data={"id": interview_id},
+        data={"id": interview_id, "email_result": email_result},
         message=f"Interview #{interview_id} created",
     )
 
@@ -4200,29 +4253,51 @@ async def admin_send_interview_email(interview_id: int, body: InterviewSendEmail
 
 
 class InterviewStatusUpdate(BaseModel):
-    status: str = Field(..., min_length=1, max_length=20)
+    status:           Optional[str] = Field(None, min_length=1, max_length=20)
+    interview_date:   Optional[str] = Field(None, min_length=8, max_length=20)
+    interview_time:   Optional[str] = Field(None, min_length=3, max_length=20)
+    duration_minutes: Optional[int] = Field(None, ge=10, le=240)
+    notes:            Optional[str] = Field(None, max_length=2000)
+    candidate_name:   Optional[str] = Field(None, max_length=200)
+    candidate_email:  Optional[str] = Field(None, max_length=200)
+    employer_name:    Optional[str] = Field(None, max_length=200)
+    employer_email:   Optional[str] = Field(None, max_length=200)
+    meet_link:        Optional[str] = Field(None, max_length=500)
 
 
 @app.patch("/api/admin/interviews/{interview_id}", tags=["admin"])
 async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate, request: Request):
-    """인터뷰 상태 변경."""
+    """인터뷰 수정 — 상태/날짜/시간/메모 등 부분 업데이트."""
     _check_admin(request)
-    valid = {"scheduled", "completed", "cancelled", "no_show"}
-    if body.status not in valid:
-        raise HTTPException(400, f"Invalid status. Must be one of: {valid}")
+    valid_statuses = {"scheduled", "completed", "cancelled", "no_show"}
+    if body.status and body.status not in valid_statuses:
+        raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     r = conn.execute("SELECT id FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
     if not r:
         conn.close()
         raise HTTPException(404, "Interview not found")
-    conn.execute(
-        "UPDATE interviews SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (body.status, interview_id),
-    )
+
+    updates = []
+    params = []
+    for field in ("status", "interview_date", "interview_time", "duration_minutes",
+                  "notes", "candidate_name", "candidate_email", "employer_name",
+                  "employer_email", "meet_link"):
+        val = getattr(body, field, None)
+        if val is not None:
+            updates.append(f"{field}=?")
+            params.append(val)
+    if not updates:
+        conn.close()
+        raise HTTPException(400, "No fields to update")
+    updates.append("updated_at=CURRENT_TIMESTAMP")
+    params.append(interview_id)
+    conn.execute(f"UPDATE interviews SET {', '.join(updates)} WHERE id=?", params)
     conn.commit()
     conn.close()
-    return ok(message=f"Interview #{interview_id} → {body.status}")
+    changed = [f for f in ("status", "interview_date", "interview_time") if getattr(body, f, None)]
+    return ok(message=f"Interview #{interview_id} updated ({', '.join(changed) or 'fields'})")
 
 
 @app.delete("/api/admin/interviews/{interview_id}", tags=["admin"])
