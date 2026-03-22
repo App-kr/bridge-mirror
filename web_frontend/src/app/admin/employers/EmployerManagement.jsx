@@ -41,6 +41,11 @@ const _LOCATIONS = [
   "부천","광명","시흥","안산","군포","의왕","평택","파주",
   "김포","양주","구미","포항","경산","창원","청주","천안",
   "아산","전주","순천","여수","목포","서귀포",
+  "강동","강서","강북","성동","성북","서초","송파","노원",
+  "도봉","동대문","동작","관악","광진","금천","은평","영등포",
+  "용산","서대문","중랑","양천","남양주","하남","이천","오산",
+  "구리","김해","진주","양산","거제","통영","사상","사하",
+  "수영","연제","금정","북구","남구","동구","중구","서구",
 ];
 const _REGION_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종",
   "경기","강원","충북","충남","전북","전남","경북","경남","제주"]);
@@ -806,14 +811,19 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
                   }
                   merged.push({type:"text",key:i,v:t});
                 }
+                let seenKv=false;
                 return merged.map(row=>{
                   if(row.type==="empty")return <div key={row.key} style={{height:4}}/>;
-                  if(row.type==="kv")return(
+                  if(row.type==="kv"){seenKv=true;return(
                     <div key={row.key} style={{display:"flex",gap:6,marginBottom:2}}>
                       <span style={{color:"#444",fontWeight:700,minWidth:280,flexShrink:0,fontSize:`${fontBody}px`}}>{row.k} :</span>
                       <span style={{fontWeight:400,color:"#111",fontSize:`${fontBody}px`}}>{row.v}</span>
                     </div>
-                  );
+                  );}
+                  // 도시명/Job번호 → 크게 표시
+                  const isJob=/^Job\.?\s*\d/.test(row.v);
+                  const isCity=!seenKv&&!isJob&&row.v.length<40&&!/[:\d]{4}/.test(row.v);
+                  if(isJob||isCity)return <div key={row.key} style={{color:"#333",fontSize:"1.15rem",fontWeight:700,marginBottom:4,paddingLeft:2}}>{row.v}</div>;
                   return <div key={row.key} style={{color:"#111",fontSize:`${fontBody}px`,marginBottom:2,paddingLeft:2}}>{row.v}</div>;
                 });
               })()}
