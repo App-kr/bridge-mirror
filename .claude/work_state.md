@@ -11,6 +11,20 @@
 ## 현재 진행 중인 작업
 없음
 
+## 2026-03-23 세션 6 완료 (Employer 본문 정리 + 사이드바 + 복사)
+- fix(employers): rawText 지역 첫줄 자동 주입 (`a4cdca4`)
+- fix(sidebar): 업체관리→인력관리, 문의→메일관리 이동 (`694bc36`)
+- fix(employers): 영문 지역(Gwangmyeong) + 빈줄 kv 병합 (`118da47`)
+  - CITY_KO_EN 역매핑 생성 (한글→영문 변환)
+  - CITY_EN_KO에 서울구/부산구/경기세부 영문명 40+ 추가
+  - normalizeRawText: "Key :\n\nValue" 빈줄 1개 건너뛴 병합
+  - mapJobsV2: locationEn 필드 추가 (메모 도시→영문 자동 변환)
+- fix(employers): rawText kv flex→inline 전환 (`956acbf`)
+- feat(employers): 📋 복사 버튼 (`06ca5a7`)
+  - navigator.clipboard.writeText() — 정확한 Key:Value 형식 복사
+  - 지역명(locationEn) 첫줄 자동 삽입 (중복 방지)
+  - 복사 완료 피드백 "✓ 복사됨" 1.5초
+
 ## 2026-03-23 세션 5 완료 (문서 프로세서 도구)
 - feat(tools): doc_processor.py v1.0 — 이력서/커버레터 PII 삭제 + 강사번호 입력
   - DOCX/PDF 지원 (PDF→텍스트 추출)
