@@ -55,8 +55,7 @@ export default function AdminBoardsPage() {
       const res = await fetch(`${API}/api/admin/boards`, { headers: headers() })
       const json = await res.json()
       if (res.status === 403) {
-        const errBody = await res.json().catch(() => ({}))
-        if (errBody.error?.includes?.('Access denied')) {
+        if (json.error?.includes?.('Access denied')) {
           setError('일시적으로 차단되었습니다. 자동 재시도 중...')
           const k = localStorage.getItem('bridge_admin_key') || ''
           await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})

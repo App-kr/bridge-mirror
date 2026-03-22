@@ -196,7 +196,7 @@ export default function JobDetailModal({
             <h2 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>
               {job.location || 'Korea'}
             </h2>
-            <span style={{ fontSize: 14, color: '#9ca3af', fontWeight: 300, letterSpacing: '-0.02em' }}>
+            <span style={{ fontSize: 15, color: '#6b7280', fontWeight: 600, letterSpacing: '-0.02em' }}>
               {job.job_id}
             </span>
           </div>
@@ -251,16 +251,16 @@ export default function JobDetailModal({
           {benefits.length > 0 && (
             <>
               <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
                 Benefits
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                 {benefits.map((b, i) => (
                   <div
                     key={i}
-                    style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
+                    style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
                   >
-                    <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }}>✓</span>
+                    <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2, fontSize: 15 }}>✓</span>
                     <span>{b}</span>
                   </div>
                 ))}

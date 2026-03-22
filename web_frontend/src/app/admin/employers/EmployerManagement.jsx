@@ -669,20 +669,8 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
       {item.blacklist&&<div style={{position:"absolute",inset:0,background:"rgba(220,38,38,0.05)",pointerEvents:"none"}}/>}
       {isNewBlink&&<button onClick={()=>onConfirm(item.jNumber)} style={{position:"absolute",top:10,right:10,background:"#fee2e2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:6,padding:"6px 16px",fontSize:"0.82rem",fontWeight:700,cursor:"pointer",animation:"blink 1s step-end infinite",zIndex:2}}>★ NEW — 확인</button>}
 
-      {/* 헤더: 번호 + 지역 + 이름 + 컨트롤 버튼 */}
+      {/* 헤더: 태그 + 컨트롤 버튼 (번호·업체명은 INFO에서 표시) */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
-        {editHeader
-          ?<>
-            <span style={{fontSize:"0.72rem",color:"#aaa",fontFamily:"monospace",cursor:"pointer"}} onClick={()=>setEditHeader(false)} title="번호 편집 (클릭 취소)">#{tmpJNumber}</span>
-            <input value={tmpName} onChange={e=>setTmpName(e.target.value)} style={{fontSize:"1rem",fontWeight:600,padding:"3px 8px",border:"2px solid #2563eb",borderRadius:6,outline:"none",minWidth:160}} autoFocus onKeyDown={e=>{if(e.key==="Enter"){onUpdate(item.jNumber,{jNumber:tmpJNumber,name:tmpName,rawText:item.rawText.replace(/Job\.\s*\S+/,`Job. ${tmpJNumber}`)});setEditHeader(false);}if(e.key==="Escape")setEditHeader(false);}}/>
-            <button onClick={()=>{onUpdate(item.jNumber,{jNumber:tmpJNumber,name:tmpName,rawText:item.rawText.replace(/Job\.\s*\S+/,`Job. ${tmpJNumber}`)});setEditHeader(false);}} style={{padding:"3px 10px",borderRadius:4,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.78rem",fontWeight:700,cursor:"pointer"}}>저장</button>
-            <button onClick={()=>setEditHeader(false)} style={{padding:"3px 8px",borderRadius:4,border:"1px solid #ccc",background:"#fff",fontSize:"0.78rem",color:"#888",cursor:"pointer"}}>취소</button>
-          </>
-          :<>
-            <span style={{fontSize:"1rem",color:"#2563eb",fontFamily:"monospace",fontWeight:700,userSelect:"none",background:"#eff6ff",padding:"2px 8px",borderRadius:5}}>{item.jNumber}</span>
-            <span onDoubleClick={()=>{setTmpJNumber(item.jNumber);setTmpName(item.name);setEditHeader(true);}} title="더블클릭으로 업체명 편집" style={{fontSize:"1rem",color:"#111",fontWeight:500,cursor:"text"}}>{item.name}</span>
-          </>
-        }
         {tags.map((tag,ti)=>{
           const bg=tag==="비추천"?"#fee2e2":tag==="분위기"?"#d1fae5":tag==="급여"?"#fef3c7":tag==="짧은"?"#ede9fe":"#dbeafe";
           const col=tag==="비추천"?"#dc2626":tag==="분위기"?"#16a34a":tag==="급여"?"#92400e":tag==="짧은"?"#7c3aed":"#2563eb";
@@ -732,7 +720,7 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
           </div>
           {editInfo
             ?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
-              {[["업체명","name"],["담당자","contact"],["이메일","email"],["전화","phone"]].map(([lbl,k])=>(
+              {[["업체명","name"],["담당자","contact"],["전화","phone"],["이메일","email"]].map(([lbl,k])=>(
                 <div key={k} style={{display:"flex",gap:6,alignItems:"center"}}>
                   <span style={{color:"#555",fontWeight:600,minWidth:46,fontSize:"0.8rem"}}>{lbl}</span>
                   <input value={tmpInfo[k]} onChange={e=>setTmpInfo(p=>({...p,[k]:e.target.value}))} style={{flex:1,padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:"0.82rem",outline:"none"}}/>
@@ -740,10 +728,10 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
               ))}
             </div>
             :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 24px"}}>
-              {item.name&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:46,fontSize:`${fontInfo}px`}}>업체명</span><span style={{fontSize:`${fontInfo}px`}}>{item.name}</span></div>}
-              {item.email&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:46,fontSize:`${fontInfo}px`}}>이메일</span><span onClick={()=>onMailTo&&onMailTo(item)} style={{fontSize:`${fontInfo}px`,color:"#2563eb",cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{item.email}</span></div>}
-              {item.contact&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:46,fontSize:`${fontInfo}px`}}>담당자</span><span style={{fontSize:`${fontInfo}px`}}>{item.contact}</span></div>}
-              {item.phone&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:46,fontSize:`${fontInfo}px`}}>전화</span><span style={{fontSize:`${fontInfo}px`}}>{item.phone}</span></div>}
+              {(item.region||item.city)&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:62,fontSize:`${fontInfo}px`}}>지역</span><span style={{fontSize:`${fontInfo}px`}}>{[item.region,item.city].filter(Boolean).join(" ")}</span></div>}
+              {item.name&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:62,fontSize:`${fontInfo}px`}}>업체명</span><span style={{fontSize:`${fontInfo}px`}}>{item.name}</span></div>}
+              {(item.contact||item.phone)&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:62,fontSize:`${fontInfo}px`}}>직책/연락처</span><span style={{fontSize:`${fontInfo}px`}}>{[item.contact,item.phone].filter(Boolean).join("  ")}</span></div>}
+              {item.email&&<div style={{display:"flex",gap:8}}><span style={{color:"#555",fontWeight:600,minWidth:62,fontSize:`${fontInfo}px`}}>이메일</span><span onClick={()=>onMailTo&&onMailTo(item)} style={{fontSize:`${fontInfo}px`,color:"#2563eb",cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>{item.email}</span></div>}
             </div>
           }
         </div>

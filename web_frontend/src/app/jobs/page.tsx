@@ -194,8 +194,14 @@ export default function JobsPage() {
     return jobs
   }, [allJobs, hotOnly, ageFilter, search, hotSet])
 
-  // Sort by salary desc, then HOT interleave
+  // Sort by salary desc, then HOT interleave (admin shuffle bypasses sort)
   const interleaved = useMemo(() => {
+    if (shuffleSeed !== null) {
+      // Admin shuffle: skip salary sort, just interleave HOT
+      const regular = filtered.filter((j) => !hotSet.has(j.job_id))
+      const hot = filtered.filter((j) => hotSet.has(j.job_id))
+      return interleaveHot(regular, hot)
+    }
     const bySalary = (a: PublicJob, b: PublicJob) => {
       const aEmpty = !a.raw_text ? 1 : 0
       const bEmpty = !b.raw_text ? 1 : 0
@@ -205,7 +211,7 @@ export default function JobsPage() {
     const regular = filtered.filter((j) => !hotSet.has(j.job_id)).sort(bySalary)
     const hot = filtered.filter((j) => hotSet.has(j.job_id)).sort(bySalary)
     return interleaveHot(regular, hot)
-  }, [filtered, hotSet])
+  }, [filtered, hotSet, shuffleSeed])
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(interleaved.length / PER_PAGE))

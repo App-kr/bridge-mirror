@@ -51,7 +51,7 @@ export default function JobCard({
             </span>
           )}
         </div>
-        <span style={{ fontSize: 22, fontWeight: 300, color: '#9ca3af', letterSpacing: '-0.02em' }}>
+        <span style={{ fontSize: 22, fontWeight: 600, color: '#6b7280', letterSpacing: '-0.02em' }}>
           {job.job_id}
         </span>
       </div>

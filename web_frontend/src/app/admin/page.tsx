@@ -66,6 +66,21 @@ const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
 
 const API = API_URL
 const SEEN_POSTS_KEY = 'bridge_admin_seen_posts'
+const SEEN_NEW_KEY = 'bridge_admin_seen_new'
+
+function getSeenNew(): Record<string, number> {
+  try {
+    const stored = localStorage.getItem(SEEN_NEW_KEY)
+    if (stored) return JSON.parse(stored)
+  } catch { /* empty */ }
+  return {}
+}
+
+function markNewSeen(key: string, count: number) {
+  const seen = getSeenNew()
+  seen[key] = count
+  localStorage.setItem(SEEN_NEW_KEY, JSON.stringify(seen))
+}
 
 interface DashboardStats {
   candidates?: number
@@ -181,6 +196,7 @@ export default function AdminDashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [analyticsDays, setAnalyticsDays] = useState(30)
   const [kakaoUrl, setKakaoUrl] = useState<string>('')
+  const [seenNew, setSeenNew] = useState<Record<string, number>>({})
 
   useEffect(() => {
     fetch(`${API}/api/settings`)
@@ -191,6 +207,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     setSeenPosts(getSeenPosts())
+    setSeenNew(getSeenNew())
   }, [])
 
   const fetchAll = useCallback(async () => {
@@ -253,14 +270,24 @@ export default function AdminDashboardPage() {
   const deltaSign = thisMonthDelta > lastMonthDelta ? '+' : ''
   const deltaValue = thisMonthDelta - lastMonthDelta
 
+  const newCandidates = inboxStats.new_candidates ?? 0
+  const newInquiries = inboxStats.this_month_inquiries ?? 0
+  const unseenCandidates = Math.max(0, newCandidates - (seenNew.candidates ?? 0))
+  const unseenInquiries = Math.max(0, newInquiries - (seenNew.inquiries ?? 0))
+
+  const handleConfirmNew = (key: string, count: number) => {
+    markNewSeen(key, count)
+    setSeenNew(getSeenNew())
+  }
+
   const statCards = [
-    { label: '총 지원', value: inboxStats.total_candidates ?? 0, trend: thisMonthDelta, trendLabel: '이번달' },
+    { label: '총 지원', value: inboxStats.total_candidates ?? 0, trend: thisMonthDelta, trendLabel: '이번달', newCount: unseenCandidates, newKey: 'candidates', newTotal: newCandidates },
     { label: '신규 미처리', value: inboxStats.new_candidates ?? 0, trend: 0, trendLabel: '' },
     { label: '이번달 유입', value: thisMonthDelta, trend: deltaValue, trendLabel: '전월 대비' },
-    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, trend: inboxStats.this_month_inquiries ?? 0, trendLabel: '이번달' },
+    { label: '구인 문의', value: inboxStats.total_inquiries ?? 0, trend: inboxStats.this_month_inquiries ?? 0, trendLabel: '이번달', newCount: unseenInquiries, newKey: 'inquiries', newTotal: newInquiries },
     { label: '활성 구인', value: inboxStats.active_jobs ?? 0, trend: 0, trendLabel: '' },
     { label: '커뮤니티', value: inboxStats.community_posts ?? 0, trend: 0, trendLabel: '' },
-  ]
+  ] as Array<{ label: string; value: number; trend: number; trendLabel: string; newCount?: number; newKey?: string; newTotal?: number }>
 
   const recentPosts = activity.filter(a => a.type === 'post')
   const visiblePosts = recentPosts.slice(0, showCount)
@@ -308,23 +335,16 @@ export default function AdminDashboardPage() {
 
       {/* 빠른 실행 */}
       <div className="flex flex-wrap gap-2">
-        <Link
-          href="/admin/settings"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-[#0071e3] shadow-sm hover:bg-[#0077ED] active:scale-[0.98] transition-all"
-        >
-          <span className="text-[14px] leading-none">⚙️</span>
-          관리자로 메인가기
-        </Link>
         <button
           type="button"
           onClick={() => {
             document.cookie = 'bridge_edit_mode=true; path=/; max-age=7200'
             window.open('/', '_blank')
           }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-[#dc2626] bg-red-50 border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-[#0071e3] shadow-sm hover:bg-[#0077ED] active:scale-[0.98] transition-all"
         >
-          <span className="text-[14px] leading-none">✏️</span>
-          메인바로가기
+          <span className="text-[14px] leading-none">⚙️</span>
+          관리자로 메인가기
         </button>
         <a
           href="https://business.kakao.com/_tBxhxkK/chats"
@@ -334,7 +354,7 @@ export default function AdminDashboardPage() {
           style={{ background: '#FEE500' }}
         >
           <span className="text-[16px] leading-none">💬</span>
-          카카오 채널바로가기
+          카카오채널 가기
           <span className="text-[11px] opacity-50 ml-1">↗</span>
         </a>
         <a
@@ -344,7 +364,7 @@ export default function AdminDashboardPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-[#424245] bg-white border border-[#e5e5e7] hover:bg-[#f5f5f7] transition-colors shadow-sm"
         >
           <span className="text-[14px] leading-none">🌐</span>
-          사이트 바로가기
+          홈페이지
           <span className="text-[11px] opacity-40 ml-1">↗</span>
         </a>
       </div>
@@ -465,18 +485,35 @@ export default function AdminDashboardPage() {
 
           {/* ── 통계 카드 6개 (애니메이션) ────────────────────── */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {statCards.map((c, i) => (
-              <div key={c.label}
-                className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4 anim-card-in hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
-                style={{ animationDelay: `${i * 80}ms` }}>
-                <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">
-                  <CountUp value={c.value} />
+            {statCards.map((c, i) => {
+              const hasNew = (c.newCount ?? 0) > 0
+              return (
+                <div key={c.label}
+                  className="bg-white rounded-2xl border border-[#e5e5e7] px-4 py-4 anim-card-in hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                  style={{ animationDelay: `${i * 80}ms` }}>
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-2xl font-bold text-[#1d1d1f] tabular-nums">
+                      <CountUp value={c.value} />
+                    </div>
+                    {hasNew && (
+                      <button
+                        type="button"
+                        onClick={() => c.newKey && handleConfirmNew(c.newKey, c.newTotal ?? 0)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold tabular-nums cursor-pointer border-0 anim-pulse-blue"
+                        style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}
+                        title="클릭하여 확인"
+                      >
+                        <span className="text-[10px]">N</span>
+                        <span>+{c.newCount}</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="text-[12px] text-[#86868b] mt-1 font-medium">{c.label}</div>
+                  {c.trend !== 0 && c.trendLabel && <TrendBadge value={c.trend} label={c.trendLabel} />}
+                  {c.trend === 0 && c.trendLabel && <span className="text-[10px] text-[#aeaeb2] mt-0.5 block">{c.trendLabel}</span>}
                 </div>
-                <div className="text-[12px] text-[#86868b] mt-1 font-medium">{c.label}</div>
-                {c.trend !== 0 && c.trendLabel && <TrendBadge value={c.trend} label={c.trendLabel} />}
-                {c.trend === 0 && c.trendLabel && <span className="text-[10px] text-[#aeaeb2] mt-0.5 block">{c.trendLabel}</span>}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* ── 차트 2개 ─────────────────────────────────────── */}

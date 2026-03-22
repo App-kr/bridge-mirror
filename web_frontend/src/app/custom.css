@@ -550,6 +550,15 @@ a.nav-cta[href="/inquiry"]:hover {
   font-size: 13px;
 }
 
+/* ── New badge pulse (light blue) ── */
+@keyframes pulseBlue {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.anim-pulse-blue {
+  animation: pulseBlue 1.5s ease-in-out infinite;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    10. HERO BRIDGE ANIMATION — light sweep reveal
    ═══════════════════════════════════════════════════════════════════════════ */

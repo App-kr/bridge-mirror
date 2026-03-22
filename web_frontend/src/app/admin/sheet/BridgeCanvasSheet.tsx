@@ -996,15 +996,14 @@ export default function BridgeCanvasSheet() {
         u[k] = prev[k].filter(r => !cidsToDelete.has(String(r._cid ?? '')))
       return u
     })
-    // Soft-delete to server (is_deleted=1)
+    // Soft-delete via DELETE endpoint (sets status='Deleted')
     let failCount = 0
     for (const cid of cidsToDelete) {
       if (!cid) continue
       try {
         const res = await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
-          method: 'PATCH',
-          headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_deleted: 1 }),
+          method: 'DELETE',
+          headers: hdrsRef.current(),
         })
         if (!res.ok) failCount++
       } catch { failCount++ }

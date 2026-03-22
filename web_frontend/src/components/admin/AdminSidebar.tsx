@@ -24,6 +24,10 @@ import {
   HelpCircle,
   LogOut,
   KeyRound,
+  Briefcase,
+  Inbox,
+  Layers,
+  LayoutList,
 } from 'lucide-react'
 
 interface NavItem {
@@ -52,6 +56,9 @@ const NAV_CATEGORIES: NavCategory[] = [
     items: [
       { href: '/admin/sheet', label: '원어민 관리', icon: <Table2 size={ICON_SIZE} /> },
       { href: '/admin/employers', label: '구인자 관리', icon: <Building2 size={ICON_SIZE} /> },
+      { href: '/admin/jobs', label: '채용공고', icon: <Briefcase size={ICON_SIZE} /> },
+      { href: '/admin/inbox', label: '통합 수신함', icon: <Inbox size={ICON_SIZE} /> },
+      { href: '/admin/applications', label: '업체 관리', icon: <Layers size={ICON_SIZE} /> },
       { href: '/admin/interviews', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
       { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
     ],
@@ -60,7 +67,6 @@ const NAV_CATEGORIES: NavCategory[] = [
     title: '메일 관리',
     items: [
       { href: '/admin/mail-send', label: '메일 발송', icon: <Mail size={ICON_SIZE} /> },
-      { href: '/admin/email-templates', label: '이메일 템플릿', icon: <FileText size={ICON_SIZE} /> },
       { href: '/admin/mail-logs', label: '메일 수발신 관리', icon: <MailCheck size={ICON_SIZE} /> },
     ],
   },
@@ -68,6 +74,7 @@ const NAV_CATEGORIES: NavCategory[] = [
     title: '게시판 관리',
     items: [
       { href: '/admin/posts', label: '전체 게시물', icon: <FileText size={ICON_SIZE} /> },
+      { href: '/admin/boards', label: '게시판 설정', icon: <LayoutList size={ICON_SIZE} /> },
       { href: '/admin/faq', label: 'FAQ 관리', icon: <HelpCircle size={ICON_SIZE} /> },
       { href: '/admin/guide-links', label: '링크 관리', icon: <Link2 size={ICON_SIZE} /> },
     ],
