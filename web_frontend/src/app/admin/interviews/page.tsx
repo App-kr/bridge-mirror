@@ -12,7 +12,43 @@ import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
 
 const API = API_URL
-const FIXED_MEET_LINK = 'https://meet.google.com/kmt-ydhj-fmf'
+
+/* ── Google Meet Room Pool (5개 고정 열린방) ── */
+const DEFAULT_MEET_POOL = [
+  'https://meet.google.com/kmt-ydhj-fmf',
+  'https://meet.google.com/abc-defg-hij',
+  'https://meet.google.com/xyz-uvwx-rst',
+  'https://meet.google.com/qwe-rtyp-asd',
+  'https://meet.google.com/mnb-vcxz-lkj',
+]
+const MEET_POOL_KEY = 'bridge_meet_pool'
+
+function loadMeetPool(): string[] {
+  try {
+    const s = localStorage.getItem(MEET_POOL_KEY)
+    if (s) { const arr = JSON.parse(s); if (Array.isArray(arr) && arr.length) return arr }
+  } catch { /* ignore */ }
+  return DEFAULT_MEET_POOL
+}
+
+function saveMeetPool(pool: string[]) {
+  localStorage.setItem(MEET_POOL_KEY, JSON.stringify(pool))
+}
+
+/** 예정된 인터뷰와 겹치지 않는 Meet 링크를 랜덤 배정 */
+function pickAvailableMeet(pool: string[], interviews: Interview[], date: string): string {
+  // 같은 날 scheduled 인터뷰에서 사용 중인 링크 수집
+  const usedOnDate = new Set(
+    interviews
+      .filter(iv => iv.status === 'scheduled' && iv.interview_date === date)
+      .map(iv => iv.meet_link)
+  )
+  // 사용 안 된 링크 우선
+  const available = pool.filter(link => !usedOnDate.has(link))
+  if (available.length > 0) return available[Math.floor(Math.random() * available.length)]
+  // 모두 사용 중이면 그냥 랜덤 (5개 이상 인터뷰가 같은 날 겹칠 가능성 낮음)
+  return pool[Math.floor(Math.random() * pool.length)]
+}
 
 interface Interview {
   id: number
@@ -250,7 +286,7 @@ function InterviewCard({
 }) {
   const meta = STATUS_META[iv.status] || STATUS_META.scheduled
   const fmt = formatKoreanDateTime(iv.interview_date, iv.interview_time)
-  const meetLink = iv.meet_link || FIXED_MEET_LINK
+  const meetLink = iv.meet_link || loadMeetPool()[0]
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
@@ -380,6 +416,11 @@ export default function AdminInterviewsPage() {
   const [emailModal, setEmailModal] = useState<{ id: number; target: 'candidate' | 'employer' } | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Interview | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [meetPool, setMeetPool] = useState<string[]>(DEFAULT_MEET_POOL)
+  const [showMeetSettings, setShowMeetSettings] = useState(false)
+
+  // Load meet pool from localStorage on mount
+  useEffect(() => { setMeetPool(loadMeetPool()) }, [])
 
   // Quick create form
   const [showCreate, setShowCreate] = useState(false)
@@ -387,7 +428,7 @@ export default function AdminInterviewsPage() {
     candidate_name: '', candidate_email: '', candidate_id: '',
     employer_name: '', employer_email: '',
     interview_date: '', interview_time: '14:00',
-    meet_link: FIXED_MEET_LINK, notes: '', duration_minutes: 20,
+    meet_link: '', notes: '', duration_minutes: 20,
     auto_send_email: false,
   })
   const [creating, setCreating] = useState(false)
@@ -490,11 +531,20 @@ export default function AdminInterviewsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button type="button" onClick={() => setShowMeetSettings(true)}
+            className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Meet 링크 설정">
+            🔗 Meet 설정
+          </button>
           <button type="button" onClick={fetchInterviews}
             className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             ↻ 새로고침
           </button>
-          <button type="button" onClick={() => { setShowCreate(!showCreate); if (!showCreate) { const tom = new Date(); tom.setDate(tom.getDate()+1); setForm(p => ({...p, interview_date: tom.toISOString().slice(0,10)})) } }}
+          <button type="button" onClick={() => {
+            const tom = new Date(); tom.setDate(tom.getDate()+1)
+            const d = tom.toISOString().slice(0,10)
+            setForm(p => ({...p, interview_date: d, meet_link: pickAvailableMeet(meetPool, interviews, d)}))
+            setShowCreate(!showCreate)
+          }}
             className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors">
             + 인터뷰 생성
           </button>
@@ -545,7 +595,10 @@ export default function AdminInterviewsPage() {
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">날짜</label>
               <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                value={form.interview_date} onChange={e => setForm({...form, interview_date: e.target.value})} />
+                value={form.interview_date} onChange={e => {
+                  const d = e.target.value
+                  setForm(p => ({...p, interview_date: d, meet_link: pickAvailableMeet(meetPool, interviews, d)}))
+                }} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">시간 (KST)</label>
@@ -566,8 +619,17 @@ export default function AdminInterviewsPage() {
             </div>
           </div>
 
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-            🔗 고정 Meet: <code className="text-xs bg-green-100 px-1.5 py-0.5 rounded">{FIXED_MEET_LINK}</code>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-green-700">
+                🔗 Meet: <code className="text-xs bg-green-100 px-1.5 py-0.5 rounded">{form.meet_link || '(미배정)'}</code>
+              </div>
+              <button type="button" onClick={() => setForm(p => ({...p, meet_link: pickAvailableMeet(meetPool, interviews, form.interview_date)}))}
+                className="text-xs font-semibold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg transition-colors">
+                🔄 다른 방
+              </button>
+            </div>
+            <div className="text-[11px] text-green-600 mt-1">풀 {meetPool.length}개 중 자동 배정 (같은 날 겹침 방지)</div>
           </div>
 
           <textarea className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="메모 (선택)"
@@ -657,6 +719,103 @@ export default function AdminInterviewsPage() {
           onDone={() => { setRescheduleTarget(null); setToast('일정이 변경되었습니다'); fetchInterviews() }}
         />
       )}
+
+      {/* Meet Settings Modal */}
+      {showMeetSettings && (
+        <MeetSettingsModal
+          pool={meetPool}
+          onSave={(newPool) => { setMeetPool(newPool); saveMeetPool(newPool); setShowMeetSettings(false); setToast('Meet 링크 저장 완료') }}
+          onClose={() => setShowMeetSettings(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── Meet Settings Modal ── */
+function MeetSettingsModal({
+  pool, onSave, onClose,
+}: {
+  pool: string[]
+  onSave: (pool: string[]) => void
+  onClose: () => void
+}) {
+  const [links, setLinks] = useState<string[]>([...pool])
+  const [newLink, setNewLink] = useState('')
+
+  const addLink = () => {
+    const url = newLink.trim()
+    if (!url || !url.includes('meet.google.com/')) return
+    if (links.includes(url)) return
+    setLinks([...links, url])
+    setNewLink('')
+  }
+
+  const removeLink = (idx: number) => {
+    if (links.length <= 1) return // 최소 1개 유지
+    setLinks(links.filter((_, i) => i !== idx))
+  }
+
+  const resetDefaults = () => setLinks([...DEFAULT_MEET_POOL])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-gray-900">🔗 Google Meet 링크 풀 설정</h3>
+            <p className="text-xs text-gray-500 mt-1">인터뷰 생성 시 같은 날 겹치지 않도록 랜덤 배정됩니다</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-auto">
+          {links.map((link, idx) => (
+            <div key={idx} className="flex items-center gap-2 group">
+              <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold shrink-0">
+                {idx + 1}
+              </span>
+              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 truncate">
+                {link}
+              </div>
+              <a href={link} target="_blank" rel="noopener noreferrer"
+                className="text-blue-500 hover:text-blue-700 text-sm shrink-0" title="열기">
+                ↗
+              </a>
+              <button type="button" onClick={() => removeLink(idx)}
+                className="text-red-300 hover:text-red-500 text-lg shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="삭제">×</button>
+            </div>
+          ))}
+
+          {/* Add new */}
+          <div className="flex gap-2 mt-2">
+            <input className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://meet.google.com/xxx-xxxx-xxx"
+              value={newLink} onChange={e => setNewLink(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
+            <button type="button" onClick={addLink}
+              className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 shrink-0">
+              + 추가
+            </button>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 space-y-1">
+            <p>💡 <b>Google Meet에서 방 만들기:</b> <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" className="underline font-semibold">meet.google.com/new</a></p>
+            <p>방 생성 후 링크를 복사해서 위에 추가하세요. 액세스 유형을 &apos;열기&apos;로 설정하면 항상 열린 방이 됩니다.</p>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+          <button type="button" onClick={resetDefaults} className="text-xs text-gray-400 hover:text-gray-600">기본값 복원</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
+            <button type="button" onClick={() => onSave(links)} disabled={links.length === 0}
+              className="px-5 py-2 text-sm font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
+              💾 저장 ({links.length}개)
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

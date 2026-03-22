@@ -32,7 +32,20 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
-const FIXED_MEET_LINK = 'https://meet.google.com/kmt-ydhj-fmf' // Scarlett: 고정 Meet 링크 (1회만 교체)
+/* ── Google Meet Room Pool (localStorage에서 읽기, interviews/page.tsx와 공유) ── */
+const MEET_POOL_KEY = 'bridge_meet_pool'
+const DEFAULT_MEET_POOL = [
+  'https://meet.google.com/kmt-ydhj-fmf',
+  'https://meet.google.com/abc-defg-hij',
+  'https://meet.google.com/xyz-uvwx-rst',
+  'https://meet.google.com/qwe-rtyp-asd',
+  'https://meet.google.com/mnb-vcxz-lkj',
+]
+function loadMeetPool(): string[] {
+  try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
+  return DEFAULT_MEET_POOL
+}
+function pickRandomMeet(): string { const p = loadMeetPool(); return p[Math.floor(Math.random() * p.length)] }
 
 /* ── 집중관리 탭 필터 — 진행중/계약중 강사 ── */
 const FOCUS_STAGES = new Set(['interview', 'proposal', 'signed', 'guide_sent', 'guide_done', 'caution'])
@@ -133,8 +146,9 @@ export default function BridgeCanvasSheet() {
   const [ivDuration, setIvDuration] = useState(20)
   const [ivNotes, setIvNotes] = useState('')
   const [ivAutoSend, setIvAutoSend] = useState(true)
+  const [ivMeetLink, setIvMeetLink] = useState('')
   const [ivLoading, setIvLoading] = useState(false)
-  const [ivResult, setIvResult] = useState<{ id: number; emailSent: boolean } | null>(null)
+  const [ivResult, setIvResult] = useState<{ id: number; emailSent: boolean; meetLink: string } | null>(null)
 
   // Filter popup
   const [filterPopup, setFilterPopup] = useState<FilterPopup | null>(null)
@@ -1253,6 +1267,7 @@ export default function BridgeCanvasSheet() {
                 const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
                 setIvDate(tomorrow.toISOString().slice(0, 10))
                 setIvTime('14:00'); setIvDuration(20); setIvNotes(''); setIvAutoSend(true); setIvResult(null)
+                setIvMeetLink(pickRandomMeet())
                 setIvModal(true)
               }}
               style={{ ...tbBtn, background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }}
@@ -1806,7 +1821,7 @@ export default function BridgeCanvasSheet() {
                     {ivResult.emailSent ? '후보자에게 이메일이 발송되었습니다' : '이메일은 별도로 발송해주세요'}
                   </div>
                   <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center' }}>
-                    <a href={FIXED_MEET_LINK} target="_blank" rel="noopener noreferrer"
+                    <a href={ivResult.meetLink} target="_blank" rel="noopener noreferrer"
                       style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
                       🔗 Meet 참가
                     </a>
@@ -1859,13 +1874,19 @@ export default function BridgeCanvasSheet() {
                     </div>
                   </div>
 
-                  {/* Meet Link (fixed) */}
+                  {/* Meet Link (random from pool) */}
                   <div style={{ marginBottom: 14 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Google Meet 링크 (고정)</label>
-                    <div style={{ padding: '8px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 13, color: '#166534', fontFamily: 'monospace' }}>
-                      {FIXED_MEET_LINK}
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Google Meet 링크</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, padding: '8px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#166534', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ivMeetLink}
+                      </div>
+                      <button onClick={() => setIvMeetLink(pickRandomMeet())}
+                        style={{ padding: '6px 12px', background: '#ede9fe', color: '#7c3aed', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid #c4b5fd', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        🔄 변경
+                      </button>
                     </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>방은 항상 열려있습니다. 후보자에게 약 5분 안내됩니다.</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>풀 {loadMeetPool().length}개 중 랜덤 배정 · 설정은 Interview 페이지에서</div>
                   </div>
 
                   {/* Notes */}
@@ -1903,7 +1924,7 @@ export default function BridgeCanvasSheet() {
                               candidate_id: ivTarget._cid || String(ivTarget.mgtNum || ''),
                               employer_name: '', employer_email: '',
                               interview_date: ivDate, interview_time: ivTime,
-                              meet_link: FIXED_MEET_LINK,
+                              meet_link: ivMeetLink,
                               notes: ivNotes, duration_minutes: ivDuration,
                               auto_send_email: ivAutoSend && !!ivTarget.email,
                             }),
@@ -1913,6 +1934,7 @@ export default function BridgeCanvasSheet() {
                           setIvResult({
                             id: json.data?.id,
                             emailSent: json.data?.email_result?.status === 'sent',
+                            meetLink: ivMeetLink,
                           })
                         } catch (e) {
                           showPhotoToast(e instanceof Error ? e.message : 'Error')
