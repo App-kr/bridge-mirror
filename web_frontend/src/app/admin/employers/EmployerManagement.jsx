@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -30,6 +30,28 @@ const CITY_EN_KO = {
   "Chungcheongnam-do":"충남",Jeonlado:"전라","Jeju-do":"제주",
 };
 const METRO_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종"]);
+// ─── 도시 → 광역시/도 역매핑 (메모 지역 보정용) ────────
+const CITY_REGION = {
+  강동:"서울",강서:"서울",강남:"서울",강북:"서울",관악:"서울",광진:"서울",구로:"서울",
+  금천:"서울",노원:"서울",도봉:"서울",동대문:"서울",동작:"서울",마포:"서울",서대문:"서울",
+  서초:"서울",성동:"서울",성북:"서울",송파:"서울",양천:"서울",영등포:"서울",용산:"서울",
+  은평:"서울",종로:"서울",중랑:"서울",잠실:"서울",신촌:"서울",홍대:"서울",
+  고양:"경기",일산:"경기",수원:"경기",용인:"경기",수지:"경기",기흥:"경기",성남:"경기",
+  분당:"경기",화성:"경기",동탄:"경기",남동탄:"경기",부천:"경기",안양:"경기",안산:"경기",
+  시흥:"경기",군포:"경기",의왕:"경기",광명:"경기",파주:"경기",김포:"경기",양주:"경기",
+  의정부:"경기",남양주:"경기",하남:"경기",이천:"경기",오산:"경기",구리:"경기",평택:"경기",
+  위례:"경기",동두천:"경기",과천:"경기",
+  해운대:"부산",동래:"부산",사직:"부산",사상:"부산",사하:"부산",수영:"부산",연제:"부산",금정:"부산",
+  송도:"인천",
+  구미:"경북",포항:"경북",경산:"경북",경주:"경북",거창:"경북",
+  창원:"경남",김해:"경남",진주:"경남",양산:"경남",거제:"경남",통영:"경남",마산:"경남",
+  청주:"충북",충주:"충북",음성:"충북",
+  천안:"충남",아산:"충남",보령:"충남",
+  전주:"전북",군산:"전북",
+  순천:"전남",여수:"전남",목포:"전남",
+  강릉:"강원",원주:"강원",춘천:"강원",
+  서귀포:"제주",
+};
 // ─── memo PII 파서 (backend _parse_memo_pii 동일 로직) ──
 const _TITLES = ["원장","부원장","대표","이사","부장","실장","팀장","담당","선생","매니저","관장","사장"];
 const _LOCATIONS = [
@@ -122,9 +144,8 @@ function mapJobsV2(r) {
   // jNumber
   const jcode = r.job_code || "";
   const jnum = jcode.replace("Job.","").replace("Job","").trim() || r.brj_id || String(r.id || "");
-  // region 한글
-  const regionKo = r.region_name || REGION_KO[r.region] || r.region || "";
-  // city 한글
+  // region/city — DB 값 (후순위, 메모가 우선)
+  let regionKo = r.region_name || REGION_KO[r.region] || r.region || "";
   const locRaw = r.location || r.city || "";
   const locParts = locRaw ? locRaw.split(/\s+/) : [];
   let cityKo = "";
@@ -162,7 +183,19 @@ function mapJobsV2(r) {
     if (!email) email = p.email;
     parsedCity = p.city;
   }
-  if (!cityKo && parsedCity) cityKo = parsedCity;
+  // 메모에서 파싱된 도시가 있으면 → DB값 무시하고 메모 우선
+  if (parsedCity) {
+    cityKo = parsedCity;
+    // 메모 도시에서 region도 보정
+    if (METRO_SET.has(parsedCity)) {
+      regionKo = parsedCity;
+      cityKo = "";  // 광역시 = region이므로 city는 비움
+    } else if (CITY_REGION[parsedCity]) {
+      regionKo = CITY_REGION[parsedCity];
+    }
+  } else if (!cityKo && parsedCity) {
+    cityKo = parsedCity;
+  }
   // rawText 정리: PII 블록 제거 + 백틱/따옴표 정리
   let rawTextClean = cleanRawText(r.raw_text || "");
   if (tailBlock) {
@@ -928,7 +961,7 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
     document.addEventListener("mousemove",onMove);document.addEventListener("mouseup",onUp);setResizingRow(ri);
   },[rowHeights]);
 
-  const visRows=useMemo(()=>{
+  const allVisRows=useMemo(()=>{
     let r=[...filtered];
     // exFl 필터 적용
     ["region","city","teachingAge","status"].forEach(key=>{
@@ -937,6 +970,8 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
     if(sortKey){r.sort((a,b)=>{const av=a[sortKey]||"",bv=b[sortKey]||"";return sortDir==="asc"?av.localeCompare(bv,undefined,{numeric:true}):bv.localeCompare(av,undefined,{numeric:true});});}
     return r;
   },[filtered,sortKey,sortDir,exFl]);
+  const visRows=useMemo(()=>allVisRows.slice(0,displayLimit),[allVisRows,displayLimit]);
+  const hasMore=allVisRows.length>displayLimit;
 
   const totalW=cols.reduce((a,c)=>a+c.w,0)+44; // +44 for row number col
 
@@ -1213,6 +1248,21 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
                 </tr>
               );
             })}
+            {hasMore&&(
+              <tr>
+                <td colSpan={dataCols.length+2} style={{padding:0,border:"none"}}>
+                  <button type="button" onClick={()=>setDisplayLimit(v=>v+100)}
+                    style={{width:"100%",padding:"10px 0",background:"#eff6ff",border:"1px solid #bfdbfe",
+                      color:"#2563eb",fontSize:"0.82rem",fontWeight:700,cursor:"pointer",
+                      display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                    <span>▼ 더 보기</span>
+                    <span style={{fontSize:"0.72rem",fontWeight:400,color:"#6b7280"}}>
+                      ({visRows.length} / {allVisRows.length}건)
+                    </span>
+                  </button>
+                </td>
+              </tr>
+            )}
             <tr style={{background:"#fafafa",cursor:"pointer"}} onClick={onAddRow}>
               <td colSpan={dataCols.length+2} style={{padding:"8px 12px",color:"#bbb",fontSize:"0.73rem",textAlign:"center"}}>+ 행 추가 (클릭)</td>
             </tr>
@@ -1273,6 +1323,9 @@ const ColMgr=({cols,setCols,onClose})=>{
 export default function EmployerManagement(){
   const[data,setData]=useState([]);
   const[loading,setLoading]=useState(true);
+  const[displayLimit,setDisplayLimit]=useState(100);
+  const[debouncedSearch,setDebouncedSearch]=useState("");
+  const searchTimerRef=useRef(null);
 
   useEffect(()=>{
     const adminKey=localStorage.getItem("bridge_admin_key")||"";
@@ -1322,21 +1375,30 @@ export default function EmployerManagement(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
+  // 검색어 디바운스 (300ms)
+  useEffect(()=>{
+    if(searchTimerRef.current)clearTimeout(searchTimerRef.current);
+    searchTimerRef.current=setTimeout(()=>setDebouncedSearch(searchQ),300);
+    return()=>{if(searchTimerRef.current)clearTimeout(searchTimerRef.current);};
+  },[searchQ]);
+
+  // 탭/필터/검색 변경 시 displayLimit 리셋
+  useEffect(()=>{setDisplayLimit(100);},[tab,fl,debouncedSearch]);
+
   const filtered=useMemo(()=>{
     let r=[...data];
     if(tab==="active")r=r.filter(d=>Boolean(d.active)&&!Boolean(d.blacklist));
     else if(tab==="blacklist")r=r.filter(d=>Boolean(d.blacklist));
     // 상단 필터 적용
     Object.entries(fl).forEach(([k,v])=>{if(v&&v.length)r=r.filter(d=>{const val=(d[k]||"").toString();return v.includes(val);});});
-    // Ctrl+F 검색 필터
-    if(searchQ.trim()){
-      const q=searchQ.toLowerCase();
+    // Ctrl+F 검색 필터 (디바운스 적용)
+    if(debouncedSearch.trim()){
+      const q=debouncedSearch.toLowerCase();
       r=r.filter(d=>(d.rawText||"").toLowerCase().includes(q)||(d.memo||"").toLowerCase().includes(q)||d.name.toLowerCase().includes(q)||d.jNumber.toLowerCase().includes(q));
     }
     if(sortKey)r.sort((a,b)=>{const av=(a[sortKey]||"").toString().toLowerCase();const bv=(b[sortKey]||"").toString().toLowerCase();return sortDir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);});
-    console.log(`[employers] tab=${tab} total=${data.length} filtered=${r.length} searchQ="${searchQ}"`);
     return r;
-  },[data,tab,fl,sortKey,sortDir,searchQ]);
+  },[data,tab,fl,sortKey,sortDir,debouncedSearch]);
 
   const newCount=data.filter(d=>d.isNew&&!d.confirmed&&Boolean(d.active)&&!Boolean(d.blacklist)).length;
   const confirm=useCallback(jn=>setData(p=>p.map(d=>d.jNumber===jn?{...d,confirmed:true,isNew:false}:d)),[]);
@@ -1506,14 +1568,23 @@ export default function EmployerManagement(){
             <div style={{maxWidth:860,margin:"0 auto"}}>
               <div style={{background:"#fff",padding:"24px 0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
 
-                {filtered.map((item,i)=>(
-                  <div key={i} style={{padding:"0 24px"}}>
+                {filtered.slice(0,displayLimit).map((item,i)=>(
+                  <div key={item.jNumber||i} style={{padding:"0 24px"}}>
                     <DocBlock item={item} onConfirm={confirm} onUpdate={updateItem} onMove={moveItem} searchQ={searchQ} fontInfo={fontInfo} fontMemo={fontMemo} fontBody={fontBody} onMailTo={it=>{setMailTarget(it);setMailPopup(true);}}/>
-                    {i<filtered.length-1&&(
+                    {i<Math.min(filtered.length,displayLimit)-1&&(
                       <div style={{margin:"0 -24px",height:8,background:"linear-gradient(to bottom,#6b7280,#d1d5db)",boxShadow:"0 2px 4px rgba(0,0,0,0.10)"}}/>
                     )}
                   </div>
                 ))}
+                {filtered.length>displayLimit&&(
+                  <div style={{textAlign:"center",padding:"16px 0"}}>
+                    <button type="button" onClick={()=>setDisplayLimit(v=>v+100)}
+                      style={{padding:"10px 32px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,
+                        color:"#2563eb",fontSize:"0.85rem",fontWeight:700,cursor:"pointer"}}>
+                      ▼ 더 보기 ({Math.min(filtered.length,displayLimit)} / {filtered.length}건)
+                    </button>
+                  </div>
+                )}
                 {!filtered.length&&<div style={{textAlign:"center",padding:50,color:"#bbb"}}>검색 결과 없음</div>}
               </div>
             </div>

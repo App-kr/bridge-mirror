@@ -5677,17 +5677,20 @@ async def admin_list_jobs_v2(
             )
             params.extend([s, s, s, s, s])
         w = " AND ".join(where)
+        # 필요한 컬럼만 조회 (87→16컬럼, 페이로드 ~80% 절감)
+        _V2_COLS = (
+            "brj_id, id, job_code, region, region_name, location, city, "
+            "employer_display_name, internal_notes, raw_text, teaching_age, "
+            "salary_raw, status, is_hot, created_at"
+        )
         total = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {w}", params).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM jobs WHERE {w} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"SELECT {_V2_COLS} FROM jobs WHERE {w} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
         data = []
         for r in rows:
             d = dict(r)
-            for k in list(d.keys()):
-                if isinstance(d[k], bytes):
-                    d[k] = None
             # salary_raw fallback: raw_text에서 추출
             if not d.get("salary_raw") and d.get("raw_text"):
                 _m = re.search(r"Monthly Salary\s*:\s*(.+)", d["raw_text"])
