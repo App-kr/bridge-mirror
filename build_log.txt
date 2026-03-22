@@ -1,0 +1,170 @@
+   ▲ Next.js 15.5.12
+   - Environments: .env.local, .env.production
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 8.2s
+   Linting and checking validity of types ...
+
+./src/app/admin/banners/page.tsx
+219:15  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+250:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/admin/candidates/page.tsx
+471:27  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+
+./src/app/admin/components/AllCandidatesGrid.tsx
+41:5  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+210:36  Warning: '_e' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/components/BridgeAdminSheet.tsx
+225:10  Warning: 'mkD' is defined but never used.  @typescript-eslint/no-unused-vars
+654:66  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+656:108  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+
+./src/app/admin/components/DocBlock.tsx
+96:41  Warning: 'province' is defined but never used.  @typescript-eslint/no-unused-vars
+96:59  Warning: 'city' is defined but never used.  @typescript-eslint/no-unused-vars
+96:73  Warning: 'jobNo' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/components/EmployerManagement.tsx
+205:28  Warning: 'signedFetch' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+783:29  Warning: 'isNewCode' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/inquiries/page.tsx
+8:34  Warning: 'useMemo' is defined but never used.  @typescript-eslint/no-unused-vars
+533:10  Warning: 'InfoItem' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/layout.tsx
+10:7  Warning: 'DEV_MODE' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/mail-send/page.tsx
+259:13  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+771:17  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/admin/matching/page.tsx
+236:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/admin/page.tsx
+183:10  Warning: 'kakaoUrl' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+253:9  Warning: 'deltaSign' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/posts/page.tsx
+268:6  Warning: React Hook useEffect has a missing dependency: 'startEdit'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/admin/sheet/BridgeCanvasSheet.tsx
+189:9  Warning: 'memoTimer' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+445:35  Warning: '_' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+512:29  Warning: '_ct' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+542:6  Warning: React Hook useCallback has a missing dependency: 'showPhotoToast'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+941:6  Warning: React Hook useCallback has a missing dependency: 'showPhotoToast'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/admin/sheet/engine/GridEngine.ts
+31:7  Warning: 'KEY_COL_FONT' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+32:7  Warning: 'KEY_HEADER_FONT' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/admin/sheet/engine/SelectionManager.ts
+87:34  Warning: '_rowCount' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/apply/page.tsx
+473:7  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unused-vars').
+
+./src/app/community/[board]/page.tsx
+241:60  Warning: 'orderDirty' is defined but never used.  @typescript-eslint/no-unused-vars
+826:112  Warning: 'onMoveUp' is defined but never used.  @typescript-eslint/no-unused-vars
+826:122  Warning: 'onMoveDown' is defined but never used.  @typescript-eslint/no-unused-vars
+983:35  Warning: 'i' is defined but never used.  @typescript-eslint/no-unused-vars
+1232:99  Warning: 'onMoveUp' is defined but never used.  @typescript-eslint/no-unused-vars
+1232:109  Warning: 'onMoveDown' is defined but never used.  @typescript-eslint/no-unused-vars
+1644:31  Warning: 'i' is defined but never used.  @typescript-eslint/no-unused-vars
+1651:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+1773:30  Warning: 'config' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/community/[board]/[id]/page.tsx
+124:17  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/page.tsx
+18:3  Warning: 'staggerContainer' is defined but never used.  @typescript-eslint/no-unused-vars
+19:3  Warning: 'scaleIn' is defined but never used.  @typescript-eslint/no-unused-vars
+196:6  Warning: React Hook useCallback has a missing dependency: 'loadFallback'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/components/admin/AdminSidebar.tsx
+9:3  Warning: 'Users' is defined but never used.  @typescript-eslint/no-unused-vars
+78:55  Warning: Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.  jsx-a11y/alt-text
+
+./src/components/ApplyPanel.tsx
+106:6  Warning: React Hook useEffect has a missing dependency: 'job'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/components/SecureAdminImage.tsx
+187:5  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/ui/AvatarPlaceholder.tsx
+30:7  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/hooks/useAdminAuth.ts
+114:3  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/41) ...
+   Generating static pages (10/41) 
+   Generating static pages (20/41) 
+   Generating static pages (30/41) 
+ ✓ Generating static pages (41/41)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                     142 kB         290 kB
+├ ○ /_not-found                            156 B         102 kB
+├ ○ /about                                2.4 kB         148 kB
+├ ○ /admin                                 10 kB         115 kB
+├ ○ /admin/ad-posts                      4.96 kB         107 kB
+├ ○ /admin/applications                  7.89 kB         110 kB
+├ ○ /admin/banners                       5.41 kB         107 kB
+├ ○ /admin/boards                        5.18 kB         107 kB
+├ ○ /admin/candidates                    10.1 kB         112 kB
+├ ○ /admin/email-templates               7.36 kB         118 kB
+├ ○ /admin/employer                      6.14 kB         108 kB
+├ ○ /admin/employers                     24.4 kB         126 kB
+├ ○ /admin/faq                           6.64 kB         124 kB
+├ ○ /admin/guide-links                   4.32 kB         106 kB
+├ ○ /admin/inbox                         5.82 kB         108 kB
+├ ƒ /admin/inbox/[id]                    6.03 kB         111 kB
+├ ○ /admin/inquiries                     7.13 kB         109 kB
+├ ○ /admin/interviews                    9.43 kB         111 kB
+├ ○ /admin/jobs                            10 kB         112 kB
+├ ○ /admin/kakao-setup                   5.04 kB         107 kB
+├ ○ /admin/mail-logs                     6.43 kB         108 kB
+├ ○ /admin/mail-send                     10.9 kB         121 kB
+├ ○ /admin/matching                      6.37 kB         108 kB
+├ ○ /admin/partners                      5.16 kB         107 kB
+├ ○ /admin/payments                      4.72 kB         107 kB
+├ ○ /admin/posts                         10.4 kB         136 kB
+├ ○ /admin/settings                      7.89 kB         110 kB
+├ ○ /admin/sheet                         34.7 kB         137 kB
+├ ƒ /api/community/[board]                 156 B         102 kB
+├ ƒ /api/community/[board]/[id]            156 B         102 kB
+├ ƒ /api/jobs                              156 B         102 kB
+├ ƒ /api/partners                          156 B         102 kB
+├ ƒ /api/settings                          156 B         102 kB
+├ ƒ /api/testimonials                      156 B         102 kB
+├ ƒ /api/track                             156 B         102 kB
+├ ○ /apply                               10.9 kB         113 kB
+├ ○ /community                             170 B         106 kB
+├ ƒ /community/[board]                   27.8 kB         200 kB
+├ ƒ /community/[board]/[id]              7.65 kB         122 kB
+├ ƒ /community/[board]/new                  5 kB         110 kB
+├ ○ /icon.svg                                0 B            0 B
+├ ○ /inquiry                               10 kB         112 kB
+├ ○ /jobs                                7.97 kB         153 kB
+├ ○ /opengraph-image                       156 B         102 kB
+└ ○ /sitemap.xml                           156 B         102 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/1255-ad409e5887c155b0.js      45.7 kB
+  ├ chunks/4bd1b696-100b9d70ed4e49c1.js  54.2 kB
+  └ other shared chunks (total)          2.05 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

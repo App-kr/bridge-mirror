@@ -47,6 +47,15 @@ function loadMeetPool(): string[] {
 }
 function pickRandomMeet(): string { const p = loadMeetPool(); return p[Math.floor(Math.random() * p.length)] }
 
+/* ── Interview defaults persistence ── */
+const IV_PREFS_KEY = 'bridge_iv_prefs'
+interface IvPrefs { time: string; duration: number; autoSend: boolean }
+function loadIvPrefs(): IvPrefs {
+  try { const s = localStorage.getItem(IV_PREFS_KEY); if (s) return JSON.parse(s) } catch { /* */ }
+  return { time: '14:00', duration: 20, autoSend: true }
+}
+function saveIvPrefs(p: IvPrefs) { localStorage.setItem(IV_PREFS_KEY, JSON.stringify(p)) }
+
 /* ── 집중관리 탭 필터 — 진행중/계약중 강사 ── */
 const FOCUS_STAGES = new Set(['interview', 'proposal', 'signed', 'guide_sent', 'guide_done', 'caution'])
 const isFocusRow = (r: DataRow): boolean =>
@@ -487,15 +496,22 @@ export default function BridgeCanvasSheet() {
   }, [selectedRows, pushHistory, showPhotoToast])
 
   /* ── Server save ── */
-  const saveToServer = useCallback(async (cid: string, field: string, value: string) => {
+  const saveToServer = useCallback(async (cid: string, field: string, value: string | number) => {
     try {
-      await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+      const res = await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
         method: 'PATCH',
         headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
       })
-    } catch { /* offline */ }
-  }, [])
+      if (!res.ok) {
+        console.error(`[PATCH] ${field} 저장 실패: ${res.status}`)
+        showPhotoToast(`저장 실패: ${field}`, false)
+      }
+    } catch {
+      console.error(`[PATCH] ${field} 네트워크 오류`)
+      showPhotoToast('네트워크 오류 — 저장 실패', false)
+    }
+  }, [showPhotoToast])
 
   /* ── Photo upload handler ── */
   const handlePhotoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -981,15 +997,21 @@ export default function BridgeCanvasSheet() {
       return u
     })
     // Soft-delete to server (is_deleted=1)
+    let failCount = 0
     for (const cid of cidsToDelete) {
       if (!cid) continue
-      fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
-        method: 'PATCH',
-        headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_deleted: 1 }),
-      }).catch(() => {})
+      try {
+        const res = await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
+          method: 'PATCH',
+          headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_deleted: 1 }),
+        })
+        if (!res.ok) failCount++
+      } catch { failCount++ }
     }
-  }, [pushHistory])
+    if (failCount > 0) showPhotoToast(`삭제 실패 ${failCount}건 — 새로고침 후 재시도`, false)
+    else showPhotoToast(`${cidsToDelete.size}건 삭제 완료`, true)
+  }, [pushHistory, showPhotoToast])
 
   /* ── Full reload ── */
   const fullReload = useCallback(() => { setDbAll([]); setLoaded(0); loadAllData() }, [loadAllData])
@@ -1310,7 +1332,9 @@ export default function BridgeCanvasSheet() {
                 setIvTarget(row)
                 const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
                 setIvDate(tomorrow.toISOString().slice(0, 10))
-                setIvTime('14:00'); setIvDuration(20); setIvNotes(''); setIvAutoSend(true); setIvResult(null)
+                const prefs = loadIvPrefs()
+                setIvTime(prefs.time); setIvDuration(prefs.duration); setIvAutoSend(prefs.autoSend)
+                setIvNotes(''); setIvResult(null)
                 setIvMeetLink(pickRandomMeet())
                 setIvModal(true)
               }}
@@ -1924,7 +1948,7 @@ export default function BridgeCanvasSheet() {
                     </div>
                     <div>
                       <label style={{ fontSize: 17, fontWeight: 500, color: '#000', display: 'block', marginBottom: 10 }}>시간 (KST)</label>
-                      <input type="time" value={ivTime} onChange={e => setIvTime(e.target.value)}
+                      <input type="time" value={ivTime} onChange={e => { setIvTime(e.target.value); saveIvPrefs({ time: e.target.value, duration: ivDuration, autoSend: ivAutoSend }) }}
                         style={{ width: '100%', padding: '16px 18px', border: '1.5px solid #ccc', borderRadius: 12, fontSize: 20, fontWeight: 400, color: '#000', background: '#fff', boxSizing: 'border-box', fontFamily: F }} />
                     </div>
                   </div>
@@ -1949,7 +1973,7 @@ export default function BridgeCanvasSheet() {
                     <label style={{ fontSize: 17, fontWeight: 500, color: '#000', display: 'block', marginBottom: 12 }}>면접 시간</label>
                     <div style={{ display: 'flex', gap: 12 }}>
                       {[15, 20, 30, 45].map(d => (
-                        <button key={d} onClick={() => setIvDuration(d)}
+                        <button key={d} onClick={() => { setIvDuration(d); saveIvPrefs({ time: ivTime, duration: d, autoSend: ivAutoSend }) }}
                           style={{
                             padding: '16px 32px', borderRadius: 12, fontSize: 19, fontWeight: 500, cursor: 'pointer', fontFamily: F,
                             border: ivDuration === d ? '2px solid #000' : '1.5px solid #d1d5db',
@@ -2039,7 +2063,7 @@ export default function BridgeCanvasSheet() {
                   {/* ── Auto send + Email editor ── */}
                   <div style={{ marginBottom: 30 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', padding: '18px 22px', background: ivAutoSend ? '#f0f9ff' : '#f8f8f8', borderRadius: 14, border: ivAutoSend ? '1.5px solid #93c5fd' : '1.5px solid #e5e7eb' }}>
-                      <input type="checkbox" checked={ivAutoSend} onChange={e => setIvAutoSend(e.target.checked)}
+                      <input type="checkbox" checked={ivAutoSend} onChange={e => { setIvAutoSend(e.target.checked); saveIvPrefs({ time: ivTime, duration: ivDuration, autoSend: e.target.checked }) }}
                         style={{ width: 26, height: 26, accentColor: '#000' }} />
                       <span style={{ fontSize: 19, fontWeight: 500, color: '#000' }}>후보자에게 이메일 자동 발송</span>
                       {!ivTarget.email && <span style={{ fontSize: 17, color: '#ef4444', fontWeight: 500 }}>(이메일 없음)</span>}

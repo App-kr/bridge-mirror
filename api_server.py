@@ -1822,6 +1822,7 @@ async def admin_update_candidate(
         "interview_time", "job_prefs", "invoice", "tattoo", "visa_type",
         "working_hours", "photo_url", "thumb_url",
         "stage", "mail_tags", "korea_experience",
+        "is_deleted",
         # Sheet 인라인 편집용 추가 필드
         "full_name", "email", "nationality", "ancestry", "dob", "gender",
         "current_location", "start_date", "target", "area_prefs",
