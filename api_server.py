@@ -5473,6 +5473,11 @@ async def admin_list_jobs_v2(
             for k in list(d.keys()):
                 if isinstance(d[k], bytes):
                     d[k] = None
+            # salary_raw fallback: raw_text에서 추출
+            if not d.get("salary_raw") and d.get("raw_text"):
+                _m = re.search(r"Monthly Salary\s*:\s*(.+)", d["raw_text"])
+                if _m:
+                    d["salary_raw"] = _m.group(1).strip().strip('`"')
             data.append(d)
         return ok(data={"jobs": data, "total": total})
     finally:
@@ -6962,6 +6967,16 @@ _CITY_EN_KO = {
     "Gumi": "구미", "Pohang": "포항", "Gyeongsan": "경산",
     "Gangneung": "강릉", "Wonju": "원주", "Chuncheon": "춘천",
     "Jeju": "제주", "Seogwipo": "서귀포",
+    # 추가 매핑 (2026-03-22)
+    "Boryeong": "보령", "Chungju": "충주", "Dongducheon": "동두천",
+    "Dongtan": "동탄", "Eumseong": "음성", "Geochang": "거창",
+    "Geoje": "거제", "Gunsan": "군산", "Gwacheon": "과천",
+    "Gyeongju": "경주", "Masan": "마산", "Tongyeong": "통영",
+    "Wirye": "위례",
+    # 도/광역 이름 (지역명 그대로)
+    "Gangwon": "강원", "Gangwon-do": "강원", "Gangwondo": "강원",
+    "Chungbuk": "충북", "Gyeongbuk": "경북", "Gyeongsang": "경상",
+    "Chungcheongnam-do": "충남", "Jeonlado": "전라", "Jeju-do": "제주",
 }
 
 

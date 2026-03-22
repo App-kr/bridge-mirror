@@ -21,6 +21,13 @@ const CITY_EN_KO = {
   Suncheon:"순천",Mokpo:"목포",Changwon:"창원",Gimhae:"김해",Jinju:"진주",
   Yangsan:"양산",Gumi:"구미",Pohang:"포항",Gyeongsan:"경산",Gangneung:"강릉",
   Wonju:"원주",Chuncheon:"춘천",Jeju:"제주",Seogwipo:"서귀포",
+  // 추가 매핑
+  Boryeong:"보령",Chungju:"충주",Dongducheon:"동두천",Dongtan:"동탄",
+  Eumseong:"음성",Geochang:"거창",Geoje:"거제",Gunsan:"군산",
+  Gwacheon:"과천",Gyeongju:"경주",Masan:"마산",Tongyeong:"통영",Wirye:"위례",
+  Gangwon:"강원","Gangwon-do":"강원",Gangwondo:"강원",
+  Chungbuk:"충북",Gyeongbuk:"경북",Gyeongsang:"경상",
+  "Chungcheongnam-do":"충남",Jeonlado:"전라","Jeju-do":"제주",
 };
 const METRO_SET = new Set(["서울","부산","대구","인천","광주","대전","울산","세종"]);
 // ─── memo PII 파서 (backend _parse_memo_pii 동일 로직) ──
