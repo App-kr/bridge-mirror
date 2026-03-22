@@ -15,8 +15,10 @@ import { API_URL } from '@/lib/api'
 /* ── Types ── */
 interface CandidateResult {
   candidate_id: string
+  sheet_number: string
   full_name: string
   nationality: string
+  email: string
   target: string
   target_age: string
   area_prefs: string
@@ -28,6 +30,7 @@ interface CandidateResult {
   photo_url: string
   dob: string
   gender: string
+  interview_time: string
 }
 
 interface Employer {
@@ -51,13 +54,13 @@ interface ConfirmResult {
   email_errors: string[]
 }
 
-/* ── Meet Room Pool (fallback) ── */
-const DEFAULT_MEET_POOL = [
-  'https://meet.google.com/kmt-ydhj-fmf',
-  'https://meet.google.com/abc-defg-hij',
-  'https://meet.google.com/xyz-uvwx-rst',
-  'https://meet.google.com/qwe-rtyp-asd',
-  'https://meet.google.com/mnb-vcxz-lkj',
+/* ── Meet Room Pool ── */
+const MEET_ROOMS = [
+  { label: 'Room 1', code: 'kmt-ydhj-fmf' },
+  { label: 'Room 2', code: 'abc-defg-hij' },
+  { label: 'Room 3', code: 'xyz-uvwx-rst' },
+  { label: 'Room 4', code: 'qwe-rtyp-asd' },
+  { label: 'Room 5', code: 'mnb-vcxz-lkj' },
 ]
 
 function getDefaultDate(): string {
@@ -137,11 +140,42 @@ function InterviewSetupInner() {
   const [interviewTime, setInterviewTime] = useState('10:00')
   const [duration, setDuration] = useState(20)
   const [notes, setNotes] = useState('')
+  const [selectedRoom, setSelectedRoom] = useState(-1) // -1 = random
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState<ConfirmResult | null>(null)
 
+  // Edit mode
+  const [editing, setEditing] = useState(false)
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editDuration, setEditDuration] = useState(20)
+  const [editNotes, setEditNotes] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+
+  /* ── Generate email preview ── */
+  const generateEmailPreview = useCallback((c: CandidateResult | null, date: string, time: string, dur: number, roomIdx: number) => {
+    if (!c) return
+    const firstName = (c.full_name || '').split(' ')[0] || c.full_name
+    const meetCode = roomIdx >= 0 ? MEET_ROOMS[roomIdx].code : 'auto-generated'
+    const meetUrl = roomIdx >= 0 ? `https://meet.google.com/${MEET_ROOMS[roomIdx].code}` : 'https://meet.google.com/auto-generated'
+    setEmailSubject(`[BRIDGE] Interview — ${firstName}`)
+    setEmailBody(
+      `Dear ${firstName},\n\nYour interview has been scheduled.\n\nDate: ${date}\nTime: ${time} KST\nDuration: ${dur} minutes\n\nMeet Link: ${meetUrl}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
+    )
+  }, [])
+
+  // Update email preview when schedule changes
+  useEffect(() => {
+    if (step === 3 && candidate) {
+      generateEmailPreview(candidate, interviewDate, interviewTime, duration, selectedRoom)
+    }
+  }, [step, candidate, interviewDate, interviewTime, duration, selectedRoom, generateEmailPreview])
 
   /* ── URL param auto-load ── */
   useEffect(() => {
@@ -197,6 +231,8 @@ function InterviewSetupInner() {
     setStep(2)
     setCandidates([])
     setSearchQ('')
+    // Pre-fill notes from candidate's interview_time preference
+    if (c.interview_time) setNotes(c.interview_time)
     fetchMatching(c.candidate_id)
   }
 
@@ -227,6 +263,12 @@ function InterviewSetupInner() {
     setInterviewDate(getDefaultDate())
   }
 
+  /* ── Pick random meet room ── */
+  const pickRandomRoom = () => {
+    const idx = Math.floor(Math.random() * MEET_ROOMS.length)
+    setSelectedRoom(idx)
+  }
+
   /* ── Confirm Interview ── */
   const handleConfirm = async () => {
     if (!candidate || !selectedEmployer) return
@@ -252,12 +294,11 @@ function InterviewSetupInner() {
       const j = await res.json()
       const data = j.data as ConfirmResult
 
-      // GCal 실패 시 Meet pool fallback
+      // GCal 실패 시 Meet pool fallback — 선택된 룸 사용
       if (data.gcal_error && !data.meet_link) {
-        const pool = DEFAULT_MEET_POOL
-        const fallbackLink = pool[Math.floor(Math.random() * pool.length)]
+        const roomIdx = selectedRoom >= 0 ? selectedRoom : Math.floor(Math.random() * MEET_ROOMS.length)
+        const fallbackLink = `https://meet.google.com/${MEET_ROOMS[roomIdx].code}`
         data.meet_link = fallbackLink
-        // PATCH meet_link
         await signedFetch(`${API_URL}/api/admin/interviews/${data.id}`, {
           method: 'PATCH',
           body: JSON.stringify({ meet_link: fallbackLink }),
@@ -270,6 +311,73 @@ function InterviewSetupInner() {
       setError(e instanceof Error ? e.message : 'Confirm failed')
     } finally {
       setConfirming(false)
+    }
+  }
+
+  /* ── Edit Interview ── */
+  const startEdit = () => {
+    setEditDate(interviewDate)
+    setEditTime(interviewTime)
+    setEditDuration(duration)
+    setEditNotes(notes)
+    setEditing(true)
+    setError(null)
+  }
+
+  const saveEdit = async () => {
+    if (!result) return
+    setEditSaving(true)
+    setError(null)
+    try {
+      const res = await signedFetch(`${API_URL}/api/admin/interviews/${result.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          interview_date: editDate,
+          interview_time: editTime,
+          duration_minutes: editDuration,
+          notes: editNotes,
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.detail || `Error ${res.status}`)
+      }
+      // Apply changes locally
+      setInterviewDate(editDate)
+      setInterviewTime(editTime)
+      setDuration(editDuration)
+      setNotes(editNotes)
+      setEditing(false)
+      setMsg('Schedule updated successfully')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  /* ── Delete Interview ── */
+  const handleDelete = async () => {
+    if (!result) return
+    if (!window.confirm(`Interview #${result.id} will be permanently deleted. Are you sure?`)) return
+    setDeleting(true)
+    setError(null)
+    try {
+      const res = await signedFetch(`${API_URL}/api/admin/interviews/${result.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.detail || `Error ${res.status}`)
+      }
+      setMsg(`Interview #${result.id} deleted`)
+      setResult(null)
+      // Go back to step 3 so they can recreate
+      setEditing(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -286,6 +394,8 @@ function InterviewSetupInner() {
     setNotes('')
     setSearchQ('')
     setCandidates([])
+    setSelectedRoom(-1)
+    setEditing(false)
   }
 
   /* ── Debounced search ── */
@@ -299,7 +409,7 @@ function InterviewSetupInner() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7]">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div>
@@ -323,6 +433,11 @@ function InterviewSetupInner() {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 text-[13px] text-red-700">
             {error}
+          </div>
+        )}
+        {msg && !error && !result && (
+          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4 text-[13px] text-green-700">
+            {msg}
           </div>
         )}
 
@@ -370,10 +485,10 @@ function InterviewSetupInner() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-[14px] font-semibold text-[#1d1d1f] truncate">{c.full_name || 'Unknown'}</span>
-                          <span className="text-[11px] text-[#86868b]">{c.candidate_id}</span>
+                          <span className="text-[11px] text-[#86868b]">#{c.sheet_number || c.candidate_id}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 text-[12px] text-[#86868b]">
-                          <span>{c.nationality || '—'}</span>
+                          <span>{c.nationality || '\u2014'}</span>
                           {c.target && <><span className="text-[#d2d2d7]">|</span><span>{c.target}</span></>}
                           {c.area_prefs && <><span className="text-[#d2d2d7]">|</span><span>{c.area_prefs}</span></>}
                         </div>
@@ -438,9 +553,9 @@ function InterviewSetupInner() {
                         selectedEmployer?.id === emp.id ? 'bg-[#0071e3]/10' : 'hover:bg-[#fafafa]'
                       }`}
                     >
-                      <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                         selectedEmployer?.id === emp.id ? 'border-[#0071e3] bg-[#0071e3]' : 'border-[#d2d2d7]'
-                      }">
+                      }`}>
                         {selectedEmployer?.id === emp.id && (
                           <span className="text-white text-[10px]">{'\u2713'}</span>
                         )}
@@ -462,7 +577,7 @@ function InterviewSetupInner() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 text-[12px] text-[#86868b]">
-                          <span>{emp.location || '—'}</span>
+                          <span>{emp.location || '\u2014'}</span>
                           {emp.teaching_age && <><span className="text-[#d2d2d7]">|</span><span>{emp.teaching_age}</span></>}
                           {emp.contact_name && <><span className="text-[#d2d2d7]">|</span><span>{emp.contact_name}</span></>}
                         </div>
@@ -514,43 +629,66 @@ function InterviewSetupInner() {
 
         {/* ═══ STEP 3: Schedule & Confirm ═══ */}
         {step === 3 && candidate && selectedEmployer && !result && (
-          <div className="space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-                <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">Candidate</div>
-                <div className="flex items-center gap-3">
-                  {candidate.photo_url ? (
-                    <img src={candidate.photo_url} alt="" className="w-10 h-10 rounded-full object-cover border border-[#e5e5e7]" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[14px] font-bold text-[#86868b]">
-                      {(candidate.full_name || '?')[0]}
+          <div className="space-y-5">
+            {/* ── Candidate Info Card (큰 폰트) ── */}
+            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+              <div className="flex items-start gap-5">
+                {candidate.photo_url ? (
+                  <img src={candidate.photo_url} alt="" className="w-16 h-16 rounded-xl object-cover border border-[#e5e5e7] shrink-0" />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-[#f5f5f7] flex items-center justify-center text-[22px] font-bold text-[#86868b] shrink-0">
+                    {(candidate.full_name || '?')[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">번호</div>
+                      <div className="text-[16px] font-bold text-[#1d1d1f]">#{candidate.sheet_number || candidate.candidate_id}</div>
                     </div>
-                  )}
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1d1d1f]">{candidate.full_name}</p>
-                    <p className="text-[12px] text-[#86868b]">{candidate.nationality} / {candidate.target || '—'}</p>
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">이름</div>
+                      <div className="text-[16px] font-bold text-[#1d1d1f]">{candidate.full_name}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">국적</div>
+                      <div className="text-[16px] font-semibold text-[#1d1d1f]">{candidate.nationality || '\u2014'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">이메일</div>
+                      <div className="text-[15px] text-[#1d1d1f] truncate">{candidate.email || '\u2014'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">시작일</div>
+                      <div className="text-[15px] text-[#1d1d1f]">{candidate.start_date || '\u2014'}</div>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">메모 / 선호 인터뷰 시간</div>
+                      <div className="text-[15px] text-[#1d1d1f]">{candidate.interview_time || '\u2014'}</div>
+                    </div>
                   </div>
                 </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button type="button" onClick={() => setStep(2)}
+                    className="text-[11px] text-[#86868b] hover:text-[#1d1d1f] px-3 py-1 border border-[#e5e5e7] rounded-lg">
+                    Change
+                  </button>
+                </div>
               </div>
-              <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-                <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">Employer</div>
-                <p className="text-[14px] font-semibold text-[#1d1d1f]">{selectedEmployer.school_name || 'Unknown'}</p>
-                <p className="text-[12px] text-[#86868b]">{selectedEmployer.location} / {selectedEmployer.contact_name || '—'}</p>
-                <button type="button" onClick={() => setStep(2)}
-                  className="text-[11px] text-[#0071e3] hover:underline mt-1">
-                  Change employer
-                </button>
+              {/* Employer info (compact) */}
+              <div className="mt-3 pt-3 border-t border-[#f0f0f2] flex items-center gap-3 text-[13px]">
+                <span className="text-[#86868b]">Employer:</span>
+                <span className="font-semibold text-[#1d1d1f]">{selectedEmployer.school_name}</span>
+                <span className="text-[#86868b]">{selectedEmployer.location}</span>
+                <span className="text-[#86868b]">{selectedEmployer.contact_name}</span>
               </div>
             </div>
 
-            {/* Schedule Form */}
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-6">
-              <h2 className="text-[16px] font-semibold text-[#1d1d1f] mb-5">Schedule Interview</h2>
-
-              <div className="grid grid-cols-2 gap-4 mb-5">
+            {/* ── Schedule Row ── */}
+            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className="text-[12px] font-semibold text-[#86868b] block mb-1.5">Date</label>
+                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Date</label>
                   <input
                     type="date"
                     value={interviewDate}
@@ -559,7 +697,7 @@ function InterviewSetupInner() {
                   />
                 </div>
                 <div>
-                  <label className="text-[12px] font-semibold text-[#86868b] block mb-1.5">Time (KST)</label>
+                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Time (KST)</label>
                   <input
                     type="time"
                     value={interviewTime}
@@ -567,58 +705,126 @@ function InterviewSetupInner() {
                     className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
                   />
                 </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Duration</label>
+                  <div className="flex gap-1.5">
+                    {[15, 20, 30].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDuration(d)}
+                        className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold border transition-colors ${
+                          duration === d
+                            ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/30'
+                            : 'bg-white text-[#424245] border-[#d2d2d7] hover:bg-[#f5f5f7]'
+                        }`}
+                      >
+                        {d}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">메모</label>
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="추가 메모..."
+                    className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
+                  />
+                </div>
               </div>
+            </div>
 
-              <div className="mb-5">
-                <label className="text-[12px] font-semibold text-[#86868b] block mb-2">Duration</label>
-                <div className="flex gap-2">
-                  {[15, 20, 30].map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDuration(d)}
-                      className={`px-5 py-2 rounded-xl text-[13px] font-semibold border transition-colors ${
-                        duration === d
-                          ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/30'
-                          : 'bg-white text-[#424245] border-[#d2d2d7] hover:bg-[#f5f5f7]'
+            {/* ── Two Column: Meet Rooms (Left) + Email Preview (Right) ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* LEFT: Meet 회의실 */}
+              <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+                <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa] flex items-center justify-between">
+                  <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
+                    Meet 회의실 ({MEET_ROOMS.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={pickRandomRoom}
+                    className="text-[12px] px-3 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-full font-medium hover:bg-[#0071e3]/20 transition-colors"
+                  >
+                    랜덤
+                  </button>
+                </div>
+                <div className="px-4 py-2 text-[11px] text-[#86868b] border-b border-[#f5f5f7]">
+                  액세스: 항상 열기 &middot; 허가없이 참여 가능
+                </div>
+                <div className="divide-y divide-[#f5f5f7]">
+                  {MEET_ROOMS.map((room, idx) => (
+                    <div
+                      key={room.code}
+                      className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${
+                        selectedRoom === idx ? 'bg-green-50' : 'hover:bg-[#fafafa]'
                       }`}
+                      onClick={() => setSelectedRoom(idx)}
                     >
-                      {d} min
-                    </button>
+                      {/* Radio indicator */}
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        selectedRoom === idx ? 'border-green-500 bg-green-500' : 'border-[#d2d2d7]'
+                      }`}>
+                        {selectedRoom === idx && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[13px] font-medium text-[#1d1d1f]">{room.label}</span>
+                        <span className="text-[12px] text-[#86868b] ml-2">&middot; {room.code}</span>
+                      </div>
+                      <a
+                        href={`https://meet.google.com/${room.code}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-[11px] px-2.5 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-lg font-medium hover:bg-[#0071e3]/20 transition-colors"
+                      >
+                        입장
+                      </a>
+                    </div>
                   ))}
                 </div>
               </div>
 
-              <div className="mb-5">
-                <label className="text-[12px] font-semibold text-[#86868b] block mb-1.5">Notes (optional)</label>
-                <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Additional notes for this interview..."
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] resize-none"
-                />
+              {/* RIGHT: 이메일 자동 발송 */}
+              <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden flex flex-col">
+                <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa]">
+                  <h3 className="text-[14px] font-semibold text-[#1d1d1f]">이메일 자동 발송</h3>
+                </div>
+                <div className="p-4 flex-1 flex flex-col gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] bg-[#fafafa]"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1">본문</label>
+                    <textarea
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                      className="w-full h-full min-h-[200px] px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] bg-[#fafafa] resize-none font-mono"
+                    />
+                  </div>
+                </div>
               </div>
-
-              {/* What will happen */}
-              <div className="bg-[#f5f5f7] rounded-xl p-4 mb-5 text-[12px] text-[#86868b] space-y-1">
-                <p className="font-semibold text-[#1d1d1f] text-[13px] mb-2">What happens on confirm:</p>
-                <p>{'\u2713'} Google Calendar event created (Meet link auto-generated)</p>
-                <p>{'\u2713'} Interview record saved to database</p>
-                <p>{'\u2713'} Guide email sent to candidate with Meet link</p>
-                <p>{'\u2713'} Guide email sent to employer with Meet link</p>
-              </div>
-
-              {/* Confirm Button */}
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={confirming}
-                className="w-full py-3.5 bg-[#0071e3] text-white text-[15px] font-semibold rounded-2xl hover:bg-[#0077ED] disabled:opacity-50 transition-colors"
-              >
-                {confirming ? 'Setting up interview...' : 'Confirm Interview'}
-              </button>
             </div>
+
+            {/* ── Confirm Button (옅은 초록) ── */}
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={confirming}
+              className="w-full py-4 bg-green-500 text-white text-[16px] font-bold rounded-2xl hover:bg-green-600 disabled:opacity-50 transition-colors shadow-sm"
+            >
+              {confirming ? 'Setting up interview...' : '생성'}
+            </button>
           </div>
         )}
 
@@ -626,7 +832,7 @@ function InterviewSetupInner() {
         {result && (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-green-200 p-6">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-5">
                 <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-[20px] shrink-0">
                   {'\u2713'}
                 </div>
@@ -636,71 +842,137 @@ function InterviewSetupInner() {
                 </div>
               </div>
 
-              <div className="space-y-3 text-[13px]">
-                <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                  <span className="text-[#86868b]">Candidate</span>
-                  <span className="text-[#1d1d1f] font-medium">{candidate?.full_name}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                  <span className="text-[#86868b]">Employer</span>
-                  <span className="text-[#1d1d1f] font-medium">{selectedEmployer?.school_name}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                  <span className="text-[#86868b]">Date / Time</span>
-                  <span className="text-[#1d1d1f] font-medium">{interviewDate} {interviewTime} KST</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                  <span className="text-[#86868b]">Duration</span>
-                  <span className="text-[#1d1d1f] font-medium">{duration} min</span>
-                </div>
-                {result.meet_link && (
-                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                    <span className="text-[#86868b]">Meet Link</span>
-                    <a href={result.meet_link} target="_blank" rel="noopener noreferrer"
-                      className="text-[#0071e3] font-medium hover:underline truncate max-w-[250px]">
-                      {result.meet_link}
-                    </a>
+              {/* Edit Form */}
+              {editing ? (
+                <div className="space-y-4 mb-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Date</label>
+                      <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30" />
+                    </div>
+                    <div>
+                      <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Time</label>
+                      <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30" />
+                    </div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Duration</label>
+                    <div className="flex gap-2">
+                      {[15, 20, 30].map(d => (
+                        <button key={d} type="button" onClick={() => setEditDuration(d)}
+                          className={`px-5 py-2 rounded-xl text-[13px] font-semibold border transition-colors ${
+                            editDuration === d
+                              ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/30'
+                              : 'bg-white text-[#424245] border-[#d2d2d7] hover:bg-[#f5f5f7]'
+                          }`}>
+                          {d} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Notes</label>
+                    <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2}
+                      className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 resize-none" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={saveEdit} disabled={editSaving}
+                      className="flex-1 py-2.5 bg-[#0071e3] text-white text-[14px] font-semibold rounded-xl hover:bg-[#0077ED] disabled:opacity-50 transition-colors">
+                      {editSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button type="button" onClick={() => setEditing(false)}
+                      className="px-5 py-2.5 text-[14px] text-[#86868b] border border-[#d2d2d7] rounded-xl hover:bg-[#f5f5f7] transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 text-[14px] mb-5">
+                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
+                    <span className="text-[#86868b]">Candidate</span>
+                    <span className="text-[#1d1d1f] font-medium">{candidate?.full_name}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
+                    <span className="text-[#86868b]">Employer</span>
+                    <span className="text-[#1d1d1f] font-medium">{selectedEmployer?.school_name}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
+                    <span className="text-[#86868b]">Date / Time</span>
+                    <span className="text-[#1d1d1f] font-medium">{interviewDate} {interviewTime} KST</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
+                    <span className="text-[#86868b]">Duration</span>
+                    <span className="text-[#1d1d1f] font-medium">{duration} min</span>
+                  </div>
+                  {result.meet_link && (
+                    <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
+                      <span className="text-[#86868b]">Meet Link</span>
+                      <a href={result.meet_link} target="_blank" rel="noopener noreferrer"
+                        className="text-[#0071e3] font-medium hover:underline truncate max-w-[280px]">
+                        {result.meet_link}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Status badges */}
-              <div className="flex flex-wrap gap-2 mt-4">
-                {result.gcal_error ? (
-                  <span className="text-[11px] px-2 py-1 bg-orange-100 text-orange-700 rounded-full">
-                    GCal: {result.gcal_error.length > 30 ? 'Fallback to Meet Pool' : result.gcal_error}
-                  </span>
-                ) : (
-                  <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                    Google Calendar OK
-                  </span>
-                )}
-                {result.email_errors.length === 0 ? (
-                  <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                    Emails sent to both parties
-                  </span>
-                ) : (
-                  <span className="text-[11px] px-2 py-1 bg-red-100 text-red-700 rounded-full">
-                    Email errors: {result.email_errors.join(', ')}
-                  </span>
-                )}
-              </div>
+              {!editing && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {result.gcal_error ? (
+                    <span className="text-[11px] px-2 py-1 bg-orange-100 text-orange-700 rounded-full">
+                      GCal: {result.gcal_error.length > 30 ? 'Fallback to Meet Pool' : result.gcal_error}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                      Google Calendar OK
+                    </span>
+                  )}
+                  {result.email_errors.length === 0 ? (
+                    <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                      Emails sent to both parties
+                    </span>
+                  ) : (
+                    <span className="text-[11px] px-2 py-1 bg-red-100 text-red-700 rounded-full">
+                      Email errors: {result.email_errors.join(', ')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3">
-              <a href="/admin/interviews"
-                className="flex-1 py-3 text-center text-[14px] font-medium text-[#424245] bg-white border border-[#d2d2d7] rounded-2xl hover:bg-[#f5f5f7] transition-colors">
-                View All Interviews
-              </a>
-              <button
-                type="button"
-                onClick={resetAll}
-                className="flex-1 py-3 text-[14px] font-semibold text-white bg-[#0071e3] rounded-2xl hover:bg-[#0077ED] transition-colors"
-              >
-                New Interview Setup
-              </button>
-            </div>
+            {/* Actions: 수정 / 삭제 / New / View All */}
+            {!editing && (
+              <div className="flex gap-3">
+                <button type="button" onClick={startEdit}
+                  className="flex-1 py-3 text-center text-[14px] font-semibold text-[#0071e3] bg-white border border-[#0071e3]/30 rounded-2xl hover:bg-[#0071e3]/5 transition-colors">
+                  일정 수정
+                </button>
+                <button type="button" onClick={handleDelete} disabled={deleting}
+                  className="flex-1 py-3 text-center text-[14px] font-semibold text-red-600 bg-white border border-red-200 rounded-2xl hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  {deleting ? 'Deleting...' : '일정 삭제'}
+                </button>
+                <button type="button" onClick={resetAll}
+                  className="flex-1 py-3 text-[14px] font-bold text-white bg-green-500 rounded-2xl hover:bg-green-600 transition-colors">
+                  New Interview
+                </button>
+              </div>
+            )}
+
+            {/* View All link */}
+            <a href="/admin/interviews"
+              className="block text-center text-[13px] text-[#86868b] hover:text-[#1d1d1f] transition-colors py-2">
+              View All Interviews &rarr;
+            </a>
+          </div>
+        )}
+
+        {/* ═══ Deleted → Back to creation ═══ */}
+        {!result && msg && step === 3 && candidate && selectedEmployer && msg.includes('deleted') && (
+          <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-[13px] text-orange-700">
+            Interview deleted. You can create a new one above.
           </div>
         )}
       </div>

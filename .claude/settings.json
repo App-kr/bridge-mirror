@@ -4,6 +4,21 @@
   },
   "permissions": {
     "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Task(*)",
+      "NotebookEdit(*)",
+      "SendMessage(*)",
+      "TeamCreate(*)",
+      "TeamDelete(*)"
+    ],
     "deny": [
       "Bash(rm -rf *)",
       "Bash(DROP TABLE*)",
