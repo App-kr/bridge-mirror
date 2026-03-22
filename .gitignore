@@ -11,6 +11,7 @@ account*.env
 *.key
 *.p12
 *.pfx
+.secrets.enc.json
 google_service_account*.json
 CREDENTIALS_REFERENCE.md
 
