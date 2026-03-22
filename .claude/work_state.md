@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-21 (12:30)
+최근 업데이트: 2026-03-23 (세션 3)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -11,7 +11,42 @@
 ## 현재 진행 중인 작업
 없음
 
-## 2026-03-21 세션 2 완료 (홈페이지 전수점검 + 보안수정)
+## 2026-03-23 세션 5 완료 (문서 프로세서 도구)
+- feat(tools): doc_processor.py v1.0 — 이력서/커버레터 PII 삭제 + 강사번호 입력
+  - DOCX/PDF 지원 (PDF→텍스트 추출)
+  - PII 삭제: 이메일, 전화, SNS, LinkedIn, 카카오, URL, 여권, 직장명
+  - 한국 주소/거주지 → "Korea" 자동 변환
+  - DB lookup: sheet_number로 후보자 매칭 + 이름 자동 삭제
+  - 원본 자동 백업 → processed_docs/originals/
+  - 사용: `python doc_processor.py process <폴더> [--number N]`
+  - 사용: `python doc_processor.py lookup <이름/이메일>`
+
+## 2026-03-23 세션 4 완료 (인터뷰 세팅 원클릭 자동화)
+- feat(admin): interview setup wizard (`543bde1`)
+  - 3단계 위저드: 후보자 검색 → 구인처 매칭 → 일정 확정 & 원클릭 발송
+  - 기존 API만 사용 (백엔드 변경 0건)
+  - POST /api/admin/interview/confirm → GCal + Meet + DB + 양측 이메일 자동
+  - 사이드바: 인터뷰 세팅 href → /admin/interview-setup
+  - Make.com/Notion/Google Calendar 외부 도구 대체
+
+## 2026-03-23 세션 3 완료 (관리자 알림 + MailModal + 인터뷰 + 셀 영속성)
+- feat(admin): 데스크탑 알림 + 배지 수정 (`e5d07dc`)
+  - 브라우저 Notification API — 새 문의 접수 시 데스크탑 팝업
+  - Web Audio 알림음 (880Hz→1100Hz, 파일 불필요)
+  - 배지 구인자관리→문의 이동, 색상 blue→red
+- feat(sheet): MailModal Apple-style 리디자인 (`d135d3e`)
+  - 템플릿 CRUD (localStorage), Gmail/Naver 색분리 버튼
+  - 첨부파일 "대용량첨부(14일후 만료)", Save/Send 상단 헤더
+- fix(sheet): 셀 편집/삭제 영속성 수정 (`36a5471`, `7b50406`)
+  - saveToServer 에러 핸들링 + 토스트
+  - 삭제: PATCH→DELETE (status='Deleted' 패턴)
+  - GET 쿼리 status!='Deleted' 기본 필터
+- feat(sheet): 인터뷰 모달 2단 컴팩트 (`29cb5a0`)
+  - 날짜 프리뷰 상단, 후보자 정보 그리드, Meet 풀
+- fix(sheet): Pipeline/Tab 가독성 개선 (`c3ef0c9`)
+  - 인터뷰대기→인터뷰 대기, pill 배지, flexbox gap
+
+## 2026-03-22 세션 2 완료 (Employers 데이터 안정화)
 - fix(frontend): 보안/SEO 수정 5건 (`5464736`)
   - DEV_MODE=false, MegaMenu /about 링크 수정, sitemap /about 추가
   - inquiry 가짜계좌 제거, 카카오 http→https
