@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { API_URL } from '@/lib/api'
@@ -105,6 +105,61 @@ export default function AdminSidebar() {
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [newCount, setNewCount] = useState(0)
+  const prevCountRef = useRef(0)
+  const notifPermRef = useRef<NotificationPermission>('default')
+
+  /* ── 브라우저 알림 권한 요청 (최초 1회) ── */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    notifPermRef.current = Notification.permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(p => { notifPermRef.current = p })
+    }
+  }, [])
+
+  /* ── 알림음 (Web Audio API — 파일 불필요) ── */
+  const playNotifSound = useCallback(() => {
+    try {
+      const ctx = new AudioContext()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.frequency.value = 880
+      osc.type = 'sine'
+      gain.gain.value = 0.15
+      osc.start(); osc.stop(ctx.currentTime + 0.15)
+      setTimeout(() => {
+        const osc2 = ctx.createOscillator()
+        const gain2 = ctx.createGain()
+        osc2.connect(gain2); gain2.connect(ctx.destination)
+        osc2.frequency.value = 1100
+        osc2.type = 'sine'
+        gain2.gain.value = 0.12
+        osc2.start(); osc2.stop(ctx.currentTime + 0.12)
+      }, 180)
+    } catch { /* AudioContext 차단 시 무시 */ }
+  }, [])
+
+  /* ── 새 문의 감지 → 데스크탑 알림 + 소리 ── */
+  useEffect(() => {
+    if (newCount > prevCountRef.current && prevCountRef.current >= 0) {
+      const added = newCount - prevCountRef.current
+      if (prevCountRef.current > 0 || newCount > 0) {
+        // 최초 로드(0→N)에도 알림 (prev===0 && newCount>0)
+        if (notifPermRef.current === 'granted') {
+          try {
+            new Notification('BRIDGE 새 문의', {
+              body: `새로운 문의 ${added}건이 접수되었습니다`,
+              icon: '/icon.svg',
+              tag: 'bridge-inquiry',
+            })
+          } catch { /* SW 없는 환경 fallback */ }
+        }
+        if (prevCountRef.current > 0) playNotifSound() // 최초 로드 시 소리 안 남
+      }
+    }
+    prevCountRef.current = newCount
+  }, [newCount, playNotifSound])
 
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_KEY_STORAGE)
@@ -177,12 +232,12 @@ export default function AdminSidebar() {
                     {active && (
                       <span className="absolute left-0 w-[3px] h-5 bg-blue-600 rounded-r-full" />
                     )}
-                    <span className={`shrink-0 ${active ? 'text-blue-600' : item.href === '/admin/employers' && newCount > 0 ? 'text-blue-500' : 'text-zinc-400 group-hover:text-zinc-600'}`}>
+                    <span className={`shrink-0 ${active ? 'text-blue-600' : item.href === '/admin/inquiries' && newCount > 0 ? 'text-red-500' : 'text-zinc-400 group-hover:text-zinc-600'}`}>
                       {item.icon}
                     </span>
                     <span>{item.label}</span>
-                    {item.href === '/admin/employers' && newCount > 0 && (
-                      <span className="ml-auto shrink-0 text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 animate-pulse leading-none">
+                    {item.href === '/admin/inquiries' && newCount > 0 && (
+                      <span className="ml-auto shrink-0 text-[10px] font-bold text-white bg-red-500 rounded-full min-w-[18px] text-center px-1.5 py-0.5 animate-pulse leading-none">
                         {newCount}
                       </span>
                     )}
