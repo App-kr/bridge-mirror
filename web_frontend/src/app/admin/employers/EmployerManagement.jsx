@@ -1253,17 +1253,9 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
               );
             })}
             {hasMore&&(
-              <tr>
-                <td colSpan={dataCols.length+2} style={{padding:0,border:"none"}}>
-                  <button type="button" onClick={()=>setDisplayLimit(v=>v+100)}
-                    style={{width:"100%",padding:"10px 0",background:"#eff6ff",border:"1px solid #bfdbfe",
-                      color:"#2563eb",fontSize:"0.82rem",fontWeight:700,cursor:"pointer",
-                      display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                    <span>▼ 더 보기</span>
-                    <span style={{fontSize:"0.72rem",fontWeight:400,color:"#6b7280"}}>
-                      ({visRows.length} / {allVisRows.length}건)
-                    </span>
-                  </button>
+              <tr ref={sentinelRef}>
+                <td colSpan={dataCols.length+2} style={{padding:"8px 0",border:"none",textAlign:"center"}}>
+                  <span style={{fontSize:"0.72rem",color:"#86868b"}}>{visRows.length} / {allVisRows.length}건</span>
                 </td>
               </tr>
             )}
@@ -1330,6 +1322,8 @@ export default function EmployerManagement(){
   const[displayLimit,setDisplayLimit]=useState(100);
   const[debouncedSearch,setDebouncedSearch]=useState("");
   const searchTimerRef=useRef(null);
+  const sentinelRef=useRef(null);
+  const sentinelDocRef=useRef(null);
 
   useEffect(()=>{
     const adminKey=localStorage.getItem("bridge_admin_key")||"";
@@ -1388,6 +1382,18 @@ export default function EmployerManagement(){
 
   // 탭/필터/검색 변경 시 displayLimit 리셋
   useEffect(()=>{setDisplayLimit(100);},[tab,fl,debouncedSearch]);
+
+  // 무한 스크롤: sentinel 요소가 뷰포트에 들어오면 100건 추가
+  useEffect(()=>{
+    const obs=new IntersectionObserver(entries=>{
+      if(entries[0]?.isIntersecting)setDisplayLimit(v=>v+100);
+    },{rootMargin:"400px"});
+    const s1=sentinelRef.current;
+    const s2=sentinelDocRef.current;
+    if(s1)obs.observe(s1);
+    if(s2)obs.observe(s2);
+    return()=>obs.disconnect();
+  });
 
   const filtered=useMemo(()=>{
     let r=[...data];
@@ -1581,12 +1587,8 @@ export default function EmployerManagement(){
                   </div>
                 ))}
                 {filtered.length>displayLimit&&(
-                  <div style={{textAlign:"center",padding:"16px 0"}}>
-                    <button type="button" onClick={()=>setDisplayLimit(v=>v+100)}
-                      style={{padding:"10px 32px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,
-                        color:"#2563eb",fontSize:"0.85rem",fontWeight:700,cursor:"pointer"}}>
-                      ▼ 더 보기 ({Math.min(filtered.length,displayLimit)} / {filtered.length}건)
-                    </button>
+                  <div ref={sentinelDocRef} style={{textAlign:"center",padding:"12px 0"}}>
+                    <span style={{fontSize:"0.72rem",color:"#86868b"}}>{Math.min(filtered.length,displayLimit)} / {filtered.length}건</span>
                   </div>
                 )}
                 {!filtered.length&&<div style={{textAlign:"center",padding:50,color:"#bbb"}}>검색 결과 없음</div>}
