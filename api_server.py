@@ -5230,15 +5230,17 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             if inq["benefits"]:    raw_parts.append(f"Benefits : {inq['benefits']}")
             raw_text = "\n".join(raw_parts)
 
-            # job_code: INSERT 후 lastrowid로 생성 (race condition 방지)
+            # job_code 생성: MAX(id) 기반으로 INSERT 시 바로 포함 (NOT NULL 제약)
+            max_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM jobs").fetchone()[0]
+            job_code = f"Job.{max_id + 1001}"
             cur = conn.execute(
-                """INSERT INTO jobs (seq, location, city, start_date, teaching_age,
+                """INSERT INTO jobs (seq, job_code, location, city, start_date, teaching_age,
                    working_hours, daily_hours, salary_min, salary_max, salary_raw,
                    vacation, housing, benefits, status, is_hot, is_deleted, created_at,
                    internal_notes, raw_text, employer_display_name)
-                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 1, 0, ?, ?, ?, ?)""",
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 1, 0, ?, ?, ?, ?)""",
                 (
-                    loc, city, inq["start_date"], inq["teaching_age"],
+                    job_code, loc, city, inq["start_date"], inq["teaching_age"],
                     wh, daily_hours, salary_min, salary_max, salary_raw,
                     inq["vacation"], housing_val,
                     inq["benefits"], datetime.now(timezone.utc).isoformat(),
@@ -5246,8 +5248,6 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
                 ),
             )
             new_row_id = cur.lastrowid
-            job_code = f"Job.{new_row_id + 1000}"
-            conn.execute("UPDATE jobs SET job_code = ? WHERE id = ?", (job_code, new_row_id))
             new_notes = f"{notes}\nJOB_REGISTERED:{job_code}".strip()
             conn.execute("UPDATE client_inquiries SET notes = ? WHERE id = ?", (new_notes, inquiry_id))
             conn.commit()
