@@ -13,6 +13,7 @@
    ═══════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { GridEngine } from './engine/GridEngine'
@@ -160,6 +161,25 @@ export default function BridgeCanvasSheet() {
   const [newBanner, setNewBanner] = useState(0)  // 신규 접수 배너 카운트
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [pipelineStage, setPipelineStage] = useState<string | null>(null) // 파이프라인 상태표시줄
+
+  // Tab customization (label rename + drag reorder)
+  const TAB_PREFS_KEY = 'bridge_sheet_tab_prefs'
+  const loadTabPrefs = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(TAB_PREFS_KEY)
+      if (!raw) return { order: TABS.map(t => t.key), labels: {} as Record<string, string> }
+      const p = JSON.parse(raw)
+      return { order: p.order ?? TABS.map(t => t.key), labels: p.labels ?? {} }
+    } catch { return { order: TABS.map(t => t.key), labels: {} as Record<string, string> } }
+  }, [])
+  const [tabOrder, setTabOrder] = useState<string[]>(() => loadTabPrefs().order)
+  const [tabLabels, setTabLabels] = useState<Record<string, string>>(() => loadTabPrefs().labels)
+  const [editingTab, setEditingTab] = useState<string | null>(null)
+  const [dragTab, setDragTab] = useState<string | null>(null)
+  const orderedTabs = useMemo(() => tabOrder.map(k => TABS.find(t => t.key === k)).filter(Boolean) as typeof TABS, [tabOrder])
+  const saveTabPrefs = useCallback((order: string[], labels: Record<string, string>) => {
+    try { localStorage.setItem(TAB_PREFS_KEY, JSON.stringify({ order, labels })) } catch {}
+  }, [])
 
   // Mail modal
   const [mailOpen, setMailOpen] = useState(false)
@@ -1810,34 +1830,87 @@ export default function BridgeCanvasSheet() {
         )
       })()}
 
-      {/* ── Tabs (bottom) ── */}
+      {/* ── Tabs (bottom) — drag-reorder + double-click rename ── */}
       <div style={{
         display: 'flex', gap: 0, flexShrink: 0,
         borderTop: '1px solid #e5e7eb', background: '#fff',
       }}>
-        {TABS.map(t => {
+        {orderedTabs.map(t => {
           const active = tab === t.key
+          const displayLabel = tabLabels[t.key] || t.label
+          const isDragging = dragTab === t.key
           return (
-            <button key={t.key} onClick={() => { setTab(t.key); setSelectedRows(new Set()); setFilters({}) }} style={{
-              padding: '8px 20px', fontSize: 13, fontWeight: active ? 600 : 400,
-              color: active ? t.bg : '#6b7280',
-              background: active ? `${t.bg}0a` : 'transparent',
-              border: 'none',
-              borderTop: active ? `2.5px solid ${t.bg}` : '2.5px solid transparent',
-              cursor: 'pointer', transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
+            <div
+              key={t.key}
+              draggable
+              onDragStart={(e) => { setDragTab(t.key); e.dataTransfer.effectAllowed = 'move' }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (!dragTab || dragTab === t.key) return
+                const newOrder = [...tabOrder]
+                const fromIdx = newOrder.indexOf(dragTab)
+                const toIdx = newOrder.indexOf(t.key)
+                if (fromIdx < 0 || toIdx < 0) return
+                newOrder.splice(fromIdx, 1)
+                newOrder.splice(toIdx, 0, dragTab)
+                setTabOrder(newOrder)
+                saveTabPrefs(newOrder, tabLabels)
+                setDragTab(null)
+              }}
+              onDragEnd={() => setDragTab(null)}
+              onClick={() => { if (!editingTab) { setTab(t.key); setSelectedRows(new Set()); setFilters({}) } }}
+              onDoubleClick={(e) => { e.stopPropagation(); setEditingTab(t.key) }}
+              style={{
+                padding: '8px 18px', fontSize: 13, fontWeight: active ? 700 : 500,
+                color: active ? '#1d1d1f' : '#6b7280',
+                background: active ? '#fff' : isDragging ? '#f0f0f0' : 'transparent',
+                border: 'none',
+                borderTop: active ? `3px solid ${t.bg}` : '3px solid transparent',
+                cursor: editingTab === t.key ? 'text' : 'pointer',
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 6,
+                opacity: isDragging ? 0.5 : 1,
+                userSelect: 'none',
+              }}
+            >
+              <span style={{ fontSize: 14 }}>{t.icon}</span>
+              {editingTab === t.key ? (
+                <input
+                  autoFocus
+                  defaultValue={displayLabel}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim() || t.label
+                    const next = { ...tabLabels, [t.key]: v === t.label ? undefined! : v }
+                    if (v === t.label) delete next[t.key]
+                    setTabLabels(next)
+                    saveTabPrefs(tabOrder, next)
+                    setEditingTab(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    if (e.key === 'Escape') { setEditingTab(null) }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    border: 'none', borderBottom: '1.5px solid #2563eb',
+                    outline: 'none', fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+                    background: 'transparent', width: Math.max(40, displayLabel.length * 14),
+                    padding: 0,
+                  }}
+                />
+              ) : (
+                <span>{displayLabel}</span>
+              )}
               <span style={{
-                fontSize: 12, fontWeight: 600,
+                fontSize: 11, fontWeight: 600,
                 background: active ? `${t.bg}18` : '#f0f0f0',
                 color: active ? t.bg : '#9ca3af',
                 padding: '1px 8px', borderRadius: 10, minWidth: 20, textAlign: 'center' as const,
               }}>
                 {tabCounts[t.key] ?? 0}
               </span>
-            </button>
+            </div>
           )
         })}
         {loading && (
