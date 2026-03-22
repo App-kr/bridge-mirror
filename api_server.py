@@ -6946,6 +6946,10 @@ def _parse_memo_pii(memo: str) -> dict:
     )
     if stop:
         candidate = name_src[: stop.start()].strip().rstrip("/ ,;")
+        # 슬래시 뒤 5자 이상이면 잡음 → 슬래시 앞만 업체명
+        slash_m = re.match(r"^(.+?)/\s*(.+)$", candidate)
+        if slash_m and len(slash_m.group(2)) > 4:
+            candidate = slash_m.group(1).strip()
         if candidate and len(candidate) <= 30:
             result["name"] = candidate
 
