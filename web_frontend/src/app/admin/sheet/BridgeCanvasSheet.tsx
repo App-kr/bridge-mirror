@@ -1059,11 +1059,11 @@ export default function BridgeCanvasSheet() {
 
   /* ── Pipeline 상태표시줄 데이터 ── */
   const PIPELINE_STAGES = useMemo(() => [
-    { key: 'interview', label: '인터뷰대기', color: '#d97706' },
-    { key: 'proposal',  label: '제안중',    color: '#ca8a04' },
-    { key: 'signed',    label: '서명완료',  color: '#16a34a' },
-    { key: 'guide_sent',label: '배치대기',  color: '#2563eb' },
-    { key: 'guide_done',label: '완료',      color: '#1d4ed8' },
+    { key: 'interview', label: '인터뷰 대기', color: '#d97706' },
+    { key: 'proposal',  label: '제안 중',    color: '#ca8a04' },
+    { key: 'signed',    label: '서명 완료',  color: '#16a34a' },
+    { key: 'guide_sent',label: '배치 대기',  color: '#2563eb' },
+    { key: 'guide_done',label: '완료',       color: '#1d4ed8' },
   ], [])
 
   const pipelineData = useMemo(() => {
@@ -1202,36 +1202,40 @@ export default function BridgeCanvasSheet() {
 
       {/* ── Pipeline 상태표시줄 ── */}
       <div style={{
-        flexShrink: 0, background: '#1e293b', borderBottom: '1px solid #334155',
+        flexShrink: 0, background: '#fff', borderBottom: '1px solid #e5e7eb',
         display: 'flex', flexDirection: 'column',
       }}>
         {/* 버튼 행 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '4px 8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginRight: 4, letterSpacing: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', marginRight: 4, letterSpacing: 1.5 }}>
             PIPELINE
           </span>
           {PIPELINE_STAGES.map(ps => {
             const pd = pipelineData[ps.key]
             const isOpen = pipelineStage === ps.key
+            const cnt = pd?.total ?? 0
             return (
               <button
                 key={ps.key}
                 onClick={() => setPipelineStage(isOpen ? null : ps.key)}
                 style={{
-                  padding: '2px 10px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 4,
+                  padding: '4px 14px', fontSize: 13, fontWeight: 500, border: 'none', borderRadius: 6,
                   cursor: 'pointer', transition: 'all 0.15s',
-                  background: isOpen ? ps.color : 'rgba(255,255,255,0.08)',
-                  color: isOpen ? '#fff' : '#cbd5e1',
-                  outline: isOpen ? `2px solid ${ps.color}` : 'none',
+                  background: isOpen ? `${ps.color}18` : '#f5f5f7',
+                  color: isOpen ? ps.color : '#555',
+                  outline: isOpen ? `1.5px solid ${ps.color}50` : 'none',
+                  display: 'flex', alignItems: 'center', gap: 6,
                 }}
               >
                 {ps.label}
                 <span style={{
-                  marginLeft: 5, fontSize: 10, fontWeight: 800,
-                  background: isOpen ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
-                  padding: '0 5px', borderRadius: 8,
+                  fontSize: 12, fontWeight: 600,
+                  background: cnt > 0 ? (isOpen ? `${ps.color}20` : '#e5e7eb') : 'transparent',
+                  color: cnt > 0 ? (isOpen ? ps.color : '#374151') : '#ccc',
+                  padding: cnt > 0 ? '1px 7px' : '0',
+                  borderRadius: 10, minWidth: 18, textAlign: 'center' as const,
                 }}>
-                  {pd?.total ?? 0}
+                  {cnt}
                 </span>
               </button>
             )
@@ -1239,7 +1243,7 @@ export default function BridgeCanvasSheet() {
           {pipelineStage && (
             <button
               onClick={() => setPipelineStage(null)}
-              style={{ marginLeft: 'auto', fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ marginLeft: 'auto', fontSize: 14, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
             >
               ✕
             </button>
@@ -1250,30 +1254,29 @@ export default function BridgeCanvasSheet() {
         {pipelineStage && pipelineData[pipelineStage] && (
           <div style={{
             padding: '6px 12px 8px',
-            background: '#0f172a',
-            borderTop: '1px solid #1e293b',
+            background: '#f9fafb',
+            borderTop: '1px solid #f3f4f6',
             display: 'flex', flexWrap: 'wrap', gap: '6px 16px',
             maxHeight: 120, overflowY: 'auto',
           }}>
             {pipelineData[pipelineStage].byCompany.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#475569' }}>해당 단계 후보자 없음</span>
+              <span style={{ fontSize: 12, color: '#9ca3af' }}>해당 단계 후보자 없음</span>
             ) : pipelineData[pipelineStage].byCompany.map(({ company, candidates }) => (
               <div key={company} style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {company}
                 </span>
-                <span style={{ fontSize: 10, color: '#334155' }}>—</span>
+                <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
                 {candidates.map(c => (
                   <button
                     key={c._cid || c.id}
                     onClick={() => {
-                      // 해당 후보자가 있는 탭으로 이동 + 검색
                       setQ(String(c.mgtNum || c.name || ''))
                     }}
                     style={{
-                      fontSize: 11, fontWeight: 700, padding: '1px 6px',
-                      background: 'rgba(255,255,255,0.06)', border: '1px solid #334155',
-                      borderRadius: 4, color: '#e2e8f0', cursor: 'pointer',
+                      fontSize: 11, fontWeight: 500, padding: '1px 6px',
+                      background: '#fff', border: '1px solid #e5e7eb',
+                      borderRadius: 4, color: '#374151', cursor: 'pointer',
                     }}
                     title={`${c.name} (${c.nationality})`}
                   >
@@ -1809,26 +1812,28 @@ export default function BridgeCanvasSheet() {
 
       {/* ── Tabs (bottom) ── */}
       <div style={{
-        display: 'flex', gap: 0, flexShrink: 0, paddingLeft: 4,
-        borderTop: '1px solid #ccc', background: '#37474F',
+        display: 'flex', gap: 0, flexShrink: 0,
+        borderTop: '1px solid #e5e7eb', background: '#fff',
       }}>
         {TABS.map(t => {
           const active = tab === t.key
           return (
             <button key={t.key} onClick={() => { setTab(t.key); setSelectedRows(new Set()); setFilters({}) }} style={{
-              padding: '6px 16px', fontSize: 13, fontWeight: 400,
-              color: active ? '#fff' : '#ccc',
-              background: active ? t.bg : '#546E7A',
+              padding: '8px 20px', fontSize: 13, fontWeight: active ? 600 : 400,
+              color: active ? t.bg : '#6b7280',
+              background: active ? `${t.bg}0a` : 'transparent',
               border: 'none',
-              borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
-              cursor: 'pointer', transition: 'background 0.15s',
+              borderTop: active ? `2.5px solid ${t.bg}` : '2.5px solid transparent',
+              cursor: 'pointer', transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              {t.icon} {t.label}
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
               <span style={{
-                marginLeft: 6, fontSize: 11, fontWeight: 600,
-                background: active ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-                color: active ? '#fff' : '#aaa',
-                padding: '1px 6px', borderRadius: 10,
+                fontSize: 12, fontWeight: 600,
+                background: active ? `${t.bg}18` : '#f0f0f0',
+                color: active ? t.bg : '#9ca3af',
+                padding: '1px 8px', borderRadius: 10, minWidth: 20, textAlign: 'center' as const,
               }}>
                 {tabCounts[t.key] ?? 0}
               </span>
@@ -1837,10 +1842,10 @@ export default function BridgeCanvasSheet() {
         })}
         {loading && (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingRight: 12, paddingLeft: 12 }}>
-            <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.15)', borderRadius: 2 }}>
+            <div style={{ flex: 1, height: 3, background: '#f3f4f6', borderRadius: 2 }}>
               <div style={{
                 width: dbTotal > 0 ? `${(loaded / dbTotal) * 100}%` : '0%',
-                height: '100%', background: '#64b5f6', borderRadius: 2, transition: 'width 0.3s',
+                height: '100%', background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s',
               }} />
             </div>
           </div>
@@ -1850,17 +1855,17 @@ export default function BridgeCanvasSheet() {
       {/* ── Footer Legend ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '4px 12px',
-        background: '#fff', borderTop: '1px solid #e2e8f0', fontSize: 11,
-        fontWeight: 600, color: '#555', flexShrink: 0,
+        background: '#fff', borderTop: '1px solid #f3f4f6', fontSize: 11,
+        fontWeight: 400, color: '#6b7280', flexShrink: 0,
       }}>
         {STAGES.filter(s => s.key !== 'none').map(s => (
           <span key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, border: '1px solid #d1d5db' }} />
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, border: '1px solid #e5e7eb' }} />
             {s.label}
           </span>
         ))}
         <span style={{ marginLeft: 'auto' }}>
-          {MTAGS.map(m => <span key={m.key} style={{ color: m.c, fontWeight: 700, marginLeft: 8 }}>{m.label}</span>)}
+          {MTAGS.map(m => <span key={m.key} style={{ color: m.c, fontWeight: 500, marginLeft: 8 }}>{m.label}</span>)}
         </span>
       </div>
 
