@@ -32,6 +32,7 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
+const FIXED_MEET_LINK = 'https://meet.google.com/kmt-ydhj-fmf' // Scarlett: 고정 Meet 링크 (1회만 교체)
 
 /* ── 집중관리 탭 필터 — 진행중/계약중 강사 ── */
 const FOCUS_STAGES = new Set(['interview', 'proposal', 'signed', 'guide_sent', 'guide_done', 'caution'])
@@ -123,6 +124,17 @@ export default function BridgeCanvasSheet() {
   // Mail modal
   const [mailOpen, setMailOpen] = useState(false)
   const [mailRecipients, setMailRecipients] = useState<DataRow[]>([])
+
+  // Interview quick modal
+  const [ivModal, setIvModal] = useState(false)
+  const [ivTarget, setIvTarget] = useState<DataRow | null>(null)
+  const [ivDate, setIvDate] = useState('')
+  const [ivTime, setIvTime] = useState('14:00')
+  const [ivDuration, setIvDuration] = useState(20)
+  const [ivNotes, setIvNotes] = useState('')
+  const [ivAutoSend, setIvAutoSend] = useState(true)
+  const [ivLoading, setIvLoading] = useState(false)
+  const [ivResult, setIvResult] = useState<{ id: number; emailSent: boolean } | null>(null)
 
   // Filter popup
   const [filterPopup, setFilterPopup] = useState<FilterPopup | null>(null)
@@ -1233,6 +1245,19 @@ export default function BridgeCanvasSheet() {
               onClick={() => { const rows = [...selectedRows].map(i => displayRowsRef.current[i]).filter(Boolean); if (rows.length) openMailModal(rows) }}
               style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}
             >✉ 메일</button>
+            <button
+              onClick={() => {
+                const row = displayRowsRef.current[[...selectedRows][0]]
+                if (!row) return
+                setIvTarget(row)
+                const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+                setIvDate(tomorrow.toISOString().slice(0, 10))
+                setIvTime('14:00'); setIvDuration(20); setIvNotes(''); setIvAutoSend(true); setIvResult(null)
+                setIvModal(true)
+              }}
+              style={{ ...tbBtn, background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }}
+              title="선택된 후보자 인터뷰 생성"
+            >📅 인터뷰</button>
           </div>
         )}
 
@@ -1756,6 +1781,159 @@ export default function BridgeCanvasSheet() {
           {MTAGS.map(m => <span key={m.key} style={{ color: m.c, fontWeight: 700, marginLeft: 8 }}>{m.label}</span>)}
         </span>
       </div>
+
+      {/* ── Interview Quick Modal ── */}
+      {ivModal && ivTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setIvModal(false) }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: 440, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}>
+            {/* Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#111' }}>📅 인터뷰 생성</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>선택 후보자에게 인터뷰 일정을 보냅니다</div>
+              </div>
+              <button onClick={() => setIvModal(false)} style={{ fontSize: 20, color: '#9ca3af', cursor: 'pointer', border: 'none', background: 'none' }}>&times;</button>
+            </div>
+
+            <div style={{ padding: '16px 20px' }}>
+              {ivResult ? (
+                /* Success */
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>Interview #{ivResult.id} 생성 완료</div>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                    {ivResult.emailSent ? '후보자에게 이메일이 발송되었습니다' : '이메일은 별도로 발송해주세요'}
+                  </div>
+                  <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <a href={FIXED_MEET_LINK} target="_blank" rel="noopener noreferrer"
+                      style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                      🔗 Meet 참가
+                    </a>
+                    <button onClick={() => setIvModal(false)}
+                      style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      닫기
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Form */
+                <>
+                  {/* Candidate info (auto-filled) */}
+                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>후보자 정보</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 13 }}>
+                      <div><span style={{ color: '#9ca3af' }}>번호:</span> <b>#{ivTarget.mgtNum || ivTarget._cid || ivTarget.id}</b></div>
+                      <div><span style={{ color: '#9ca3af' }}>이름:</span> <b>{ivTarget.name || '-'}</b></div>
+                      <div style={{ gridColumn: '1/3' }}><span style={{ color: '#9ca3af' }}>이메일:</span> <b>{ivTarget.email || '(없음)'}</b></div>
+                    </div>
+                  </div>
+
+                  {/* Date & Time */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>날짜</label>
+                      <input type="date" value={ivDate} onChange={e => setIvDate(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>시간 (KST)</label>
+                      <input type="time" value={ivTime} onChange={e => setIvTime(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }} />
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>면접 시간</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {[15, 20, 30].map(d => (
+                        <button key={d} onClick={() => setIvDuration(d)}
+                          style={{
+                            padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                            border: ivDuration === d ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                            background: ivDuration === d ? '#ede9fe' : '#fff',
+                            color: ivDuration === d ? '#7c3aed' : '#6b7280',
+                          }}>{d}분</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Meet Link (fixed) */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Google Meet 링크 (고정)</label>
+                    <div style={{ padding: '8px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 13, color: '#166534', fontFamily: 'monospace' }}>
+                      {FIXED_MEET_LINK}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>방은 항상 열려있습니다. 후보자에게 약 5분 안내됩니다.</div>
+                  </div>
+
+                  {/* Notes */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>메모 (선택)</label>
+                    <textarea value={ivNotes} onChange={e => setIvNotes(e.target.value)} rows={2} placeholder="추가 메모..."
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, resize: 'vertical' }} />
+                  </div>
+
+                  {/* Auto send toggle */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={ivAutoSend} onChange={e => setIvAutoSend(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: '#7c3aed' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>후보자에게 이메일 자동 발송</span>
+                    {!ivTarget.email && <span style={{ fontSize: 11, color: '#ef4444' }}>(이메일 없음)</span>}
+                  </label>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setIvModal(false)}
+                      style={{ padding: '8px 16px', background: '#f3f4f6', color: '#374151', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      취소
+                    </button>
+                    <button
+                      disabled={ivLoading || !ivDate || !ivTime}
+                      onClick={async () => {
+                        setIvLoading(true)
+                        try {
+                          const res = await fetch(`${API}/api/admin/interviews`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+                            body: JSON.stringify({
+                              candidate_name: ivTarget.name || '',
+                              candidate_email: ivTarget.email || '',
+                              candidate_id: ivTarget._cid || String(ivTarget.mgtNum || ''),
+                              employer_name: '', employer_email: '',
+                              interview_date: ivDate, interview_time: ivTime,
+                              meet_link: FIXED_MEET_LINK,
+                              notes: ivNotes, duration_minutes: ivDuration,
+                              auto_send_email: ivAutoSend && !!ivTarget.email,
+                            }),
+                          })
+                          const json = await res.json()
+                          if (!res.ok) throw new Error(json.detail ?? 'Failed')
+                          setIvResult({
+                            id: json.data?.id,
+                            emailSent: json.data?.email_result?.status === 'sent',
+                          })
+                        } catch (e) {
+                          showPhotoToast(e instanceof Error ? e.message : 'Error')
+                        } finally {
+                          setIvLoading(false)
+                        }
+                      }}
+                      style={{
+                        padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+                        background: ivLoading ? '#c4b5fd' : '#7c3aed', color: '#fff',
+                        opacity: (!ivDate || !ivTime) ? 0.5 : 1,
+                      }}>
+                      {ivLoading ? '생성 중...' : '📅 인터뷰 생성'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Mail Modal ── */}
       <MailModal
