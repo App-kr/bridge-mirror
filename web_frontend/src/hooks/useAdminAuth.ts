@@ -105,7 +105,7 @@ export function useAdminAuth() {
           setAuthed(true)
           localStorage.setItem(STORAGE_KEY, key)
           localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-          document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax'
+          document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax; Secure'
         } else {
           setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
         }
@@ -141,7 +141,7 @@ export function useAdminAuth() {
       setAuthed(true)
       localStorage.setItem(STORAGE_KEY, key)
       localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-      document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax'
+      document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax; Secure'
 
       // 로그인 성공 시 IP 블랙리스트 자동 초기화
       fetch(`${API_URL}/api/admin/reset-blacklist`, {

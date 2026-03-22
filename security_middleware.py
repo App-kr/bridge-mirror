@@ -324,7 +324,7 @@ class AdminLoginGuard:
         self._fails[ip] = [t for t in self._fails[ip] if now - t < 86400]  # 24h 윈도우
         self._fails[ip].append(now)
         count = len(self._fails[ip])
-        for threshold, minutes in self.THRESHOLDS:
+        for threshold, minutes in reversed(self.THRESHOLDS):
             if count >= threshold:
                 return minutes  # minutes=None → 영구
         return None
