@@ -1535,71 +1535,84 @@ export default function EmployerManagement(){
         .rh{position:absolute;right:0;top:0;bottom:0;width:4px;cursor:col-resize;background:transparent}
         .rh:hover{background:#2563eb}
       `}</style>
-        {/* 헤더 */}
-        <div style={{background:"#fff",borderBottom:"1px solid #ddd",padding:"12px 20px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div>
-              <h2 style={{fontSize:"1.3rem",fontWeight:800}}>구인자관리</h2>
-              <span style={{fontSize:"0.85rem",color:"#111",fontWeight:700}}>{filtered.length}건</span>
+        {/* ── 상단 헤더: 제목 + 뷰 토글만 ── */}
+        <div style={{background:"#fff",borderBottom:"1px solid #e5e7eb",padding:"14px 20px 0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:10}}>
+              <h2 style={{fontSize:"1.3rem",fontWeight:800,margin:0}}>구인자관리</h2>
+              <span style={{fontSize:"0.82rem",color:"#6b7280",fontWeight:600}}>{filtered.length}건</span>
             </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              {/* 전역 폰트 슬라이더 */}
-              <div style={{display:"flex",gap:8,alignItems:"center",paddingRight:10,borderRight:"1px solid #eee"}}>
-                {[["INFO",fontInfo,setFontInfo,"#2563eb"],["MEMO",fontMemo,setFontMemo,"#b45309"],["본문",fontBody,setFontBody,"#555"]].map(([lbl,val,setter,col])=>(
-                  <div key={lbl} style={{display:"flex",alignItems:"center",gap:2}}>
-                    <span style={{fontSize:"0.58rem",color:col,fontWeight:700}}>{lbl}</span>
-                    <span style={{fontSize:"0.58rem",color:"#ccc"}}>가</span>
-                    <input type="range" min={11} max={20} value={val} onChange={e=>setter(Number(e.target.value))} style={{width:40,accentColor:col,cursor:"pointer"}}/>
-                    <span style={{fontSize:"0.65rem",color:"#ccc"}}>가</span>
-                    <span style={{fontSize:"0.58rem",color:"#aaa",minWidth:12}}>{val}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{display:"flex",border:"1px solid #111",overflow:"hidden",borderRadius:5}}>
-                {[{id:"doc",l:"워드뷰"},{id:"table",l:"엑셀뷰"}].map(v=>(
-                  <button key={v.id} onClick={()=>setMode(v.id)} style={{padding:"5px 14px",border:"none",background:mode===v.id?"#111":"#fff",color:mode===v.id?"#fff":"#111",fontSize:"0.82rem",fontWeight:600,cursor:"pointer"}}>{v.l}</button>
-                ))}
-              </div>
-              {mode==="table"&&<button onClick={()=>setShowColMgr(true)} style={{padding:"5px 12px",borderRadius:5,border:"1px solid #aaa",background:"#fff",fontSize:"0.78rem",cursor:"pointer"}}>열관리</button>}
-
-              <button onClick={()=>{setMailTarget(null);setMailPopup(true);}} style={{padding:"5px 16px",borderRadius:5,border:"none",background:checked.size>0?"#03c75a":"#a3e6bc",color:"#fff",fontSize:"0.82rem",fontWeight:700,cursor:"pointer"}}>✉ 메일발송{checked.size>0?` (${checked.size})`:""}</button>
-              <button onClick={()=>window.location.reload()} title="새로고침" style={{padding:"6px 14px",borderRadius:5,border:"1px solid #ccc",background:"#fff",fontSize:"1rem",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontWeight:700}}>⟳</button>
-              <button onClick={saveData} style={{padding:"5px 16px",borderRadius:5,border:"none",background:"#7c3aed",color:"#fff",fontSize:"0.82rem",fontWeight:700,cursor:"pointer"}}>💾 저장</button>
-              <button onClick={addNew} style={{padding:"5px 16px",borderRadius:5,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.82rem",fontWeight:700,cursor:"pointer"}}>+ 새접수</button>
+            {/* 워드뷰 / 엑셀뷰 토글 — 세그먼트 컨트롤 */}
+            <div style={{display:"flex",background:"#f3f4f6",borderRadius:8,padding:3,gap:2}}>
+              {[{id:"doc",l:"워드뷰",ico:"📄"},{id:"table",l:"엑셀뷰",ico:"📊"}].map(v=>(
+                <button key={v.id} onClick={()=>setMode(v.id)} style={{
+                  padding:"6px 18px",border:"none",borderRadius:6,fontSize:"0.82rem",fontWeight:600,cursor:"pointer",
+                  transition:"all 0.15s",
+                  background:mode===v.id?"#fff":"transparent",
+                  color:mode===v.id?"#1d1d1f":"#9ca3af",
+                  boxShadow:mode===v.id?"0 1px 3px rgba(0,0,0,0.1)":"none",
+                }}>{v.ico} {v.l}</button>
+              ))}
             </div>
           </div>
 
           {/* 탭 3개 */}
-          <div style={{display:"flex",borderBottom:"2px solid #eee",marginBottom:8}}>
+          <div style={{display:"flex",gap:2}}>
             {TABS.map(t=>{const nc=t.id==="active"?newCount:0;return(
-              <button key={t.id} onClick={()=>{setTab(t.id);setChecked(new Set());setFl({});}} style={{padding:"7px 16px",border:"none",background:"transparent",borderBottom:tab===t.id?`4px solid ${t.co}`:"4px solid transparent",color:tab===t.id?t.co:"#444",fontSize:"0.88rem",fontWeight:tab===t.id?800:500,cursor:"pointer",marginBottom:-2,position:"relative"}}>
-                {nc>0&&<span style={{position:"absolute",top:-5,left:"50%",transform:"translateX(-50%)",background:"#dc2626",color:"#fff",fontSize:"0.62rem",fontWeight:800,padding:"1px 7px",borderRadius:8,animation:"blink 1s step-end infinite"}}>NEW {nc}</span>}
+              <button key={t.id} onClick={()=>{setTab(t.id);setChecked(new Set());setFl({});}} style={{padding:"8px 18px",border:"none",background:"transparent",borderBottom:tab===t.id?`3px solid ${t.co}`:"3px solid transparent",color:tab===t.id?t.co:"#6b7280",fontSize:"0.85rem",fontWeight:tab===t.id?700:500,cursor:"pointer",marginBottom:-1,position:"relative",transition:"all 0.15s"}}>
+                {nc>0&&<span style={{position:"absolute",top:-4,left:"50%",transform:"translateX(-50%)",background:"#dc2626",color:"#fff",fontSize:"0.6rem",fontWeight:800,padding:"1px 7px",borderRadius:8,animation:"blink 1s step-end infinite"}}>NEW {nc}</span>}
                 {t.l}
-                <span style={{marginLeft:4,fontSize:"0.68rem",fontWeight:600,background:tab===t.id?(t.id==="blacklist"?"#fecaca":t.id==="all"?"#e5e7eb":"#dbeafe"):"#e8e8e8",color:tab===t.id?t.co:"#444",padding:"2px 8px",borderRadius:10,fontWeight:tab===t.id?700:600}}>{t.c}</span>
+                <span style={{marginLeft:5,fontSize:"0.7rem",fontWeight:600,background:tab===t.id?(t.id==="blacklist"?"#fee2e2":t.id==="all"?"#f3f4f6":"#eff6ff"):"#f3f4f6",color:tab===t.id?t.co:"#9ca3af",padding:"2px 8px",borderRadius:10}}>{t.c}</span>
               </button>
             );})}
+          </div>
+        </div>
 
+        {/* ── 보조 툴바: 폰트슬라이더 + 액션버튼 + 필터 ── */}
+        <div style={{background:"#fafafa",borderBottom:"1px solid #e5e7eb",padding:"8px 20px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          {/* 폰트 슬라이더 */}
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {[["INFO",fontInfo,setFontInfo,"#2563eb"],["MEMO",fontMemo,setFontMemo,"#b45309"],["본문",fontBody,setFontBody,"#555"]].map(([lbl,val,setter,col])=>(
+              <div key={lbl} style={{display:"flex",alignItems:"center",gap:2}}>
+                <span style={{fontSize:"0.58rem",color:col,fontWeight:700}}>{lbl}</span>
+                <span style={{fontSize:"0.52rem",color:"#ccc"}}>가</span>
+                <input type="range" min={11} max={20} value={val} onChange={e=>setter(Number(e.target.value))} style={{width:36,accentColor:col,cursor:"pointer"}}/>
+                <span style={{fontSize:"0.58rem",color:"#ccc"}}>가</span>
+                <span style={{fontSize:"0.52rem",color:"#aaa",minWidth:12}}>{val}</span>
+              </div>
+            ))}
           </div>
 
-          {/* 공통 필터바 — 워드뷰에서만 표시 */}
-          <div style={{display:mode==="table"?"none":"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{width:1,height:20,background:"#e5e7eb"}}/>
+
+          {/* 액션 버튼들 */}
+          {mode==="table"&&<button onClick={()=>setShowColMgr(true)} style={{padding:"4px 10px",borderRadius:5,border:"1px solid #d1d5db",background:"#fff",fontSize:"0.76rem",cursor:"pointer",color:"#374151"}}>열관리</button>}
+          <button onClick={()=>{setMailTarget(null);setMailPopup(true);}} style={{padding:"4px 14px",borderRadius:5,border:"none",background:checked.size>0?"#03c75a":"#d1fae5",color:checked.size>0?"#fff":"#16a34a",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>✉ 메일{checked.size>0?` (${checked.size})`:""}</button>
+          <button onClick={()=>window.location.reload()} title="새로고침" style={{padding:"4px 10px",borderRadius:5,border:"1px solid #d1d5db",background:"#fff",fontSize:"0.9rem",cursor:"pointer",lineHeight:1}}>⟳</button>
+          <button onClick={saveData} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#7c3aed",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>💾 저장</button>
+          <button onClick={addNew} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>+ 새접수</button>
+
+          {/* 필터바 — 워드뷰에서만 */}
+          {mode==="doc"&&<>
+            <div style={{width:1,height:20,background:"#e5e7eb"}}/>
             <DropFilter label="전체 지역" optKey="region" data={data} filters={fl} setFilters={setFl}/>
             <DropFilter label="전체 도시" optKey="city" data={data} filters={fl} setFilters={setFl}/>
             <DropFilter label="전체 대상" optKey="teachingAge" data={data} filters={fl} setFilters={setFl}/>
             <DropFilter label="상태" optKey="status" data={data} filters={fl} setFilters={setFl}/>
-            {/* Ctrl+F 검색 인라인 */}
-            <div style={{position:"relative",marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
-              <input
-                ref={searchRef}
-                value={searchQ}
-                onChange={e=>setSearchQ(e.target.value)}
-                placeholder="Ctrl+F 검색..."
-                style={{padding:"5px 10px",border:"1px solid",borderColor:searchQ?"#2563eb":"#ccc",borderRadius:6,fontSize:"0.82rem",outline:"none",width:searchQ||showSearch?180:120,transition:"width 0.2s",background:searchQ?"#eff6ff":"#fff"}}
-                onFocus={()=>setShowSearch(true)}
-              />
-              {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:"0.8rem"}}>✕</button>}
-            </div>
-            {hasF&&<button onClick={()=>setFl({})} style={{padding:"4px 10px",border:"1px solid #ccc",background:"#fff",fontSize:"0.72rem",color:"#888",cursor:"pointer",borderRadius:5}}>필터 초기화</button>}
+            {hasF&&<button onClick={()=>setFl({})} style={{padding:"3px 8px",border:"1px solid #d1d5db",background:"#fff",fontSize:"0.7rem",color:"#6b7280",cursor:"pointer",borderRadius:5}}>초기화</button>}
+          </>}
+
+          {/* 검색 — 우측 끝 */}
+          <div style={{position:"relative",marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
+            <input
+              ref={searchRef}
+              value={searchQ}
+              onChange={e=>setSearchQ(e.target.value)}
+              placeholder="검색..."
+              style={{padding:"4px 10px",border:"1px solid",borderColor:searchQ?"#2563eb":"#d1d5db",borderRadius:6,fontSize:"0.78rem",outline:"none",width:searchQ||showSearch?160:100,transition:"width 0.2s",background:searchQ?"#eff6ff":"#fff"}}
+              onFocus={()=>setShowSearch(true)}
+            />
+            {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:"0.75rem"}}>✕</button>}
           </div>
         </div>
 
