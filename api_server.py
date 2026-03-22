@@ -4089,6 +4089,8 @@ class InterviewCreate(BaseModel):
     notes:             str = Field("", max_length=2000)
     duration_minutes:  int = Field(20, ge=10, le=240)
     auto_send_email:   bool = Field(False)
+    email_subject:     str = Field("", max_length=500)
+    email_body:        str = Field("", max_length=5000)
 
 
 @app.get("/api/admin/interviews", tags=["admin"])
@@ -4135,22 +4137,29 @@ async def admin_create_interview(body: InterviewCreate, request: Request):
         # auto-send email to candidate if requested
         if body.auto_send_email and body.candidate_email:
             try:
-                iv = conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
-                if iv:
+                to_email = body.candidate_email
+                # Use custom email content if provided, otherwise fall back to template
+                if body.email_subject.strip() and body.email_body.strip():
+                    subject = body.email_subject
+                    html = body.email_body.replace("\n", "<br>")
+                else:
                     conn.row_factory = sqlite3.Row
                     iv = conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
-                    subject, html, to_email = _render_interview_email(dict(iv), "candidate")
-                    if to_email:
-                        sent = _smtp_send(to_email, subject, html)
-                        if sent:
-                            conn.execute(
-                                "UPDATE interviews SET email_sent_candidate=1, candidate_email_sent=1, candidate_email_sent_at=CURRENT_TIMESTAMP WHERE id=?",
-                                (interview_id,),
-                            )
-                            conn.commit()
-                            email_result = {"sent_to": to_email, "status": "sent"}
-                        else:
-                            email_result = {"status": "smtp_failed"}
+                    if iv:
+                        subject, html, to_email = _render_interview_email(dict(iv), "candidate")
+                    else:
+                        subject, html = "", ""
+                if to_email and subject and html:
+                    sent = _smtp_send(to_email, subject, html)
+                    if sent:
+                        conn.execute(
+                            "UPDATE interviews SET email_sent_candidate=1, candidate_email_sent=1, candidate_email_sent_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (interview_id,),
+                        )
+                        conn.commit()
+                        email_result = {"sent_to": to_email, "status": "sent"}
+                    else:
+                        email_result = {"status": "smtp_failed"}
             except Exception as _e:
                 logging.getLogger("bridge.api").warning("auto-send email failed for interview #%d: %s", interview_id, _e)
                 email_result = {"status": "error", "detail": str(_e)}
