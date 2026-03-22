@@ -833,8 +833,12 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
                   }
                   merged.push({type:"text",key:i,v:t});
                 }
+                // 지역 첫줄 보장: rawText에 지역/도시 라인이 없으면 item 데이터에서 주입
+                const _hasLoc=(()=>{for(const row of merged){if(row.type==="empty")continue;if(row.type==="kv")return false;if(row.type==="text"){if(!/^Job\.?\s*\d/.test(row.v)&&row.v.length<40&&!/[:\d]{4}/.test(row.v))return true;}};return false;})();
+                if(!_hasLoc&&(item.region||item.city)){merged.unshift({type:"loc",key:"_loc",v:[item.region,item.city].filter(Boolean).join(" ")});}
                 let seenKv=false;
                 return merged.map(row=>{
+                  if(row.type==="loc")return <div key={row.key} style={{color:"#1a57c8",fontSize:"1.15rem",fontWeight:700,marginBottom:4,paddingLeft:2}}>{row.v}</div>;
                   if(row.type==="empty")return <div key={row.key} style={{height:4}}/>;
                   if(row.type==="kv"){seenKv=true;return(
                     <div key={row.key} style={{display:"flex",gap:6,marginBottom:2}}>
