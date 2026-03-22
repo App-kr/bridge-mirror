@@ -136,9 +136,10 @@ function mapJobsV2(r) {
   }
   // PII: 암호화 필드 → memo fallback
   let name = r.employer_display_name || "";
-  // 슬래시 뒤 5자 이상 잡음 제거 (DB 미정리 데이터 방어)
+  // 업체명 잡음 제거 (DB 미정리 데이터 방어)
   const _slashN = name.match(/^(.+?)\/\s*(.+)$/);
   if (_slashN && _slashN[2].length > 4) name = _slashN[1].trim();
+  name = name.replace(/\s*0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{3,4}\s*$/, "").trim();
   let contact = ""; let phone = ""; let email = "";
   let parsedCity = "";
   let memoDisplay = r.internal_notes || "";
@@ -673,15 +674,12 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
         {editHeader
           ?<>
             <span style={{fontSize:"0.72rem",color:"#aaa",fontFamily:"monospace",cursor:"pointer"}} onClick={()=>setEditHeader(false)} title="번호 편집 (클릭 취소)">#{tmpJNumber}</span>
-            <span style={{fontSize:"1rem",color:"#555",fontWeight:400}}>{item.region} {item.city}</span>
             <input value={tmpName} onChange={e=>setTmpName(e.target.value)} style={{fontSize:"1rem",fontWeight:600,padding:"3px 8px",border:"2px solid #2563eb",borderRadius:6,outline:"none",minWidth:160}} autoFocus onKeyDown={e=>{if(e.key==="Enter"){onUpdate(item.jNumber,{jNumber:tmpJNumber,name:tmpName,rawText:item.rawText.replace(/Job\.\s*\S+/,`Job. ${tmpJNumber}`)});setEditHeader(false);}if(e.key==="Escape")setEditHeader(false);}}/>
             <button onClick={()=>{onUpdate(item.jNumber,{jNumber:tmpJNumber,name:tmpName,rawText:item.rawText.replace(/Job\.\s*\S+/,`Job. ${tmpJNumber}`)});setEditHeader(false);}} style={{padding:"3px 10px",borderRadius:4,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.78rem",fontWeight:700,cursor:"pointer"}}>저장</button>
             <button onClick={()=>setEditHeader(false)} style={{padding:"3px 8px",borderRadius:4,border:"1px solid #ccc",background:"#fff",fontSize:"0.78rem",color:"#888",cursor:"pointer"}}>취소</button>
           </>
           :<>
             <span style={{fontSize:"1rem",color:"#2563eb",fontFamily:"monospace",fontWeight:700,userSelect:"none",background:"#eff6ff",padding:"2px 8px",borderRadius:5}}>{item.jNumber}</span>
-            <span style={{fontSize:"1.15rem",color:"#111",fontWeight:700}}>{item.region}</span>
-            {item.city&&<span style={{fontSize:"1rem",color:"#555",fontWeight:400}}>{item.city}</span>}
             <span onDoubleClick={()=>{setTmpJNumber(item.jNumber);setTmpName(item.name);setEditHeader(true);}} title="더블클릭으로 업체명 편집" style={{fontSize:"1rem",color:"#111",fontWeight:500,cursor:"text"}}>{item.name}</span>
           </>
         }
