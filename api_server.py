@@ -884,6 +884,7 @@ _APPLY_FIELD_MAP = {
     "agreement":                "consent",
     "facts":                    "fact_check",
     "admin_notes":              "notes",
+    "target_age":               "target",
 }
 
 # payload에서 제거할 키 (DB 컬럼으로 직접 INSERT 불가)
@@ -1670,7 +1671,7 @@ async def admin_candidates(
                 "housing_type, education_level, major, interview_time, health_info, "
                 "piercings, dependents, married, religion, korean_criminal_record, "
                 "consent, fact_check, photo_url, criminal_record_check, doc_status, "
-                "how_to, tattoo, visa_type"
+                "how_to, tattoo, visa_type, stage, mail_tags, korea_experience"
             )
 
             if cursor > 0:
