@@ -1,16 +1,14 @@
 """
-render_deploy.py — Render 배포 트리거 (API 방식)
-==================================================
-secure_store.py 에서 RENDER_API_KEY를 복호화하여 Render REST API로 배포.
-(Deploy Hook은 PRO 전용이므로, 무료 플랜에서도 동작하는 API 방식 사용)
+render_deploy.py — Render 배포 트리거 (BX + Render API)
+========================================================
+bx.py (DPAPI 암호화)에서 RENDER_API_KEY를 읽어 Render REST API로 배포.
 
 사용법:
   python tools/render_deploy.py              <- 배포 실행
   python tools/render_deploy.py --status     <- 서버 상태 확인
 
-사전 설정 (1회):
-  python tools/secure_store.py set RENDER_API_KEY "rnd_xxxxxxxxxxxx"
-  (Render Dashboard > Account Settings > API Keys 에서 생성)
+사전 설정 (1회, 별도 터미널에서):
+  python tools/bx.py set RENDER_API_KEY
 """
 
 import sys
@@ -19,14 +17,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
 import requests  # noqa: E402
-from secure_store import store_get  # noqa: E402
+from tools.bx import _read as bx_read  # noqa: E402
 
-SERVICE_ID = "srv-ctnepulumphs73d8vb80"
+SERVICE_ID = "srv-d6imvn1aae7s73ck5570"
 RENDER_API = "https://api.render.com/v1"
-HEALTH_URL = "https://bridge-n7hk.onrender.com/health"
+HEALTH_URL = "https://bridge-n7hk.onrender.com/health"  # 실제 URL은 서비스 URL 참조
 MAX_WAIT = 300  # 5분
 
 
@@ -41,13 +38,13 @@ def check_health() -> dict | None:
 
 
 def get_api_key() -> str:
-    try:
-        return store_get("RENDER_API_KEY")
-    except SystemExit:
-        print("[render_deploy] RENDER_API_KEY가 설정되지 않았습니다.")
-        print("  1) Render Dashboard > Account Settings > API Keys 에서 키 생성")
-        print("  2) python tools/secure_store.py set RENDER_API_KEY \"rnd_xxxxxxxxxxxx\"")
+    key = bx_read("RENDER_API_KEY")
+    if not key:
+        print("[render_deploy] RENDER_API_KEY가 BX에 없습니다.")
+        print("  별도 터미널에서 실행:")
+        print('  python tools/bx.py set RENDER_API_KEY')
         sys.exit(1)
+    return key
 
 
 def trigger_deploy():
@@ -60,7 +57,7 @@ def trigger_deploy():
     else:
         print("  서버 응답 없음 (cold start 또는 다운)")
 
-    # 2. API 키 복호화
+    # 2. BX에서 API 키 복호화
     api_key = get_api_key()
     headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
 
@@ -94,7 +91,6 @@ def trigger_deploy():
         sys.stdout.write(".")
         sys.stdout.flush()
 
-        # Render API로 배포 상태 확인
         try:
             dr = requests.get(
                 f"{RENDER_API}/services/{SERVICE_ID}/deploys/{deploy_id}",
@@ -131,10 +127,12 @@ def show_status():
     else:
         print("  응답 없음 (cold start 중이거나 다운)")
 
-    # Render API로 최근 배포 정보
+    # 최근 배포 정보
+    key = bx_read("RENDER_API_KEY")
+    if not key:
+        return
+    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
     try:
-        api_key = get_api_key()
-        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         r = requests.get(
             f"{RENDER_API}/services/{SERVICE_ID}/deploys?limit=3",
             headers=headers,
@@ -145,12 +143,11 @@ def show_status():
             if deploys:
                 print("\n  최근 배포:")
                 for d in deploys[:3]:
-                    sid = d.get("deploy", d).get("id", d.get("id", "?"))
-                    st = d.get("deploy", d).get("status", d.get("status", "?"))
-                    ct = d.get("deploy", d).get("createdAt", d.get("createdAt", "?"))
+                    inner = d.get("deploy", d)
+                    sid = inner.get("id", "?")
+                    st = inner.get("status", "?")
+                    ct = inner.get("createdAt", "?")
                     print(f"    {sid[:12]}  {st:15s}  {ct[:19]}")
-    except SystemExit:
-        pass
     except Exception:
         pass
 

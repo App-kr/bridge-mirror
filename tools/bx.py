@@ -45,6 +45,7 @@ MANAGED = [
     "UPLOAD_SIGN_KEY",
     "BRIDGE_WEBHOOK_SECRET",
     "GEMINI_KEYS_JSON",
+    "RENDER_API_KEY",
 ]
 
 # ── Windows DPAPI (ctypes, 설치 불필요) ─────────────────────────────────────
