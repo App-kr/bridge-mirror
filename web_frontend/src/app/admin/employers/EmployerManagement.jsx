@@ -873,9 +873,8 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
                   if(row.type==="loc")return <div key={row.key} style={{color:"#1a57c8",fontSize:"1.15rem",fontWeight:700,marginBottom:4,paddingLeft:2}}>{row.v}</div>;
                   if(row.type==="empty")return <div key={row.key} style={{height:4}}/>;
                   if(row.type==="kv"){seenKv=true;return(
-                    <div key={row.key} style={{display:"flex",gap:6,marginBottom:2}}>
-                      <span style={{color:"#444",fontWeight:700,minWidth:280,flexShrink:0,fontSize:`${fontBody}px`}}>{row.k} :</span>
-                      <span style={{fontWeight:400,color:"#111",fontSize:`${fontBody}px`}}>{row.v}</span>
+                    <div key={row.key} style={{marginBottom:2,fontSize:`${fontBody}px`,color:"#111"}}>
+                      <span style={{fontWeight:700,color:"#444"}}>{row.k} : </span><span>{row.v}</span>
                     </div>
                   );}
                   // 도시명/Job번호 → 크게 표시
