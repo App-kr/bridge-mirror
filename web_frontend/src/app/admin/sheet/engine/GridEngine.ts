@@ -997,6 +997,7 @@ export class GridEngine {
           color: style?.color,
           strikethrough: style?.strikethrough,
           align: style?.align || (isKey ? 'center' : 'left'),
+          singleLine: true,
         })
       }
     }
@@ -1034,7 +1035,7 @@ export class GridEngine {
     styleOpts: {
       fontSize?: number; bold?: boolean; italic?: boolean;
       fontFamily?: string; color?: string; align?: string;
-      strikethrough?: boolean
+      strikethrough?: boolean; singleLine?: boolean
     } = {}
   ): void {
     if (rawText === null || rawText === undefined || rawText === '') return
@@ -1059,7 +1060,7 @@ export class GridEngine {
     const maxW = Math.max(1, cellW - PAD * 2)
     const maxH = Math.max(1, cellH - PAD * 2)
     const lineH = Math.ceil(fs * 1.5)
-    const maxLines = Math.max(1, Math.floor(maxH / lineH))
+    const maxLines = styleOpts.singleLine ? 1 : Math.max(1, Math.floor(maxH / lineH))
 
     // Line-building: handles CJK (no spaces) + English (word-level) + mixed
     const buildLines = (t: string): string[] => {
