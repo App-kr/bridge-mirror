@@ -24,7 +24,7 @@ import { defaultCols, STAGES, TABS, MTAGS } from './engine/types'
 
 /* ── Types ── */
 interface DataStore { active: DataRow[]; past: DataRow[]; blacklist: DataRow[] }
-type EditOverride = Partial<Pick<DataRow, 'stage' | 'mailStatus' | 'proposal' | 'notice' | 'applied' | 'history' | 'reference' | 'photoUrl' | 'photoSize' | 'category'>>
+type EditOverride = Partial<DataRow>
 interface CtxMenu { x: number; y: number; rowIdx: number; row: DataRow }
 interface FilterPopup { colKey: string; x: number; y: number }
 interface HeaderMenu { colKey: string; x: number; y: number }
@@ -72,34 +72,52 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
       return raw.startsWith('http') ? raw : `${API}${raw}`
     })(),
     photoSize: Number(ov.photoSize ?? 50),
-    email: String(c.email ?? ''), name: String(c.full_name ?? ''),
+    email: (ov.email as string) ?? String(c.email ?? ''),
+    name: (ov.name as string) ?? String(c.full_name ?? ''),
     mgtNum: c.sheet_number != null ? String(c.sheet_number) : String(c.row_id ?? ''),
-    arc: String(c.arc_holders ?? ''),
-    nationality: String(c.nationality ?? ''), background: String(c.ancestry ?? ''),
-    age: String(c.dob ?? ''), gender: String(c.gender ?? ''),
-    currentLoc: String(c.current_location ?? ''), startDate: String(c.start_date ?? ''),
-    university: String(c.target ?? ''), prefRegion: String(c.area_prefs ?? ''),
+    arc: (ov.arc as string) ?? String(c.arc_holders ?? ''),
+    nationality: (ov.nationality as string) ?? String(c.nationality ?? ''),
+    background: (ov.background as string) ?? String(c.ancestry ?? ''),
+    age: (ov.age as string) ?? String(c.dob ?? ''),
+    gender: (ov.gender as string) ?? String(c.gender ?? ''),
+    currentLoc: (ov.currentLoc as string) ?? String(c.current_location ?? ''),
+    startDate: (ov.startDate as string) ?? String(c.start_date ?? ''),
+    university: (ov.university as string) ?? String(c.target ?? ''),
+    prefRegion: (ov.prefRegion as string) ?? String(c.area_prefs ?? ''),
     reference: (ov.reference as string) ?? String(c.reference ?? ''),
-    totalExp: String(c.experience ?? ''), notice: (ov.notice as string) ?? '',
-    preference: String(c.preferences ?? ''),
+    totalExp: (ov.totalExp as string) ?? String(c.experience ?? ''),
+    notice: (ov.notice as string) ?? String(c.preferences ?? ''),
+    preference: (ov.preference as string) ?? String(c.preferences ?? ''),
     applied: (ov.applied as string) ?? String(c.job_prefs ?? ''),
-    proposal: (ov.proposal as string) ?? '', mailAction: '',
-    curSalary: String(c.current_salary ?? ''), hopeSalary: String(c.desired_salary ?? ''),
-    interviewCol: String(c.interview_time ?? ''), degree: String(c.education_level ?? ''),
-    major: String(c.major ?? ''), cert: String(c.certification ?? ''),
-    docs: String(c.doc_status ?? c.documents ?? ''), health: String(c.health_info ?? ''),
-    tattooPiercing: tattoo, family: String(c.dependents ?? ''),
-    married: String(c.married ?? ''), housing: String(c.housing ?? c.housing_type ?? ''),
-    religion: String(c.religion ?? ''), e2visa: String(c.e_visa ?? c.visa_type ?? ''),
-    kakao: String(c.kakaotalk ?? ''), phone: String(c.mobile_phone ?? ''),
-    crimCheck: String(c.criminal_record_check ?? c.criminal_record ?? ''),
-    domesticCrim: String(c.korean_criminal_record ?? ''),
-    infoProvide: String(c.consent ?? ''), verified: String(c.fact_check ?? ''),
-    source: isWebForm ? '\u2605NEW' : String(c.how_to ?? c.source ?? ''),
-    timestamp: ts, hired: String(c.placed_company ?? ''),
-    wage: String(c.placed_salary ?? ''), moveIn: String(c.start_month ?? ''),
-    housingCost: String(c.housing_detail ?? ''), introFee: String(c.referral_fee ?? ''),
-    process: String(c.process_date ?? ''),
+    proposal: (ov.proposal as string) ?? String(c.recruiter_memo ?? ''), mailAction: '',
+    curSalary: (ov.curSalary as string) ?? String(c.current_salary ?? ''),
+    hopeSalary: (ov.hopeSalary as string) ?? String(c.desired_salary ?? ''),
+    interviewCol: (ov.interviewCol as string) ?? String(c.interview_time ?? ''),
+    degree: (ov.degree as string) ?? String(c.education_level ?? ''),
+    major: (ov.major as string) ?? String(c.major ?? ''),
+    cert: (ov.cert as string) ?? String(c.certification ?? ''),
+    docs: (ov.docs as string) ?? String(c.doc_status ?? c.documents ?? ''),
+    health: (ov.health as string) ?? String(c.health_info ?? ''),
+    tattooPiercing: (ov.tattooPiercing as string) ?? tattoo,
+    family: (ov.family as string) ?? String(c.dependents ?? ''),
+    married: (ov.married as string) ?? String(c.married ?? ''),
+    housing: (ov.housing as string) ?? String(c.housing ?? c.housing_type ?? ''),
+    religion: (ov.religion as string) ?? String(c.religion ?? ''),
+    e2visa: (ov.e2visa as string) ?? String(c.e_visa ?? c.visa_type ?? ''),
+    kakao: (ov.kakao as string) ?? String(c.kakaotalk ?? ''),
+    phone: (ov.phone as string) ?? String(c.mobile_phone ?? ''),
+    crimCheck: (ov.crimCheck as string) ?? String(c.criminal_record_check ?? c.criminal_record ?? ''),
+    domesticCrim: (ov.domesticCrim as string) ?? String(c.korean_criminal_record ?? ''),
+    infoProvide: (ov.infoProvide as string) ?? String(c.consent ?? ''),
+    verified: (ov.verified as string) ?? String(c.fact_check ?? ''),
+    source: (ov.source as string) ?? (isWebForm ? '\u2605NEW' : String(c.how_to ?? c.source ?? '')),
+    timestamp: ts,
+    hired: (ov.hired as string) ?? String(c.placed_company ?? ''),
+    wage: (ov.wage as string) ?? String(c.placed_salary ?? ''),
+    moveIn: (ov.moveIn as string) ?? String(c.start_month ?? ''),
+    housingCost: (ov.housingCost as string) ?? String(c.housing_detail ?? ''),
+    introFee: (ov.introFee as string) ?? String(c.referral_fee ?? ''),
+    process: (ov.process as string) ?? String(c.process_date ?? ''),
     history: (ov.history as string) ?? String(c.past_placement ?? ''),
   }
 }
@@ -626,9 +644,33 @@ export default function BridgeCanvasSheet() {
         edits[cid] = { ...(edits[cid] || {}), [colKey]: value } as EditOverride
         prefsRef.current.saveEdits(edits as Record<string, Record<string, string>>)
         const fieldMap: Record<string, string> = {
-          reference: 'reference', proposal: 'proposal', notice: 'notice',
-          applied: 'job_prefs', history: 'past_placement', housing: 'housing',
-          introFee: 'referral_fee', process: 'process_date',
+          // 기본 정보
+          email: 'email', name: 'full_name', nationality: 'nationality',
+          background: 'ancestry', age: 'dob', gender: 'gender',
+          currentLoc: 'current_location', startDate: 'start_date',
+          university: 'target', prefRegion: 'area_prefs',
+          totalExp: 'experience', source: 'how_to',
+          // 급여·채용
+          curSalary: 'current_salary', hopeSalary: 'desired_salary',
+          hired: 'placed_company', wage: 'placed_salary',
+          moveIn: 'start_month', housingCost: 'housing_detail',
+          // 자격·서류
+          degree: 'education_level', major: 'major', cert: 'certification',
+          docs: 'doc_status', health: 'health_info',
+          e2visa: 'visa_type', crimCheck: 'criminal_record_check',
+          domesticCrim: 'korean_criminal_record',
+          // 연락처·기타
+          kakao: 'kakaotalk', phone: 'mobile_phone',
+          arc: 'arc_holders', married: 'married', religion: 'religion',
+          family: 'dependents', tattooPiercing: 'tattoo',
+          infoProvide: 'consent', verified: 'fact_check',
+          interviewCol: 'interview_time',
+          // 관리 필드
+          reference: 'reference', proposal: 'recruiter_memo',
+          notice: 'preferences', preference: 'preferences',
+          applied: 'job_prefs', history: 'past_placement',
+          housing: 'housing', introFee: 'referral_fee',
+          process: 'process_date',
         }
         const dbField = fieldMap[colKey]
         if (dbField) saveToServer(cid, dbField, value)

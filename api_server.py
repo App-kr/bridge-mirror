@@ -1822,6 +1822,15 @@ async def admin_update_candidate(
         "interview_time", "job_prefs", "invoice", "tattoo", "visa_type",
         "working_hours", "photo_url", "thumb_url",
         "stage", "mail_tags", "korea_experience",
+        # Sheet 인라인 편집용 추가 필드
+        "full_name", "email", "nationality", "ancestry", "dob", "gender",
+        "current_location", "start_date", "target", "area_prefs",
+        "experience", "current_salary", "desired_salary",
+        "education_level", "major", "certification", "doc_status",
+        "health_info", "criminal_record_check", "korean_criminal_record",
+        "kakaotalk", "mobile_phone", "arc_holders", "married", "religion",
+        "dependents", "consent", "fact_check", "housing", "e_visa",
+        "how_to",
     }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
