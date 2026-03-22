@@ -42,29 +42,20 @@ export default function HtmlPreview({ html }: { html: string }) {
       <iframe
         ref={iframeRef}
         srcDoc={html}
-        sandbox="allow-same-origin"
+        sandbox=""
         style={{ width: '100%', height: `${height}px`, border: 'none', display: 'block', borderRadius: '8px' }}
         title="HTML content"
       />
     )
   }
 
-  // 일반 HTML 스니펫 → DOMPurify 후 직접 렌더
-  const styleBlocks: string[] = []
-  const htmlNoStyles = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
-    styleBlocks.push(css)
-    return ''
-  })
+  // 일반 HTML 스니펫 → DOMPurify 후 직접 렌더 (style 태그 제거 — CSS injection 방지)
+  const htmlNoStyles = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
   const clean = DOMPurify.sanitize(htmlNoStyles, {
     ALLOWED_TAGS,
     ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan', 'id'],
     FORCE_BODY: true,
   })
 
-  return (
-    <>
-      {styleBlocks.map((css, i) => <style key={i}>{css}</style>)}
-      <div dangerouslySetInnerHTML={{ __html: clean }} />
-    </>
-  )
+  return <div dangerouslySetInnerHTML={{ __html: clean }} />
 }

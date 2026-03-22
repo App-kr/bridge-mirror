@@ -137,7 +137,7 @@ def _ensure_mail_tables(conn: sqlite3.Connection):
 
 def _check_auth(chat_id: int) -> bool:
     if not ALLOWED_USERS:
-        return True
+        return False  # fail-closed: TELEGRAM_ALLOWED_USERS 미설정 시 전체 차단
     return chat_id in ALLOWED_USERS
 
 
