@@ -12,7 +12,7 @@ import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import DOMPurify from 'dompurify'
 import { API_URL } from '@/lib/api'
-import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, ChevronDown } from 'lucide-react'
+import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, ChevronDown, Trash2, Plus, X, Code, Type } from 'lucide-react'
 
 const API = API_URL
 const DRAFT_KEY    = 'bridge_mail_draft'
@@ -95,7 +95,7 @@ export default function MailSendPage() {
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<SendResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showPreview, setShowPreview] = useState(false)
+  const [editorMode, setEditorMode] = useState<'rich'|'html'>('rich')
   const [personalSend, setPersonalSend] = useState(false)
   const [font, setFont] = useState(FONTS[0].value)
 
@@ -120,6 +120,14 @@ export default function MailSendPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const templateMenuRef = useRef<HTMLDivElement>(null)
+  const richEditorRef = useRef<HTMLDivElement>(null)
+
+  // Rich editor <-> HTML sync
+  const syncRichToHtml = () => {
+    if (richEditorRef.current) {
+      setBodyHtml(richEditorRef.current.innerHTML)
+    }
+  }
 
   // Load templates
   const fetchTemplates = useCallback(async () => {
@@ -201,6 +209,22 @@ export default function MailSendPage() {
       setTplMsg('생성 완료'); setTimeout(() => setTplMsg(''), 2000)
       fetchTemplates(); setNewTplKey(''); setNewTplSubject(''); setNewTplBody(''); setTplTab('list')
     } catch { setTplMsg('생성 실패') }
+    finally { setTplSaving(false) }
+  }
+
+  // 템플릿 삭제 (DELETE)
+  const deleteTpl = async (key: string) => {
+    if (!confirm(`"${key}" 템플릿을 삭제하시겠습니까?`)) return
+    setTplSaving(true)
+    try {
+      await fetch(`${API}/api/admin/email-templates/${key}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-key': adminKey },
+      })
+      setTplMsg('삭제 완료'); setTimeout(() => setTplMsg(''), 2000)
+      fetchTemplates()
+      if (editTpl?.template_key === key) { setEditTpl(null); setTplTab('list') }
+    } catch { setTplMsg('삭제 실패') }
     finally { setTplSaving(false) }
   }
 
@@ -372,11 +396,11 @@ export default function MailSendPage() {
           임시저장
         </button>
 
-        {/* Template dropdown */}
+        {/* Template dropdown — unified with full CRUD */}
         <div className="relative" ref={templateMenuRef}>
           <button
             type="button"
-            onClick={() => setShowTemplateMenu(v => !v)}
+            onClick={() => { setShowTemplateMenu(v => !v); setTplTab('list') }}
             className="flex items-center gap-1 px-4 py-1.5 text-[13px] font-bold rounded-md transition-colors"
             style={{
               background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
@@ -390,26 +414,88 @@ export default function MailSendPage() {
             <ChevronDown size={12} />
           </button>
           {showTemplateMenu && (
-            <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-[#d2d2d7] rounded-xl shadow-lg min-w-[220px] max-h-[300px] overflow-y-auto">
-              {loading ? (
-                <div className="px-4 py-3 text-[12px] text-[#86868b]">로딩 중...</div>
-              ) : templates.length === 0 ? (
-                <div className="px-4 py-3 text-[12px] text-[#86868b]">템플릿 없음</div>
-              ) : (
-                templates.map(t => (
-                  <button
-                    key={t.template_key}
-                    type="button"
-                    onClick={() => applyTemplate(t.template_key)}
-                    className={`w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f5f5f7] transition-colors ${
-                      selectedTemplate === t.template_key ? 'bg-blue-50 text-blue-700' : 'text-[#1d1d1f]'
-                    }`}
-                  >
-                    <div className="font-medium truncate">{t.template_key}</div>
-                    <div className="text-[11px] text-[#86868b] truncate">{t.subject}</div>
+            <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-[#d2d2d7] rounded-2xl shadow-xl min-w-[360px] overflow-hidden">
+              {/* Tab header */}
+              <div className="flex border-b border-[#f0f0f0]">
+                {(['list','edit','new'] as const).map(tab => (
+                  <button key={tab} type="button" onClick={() => setTplTab(tab)}
+                    className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${
+                      tplTab === tab ? 'bg-amber-50 text-amber-700 border-b-2 border-amber-500' : 'text-[#86868b] hover:bg-[#f5f5f7]'
+                    }`}>
+                    {tab === 'list' ? '적용' : tab === 'edit' ? '편집' : '+ 새 템플릿'}
                   </button>
-                ))
-              )}
+                ))}
+              </div>
+              <div className="px-3 py-3 max-h-[400px] overflow-y-auto">
+                {tplMsg && <p className="text-[11px] text-green-600 mb-2 font-medium">{tplMsg}</p>}
+
+                {/* 목록 (적용 + 편집 + 삭제) */}
+                {tplTab === 'list' && (
+                  <div className="space-y-0.5">
+                    {loading ? (
+                      <p className="text-[11px] text-[#86868b] py-4 text-center">로딩 중...</p>
+                    ) : templates.length === 0 ? (
+                      <p className="text-[11px] text-[#86868b] py-4 text-center">템플릿 없음</p>
+                    ) : (
+                      templates.map(t => (
+                        <div key={t.template_key} className="flex items-center gap-1.5 py-2 px-1 rounded-lg hover:bg-[#f5f5f7] transition-colors">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => applyTemplate(t.template_key)}>
+                            <div className="text-[12px] font-semibold text-[#1d1d1f] truncate">{t.template_key}</div>
+                            <div className="text-[10px] text-[#86868b] truncate">{t.subject || '(제목 없음)'}</div>
+                          </div>
+                          <button type="button" onClick={() => applyTemplate(t.template_key)}
+                            className="shrink-0 px-2.5 py-1 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">적용</button>
+                          <button type="button" onClick={() => { setEditTpl(t); setEditTplSubject(t.subject); setEditTplBody(t.body_html); setTplTab('edit') }}
+                            className="shrink-0 px-2 py-1 text-[10px] font-semibold text-[#555] bg-[#f5f5f7] rounded-md hover:bg-[#e8e8ed] transition-colors">편집</button>
+                          <button type="button" onClick={() => deleteTpl(t.template_key)}
+                            className="shrink-0 p-1 text-[#aaa] hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* 편집 */}
+                {tplTab === 'edit' && (editTpl ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] font-semibold text-amber-700">{editTpl.template_key}</p>
+                      <button type="button" onClick={() => { setEditTpl(null); setTplTab('list') }}
+                        className="text-[#aaa] hover:text-[#555]"><X size={14}/></button>
+                    </div>
+                    <input value={editTplSubject} onChange={e => setEditTplSubject(e.target.value)} placeholder="제목"
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                    <textarea value={editTplBody} onChange={e => setEditTplBody(e.target.value)} rows={8}
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={saveTpl} disabled={tplSaving}
+                        className="flex-1 py-2 bg-amber-500 text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-amber-600 transition-colors">
+                        {tplSaving ? '저장 중...' : '저장'}
+                      </button>
+                      <button type="button" onClick={() => deleteTpl(editTpl.template_key)} disabled={tplSaving}
+                        className="px-4 py-2 bg-red-50 text-red-600 text-[12px] font-semibold rounded-lg hover:bg-red-100 transition-colors">삭제</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[#86868b] py-4 text-center">목록에서 템플릿을 선택하세요</p>
+                ))}
+
+                {/* 새 템플릿 */}
+                {tplTab === 'new' && (
+                  <div className="space-y-2">
+                    <input value={newTplKey} onChange={e => setNewTplKey(e.target.value.replace(/[^a-z0-9_]/g, ''))} placeholder="template_key (소문자, 언더스코어)"
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                    <input value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} placeholder="이메일 제목"
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                    <textarea value={newTplBody} onChange={e => setNewTplBody(e.target.value)} rows={6} placeholder="<p>HTML 본문</p>"
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                    <button type="button" onClick={createTpl} disabled={tplSaving || !newTplKey.trim()}
+                      className="w-full py-2 bg-green-500 text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-green-600 transition-colors flex items-center justify-center gap-1">
+                      <Plus size={14}/>{tplSaving ? '생성 중...' : '템플릿 생성'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -513,12 +599,23 @@ export default function MailSendPage() {
 
         {/* Body Editor + Preview — side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* 좌: HTML 에디터 */}
+          {/* 좌: 에디터 (일반쓰기 / HTML 모드) */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4 flex flex-col">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#ff5f56] inline-block" />
-                HTML 편집
+              {/* Mode toggle */}
+              <div className="flex items-center gap-0.5 bg-[#f0f0f2] rounded-lg p-0.5">
+                <button type="button" onClick={() => { if (editorMode === 'html') { setEditorMode('rich') } }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                    editorMode === 'rich' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:text-[#555]'
+                  }`}>
+                  <Type size={12}/> 일반
+                </button>
+                <button type="button" onClick={() => { if (editorMode === 'rich') { syncRichToHtml() } setEditorMode('html') }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                    editorMode === 'html' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#86868b] hover:text-[#555]'
+                  }`}>
+                  <Code size={12}/> HTML
+                </button>
               </div>
               <button
                 type="button"
@@ -532,13 +629,28 @@ export default function MailSendPage() {
                 {bodySaved ? '저장됨' : '기본값 저장'}
               </button>
             </div>
-            <textarea
-              value={bodyHtml}
-              onChange={e => setBodyHtml(e.target.value)}
-              className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
-              style={{ minHeight: 480 }}
-              spellCheck={false}
-            />
+
+            {editorMode === 'rich' ? (
+              /* 일반 쓰기 모드 (contentEditable) */
+              <div
+                ref={richEditorRef}
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={syncRichToHtml}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }}
+                className="flex-1 w-full px-4 py-3 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 overflow-y-auto"
+                style={{ minHeight: 480, lineHeight: 1.7, fontFamily: font, color: '#222', background: '#fff' }}
+              />
+            ) : (
+              /* HTML 편집 모드 */
+              <textarea
+                value={bodyHtml}
+                onChange={e => setBodyHtml(e.target.value)}
+                className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
+                style={{ minHeight: 480 }}
+                spellCheck={false}
+              />
+            )}
           </div>
 
           {/* 우: 실시간 미리보기 */}
@@ -582,7 +694,7 @@ export default function MailSendPage() {
         )}
       </div>
 
-      {/* ── Bottom: Info + Settings (collapsible panels) ── */}
+      {/* ── Bottom: Info + Settings ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* 발송 안내 + 개인발송 안내 */}
         <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
@@ -611,126 +723,45 @@ export default function MailSendPage() {
           </div>
         </div>
 
-        {/* 기본값 설정 + 템플릿 관리 */}
-        <div className="space-y-3">
-          {/* ── 기본 서명 설정 ── */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowDefaults(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
-            >
-              <span>⚙️ 기본 서명 · 헤더 설정</span>
-              <span className="text-[11px] text-[#86868b]">{showDefaults ? '▲' : '▼'}</span>
-            </button>
-            {showDefaults && (
-              <div className="px-4 pb-4 space-y-3 border-t border-[#f0f0f0]">
-                <div className="pt-3">
-                  <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">편지 시작 (Header)</label>
-                  <textarea
-                    value={customHeader}
-                    onChange={e => setCustomHeader(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">서명 · 법적고지 (Footer)</label>
-                  <textarea
-                    value={customFooter}
-                    onChange={e => setCustomFooter(e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={saveDefaults}
-                  className="w-full py-2 rounded-xl bg-[#1d1d1f] text-white text-[13px] font-semibold hover:bg-[#424245] transition-colors"
-                >
-                  {defaultsSaved ? '✅ 저장됨!' : '💾 기본값으로 저장'}
-                </button>
+        {/* 기본 서명 설정 */}
+        <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowDefaults(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
+          >
+            <span>⚙️ 기본 서명 · 헤더 설정</span>
+            <span className="text-[11px] text-[#86868b]">{showDefaults ? '▲' : '▼'}</span>
+          </button>
+          {showDefaults && (
+            <div className="px-4 pb-4 space-y-3 border-t border-[#f0f0f0]">
+              <div className="pt-3">
+                <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">편지 시작 (Header)</label>
+                <textarea
+                  value={customHeader}
+                  onChange={e => setCustomHeader(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
               </div>
-            )}
-          </div>
-
-          {/* ── 템플릿 관리 ── */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-            <button type="button" onClick={() => setShowTplPanel(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors">
-              <span>📋 템플릿 관리</span>
-              <span className="text-[11px] text-[#86868b]">{showTplPanel ? '▲' : '▼'}</span>
-            </button>
-            {showTplPanel && (
-              <div className="border-t border-[#f0f0f0]">
-                <div className="flex border-b border-[#f0f0f0]">
-                  {(['list','edit','new'] as const).map(tab => (
-                    <button key={tab} type="button" onClick={() => setTplTab(tab)}
-                      className={`flex-1 py-2 text-[11px] font-semibold transition-colors ${
-                        tplTab === tab ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-[#86868b] hover:bg-[#f5f5f7]'
-                      }`}>
-                      {tab === 'list' ? '목록' : tab === 'edit' ? '편집' : '새 템플릿'}
-                    </button>
-                  ))}
-                </div>
-                <div className="px-3 py-3">
-                  {tplMsg && <p className="text-[11px] text-green-600 mb-2 font-medium">{tplMsg}</p>}
-                  {tplTab === 'list' && (
-                    <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
-                      {templates.length === 0
-                        ? <p className="text-[11px] text-[#86868b] py-4 text-center">템플릿 없음</p>
-                        : templates.map(t => (
-                          <div key={t.template_key} className="flex items-center gap-1 py-2 border-b border-[#f5f5f7] last:border-0">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[11px] font-semibold text-[#1d1d1f] truncate">{t.template_key}</div>
-                              <div className="text-[10px] text-[#86868b] truncate">{t.subject || '(제목 없음)'}</div>
-                            </div>
-                            <button type="button" onClick={() => applyTemplate(t.template_key)}
-                              className="shrink-0 px-2 py-1 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">적용</button>
-                            <button type="button" onClick={() => { setEditTpl(t); setEditTplSubject(t.subject); setEditTplBody(t.body_html); setTplTab('edit'); }}
-                              className="shrink-0 px-2 py-1 text-[10px] font-semibold text-[#555] bg-[#f5f5f7] rounded-md hover:bg-[#e8e8ed] transition-colors">편집</button>
-                          </div>
-                        ))
-                      }
-                    </div>
-                  )}
-                  {tplTab === 'edit' && (editTpl ? (
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-blue-600">{editTpl.template_key}</p>
-                      <input value={editTplSubject} onChange={e => setEditTplSubject(e.target.value)} placeholder="제목"
-                        className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <textarea value={editTplBody} onChange={e => setEditTplBody(e.target.value)} rows={6}
-                        className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={saveTpl} disabled={tplSaving}
-                          className="flex-1 py-1.5 bg-[#0071e3] text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-[#0077ED] transition-colors">
-                          {tplSaving ? '저장 중...' : '저장'}
-                        </button>
-                        <button type="button" onClick={() => setTplTab('list')}
-                          className="px-4 py-1.5 bg-[#f5f5f7] text-[#555] text-[12px] font-semibold rounded-lg hover:bg-[#e8e8ed] transition-colors">취소</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-[#86868b] py-4 text-center">목록에서 템플릿을 선택하세요</p>
-                  ))}
-                  {tplTab === 'new' && (
-                    <div className="space-y-2">
-                      <input value={newTplKey} onChange={e => setNewTplKey(e.target.value.replace(/[^a-z0-9_]/g, ''))} placeholder="template_key (소문자, 언더스코어)"
-                        className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <input value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} placeholder="이메일 제목"
-                        className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <textarea value={newTplBody} onChange={e => setNewTplBody(e.target.value)} rows={4} placeholder="<p>HTML 본문</p>"
-                        className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <button type="button" onClick={createTpl} disabled={tplSaving || !newTplKey.trim()}
-                        className="w-full py-1.5 bg-[#34c759] text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-[#2db84e] transition-colors">
-                        {tplSaving ? '생성 중...' : '+ 템플릿 생성'}
-                      </button>
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">서명 · 법적고지 (Footer)</label>
+                <textarea
+                  value={customFooter}
+                  onChange={e => setCustomFooter(e.target.value)}
+                  rows={8}
+                  className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
               </div>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={saveDefaults}
+                className="w-full py-2 rounded-xl bg-[#1d1d1f] text-white text-[13px] font-semibold hover:bg-[#424245] transition-colors"
+              >
+                {defaultsSaved ? '✅ 저장됨!' : '💾 기본값으로 저장'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
