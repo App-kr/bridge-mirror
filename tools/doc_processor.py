@@ -118,6 +118,70 @@ def get_candidate(number: int):
     }
 
 
+def find_candidate_by_email(email: str):
+    """이메일로 후보자 검색 → dict or None (정확 매칭 우선, 없으면 LIKE)"""
+    db = _get_db()
+    # 정확 매칭
+    row = db.execute(
+        "SELECT sheet_number, full_name, nationality, email, "
+        "mobile_phone, kakaotalk, current_location "
+        "FROM candidates WHERE email = ? LIMIT 1",
+        (email,),
+    ).fetchone()
+    if not row:
+        # 암호화된 이메일일 수 있으므로 전체 스캔 (느리지만 정확)
+        rows = db.execute(
+            "SELECT sheet_number, full_name, nationality, email, "
+            "mobile_phone, kakaotalk, current_location "
+            "FROM candidates WHERE email IS NOT NULL AND email != ''"
+        ).fetchall()
+        for r in rows:
+            decrypted = _try_decrypt(r[3])
+            if decrypted and decrypted.lower() == email.lower():
+                row = r
+                break
+    if not row:
+        return None
+    return {
+        "sheet_number": row[0],
+        "full_name": _try_decrypt(row[1]),
+        "nationality": _try_decrypt(row[2]),
+        "email": _try_decrypt(row[3]),
+        "mobile_phone": _try_decrypt(row[4]),
+        "kakaotalk": _try_decrypt(row[5]),
+        "current_location": _try_decrypt(row[6]),
+    }
+
+
+def _extract_emails_from_docx(filepath: Path) -> list[str]:
+    """DOCX에서 이메일 주소 추출 (PII 삭제 전 원본에서)"""
+    import docx
+    doc = docx.Document(str(filepath))
+    emails = set()
+    all_text = []
+    # 본문
+    for p in doc.paragraphs:
+        all_text.append(p.text)
+    # 헤더/푸터
+    for sec in doc.sections:
+        if sec.header and sec.header.paragraphs:
+            for p in sec.header.paragraphs:
+                all_text.append(p.text)
+        if sec.footer and sec.footer.paragraphs:
+            for p in sec.footer.paragraphs:
+                all_text.append(p.text)
+    # 테이블
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    all_text.append(p.text)
+    full = "\n".join(all_text)
+    for m in RE_EMAIL.finditer(full):
+        emails.add(m.group().lower())
+    return list(emails)
+
+
 # ══════════════════════════════════════════════════════
 #  1b. file_uploads 테이블 (로컬 DB 이력 추적)
 # ══════════════════════════════════════════════════════
@@ -427,7 +491,7 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
 
     # ── Pass 2.5: 한국 근무 경력줄 축약 ──
     # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022"
-    # → "South Korea, March 2021 - Sept 2022"
+    # → "S.Korea\nMarch 2021 - Sept 2022"  (S.Korea는 볼드 마커)
     lines2 = result.split("\n")
     kept_lines2 = []
     for line in lines2:
@@ -440,10 +504,10 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             # 날짜 범위 추출
             date_match = RE_DATE_RANGE.search(stripped)
             if date_match:
-                date_str = date_match.group(1).strip()
+                date_str = date_match.group(0).strip()
                 log.append(f"KR_EXP_REDACT: {stripped[:80]}")
-                # 직장 상세를 "South Korea, 기간"으로 축약
-                kept_lines2.append(f"South Korea, {date_str}")
+                # 직장 상세를 "S.Korea\n기간"으로 축약 (S.Korea 볼드는 DOCX 처리에서)
+                kept_lines2.append(f"S.Korea\n{date_str}")
                 continue
         kept_lines2.append(line)
     result = "\n".join(kept_lines2)
@@ -574,9 +638,40 @@ def _extract_names_from_filename(filepath: Path) -> list[str]:
     return names
 
 
-def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: bool = False):
-    """DOCX 처리: PII 삭제 + 번호 삽입. Returns (doc, log_entries)"""
+def _find_photo_for_candidate(filepath: Path) -> Path | None:
+    """incoming 폴더에서 같이 넣은 사진 파일 찾기 (JPG/PNG)"""
+    incoming = filepath.parent
+    photo_exts = {".jpg", ".jpeg", ".png"}
+    # 1) 같은 번호로 시작하는 사진
+    stem_numbers = re.findall(r"(\d{3,5})", filepath.stem)
+    for f in incoming.iterdir():
+        if f.suffix.lower() in photo_exts:
+            for num in stem_numbers:
+                if num in f.stem:
+                    return f
+    # 2) incoming에 사진이 1개만 있으면 그거
+    photos = [f for f in incoming.iterdir() if f.suffix.lower() in photo_exts]
+    if len(photos) == 1:
+        return photos[0]
+    # 3) processed_docs 폴더에서도 찾기
+    proc_parent = incoming.parent
+    for subdir in [proc_parent / "incoming", proc_parent]:
+        if not subdir.exists():
+            continue
+        for f in subdir.iterdir():
+            if f.suffix.lower() in photo_exts:
+                for num in stem_numbers:
+                    if num in f.stem:
+                        return f
+    return None
+
+
+def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
+                 dry: bool = False, photo_path: Path = None):
+    """DOCX 처리: PII 삭제 + 번호/사진 삽입. Returns (doc, log_entries)"""
     import docx
+    from docx.shared import Pt, Inches, Cm, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     doc = docx.Document(str(filepath))
     all_logs = []
@@ -599,40 +694,22 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: b
             if cleaned != original:
                 all_logs.extend([f"[{section_name}] {l}" for l in log])
                 if not dry:
-                    _replace_in_runs(para, cleaned)
+                    # S.Korea → 볼드 처리
+                    if "S.Korea" in cleaned:
+                        _replace_with_bold_korea(para, cleaned)
+                    else:
+                        _replace_in_runs(para, cleaned)
 
-    # 헤더/푸터 — 공격적 삭제 (이름/주소/연락처 모두 비움)
+    # 헤더/푸터 — 전체 삭제 (이름/주소/연락처 모두 비움)
     def _clean_header_footer(paragraphs, section_name="header"):
         for para in paragraphs:
             original = para.text
             if not original.strip():
                 continue
-            cleaned = original
-            # 파일명 이름 삭제
-            for fn_name in filename_names:
-                pat = re.compile(re.escape(fn_name), re.I)
-                cleaned = pat.sub("", cleaned)
-            # DB 후보자 이름 삭제
-            if candidate and candidate.get("full_name"):
-                for variant in _name_variants(candidate["full_name"]):
-                    cleaned = re.sub(re.escape(variant), "", cleaned, flags=re.I)
-            # PII 패턴 삭제
-            cleaned, log = remove_pii(cleaned, candidate)
-            # 도시+주 패턴 (City, ST 또는 City, State)
-            cleaned = re.sub(
-                r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*,\s*[A-Z]{2}\b",
-                "", cleaned
-            )
-            # 남은 텍스트가 거의 없으면 (순수 PII였음) 전체 비움
-            remaining = cleaned.strip()
-            if len(remaining) < 3:
-                cleaned = ""
-            if cleaned != original:
-                all_logs.extend([f"[{section_name}] {l}" for l in log])
-                if cleaned != original:
-                    all_logs.append(f"[{section_name}] HDR_CLEAN: {original.strip()[:60]}")
-                if not dry:
-                    _replace_in_runs(para, cleaned)
+            all_logs.append(f"[{section_name}] HDR_CLEAR: {original.strip()[:60]}")
+            if not dry:
+                for run in para.runs:
+                    run.text = ""
 
     # 본문
     _process_paragraphs(doc.paragraphs, "body")
@@ -643,7 +720,7 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: b
             for cell in row.cells:
                 _process_paragraphs(cell.paragraphs, f"table{ti}")
 
-    # 헤더/푸터 — 공격적 삭제
+    # 헤더/푸터 — 전체 삭제
     for si, section in enumerate(doc.sections):
         for hf_name, hf in [("header", section.header), ("footer", section.footer)]:
             if hf and hf.paragraphs:
@@ -661,20 +738,71 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: b
         except Exception:
             pass
 
-    # 번호 삽입 (최상단)
+    # 번호 + 사진 삽입 (최상단 테이블 레이아웃)
     if not dry:
+        # 사진 찾기
+        photo = photo_path or _find_photo_for_candidate(filepath)
+
         first_para = doc.paragraphs[0] if doc.paragraphs else None
         if first_para:
-            new_para = first_para.insert_paragraph_before(str(brj_number))
-            run = new_para.runs[0]
-            run.bold = True
-            run.font.size = docx.shared.Pt(18)
+            # 1행 2열 테이블: [번호 | 사진]
+            tbl = doc.add_table(rows=1, cols=2)
+            tbl.autofit = True
+            # 테두리 없음
+            from docx.oxml.ns import qn
+            tbl_pr = tbl._element.tblPr
+            borders = tbl_pr.find(qn("w:tblBorders"))
+            if borders is not None:
+                tbl_pr.remove(borders)
+
+            # 왼쪽: 번호 (크고 굵게)
+            left_cell = tbl.cell(0, 0)
+            left_cell.text = ""
+            p_num = left_cell.paragraphs[0]
+            run_num = p_num.add_run(str(brj_number))
+            run_num.bold = True
+            run_num.font.size = Pt(28)
+            run_num.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+
+            # 오른쪽: 사진
+            right_cell = tbl.cell(0, 1)
+            right_cell.text = ""
+            p_photo = right_cell.paragraphs[0]
+            p_photo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            if photo and photo.exists():
+                run_photo = p_photo.add_run()
+                run_photo.add_picture(str(photo), height=Cm(3.5))
+                all_logs.append(f"[photo] 삽입: {photo.name}")
+            else:
+                all_logs.append("[photo] 사진 없음 (스킵)")
+
+            # 테이블을 문서 맨 앞으로 이동
+            first_para._element.addprevious(tbl._element)
         else:
-            p = doc.add_paragraph(str(brj_number))
-            p.runs[0].bold = True
-            p.runs[0].font.size = docx.shared.Pt(18)
+            p = doc.add_paragraph()
+            run = p.add_run(str(brj_number))
+            run.bold = True
+            run.font.size = Pt(28)
 
     return doc, all_logs
+
+
+def _replace_with_bold_korea(para, cleaned_text: str):
+    """S.Korea를 볼드로 처리하여 단락에 삽입"""
+    from docx.shared import Pt, RGBColor
+    # 기존 runs 모두 지우기
+    for run in para.runs:
+        run.text = ""
+    # S.Korea 기준으로 분할
+    parts = cleaned_text.split("S.Korea")
+    for i, part in enumerate(parts):
+        if part:
+            run = para.add_run(part)
+        if i < len(parts) - 1:
+            kr_run = para.add_run("S.Korea")
+            kr_run.bold = True
+            kr_run.font.size = Pt(11)
+            kr_run.font.color.rgb = RGBColor(0, 0, 0)
 
 
 # ══════════════════════════════════════════════════════
@@ -1039,6 +1167,15 @@ def cmd_batch(args):
     fake.dry = dry
     fake.number = None
 
+    # incoming에서 사진 파일 목록 수집
+    photo_map = {}  # number → photo_path
+    for f in incoming.iterdir():
+        if f.suffix.lower() in (".jpg", ".jpeg", ".png") and not f.name.startswith(("~", ".")):
+            # 파일명에서 번호 추출
+            nums = re.findall(r"(\d{3,5})", f.stem)
+            for n in nums:
+                photo_map[int(n)] = f
+
     for filepath in files:
         fake.input = str(filepath)
         print(f"[{mode}] {filepath.name}")
@@ -1050,6 +1187,7 @@ def cmd_batch(args):
             current_number = candidate["sheet_number"]
             print(f"  Auto: #{current_number} {candidate['full_name']}")
         else:
+            # 파일명에 번호 없으면 → DOCX에서 이메일 추출하여 DB 매칭
             nums = re.findall(r"(\d{3,5})", filepath.stem)
             if nums:
                 current_number = int(nums[0])
@@ -1058,14 +1196,33 @@ def cmd_batch(args):
                     print(f"  Filename: #{current_number} {candidate['full_name']}")
                 else:
                     print(f"  Filename: #{current_number} (DB에 없음)")
+            elif filepath.suffix.lower() == ".docx":
+                # 이메일 기반 매칭
+                try:
+                    doc_emails = _extract_emails_from_docx(filepath)
+                    for em in doc_emails:
+                        cand = find_candidate_by_email(em)
+                        if cand:
+                            candidate = cand
+                            current_number = cand["sheet_number"]
+                            print(f"  Email match: #{current_number} {cand['full_name']} ({em})")
+                            break
+                except Exception:
+                    pass
+                if not current_number:
+                    print(f"  [SKIP] 번호/이메일 매칭 실패. 파일명에 강사번호 포함 필요")
+                    continue
             else:
                 print(f"  [SKIP] 파일명에 번호 없음. 파일명에 강사번호 포함 필요")
                 continue
 
+        # 사진 찾기
+        photo = photo_map.get(current_number)
+
         try:
             ext = filepath.suffix.lower()
             if ext == ".docx":
-                doc, logs = process_docx(filepath, current_number, candidate, dry)
+                doc, logs = process_docx(filepath, current_number, candidate, dry, photo_path=photo)
             elif ext == ".pdf":
                 doc, logs = process_pdf(filepath, current_number, candidate, dry)
             else:
