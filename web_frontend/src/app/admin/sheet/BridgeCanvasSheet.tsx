@@ -395,9 +395,6 @@ export default function BridgeCanvasSheet() {
         rows = dbAll.filter(r => r.category === tab)
       }
     }
-    // 세션 중 삭제된 CID 최종 필터 — 어떤 경로로든 복원 방지
-    const dc = deletedCidsRef.current
-    if (dc.size > 0) rows = rows.filter(r => !dc.has(String(r._cid ?? '')))
     // Apply filters
     for (const [colKey, vals] of Object.entries(filters)) {
       if (vals.size > 0) {
@@ -429,7 +426,15 @@ export default function BridgeCanvasSheet() {
 
   const undo = useCallback(() => {
     const prev = historyRef.current.undo({ data: dataRef.current, dbAll: dbAllRef.current })
-    if (prev) { setData(prev.data); setDbAll(prev.dbAll) }
+    if (prev) {
+      // undo로 복원된 CID는 삭제 추적에서 제거 — 되돌리기 허용
+      const curCids = new Set(dbAllRef.current.map(r => String(r._cid ?? '')))
+      const prevCids = prev.dbAll.map(r => String(r._cid ?? ''))
+      for (const cid of prevCids) {
+        if (!curCids.has(cid)) deletedCidsRef.current.delete(cid)
+      }
+      setData(prev.data); setDbAll(prev.dbAll)
+    }
   }, [])
 
   const redo = useCallback(() => {
