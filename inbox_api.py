@@ -316,6 +316,121 @@ async def admin_inbox_update_status(item_id: str, body: StatusUpdate, request: R
         conn.close()
 
 
+# ── GET /api/admin/inbox/{id} — 상세 조회 ─────────────────────────────────────
+@router.get("/inbox/{item_id}")
+async def admin_inbox_detail(item_id: str, request: Request):
+    """수신함 항목 상세 — 지원자 또는 구인문의."""
+    _check_admin(request)
+
+    conn = _get_conn()
+    try:
+        # candidates 먼저
+        r = conn.execute(
+            "SELECT * FROM candidates WHERE candidate_id = ?", (item_id,)
+        ).fetchone()
+        if r:
+            detail = dict(r)
+            return ok(data={"type": "candidate", "detail": detail})
+
+        # client_inquiries
+        r = conn.execute(
+            "SELECT * FROM client_inquiries WHERE id = ?", (item_id,)
+        ).fetchone()
+        if r:
+            detail = dict(r)
+            return ok(data={"type": "inquiry", "detail": detail})
+
+        raise HTTPException(404, "Item not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.error("inbox detail error: %s", e)
+        raise HTTPException(500, "상세 정보를 불러올 수 없습니다.")
+    finally:
+        conn.close()
+
+
+# ── PATCH /api/admin/inbox/{id}/notes — 메모 저장 ────────────────────────────
+class NotesUpdate(BaseModel):
+    notes: str = Field("", max_length=5000)
+
+
+@router.patch("/inbox/{item_id}/notes")
+async def admin_inbox_update_notes(item_id: str, body: NotesUpdate, request: Request):
+    """수신함 항목 메모 저장."""
+    _check_admin(request)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE candidates SET notes = ?, last_activity = ? WHERE candidate_id = ?",
+            (body.notes, now_iso, item_id),
+        )
+        if cur.rowcount > 0:
+            conn.commit()
+            return ok(message="메모 저장 완료")
+
+        cur = conn.execute(
+            "UPDATE client_inquiries SET notes = ?, last_activity = ? WHERE id = ?",
+            (body.notes, now_iso, item_id),
+        )
+        if cur.rowcount > 0:
+            conn.commit()
+            return ok(message="메모 저장 완료")
+
+        raise HTTPException(404, "Item not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.error("notes update error: %s", e)
+        raise HTTPException(500, "메모 저장 실패")
+    finally:
+        conn.close()
+
+
+# ── PATCH /api/admin/inbox/{id}/assign — 담당자 배정 ─────────────────────────
+class AssignUpdate(BaseModel):
+    assigned_to: str = Field("", max_length=100)
+
+
+@router.patch("/inbox/{item_id}/assign")
+async def admin_inbox_assign(item_id: str, body: AssignUpdate, request: Request):
+    """수신함 항목 담당자 배정."""
+    _check_admin(request)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE candidates SET assigned_to = ?, last_activity = ? WHERE candidate_id = ?",
+            (body.assigned_to, now_iso, item_id),
+        )
+        if cur.rowcount > 0:
+            conn.commit()
+            return ok(message=f"담당자 배정: {body.assigned_to}")
+
+        cur = conn.execute(
+            "UPDATE client_inquiries SET assigned_to = ?, last_activity = ? WHERE id = ?",
+            (body.assigned_to, now_iso, item_id),
+        )
+        if cur.rowcount > 0:
+            conn.commit()
+            return ok(message=f"담당자 배정: {body.assigned_to}")
+
+        raise HTTPException(404, "Item not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.error("assign update error: %s", e)
+        raise HTTPException(500, "담당자 배정 실패")
+    finally:
+        conn.close()
+
+
 # ── POST /api/admin/inbox/bulk ────────────────────────────────────────────────
 @router.post("/inbox/bulk")
 async def admin_inbox_bulk(body: BulkAction, request: Request):
