@@ -57,10 +57,6 @@ interface ConfirmResult {
 /* ── Meet Room Pool ── */
 const MEET_ROOMS = [
   { label: 'Room 1', code: 'kmt-ydhj-fmf' },
-  { label: 'Room 2', code: 'abc-defg-hij' },
-  { label: 'Room 3', code: 'xyz-uvwx-rst' },
-  { label: 'Room 4', code: 'qwe-rtyp-asd' },
-  { label: 'Room 5', code: 'mnb-vcxz-lkj' },
 ]
 
 function getDefaultDate(): string {

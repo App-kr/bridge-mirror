@@ -36,15 +36,6 @@ const PAGE_SIZE = 150
 const MEET_POOL_KEY = 'bridge_meet_pool'
 const DEFAULT_MEET_POOL = [
   'https://meet.google.com/kmt-ydhj-fmf',
-  'https://meet.google.com/abc-defg-hij',
-  'https://meet.google.com/xyz-uvwx-rst',
-  'https://meet.google.com/qwe-rtyp-asd',
-  'https://meet.google.com/mnb-vcxz-lkj',
-  'https://meet.google.com/pfg-hijk-lmn',
-  'https://meet.google.com/stu-vwxy-zab',
-  'https://meet.google.com/cde-fghi-jkl',
-  'https://meet.google.com/mno-pqrs-tuv',
-  'https://meet.google.com/wxy-zabc-def',
 ]
 function loadMeetPool(): string[] {
   try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
@@ -236,6 +227,9 @@ export default function BridgeCanvasSheet() {
   const photoRef = useRef<HTMLInputElement>(null)
   const photoTargetRef = useRef<number>(-1)
 
+  /* ── 세션 중 삭제된 CID 추적 — 리로드 시 복원 방지 ── */
+  const deletedCidsRef = useRef<Set<string>>(new Set())
+
   /* ── Refs for stable callbacks ── */
   const dbAllRef = useRef(dbAll)
   const dataRef = useRef(data)
@@ -328,7 +322,9 @@ export default function BridgeCanvasSheet() {
         allRows.push(...newRows)
         offset += raw.length
         setLoaded(allRows.length)
-        setDbAll([...allRows])
+        // 세션 중 삭제된 CID는 제외 — 리로드 시 복원 방지
+        const dc = deletedCidsRef.current
+        setDbAll(dc.size > 0 ? allRows.filter(r => !dc.has(String(r._cid ?? ''))) : [...allRows])
 
         if (offset === 0) {
           const nc = raw.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
@@ -397,6 +393,9 @@ export default function BridgeCanvasSheet() {
         rows = dbAll.filter(r => r.category === tab)
       }
     }
+    // 세션 중 삭제된 CID 최종 필터 — 어떤 경로로든 복원 방지
+    const dc = deletedCidsRef.current
+    if (dc.size > 0) rows = rows.filter(r => !dc.has(String(r._cid ?? '')))
     // Apply filters
     for (const [colKey, vals] of Object.entries(filters)) {
       if (vals.size > 0) {
@@ -1016,6 +1015,9 @@ export default function BridgeCanvasSheet() {
     if (rowIndices.size === 0) return
     const rows = displayRowsRef.current
     const cidsToDelete = new Set([...rowIndices].map(i => String(rows[i]?._cid ?? '')).filter(Boolean))
+    if (cidsToDelete.size === 0) return
+    // 세션 중 삭제 CID 추적 — 리로드 시에도 복원 방지
+    for (const cid of cidsToDelete) deletedCidsRef.current.add(cid)
     pushHistory()
     setDbAll(prev => prev.filter(r => !cidsToDelete.has(String(r._cid ?? ''))))
     setData(prev => {
@@ -2200,7 +2202,9 @@ export default function BridgeCanvasSheet() {
                       <button onClick={addLink}
                         style={{ padding: '8px 14px', background: '#000', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>추가</button>
                     </div>
-                    <div style={{ fontSize: 11, color: '#999' }}>링크 유출 시 삭제 후 새 링크 추가</div>
+                    <div style={{ fontSize: 11, color: '#999' }}>
+                      <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 500 }}>meet.google.com/new</a> 에서 방 생성 → 링크 복사 → 여기에 추가
+                    </div>
                   </div>
                 </div>
               )}

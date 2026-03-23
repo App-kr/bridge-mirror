@@ -63,7 +63,7 @@ const SAMPLE_VARS: Record<string, string> = {
   '{candidate_first_name}': 'John',
   '{candidate_name}':       'John Smith',
   '{scheduled_at}':         '2026-03-10 14:00',
-  '{meet_link}':            'https://meet.google.com/abc-defg-hij',
+  '{meet_link}':            'https://meet.google.com/kmt-ydhj-fmf',
   '{employer_name}':        'Seoul English Academy',
   '{school_name}':          'Seoul English Academy',
   '{position}':             'ESL Teacher',

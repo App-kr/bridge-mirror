@@ -13,13 +13,9 @@ import { API_URL } from '@/lib/api'
 
 const API = API_URL
 
-/* ── Google Meet Room Pool (5개 고정 열린방) ── */
+/* ── Google Meet Room Pool (실제 열린방만) ── */
 const DEFAULT_MEET_POOL = [
   'https://meet.google.com/kmt-ydhj-fmf',
-  'https://meet.google.com/abc-defg-hij',
-  'https://meet.google.com/xyz-uvwx-rst',
-  'https://meet.google.com/qwe-rtyp-asd',
-  'https://meet.google.com/mnb-vcxz-lkj',
 ]
 const MEET_POOL_KEY = 'bridge_meet_pool'
 
