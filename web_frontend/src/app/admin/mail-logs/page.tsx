@@ -2,7 +2,7 @@
 
 /**
  * /admin/mail-logs - 메일 수발신 관리
- * 발송 로그 조회 + 상태 확인
+ * 백엔드 mail_logs 테이블: 배치 작업 로그 (manual_send, profile_broadcast 등)
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -15,21 +15,34 @@ const API = API_URL
 
 interface MailLog {
   id: number
-  sender: string | null
-  recipient: string
-  subject: string
-  status: 'sent' | 'failed' | 'pending' | 'bounced'
+  log_type: string
+  candidate_id: string | null
+  employer_count: number
+  sent_count: number
+  failed_count: number
+  status: string
   sent_at: string | null
-  error_msg: string | null
-  template_key: string | null
-  created_at: string
+  details: string | null
 }
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  sent:    { bg: 'bg-green-50',  text: 'text-green-700',  label: '발송완료' },
-  failed:  { bg: 'bg-red-50',    text: 'text-red-700',    label: '실패' },
-  pending: { bg: 'bg-yellow-50', text: 'text-yellow-700', label: '대기' },
-  bounced: { bg: 'bg-orange-50', text: 'text-orange-700', label: '반송' },
+interface ParsedDetails {
+  sender?: string
+  subject?: string
+  recipients_preview?: string
+  [key: string]: unknown
+}
+
+const LOG_TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  manual_send:        { label: '수동발송', color: 'text-blue-700', bg: 'bg-blue-50' },
+  profile_broadcast:  { label: '프로필발송', color: 'text-purple-700', bg: 'bg-purple-50' },
+  auto_send:          { label: '자동발송', color: 'text-teal-700', bg: 'bg-teal-50' },
+}
+
+const STATUS_STYLES: Record<string, { label: string; color: string; bg: string }> = {
+  completed: { label: '완료', color: 'text-green-700', bg: 'bg-green-50' },
+  partial:   { label: '일부실패', color: 'text-yellow-700', bg: 'bg-yellow-50' },
+  failed:    { label: '실패', color: 'text-red-700', bg: 'bg-red-50' },
+  pending:   { label: '대기', color: 'text-gray-600', bg: 'bg-gray-50' },
 }
 
 const PER_PAGE = 50
@@ -42,6 +55,11 @@ function fmtDate(iso: string | null): string {
   })
 }
 
+function parseDetails(raw: string | null): ParsedDetails {
+  if (!raw) return {}
+  try { return JSON.parse(raw) } catch { return {} }
+}
+
 export default function MailLogsPage() {
   const { adminKey, authed, login, waking } = useAdminAuth()
 
@@ -51,20 +69,16 @@ export default function MailLogsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [searchQ, setSearchQ] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
-  const fetchLogs = useCallback(async (q = searchQ, status = statusFilter, pg = page) => {
+  const fetchLogs = useCallback(async (logType = typeFilter, pg = page) => {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({
-        limit: String(PER_PAGE),
-        offset: String((pg - 1) * PER_PAGE),
-      })
-      if (q) params.set('q', q)
-      if (status !== 'all') params.set('status', status)
+      const params = new URLSearchParams({ limit: String(PER_PAGE) })
+      if (logType !== 'all') params.set('log_type', logType)
 
       const res = await fetch(`${API}/api/admin/mail-logs?${params}`, {
         headers: { 'x-admin-key': adminKey },
@@ -73,14 +87,30 @@ export default function MailLogsPage() {
       if (!res.ok) {
         throw new Error(json.detail || json.message || `Error ${res.status}`)
       }
-      setLogs(json.data?.logs || json.data || [])
-      setTotal(json.data?.total ?? (json.data?.logs || json.data || []).length)
+      const allLogs: MailLog[] = json.data || []
+
+      // 클라이언트 검색 필터 (details JSON 내부 검색)
+      const filtered = searchQ
+        ? allLogs.filter(l => {
+            const d = parseDetails(l.details)
+            const hay = [
+              l.log_type, l.status,
+              d.sender, d.subject, d.recipients_preview,
+            ].filter(Boolean).join(' ').toLowerCase()
+            return hay.includes(searchQ.toLowerCase())
+          })
+        : allLogs
+
+      // 페이지네이션 (클라이언트)
+      const start = (pg - 1) * PER_PAGE
+      setLogs(filtered.slice(start, start + PER_PAGE))
+      setTotal(filtered.length)
     } catch (e) {
       setError(e instanceof Error ? e.message : '데이터 로드 실패')
     } finally {
       setLoading(false)
     }
-  }, [adminKey, searchQ, statusFilter, page])
+  }, [adminKey, typeFilter, searchQ, page])
 
   useEffect(() => {
     if (authed) fetchLogs()
@@ -89,19 +119,16 @@ export default function MailLogsPage() {
   const handleSearch = (val: string) => {
     setSearchQ(val)
     setPage(1)
-    fetchLogs(val, statusFilter, 1)
   }
 
-  const handleStatusFilter = (val: string) => {
-    setStatusFilter(val)
+  const handleTypeFilter = (val: string) => {
+    setTypeFilter(val)
     setPage(1)
-    fetchLogs(searchQ, val, 1)
   }
 
   const handlePageChange = (pg: number) => {
     setPage(pg)
     setExpandedId(null)
-    fetchLogs(searchQ, statusFilter, pg)
   }
 
   const totalPages = Math.ceil(total / PER_PAGE)
@@ -109,8 +136,8 @@ export default function MailLogsPage() {
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   // Stats
-  const sentCount = logs.filter(l => l.status === 'sent').length
-  const failedCount = logs.filter(l => l.status === 'failed').length
+  const totalSent = logs.reduce((s, l) => s + (l.sent_count || 0), 0)
+  const totalFailed = logs.reduce((s, l) => s + (l.failed_count || 0), 0)
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
@@ -138,9 +165,9 @@ export default function MailLogsPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: '전체', value: total, color: 'text-[#1d1d1f]', bg: 'bg-white' },
-          { label: '발송완료', value: sentCount, color: 'text-green-600', bg: 'bg-green-50/50' },
-          { label: '실패', value: failedCount, color: 'text-red-600', bg: 'bg-red-50/50' },
+          { label: '작업 수', value: total, color: 'text-[#1d1d1f]', bg: 'bg-white' },
+          { label: '발송 성공', value: totalSent, color: 'text-green-600', bg: 'bg-green-50/50' },
+          { label: '발송 실패', value: totalFailed, color: 'text-red-600', bg: 'bg-red-50/50' },
           { label: '이 페이지', value: logs.length, color: 'text-blue-600', bg: 'bg-blue-50/50' },
         ].map(s => (
           <div key={s.label} className={`${s.bg} rounded-2xl border border-[#e5e5e7] p-4 text-center`}>
@@ -158,23 +185,23 @@ export default function MailLogsPage() {
             type="text"
             value={searchQ}
             onChange={e => handleSearch(e.target.value)}
-            placeholder="수신자, 제목 검색..."
+            placeholder="발신자, 제목, 수신자 검색..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[#d2d2d7] text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
           />
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {['all', 'sent', 'failed', 'pending', 'bounced'].map(s => (
+          {['all', 'manual_send', 'profile_broadcast'].map(t => (
             <button
-              key={s}
+              key={t}
               type="button"
-              onClick={() => handleStatusFilter(s)}
+              onClick={() => handleTypeFilter(t)}
               className={`px-3.5 py-2 rounded-xl text-[12px] font-medium transition-colors ${
-                statusFilter === s
+                typeFilter === t
                   ? 'bg-[#1d1d1f] text-white'
                   : 'bg-[#f5f5f7] text-[#424245] hover:bg-[#e8e8ed]'
               }`}
             >
-              {s === 'all' ? '전체' : STATUS_STYLES[s]?.label ?? s}
+              {t === 'all' ? '전체' : LOG_TYPE_LABELS[t]?.label ?? t}
             </button>
           ))}
         </div>
@@ -194,8 +221,10 @@ export default function MailLogsPage() {
             <thead className="bg-[#f5f5f7] text-[11px] text-[#86868b] uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3 text-left w-12">ID</th>
-                <th className="px-4 py-3 text-left">수신자</th>
-                <th className="px-4 py-3 text-left">제목</th>
+                <th className="px-4 py-3 text-left w-28">유형</th>
+                <th className="px-4 py-3 text-left">제목 / 수신자</th>
+                <th className="px-4 py-3 text-center w-20">성공</th>
+                <th className="px-4 py-3 text-center w-20">실패</th>
                 <th className="px-4 py-3 text-left w-24">상태</th>
                 <th className="px-4 py-3 text-left w-36">발송일시</th>
                 <th className="px-4 py-3 text-left w-10"></th>
@@ -204,9 +233,11 @@ export default function MailLogsPage() {
             <tbody className="divide-y divide-[#f0f0f2]">
               {logs.map(log => {
                 const st = STATUS_STYLES[log.status] ?? STATUS_STYLES.pending
+                const lt = LOG_TYPE_LABELS[log.log_type] ?? { label: log.log_type, color: 'text-gray-600', bg: 'bg-gray-50' }
+                const d = parseDetails(log.details)
                 const expanded = expandedId === log.id
                 return (
-                  <tr key={log.id} className="group">
+                  <tr key={log.id} className="group hover:bg-[#fafafa]">
                     <td className="px-4 py-3">
                       <button
                         type="button"
@@ -216,19 +247,36 @@ export default function MailLogsPage() {
                         {log.id}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-[#1d1d1f] font-medium max-w-[200px] truncate">
-                      {log.recipient}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${lt.bg} ${lt.color}`}>
+                        {lt.label}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-[#424245] max-w-[250px] truncate">
-                      {log.subject}
+                    <td className="px-4 py-3 max-w-[280px]">
+                      {d.subject ? (
+                        <div className="truncate text-[#1d1d1f] font-medium">{d.subject}</div>
+                      ) : null}
+                      {d.recipients_preview ? (
+                        <div className="truncate text-[11px] text-[#86868b]">{d.recipients_preview}</div>
+                      ) : log.candidate_id ? (
+                        <div className="truncate text-[11px] text-[#86868b]">후보자: {log.candidate_id}</div>
+                      ) : (
+                        <div className="text-[11px] text-[#aaa]">-</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-green-600 font-semibold">{log.sent_count}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={log.failed_count > 0 ? 'text-red-600 font-semibold' : 'text-[#aaa]'}>{log.failed_count}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full ${st.bg} ${st.text}`}>
+                      <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full ${st.bg} ${st.color}`}>
                         {st.label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[#86868b]">
-                      {fmtDate(log.sent_at || log.created_at)}
+                      {fmtDate(log.sent_at)}
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -244,7 +292,7 @@ export default function MailLogsPage() {
               })}
               {!loading && logs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-[#86868b]">
+                  <td colSpan={8} className="px-4 py-16 text-center text-[#86868b]">
                     {searchQ ? `"${searchQ}" 검색 결과 없음` : '메일 로그가 없습니다'}
                   </td>
                 </tr>
@@ -257,29 +305,37 @@ export default function MailLogsPage() {
         {expandedId && (() => {
           const log = logs.find(l => l.id === expandedId)
           if (!log) return null
+          const d = parseDetails(log.details)
           return (
             <div className="px-6 py-4 bg-[#fafafa] border-t border-[#e5e5e7]">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[12px]">
                 <div>
                   <span className="text-[#86868b] block mb-0.5">발신자</span>
-                  <span className="text-[#1d1d1f] font-medium">{log.sender || '-'}</span>
+                  <span className="text-[#1d1d1f] font-medium">{d.sender || '-'}</span>
                 </div>
                 <div>
                   <span className="text-[#86868b] block mb-0.5">수신자</span>
-                  <span className="text-[#1d1d1f] font-medium">{log.recipient}</span>
+                  <span className="text-[#1d1d1f] font-medium">{d.recipients_preview || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-[#86868b] block mb-0.5">템플릿</span>
-                  <span className="text-[#1d1d1f] font-medium">{log.template_key || '-'}</span>
+                  <span className="text-[#86868b] block mb-0.5">유형</span>
+                  <span className="text-[#1d1d1f] font-medium">{log.log_type}</span>
                 </div>
                 <div>
-                  <span className="text-[#86868b] block mb-0.5">생성일</span>
-                  <span className="text-[#1d1d1f] font-medium">{fmtDate(log.created_at)}</span>
+                  <span className="text-[#86868b] block mb-0.5">구인자 수</span>
+                  <span className="text-[#1d1d1f] font-medium">{log.employer_count || '-'}</span>
                 </div>
               </div>
-              {log.error_msg && (
-                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-[12px] text-red-700">
-                  <span className="font-semibold">오류:</span> {log.error_msg}
+              {d.subject && (
+                <div className="mt-3 text-[12px]">
+                  <span className="text-[#86868b]">제목:</span>{' '}
+                  <span className="text-[#1d1d1f] font-medium">{d.subject}</span>
+                </div>
+              )}
+              {log.candidate_id && (
+                <div className="mt-1 text-[12px]">
+                  <span className="text-[#86868b]">후보자 ID:</span>{' '}
+                  <span className="text-[#1d1d1f] font-medium">{log.candidate_id}</span>
                 </div>
               )}
             </div>
