@@ -1208,7 +1208,7 @@ def cmd_batch(args):
                     doc_emails = _extract_emails_from_docx(filepath)
                     for em in doc_emails:
                         cand = find_candidate_by_email(em)
-                        if cand:
+                        if cand and cand.get("sheet_number"):
                             candidate = cand
                             current_number = cand["sheet_number"]
                             print(f"  Email match: #{current_number} {cand['full_name']} ({em})")
@@ -1216,8 +1216,13 @@ def cmd_batch(args):
                 except Exception:
                     pass
                 if not current_number:
-                    print(f"  [SKIP] 번호/이메일 매칭 실패. 파일명에 강사번호 포함 필요")
-                    continue
+                    # 번호 없으면 다음 가용 번호 자동 할당
+                    db = _get_db()
+                    max_num = db.execute(
+                        "SELECT MAX(sheet_number) FROM candidates"
+                    ).fetchone()[0] or 3000
+                    current_number = max_num + 1
+                    print(f"  Auto-assign: #{current_number} (신규 번호)")
             else:
                 print(f"  [SKIP] 파일명에 번호 없음. 파일명에 강사번호 포함 필요")
                 continue
