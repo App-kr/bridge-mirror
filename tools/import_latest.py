@@ -375,8 +375,8 @@ def import_new_sheet(wb, conn, db_cols):
             params = []
             changed_fields = []
             for col_i, db_field in effective.items():
-                if db_field in ('email', 'full_name'):
-                    continue
+                if db_field == 'email':
+                    continue  # email은 매칭키 — full_name은 덮어쓰기 허용
                 v = _clean_val(row[col_i] if len(row) > col_i else None)
                 if not v:
                     continue
