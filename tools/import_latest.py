@@ -313,18 +313,31 @@ def import_source_sheet(wb, conn, db_cols):
     return update_count, insert_count
 
 
+def _clean_val(v):
+    """Excel 숫자 소수점 제거 (93.0 → 93) + 정리."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s in ('None', 'nan'):
+        return None
+    # 숫자.0 패턴 정리 (93.0 → 93, 14253284554.0 → 14253284554)
+    if re.match(r'^\d+\.0$', s):
+        s = s[:-2]
+    return s
+
+
 def import_new_sheet(wb, conn, db_cols):
-    """New 시트 → candidates Active 마킹 + 필드 업데이트."""
+    """New 시트 → candidates 전체 덮어쓰기 (원어민관리 시트 = 최신 진실)."""
     p()
     p("=" * 60)
-    p("=== New 시트 → candidates (Active 마킹) ===")
+    p("=== New 시트 → candidates (전체 덮어쓰기) ===")
 
     ws = wb['New']
     cur = conn.cursor()
 
     effective = {ci: f for ci, f in NEW_COL_MAP.items() if f in db_cols}
     activated = 0
-    updated = 0
+    overwritten = 0
     inserted = 0
     skip = 0
 
@@ -332,20 +345,20 @@ def import_new_sheet(wb, conn, db_cols):
         raw_email = cv(row[0] if len(row) > 0 else None)
         raw_name = cv(row[1] if len(row) > 1 else None)
 
-        if not raw_email and not raw_name:
+        # 이메일이 없거나 @ 없으면 카테고리/메모 행 → 스킵
+        if not raw_email or '@' not in raw_email:
             skip += 1
             continue
 
         # 매칭
         matched_id = None
-        if raw_email and '@' in raw_email:
-            cur.execute(
-                "SELECT candidate_id FROM candidates WHERE LOWER(TRIM(email)) = ?",
-                (raw_email.lower().strip(),),
-            )
-            m = cur.fetchone()
-            if m:
-                matched_id = m[0]
+        cur.execute(
+            "SELECT candidate_id FROM candidates WHERE LOWER(TRIM(email)) = ?",
+            (raw_email.lower().strip(),),
+        )
+        m = cur.fetchone()
+        if m:
+            matched_id = m[0]
 
         if matched_id is None and raw_name:
             cur.execute(
@@ -357,22 +370,27 @@ def import_new_sheet(wb, conn, db_cols):
                 matched_id = m[0]
 
         if matched_id:
-            # Active 마킹 + 빈 필드 채우기
+            # ★ 전체 덮어쓰기: Excel 값이 있으면 DB값 무조건 교체
             updates = ["status = 'Active'"]
             params = []
+            changed_fields = []
             for col_i, db_field in effective.items():
                 if db_field in ('email', 'full_name'):
                     continue
-                v = cv(row[col_i] if len(row) > col_i else None)
+                v = _clean_val(row[col_i] if len(row) > col_i else None)
                 if not v:
                     continue
+                # DB 현재값과 비교
                 cur.execute(f"SELECT {db_field} FROM candidates WHERE candidate_id = ?", (matched_id,))
                 cur_row = cur.fetchone()
                 cur_val = str(cur_row[0]).strip() if cur_row and cur_row[0] else ''
-                if not cur_val:
+                if v != cur_val:
                     updates.append(f"{db_field} = ?")
                     params.append(v)
+                    changed_fields.append(db_field)
 
+            updates.append("updated_at = ?")
+            params.append(datetime.datetime.now().isoformat())
             params.append(matched_id)
             if not DRY_RUN:
                 cur.execute(
@@ -380,11 +398,15 @@ def import_new_sheet(wb, conn, db_cols):
                     params,
                 )
             activated += 1
+            if changed_fields:
+                overwritten += 1
+                if len(changed_fields) <= 5:
+                    p(f"    {raw_name or raw_email}: {', '.join(changed_fields)}")
         else:
-            # INSERT
+            # INSERT: 신규 후보자
             fields_vals = {}
             for col_i, db_field in effective.items():
-                v = cv(row[col_i] if len(row) > col_i else None)
+                v = _clean_val(row[col_i] if len(row) > col_i else None)
                 if v:
                     fields_vals[db_field] = v
 
@@ -412,7 +434,7 @@ def import_new_sheet(wb, conn, db_cols):
     if not DRY_RUN:
         conn.commit()
 
-    p(f"  Active 마킹: {activated}건 / INSERT: {inserted}건 / SKIP: {skip}건")
+    p(f"  Active 마킹: {activated}건 (값 변경: {overwritten}건) / INSERT: {inserted}건 / SKIP: {skip}건")
     return activated, inserted
 
 
