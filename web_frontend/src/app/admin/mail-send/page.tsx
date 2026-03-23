@@ -303,7 +303,7 @@ export default function MailSendPage() {
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[#444] text-[13px] font-semibold no-underline border border-[#ddd] transition-opacity hover:opacity-85"
             style={{ background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}
           >
-            <img src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" width={16} height={16} alt="gmail" />
+            <span style={{ width: 16, height: 16, background: '#EA4335', borderRadius: 3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: '#fff', flexShrink: 0 }}>M</span>
             Gmail
           </a>
         </div>
