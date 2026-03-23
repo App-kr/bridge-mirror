@@ -351,24 +351,17 @@ export default function MailSendPage() {
       {/* ── Mail Tab ── */}
       {activeTab === 'mail' && (<>
 
-      {/* ── Naver-style Toolbar ── */}
+      {/* ── Toolbar ── */}
       <div className="bg-[#f0f4fb] border border-[#c8d6f0] rounded-xl px-4 py-2.5 flex items-center gap-2 flex-wrap">
         <button
           type="button"
           onClick={handleSend}
           disabled={sending || recipients.length === 0}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-[#1a57c8] text-white text-[13px] font-bold rounded-md hover:bg-[#1444a8] disabled:opacity-40 transition-colors"
+          className="flex items-center gap-1.5 px-5 py-1.5 text-white text-[13px] font-bold rounded-md disabled:opacity-40 transition-colors"
+          style={{ background: sending ? '#86868b' : '#22c55e', boxShadow: '0 2px 6px rgba(34,197,94,0.3)' }}
         >
           <Send size={14} />
-          보내기
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowPreview(!showPreview)}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-white border border-[#c8d6f0] text-[#1a57c8] text-[13px] font-semibold rounded-md hover:bg-[#e8eef8] transition-colors"
-        >
-          미리보기
+          {sending ? '발송 중...' : `보내기 (${recipients.length}명)`}
         </button>
 
         <button
@@ -393,7 +386,7 @@ export default function MailSendPage() {
             }}
           >
             <FileText size={13} />
-            템플릿 ✨
+            템플릿
             <ChevronDown size={12} />
           </button>
           {showTemplateMenu && (
@@ -423,6 +416,35 @@ export default function MailSendPage() {
 
         <div className="flex-1" />
 
+        {/* Personal Send Toggle (compact) */}
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#1a1a2e',
+            color: '#fff',
+            padding: '4px 12px',
+            borderRadius: '16px',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: '12px',
+            border: `2px solid ${personalSend ? '#ff4444' : '#4f8ef7'}`,
+            boxShadow: `0 0 6px ${personalSend ? 'rgba(255,68,68,0.3)' : 'rgba(79,142,247,0.3)'}`,
+            whiteSpace: 'nowrap',
+            userSelect: 'none',
+            transition: 'all 0.2s',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={personalSend}
+            onChange={e => setPersonalSend(e.target.checked)}
+            style={{ width: '14px', height: '14px', accentColor: personalSend ? '#ff4444' : '#4f8ef7', cursor: 'pointer' }}
+          />
+          {personalSend ? '개인발송 ON' : '개인발송'}
+        </label>
+
         {/* Font selector */}
         <select
           value={font}
@@ -442,225 +464,161 @@ export default function MailSendPage() {
           className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#c8d6f0] text-[12px] text-[#555] rounded-md hover:bg-[#e8eef8] transition-colors"
         >
           <Paperclip size={13} />
-          내 PC
+          첨부
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
-        {/* Left: Compose */}
-        <div className="space-y-3">
-          {/* Sender */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">발신자</label>
-            <select
-              value={sender}
-              onChange={e => setSender(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            >
-              {SENDERS.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Recipients + Personal Send Toggle */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1.5">
-                <Users size={13} />
-                수신자 <span className="text-[#86868b] font-normal normal-case">({recipients.length}명)</span>
-              </label>
-
-              {/* ── 개인발송 강조 토글 ── */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: '#1a1a2e',
-                  color: '#fff',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  border: `2px solid ${personalSend ? '#ff4444' : '#4f8ef7'}`,
-                  boxShadow: `0 0 8px ${personalSend ? 'rgba(255,68,68,0.4)' : 'rgba(79,142,247,0.4)'}`,
-                  whiteSpace: 'nowrap',
-                  userSelect: 'none',
-                  transition: 'all 0.2s',
-                }}
+      {/* ── Compose Area ── */}
+      <div className="space-y-3">
+        {/* Sender + Recipients + Subject — compact row */}
+        <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4 space-y-3">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">발신자</label>
+              <select
+                value={sender}
+                onChange={e => setSender(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               >
-                <input
-                  type="checkbox"
-                  checked={personalSend}
-                  onChange={e => setPersonalSend(e.target.checked)}
-                  style={{ width: '16px', height: '16px', accentColor: personalSend ? '#ff4444' : '#4f8ef7', cursor: 'pointer' }}
-                />
-                {personalSend ? '개인 발송 ✓' : '개인 발송'}
-              </label>
+                {SENDERS.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
             </div>
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">제목</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={e => setSubject(e.target.value)}
+                placeholder="이메일 제목"
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Users size={12} />
+              수신자 <span className="font-normal normal-case">({recipients.length}명)</span>
+            </label>
             <textarea
               value={recipientText}
               onChange={e => setRecipientText(e.target.value)}
-              placeholder="이메일 주소를 입력하세요 (줄바꿈, 콤마, 세미콜론으로 구분)&#10;예: teacher1@school.com&#10;teacher2@academy.kr"
-              rows={4}
-              className="w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+              placeholder="이메일 주소 입력 (줄바꿈, 콤마, 세미콜론 구분)"
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
             />
           </div>
-
-          {/* Subject */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">제목</label>
-            <input
-              type="text"
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              placeholder="이메일 제목"
-              className="w-full px-3 py-2 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
-          </div>
-
-          {/* Body — 분할 뷰 (에디터 + 실시간 미리보기) */}
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">본문 (HTML)</label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={saveBodyAsDefault}
-                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                    bodySaved
-                      ? 'bg-green-50 border-green-300 text-green-700'
-                      : 'bg-[#f5f5f7] border-[#d2d2d7] text-[#555] hover:bg-[#e8e8ed]'
-                  }`}
-                >
-                  {bodySaved ? '✅ 저장됨' : '📌 기본값 저장'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(!showPreview)}
-                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                    showPreview
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'bg-[#f5f5f7] border-[#d2d2d7] text-[#555] hover:bg-[#e8e8ed]'
-                  }`}
-                >
-                  {showPreview ? '◧ 분할보기 ON' : '◧ 분할보기'}
-                </button>
-              </div>
-            </div>
-
-            {showPreview ? (
-              /* ── 분할 뷰 ── */
-              <div className="grid grid-cols-2 gap-3" style={{ minHeight: 420 }}>
-                {/* 좌: HTML 에디터 */}
-                <div className="flex flex-col">
-                  <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#ff5f56] inline-block" />
-                    HTML 편집
-                  </div>
-                  <textarea
-                    value={bodyHtml}
-                    onChange={e => setBodyHtml(e.target.value)}
-                    className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
-                    style={{ minHeight: 400 }}
-                    spellCheck={false}
-                  />
-                </div>
-                {/* 우: 실시간 미리보기 */}
-                <div className="flex flex-col">
-                  <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#27c93f] inline-block" />
-                    실시간 미리보기
-                  </div>
-                  <div
-                    className="flex-1 rounded-xl border border-[#d2d2d7] overflow-y-auto"
-                    style={{ minHeight: 400, background: '#f6f6f6' }}
-                  >
-                    {/* 이메일 외곽 래퍼 */}
-                    <div style={{ maxWidth: 600, margin: '16px auto', background: '#fff', borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.10)', padding: '24px 32px', fontFamily: font, fontSize: 14, lineHeight: 1.7, color: '#222' }}>
-                      {subject && (
-                        <div style={{ fontSize: 12, color: '#888', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #eee' }}>
-                          <strong>제목:</strong> {subject}
-                        </div>
-                      )}
-                      <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* ── 단독 에디터 ── */
-              <textarea
-                value={bodyHtml}
-                onChange={e => setBodyHtml(e.target.value)}
-                rows={14}
-                className="w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[12px] resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
-              />
-            )}
-          </div>
-
-          {/* Error / Result */}
-          {error && (
-            <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-[13px] text-red-700">
-              <AlertCircle size={16} />
-              {error}
-            </div>
-          )}
-          {result && (
-            <div className={`flex items-center gap-2 p-4 rounded-xl text-[13px] border ${
-              result.failed === 0
-                ? 'bg-green-50 border-green-200 text-green-700'
-                : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-            }`}>
-              <CheckCircle2 size={16} />
-              {result.sent}건 발송 완료{result.failed > 0 ? `, ${result.failed}건 실패` : ''}
-            </div>
-          )}
-
-          {/* Send Button */}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={sending || recipients.length === 0}
-            className="w-full py-3.5 bg-[#1a57c8] text-white text-[15px] font-bold rounded-2xl hover:bg-[#1444a8] disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
-          >
-            {sending ? '발송 중...' : <><Send size={18} />메일 발송 ({recipients.length}명)</>}
-          </button>
         </div>
 
-        {/* Right: Info panel */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <h3 className="text-[13px] font-semibold text-[#1d1d1f] mb-3 flex items-center gap-1.5">
-              <FileText size={15} />
-              발송 안내
-            </h3>
-            <div className="space-y-1.5 text-[12px] text-[#86868b]">
-              <p>• 개별 발송 (CC/BCC 사용 안 함)</p>
-              <p>• 발송 간격: 3초</p>
-              <p>• 일일 한도: 200건</p>
-              <p>• Reply-To: bridgejobkr@gmail.com</p>
-              <p>• 발송 기록은 메일 로그에서 확인</p>
+        {/* Body Editor + Preview — side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {/* 좌: HTML 에디터 */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#ff5f56] inline-block" />
+                HTML 편집
+              </div>
+              <button
+                type="button"
+                onClick={saveBodyAsDefault}
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-colors ${
+                  bodySaved
+                    ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'bg-[#f5f5f7] border-[#d2d2d7] text-[#555] hover:bg-[#e8e8ed]'
+                }`}
+              >
+                {bodySaved ? '저장됨' : '기본값 저장'}
+              </button>
             </div>
+            <textarea
+              value={bodyHtml}
+              onChange={e => setBodyHtml(e.target.value)}
+              className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
+              style={{ minHeight: 480 }}
+              spellCheck={false}
+            />
           </div>
 
-          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
-            <h3 className="text-[13px] font-semibold text-[#1d1d1f] mb-3">개인발송 안내</h3>
-            <div className="space-y-1.5 text-[12px] text-[#86868b]">
-              <p>• <span className="font-semibold text-[#ff4444]">개인 발송 ON</span>: 수신자별 개별 연결</p>
-              <p>• OFF: 일반 대량 발송 모드</p>
-              <p>• 개인정보 노출 방지를 위해 중요 메일은 ON 권장</p>
+          {/* 우: 실시간 미리보기 */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4 flex flex-col">
+            <div className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider mb-2 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#27c93f] inline-block" />
+              미리보기
+            </div>
+            <div
+              className="flex-1 rounded-xl border border-[#d2d2d7] overflow-y-auto"
+              style={{ minHeight: 480, background: '#f6f6f6' }}
+            >
+              <div style={{ maxWidth: 600, margin: '16px auto', background: '#fff', borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.10)', padding: '24px 32px', fontFamily: font, fontSize: 14, lineHeight: 1.7, color: '#222' }}>
+                {subject && (
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #eee' }}>
+                    <strong>제목:</strong> {subject}
+                  </div>
+                )}
+                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }} />
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* ── 기본값 설정 ── */}
+        {/* Error / Result */}
+        {error && (
+          <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-[13px] text-red-700">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+        {result && (
+          <div className={`flex items-center gap-2 p-4 rounded-xl text-[13px] border ${
+            result.failed === 0
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+          }`}>
+            <CheckCircle2 size={16} />
+            {result.sent}건 발송 완료{result.failed > 0 ? `, ${result.failed}건 실패` : ''}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom: Info + Settings (collapsible panels) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* 발송 안내 + 개인발송 안내 */}
+        <div className="bg-white rounded-2xl border border-[#e5e5e7] p-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-[12px] font-semibold text-[#1d1d1f] mb-2 flex items-center gap-1.5">
+                <FileText size={13} />
+                발송 안내
+              </h3>
+              <div className="space-y-1 text-[11px] text-[#86868b]">
+                <p>• 개별 발송 (CC/BCC 미사용)</p>
+                <p>• 발송 간격: 3초</p>
+                <p>• 일일 한도: 200건</p>
+                <p>• Reply-To: bridgejobkr@gmail.com</p>
+                <p>• 발송 기록은 메일 로그에서 확인</p>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-[12px] font-semibold text-[#1d1d1f] mb-2">개인발송 안내</h3>
+              <div className="space-y-1 text-[11px] text-[#86868b]">
+                <p>• <span className="font-semibold text-[#ff4444]">ON</span>: 수신자별 개별 연결</p>
+                <p>• OFF: 일반 대량 발송 모드</p>
+                <p>• 중요 메일은 ON 권장</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 기본값 설정 + 템플릿 관리 */}
+        <div className="space-y-3">
+          {/* ── 기본 서명 설정 ── */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
             <button
               type="button"
               onClick={() => setShowDefaults(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 text-[13px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
+              className="w-full flex items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
             >
               <span>⚙️ 기본 서명 · 헤더 설정</span>
               <span className="text-[11px] text-[#86868b]">{showDefaults ? '▲' : '▼'}</span>
@@ -692,21 +650,19 @@ export default function MailSendPage() {
                 >
                   {defaultsSaved ? '✅ 저장됨!' : '💾 기본값으로 저장'}
                 </button>
-                <p className="text-[11px] text-[#86868b]">저장하면 이 브라우저에서 항상 이 서명이 기본으로 적용됩니다.</p>
               </div>
             )}
           </div>
 
-          {/* ── 템플릿 관리 패널 ── */}
+          {/* ── 템플릿 관리 ── */}
           <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
             <button type="button" onClick={() => setShowTplPanel(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 text-[13px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors">
+              className="w-full flex items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors">
               <span>📋 템플릿 관리</span>
               <span className="text-[11px] text-[#86868b]">{showTplPanel ? '▲' : '▼'}</span>
             </button>
             {showTplPanel && (
               <div className="border-t border-[#f0f0f0]">
-                {/* 탭 */}
                 <div className="flex border-b border-[#f0f0f0]">
                   {(['list','edit','new'] as const).map(tab => (
                     <button key={tab} type="button" onClick={() => setTplTab(tab)}
@@ -719,10 +675,8 @@ export default function MailSendPage() {
                 </div>
                 <div className="px-3 py-3">
                   {tplMsg && <p className="text-[11px] text-green-600 mb-2 font-medium">{tplMsg}</p>}
-
-                  {/* 목록 */}
                   {tplTab === 'list' && (
-                    <div className="space-y-0.5 max-h-[260px] overflow-y-auto">
+                    <div className="space-y-0.5 max-h-[200px] overflow-y-auto">
                       {templates.length === 0
                         ? <p className="text-[11px] text-[#86868b] py-4 text-center">템플릿 없음</p>
                         : templates.map(t => (
@@ -740,14 +694,12 @@ export default function MailSendPage() {
                       }
                     </div>
                   )}
-
-                  {/* 편집 */}
                   {tplTab === 'edit' && (editTpl ? (
                     <div className="space-y-2">
                       <p className="text-[11px] font-semibold text-blue-600">{editTpl.template_key}</p>
                       <input value={editTplSubject} onChange={e => setEditTplSubject(e.target.value)} placeholder="제목"
                         className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <textarea value={editTplBody} onChange={e => setEditTplBody(e.target.value)} rows={8}
+                      <textarea value={editTplBody} onChange={e => setEditTplBody(e.target.value)} rows={6}
                         className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"/>
                       <div className="flex gap-2">
                         <button type="button" onClick={saveTpl} disabled={tplSaving}
@@ -761,15 +713,13 @@ export default function MailSendPage() {
                   ) : (
                     <p className="text-[11px] text-[#86868b] py-4 text-center">목록에서 템플릿을 선택하세요</p>
                   ))}
-
-                  {/* 새 템플릿 */}
                   {tplTab === 'new' && (
                     <div className="space-y-2">
                       <input value={newTplKey} onChange={e => setNewTplKey(e.target.value.replace(/[^a-z0-9_]/g, ''))} placeholder="template_key (소문자, 언더스코어)"
                         className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
                       <input value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} placeholder="이메일 제목"
                         className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500"/>
-                      <textarea value={newTplBody} onChange={e => setNewTplBody(e.target.value)} rows={6} placeholder="<p>HTML 본문</p>"
+                      <textarea value={newTplBody} onChange={e => setNewTplBody(e.target.value)} rows={4} placeholder="<p>HTML 본문</p>"
                         className="w-full px-2 py-1.5 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"/>
                       <button type="button" onClick={createTpl} disabled={tplSaving || !newTplKey.trim()}
                         className="w-full py-1.5 bg-[#34c759] text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-[#2db84e] transition-colors">
