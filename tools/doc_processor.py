@@ -31,9 +31,10 @@ from pathlib import Path
 BASE_DIR = Path("Q:/Claudework/bridge base")
 DB_PATH = BASE_DIR / "master.db"
 ENV_PATH = BASE_DIR / ".env"
-DEFAULT_OUTPUT = BASE_DIR / "tools" / "processed_docs"
-BACKUP_DIR = DEFAULT_OUTPUT / "originals"
-LOG_DIR = DEFAULT_OUTPUT / "logs"
+DEFAULT_OUTPUT = BASE_DIR / "tools" / "processed_docs" / "processed"
+INCOMING_DIR = BASE_DIR / "tools" / "processed_docs" / "incoming"
+BACKUP_DIR = BASE_DIR / "tools" / "processed_docs" / "originals"
+LOG_DIR = BASE_DIR / "tools" / "processed_docs" / "logs"
 
 
 # ══════════════════════════════════════════════════════
@@ -558,24 +559,26 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
+        # replacement_redacts: (target_text, replacement_text) — 대체 텍스트 삽입용
+        replacement_redacts = []
+
         for line in text.split("\n"):
             stripped = line.strip()
             if not stripped:
                 continue
             s_lower = stripped.lower()
 
-            # 위치: "Current Location: Seoul, South Korea" → redact "Seoul, South Korea"
+            # 위치: "Current Location: Seoul, South Korea" → redact → "Korea"
             for label in LOCATION_LABELS:
                 pat = re.match(rf"({re.escape(label)}\s*:?\s*)(.+)", s_lower)
                 if pat and _is_korea(pat.group(2)):
-                    # 원문에서 값 부분만 추출 (대소문자 보존)
                     label_end = len(pat.group(1))
                     value_text = stripped[label_end:].strip()
                     if value_text:
-                        redact_texts.add(value_text)
-                        all_logs.append(f"[page{page_num}] LOC_REDACT: {value_text[:40]}")
+                        replacement_redacts.append((value_text, "Korea"))
+                        all_logs.append(f"[page{page_num}] LOC→Korea: {value_text[:40]}")
 
-            # 직장명: "Current Employer: YBM Academy" → redact "YBM Academy"
+            # 직장명: "Current Employer: YBM Academy" → redact (빈 대체)
             for label in WORKPLACE_LABELS:
                 pat = re.match(rf"({re.escape(label)}\s*:?\s*)(.+)", s_lower)
                 if pat:
@@ -588,13 +591,22 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
         if dry:
             continue
 
-        # Redact 적용
+        # Redact 적용 — 일반 (흰색 덮기)
         for target in redact_texts:
             instances = page.search_for(target)
             for rect in instances:
-                page.add_redact_annot(rect, fill=(1, 1, 1))  # 흰색으로 덮기
+                page.add_redact_annot(rect, fill=(1, 1, 1))
 
-        if redact_texts:
+        # Redact 적용 — 대체 텍스트 삽입 (위치→Korea)
+        for target, replacement in replacement_redacts:
+            instances = page.search_for(target)
+            for rect in instances:
+                page.add_redact_annot(
+                    rect, text=replacement, fill=(1, 1, 1),
+                    text_color=(0, 0, 0), fontsize=10,
+                )
+
+        if redact_texts or replacement_redacts:
             page.apply_redactions()
 
     # 번호 삽입 (첫 페이지 최상단)
@@ -821,26 +833,286 @@ def cmd_lookup(args):
     print()
 
 
+def cmd_batch(args):
+    """batch 명령: incoming/ 폴더 전체 일괄 처리"""
+    dry = args.dry
+    incoming = INCOMING_DIR
+    if not incoming.exists() or not any(incoming.iterdir()):
+        print(f"[INFO] incoming/ 폴더가 비어 있습니다: {incoming}")
+        print(f"  파일을 여기에 넣으세요: {incoming}")
+        return
+
+    files = sorted(
+        f for f in incoming.iterdir()
+        if f.suffix.lower() in (".docx", ".pdf")
+        and not f.name.startswith("~")
+        and not f.name.startswith(".")
+    )
+
+    if not files:
+        print(f"[INFO] .docx/.pdf 파일 없음: {incoming}")
+        return
+
+    mode = "DRY RUN" if dry else "BATCH"
+    print(f"\n{'=' * 60}")
+    print(f"  BRIDGE Document Processor v2.1  [{mode}]")
+    print(f"  Incoming: {incoming}")
+    print(f"  Output:   {DEFAULT_OUTPUT}")
+    print(f"  Files:    {len(files)}")
+    print(f"{'=' * 60}\n")
+
+    # 각 파일 처리 (auto_detect_candidate로 번호 자동 감지)
+    class FakeArgs:
+        pass
+    fake = FakeArgs()
+    fake.output = str(DEFAULT_OUTPUT)
+    fake.dry = dry
+    fake.number = None
+
+    for filepath in files:
+        fake.input = str(filepath)
+        print(f"[{mode}] {filepath.name}")
+
+        candidate = auto_detect_candidate(filepath)
+        current_number = None
+
+        if candidate:
+            current_number = candidate["sheet_number"]
+            print(f"  Auto: #{current_number} {candidate['full_name']}")
+        else:
+            nums = re.findall(r"(\d{3,5})", filepath.stem)
+            if nums:
+                current_number = int(nums[0])
+                candidate = get_candidate(current_number)
+                if candidate:
+                    print(f"  Filename: #{current_number} {candidate['full_name']}")
+                else:
+                    print(f"  Filename: #{current_number} (DB에 없음)")
+            else:
+                print(f"  [SKIP] 파일명에 번호 없음. 파일명에 강사번호 포함 필요")
+                continue
+
+        try:
+            ext = filepath.suffix.lower()
+            if ext == ".docx":
+                doc, logs = process_docx(filepath, current_number, candidate, dry)
+            elif ext == ".pdf":
+                doc, logs = process_pdf(filepath, current_number, candidate, dry)
+            else:
+                continue
+
+            if logs:
+                print(f"  PII {len(logs)}건 {'발견' if dry else '삭제'}:")
+                for l in logs[:10]:
+                    print(f"    - {l}")
+                if len(logs) > 10:
+                    print(f"    ... +{len(logs)-10}건")
+
+            if dry:
+                if ext == ".pdf":
+                    doc.close()
+                print(f"  [DRY] 미리보기 완료\n")
+                continue
+
+            backup = backup_original(filepath)
+            print(f"  Backup: {backup.name}")
+
+            DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
+            out_name = f"BRJ{current_number}_{filepath.stem}{ext}"
+            out_path = DEFAULT_OUTPUT / out_name
+
+            if ext == ".docx":
+                doc.save(str(out_path))
+            elif ext == ".pdf":
+                doc.save(str(out_path), garbage=4, deflate=True)
+                doc.close()
+
+            print(f"  Output: {out_path.name}")
+
+            if logs:
+                log_path = save_log(filepath, current_number, logs)
+                print(f"  Log: {log_path.name}")
+
+            # 처리 완료된 파일을 incoming에서 제거
+            filepath.unlink()
+            print(f"  [OK] (incoming에서 제거됨)\n")
+
+        except Exception as e:
+            print(f"  [ERROR] {e}\n")
+            import traceback
+            traceback.print_exc()
+
+    print(f"{'=' * 60}")
+    print(f"  Done! 결과: {DEFAULT_OUTPUT}")
+    print(f"{'=' * 60}")
+
+
+def cmd_download(args):
+    """download 명령: S3에서 후보자 파일 다운로드"""
+    number = args.number
+    candidate = get_candidate(number)
+    if not candidate:
+        print(f"[ERROR] #{number} 후보자를 찾을 수 없습니다")
+        return
+
+    print(f"  #{number} {candidate['full_name']}")
+
+    # bx.py로 AWS 자격증명 로드
+    try:
+        sys.path.insert(0, str(BASE_DIR / "tools"))
+        from bx import load_to_env
+        load_to_env()
+    except Exception as e:
+        print(f"[ERROR] AWS 자격증명 로드 실패: {e}")
+        print(f"  bx.py set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_S3_BUCKET 필요")
+        return
+
+    import boto3
+
+    bucket = os.environ.get("AWS_S3_BUCKET")
+    region = os.environ.get("AWS_REGION", "ap-northeast-2")
+    if not bucket:
+        print("[ERROR] AWS_S3_BUCKET 환경변수 미설정")
+        return
+
+    s3 = boto3.client(
+        "s3",
+        region_name=region,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+    )
+
+    # S3에서 후보자 관련 파일 검색 (prefix 패턴)
+    prefixes_to_try = [
+        f"candidates/cnd_{number}/",
+        f"candidates/{number}/",
+        f"resumes/{number}/",
+    ]
+
+    downloaded = []
+    dest_dir = args.output or str(INCOMING_DIR)
+    Path(dest_dir).mkdir(parents=True, exist_ok=True)
+
+    for prefix in prefixes_to_try:
+        try:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+            for obj in response.get("Contents", []):
+                key = obj["Key"]
+                ext = Path(key).suffix.lower()
+                if ext not in (".pdf", ".docx", ".doc", ".hwp"):
+                    continue
+
+                filename = f"{number}_{Path(key).name}"
+                dest = Path(dest_dir) / filename
+                print(f"  Downloading: {key} -> {filename}")
+                s3.download_file(bucket, key, str(dest))
+                downloaded.append(dest)
+        except Exception as e:
+            # prefix가 없을 수 있음 → 조용히 넘김
+            pass
+
+    if downloaded:
+        print(f"\n  {len(downloaded)}개 다운로드 완료 → {dest_dir}")
+        if not args.no_process:
+            print(f"\n  자동 처리 시작...")
+            for f in downloaded:
+                try:
+                    ext = f.suffix.lower()
+                    if ext == ".docx":
+                        doc, logs = process_docx(f, number, candidate)
+                    elif ext == ".pdf":
+                        doc, logs = process_pdf(f, number, candidate)
+                    else:
+                        continue
+
+                    backup_original(f)
+                    DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
+                    out_name = f"BRJ{number}_{f.stem}{ext}"
+                    out_path = DEFAULT_OUTPUT / out_name
+
+                    if ext == ".docx":
+                        doc.save(str(out_path))
+                    elif ext == ".pdf":
+                        doc.save(str(out_path), garbage=4, deflate=True)
+                        doc.close()
+
+                    if logs:
+                        save_log(f, number, logs)
+                    print(f"  [OK] {out_path.name} (PII {len(logs)}건 삭제)")
+
+                except Exception as e:
+                    print(f"  [ERROR] {f.name}: {e}")
+    else:
+        print(f"  S3에서 파일을 찾을 수 없습니다")
+        print(f"  수동으로 파일을 incoming/에 넣고 batch 명령 사용:")
+        print(f"    python doc_processor.py batch")
+
+
+def cmd_setup(_args=None):
+    """setup 명령: 폴더 구조 생성 + 상태 확인"""
+    dirs = [INCOMING_DIR, DEFAULT_OUTPUT, BACKUP_DIR, LOG_DIR]
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n  BRIDGE Document Processor v2.1 — 폴더 구조")
+    print(f"  {'─' * 50}")
+    print(f"  incoming/   : {INCOMING_DIR}")
+    print(f"  processed/  : {DEFAULT_OUTPUT}")
+    print(f"  originals/  : {BACKUP_DIR}")
+    print(f"  logs/       : {LOG_DIR}")
+    print()
+
+    # incoming 파일 수
+    incoming_files = [f for f in INCOMING_DIR.iterdir()
+                      if f.suffix.lower() in (".docx", ".pdf")] if INCOMING_DIR.exists() else []
+    processed_files = list(DEFAULT_OUTPUT.iterdir()) if DEFAULT_OUTPUT.exists() else []
+
+    print(f"  대기 중: {len(incoming_files)}개")
+    print(f"  처리됨: {len(processed_files)}개")
+
+    if incoming_files:
+        print(f"\n  대기 파일:")
+        for f in incoming_files[:10]:
+            print(f"    - {f.name}")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="BRIDGE Document Processor v2.0 — PII 삭제 + 강사번호"
+        description="BRIDGE Document Processor v2.1 — PII 삭제 + 강사번호"
     )
     sub = parser.add_subparsers(dest="command")
 
-    p_proc = sub.add_parser("process", help="문서 처리")
+    p_proc = sub.add_parser("process", help="단일 파일/폴더 처리")
     p_proc.add_argument("input", help="파일 또는 폴더")
     p_proc.add_argument("--number", "-n", type=int, help="강사번호")
     p_proc.add_argument("--output", "-o", help="출력 폴더")
     p_proc.add_argument("--dry", action="store_true", help="미리보기 (수정 없음)")
 
+    p_batch = sub.add_parser("batch", help="incoming/ 폴더 일괄 처리")
+    p_batch.add_argument("--dry", action="store_true", help="미리보기 (수정 없음)")
+
+    p_dl = sub.add_parser("download", help="S3에서 후보자 파일 다운로드 + 처리")
+    p_dl.add_argument("number", type=int, help="강사번호")
+    p_dl.add_argument("--output", "-o", help="다운로드 폴더 (기본: incoming/)")
+    p_dl.add_argument("--no-process", action="store_true", help="다운로드만 (처리 안 함)")
+
     p_look = sub.add_parser("lookup", help="후보자 검색")
     p_look.add_argument("query", help="이름 또는 이메일")
+
+    sub.add_parser("setup", help="폴더 구조 생성 + 상태 확인")
 
     args = parser.parse_args()
     if args.command == "process":
         cmd_process(args)
+    elif args.command == "batch":
+        cmd_batch(args)
+    elif args.command == "download":
+        cmd_download(args)
     elif args.command == "lookup":
         cmd_lookup(args)
+    elif args.command == "setup":
+        cmd_setup(args)
     else:
         parser.print_help()
 
