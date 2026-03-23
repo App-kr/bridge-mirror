@@ -335,11 +335,12 @@ RE_KR_ADDRESS = re.compile(
 
 RE_PASSPORT = re.compile(r"\b[A-Z]{1,2}\d{7,8}\b")
 
-# 영문 주소 패턴: "123 Street Name, City, ST 12345" 또는 "City, State ZIP"
+# 영문 주소 패턴: "123 Street Name, City, ST 12345"
+# 약어(St, Ct, Dr 등)는 오탐 심해서 전체 단어만 매칭
 RE_EN_ADDRESS = re.compile(
-    r"\d{1,5}\s+[\w\s.]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Boulevard|Dr(?:ive)?|"
-    r"Rd|Road|Ln|Lane|Ct|Court|Way|Pl(?:ace)?|Trail|Tr|Circle|Cir|Pike|Pkwy|Hwy)"
-    r"[.,]?\s*(?:(?:Apt|Suite|Ste|Unit|#)\s*\w+[.,]?\s*)?"
+    r"\d{1,5}\s+[\w\s.]{3,40}\b(?:Street|Avenue|Boulevard|Drive|"
+    r"Road|Lane|Court|Place|Trail|Circle|Parkway|Highway)\b"
+    r"[.,]?\s*(?:(?:Apt|Suite|Unit|#)\s*\w+[.,]?\s*)?"
     r"(?:\w[\w\s]*,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?)?",
     re.I,
 )
@@ -1015,6 +1016,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
     # 모든 PII 패턴을 수집
     pii_patterns = _build_search_patterns(candidate)
 
+    # 파일명에서 이름 추출 (DB 불일치 대비)
+    filename_names = _extract_names_from_filename(filepath)
+
     for page_num, page in enumerate(doc):
         text = page.get_text()
 
@@ -1047,9 +1051,49 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
                     redact_texts.add(variant)
                     all_logs.append(f"[page{page_num}] NAME: {variant}")
 
+        # 파일명 기반 이름도 redact
+        for fn_name in filename_names:
+            if fn_name.lower() in text.lower():
+                redact_texts.add(fn_name)
+                all_logs.append(f"[page{page_num}] FILENAME_NAME: {fn_name}")
+
+        # ── 한국 학원명/도시명 redact (한국 맥락 있을 때만) ──
+        # 페이지 전체에 한국 관련 키워드가 있는지 먼저 확인
+        page_lower = text.lower()
+        page_has_korea = any(kw in page_lower for kw in
+            ("korea", "한국", "seoul", "busan", "서울", "부산"))
+
+        keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
+        # 한국 맥락이 없으면 학원명 redact 스킵 (미국 high school 등 오탐 방지)
+        if page_has_korea:
+            for line in text.split("\n"):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                s_lower = stripped.lower()
+                has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
+                has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
+
+                # 같은 줄에 한국 키워드+학원명 → 학원명 redact
+                if has_kr_work and has_kr:
+                    for kw in KR_WORKPLACE_KEYWORDS:
+                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                        for m in kw_pat.finditer(stripped):
+                            redact_texts.add(m.group())
+                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+
+                # 한국 도시명 redact (korea 자체는 유지)
+                if has_kr:
+                    for city in KR_KEYWORDS:
+                        if len(city) <= 2 or city.lower() in keep_keywords:
+                            continue
+                        city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
+                        for m in city_pat.finditer(stripped):
+                            redact_texts.add(m.group())
+                            all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
+
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
-        # replacement_redacts: (target_text, replacement_text) — 대체 텍스트 삽입용
         replacement_redacts = []
 
         for line in text.split("\n"):
@@ -1102,9 +1146,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
     # 번호 삽입 (첫 페이지 최상단)
     if not dry and len(doc) > 0:
         first_page = doc[0]
-        # 페이지 상단에 번호 텍스트 삽입
         rect = fitz.Rect(50, 15, 300, 45)
-        # 기존 내용 위에 흰 박스 → 번호 텍스트
         first_page.draw_rect(rect, color=None, fill=(1, 1, 1))
         first_page.insert_text(
             fitz.Point(50, 38),
@@ -1113,6 +1155,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
             fontname="helv",
             color=(0, 0, 0),
         )
+
+    # PDF 메타데이터 클리어 (이름/제목 제거)
+    if not dry:
+        doc.set_metadata({
+            "title": "", "author": "", "subject": "",
+            "keywords": "", "creator": "", "producer": "",
+        })
 
     return doc, all_logs
 
@@ -1127,6 +1176,7 @@ def _build_search_patterns(candidate: dict = None):
         (RE_URL, "URL"),
         (RE_PASSPORT, "PASSPORT"),
         (RE_KR_ADDRESS, "KR_ADDR"),
+        (RE_EN_ADDRESS, "EN_ADDR"),
     ]
 
     # 전화번호는 별도 처리 (7자리+ 필터)
