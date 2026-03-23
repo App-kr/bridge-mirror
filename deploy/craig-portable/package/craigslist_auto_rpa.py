@@ -396,14 +396,11 @@ _MONTH_LABEL = ["", "January", "February", "March", "April", "May", "June",
 
 
 def _safe_start_date(raw: str) -> str:
-    """당월 포함 과거~차월 시작일 → 안전한 미래 월로 변환.
+    """안전하지 않은 시작일 → ASAP~6개월 뒤 중 랜덤 선택.
 
-    규칙:
-      - 텍스트 전체가 ASAP/Immediately/Negotiable만이면 그대로
-      - 쉼표/슬래시로 파트 분리 → 각 파트를 독립 변환
-      - ASAP 등 비월 토큰은 보존
-      - 안전 기준(현재월+2) 미만 월 → +2 밀기
-      - 중복 월 제거
+    안전 기준: 현재월 + 2 이상만 허용.
+    이미 안전한 월 → 그대로 유지.
+    당월/차월/과거 → ASAP 또는 2~6개월 뒤 랜덤.
     """
     if not raw or not raw.strip():
         return "Negotiable"
@@ -411,51 +408,34 @@ def _safe_start_date(raw: str) -> str:
     text = raw.strip()
     low = text.lower().strip()
 
-    # 텍스트 전체가 ASAP/Negotiable 등만이면 그대로
     if low in ("asap", "immediately", "negotiable", "anytime"):
         return text
 
     cur_month = datetime.now().month
-    safe_month = cur_month + 2  # 이 달부터 안전 (3월→5월)
+    safe_start = cur_month + 2  # 이 달부터 안전
 
-    # 구분자로 파트 분리 (쉼표, 슬래시, &, 틸데, 공백구분 월이름)
-    sep = ", " if "," in raw else ("/" if "/" in raw else ", ")
-    parts = [p.strip() for p in re.split(r'[,/&~]+', text) if p.strip()]
+    # 안전 풀: ASAP + 2~6개월 뒤
+    safe_pool = ["ASAP"]
+    for offset in range(2, 7):
+        m = (cur_month + offset - 1) % 12 + 1
+        safe_pool.append(_MONTH_LABEL[m])
 
-    converted: list[str] = []
-    for part in parts:
-        plow = part.lower().strip().rstrip('.')
-        # ASAP 등 비월 키워드는 보존
-        if any(kw in plow for kw in ("asap", "immediately", "negotiable", "anytime")):
-            converted.append("ASAP")
-            continue
-        # 파트에서 월 이름 추출
-        month_match = None
-        for tok_m in re.finditer(r'\b([A-Za-z]+)\.?\b', part):
-            tok = tok_m.group(1).lower().rstrip('.')
-            if tok in _MONTH_NAMES:
-                month_match = (tok_m, _MONTH_NAMES[tok])
+    # 텍스트에서 월 이름 존재 여부 확인
+    has_month = False
+    has_unsafe = False
+    for tok_m in re.finditer(r'\b([A-Za-z]+)\.?\b', text):
+        tok = tok_m.group(1).lower().rstrip('.')
+        if tok in _MONTH_NAMES:
+            has_month = True
+            if _MONTH_NAMES[tok] < safe_start:
+                has_unsafe = True
                 break
 
-        if not month_match:
-            converted.append(part)  # 월 아닌 텍스트 보존
-            continue
+    if not has_month or not has_unsafe:
+        return text  # 월 없거나 모두 안전 → 그대로
 
-        m_obj, m_num = month_match
-        if m_num < safe_month:
-            new_m = m_num + 2
-            if new_m > 12:
-                new_m -= 12
-            new_label = _MONTH_LABEL[new_m]
-            # 월 이름만 교체, 나머지 텍스트 보존
-            new_part = part[:m_obj.start()] + new_label + part[m_obj.end():]
-            converted.append(new_part.strip())
-        else:
-            converted.append(part)
-
-    # 중복 제거 (순서 유지)
-    deduped = list(dict.fromkeys(converted))
-    return sep.join(deduped)
+    # 안전하지 않은 월 포함 → 전체를 랜덤 안전 값으로 교체
+    return random.choice(safe_pool)
 
 
 def _safe_benefits(raw: str) -> list[str]:
