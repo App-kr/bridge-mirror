@@ -32,9 +32,9 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
-/* ── Google Meet Room Pool (localStorage에서 읽기, interviews/page.tsx와 공유) ── */
+/* ── Video Room Pool (Google Meet 수동 등록 or Jitsi 자동 생성) ── */
 const MEET_POOL_KEY = 'bridge_meet_pool'
-const DEFAULT_MEET_POOL = [
+const DEFAULT_MEET_POOL: string[] = [
   'https://meet.google.com/kmt-ydhj-fmf',
 ]
 function loadMeetPool(): string[] {
@@ -42,7 +42,19 @@ function loadMeetPool(): string[] {
   try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
   return DEFAULT_MEET_POOL
 }
-function pickRandomMeet(): string { const p = loadMeetPool(); return p[Math.floor(Math.random() * p.length)] }
+/** 3글자-4글자-3글자 랜덤 코드 생성 (Google Meet 스타일) */
+function _rndCode(): string {
+  const c = 'abcdefghijklmnopqrstuvwxyz'
+  const pick = (n: number) => Array.from({ length: n }, () => c[Math.floor(Math.random() * 26)]).join('')
+  return `${pick(3)}-${pick(4)}-${pick(3)}`
+}
+/** 풀에서 랜덤 선택 or Jitsi 자동 생성 */
+function pickRandomMeet(): string {
+  const pool = loadMeetPool()
+  if (pool.length >= 2) return pool[Math.floor(Math.random() * pool.length)]
+  // 풀이 1개 이하면 Jitsi 자동 생성 (항상 열림, 권한 불필요)
+  return `https://meet.jit.si/bridge-iv-${_rndCode()}`
+}
 
 /* ── Interview defaults persistence ── */
 const IV_PREFS_KEY = 'bridge_iv_prefs'
@@ -1990,7 +2002,7 @@ export default function BridgeCanvasSheet() {
           const raw = ivNewLink.trim()
           if (!raw) return
           // 여러 줄 또는 공백으로 구분된 링크도 한번에 추가
-          const links = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.startsWith('http') && s.includes('meet.google.com/'))
+          const links = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.startsWith('http') && (s.includes('meet.google.com/') || s.includes('meet.jit.si/') || s.includes('zoom.us/')))
           if (!links.length) return
           const unique = links.filter(l => !pool.includes(l))
           if (!unique.length) { setIvNewLink(''); return }
@@ -1998,11 +2010,7 @@ export default function BridgeCanvasSheet() {
           setIvMeetPool(np); localStorage.setItem(MEET_POOL_KEY, JSON.stringify(np))
           setIvNewLink('')
         }
-        const getMeetCode = (url: string) => { const m = url.match(/meet\.google\.com\/([a-z\-]+)/); return m ? m[1] : '' }
-        const getCalendarSettingsUrl = (url: string) => {
-          const code = getMeetCode(url)
-          return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Bridge+Interview&location=${encodeURIComponent(url)}&details=${encodeURIComponent('Meet code: ' + code + '\n\n회의 엑세스 유형: 항상 열기\n사진 체크: ON')}`
-        }
+        const getMeetCode = (url: string) => { const m = url.match(/meet\.(?:google\.com|jit\.si)\/([a-zA-Z0-9\-]+)/); return m ? m[1] : '' }
         const firstName = String(ivTarget.name || '').split(/\s+/).pop() || String(ivTarget.name || '-')
         const defaultSubject = `[BRIDGE] Interview — ${firstName}`
         const defaultBody = `Dear ${firstName},\n\nYour interview has been scheduled.\n\nDate: ${ivDate || '(TBD)'}\nTime: ${ivTime || '(TBD)'} KST\nDuration: ${ivDuration} minutes\n\nMeet Link: ${ivMeetLink}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
@@ -2172,57 +2180,71 @@ export default function BridgeCanvasSheet() {
                     )}
                   </div>
 
-                  {/* ═══ RIGHT COLUMN — Meet Rooms ═══ */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#000' }}>Meet 회의실 ({pool.length})</span>
-                      <button onClick={() => { const r = pool[Math.floor(Math.random() * pool.length)]; setIvMeetLink(r) }}
-                        style={{ padding: '4px 12px', background: '#f3f4f6', color: '#000', borderRadius: 6, fontSize: 12, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F }}>
-                        랜덤
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#888' }}>엑세스: 항상 열기 &middot; 허가없이 참여 가능</div>
-
-                    <div style={{ flex: 1, maxHeight: 'calc(90vh - 220px)', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 10, background: '#fafafa' }}>
-                      {pool.map((link, i) => {
-                        const code = getMeetCode(link)
-                        const selected = link === ivMeetLink
-                        return (
-                          <div key={i} style={{
-                            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                            background: selected ? '#e8f4fd' : (i % 2 === 0 ? '#fff' : '#fafafa'),
-                            borderBottom: i < pool.length - 1 ? '1px solid #f0f0f0' : 'none',
-                            cursor: 'pointer',
-                          }} onClick={() => setIvMeetLink(link)}>
-                            <div style={{ width: 18, height: 18, borderRadius: 9, border: selected ? '2px solid #000' : '2px solid #ccc', background: selected ? '#000' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              {selected && <div style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 500, color: '#000', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Room {i + 1} &middot; {code || link}</div>
-                            </div>
-                            <a href={link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                              style={{ padding: '4px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, textDecoration: 'none', fontFamily: F }}>입장</a>
-                            <a href={getCalendarSettingsUrl(link)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                              style={{ padding: '4px 10px', background: '#f3f4f6', color: '#000', borderRadius: 6, fontSize: 11, fontWeight: 500, textDecoration: 'none', border: '1px solid #e5e7eb', fontFamily: F }}>설정</a>
-                            <button onClick={e => { e.stopPropagation(); removeLink(i) }} disabled={pool.length <= 1}
-                              style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff', color: pool.length <= 1 ? '#ddd' : '#ef4444', fontSize: 16, cursor: pool.length <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: F }}>&times;</button>
-                          </div>
-                        )
-                      })}
+                  {/* ═══ RIGHT COLUMN — Video Room ═══ */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {/* Current selected link */}
+                    <div>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>화상 회의 링크</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 5, background: '#22c55e', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: '#000', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ivMeetLink || '(없음)'}
+                        </div>
+                        <a href={ivMeetLink} target="_blank" rel="noopener noreferrer"
+                          style={{ padding: '4px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, textDecoration: 'none', fontFamily: F, flexShrink: 0 }}>입장</a>
+                        <button onClick={() => { if (ivMeetLink) { navigator.clipboard?.writeText(ivMeetLink); showPhotoToast('링크 복사됨') } }}
+                          style={{ padding: '4px 10px', background: '#f3f4f6', color: '#000', borderRadius: 6, fontSize: 11, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F, flexShrink: 0 }}>복사</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                        <button onClick={() => setIvMeetLink(pickRandomMeet())}
+                          style={{ flex: 1, padding: '8px 0', background: '#1e293b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: F }}>
+                          새 링크 생성
+                        </button>
+                        {pool.length >= 2 && (
+                          <button onClick={() => { const r = pool[Math.floor(Math.random() * pool.length)]; setIvMeetLink(r) }}
+                            style={{ flex: 1, padding: '8px 0', background: '#f3f4f6', color: '#1e293b', borderRadius: 8, fontSize: 12, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F }}>
+                            풀에서 선택
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>항상 열림 &middot; 허가없이 참여 가능 &middot; 인터뷰마다 고유 링크</div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <textarea value={ivNewLink} onChange={e => setIvNewLink(e.target.value)}
-                        placeholder="https://meet.google.com/xxx-yyyy-zzz&#10;여러 링크를 한번에 붙여넣기 가능"
-                        rows={ivNewLink.includes('\n') ? 3 : 1}
-                        style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12, color: '#000', boxSizing: 'border-box', fontFamily: F, resize: 'vertical', lineHeight: 1.6 }}
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
-                      <button onClick={addLink}
-                        style={{ padding: '8px 14px', background: '#000', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F, alignSelf: 'flex-end' }}>추가</button>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#999', lineHeight: 1.6 }}>
-                      <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 500 }}>meet.google.com/new</a> 에서 방 생성 → 링크 복사 → 여기에 추가 (여러 개 동시 가능)
-                    </div>
+                    {/* Saved pool (collapsible) */}
+                    <details style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                      <summary style={{ padding: '10px 14px', fontSize: 12, fontWeight: 500, color: '#555', cursor: 'pointer', background: '#fafafa', userSelect: 'none' }}>
+                        저장된 회의실 풀 ({pool.length})
+                      </summary>
+                      <div style={{ maxHeight: 200, overflow: 'auto' }}>
+                        {pool.map((link, i) => {
+                          const code = getMeetCode(link) || link.replace(/^https?:\/\//, '').slice(0, 30)
+                          const selected = link === ivMeetLink
+                          return (
+                            <div key={i} style={{
+                              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+                              background: selected ? '#e8f4fd' : (i % 2 === 0 ? '#fff' : '#fafafa'),
+                              borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 12,
+                            }} onClick={() => setIvMeetLink(link)}>
+                              <div style={{ width: 14, height: 14, borderRadius: 7, border: selected ? '2px solid #000' : '2px solid #ccc', background: selected ? '#000' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {selected && <div style={{ width: 6, height: 6, borderRadius: 3, background: '#fff' }} />}
+                              </div>
+                              <span style={{ flex: 1, color: '#000', fontWeight: selected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{code}</span>
+                              <button onClick={e => { e.stopPropagation(); removeLink(i) }} disabled={pool.length <= 1}
+                                style={{ width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', color: pool.length <= 1 ? '#ddd' : '#ef4444', fontSize: 14, cursor: pool.length <= 1 ? 'default' : 'pointer', flexShrink: 0, fontFamily: F }}>&times;</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div style={{ padding: '8px 12px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 6 }}>
+                        <textarea value={ivNewLink} onChange={e => setIvNewLink(e.target.value)}
+                          placeholder="Google Meet / Jitsi 링크 추가"
+                          rows={1}
+                          style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, color: '#000', boxSizing: 'border-box', fontFamily: F, resize: 'none' }}
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
+                        <button onClick={addLink}
+                          style={{ padding: '6px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>+</button>
+                      </div>
+                    </details>
                   </div>
                 </div>
               )}
