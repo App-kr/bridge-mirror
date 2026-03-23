@@ -484,6 +484,66 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(BodySizeLimitMiddleware)
 
+# ── CSRF Origin 검증 — 관리자 mutation 요청의 Origin 헤더 검증 ──────────────
+_ALLOWED_ORIGINS_SET = set(ALLOWED_ORIGINS)
+
+class CSRFOriginMiddleware(BaseHTTPMiddleware):
+    """POST/PUT/PATCH/DELETE 요청에 Origin 헤더 검증 (CSRF 방어)."""
+    _EXEMPT = {"/api/apply", "/api/inquiry", "/api/track"}  # 공개 폼 제외
+    _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method not in self._MUTATION:
+            return await call_next(request)
+        path = request.url.path
+        if any(path.startswith(p) for p in self._EXEMPT):
+            return await call_next(request)
+        origin = request.headers.get("origin", "")
+        if origin and origin not in _ALLOWED_ORIGINS_SET:
+            return JSONResponse(status_code=403, content={
+                "isError": True, "errorCategory": "CSRF_REJECTED",
+                "isRetryable": False, "context": "Cross-origin request blocked."
+            })
+        return await call_next(request)
+
+app.add_middleware(CSRFOriginMiddleware)
+
+# ── 관리자 변경 감사 로그 — 모든 admin mutation 상세 기록 ────────────────────
+class AdminAuditMiddleware(BaseHTTPMiddleware):
+    """관리자 POST/PATCH/DELETE 요청을 감사 로그에 기록."""
+    _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        method = request.method
+        if method not in self._MUTATION or not path.startswith("/api/admin"):
+            return await call_next(request)
+        # 관리자 인증된 요청만 로깅 (인증 실패는 _check_admin에서 로깅)
+        _ak = os.getenv("ADMIN_API_KEY", "")
+        has_key = _ak and request.headers.get("x-admin-key", "").strip() == _ak
+        has_token = bool(request.headers.get("x-admin-token", "").strip())
+        if not has_key and not has_token:
+            return await call_next(request)
+
+        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+        response = await call_next(request)
+
+        # 감사 로그 기록 (파일)
+        try:
+            from security_middleware import audit
+            audit.log("ADMIN_MUTATION", {
+                "ip": ip,
+                "method": method,
+                "path": path,
+                "status": response.status_code,
+                "auth": "session" if has_token else "api_key",
+            }, "INFO" if response.status_code < 400 else "WARNING")
+        except ImportError:
+            pass
+        return response
+
+app.add_middleware(AdminAuditMiddleware)
+
 # ── DB 인덱스 보장 (무한스크롤 cursor 성능) ─────────────────────────────────
 def _ensure_candidate_indexes() -> None:
     try:
@@ -1195,6 +1255,118 @@ except OSError as _mkdir_err:
 _ADMIN_KEY     = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW      = os.getenv("ADMIN_PASSWORD", "")
 
+# ── 상위 보안: IP 화이트리스트 ──────────────────────────────────────────────
+# ADMIN_ALLOWED_IPS=1.2.3.4,5.6.7.0/24 (콤마 구분, CIDR 지원, 비어있으면 제한 없음)
+_ADMIN_ALLOWED_IPS_RAW = os.getenv("ADMIN_ALLOWED_IPS", "").strip()
+_ADMIN_ALLOWED_IPS: list[str] = [ip.strip() for ip in _ADMIN_ALLOWED_IPS_RAW.split(",") if ip.strip()] if _ADMIN_ALLOWED_IPS_RAW else []
+
+import ipaddress as _ipaddr
+import secrets as _secrets
+
+def _ip_in_whitelist(client_ip: str) -> bool:
+    """IP 화이트리스트 검사. 리스트 비어있으면 True (제한 없음)."""
+    if not _ADMIN_ALLOWED_IPS:
+        return True
+    try:
+        addr = _ipaddr.ip_address(client_ip)
+    except ValueError:
+        return False
+    for entry in _ADMIN_ALLOWED_IPS:
+        try:
+            if "/" in entry:
+                if addr in _ipaddr.ip_network(entry, strict=False):
+                    return True
+            else:
+                if addr == _ipaddr.ip_address(entry):
+                    return True
+        except ValueError:
+            continue
+    return False
+
+def _ip_subnet24(ip_str: str) -> str:
+    """IP → /24 서브넷 문자열 (세션 바인딩용)."""
+    try:
+        addr = _ipaddr.ip_address(ip_str)
+        if isinstance(addr, _ipaddr.IPv4Address):
+            parts = ip_str.split(".")
+            return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        return str(_ipaddr.ip_network(f"{addr}/48", strict=False))
+    except ValueError:
+        return "unknown"
+
+# ── 상위 보안: 세션 토큰 시스템 ─────────────────────────────────────────────
+# 로그인 시 세션 토큰 발급, 8시간 만료, /24 서브넷 바인딩
+_SESSION_TTL = 8 * 3600  # 8시간
+_SESSIONS: dict[str, dict] = {}  # token → {created, expires, subnet, ip, ua}
+_SESSION_LOCK = threading.Lock()
+_MAX_SESSIONS = 50  # 최대 동시 세션 수
+
+def _get_client_ip(request: Request) -> str:
+    """프록시 헤더에서 실제 클라이언트 IP 추출."""
+    for hdr in ("X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"):
+        val = request.headers.get(hdr, "")
+        if val:
+            ip = val.split(",")[0].strip()
+            try:
+                _ipaddr.ip_address(ip)
+                return ip
+            except ValueError:
+                continue
+    return request.client.host if request.client else "unknown"
+
+def _create_session(request: Request) -> str:
+    """세션 토큰 생성 + 저장. 반환: 토큰 문자열."""
+    token = _secrets.token_urlsafe(32)
+    ip = _get_client_ip(request)
+    now = time.time()
+    with _SESSION_LOCK:
+        # 만료 세션 정리
+        expired = [k for k, v in _SESSIONS.items() if v["expires"] < now]
+        for k in expired:
+            del _SESSIONS[k]
+        # 최대 세션 수 초과 시 가장 오래된 것 제거
+        if len(_SESSIONS) >= _MAX_SESSIONS:
+            oldest = min(_SESSIONS, key=lambda k: _SESSIONS[k]["created"])
+            del _SESSIONS[oldest]
+        _SESSIONS[token] = {
+            "created": now,
+            "expires": now + _SESSION_TTL,
+            "subnet": _ip_subnet24(ip),
+            "ip": ip,
+            "ua": (request.headers.get("User-Agent", ""))[:100],
+        }
+    return token
+
+def _validate_session(request: Request) -> bool:
+    """X-Admin-Token 헤더의 세션 토큰 검증. 유효하면 True."""
+    token = request.headers.get("x-admin-token", "").strip()
+    if not token:
+        return False
+    now = time.time()
+    with _SESSION_LOCK:
+        sess = _SESSIONS.get(token)
+        if not sess:
+            return False
+        if sess["expires"] < now:
+            del _SESSIONS[token]
+            return False
+        # /24 서브넷 바인딩 검증
+        client_ip = _get_client_ip(request)
+        if _ip_subnet24(client_ip) != sess["subnet"]:
+            _log.warning("세션 서브넷 불일치: token_subnet=%s client=%s", sess["subnet"], client_ip)
+            del _SESSIONS[token]
+            return False
+        # 세션 갱신 (슬라이딩 만료)
+        sess["expires"] = now + _SESSION_TTL
+        return True
+
+def _revoke_session(token: str) -> bool:
+    """세션 토큰 폐기."""
+    with _SESSION_LOCK:
+        return _SESSIONS.pop(token, None) is not None
+
+_log = logging.getLogger("bridge.security")
+
 # 시작 진단 (값 노출 없이 상태만 출력)
 print(f"[STARTUP] ADMIN_API_KEY={'SET' if _ADMIN_KEY else 'EMPTY'} "
       f"ADMIN_PASSWORD={'SET(pbkdf2)' if _ADMIN_PW.startswith('pbkdf2:') else 'SET(plain)' if _ADMIN_PW else 'EMPTY'} "
@@ -1260,12 +1432,22 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
 
 
 def _check_admin(request: Request):
-    """ADMIN_API_KEY 헤더 검증. 키 미설정 시 항상 접근 차단 (개발/프로덕션 구분 없음)."""
+    """
+    관리자 인증 — 3단계 검증:
+    1. 세션 토큰 (x-admin-token) — 유효하면 즉시 통과 (HMAC/API키 스킵)
+    2. API 키 (x-admin-key) — 기존 방식
+    3. IP 화이트리스트 (ADMIN_ALLOWED_IPS) — 설정 시 추가 검증
+    """
     if not _ADMIN_KEY:
         raise HTTPException(status_code=503, detail={"isError": True, "errorCategory": "DB_UNAVAILABLE", "isRetryable": True, "context": "관리자 기능이 비활성화되어 있습니다."})
-    # ── brute-force 방어: 10회 실패 시 5분 차단 ──
+
+    # ── Layer 1: 세션 토큰 (최우선 — 프론트엔드 내부 사용자용) ──
+    if _validate_session(request):
+        return  # 세션 유효 → 즉시 통과
+
+    # ── Layer 2: API 키 검증 ──
     ip_h = _ip_hash(request)
-    now = _time.time()
+    now = time.time()
     fails = [t for t in _AUTH_FAIL.get(ip_h, []) if now - t < 300]
     if len(fails) >= 10:
         raise HTTPException(status_code=429, detail={"isError": True, "errorCategory": "RATE_LIMIT", "isRetryable": True, "context": "인증 시도가 너무 많습니다. 5분 후 다시 시도하세요."})
@@ -1274,8 +1456,14 @@ def _check_admin(request: Request):
         _AUTH_FAIL[ip_h] = fails
         _log_unauthorized_access(request)
         raise HTTPException(status_code=403, detail={"isError": True, "errorCategory": "ADMIN_KEY_INVALID", "isRetryable": False, "context": "관리자 키가 올바르지 않습니다."})
-    # 인증 성공 시 실패 기록 초기화
     _AUTH_FAIL.pop(ip_h, None)
+
+    # ── Layer 3: IP 화이트리스트 (ADMIN_ALLOWED_IPS 설정 시) ──
+    if _ADMIN_ALLOWED_IPS:
+        client_ip = _get_client_ip(request)
+        if not _ip_in_whitelist(client_ip):
+            _log.warning("IP 화이트리스트 차단: ip=%s", client_ip)
+            raise HTTPException(status_code=403, detail={"isError": True, "errorCategory": "IP_NOT_ALLOWED", "isRetryable": False, "context": "허용되지 않은 IP입니다."})
 
 
 @app.post("/api/admin/login", tags=["admin"])
@@ -1326,7 +1514,49 @@ async def admin_login(request: Request):
     except Exception:
         pass
 
-    return ok(data={"api_key": _ADMIN_KEY}, message="로그인 성공")
+    # 세션 토큰 발급 (IP /24 서브넷 바인딩, 8시간 만료)
+    session_token = _create_session(request)
+    _log.info("관리자 로그인 성공: ip=%s subnet=%s", real_ip[:12] + "***", _ip_subnet24(real_ip))
+    return ok(data={"api_key": _ADMIN_KEY, "session_token": session_token}, message="로그인 성공")
+
+
+@app.post("/api/admin/logout", tags=["admin"])
+async def admin_logout(request: Request):
+    """세션 토큰 폐기 (로그아웃)."""
+    token = request.headers.get("x-admin-token", "").strip()
+    if token:
+        _revoke_session(token)
+    return ok(message="로그아웃 완료")
+
+
+@app.get("/api/admin/sessions", tags=["admin"])
+async def admin_sessions(request: Request):
+    """활성 세션 목록 조회 (관리자 전용)."""
+    _check_admin(request)
+    now = time.time()
+    with _SESSION_LOCK:
+        active = []
+        for tok, s in _SESSIONS.items():
+            if s["expires"] > now:
+                active.append({
+                    "token_prefix": tok[:8] + "...",
+                    "subnet": s["subnet"],
+                    "created": datetime.fromtimestamp(s["created"], tz=timezone.utc).isoformat(),
+                    "expires_in_min": round((s["expires"] - now) / 60),
+                    "ua": s["ua"][:50],
+                })
+    return ok(data={"sessions": active, "count": len(active)})
+
+
+@app.delete("/api/admin/sessions", tags=["admin"])
+async def admin_revoke_all_sessions(request: Request):
+    """모든 세션 폐기 (긴급 시)."""
+    _check_admin(request)
+    with _SESSION_LOCK:
+        count = len(_SESSIONS)
+        _SESSIONS.clear()
+    _log.warning("모든 세션 강제 폐기: count=%d ip=%s", count, _get_client_ip(request))
+    return ok(data={"revoked": count}, message="모든 세션이 폐기되었습니다.")
 
 
 @app.post("/api/admin/change-password", tags=["admin"])
