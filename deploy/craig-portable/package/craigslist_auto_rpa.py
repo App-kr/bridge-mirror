@@ -38,7 +38,7 @@ from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
-BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent.parent)))
+BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
 DB_PATH  = Path(os.getenv("BRIDGE_DB_PATH", str(BASE_DIR / "data" / "master.db")))
 
 # DB fallback: data/master.db 없으면 루트의 master.db (기존 Windows 구조 호환)
@@ -47,7 +47,8 @@ if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
-LOCK_FILE = BASE_DIR / "logs" / ".rpa_running.lock"
+LOCK_FILE           = BASE_DIR / "logs" / ".rpa_running.lock"
+_STOP_GRACEFUL_FLAG = BASE_DIR / "logs" / ".rpa_stop_graceful.flag"
 # 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
 _IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -383,6 +384,80 @@ def _age_label(raw: str) -> str:
     return " - ".join(sorted_labels)
 
 
+# ── 월 이름 정규화 (약어 포함) ───────────────────────────────────────────────
+_MONTH_NAMES = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6,
+    "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "september": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+_MONTH_LABEL = ["", "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"]
+
+
+def _safe_start_date(raw: str) -> str:
+    """당월 포함 과거~차월 시작일 → 안전한 미래 월로 변환.
+
+    규칙:
+      - 텍스트 전체가 ASAP/Immediately/Negotiable만이면 그대로
+      - 쉼표/슬래시로 파트 분리 → 각 파트를 독립 변환
+      - ASAP 등 비월 토큰은 보존
+      - 안전 기준(현재월+2) 미만 월 → +2 밀기
+      - 중복 월 제거
+    """
+    if not raw or not raw.strip():
+        return "Negotiable"
+
+    text = raw.strip()
+    low = text.lower().strip()
+
+    # 텍스트 전체가 ASAP/Negotiable 등만이면 그대로
+    if low in ("asap", "immediately", "negotiable", "anytime"):
+        return text
+
+    cur_month = datetime.now().month
+    safe_month = cur_month + 2  # 이 달부터 안전 (3월→5월)
+
+    # 구분자로 파트 분리 (쉼표, 슬래시, &, 틸데, 공백구분 월이름)
+    sep = ", " if "," in raw else ("/" if "/" in raw else ", ")
+    parts = [p.strip() for p in re.split(r'[,/&~]+', text) if p.strip()]
+
+    converted: list[str] = []
+    for part in parts:
+        plow = part.lower().strip().rstrip('.')
+        # ASAP 등 비월 키워드는 보존
+        if any(kw in plow for kw in ("asap", "immediately", "negotiable", "anytime")):
+            converted.append("ASAP")
+            continue
+        # 파트에서 월 이름 추출
+        month_match = None
+        for tok_m in re.finditer(r'\b([A-Za-z]+)\.?\b', part):
+            tok = tok_m.group(1).lower().rstrip('.')
+            if tok in _MONTH_NAMES:
+                month_match = (tok_m, _MONTH_NAMES[tok])
+                break
+
+        if not month_match:
+            converted.append(part)  # 월 아닌 텍스트 보존
+            continue
+
+        m_obj, m_num = month_match
+        if m_num < safe_month:
+            new_m = m_num + 2
+            if new_m > 12:
+                new_m -= 12
+            new_label = _MONTH_LABEL[new_m]
+            # 월 이름만 교체, 나머지 텍스트 보존
+            new_part = part[:m_obj.start()] + new_label + part[m_obj.end():]
+            converted.append(new_part.strip())
+        else:
+            converted.append(part)
+
+    # 중복 제거 (순서 유지)
+    deduped = list(dict.fromkeys(converted))
+    return sep.join(deduped)
+
+
 def _safe_benefits(raw: str) -> list[str]:
     """복지 항목 파싱. 연락처/업체명 포함 항목 차단."""
     defaults = ["Visa sponsorship", "severance pay", "pension", "insurance", "paid vacation"]
@@ -467,7 +542,7 @@ def generate_ad(job: dict) -> tuple[str, str]:
     teach_hrs  = (job.get("teach_hrs_week") or "").strip()
     vacation   = (job.get("vacation")      or "").strip()
     native     = (job.get("native_count")  or "").strip()
-    start      = (job.get("start_date")    or "Negotiable").strip()
+    start      = _safe_start_date((job.get("start_date") or "Negotiable").strip())
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
@@ -533,8 +608,44 @@ def _type_slow(el, text: str):
         time.sleep(random.uniform(0.04, 0.10))
 
 
+def _find_chrome_binary() -> str | None:
+    """Chrome 바이너리 경로 자동 탐색 (비표준 경로 포함)."""
+    import winreg
+    # 레지스트리 우선 (설치 경로가 어디든 확실히 탐색)
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            key = winreg.OpenKey(hive,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
+            val, _ = winreg.QueryValueEx(key, "")
+            winreg.CloseKey(key)
+            if val and Path(val).exists():
+                return val
+        except Exception:
+            pass
+    # 표준 경로 폴백
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
+        r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            return str(c)
+    return None
+
+
 def build_driver(headless: bool = False) -> webdriver.Chrome:
     opts = Options()
+
+    # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
+    chrome_bin = _find_chrome_binary()
+    if chrome_bin:
+        opts.binary_location = chrome_bin
+        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+    else:
+        print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
         # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
@@ -1278,6 +1389,43 @@ def main():
             print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
         return
 
+    # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
+    if not args.account and not args.dry_run and not args.generate and not args.diagnose:
+        try:
+            from rpa_overlay import ask_account_selection
+            account_id, selected_limit = ask_account_selection()
+        except Exception as e:
+            print(f"[ERROR] 계정 선택 팝업 실패: {e}")
+            sys.exit(1)
+        if account_id == "CANCEL":
+            print("취소됨.")
+            sys.exit(0)
+        args.account = account_id
+        args.limit   = selected_limit
+
+    # ── 중복 실행 방지 (per-account 잠금 파일 체크) ──────────────────────────
+    if not args.dry_run and not args.generate and not args.diagnose:
+        acct_key  = args.account or "default"
+        acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
+        if acct_lock.exists():
+            try:
+                import ctypes as _ct
+                pid = int(acct_lock.read_text().strip())
+                h   = _ct.windll.kernel32.OpenProcess(0x400, False, pid)
+                if h:
+                    _ct.windll.kernel32.CloseHandle(h)
+                    print(f"[WARN] {acct_key} 계정 RPA 이미 실행 중 (PID={pid}) — 중복 실행 차단")
+                    try:
+                        from rpa_overlay import ask_already_running
+                        ask_already_running(acct_key)
+                    except Exception:
+                        pass
+                    sys.exit(0)
+                else:
+                    acct_lock.unlink(missing_ok=True)
+            except Exception:
+                acct_lock.unlink(missing_ok=True)
+
     # ── 계정별 .env 재로딩 (--account 지정 시) ──
     if args.account:
         _load_account_env(args.account)
@@ -1446,15 +1594,17 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
-    # ── 잠금 파일 (중복 실행 방지) ──
+    # ── 잠금 파일 (중복 실행 방지, per-account) ──
     import atexit
+    acct_key  = args.account or "default"
+    acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
-    atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
+    acct_lock.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, close as overlay_close, wants_more, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
     except ImportError:
         _HAS_OVERLAY = False
@@ -1469,13 +1619,21 @@ def main():
         posted = 0
 
         try:
+            if _HAS_OVERLAY:
+                update_status("로그인중")
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
-                if _HAS_OVERLAY and stop_requested():
+                _graceful_hit = _STOP_GRACEFUL_FLAG.exists()
+                if _graceful_hit:
+                    try:
+                        _STOP_GRACEFUL_FLAG.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                if (_HAS_OVERLAY and stop_requested()) or _graceful_hit:
                     print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
                     _log_event("info", "—", "user_stop", "User requested stop via overlay")
                     break
@@ -1485,6 +1643,8 @@ def main():
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
 
                 try:
+                    if _HAS_OVERLAY:
+                        update_status(f"게시중 ({i}/{len(ad_list)})")
                     url = cl_post(driver, title, body, job)
                     ss  = take_screenshot(driver, jcode)
 
