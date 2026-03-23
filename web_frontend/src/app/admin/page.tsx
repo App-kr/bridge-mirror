@@ -69,6 +69,7 @@ const SEEN_POSTS_KEY = 'bridge_admin_seen_posts'
 const SEEN_NEW_KEY = 'bridge_admin_seen_new'
 
 function getSeenNew(): Record<string, number> {
+  if (typeof window === 'undefined') return {}
   try {
     const stored = localStorage.getItem(SEEN_NEW_KEY)
     if (stored) return JSON.parse(stored)
@@ -77,6 +78,7 @@ function getSeenNew(): Record<string, number> {
 }
 
 function markNewSeen(key: string, count: number) {
+  if (typeof window === 'undefined') return
   const seen = getSeenNew()
   seen[key] = count
   localStorage.setItem(SEEN_NEW_KEY, JSON.stringify(seen))
@@ -167,6 +169,7 @@ const boardColor = (b: string) => {
 }
 
 function getSeenPosts(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
   try {
     const stored = localStorage.getItem(SEEN_POSTS_KEY)
     if (stored) return new Set(JSON.parse(stored))
@@ -175,6 +178,7 @@ function getSeenPosts(): Set<string> {
 }
 
 function markPostSeen(postId: number) {
+  if (typeof window === 'undefined') return
   const seen = getSeenPosts()
   seen.add(String(postId))
   localStorage.setItem(SEEN_POSTS_KEY, JSON.stringify([...seen]))
