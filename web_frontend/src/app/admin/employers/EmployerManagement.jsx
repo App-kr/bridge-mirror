@@ -1395,8 +1395,8 @@ export default function EmployerManagement(){
     (async()=>{
       try{
         const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
-        const hdrs={"Content-Type":"application/json"};
-        if(adminKey)hdrs["x-admin-key"]=adminKey;
+        if(!adminKey){if(!cancelled)setLoading(false);return;}
+        const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
         const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const body=await res.json();

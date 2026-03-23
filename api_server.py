@@ -62,6 +62,7 @@ try:
     from fastapi.middleware.gzip import GZipMiddleware
     from fastapi.staticfiles import StaticFiles
     from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
     from fastapi.responses import JSONResponse, Response
     from pydantic import BaseModel, EmailStr, Field
 except Exception as _fa_exc:
@@ -461,6 +462,27 @@ app.add_middleware(
 
 # GZip 압축 — 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# TrustedHost — 허용된 호스트만 접근 (Host 헤더 위조 방지)
+_TRUSTED_HOSTS = ["bridgejob.co.kr", "www.bridgejob.co.kr", "bridge-n7hk.onrender.com"]
+if not _IS_PROD:
+    _TRUSTED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_TRUSTED_HOSTS)
+
+# Body size 제한 — 10MB (파일 업로드 포함), 관리자 외 일반 요청은 1MB
+_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10MB
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and int(cl) > _MAX_BODY_BYTES:
+            return JSONResponse(status_code=413, content={
+                "isError": True, "errorCategory": "PAYLOAD_TOO_LARGE",
+                "isRetryable": False, "context": "Request body too large (max 10MB)."
+            })
+        return await call_next(request)
+
+app.add_middleware(BodySizeLimitMiddleware)
 
 # ── DB 인덱스 보장 (무한스크롤 cursor 성능) ─────────────────────────────────
 def _ensure_candidate_indexes() -> None:
@@ -1322,7 +1344,7 @@ async def admin_change_password(request: Request):
         env_path.write_text(updated, encoding="utf-8")
     global _ADMIN_PW
     _ADMIN_PW = new_hash
-    return ok(data={"hash": new_hash}, message="비밀번호 변경 완료. 서버 재시작 후 완전 적용됩니다.")
+    return ok(data={}, message="비밀번호 변경 완료. 서버 재시작 후 완전 적용됩니다.")
 
 
 @app.post("/api/admin/reset-blacklist", tags=["admin"])
@@ -2956,10 +2978,16 @@ async def admin_send_email(candidate_id: str, request: Request, body: SendEmailB
         html = _substitute_vars(html, c, guide_links)
         subject = _substitute_vars(subject, c, guide_links)
 
+        # SECURITY: rate limit 체크
+        ok_send, deny_reason = _mail_rate_check()
+        if not ok_send:
+            raise HTTPException(status_code=429, detail=deny_reason)
+
         # 발송
         sent = _smtp_send(to_email, subject, html)
         if not sent:
             raise HTTPException(status_code=500, detail="이메일 발송에 실패했습니다. SMTP 설정을 확인하세요.")
+        _mail_rate_record()
 
         # 발송 기록: 해당 email_* 컬럼 업데이트
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -3060,12 +3088,19 @@ async def admin_bulk_send(request: Request, body: BulkSendBody):
                 if val and is_encrypted(val):
                     c[f] = decrypt_field(val)
 
+            # SECURITY: rate limit 체크
+            ok_send, deny_reason = _mail_rate_check()
+            if not ok_send:
+                results.append({"id": cid, "status": "rate_limited", "reason": deny_reason})
+                break
+
             # 치환 + 발송
             subject = _substitute_vars(tpl["subject"], c, guide_links)
             html = _substitute_vars(tpl["body_html"], c, guide_links)
             sent = _smtp_send(to_email, subject, html)
 
             if sent:
+                _mail_rate_record()
                 now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 col = _TEMPLATE_COL_MAP.get(body.template_key)
                 if col:
@@ -3130,9 +3165,15 @@ async def admin_send_profiles(request: Request, body: SendProfilesBody):
         # 미치환 변수 정리
         html = re.sub(r"\{\{\w+\}\}", "", html)
 
+        # SECURITY: rate limit 체크
+        ok_send, deny_reason = _mail_rate_check()
+        if not ok_send:
+            raise HTTPException(status_code=429, detail=deny_reason)
+
         sent = _smtp_send(body.to_email, subject, html)
         if not sent:
             raise HTTPException(status_code=500, detail="이메일 발송에 실패했습니다.")
+        _mail_rate_record()
 
         return ok(
             message=f"프로필 발송 완료 → {body.to_email} ({len(body.candidate_ids)}명)",
@@ -3372,7 +3413,9 @@ async def admin_matching_send_profile(request: Request, body: ProfileBroadcastBo
                    VALUES (?, ?, ?, ?, ?)""",
                 (body.candidate_id, emp_id, school, to_email, status_val)
             )
-            results.append({"employer_id": emp_id, "school": school, "email": to_email, "status": status_val})
+            # SECURITY: email 마스킹 후 응답 (PII 최소화)
+            masked_email = to_email[:3] + "***" + to_email[to_email.index("@"):] if "@" in to_email else "***"
+            results.append({"employer_id": emp_id, "school": school, "email": masked_email, "status": status_val})
 
         conn.commit()
 
@@ -5195,8 +5238,8 @@ async def upload_file(
     """
     if entity_type not in ("candidate", "inquiry", "community"):
         raise HTTPException(400, "entity_type must be 'candidate', 'inquiry', or 'community'")
-    if entity_type == "community":
-        _check_admin(request)
+    # SECURITY: 모든 entity_type에 대해 관리자 인증 필수 (candidate/inquiry 포함)
+    _check_admin(request)
 
     if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         raise HTTPException(429, "Too many uploads. Please slow down.")
@@ -5253,7 +5296,7 @@ async def upload_file(
         file_url = _s3_result["s3_url"]
     except (RuntimeError, StorageError) as _s3_err:
         _log_upload.error("S3 업로드 실패: %s", _s3_err)
-        raise HTTPException(503, f"파일 저장 실패: {_s3_err}")
+        raise HTTPException(503, "파일 저장에 실패했습니다. 잠시 후 다시 시도하세요.")
     # ──────────────────────────────────────────────────────────────────────
 
     # Thumbnail for photos
@@ -8189,7 +8232,8 @@ async def send_mail_single(request: Request):
     except smtplib.SMTPAuthenticationError:
         raise HTTPException(status_code=401, detail="SMTP 인증 실패")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logging.getLogger("bridge.api").error("send-mail SMTP 오류: %s", exc)
+        raise HTTPException(status_code=500, detail="메일 발송 중 오류가 발생했습니다.")
 
 
 # ── 앱 비밀키 관리 (App Secrets) ─────────────────────────────────────────────
