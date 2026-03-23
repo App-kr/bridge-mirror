@@ -5002,6 +5002,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
     try:
         # 1. 후보자 정보 조회
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT sheet_number, full_name, nationality, email, "
@@ -5252,12 +5253,12 @@ async def upload_file(
             if entity_type == "candidate" and file_type == "photo":
                 if thumb_url:
                     conn.execute(
-                        "UPDATE candidates SET photo_url = ?, thumb_url = ? WHERE id = ?",
+                        "UPDATE candidates SET photo_url = ?, thumb_url = ? WHERE candidate_id = ?",
                         (file_url, thumb_url, entity_id),
                     )
                 else:
                     conn.execute(
-                        "UPDATE candidates SET photo_url = ? WHERE id = ?",
+                        "UPDATE candidates SET photo_url = ? WHERE candidate_id = ?",
                         (file_url, entity_id),
                     )
             conn.commit()
@@ -7537,9 +7538,19 @@ async def _handle_mail_send(request: Request):
 
     # FormData (MailModal) 또는 JSON 모두 지원
     content_type = request.headers.get("content-type", "")
+    manual_files: list[tuple[bytes, str]] = []  # (bytes, filename) 수동 첨부
     if "multipart/form-data" in content_type:
         form = await request.form()
-        data = {k: form[k] for k in form if not hasattr(form[k], "read")}
+        data = {}
+        for k in form:
+            val = form[k]
+            if hasattr(val, "read"):
+                # UploadFile → 수동 첨부파일로 수집
+                file_bytes = await val.read()
+                if file_bytes:
+                    manual_files.append((file_bytes, val.filename or "attachment"))
+            else:
+                data[k] = val
         # FormData 개별발송 형식 → recipients 리스트 변환
         to_email = str(data.get("to", "")).strip()
         recipients = [to_email] if to_email else []
@@ -7602,6 +7613,13 @@ async def _handle_mail_send(request: Request):
             part.set_payload(pdf_data)
             _email_encoders.encode_base64(part)
             part.add_header("Content-Disposition", "attachment", filename=pdf_name)
+            msg.attach(part)
+        # 수동 첨부파일 (드래그&드롭/파일선택)
+        for file_data, file_name in manual_files:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(file_data)
+            _email_encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=file_name)
             msg.attach(part)
         return msg
 
