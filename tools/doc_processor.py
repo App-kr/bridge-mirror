@@ -846,6 +846,18 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
         except Exception:
             pass
 
+    # 문서 메타데이터 클리어 (이름/제목 제거)
+    try:
+        cp = doc.core_properties
+        cp.title = ""
+        cp.author = ""
+        cp.subject = ""
+        cp.keywords = ""
+        cp.comments = ""
+        cp.last_modified_by = ""
+    except Exception:
+        pass
+
     # 번호 + 사진 삽입 (최상단)
     if not dry:
         from docx.oxml.ns import qn
@@ -853,6 +865,17 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
 
         photo = photo_path or _find_photo_for_candidate(filepath)
         body = doc.element.body
+
+        # 기존 본문 이미지 모두 제거 (프로필 사진 중복 방지)
+        for drawing in body.findall('.//' + qn('w:drawing')):
+            parent = drawing.getparent()
+            if parent is not None:
+                parent.remove(drawing)
+                all_logs.append("[photo] 기존 이미지 제거")
+        for pict in body.findall('.//' + qn('w:pict')):
+            parent = pict.getparent()
+            if parent is not None:
+                parent.remove(pict)
 
         # 1행 2열 테이블: [번호 | 사진]
         tbl = doc.add_table(rows=1, cols=2)
