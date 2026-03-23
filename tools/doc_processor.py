@@ -489,9 +489,9 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
 
-    # ── Pass 2.5: 한국 근무 경력줄 축약 ──
+    # ── Pass 2.5: 한국 근무 경력줄 — 업체명+지역만 삭제, 직책·설명 유지 ──
     # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022"
-    # → "S.Korea\nMarch 2021 - Sept 2022"  (S.Korea는 볼드 마커)
+    # → "S.Korea, March 2021 - Sept 2022"
     lines2 = result.split("\n")
     kept_lines2 = []
     for line in lines2:
@@ -506,8 +506,8 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             if date_match:
                 date_str = date_match.group(0).strip()
                 log.append(f"KR_EXP_REDACT: {stripped[:80]}")
-                # 직장 상세를 "S.Korea\n기간"으로 축약 (S.Korea 볼드는 DOCX 처리에서)
-                kept_lines2.append(f"S.Korea\n{date_str}")
+                # 업체명+지역 삭제, "S.Korea, 기간"만 남김
+                kept_lines2.append(f"S.Korea, {date_str}")
                 continue
         kept_lines2.append(line)
     result = "\n".join(kept_lines2)
@@ -790,18 +790,24 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
 def _replace_with_bold_korea(para, cleaned_text: str):
     """S.Korea를 볼드로 처리하여 단락에 삽입"""
     from docx.shared import Pt, RGBColor
-    # 기존 runs 모두 지우기
+    # 기존 runs의 서식 복사용 (첫 run의 font 정보 보존)
+    base_font_size = None
+    if para.runs:
+        base_font_size = para.runs[0].font.size
+    # 기존 runs 텍스트 비우기
     for run in para.runs:
         run.text = ""
-    # S.Korea 기준으로 분할
+    # S.Korea 기준으로 분할하여 새 run 추가
     parts = cleaned_text.split("S.Korea")
     for i, part in enumerate(parts):
         if part:
             run = para.add_run(part)
+            if base_font_size:
+                run.font.size = base_font_size
         if i < len(parts) - 1:
             kr_run = para.add_run("S.Korea")
             kr_run.bold = True
-            kr_run.font.size = Pt(11)
+            kr_run.font.size = base_font_size or Pt(11)
             kr_run.font.color.rgb = RGBColor(0, 0, 0)
 
 
