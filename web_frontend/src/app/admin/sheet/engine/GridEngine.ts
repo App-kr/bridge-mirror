@@ -797,7 +797,8 @@ export class GridEngine {
       for (let c = 0; c < this.visCols.length; c++) {
         const col = this.visCols[c]
         if (c < frozenN) { cx += col.w; continue }
-        this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
+        if (cx >= viewW) break
+        if (cx + col.w > frozenW) this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
         cx += col.w
       }
     }
@@ -813,6 +814,8 @@ export class GridEngine {
       for (let c = 0; c < this.visCols.length; c++) {
         if (c < frozenN) { lx += this.visCols[c].w; continue }
         lx += this.visCols[c].w
+        if (lx < frozenW) continue
+        if (lx - this.visCols[c].w >= viewW) break
         const sx = this.snap(lx)
         ctx.beginPath(); ctx.moveTo(sx, HEADER_H); ctx.lineTo(sx, viewH); ctx.stroke()
       }
@@ -1308,7 +1311,9 @@ export class GridEngine {
     for (let i = 0; i < this.visCols.length; i++) {
       const col = this.visCols[i]
       if (i < frozenN) { cx += col.w; continue }
-      this.drawHeaderCell(col, cx, col.w, i); cx += col.w
+      if (cx >= viewW) break
+      if (cx + col.w > frozenW) this.drawHeaderCell(col, cx, col.w, i)
+      cx += col.w
     }
     ctx.restore()
 
