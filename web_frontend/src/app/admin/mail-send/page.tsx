@@ -301,7 +301,7 @@ export default function MailSendPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[#444] text-[13px] font-semibold no-underline border border-[#ddd] transition-opacity hover:opacity-85"
-            style={{ background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}
+            style={{ background: '#fef2f2', boxShadow: '0 2px 6px rgba(234,67,53,0.15)' }}
           >
             <svg width={16} height={16} viewBox="0 0 48 48" style={{flexShrink:0}}><path fill="#4caf50" d="M45 16.2l-5 2.75-8 4.45V40H42c1.66 0 3-1.34 3-3V16.2z"/><path fill="#1e88e5" d="M3 16.2l3.04 1.67 2.96 1.63 2 1.1V40H6c-1.66 0-3-1.34-3-3V16.2z"/><path fill="#e53935" d="M35 11.2L24 19.45 13 11.2 11 9.8V23.4l13 8.05 13-8.05V9.8l-2 1.4z"/><path fill="#c62828" d="M3 12.3V16.2l8 4.45V12.8L8.96 11.1 3 12.3z"/><path fill="#fbc02d" d="M45 12.3L37 10.8v12.5l8-4.45V12.3z"/></svg>
             Gmail
