@@ -10,9 +10,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import DOMPurify from 'dompurify'
 import { API_URL } from '@/lib/api'
 import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, ChevronDown, Trash2, Plus, X, Code, Type } from 'lucide-react'
+
+// DOMPurify: SSR에서 window 없으면 크래시 → lazy require
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _DOMPurify: any = null
+function sanitizeHtml(html: string): string {
+  if (typeof window === 'undefined') return ''
+  if (!_DOMPurify) { const m = require('dompurify'); _DOMPurify = m.default || m }
+  return _DOMPurify.sanitize(html)
+}
 
 const API = API_URL
 const DRAFT_KEY    = 'bridge_mail_draft'
@@ -42,6 +50,24 @@ const SENDERS = [
   { value: 'bridgejobkr@gmail.com', label: 'Gmail (bridgejobkr)' },
   { value: 'bridgejobkr@naver.com', label: 'Naver (bridgejobkr)' },
 ]
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  interview: '인터뷰 안내',
+  contract: '계약 안내',
+  contract_offer: '계약 제안',
+  visa: '비자 가이드',
+  settle: '정착 가이드',
+  settlement: '정착 가이드',
+  tax: '세금 안내',
+  transfer: '이직 안내',
+  renewal: '갱신 안내',
+  arrival_guide: '입국 가이드',
+  departure_guide: '출국 가이드',
+  immigration_guide: '출입국사무소 가이드',
+  welcome: '환영 안내',
+  orientation: '오리엔테이션',
+  custom: '직접 작성',
+}
 
 const FONTS = [
   { value: 'Nanum Gothic, sans-serif', label: '나눔고딕' },
@@ -96,7 +122,7 @@ export default function MailSendPage() {
   const [result, setResult] = useState<SendResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editorMode, setEditorMode] = useState<'rich'|'html'>('rich')
-  const [personalSend, setPersonalSend] = useState(false)
+  const [personalSend, setPersonalSend] = useState(true)
   const [font, setFont] = useState(FONTS[0].value)
 
   // 기본값 설정 (localStorage에서 로드)
@@ -295,9 +321,9 @@ export default function MailSendPage() {
   return (
     <div className="max-w-[1100px] mx-auto space-y-4">
       <style>{`
-        @keyframes templateGlow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.7), 0 2px 8px rgba(245,158,11,0.3); }
-          50% { box-shadow: 0 0 0 5px rgba(251,191,36,0.2), 0 2px 14px rgba(245,158,11,0.5); }
+        @keyframes tplGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.5), 0 2px 8px rgba(59,130,246,0.2); }
+          50% { box-shadow: 0 0 0 4px rgba(96,165,250,0.15), 0 2px 12px rgba(59,130,246,0.35); }
         }
       `}</style>
       {/* Header */}
@@ -403,14 +429,14 @@ export default function MailSendPage() {
             onClick={() => { setShowTemplateMenu(v => !v); setTplTab('list') }}
             className="flex items-center gap-1 px-4 py-1.5 text-[13px] font-bold rounded-md transition-colors"
             style={{
-              background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-              color: '#fff',
-              border: '1px solid #d97706',
-              animation: 'templateGlow 1.8s ease-in-out infinite',
+              background: '#eff6ff',
+              color: '#2563eb',
+              border: '1px solid #93c5fd',
+              animation: 'tplGlow 2s ease-in-out infinite',
             }}
           >
             <FileText size={13} />
-            템플릿
+            템플릿선택
             <ChevronDown size={12} />
           </button>
           {showTemplateMenu && (
@@ -420,7 +446,7 @@ export default function MailSendPage() {
                 {(['list','edit','new'] as const).map(tab => (
                   <button key={tab} type="button" onClick={() => setTplTab(tab)}
                     className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${
-                      tplTab === tab ? 'bg-amber-50 text-amber-700 border-b-2 border-amber-500' : 'text-[#86868b] hover:bg-[#f5f5f7]'
+                      tplTab === tab ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500' : 'text-[#86868b] hover:bg-[#f5f5f7]'
                     }`}>
                     {tab === 'list' ? '적용' : tab === 'edit' ? '편집' : '+ 새 템플릿'}
                   </button>
@@ -438,10 +464,10 @@ export default function MailSendPage() {
                       <p className="text-[11px] text-[#86868b] py-4 text-center">템플릿 없음</p>
                     ) : (
                       templates.map(t => (
-                        <div key={t.template_key} className="flex items-center gap-1.5 py-2 px-1 rounded-lg hover:bg-[#f5f5f7] transition-colors">
+                        <div key={t.template_key} className="flex items-center gap-1.5 py-2.5 px-2 rounded-lg hover:bg-[#f0f7ff] transition-colors border-b border-[#f5f5f7] last:border-0">
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => applyTemplate(t.template_key)}>
-                            <div className="text-[12px] font-semibold text-[#1d1d1f] truncate">{t.template_key}</div>
-                            <div className="text-[10px] text-[#86868b] truncate">{t.subject || '(제목 없음)'}</div>
+                            <div className="text-[14px] font-bold text-[#1d1d1f] truncate">{TEMPLATE_LABELS[t.template_key] || t.template_key}</div>
+                            <div className="text-[10px] text-[#aaa] truncate">{t.template_key} · {t.subject || '(제목 없음)'}</div>
                           </div>
                           <button type="button" onClick={() => applyTemplate(t.template_key)}
                             className="shrink-0 px-2.5 py-1 text-[10px] font-semibold text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">적용</button>
@@ -459,17 +485,17 @@ export default function MailSendPage() {
                 {tplTab === 'edit' && (editTpl ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-[12px] font-semibold text-amber-700">{editTpl.template_key}</p>
+                      <p className="text-[13px] font-bold text-blue-700">{TEMPLATE_LABELS[editTpl.template_key] || editTpl.template_key} <span className="text-[10px] font-normal text-[#aaa]">({editTpl.template_key})</span></p>
                       <button type="button" onClick={() => { setEditTpl(null); setTplTab('list') }}
                         className="text-[#aaa] hover:text-[#555]"><X size={14}/></button>
                     </div>
                     <input value={editTplSubject} onChange={e => setEditTplSubject(e.target.value)} placeholder="제목"
-                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                     <textarea value={editTplBody} onChange={e => setEditTplBody(e.target.value)} rows={8}
-                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                     <div className="flex gap-2">
                       <button type="button" onClick={saveTpl} disabled={tplSaving}
-                        className="flex-1 py-2 bg-amber-500 text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-amber-600 transition-colors">
+                        className="flex-1 py-2 bg-blue-500 text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-blue-600 transition-colors">
                         {tplSaving ? '저장 중...' : '저장'}
                       </button>
                       <button type="button" onClick={() => deleteTpl(editTpl.template_key)} disabled={tplSaving}
@@ -484,11 +510,11 @@ export default function MailSendPage() {
                 {tplTab === 'new' && (
                   <div className="space-y-2">
                     <input value={newTplKey} onChange={e => setNewTplKey(e.target.value.replace(/[^a-z0-9_]/g, ''))} placeholder="template_key (소문자, 언더스코어)"
-                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                     <input value={newTplSubject} onChange={e => setNewTplSubject(e.target.value)} placeholder="이메일 제목"
-                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                     <textarea value={newTplBody} onChange={e => setNewTplBody(e.target.value)} rows={6} placeholder="<p>HTML 본문</p>"
-                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-amber-400"/>
+                      className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[11px] font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                     <button type="button" onClick={createTpl} disabled={tplSaving || !newTplKey.trim()}
                       className="w-full py-2 bg-green-500 text-white text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-green-600 transition-colors flex items-center justify-center gap-1">
                       <Plus size={14}/>{tplSaving ? '생성 중...' : '템플릿 생성'}
@@ -631,23 +657,23 @@ export default function MailSendPage() {
             </div>
 
             {editorMode === 'rich' ? (
-              /* 일반 쓰기 모드 (contentEditable) */
+              /* 일반 쓰기 모드 (contentEditable) — 세로 리사이즈 가능 */
               <div
                 ref={richEditorRef}
                 contentEditable
                 suppressContentEditableWarning
                 onBlur={syncRichToHtml}
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }}
-                className="flex-1 w-full px-4 py-3 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 overflow-y-auto"
-                style={{ minHeight: 480, lineHeight: 1.7, fontFamily: font, color: '#222', background: '#fff' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(bodyHtml) }}
+                className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 overflow-y-auto"
+                style={{ minHeight: 320, height: 520, resize: 'vertical', lineHeight: 1.7, fontFamily: font, color: '#222', background: '#fff' }}
               />
             ) : (
-              /* HTML 편집 모드 */
+              /* HTML 편집 모드 — 세로 리사이즈 가능 */
               <textarea
                 value={bodyHtml}
                 onChange={e => setBodyHtml(e.target.value)}
-                className="flex-1 w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
-                style={{ minHeight: 480 }}
+                className="w-full px-3 py-2.5 rounded-xl border border-[#d2d2d7] text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono bg-[#1e1e2e] text-[#cdd6f4]"
+                style={{ minHeight: 320, height: 520, resize: 'vertical' }}
                 spellCheck={false}
               />
             )}
@@ -660,8 +686,8 @@ export default function MailSendPage() {
               미리보기
             </div>
             <div
-              className="flex-1 rounded-xl border border-[#d2d2d7] overflow-y-auto"
-              style={{ minHeight: 480, background: '#f6f6f6' }}
+              className="rounded-xl border border-[#d2d2d7] overflow-y-auto"
+              style={{ minHeight: 320, height: 520, resize: 'vertical', background: '#f6f6f6' }}
             >
               <div style={{ maxWidth: 600, margin: '16px auto', background: '#fff', borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.10)', padding: '24px 32px', fontFamily: font, fontSize: 14, lineHeight: 1.7, color: '#222' }}>
                 {subject && (
@@ -669,7 +695,7 @@ export default function MailSendPage() {
                     <strong>제목:</strong> {subject}
                   </div>
                 )}
-                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml) }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(bodyHtml) }} />
               </div>
             </div>
           </div>
@@ -934,7 +960,7 @@ function ProfileBuilder({
         <div className="text-xs font-medium text-[#6e6e73]">HTML 미리보기</div>
         <div className="flex-1 border border-[#d2d2d7] rounded-lg overflow-auto bg-white p-4">
           {previewHtml ? (
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }} />
           ) : (
             <div className="text-[#6e6e73] text-sm text-center mt-8">
               후보자를 선택 후 &quot;HTML 생성&quot; 클릭
