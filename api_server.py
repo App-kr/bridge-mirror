@@ -2266,6 +2266,8 @@ import smtplib
 import ssl as _ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders as _email_encoders
 
 _SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 _SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -2596,6 +2598,30 @@ def _ensure_candidates_extra_cols():
 
 try:
     _ensure_candidates_extra_cols()
+except Exception:
+    pass
+
+
+def _ensure_auto_process_cols():
+    """auto-process 용 컬럼 추가 (없으면 무시)."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        for sql in [
+            "ALTER TABLE candidates ADD COLUMN cv_processed_s3_key TEXT DEFAULT NULL",
+            "ALTER TABLE file_uploads ADD COLUMN s3_key TEXT DEFAULT NULL",
+        ]:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+try:
+    _ensure_auto_process_cols()
 except Exception:
     pass
 
@@ -4656,6 +4682,8 @@ try:
     from backend.utils.storage import (
         upload_bytes as s3_upload_bytes,
         upload_file  as s3_upload_file,
+        upload_bytes_sync as s3_upload_bytes_sync,
+        download_bytes as s3_download_bytes,
         get_presigned_url as s3_presigned_url,
         delete_file  as s3_delete_file,
         check_s3_connection,
@@ -4671,6 +4699,12 @@ except Exception as _s3_exc:
 
     async def s3_upload_bytes(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
+
+    def s3_upload_bytes_sync(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정")
+
+    def s3_download_bytes(*a, **kw):
+        raise RuntimeError("S3 스토리지 미설정")
 
     async def s3_upload_file(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
@@ -4892,6 +4926,142 @@ def _make_thumbnail(src_path: Path, thumb_path: Path, size: int = 150) -> bool:
         return False
 
 
+def _auto_process_resume(entity_id: str, cv_s3_key: str):
+    """
+    CV 업로드 후 백그라운드 자동 처리 — PII 제거 + 번호/사진 삽입.
+    threading.Thread 에서 호출 (동기).
+    원본은 S3에 그대로 유지, processed 버전을 별도 S3 키로 저장.
+    """
+    import tempfile
+    conn = None
+    try:
+        # 1. 후보자 정보 조회
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT sheet_number, full_name, nationality, email, "
+            "mobile_phone, kakaotalk, current_location, dob, gender, "
+            "candidate_id, photo_url "
+            "FROM candidates WHERE candidate_id = ?",
+            (entity_id,),
+        ).fetchone()
+        if not row:
+            _log_upload.warning("[AutoProcess] candidate %s not found", entity_id)
+            return
+
+        candidate = dict(row)
+        brj_number = candidate.get("sheet_number") or 0
+        if not brj_number:
+            _log_upload.info("[AutoProcess] %s — sheet_number 없음, 스킵", entity_id)
+            return
+
+        # 복호화 시도 (암호화된 필드)
+        for field in ("full_name", "email", "mobile_phone", "kakaotalk",
+                       "nationality", "current_location", "dob", "gender"):
+            raw = candidate.get(field)
+            if raw:
+                try:
+                    candidate[field] = _safe_decrypt(raw)
+                except Exception:
+                    pass
+
+        # 2. CV 다운로드
+        cv_data = s3_download_bytes(cv_s3_key)
+        if not cv_data:
+            _log_upload.warning("[AutoProcess] CV 다운로드 실패: %s", cv_s3_key)
+            return
+
+        # 3. 사진 다운로드 (있으면)
+        photo_row = conn.execute(
+            "SELECT s3_key FROM file_uploads "
+            "WHERE entity_id = ? AND file_type = 'photo' AND s3_key IS NOT NULL "
+            "ORDER BY rowid DESC LIMIT 1",
+            (entity_id,),
+        ).fetchone()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            cv_ext = Path(cv_s3_key).suffix.lower() or ".pdf"
+            cv_path = tmpdir_path / f"cv{cv_ext}"
+            cv_path.write_bytes(cv_data)
+
+            photo_path = None
+            if photo_row and photo_row[0]:
+                try:
+                    photo_data = s3_download_bytes(photo_row[0])
+                    if photo_data:
+                        photo_ext = Path(photo_row[0]).suffix.lower() or ".jpg"
+                        photo_path = tmpdir_path / f"photo{photo_ext}"
+                        photo_path.write_bytes(photo_data)
+                except Exception as e:
+                    _log_upload.warning("[AutoProcess] 사진 다운로드 실패: %s", e)
+
+            # 4. PDF만 자동 처리 (DOCX는 서버에서 변환 불가)
+            if cv_ext != ".pdf":
+                _log_upload.info("[AutoProcess] %s — PDF 아님(%s), 스킵", entity_id, cv_ext)
+                return
+
+            # doc_processor.process_pdf import
+            try:
+                import importlib
+                _dp_spec = importlib.util.find_spec("tools.doc_processor")
+                if _dp_spec is None:
+                    _tools_dir = Path(__file__).resolve().parent / "tools"
+                    if str(_tools_dir.parent) not in sys.path:
+                        sys.path.insert(0, str(_tools_dir.parent))
+                from tools.doc_processor import process_pdf as _dp_process_pdf
+            except ImportError as ie:
+                _log_upload.error("[AutoProcess] doc_processor import 실패: %s", ie)
+                return
+
+            processed_doc, logs = _dp_process_pdf(
+                cv_path, brj_number, candidate,
+                dry=False, photo_path=photo_path,
+            )
+
+            # 5. 결과 저장
+            out_path = tmpdir_path / "processed.pdf"
+            processed_doc.save(str(out_path), garbage=4, deflate=True)
+            processed_doc.close()
+            processed_bytes = out_path.read_bytes()
+
+            # 6. S3 업로드 (동기)
+            result = s3_upload_bytes_sync(
+                data=processed_bytes,
+                folder=f"candidates/{entity_id}",
+                filename="cv_processed.pdf",
+                allowed_category="resume",
+            )
+
+            # 7. DB 업데이트
+            conn.execute(
+                "UPDATE candidates SET cv_processed_s3_key = ? WHERE candidate_id = ?",
+                (result["s3_key"], entity_id),
+            )
+            conn.execute(
+                "INSERT INTO file_uploads "
+                "(entity_type, entity_id, file_type, file_url, file_size, s3_key) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("candidate", entity_id, "cv_processed",
+                 result["s3_url"], len(processed_bytes), result["s3_key"]),
+            )
+            conn.commit()
+
+            _log_upload.info(
+                "[AutoProcess] OK: %s (#%s) → %d PII removals, %d bytes",
+                entity_id, brj_number, len(logs), len(processed_bytes),
+            )
+
+    except Exception as e:
+        _log_upload.error("[AutoProcess] FAIL %s: %s", entity_id, e, exc_info=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.post("/api/upload/{entity_type}/{entity_id}", tags=["upload"])
 async def upload_file(
     entity_type: str,
@@ -4987,8 +5157,8 @@ async def upload_file(
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
             conn.execute(
-                "INSERT INTO file_uploads (entity_type, entity_id, file_type, file_url, file_size) VALUES (?, ?, ?, ?, ?)",
-                (entity_type, entity_id, file_type, file_url, len(data)),
+                "INSERT INTO file_uploads (entity_type, entity_id, file_type, file_url, file_size, s3_key) VALUES (?, ?, ?, ?, ?, ?)",
+                (entity_type, entity_id, file_type, file_url, len(data), s3_key),
             )
             # Update candidates photo_url/thumb_url if photo upload
             if entity_type == "candidate" and file_type == "photo":
@@ -5009,6 +5179,14 @@ async def upload_file(
         _log_upload.error("File metadata save failed: %s", e)
         # File is saved locally; metadata failure is non-blocking
 
+    # ── Auto-process: CV/커버레터 업로드 시 PII 자동 제거 ──
+    if entity_type == "candidate" and file_type in ("cv", "cover_letter"):
+        threading.Thread(
+            target=_auto_process_resume,
+            args=(entity_id, s3_key),
+            daemon=True,
+        ).start()
+
     return ok(
         data={
             "file_url":  file_url,   # presigned URL (1시간 유효)
@@ -5018,6 +5196,29 @@ async def upload_file(
         },
         message="File uploaded successfully.",
     )
+
+
+@app.get("/api/admin/candidates/{candidate_id}/processed-cv", tags=["admin"])
+async def get_processed_cv(candidate_id: str, request: Request):
+    """PII 제거된 이력서 presigned URL 반환 (관리자 전용)."""
+    _check_admin(request)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as e:
+        _log_upload.error("processed-cv lookup failed: %s", e)
+        raise HTTPException(500, "DB 조회 실패")
+    if not row or not row[0]:
+        raise HTTPException(404, "Processed CV not found")
+    url = s3_presigned_url(row[0], expires=3600)
+    return ok(data={"url": url, "s3_key": row[0]})
 
 
 @app.post("/api/admin/upload-image", tags=["admin"])
@@ -7120,16 +7321,53 @@ async def get_mail_stats(request: Request):
 
 
 # ─── 엔드포인트 2: 메일 발송 (/send + /send-bulk 동일 핸들러) ────────────────
+def _fetch_processed_cv_attachment(candidate_id: str) -> "tuple[bytes, str] | None":
+    """S3에서 processed CV 다운로드 → (bytes, filename) or None."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT cv_processed_s3_key, sheet_number FROM candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row or not row[0]:
+            return None
+        pdf_data = s3_download_bytes(row[0])
+        num = row[1] or "resume"
+        return pdf_data, f"BRJ{num}_resume.pdf"
+    except Exception as e:
+        logging.getLogger("bridge.mail").warning("CV 첨부 실패 %s: %s", candidate_id, e)
+        return None
+
+
 async def _handle_mail_send(request: Request):
     _check_admin(request)
     import json as _json
-    data = await request.json()
 
-    sender_label: str = data.get("sender", "gmail")
-    recipients: list = data.get("recipients", [])
-    subject: str = data.get("subject", "")
-    body: str = data.get("body_html", data.get("body", ""))
-    personal: bool = data.get("personal_send", data.get("personal", True))
+    # FormData (MailModal) 또는 JSON 모두 지원
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        data = {k: form[k] for k in form if not hasattr(form[k], "read")}
+        # FormData 개별발송 형식 → recipients 리스트 변환
+        to_email = str(data.get("to", "")).strip()
+        recipients = [to_email] if to_email else []
+        sender_label = str(data.get("sender", "gmail"))
+        subject = str(data.get("subject", ""))
+        body = str(data.get("body", ""))
+        personal = True
+        attach_cv_ids = [cid.strip() for cid in str(data.get("attach_cv_ids", "")).split(",") if cid.strip()]
+    else:
+        data = await request.json()
+        recipients = data.get("recipients", [])
+        sender_label = data.get("sender", "gmail")
+        subject = data.get("subject", "")
+        body = data.get("body_html", data.get("body", ""))
+        personal = data.get("personal_send", data.get("personal", True))
+        attach_cv_ids = data.get("attach_cv_ids", [])
 
     if not recipients:
         raise HTTPException(status_code=400, detail="수신자가 없습니다.")
@@ -7142,9 +7380,34 @@ async def _handle_mail_send(request: Request):
     if not cfg["user"] or not cfg["password"]:
         raise HTTPException(status_code=503, detail=f"{smtp_key.upper()} SMTP 계정이 설정되지 않았습니다.")
 
+    # Processed CV 첨부 파일 미리 다운로드
+    cv_attachments: list[tuple[bytes, str]] = []
+    for cid in attach_cv_ids:
+        att = _fetch_processed_cv_attachment(cid)
+        if att:
+            cv_attachments.append(att)
+
     sent = 0
     failed = 0
     errors: list = []
+
+    def _build_msg(to_addr: str, bcc_list: list = None) -> MIMEMultipart:
+        msg = MIMEMultipart("mixed")
+        msg["From"] = f"BRIDGE Recruitment <{cfg['user']}>"
+        msg["To"] = to_addr
+        if bcc_list:
+            msg["Bcc"] = ", ".join(bcc_list)
+        msg["Subject"] = subject
+        msg["Reply-To"] = "bridgejobkr@gmail.com"
+        msg.attach(MIMEText(body, "html", "utf-8"))
+        # Processed CV 첨부
+        for pdf_data, pdf_name in cv_attachments:
+            part = MIMEBase("application", "pdf")
+            part.set_payload(pdf_data)
+            _email_encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=pdf_name)
+            msg.attach(part)
+        return msg
 
     try:
         server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
@@ -7154,12 +7417,7 @@ async def _handle_mail_send(request: Request):
         if personal:
             for email in recipients:
                 try:
-                    msg = MIMEMultipart("alternative")
-                    msg["From"] = cfg["user"]
-                    msg["To"] = email
-                    msg["Subject"] = subject
-                    msg["Reply-To"] = "bridgejobkr@gmail.com"
-                    msg.attach(MIMEText(body, "html", "utf-8"))
+                    msg = _build_msg(email)
                     server.sendmail(cfg["user"], [email], msg.as_string())
                     sent += 1
                     time.sleep(3)
@@ -7170,13 +7428,7 @@ async def _handle_mail_send(request: Request):
             batch_size = 100
             for i in range(0, len(recipients), batch_size):
                 batch = recipients[i:i + batch_size]
-                msg = MIMEMultipart("alternative")
-                msg["From"] = cfg["user"]
-                msg["To"] = cfg["user"]
-                msg["Bcc"] = ", ".join(batch)
-                msg["Subject"] = subject
-                msg["Reply-To"] = "bridgejobkr@gmail.com"
-                msg.attach(MIMEText(body, "html", "utf-8"))
+                msg = _build_msg(cfg["user"], bcc_list=batch)
                 try:
                     server.sendmail(cfg["user"], batch, msg.as_string())
                     sent += len(batch)
@@ -7199,13 +7451,14 @@ async def _handle_mail_send(request: Request):
         conn.execute(
             "INSERT INTO mail_logs (log_type, sent_count, failed_count, status, details) VALUES (?, ?, ?, ?, ?)",
             ("manual_send", sent, failed, "completed" if failed == 0 else "partial",
-             _json.dumps({"sender": sender_label, "subject": subject, "recipients_preview": preview}, ensure_ascii=False)),
+             _json.dumps({"sender": sender_label, "subject": subject, "recipients_preview": preview,
+                          "cv_attached": len(cv_attachments)}, ensure_ascii=False)),
         )
         conn.commit()
     finally:
         conn.close()
 
-    return ok(data={"sent": sent, "failed": failed, "errors": errors[:3]})
+    return ok(data={"sent": sent, "failed": failed, "errors": errors[:3], "cv_attached": len(cv_attachments)})
 
 
 @app.post("/api/admin/mail/send", tags=["admin"])

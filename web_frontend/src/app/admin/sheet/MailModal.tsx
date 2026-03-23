@@ -51,6 +51,7 @@ export default function MailModal({ open, onClose, recipients, adminKey, apiUrl 
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [attachments, setAttachments] = useState<File[]>([])
+  const [attachCv, setAttachCv] = useState(false)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState('')
   const [previewMode, setPreviewMode] = useState(false)
@@ -173,6 +174,7 @@ export default function MailModal({ open, onClose, recipients, adminKey, apiUrl 
         form.append('to_name', String(r.name ?? r.email ?? ''))
         form.append('subject', applyVars(subject, r))
         form.append('body', applyVars(body, r))
+        if (attachCv && r._cid) form.append('attach_cv_ids', String(r._cid))
         attachments.forEach(f => form.append('files', f))
         const res = await fetch(`${apiUrl}/api/admin/mail/send`, {
           method: 'POST',
@@ -381,6 +383,19 @@ export default function MailModal({ open, onClose, recipients, adminKey, apiUrl 
           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
           minHeight: 48,
         }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: attachCv ? '#EEF2FF' : '#f5f5f5',
+            border: attachCv ? '1px solid #6366F1' : '1px solid #ddd',
+            borderRadius: 10, padding: '7px 14px', fontSize: 14,
+            cursor: 'pointer', fontWeight: 500, fontFamily: F,
+            color: attachCv ? '#4338CA' : '#555', flexShrink: 0,
+            transition: 'all 0.15s', userSelect: 'none',
+          }}>
+            <input type="checkbox" checked={attachCv} onChange={e => setAttachCv(e.target.checked)}
+              style={{ accentColor: '#6366F1' }} />
+            이력서 자동첨부
+          </label>
           <button onClick={() => fileRef.current?.click()} style={{
             background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 10,
             padding: '7px 18px', fontSize: 15, cursor: 'pointer',

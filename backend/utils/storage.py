@@ -301,6 +301,68 @@ def delete_file(s3_key: str) -> bool:
         raise StorageError(f"S3 삭제 실패: {e.response['Error']['Message']}")
 
 
+def download_bytes(s3_key: str) -> bytes:
+    """
+    S3 파일 다운로드 → bytes.
+
+    Args:
+        s3_key: 다운로드할 S3 키
+
+    Returns:
+        파일 바이트
+
+    Raises:
+        RuntimeError : 환경변수 미설정
+        StorageError : S3 오류
+    """
+    s3 = _get_s3_client()
+    try:
+        resp = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
+        data = resp["Body"].read()
+        log.info("[S3] 다운로드 완료: key=%s size=%d", s3_key, len(data))
+        return data
+    except ClientError as e:
+        raise StorageError(f"S3 다운로드 실패: {e.response['Error']['Message']}")
+
+
+def upload_bytes_sync(
+    data: bytes,
+    folder: str,
+    filename: str,
+    allowed_category: str = "document",
+) -> dict:
+    """
+    동기 버전 upload — threading/BackgroundTask 에서 사용.
+    upload_bytes 와 동일한 dict 반환.
+    """
+    s3 = _get_s3_client()
+    file_size = len(data)
+    if file_size == 0:
+        raise StorageError("빈 파일은 업로드할 수 없습니다.")
+    ext = _validate_file_ext(filename, file_size, allowed_category)
+    s3_key = _generate_s3_key(folder, filename, ext)
+    content_type = _CONTENT_TYPE_MAP.get(ext, "application/octet-stream")
+    try:
+        s3.put_object(
+            Bucket=AWS_S3_BUCKET,
+            Key=s3_key,
+            Body=data,
+            ContentType=content_type,
+        )
+    except NoCredentialsError:
+        raise RuntimeError("AWS 인증 실패 — AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY 확인")
+    except ClientError as e:
+        raise StorageError(f"S3 업로드 실패: {e.response['Error']['Message']}")
+    s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+    log.info("[S3] sync 업로드 완료: key=%s size=%d", s3_key, file_size)
+    return {
+        "s3_key":   s3_key,
+        "s3_url":   s3_url,
+        "filename": filename,
+        "size":     file_size,
+    }
+
+
 def check_s3_connection() -> bool:
     """
     S3 연결 상태 확인 — 헬스체크 / 서버 시작 시 사용.

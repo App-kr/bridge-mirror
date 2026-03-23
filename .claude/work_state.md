@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-23 (세션 9 — 병렬 보안+자동화+SEO)
+최근 업데이트: 2026-03-23 (세션 12 — CV 자동처리 파이프라인)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,46 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-23 세션 12 완료 (CV 자동처리 + 메일 이력서 자동첨부)
+- feat(auto-process): CV 업로드 시 PII 자동 제거 파이프라인
+  - api_server.py: `_auto_process_resume()` 백그라운드 태스크
+  - 업로드 시 자동 트리거: candidate + cv/cover_letter → threading.Thread
+  - S3 원본 보관 + processed 버전 별도 저장 (`cv_processed.pdf`)
+  - DB: `candidates.cv_processed_s3_key` + `file_uploads.s3_key` 컬럼 추가
+  - doc_processor.py `process_pdf()` 서버사이드 import (Render 호환)
+  - GET `/api/admin/candidates/{id}/processed-cv` presigned URL 엔드포인트
+- feat(storage): `download_bytes()` + `upload_bytes_sync()` 추가 (threading용)
+- fix(mail): `_handle_mail_send` FormData 지원 (기존 JSON + 신규 FormData)
+  - 이메일에 processed CV MIME 첨부 (`attach_cv_ids` 파라미터)
+  - `MIMEMultipart("mixed")` + `MIMEBase("application", "pdf")` 첨부
+- feat(MailModal): 이력서 자동첨부 토글 체크박스
+  - 활성화 시 수신자 candidate_id → 서버에서 S3 다운로드+첨부
+- requirements.txt: `PyMuPDF>=1.24.0,<2.0` 추가
+
+## 2026-03-23 세션 11 완료 (doc_processor v2.3 PII 완전삭제)
+- feat(doc_processor): v2.3 완성 (`86f56e4`)
+  - PII_LINE_LABELS 확장: permanent address, u.k./korean telephone 등
+  - KR_WORKPLACE_KEYWORDS 확장: slp, rise, altiora, emg education 등 30+
+  - Pass 2.5: 한국 경력 → "S.Korea" + 날짜만 / 도시명·학원명 삭제
+  - _build_output_filename(): `3060영국_여(76born).docx` 포맷 자동생성
+  - find_candidate_by_email: dob/gender 반환 추가
+  - 하이퍼링크 강제 클리어 (python-docx 한계 우회)
+  - cmd_batch/cmd_process/cmd_download: out_name 일괄 교체
+
+## 2026-03-23 세션 10 완료 (PWA Push 알림 시스템)
+- feat(pwa): push notifications + mobile settings (`839fd5b`)
+  - push_api.py: Web Push API (pywebpush RFC 8291 암호화)
+    - /subscribe, /unsubscribe, /test, /broadcast, /vapid-key
+    - push_subscriptions DB 테이블, 만료 구독 자동 비활성화
+  - api_server.py: push 라우터 등록 + apply/inquiry 접수 시 자동 푸시
+  - usePushNotification.ts: 구독/해제/테스트 React 훅
+  - /admin/m/settings: 푸시 토글, 테스트 버튼, PWA 설치, 로그아웃
+  - Mobile layout: 헤더 알림 벨 아이콘 (미설정 시 빨간 점)
+  - MobileTabBar: 더보기 메뉴에 설정 추가
+  - tg_notify.py: 텔레그램 알림 유틸리티
+  - requirements.txt: pywebpush 추가
+- **미완료**: Render 환경변수에 VAPID 키 등록 필요 (Scarlett 직접)
 
 ## 2026-03-23 세션 9 완료 (병렬 보안+자동화+SEO)
 - feat(seo): 4개 페이지 metadata layout.tsx (`43f97dd`)
