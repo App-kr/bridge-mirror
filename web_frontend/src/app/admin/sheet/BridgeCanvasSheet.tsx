@@ -94,9 +94,11 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     prefRegion: (ov.prefRegion as string) ?? String(c.area_prefs ?? ''),
     reference: (ov.reference as string) ?? String(c.reference ?? ''),
     totalExp: (ov.totalExp as string) ?? String(c.experience ?? ''),
+    employment: (ov.employment as string) ?? String(c.employment ?? ''),
     notice: (ov.notice as string) ?? String(c.preferences ?? ''),
     preference: (ov.preference as string) ?? String(c.preferences ?? ''),
     applied: (ov.applied as string) ?? String(c.job_prefs ?? ''),
+    contractOffer: (ov.contractOffer as string) ?? String(c.contract_offered ?? ''),
     proposal: (ov.proposal as string) ?? String(c.recruiter_memo ?? ''), mailAction: '',
     curSalary: (ov.curSalary as string) ?? String(c.current_salary ?? ''),
     hopeSalary: (ov.hopeSalary as string) ?? String(c.desired_salary ?? ''),
@@ -106,6 +108,7 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     cert: (ov.cert as string) ?? String(c.certification ?? ''),
     docs: (ov.docs as string) ?? String(c.doc_status ?? c.documents ?? ''),
     health: (ov.health as string) ?? String(c.health_info ?? ''),
+    personalNote: (ov.personalNote as string) ?? String(c.personal_consideration ?? ''),
     tattooPiercing: (ov.tattooPiercing as string) ?? tattoo,
     family: (ov.family as string) ?? String(c.dependents ?? ''),
     married: (ov.married as string) ?? String(c.married ?? ''),
@@ -701,7 +704,7 @@ export default function BridgeCanvasSheet() {
           background: 'ancestry', age: 'dob', gender: 'gender',
           currentLoc: 'current_location', startDate: 'start_date',
           university: 'target', prefRegion: 'area_prefs',
-          totalExp: 'experience', source: 'how_to',
+          totalExp: 'experience', employment: 'employment', source: 'how_to',
           // 급여·채용
           curSalary: 'current_salary', hopeSalary: 'desired_salary',
           hired: 'placed_company', wage: 'placed_salary',
@@ -720,7 +723,8 @@ export default function BridgeCanvasSheet() {
           // 관리 필드
           reference: 'reference', proposal: 'recruiter_memo',
           notice: 'preferences', preference: 'preferences',
-          applied: 'job_prefs', history: 'past_placement',
+          applied: 'job_prefs', contractOffer: 'contract_offered',
+          personalNote: 'personal_consideration', history: 'past_placement',
           housing: 'housing', introFee: 'referral_fee',
           process: 'process_date',
         }

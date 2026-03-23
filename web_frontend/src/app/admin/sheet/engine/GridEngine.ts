@@ -978,6 +978,7 @@ export class GridEngine {
         this.drawWrappedText(val, x, y, w - 12, h, {
           fontSize, bold: style?.bold, italic: style?.italic,
           color: style?.color, strikethrough: style?.strikethrough,
+          singleLine: true,
         })
         // dropdown arrow
         ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'

@@ -1,0 +1,49 @@
+import_latest.py — LIVE (DB 변경)
+Excel: Q:/Claudework/bridge base/original_candidates/BRIDGE_Candidates_Source.xlsx
+DB: Q:/Claudework/bridge base/master.db
+시트 필터: new
+백업: Q:/Claudework/bridge base/master.db.backup_20260323_110832
+
+PRE: candidates=3124 / client_inquiries=3198
+
+Excel 열기 중 (258MB, 잠시 대기)...
+시트: ['New', 'Client', 'Source', 'Form', '정리24', '정리25', 'Note', '선물']
+
+============================================================
+=== New 시트 → candidates (전체 덮어쓰기) ===
+    Peyton Lee Mcdonald: area_prefs, interview_time, kakaotalk
+    Fussner Hannah Marie: interview_time, contract_offered, kakaotalk, mobile_phone, criminal_record
+    Kathryn Jessica Begley (Kate): interview_time, kakaotalk, mobile_phone, criminal_record
+    du Preez Glenn: dob, mobile_phone
+    Sara Meagan Gregg: dob, interview_time
+    Margaret Schieffer Seo; Maggy: dob, interview_time, mobile_phone
+    Scott Lee: dob, current_salary, desired_salary
+    Olivia Rene Blehm: dob, current_salary
+    Samuel Cuerrier: dob, interview_time
+    Justin Hyunjae Chung: dob, current_salary, mobile_phone
+    Mary Ruth Martin: dob
+    Leighton Kathryn Buchanan-Cates: dob, current_salary
+    Zote Kolosa: dob, mobile_phone
+    Nandi Mthembu: dob, mobile_phone
+    Pamela Tabitha Mangcotywa; Pam: dob
+    Letitia Georgiana Nkechi Johnson ; Gia: dob, mobile_phone
+    Paula Ann Loughran: dob, interview_time
+    Aiyana Duviella Karp; Ana: dob, current_salary, mobile_phone
+    LEEYONGSONYI *Steve Lee*: dob
+    OShaea Monshelle Melvin: dob, current_salary, mobile_phone
+    Grace Olivia peers: dob, current_salary, mobile_phone
+    Kearabetswe Vallentia Radebe: dob, current_salary
+    Donia Angelic Bland: dob, current_salary
+    Nathan Jack Burgess: dob
+    KELLY SHARON LORRAINE: dob, mobile_phone
+    Annette Afrowa Quansah: dob
+    William Conner White: dob, current_salary
+    Marilynn Chimkanma Mbah; Ms. M: dob, current_salary, mobile_phone
+    Angelina Gbemisola Martins: dob, current_salary, mobile_phone
+  Active 마킹: 40건 (값 변경: 39건) / INSERT: 0건 / SKIP: 26건
+
+============================================================
+=== 최종 결과 ===
+  candidates:       3124 → 3124  (+0)
+  client_inquiries: 3198 → 3198  (+0)
+  integrity: ok

@@ -1698,7 +1698,8 @@ async def admin_candidates(
                 "housing_type, education_level, major, interview_time, health_info, "
                 "piercings, dependents, married, religion, korean_criminal_record, "
                 "consent, fact_check, photo_url, criminal_record_check, doc_status, "
-                "how_to, tattoo, visa_type, stage, mail_tags, korea_experience"
+                "how_to, tattoo, visa_type, stage, mail_tags, korea_experience, "
+                "employment, contract_offered, personal_consideration"
             )
 
             if cursor > 0:
@@ -1839,9 +1840,9 @@ async def admin_update_candidate(
         # Sheet 인라인 편집용 추가 필드
         "full_name", "email", "nationality", "ancestry", "dob", "gender",
         "current_location", "start_date", "target", "area_prefs",
-        "experience", "current_salary", "desired_salary",
+        "experience", "employment", "current_salary", "desired_salary",
         "education_level", "major", "certification", "doc_status",
-        "health_info", "criminal_record_check", "korean_criminal_record",
+        "health_info", "personal_consideration", "criminal_record_check", "korean_criminal_record",
         "kakaotalk", "mobile_phone", "arc_holders", "married", "religion",
         "dependents", "consent", "fact_check", "housing", "e_visa",
         "how_to",
@@ -2211,6 +2212,20 @@ async def admin_update_email_template(template_key: str, request: Request, body:
     finally:
         conn.close()
     return ok(message=f"템플릿 '{template_key}' 저장 완료")
+
+
+@app.delete("/api/admin/email-templates/{template_key}", tags=["admin"])
+async def admin_delete_email_template(template_key: str, request: Request):
+    """이메일 템플릿 삭제."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("DELETE FROM email_templates WHERE template_key = ?", (template_key,))
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(message=f"템플릿 '{template_key}' 삭제 완료")
 
 
 @app.get("/api/admin/guide-links", tags=["admin"])
