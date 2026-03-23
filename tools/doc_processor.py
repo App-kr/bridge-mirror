@@ -419,7 +419,7 @@ WORKPLACE_LABELS = [
 
 # 한국 학원/학교 키워드 (경력줄에서 한국 근무지 감지용)
 KR_WORKPLACE_KEYWORDS = frozenset([
-    # 대형 프랜차이즈
+    # 대형 프랜차이즈 / ESL 학원
     "ecc", "ybm", "pagoda", "avalon", "chungdahm", "cdl", "jle",
     "poly", "sle", "aclipse", "epik", "gepik", "smoe", "jlec",
     "slp", "rise", "cdi", "bcm", "gnb", "iei", "ael", "tel",
@@ -429,6 +429,11 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "altiora", "bricks", "jungchul", "jeongchul",
     "sisa", "hansol", "daekyo", "kumon", "chungjae",
     "global adventure", "hampson", "engoo",
+    "gse", "ils", "fastrackids", "ding ding dang", "seouldal",
+    "reading town", "english channel", "yoon's", "eduplex",
+    "chungdahm learning", "creverse", "lucid", "topia",
+    "snb", "jls", "like english", "english egg",
+    "canlearn", "kids college", "english town",
     # 일반 유형
     "english village", "language school", "language academy",
     "language institute", "language center", "language centre",
@@ -438,6 +443,23 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "after-school", "afterschool", "after school",
     "private academy", "teaching academy", "english academy",
 ])
+
+# 이력서 섹션 헤더 (PDF 이름 추출 시 오탐 방지)
+_RESUME_SECTION_HEADERS = frozenset({
+    "professional summary", "work experience", "education", "references",
+    "skills", "qualifications", "experience", "objective",
+    "personal statement", "career summary", "career objective",
+    "profile summary", "employment history", "work history",
+    "professional experience", "relevant experience",
+    "academic qualifications", "certifications", "teaching experience",
+    "teaching history", "additional skills", "languages", "interests",
+    "volunteer experience", "professional development", "awards",
+    "curriculum vitae", "personal profile", "about me",
+    "contact information", "contact details", "personal information",
+    "personal details", "key skills", "core competencies",
+    "summary of qualifications", "professional skills",
+    "cover letter", "letter of introduction", "summary",
+})
 
 # 경력줄에서 한국 근무 상세 축약 패턴
 # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022" → "South Korea, March 2021 - Sept 2022"
@@ -1002,11 +1024,12 @@ def _replace_with_bold_korea(para, cleaned_text: str):
 #  5. PDF 처리 (인-플레이스 redaction)
 # ══════════════════════════════════════════════════════
 
-def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bool = False):
+def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
+                dry: bool = False, photo_path: Path = None):
     """
     PDF 처리: PyMuPDF redaction으로 PII를 흰색 사각형으로 덮기.
-    원본 서식/이미지/레이아웃 보존.
-    Returns (output_path or None, log_entries)
+    첫 페이지 상단 영역은 화이트아웃 후 번호+사진 삽입.
+    Returns (doc, log_entries)
     """
     import fitz
 
@@ -1018,6 +1041,30 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
 
     # 파일명에서 이름 추출 (DB 불일치 대비)
     filename_names = _extract_names_from_filename(filepath)
+
+    # PDF 첫 페이지 텍스트에서 이름 추출 (상단 영역)
+    _pdf_extracted_names = []
+    if len(doc) > 0:
+        first_text = doc[0].get_text()
+        first_lines = [l.strip() for l in first_text.split("\n") if l.strip()]
+        for line in first_lines[:5]:  # 상위 5줄만
+            # 이름 패턴: 2~5단어, 각 첫글자 대문자, 짧은 줄
+            if len(line) < 60 and not _should_skip_line(line.lower()):
+                # 섹션 헤더 제외 (PROFESSIONAL SUMMARY 등)
+                if line.strip().lower() in _RESUME_SECTION_HEADERS:
+                    continue
+                # ALL-CAPS 2+단어 → 섹션 제목으로 간주 (이름은 보통 Mixed Case)
+                if line.isupper() and len(line.split()) >= 2:
+                    continue
+                words = line.split()
+                if 2 <= len(words) <= 5 and all(
+                    w[0].isupper() or w in ("de", "van", "von", "del", "K.", "K")
+                    for w in words if w
+                ):
+                    _pdf_extracted_names.append(line)
+                    for w in words:
+                        if len(w) >= 3 and w[0].isupper():
+                            _pdf_extracted_names.append(w)
 
     for page_num, page in enumerate(doc):
         text = page.get_text()
@@ -1057,11 +1104,19 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
                 redact_texts.add(fn_name)
                 all_logs.append(f"[page{page_num}] FILENAME_NAME: {fn_name}")
 
+        # PDF 텍스트에서 추출한 이름 redact
+        for pdf_name in _pdf_extracted_names:
+            if pdf_name.lower() in text.lower():
+                redact_texts.add(pdf_name)
+                all_logs.append(f"[page{page_num}] PDF_NAME: {pdf_name}")
+
         # ── 한국 학원명/도시명 redact (한국 맥락 있을 때만) ──
         # 페이지 전체에 한국 관련 키워드가 있는지 먼저 확인
         page_lower = text.lower()
-        page_has_korea = any(kw in page_lower for kw in
-            ("korea", "한국", "seoul", "busan", "서울", "부산"))
+        # \bkorea\b → "korea" 단독 매칭 ("korean" 오탐 방지)
+        page_has_korea = bool(re.search(
+            r"\bkorea\b|한국|\bseoul\b|\bbusan\b|서울|부산", page_lower
+        ))
 
         keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
         # 한국 맥락이 없으면 학원명 redact 스킵 (미국 high school 등 오탐 방지)
@@ -1074,8 +1129,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
                 has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
                 has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
 
-                # 같은 줄에 한국 키워드+학원명 → 학원명 redact
-                if has_kr_work and has_kr:
+                # 학원명 redact: 같은 줄에 한국 키워드 있거나,
+                # 짧은 줄(<50자)이면 기관명으로 간주 (페이지에 한국 맥락 있으므로)
+                if has_kr_work and (has_kr or len(stripped) < 50):
+                    # 짧은 기관명 줄은 통째로 redact ("GSE English Academy")
+                    if len(stripped) < 50 and not has_kr:
+                        redact_texts.add(stripped)
+                        all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
                     for kw in KR_WORKPLACE_KEYWORDS:
                         kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
                         for m in kw_pat.finditer(stripped):
@@ -1143,18 +1203,38 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None, dry: bo
         if redact_texts or replacement_redacts:
             page.apply_redactions()
 
-    # 번호 삽입 (첫 페이지 최상단)
+    # 첫 페이지 상단 화이트아웃 + 번호/사진 삽입
     if not dry and len(doc) > 0:
         first_page = doc[0]
-        rect = fitz.Rect(50, 15, 300, 45)
-        first_page.draw_rect(rect, color=None, fill=(1, 1, 1))
+        pw = first_page.rect.width
+
+        # 상단 영역 화이트아웃 (이름/연락처 블록 통째로 덮기)
+        # 높이 90px 정도가 일반적 이름+연락처 블록
+        header_rect = fitz.Rect(0, 0, pw, 90)
+        first_page.draw_rect(header_rect, color=None, fill=(1, 1, 1))
+        all_logs.append("[page0] HEADER_WHITEOUT: 상단 90px 화이트아웃")
+
+        # 번호 삽입 (왼쪽 상단, 크고 굵게)
         first_page.insert_text(
-            fitz.Point(50, 38),
+            fitz.Point(50, 55),
             str(brj_number),
-            fontsize=20,
+            fontsize=28,
             fontname="helv",
             color=(0, 0, 0),
         )
+
+        # 사진 삽입 (오른쪽 상단)
+        photo = photo_path or _find_photo_for_candidate(filepath)
+        if photo and photo.exists():
+            # 사진 크기: 높이 80px, 오른쪽 정렬
+            photo_rect = fitz.Rect(pw - 110, 5, pw - 30, 85)
+            try:
+                first_page.insert_image(photo_rect, filename=str(photo))
+                all_logs.append(f"[photo] PDF 삽입: {photo.name}")
+            except Exception as e:
+                all_logs.append(f"[photo] PDF 삽입 실패: {e}")
+        else:
+            all_logs.append("[photo] 사진 없음 (스킵)")
 
     # PDF 메타데이터 클리어 (이름/제목 제거)
     if not dry:
@@ -1275,14 +1355,27 @@ def save_log(filepath, brj_number: int, logs: list[str]):
 
 
 def auto_detect_candidate(filepath: Path):
-    """파일명에서 강사번호 자동 감지"""
+    """파일명에서 강사번호 자동 감지 (이름/위치 교차 검증)"""
     stem = filepath.stem
-    # 파일명에서 3-5자리 숫자 추출
     numbers = re.findall(r"(\d{3,5})", stem)
     for num_str in numbers:
         candidate = get_candidate(int(num_str))
-        if candidate:
+        if not candidate:
+            continue
+        # 번호가 파일명 맨 앞이면 확실한 매칭 (예: "3060_resume.pdf")
+        if stem.startswith(num_str):
             return candidate
+        # _# 뒤에 오면 확실한 매칭 (예: "resume_3060.pdf", "#3060.pdf")
+        if re.search(rf"[_#]{num_str}\b", stem):
+            return candidate
+        # 그 외: 후보자 이름이 파일명에 포함되는지 검증
+        cand_name = (candidate.get("full_name") or "").lower()
+        stem_lower = stem.lower()
+        if cand_name:
+            name_words = [w for w in cand_name.split() if len(w) >= 3]
+            if any(w in stem_lower for w in name_words):
+                return candidate
+        # 이름 매칭 실패 → 우연한 숫자 (연도 2026 등) → 스킵
     return None
 
 
@@ -1430,24 +1523,144 @@ def _resolve_candidate(filepath: Path) -> tuple[int | None, dict | None]:
     if candidate and candidate.get("sheet_number"):
         return candidate["sheet_number"], candidate
 
-    nums = re.findall(r"(\d{3,5})", filepath.stem)
-    if nums:
-        num = int(nums[0])
-        cand = get_candidate(num)
-        return num, cand
+    # auto_detect_candidate가 이미 파일명 숫자를 이름 교차검증했으므로
+    # 여기서 재시도 불필요 → 이메일 매칭으로 직행
 
-    # DOCX → 이메일 기반 매칭
-    if filepath.suffix.lower() == ".docx":
+    # 이메일 기반 매칭 (DOCX + PDF)
+    emails = []
+    ext = filepath.suffix.lower()
+    try:
+        if ext == ".docx":
+            emails = _extract_emails_from_docx(filepath)
+        elif ext == ".pdf":
+            import fitz
+            doc = fitz.open(str(filepath))
+            for page in doc:
+                for m in RE_EMAIL.finditer(page.get_text()):
+                    emails.append(m.group().lower())
+            doc.close()
+    except Exception:
+        pass
+    for em in emails:
+        cand = find_candidate_by_email(em)
+        if cand:
+            if cand.get("sheet_number"):
+                return cand["sheet_number"], cand
+            return None, cand
+    return None, None
+
+
+def _quick_extract_names(filepath: Path) -> set[str]:
+    """문서에서 이름 빠르게 추출 (사진 매칭용). Returns lowercase name parts (3글자+)."""
+    names = set()
+    # 파일명 기반
+    for fn_name in _extract_names_from_filename(filepath):
+        names.update(w.lower().rstrip(".") for w in fn_name.split() if len(w) >= 3)
+    # PDF 첫 페이지 텍스트 기반
+    if filepath.suffix.lower() == ".pdf":
         try:
-            for em in _extract_emails_from_docx(filepath):
-                cand = find_candidate_by_email(em)
-                if cand:
-                    if cand.get("sheet_number"):
-                        return cand["sheet_number"], cand
-                    return None, cand  # 번호 없지만 후보자 정보 있음
+            import fitz
+            doc = fitz.open(str(filepath))
+            if len(doc) > 0:
+                first_text = doc[0].get_text()
+                for line in (l.strip() for l in first_text.split("\n") if l.strip()):
+                    if len(line) >= 60:
+                        continue
+                    if line.strip().lower() in _RESUME_SECTION_HEADERS:
+                        continue
+                    if line.isupper() and len(line.split()) >= 2:
+                        continue
+                    if _should_skip_line(line.lower()):
+                        continue
+                    words = line.split()
+                    if 2 <= len(words) <= 5 and all(
+                        w[0].isupper() or w in ("de", "van", "von", "del", "K.", "K")
+                        for w in words if w
+                    ):
+                        names.update(w.lower().rstrip(".") for w in words if len(w) >= 3)
+                        break  # 첫 이름 줄만
+            doc.close()
         except Exception:
             pass
-    return None, None
+    return names
+
+
+def _extract_nationality_gender(filepath: Path) -> dict:
+    """문서 텍스트에서 국적/성별 추출 (DB 없는 후보자용)."""
+    text = ""
+    ext = filepath.suffix.lower()
+    try:
+        if ext == ".pdf":
+            import fitz
+            doc = fitz.open(str(filepath))
+            for page in doc:
+                text += page.get_text() + "\n"
+            doc.close()
+        elif ext == ".docx":
+            import docx
+            doc = docx.Document(str(filepath))
+            text = "\n".join(p.text for p in doc.paragraphs)
+    except Exception:
+        return {}
+
+    info = {}
+    text_lower = text.lower()
+
+    # 국적 — 명시적 라벨 우선
+    nat_line = re.search(
+        r"(?:nationality|citizenship|country of (?:origin|birth))\s*:?\s*(.+)",
+        text, re.I,
+    )
+    if nat_line:
+        val = nat_line.group(1).strip().lower()
+        for key in _NAT_KR:
+            if key in val:
+                info["nationality"] = key
+                break
+    # 라벨 없으면 본문에서 국가명 빈도 추론
+    if "nationality" not in info:
+        nat_hints = {
+            "american": ["united states", "u.s.a", "u.s. citizen"],
+            "british": ["united kingdom", "u.k.", "british citizen", "british national"],
+            "irish": ["ireland", "irish citizen"],
+            "canadian": ["canada", "canadian citizen"],
+            "australian": ["australia", "australian citizen"],
+            "south african": ["south africa"],
+        }
+        for nat, patterns in nat_hints.items():
+            if any(p in text_lower for p in patterns):
+                info["nationality"] = nat
+                break
+
+    # 성별 — 명시적 라벨 우선
+    gender_line = re.search(
+        r"(?:gender|sex)\s*:?\s*(male|female|m|f)\b", text, re.I,
+    )
+    if gender_line:
+        val = gender_line.group(1).strip().lower()
+        if val in ("male", "m"):
+            info["gender"] = "male"
+        elif val in ("female", "f"):
+            info["gender"] = "female"
+
+    # DOB — 라벨 패턴
+    dob_match = re.search(
+        r"(?:date\s+of\s+birth|d\.?o\.?b\.?|born|birth\s*date)\s*:?\s*"
+        r"(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}|\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}|"
+        r"\w+\s+\d{1,2},?\s+\d{4}|\d{4})",
+        text, re.I,
+    )
+    if dob_match:
+        info["dob"] = dob_match.group(1).strip()
+    # DOB 없으면 고등학교 졸업년도로 출생년 추정 (졸업년 - 18)
+    if "dob" not in info:
+        hs_match = re.search(r"high\s+school.*?(\d{4})", text, re.I)
+        if hs_match:
+            grad_year = int(hs_match.group(1))
+            if 2000 <= grad_year <= 2030:
+                info["dob"] = str(grad_year - 18)
+
+    return info
 
 
 def cmd_batch(args):
@@ -1552,6 +1765,15 @@ def cmd_batch(args):
         cover_path = grp["cover"]
         candidate = grp["candidate"]
 
+        # DB 없는 후보자: 문서에서 국적/성별 추출 (파일명 생성용)
+        if not candidate:
+            doc_path = resume_path or cover_path
+            if doc_path and doc_path.exists():
+                extracted_info = _extract_nationality_gender(doc_path)
+                if extracted_info:
+                    candidate = extracted_info
+                    print(f"  [INFO] 문서에서 추출: {extracted_info}")
+
         label = f"#{current_number}"
         if candidate:
             label += f" {candidate.get('full_name', '')}"
@@ -1561,18 +1783,44 @@ def cmd_batch(args):
         if cover_path:
             print(f"  Cover:  {cover_path.name}")
 
-        # 사진 매칭: 번호 → 이름 유사도
+        # 사진 매칭: 번호 → 이력서 파일명 유사도 → 이름 유사도
         photo = None
-        for pk, pf in photo_map.items():
+        for pk, pf in list(photo_map.items()):
             if str(current_number) in pk:
                 photo = pf
                 break
+        if not photo and resume_path:
+            res_stem = resume_path.stem.lower()
+            for pk, pf in list(photo_map.items()):
+                # 이력서 이니셜/이름과 사진 파일명 비교
+                res_words = set(re.findall(r"[a-z]{2,}", res_stem))
+                pk_words = set(re.findall(r"[a-z]{2,}", pk))
+                if res_words & pk_words:
+                    photo = pf
+                    break
         if not photo and candidate and candidate.get("full_name"):
             name_parts = candidate["full_name"].lower().split()
-            for pk, pf in photo_map.items():
+            for pk, pf in list(photo_map.items()):
                 if any(part in pk for part in name_parts if len(part) >= 3):
                     photo = pf
                     break
+        # NEW: 문서 텍스트에서 추출한 이름으로 사진 매칭
+        if not photo:
+            doc_names = set()
+            for doc_path in [resume_path, cover_path]:
+                if doc_path and doc_path.exists():
+                    doc_names |= _quick_extract_names(doc_path)
+            if doc_names:
+                for pk, pf in list(photo_map.items()):
+                    pk_words = set(re.findall(r"[a-z]{3,}", pk))
+                    common = pk_words & doc_names
+                    if common:
+                        photo = pf
+                        print(f"  [MATCH] Photo ↔ Doc name: {common}")
+                        break
+        # 그룹 1개 + 사진 1개면 자동 매칭
+        if not photo and len(groups) == 1 and len(photo_map) == 1:
+            photo = next(iter(photo_map.values()))
         all_logs = []
         temp_pdfs = []  # (순서, pdf_path) — 최종 병합용
 
@@ -1632,7 +1880,8 @@ def cmd_batch(args):
                         resume_path.unlink()
                 elif ext == ".pdf":
                     doc, res_logs = process_pdf(
-                        resume_path, current_number, candidate, dry
+                        resume_path, current_number, candidate, dry,
+                        photo_path=photo,
                     )
                     all_logs.extend(res_logs)
                     if not dry:
@@ -1703,6 +1952,13 @@ def cmd_batch(args):
                 print(f"  [DB] file_uploads 기록 완료")
             except Exception as db_err:
                 print(f"  [DB WARN] 기록 실패 (무시): {db_err}")
+
+            # 사진 사용 후 incoming에서 제거 (다음 batch 오염 방지)
+            if photo and photo.exists() and photo.parent == incoming:
+                backup_original(photo)
+                photo.unlink()
+                photo_map.pop(photo.stem.lower(), None)
+                print(f"  [PHOTO] {photo.name} → originals/ 이동")
 
             print(f"  [OK]\n")
 
