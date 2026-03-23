@@ -809,13 +809,22 @@ function InterviewSetupInner() {
                   <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
                     Meet 회의실 ({MEET_ROOMS.length})
                   </h3>
-                  <button
-                    type="button"
-                    onClick={pickRandomRoom}
-                    className="text-[12px] px-3 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-full font-medium hover:bg-[#0071e3]/20 transition-colors"
-                  >
-                    랜덤
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${candidate?.full_name || ''}`)}&dates=${(() => { const d = interviewDate; const t = interviewTime || '14:00'; const [y,mo,dd] = d.split('-').map(Number); const [h,mi] = t.split(':').map(Number); const s = new Date(y,mo-1,dd,h,mi); const e = new Date(s.getTime()+duration*60000); const f = (dt: Date) => dt.toISOString().replace(/[-:]/g,'').replace(/\.\d+/,''); return `${f(s)}/${f(e)}` })()}&details=${encodeURIComponent('BRIDGE Recruitment Interview')}${candidate?.email ? `&add=${encodeURIComponent(candidate.email)}` : ''}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-[12px] px-3 py-1 bg-blue-500 text-white rounded-full font-medium hover:bg-blue-600 transition-colors"
+                    >
+                      📅 캘린더에서 Meet 생성
+                    </a>
+                    <button
+                      type="button"
+                      onClick={pickRandomRoom}
+                      className="text-[12px] px-3 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-full font-medium hover:bg-[#0071e3]/20 transition-colors"
+                    >
+                      랜덤
+                    </button>
+                  </div>
                 </div>
                 <div className="px-4 py-2 text-[11px] text-[#86868b] border-b border-[#f5f5f7]">
                   액세스: 항상 열기 &middot; 허가없이 참여 가능
@@ -973,10 +982,17 @@ function InterviewSetupInner() {
                   {result.meet_link && (
                     <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
                       <span className="text-[#86868b]">Meet Link</span>
-                      <a href={result.meet_link} target="_blank" rel="noopener noreferrer"
-                        className="text-[#0071e3] font-medium hover:underline truncate max-w-[280px]">
-                        {result.meet_link}
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a href={result.meet_link} target="_blank" rel="noopener noreferrer"
+                          className="text-[#0071e3] font-medium hover:underline truncate max-w-[200px]">
+                          {result.meet_link.replace('https://meet.google.com/', '')}
+                        </a>
+                        <a href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${candidate?.full_name || ''}`)}&details=${encodeURIComponent('Meet: ' + result.meet_link)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium hover:bg-blue-200 shrink-0">
+                          📅 편집
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -335,14 +335,22 @@ function InterviewCard({
           </div>
         )}
 
-        {/* Meet link */}
-        <a href={meetLink} target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-800 mb-3 group">
-          <span className="bg-blue-100 group-hover:bg-blue-200 rounded-lg px-3 py-1.5 transition-colors">
-            🔗 Meet 참가
-          </span>
-          <span className="text-gray-400 truncate">{meetLink.replace('https://meet.google.com/', '')}</span>
-        </a>
+        {/* Meet link + Calendar edit */}
+        <div className="flex items-center gap-2 mb-3">
+          <a href={meetLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-800 group">
+            <span className="bg-blue-100 group-hover:bg-blue-200 rounded-lg px-3 py-1.5 transition-colors">
+              🔗 Meet 참가
+            </span>
+            <span className="text-gray-400 truncate">{meetLink.replace('https://meet.google.com/', '')}</span>
+          </a>
+          <a href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${iv.candidate_name}`)}&dates=${(() => { const d = iv.interview_date || ''; const t = iv.interview_time || '14:00'; const [y,mo,dd] = d.split('-').map(Number); const [h,mi] = t.split(':').map(Number); const s = new Date(y,mo-1,dd,h,mi); const e = new Date(s.getTime()+(iv.duration_minutes||20)*60000); const f = (dt: Date) => dt.toISOString().replace(/[-:]/g,'').replace(/\.\d+/,''); return `${f(s)}/${f(e)}` })()}&details=${encodeURIComponent('BRIDGE Recruitment Interview')}${iv.candidate_email ? `&add=${encodeURIComponent(iv.candidate_email)}` : ''}`}
+            target="_blank" rel="noopener noreferrer"
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
+            title="Google Calendar에서 Meet 편집">
+            📅 캘린더
+          </a>
+        </div>
 
         {/* Email status + action buttons */}
         <div className="flex flex-wrap items-center gap-2">
