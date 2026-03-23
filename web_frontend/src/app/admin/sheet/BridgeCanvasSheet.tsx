@@ -13,7 +13,6 @@
    ═══════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { GridEngine } from './engine/GridEngine'
@@ -41,6 +40,11 @@ const DEFAULT_MEET_POOL = [
   'https://meet.google.com/xyz-uvwx-rst',
   'https://meet.google.com/qwe-rtyp-asd',
   'https://meet.google.com/mnb-vcxz-lkj',
+  'https://meet.google.com/pfg-hijk-lmn',
+  'https://meet.google.com/stu-vwxy-zab',
+  'https://meet.google.com/cde-fghi-jkl',
+  'https://meet.google.com/mno-pqrs-tuv',
+  'https://meet.google.com/wxy-zabc-def',
 ]
 function loadMeetPool(): string[] {
   try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
@@ -138,7 +142,7 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
    ═══════════════════════════════════════ */
 export default function BridgeCanvasSheet() {
   const { headers: authHeaders, adminKey } = useAdminAuth()
-  const router = useRouter()
+
 
   const [data, setData] = useState<DataStore>({ active: [], past: [], blacklist: [] })
   const [dbAll, setDbAll] = useState<DataRow[]>([])
@@ -187,8 +191,9 @@ export default function BridgeCanvasSheet() {
   const [mailOpen, setMailOpen] = useState(false)
   const [mailRecipients, setMailRecipients] = useState<DataRow[]>([])
 
-  // Interview quick modal
+  // Interview modal (bridge / school)
   const [ivModal, setIvModal] = useState(false)
+  const [ivType, setIvType] = useState<'bridge' | 'school'>('bridge')
   const [ivTarget, setIvTarget] = useState<DataRow | null>(null)
   const [ivDate, setIvDate] = useState('')
   const [ivTime, setIvTime] = useState('14:00')
@@ -200,16 +205,7 @@ export default function BridgeCanvasSheet() {
   const [ivResult, setIvResult] = useState<{ id: number; emailSent: boolean; meetLink: string } | null>(null)
   const [ivMeetPool, setIvMeetPool] = useState<string[]>([])
   const [ivNewLink, setIvNewLink] = useState('')
-
-  // Quick interview email modal (no DB record)
-  const [qeModal, setQeModal] = useState(false)
-  const [qeTarget, setQeTarget] = useState<DataRow | null>(null)
-  const [qeDate, setQeDate] = useState('')
-  const [qeTime, setQeTime] = useState('14:00')
-  const [qeDuration, setQeDuration] = useState(20)
-  const [qeMeetLink, setQeMeetLink] = useState('')
-  const [qeLoading, setQeLoading] = useState(false)
-  const [qeResult, setQeResult] = useState<string | null>(null)
+  const [ivEmployerName, setIvEmployerName] = useState('')
 
   // Filter popup
   const [filterPopup, setFilterPopup] = useState<FilterPopup | null>(null)
@@ -1353,31 +1349,17 @@ export default function BridgeCanvasSheet() {
         <div style={{ flex: 1 }} />
 
         {selectedRows.size > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 14px', background: '#dbeafe', borderRadius: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#1d4ed8' }}>선택 {selectedRows.size}명</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: '#f1f5f9', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginRight: 4 }}>선택 {selectedRows.size}명</span>
             <button
               onClick={() => { const rows = [...selectedRows].map(i => displayRowsRef.current[i]).filter(Boolean); if (rows.length) openMailModal(rows) }}
-              style={{ padding: '6px 18px', fontSize: 14, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', background: '#2563eb', color: '#fff' }}
-            >✉ 메일 발송</button>
+              style={{ padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#1e293b' }}
+            >메일 발송</button>
             <button
               onClick={() => {
                 const row = displayRowsRef.current[[...selectedRows][0]]
                 if (!row) return
-                setQeTarget(row)
-                const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
-                setQeDate(tomorrow.toISOString().slice(0, 10))
-                setQeTime('14:00'); setQeDuration(20)
-                setQeMeetLink(pickRandomMeet())
-                setQeResult(null); setQeModal(true)
-              }}
-              style={{ padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', background: '#0891b2', color: '#fff' }}
-              title="인터뷰 안내 이메일만 발송"
-            >📧 인터뷰메일</button>
-            <button
-              onClick={() => {
-                const row = displayRowsRef.current[[...selectedRows][0]]
-                if (!row) return
-                setIvTarget(row)
+                setIvType('bridge'); setIvTarget(row); setIvEmployerName('')
                 const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
                 setIvDate(tomorrow.toISOString().slice(0, 10))
                 const prefs = loadIvPrefs()
@@ -1386,19 +1368,23 @@ export default function BridgeCanvasSheet() {
                 setIvMeetLink(pickRandomMeet())
                 setIvModal(true)
               }}
-              style={{ padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', background: '#7c3aed', color: '#fff' }}
-              title="브릿지 스크리닝 인터뷰 생성"
-            >📅 브릿지IV</button>
+              style={{ padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#1e293b', color: '#fff' }}
+            >브릿지 인터뷰</button>
             <button
               onClick={() => {
                 const row = displayRowsRef.current[[...selectedRows][0]]
                 if (!row) return
-                const cid = String(row._cid || row.candidate_id || '')
-                if (cid) router.push(`/admin/interview-setup?candidate=${encodeURIComponent(cid)}`)
+                setIvType('school'); setIvTarget(row); setIvEmployerName('')
+                const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+                setIvDate(tomorrow.toISOString().slice(0, 10))
+                const prefs = loadIvPrefs()
+                setIvTime(prefs.time); setIvDuration(prefs.duration); setIvAutoSend(prefs.autoSend)
+                setIvNotes(''); setIvResult(null)
+                setIvMeetLink(pickRandomMeet())
+                setIvModal(true)
               }}
-              style={{ padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', background: '#ea580c', color: '#fff' }}
-              title="구인처 매칭 → 업체 인터뷰 세팅"
-            >🏢 업체IV</button>
+              style={{ padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#1e293b' }}
+            >학교 인터뷰</button>
           </div>
         )}
 
@@ -1978,120 +1964,7 @@ export default function BridgeCanvasSheet() {
         </span>
       </div>
 
-      {/* ── Quick Interview Email Modal (no DB record) ── */}
-      {qeModal && qeTarget && (() => {
-        const firstName = String(qeTarget.name || '').split(/\s+/).pop() || String(qeTarget.name || '-')
-        const candidateEmail = String(qeTarget.email || '')
-        const cid = String(qeTarget._cid || qeTarget.candidate_id || '')
-        const defaultSubject = `[BRIDGE] Interview — ${firstName}`
-        const defaultBody = `Dear ${firstName},\n\nYour interview has been scheduled.\n\nDate: ${qeDate || '(TBD)'}\nTime: ${qeTime || '(TBD)'} KST\nDuration: ${qeDuration} minutes\n\nMeet Link: ${qeMeetLink}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
-        const F = '"Pretendard Variable", Pretendard, -apple-system, "Noto Sans KR", sans-serif'
-
-        const handleSend = async () => {
-          if (!candidateEmail || !candidateEmail.includes('@')) { showPhotoToast('No valid email'); return }
-          setQeLoading(true)
-          try {
-            const emailSubject = (document.getElementById('qe-email-subject') as HTMLInputElement)?.value || defaultSubject
-            const emailBody = (document.getElementById('qe-email-body') as HTMLTextAreaElement)?.value || defaultBody
-            const res = await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-              body: JSON.stringify({
-                template_key: 'interview_candidate',
-                custom_subject: emailSubject,
-                custom_body: emailBody.replace(/\n/g, '<br>'),
-              }),
-            })
-            const json = await res.json()
-            if (!res.ok) throw new Error(json.detail ?? 'Failed')
-            setQeResult(`Email sent to ${json.data?.sent_to || candidateEmail}`)
-          } catch (e) {
-            showPhotoToast(e instanceof Error ? e.message : 'Error')
-          } finally { setQeLoading(false) }
-        }
-
-        return (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)', padding: 12 }}
-          onClick={e => { if (e.target === e.currentTarget) setQeModal(false) }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '96vw', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', fontFamily: F }}>
-            <div style={{ padding: '14px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 600, fontSize: 18, color: '#000' }}>📧 인터뷰 메일 발송</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setQeModal(false)} style={{ padding: '6px 16px', background: '#f3f4f6', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>취소</button>
-                {!qeResult && (
-                  <button onClick={handleSend} disabled={qeLoading}
-                    style={{ padding: '6px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: F, background: qeLoading ? '#9ca3af' : '#0891b2', color: '#fff' }}>
-                    {qeLoading ? '발송중...' : '발송'}
-                  </button>
-                )}
-              </div>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
-              {qeResult ? (
-                <div style={{ textAlign: 'center', padding: '36px 0' }}>
-                  <div style={{ fontSize: 56, marginBottom: 14 }}>✅</div>
-                  <div style={{ fontWeight: 600, fontSize: 18, color: '#000' }}>발송 완료</div>
-                  <div style={{ fontSize: 14, color: '#555', marginTop: 8 }}>{qeResult}</div>
-                  <button onClick={() => setQeModal(false)}
-                    style={{ marginTop: 24, padding: '10px 24px', background: '#f3f4f6', color: '#000', borderRadius: 8, fontSize: 14, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>닫기</button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Candidate info */}
-                  <div style={{ background: '#f0fdfa', borderRadius: 10, padding: '12px 16px', border: '1px solid #99f6e4', fontSize: 13 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px' }}>
-                      <span style={{ color: '#888' }}>이름</span><span style={{ color: '#000', fontWeight: 500 }}>{firstName}</span>
-                      <span style={{ color: '#888' }}>이메일</span><span style={{ color: '#000' }}>{candidateEmail || '(없음)'}</span>
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 11, color: '#0891b2' }}>DB 인터뷰 레코드 생성 없이 이메일만 발송합니다</div>
-                  </div>
-                  {/* Date / Time / Duration */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>날짜</label>
-                      <input type="date" value={qeDate} onChange={e => setQeDate(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>시간</label>
-                      <input type="time" value={qeTime} onChange={e => setQeTime(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>시간(분)</label>
-                      <select value={qeDuration} onChange={e => setQeDuration(Number(e.target.value))}
-                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F }}>
-                        <option value={15}>15분</option><option value={20}>20분</option><option value={30}>30분</option>
-                      </select>
-                    </div>
-                  </div>
-                  {/* Meet Link */}
-                  <div>
-                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Meet Link</label>
-                    <input type="text" value={qeMeetLink} onChange={e => setQeMeetLink(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F }} />
-                  </div>
-                  {/* Subject */}
-                  <div>
-                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Subject</label>
-                    <input id="qe-email-subject" type="text" defaultValue={defaultSubject}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F }} />
-                  </div>
-                  {/* Body */}
-                  <div>
-                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Body</label>
-                    <textarea id="qe-email-body" defaultValue={defaultBody} rows={8}
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: F, resize: 'vertical', lineHeight: 1.5 }} />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        )
-      })()}
-
-      {/* ── Interview Modal — Compact 2-column ── */}
+      {/* ── Interview Modal — Compact 2-column (Bridge / School) ── */}
       {ivModal && ivTarget && (() => {
         const pool = ivMeetPool.length ? ivMeetPool : loadMeetPool()
         const removeLink = (i: number) => {
@@ -2135,7 +2008,7 @@ export default function BridgeCanvasSheet() {
             {/* Header — date preview top + title */}
             <div style={{ padding: '14px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <span style={{ fontWeight: 600, fontSize: 18, color: '#000' }}>인터뷰 생성</span>
+                <span style={{ fontWeight: 600, fontSize: 18, color: '#000' }}>{ivType === 'school' ? '학교 인터뷰 생성' : '브릿지 인터뷰 생성'}</span>
                 {datePreview && (
                   <span style={{ padding: '4px 14px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8, fontSize: 15, fontWeight: 500, color: '#3730A3' }}>
                     {datePreview} &middot; {ivDuration}분
@@ -2158,7 +2031,7 @@ export default function BridgeCanvasSheet() {
                           candidate_name: ivTarget.name || '',
                           candidate_email: ivTarget.email || '',
                           candidate_id: ivTarget._cid || String(ivTarget.mgtNum || ''),
-                          employer_name: '', employer_email: '',
+                          employer_name: ivType === 'school' ? ivEmployerName : '', employer_email: '',
                           interview_date: ivDate, interview_time: ivTime,
                           meet_link: ivMeetLink,
                           notes: ivNotes, duration_minutes: ivDuration,
@@ -2214,6 +2087,15 @@ export default function BridgeCanvasSheet() {
                         </div>
                       )}
                     </div>
+
+                    {/* Employer name (school type only) */}
+                    {ivType === 'school' && (
+                      <div>
+                        <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>학교/학원명</label>
+                        <input type="text" value={ivEmployerName} onChange={e => setIvEmployerName(e.target.value)} placeholder="업체명 입력"
+                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, color: '#000', background: '#fff', boxSizing: 'border-box', fontFamily: F }} />
+                      </div>
+                    )}
 
                     {/* Date & Time */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
