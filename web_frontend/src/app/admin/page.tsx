@@ -365,7 +365,7 @@ export default function AdminDashboardPage() {
         <button
           type="button"
           onClick={() => {
-            document.cookie = 'bridge_edit_mode=true; path=/; max-age=7200'
+            document.cookie = `bridge_edit_mode=true; path=/; max-age=7200; SameSite=Strict${window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '' : '; Secure'}`
             window.open('/', '_blank')
           }}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-[13px] text-white bg-[#0071e3] shadow-sm hover:bg-[#0077ED] active:scale-[0.98] transition-all"

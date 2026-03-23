@@ -18,7 +18,7 @@ function getStoredKey(): string {
   if (expiry && Date.now() > parseInt(expiry, 10)) {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(EXPIRY_KEY)
-    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     return ''
   }
   return key

@@ -164,7 +164,7 @@ export default function AdminSidebar() {
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_KEY_STORAGE)
     localStorage.removeItem(ADMIN_EXPIRY_STORAGE)
-    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     router.push('/')
   }
 

@@ -53,7 +53,7 @@ export default function EditModeBar() {
   if (!editMode || !mounted) return null
 
   const exit = () => {
-    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     window.location.reload()
   }
 
