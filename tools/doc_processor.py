@@ -584,11 +584,11 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
                 if date_match:
                     date_str = date_match.group(0).strip()
                     log.append(f"KR_EXP_REDACT: {stripped[:80]}")
-                    kept_lines2.append(f"S.Korea, {date_str}")
+                    kept_lines2.append(f"South Korea, {date_str}")
                     continue
 
-            # Case 2: 위치셀 — "Busan, S.Korea" 또는 "Masan, S. Korea"
-            # 한국 도시명 제거 → "S.Korea"만
+            # Case 2: 위치셀 — "Busan, South Korea" 또는 "Masan, S. Korea"
+            # 한국 도시명 제거 → "South Korea"만
             kr_loc_match = re.match(
                 r"^[\w\s-]*(?:" + "|".join(re.escape(kw) for kw in KR_KEYWORDS if len(kw) > 2) + r").*$",
                 s_lower,
@@ -598,10 +598,10 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
                 date_match = RE_DATE_RANGE.search(stripped)
                 if date_match:
                     log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
-                    kept_lines2.append(f"S.Korea, {date_match.group(0).strip()}")
+                    kept_lines2.append(f"South Korea, {date_match.group(0).strip()}")
                 else:
                     log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
-                    kept_lines2.append("S.Korea")
+                    kept_lines2.append("South Korea")
                 continue
 
         # Case 3: 한국 학원명만 있는 줄 (korea 키워드 없이) — "POLY", "TOP Edu"
@@ -795,8 +795,8 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
             if cleaned != original:
                 all_logs.extend([f"[{section_name}] {l}" for l in log])
                 if not dry:
-                    # S.Korea → 볼드 처리
-                    if "S.Korea" in cleaned:
+                    # South Korea → 볼드 처리
+                    if "South Korea" in cleaned:
                         _replace_with_bold_korea(para, cleaned)
                     else:
                         _replace_in_runs(para, cleaned)
@@ -846,57 +846,56 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
         except Exception:
             pass
 
-    # 번호 + 사진 삽입 (최상단 테이블 레이아웃)
+    # 번호 + 사진 삽입 (최상단)
     if not dry:
-        # 사진 찾기
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
         photo = photo_path or _find_photo_for_candidate(filepath)
+        body = doc.element.body
 
-        first_para = doc.paragraphs[0] if doc.paragraphs else None
-        if first_para:
-            # 1행 2열 테이블: [번호 | 사진]
-            tbl = doc.add_table(rows=1, cols=2)
-            tbl.autofit = True
-            # 테두리 없음
-            from docx.oxml.ns import qn
-            tbl_pr = tbl._element.tblPr
-            borders = tbl_pr.find(qn("w:tblBorders"))
-            if borders is not None:
-                tbl_pr.remove(borders)
+        # 1행 2열 테이블: [번호 | 사진]
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.autofit = True
+        # 테두리 없음
+        tbl_pr = tbl._element.tblPr
+        borders = tbl_pr.find(qn("w:tblBorders"))
+        if borders is not None:
+            tbl_pr.remove(borders)
 
-            # 왼쪽: 번호 (크고 굵게)
-            left_cell = tbl.cell(0, 0)
-            left_cell.text = ""
-            p_num = left_cell.paragraphs[0]
-            run_num = p_num.add_run(str(brj_number))
-            run_num.bold = True
-            run_num.font.size = Pt(28)
-            run_num.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+        # 왼쪽: 번호 (크고 굵게)
+        left_cell = tbl.cell(0, 0)
+        left_cell.text = ""
+        p_num = left_cell.paragraphs[0]
+        run_num = p_num.add_run(str(brj_number))
+        run_num.bold = True
+        run_num.font.size = Pt(28)
+        run_num.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 
-            # 오른쪽: 사진
-            right_cell = tbl.cell(0, 1)
-            right_cell.text = ""
-            p_photo = right_cell.paragraphs[0]
-            p_photo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            if photo and photo.exists():
-                run_photo = p_photo.add_run()
-                run_photo.add_picture(str(photo), height=Cm(3.5))
-                all_logs.append(f"[photo] 삽입: {photo.name}")
-            else:
-                all_logs.append("[photo] 사진 없음 (스킵)")
-
-            # 테이블을 문서 맨 앞으로 이동
-            first_para._element.addprevious(tbl._element)
+        # 오른쪽: 사진
+        right_cell = tbl.cell(0, 1)
+        right_cell.text = ""
+        p_photo = right_cell.paragraphs[0]
+        p_photo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        if photo and photo.exists():
+            run_photo = p_photo.add_run()
+            run_photo.add_picture(str(photo), height=Cm(3.5))
+            all_logs.append(f"[photo] 삽입: {photo.name}")
         else:
-            p = doc.add_paragraph()
-            run = p.add_run(str(brj_number))
-            run.bold = True
-            run.font.size = Pt(28)
+            all_logs.append("[photo] 사진 없음 (스킵)")
+
+        # body의 맨 앞 자식 앞에 삽입 (테이블/단락 무관하게 최상단)
+        first_child = body[0] if len(body) > 0 else None
+        if first_child is not None:
+            first_child.addprevious(tbl._element)
+        else:
+            body.append(tbl._element)
 
     return doc, all_logs
 
 
 def _replace_with_bold_korea(para, cleaned_text: str):
-    """S.Korea를 볼드로 처리하여 단락에 삽입"""
+    """South Korea를 볼드로 처리하여 단락에 삽입"""
     from docx.shared import Pt, RGBColor
     # 기존 runs의 서식 복사용 (첫 run의 font 정보 보존)
     base_font_size = None
@@ -905,15 +904,15 @@ def _replace_with_bold_korea(para, cleaned_text: str):
     # 기존 runs 텍스트 비우기
     for run in para.runs:
         run.text = ""
-    # S.Korea 기준으로 분할하여 새 run 추가
-    parts = cleaned_text.split("S.Korea")
+    # South Korea 기준으로 분할하여 새 run 추가
+    parts = cleaned_text.split("South Korea")
     for i, part in enumerate(parts):
         if part:
             run = para.add_run(part)
             if base_font_size:
                 run.font.size = base_font_size
         if i < len(parts) - 1:
-            kr_run = para.add_run("S.Korea")
+            kr_run = para.add_run("South Korea")
             kr_run.bold = True
             kr_run.font.size = base_font_size or Pt(11)
             kr_run.font.color.rgb = RGBColor(0, 0, 0)
@@ -1070,6 +1069,56 @@ def _build_search_patterns(candidate: dict = None):
 # ══════════════════════════════════════════════════════
 #  6. 파일 저장 + 백업 + 로그
 # ══════════════════════════════════════════════════════
+
+def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> bool:
+    """DOCX → PDF 변환 (Word COM 자동화). 성공 시 True."""
+    try:
+        import comtypes.client
+        word = comtypes.client.CreateObject("Word.Application")
+        word.Visible = False
+        doc = word.Documents.Open(str(docx_path.resolve()))
+        doc.SaveAs(str(pdf_path.resolve()), FileFormat=17)  # 17 = wdFormatPDF
+        doc.Close()
+        word.Quit()
+        return True
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"  [PDF WARN] COM 변환 실패: {e}")
+    # fallback: docx2pdf
+    try:
+        from docx2pdf import convert
+        convert(str(docx_path), str(pdf_path))
+        return True
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"  [PDF WARN] docx2pdf 실패: {e}")
+    # fallback: LibreOffice
+    try:
+        import subprocess
+        lo_paths = [
+            r"C:\Program Files\LibreOffice\program\soffice.exe",
+            r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+        ]
+        lo = next((p for p in lo_paths if Path(p).exists()), None)
+        if lo:
+            subprocess.run(
+                [lo, "--headless", "--convert-to", "pdf",
+                 "--outdir", str(pdf_path.parent), str(docx_path)],
+                capture_output=True, timeout=60,
+            )
+            # LibreOffice는 원본 이름으로 저장하므로 rename
+            lo_out = pdf_path.parent / (docx_path.stem + ".pdf")
+            if lo_out.exists() and lo_out != pdf_path:
+                lo_out.rename(pdf_path)
+            return pdf_path.exists()
+    except Exception as e:
+        print(f"  [PDF WARN] LibreOffice 실패: {e}")
+    print("  [PDF FAIL] PDF 변환 불가 — comtypes/docx2pdf/LibreOffice 모두 없음")
+    print("             pip install comtypes 또는 pip install docx2pdf 로 설치")
+    return False
+
 
 def backup_original(filepath: Path):
     """원본 → originals/ 복사"""
@@ -1367,16 +1416,28 @@ def cmd_batch(args):
             print(f"  Backup: {backup.name}")
 
             DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
-            out_name = _build_output_filename(current_number, candidate, ext)
-            out_path = DEFAULT_OUTPUT / out_name
 
             if ext == ".docx":
-                doc.save(str(out_path))
+                # DOCX → 임시 저장 → PDF 변환
+                docx_name = _build_output_filename(current_number, candidate, ".docx")
+                docx_path = DEFAULT_OUTPUT / docx_name
+                doc.save(str(docx_path))
+
+                pdf_name = _build_output_filename(current_number, candidate, ".pdf")
+                pdf_path = DEFAULT_OUTPUT / pdf_name
+                if _convert_docx_to_pdf(docx_path, pdf_path):
+                    docx_path.unlink()  # DOCX 삭제 (PDF만 유지)
+                    out_path = pdf_path
+                    print(f"  Output: {pdf_path.name} (PDF)")
+                else:
+                    out_path = docx_path
+                    print(f"  Output: {docx_path.name} (DOCX — PDF 변환 실패)")
             elif ext == ".pdf":
+                out_name = _build_output_filename(current_number, candidate, ".pdf")
+                out_path = DEFAULT_OUTPUT / out_name
                 doc.save(str(out_path), garbage=4, deflate=True)
                 doc.close()
-
-            print(f"  Output: {out_path.name}")
+                print(f"  Output: {out_path.name}")
 
             if logs:
                 log_path = save_log(filepath, current_number, logs)
@@ -1385,12 +1446,12 @@ def cmd_batch(args):
             # 처리 완료된 파일을 incoming에서 제거
             filepath.unlink()
 
-            # DB 기록: file_uploads 테이블에 처리 이력 INSERT
+            # DB 기록
             try:
                 file_size = out_path.stat().st_size if out_path.exists() else 0
                 _record_file_upload(
                     entity_id=current_number,
-                    file_type=ext.lstrip("."),
+                    file_type=out_path.suffix.lstrip("."),
                     file_url=str(out_path),
                     file_size=file_size,
                 )
