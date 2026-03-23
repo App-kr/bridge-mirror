@@ -1136,7 +1136,13 @@ export class GridEngine {
     else if (align === 'center') baseX = cellX + cellW / 2
     else baseX = cellX + PAD
 
-    // Render text — fillText ONLY, no stroke/line/rect, no maxWidth param (avoids browser scaling artifacts)
+    // Clip to cell boundary — 숫자/텍스트 옆 셀 침범 방지
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(cellX, cellY, cellW, cellH)
+    ctx.clip()
+
+    // Render text — fillText ONLY
     for (let i = 0; i < lines.length; i++) {
       const lineY = cellY + PAD + i * lineH
       if (lineY >= cellY + cellH) break
@@ -1156,6 +1162,7 @@ export class GridEngine {
       }
     }
 
+    ctx.restore()
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
   }
