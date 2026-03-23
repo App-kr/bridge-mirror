@@ -976,6 +976,12 @@ async def apply(request: Request, body: CandidateApply):
             payload["status"]     = "Active"
             payload["created_at"] = now_iso
 
+            # sheet_number 자동 할당 (MAX+1, 최소 10000)
+            cur_max = conn.execute(
+                "SELECT MAX(sheet_number) FROM candidates"
+            ).fetchone()[0] or 0
+            payload["sheet_number"] = max(int(cur_max) + 1, 10000)
+
             db_payload = _map_apply_payload(payload)
             cols = ", ".join(db_payload.keys())
             placeholders = ", ".join("?" * len(db_payload))
@@ -8413,6 +8419,28 @@ except Exception as _pay_err:
 # ── Static Files Mount 제거 ─────────────────────────────────────────────────
 # /uploads/ 직접 접근은 HMAC 서명 URL (/api/files/) 로 교체됨.
 # 비인증 직접 접근 → 403 (security_middleware.py에서 차단)
+
+
+# ── 인터뷰 리마인더 백그라운드 스레드 ─────────────────────────────────────────
+def _interview_reminder_loop():
+    """10분 간격으로 인터뷰 30분 전 리마인더 발송 (Render 서버용)."""
+    import time as _time
+    import importlib
+    _log = logging.getLogger("bridge.reminder_thread")
+    _log.info("[REMINDER] 인터뷰 리마인더 스레드 시작 (10분 주기)")
+    # tools/ 경로 보장
+    _tools = Path(__file__).resolve().parent / "tools"
+    if str(_tools.parent) not in sys.path:
+        sys.path.insert(0, str(_tools.parent))
+    while True:
+        try:
+            mod = importlib.import_module("tools.interview_reminder")
+            mod.check_and_send_reminders()
+        except Exception as e:
+            _log.warning("[REMINDER] 리마인더 체크 실패: %s", e)
+        _time.sleep(600)  # 10분
+
+threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").start()
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
