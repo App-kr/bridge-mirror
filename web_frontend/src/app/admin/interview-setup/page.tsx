@@ -192,11 +192,63 @@ function InterviewSetupInner() {
     setSearchLoading(true)
     setError(null)
     try {
-      const res = await adminFetch(`${API_URL}/api/admin/candidates?search=${encodeURIComponent(q)}&limit=20&status=active`)
-      if (!res.ok) throw new Error(`Error ${res.status}`)
-      const j = await res.json()
-      const rows = j.data?.rows || j.data || []
-      setCandidates(Array.isArray(rows) ? rows : [])
+      // candidate_id (cnd_) 검색은 profile-search, 이름 검색은 main API
+      const isCidSearch = q.trim().startsWith('cnd_') || /^\d+$/.test(q.trim())
+      if (isCidSearch) {
+        // profile-search: candidate_id, nationality, location 검색 가능
+        const res = await adminFetch(`${API_URL}/api/admin/candidates/profile-search?q=${encodeURIComponent(q)}&limit=20`)
+        if (!res.ok) throw new Error(`Error ${res.status}`)
+        const j = await res.json()
+        const rows = j.data || []
+        // profile-search는 full_name이 없음 → nationality로 대체 표시
+        const mapped = (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({
+          candidate_id: String(r.candidate_id || ''),
+          sheet_number: String(r.sheet_number || ''),
+          full_name: String(r.full_name || `#${r.sheet_number || '?'} (${r.nationality || '?'})`),
+          nationality: String(r.nationality || ''),
+          target: String(r.target || ''),
+          target_age: String(r.target_age || ''),
+          area_prefs: String(r.area_prefs || ''),
+          experience: String(r.experience || ''),
+          education_level: String(r.education_level || ''),
+          certification: String(r.certification || ''),
+          visa_type: String(r.visa_type || ''),
+          start_date: String(r.start_date || ''),
+          photo_url: String(r.photo_url || ''),
+          dob: String(r.dob || ''),
+          gender: String(r.gender || ''),
+          email: String(r.email || ''),
+          interview_time: String(r.interview_time || ''),
+        } as CandidateResult))
+        setCandidates(mapped)
+      } else {
+        // main API: full_name, email 검색 (암호화 필드)
+        const res = await adminFetch(`${API_URL}/api/admin/candidates?search=${encodeURIComponent(q)}&limit=20&status=active`)
+        if (!res.ok) throw new Error(`Error ${res.status}`)
+        const j = await res.json()
+        const rows = j.data?.candidates || []
+        // main API renames candidate_id → id
+        const mapped = (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({
+          candidate_id: String(r.candidate_id || r.id || ''),
+          sheet_number: String(r.sheet_number || ''),
+          full_name: String(r.full_name || ''),
+          nationality: String(r.nationality || ''),
+          target: String(r.target || ''),
+          target_age: String(r.target_age || ''),
+          area_prefs: String(r.area_prefs || ''),
+          experience: String(r.experience || ''),
+          education_level: String(r.education_level || ''),
+          certification: String(r.certification || ''),
+          visa_type: String(r.visa_type || ''),
+          start_date: String(r.start_date || ''),
+          photo_url: String(r.photo_url || ''),
+          dob: String(r.dob || ''),
+          gender: String(r.gender || ''),
+          email: String(r.email || ''),
+          interview_time: String(r.interview_time || ''),
+        } as CandidateResult))
+        setCandidates(mapped)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed')
     } finally {
@@ -208,13 +260,22 @@ function InterviewSetupInner() {
     setSearchLoading(true)
     setError(null)
     try {
-      const res = await adminFetch(`${API_URL}/api/admin/candidates?search=${encodeURIComponent(cid)}&limit=5`)
-      if (!res.ok) throw new Error(`Error ${res.status}`)
+      // matching API로 직접 조회 — candidate_id 정확 매칭 + 매칭 데이터도 함께 로드
+      const res = await adminFetch(`${API_URL}/api/admin/matching/employers?candidate_id=${encodeURIComponent(cid)}`)
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.detail || `Candidate ${cid} not found`)
+      }
       const j = await res.json()
-      const rows = j.data?.rows || j.data || []
-      const found = (Array.isArray(rows) ? rows : []).find((r: CandidateResult) => r.candidate_id === cid)
-      if (found) {
-        selectCandidate(found)
+      const cand = j.data?.candidate
+      if (cand) {
+        setCandidate(cand)
+        setMatched(j.data?.matched || [])
+        setUnmatched(j.data?.unmatched || [])
+        setCandidates([])
+        setSearchQ('')
+        if (cand.interview_time) setNotes(cand.interview_time)
+        setStep(2) // 바로 Step 2 (매칭 데이터 이미 로드됨)
       } else {
         setError(`Candidate ${cid} not found`)
       }
@@ -227,13 +288,15 @@ function InterviewSetupInner() {
 
   /* ── Select Candidate → Go to Step 2 ── */
   const selectCandidate = (c: CandidateResult) => {
-    setCandidate(c)
+    // main API renames candidate_id → id, normalize it
+    const normalized = { ...c, candidate_id: c.candidate_id || (c as unknown as Record<string, string>).id || '' }
+    setCandidate(normalized)
     setStep(2)
     setCandidates([])
     setSearchQ('')
     // Pre-fill notes from candidate's interview_time preference
-    if (c.interview_time) setNotes(c.interview_time)
-    fetchMatching(c.candidate_id)
+    if (normalized.interview_time) setNotes(normalized.interview_time)
+    fetchMatching(normalized.candidate_id)
   }
 
   /* ── Matching ── */
