@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-23 (세션 7 — 백업 + MD 업데이트)
+최근 업데이트: 2026-03-23 (세션 8 — doc_processor v2.1 pipeline)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,16 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-23 세션 8 완료 (doc_processor v2.1 파이프라인)
+- feat(tools): doc_processor v2.1 (`ae31962`)
+  - PDF redaction: location→"Korea" 대체 텍스트 삽입 (기존: 흰 박스만)
+  - `batch` 명령: incoming/ 폴더 일괄 처리 + 완료 후 자동 제거
+  - `download` 명령: S3 boto3 다운로드 + 자동 처리
+  - `setup` 명령: 폴더 상태 확인
+  - `doc_run.bat`: Windows 원클릭 런처
+  - 폴더 구조: incoming/ → processed/ + originals/ + logs/
+  - E2E 테스트 통과 (PDF Korea삽입 + DOCX PII삭제 + 감사로그)
 
 ## 2026-03-23 세션 7 (백업 + 문서 정리)
 - 구조화 백업: `Q:\Claudework\bridge backup\` 생성

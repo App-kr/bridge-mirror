@@ -5,7 +5,9 @@
  * Reports threats to /api/security/report.
  */
 
-const API = ''
+import { API_URL } from '@/lib/api'
+
+const API = API_URL
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

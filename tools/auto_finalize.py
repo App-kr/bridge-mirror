@@ -57,6 +57,40 @@ def run_backup(task):
         )
         print("[백업]", "완료" if r.returncode == 0 else "실패")
 
+def run_doc_processor():
+    """incoming/ 에 파일이 있으면 doc_processor batch 자동 실행"""
+    incoming = BASE / "tools" / "processed_docs" / "incoming"
+    if not incoming.exists():
+        return
+    pending = [
+        f for f in incoming.iterdir()
+        if f.suffix.lower() in (".docx", ".pdf")
+        and not f.name.startswith("~")
+        and not f.name.startswith(".")
+    ]
+    if not pending:
+        return
+    print(f"[DocProc] incoming에 {len(pending)}개 파일 발견, batch 처리 시작...")
+    dp = BASE / "tools" / "doc_processor.py"
+    if not dp.exists():
+        print("[DocProc] doc_processor.py 없음 - skip")
+        return
+    r = subprocess.run(
+        [sys.executable, "-X", "utf8", str(dp), "batch"],
+        capture_output=True, text=True
+    )
+    if r.returncode == 0:
+        print("[DocProc] batch 완료")
+        # stdout에서 주요 결과만 출력
+        for line in r.stdout.splitlines():
+            if any(k in line for k in ("[OK]", "[DB]", "Done!", "[SKIP]", "[ERROR]")):
+                print(f"  {line.strip()}")
+    else:
+        print(f"[DocProc] batch 실패 (exit={r.returncode})")
+        if r.stderr:
+            for line in r.stderr.splitlines()[:5]:
+                print(f"  {line.strip()}")
+
 def git_commit(task):
     git(["git", "add", "-A"])
     # PAT에 workflow scope 없음 → .github/workflows/ 는 자동커밋에서 항상 제외
@@ -75,6 +109,7 @@ task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "작업완료"
 print(f"=== BRIDGE 자동마무리 - {task} ===")
 refresh_canvas()
 run_backup(task)
+run_doc_processor()
 files = [l.strip() for l in git(["git","diff","--name-only","HEAD"]).splitlines() if l.strip()]
 commit = git_commit(task)
 append_worklog(task, files, commit)

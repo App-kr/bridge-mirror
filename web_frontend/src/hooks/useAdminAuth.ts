@@ -18,7 +18,7 @@ function getStoredKey(): string {
   if (expiry && Date.now() > parseInt(expiry, 10)) {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(EXPIRY_KEY)
-    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     return ''
   }
   return key
@@ -105,7 +105,8 @@ export function useAdminAuth() {
           setAuthed(true)
           localStorage.setItem(STORAGE_KEY, key)
           localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-          document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax; Secure'
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
         } else {
           setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
         }
@@ -141,7 +142,8 @@ export function useAdminAuth() {
       setAuthed(true)
       localStorage.setItem(STORAGE_KEY, key)
       localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-      document.cookie = 'bridge_edit_mode=true; path=/; max-age=86400; SameSite=Lax; Secure'
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
 
       // 로그인 성공 시 IP 블랙리스트 자동 초기화
       fetch(`${API_URL}/api/admin/reset-blacklist`, {
@@ -161,7 +163,7 @@ export function useAdminAuth() {
     setAuthed(false)
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(EXPIRY_KEY)
-    document.cookie = 'bridge_edit_mode=; path=/; max-age=0'
+    document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
   }, [])
 
   const headers = useCallback((): Record<string, string> => {

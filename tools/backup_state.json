@@ -935,8 +935,72 @@
       "git": "7cf910e",
       "files": 2026,
       "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095156__parallel_work_session9",
+      "task": "parallel_work_session9",
+      "ts": "2026.03.23 09:52:06",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095247__보안점검4건",
+      "task": "보안점검4건",
+      "ts": "2026.03.23 09:52:52",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095259__보안점검4건",
+      "task": "보안점검4건",
+      "ts": "2026.03.23 09:53:04",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095303__auto_finalize_doc_processor_연동",
+      "task": "auto_finalize_doc_processor_연동",
+      "ts": "2026.03.23 09:53:09",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095317__SEO메타데이터+코드정리",
+      "task": "SEO메타데이터+코드정리",
+      "ts": "2026.03.23 09:53:22",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095316__auto_finalize_doc_processor_연동",
+      "task": "auto_finalize_doc_processor_연동",
+      "ts": "2026.03.23 09:53:22",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095329__SEO메타데이터+코드정리",
+      "task": "SEO메타데이터+코드정리",
+      "ts": "2026.03.23 09:53:33",
+      "git": "d6f80fc",
+      "files": 2029,
+      "db_hash": "689a47431ca3"
+    },
+    {
+      "dir": "20260323_095613__inbox-stats-api",
+      "task": "inbox-stats-api",
+      "ts": "2026.03.23 09:56:17",
+      "git": "43f97dd",
+      "files": 2035,
+      "db_hash": "f15c7ba31972"
     }
   ],
-  "last_backup": "2026.03.23 09:31:12",
-  "total_count": 117
+  "last_backup": "2026.03.23 09:56:17",
+  "total_count": 125
 }

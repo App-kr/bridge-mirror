@@ -92,7 +92,12 @@
 - `web_frontend/src/components/admin/SplitEditor.tsx` — dangerouslySetInnerHTML 사용 확인
   → DOMPurify.sanitize() 통과 후 사용 (line 57-80) — PASS
 - `web_frontend/src/hooks/useAdminAuth.ts` — 하드코딩 비밀번호 없음, API 경유 로그인
+  → 2026-03-23: Cookie Secure+SameSite=Strict 플래그 추가 완료 (localhost 제외)
 - `web_frontend/src/lib/api.ts` — NEXT_PUBLIC_API_URL만 사용, 하드코딩 시크릿 없음
+- `web_frontend/src/utils/securityGuard.ts` — XSS/SQLi/Bot 탐지 + /api/security/report 리포트
+  → 2026-03-23: API URL이 빈 문자열이던 버그 수정 (API_URL import로 변경)
+- `web_frontend/next.config.ts` — CSP 설정 확인 (unsafe-eval 없음, unsafe-inline만 존재 — Next.js 필수)
+- `web_frontend/src/app/layout.tsx` — og:image 메타데이터에 /og-image.png 참조 (파일 미존재 상태)
 - `web_frontend/.env.production` — NEXT_PUBLIC_API_URL만 포함, 민감 시크릿 없음
 - `web_frontend/src/app/jobs/page.tsx` — PublicJob 타입만 사용
 - `web_frontend/src/app/jobs/[id]/page.tsx` — 존재하지 않음 (modal 방식 사용)

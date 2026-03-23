@@ -1,5 +1,5 @@
 """
-BRIDGE Document Processor v2.1
+BRIDGE Document Processor v2.2
 후보자 이력서/커버레터에서 PII 삭제 + 강사번호 입력
 
 사용법:
@@ -8,11 +8,13 @@ BRIDGE Document Processor v2.1
   python doc_processor.py process <파일> --number 3057       # 단일 파일 처리
   python doc_processor.py download 3057                      # S3 다운로드+처리
   python doc_processor.py lookup "이름 또는 이메일"            # 후보자 검색
+  python doc_processor.py init-db                            # file_uploads 테이블 생성
 
 워크플로우:
   1) incoming/ 폴더에 파일 넣기 (파일명에 강사번호 포함: 3057_resume.pdf)
   2) batch --dry  → 미리보기 확인
   3) batch        → 처리 실행 (processed/ 에 결과, originals/ 에 원본 백업)
+  4) 처리 완료 파일은 file_uploads 테이블에 자동 기록 (이력 추적)
 
 지원 형식: .docx (서식 보존), .pdf (인-플레이스 redaction)
 Python: "D:/Phtyon 3/python.exe"
@@ -114,6 +116,43 @@ def get_candidate(number: int):
         "kakaotalk": _try_decrypt(row[5]),
         "current_location": _try_decrypt(row[6]),
     }
+
+
+# ══════════════════════════════════════════════════════
+#  1b. file_uploads 테이블 (로컬 DB 이력 추적)
+# ══════════════════════════════════════════════════════
+
+_FILE_UPLOADS_DDL = """
+CREATE TABLE IF NOT EXISTS file_uploads (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type   TEXT    NOT NULL DEFAULT 'candidate',
+    entity_id     INTEGER,
+    file_type     TEXT,
+    file_url      TEXT,
+    file_size     INTEGER DEFAULT 0,
+    is_deleted    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+)
+"""
+
+
+def _ensure_file_uploads_table():
+    """file_uploads 테이블이 없으면 생성 (IF NOT EXISTS)."""
+    db = _get_db()
+    db.execute(_FILE_UPLOADS_DDL)
+    db.commit()
+
+
+def _record_file_upload(entity_id: int, file_type: str, file_url: str, file_size: int = 0):
+    """처리 완료 파일을 file_uploads 테이블에 INSERT."""
+    _ensure_file_uploads_table()
+    db = _get_db()
+    db.execute(
+        "INSERT INTO file_uploads (entity_type, entity_id, file_type, file_url, file_size) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("candidate", entity_id, file_type, file_url, file_size),
+    )
+    db.commit()
 
 
 # ══════════════════════════════════════════════════════
@@ -857,7 +896,7 @@ def cmd_batch(args):
 
     mode = "DRY RUN" if dry else "BATCH"
     print(f"\n{'=' * 60}")
-    print(f"  BRIDGE Document Processor v2.1  [{mode}]")
+    print(f"  BRIDGE Document Processor v2.2  [{mode}]")
     print(f"  Incoming: {incoming}")
     print(f"  Output:   {DEFAULT_OUTPUT}")
     print(f"  Files:    {len(files)}")
@@ -937,6 +976,20 @@ def cmd_batch(args):
 
             # 처리 완료된 파일을 incoming에서 제거
             filepath.unlink()
+
+            # DB 기록: file_uploads 테이블에 처리 이력 INSERT
+            try:
+                file_size = out_path.stat().st_size if out_path.exists() else 0
+                _record_file_upload(
+                    entity_id=current_number,
+                    file_type=ext.lstrip("."),
+                    file_url=str(out_path),
+                    file_size=file_size,
+                )
+                print(f"  [DB] file_uploads 기록 완료")
+            except Exception as db_err:
+                print(f"  [DB WARN] 기록 실패 (무시): {db_err}")
+
             print(f"  [OK] (incoming에서 제거됨)\n")
 
         except Exception as e:
@@ -1056,7 +1109,7 @@ def cmd_setup(_args=None):
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n  BRIDGE Document Processor v2.1 — 폴더 구조")
+    print(f"\n  BRIDGE Document Processor v2.2 — 폴더 구조")
     print(f"  {'─' * 50}")
     print(f"  incoming/   : {INCOMING_DIR}")
     print(f"  processed/  : {DEFAULT_OUTPUT}")
@@ -1079,9 +1132,19 @@ def cmd_setup(_args=None):
     print()
 
 
+def cmd_init_db(_args=None):
+    """init-db 명령: file_uploads 테이블 생성"""
+    _ensure_file_uploads_table()
+    db = _get_db()
+    count = db.execute("SELECT COUNT(*) FROM file_uploads").fetchone()[0]
+    print(f"\n  [init-db] file_uploads 테이블 준비 완료")
+    print(f"  DB: {DB_PATH}")
+    print(f"  기존 레코드: {count}건\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="BRIDGE Document Processor v2.1 — PII 삭제 + 강사번호"
+        description="BRIDGE Document Processor v2.2 — PII 삭제 + 강사번호"
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -1103,6 +1166,7 @@ def main():
     p_look.add_argument("query", help="이름 또는 이메일")
 
     sub.add_parser("setup", help="폴더 구조 생성 + 상태 확인")
+    sub.add_parser("init-db", help="file_uploads 테이블 생성 (IF NOT EXISTS)")
 
     args = parser.parse_args()
     if args.command == "process":
@@ -1115,6 +1179,8 @@ def main():
         cmd_lookup(args)
     elif args.command == "setup":
         cmd_setup(args)
+    elif args.command == "init-db":
+        cmd_init_db(args)
     else:
         parser.print_help()
 
