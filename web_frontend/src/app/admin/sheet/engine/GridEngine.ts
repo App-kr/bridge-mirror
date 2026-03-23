@@ -1043,8 +1043,6 @@ export class GridEngine {
     if (rawText === null || rawText === undefined || rawText === '') return
     let text = String(rawText)
     if (!text.trim()) return
-    // singleLine: 줄바꿈 강제 제거 — 국적/현위치 등 짧은 컬럼 세로 렌더링 방지
-    if (styleOpts.singleLine) text = text.replace(/[\r\n]+/g, ' ').trim()
 
     const { ctx } = this
 
@@ -1064,7 +1062,10 @@ export class GridEngine {
     const maxW = Math.max(1, cellW - PAD * 2)
     const maxH = Math.max(1, cellH - PAD * 2)
     const lineH = Math.ceil(fs * 1.5)
-    const maxLines = styleOpts.singleLine ? 1 : Math.max(1, Math.floor(maxH / lineH))
+    // 좁은 컬럼(CJK 4자 미만)은 무조건 singleLine — 세로 렌더링 방지
+    const forceSingle = styleOpts.singleLine || maxW < fs * 4
+    if (forceSingle) text = text.replace(/[\r\n]+/g, ' ').trim()
+    const maxLines = forceSingle ? 1 : Math.max(1, Math.floor(maxH / lineH))
 
     // Line-building: handles CJK (no spaces) + English (word-level) + mixed
     const buildLines = (t: string): string[] => {
@@ -1107,8 +1108,8 @@ export class GridEngine {
 
     let lines: string[]
 
-    if (styleOpts.singleLine) {
-      // singleLine: 문자 단위 직접 잘림 + 말줄임 (word-wrap 건너뜀)
+    if (forceSingle) {
+      // singleLine 또는 좁은 컬럼: 문자 단위 직접 잘림 + 말줄임 (word-wrap 건너뜀)
       if (ctx.measureText(text).width <= maxW) {
         lines = [text]
       } else {
