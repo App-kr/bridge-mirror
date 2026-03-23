@@ -17,43 +17,58 @@ from email.mime.multipart import MIMEMultipart
 
 log = logging.getLogger("bridge.email")
 
-# SMTP 설정 — api_server.py와 동일 우선순위 체인
-_SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-_SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-_SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMAIL_USER", "")))
-_SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
+# SMTP 설정 — api_server.py SMTP_CONFIG와 동일 구조
+_SMTP_CONFIG = {
+    "gmail": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "user": os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMAIL_USER", ""))),
+        "password": os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", ""))),
+    },
+    "naver": {
+        "host": "smtp.naver.com",
+        "port": 587,
+        "user": os.getenv("NAVER_SMTP_USER", ""),
+        "password": os.getenv("NAVER_SMTP_PASS", ""),
+    },
+}
+
+# 하위 호환: 기존 코드가 참조하는 변수
+_SMTP_USER = _SMTP_CONFIG["gmail"]["user"]
+_SMTP_PASS = _SMTP_CONFIG["gmail"]["password"]
 
 
-def _send_email(to: str, subject: str, html_body: str) -> bool:
-    """Gmail SMTP로 이메일 발송. 실패 시 False 반환 (예외 미전파).
+def _send_email(to: str, subject: str, html_body: str, provider: str = "gmail") -> bool:
+    """SMTP 이메일 발송. provider='gmail'|'naver'. 실패 시 False (예외 미전파).
     SECURITY: CC/BCC 없음, Reply-To bridgejobkr@gmail.com 고정."""
-    if not _SMTP_USER or not _SMTP_PASS:
-        log.warning("SMTP 미설정 — 이메일 발송 스킵 (to=%s)", to)
+    cfg = _SMTP_CONFIG.get(provider, _SMTP_CONFIG["gmail"])
+    if not cfg["user"] or not cfg["password"]:
+        log.warning("SMTP(%s) 미설정 — 이메일 발송 스킵 (to=%s)", provider, to)
         return False
 
     try:
         msg = MIMEMultipart("alternative")
         # SECURITY: From/Reply-To 고정
-        msg["From"] = f"BRIDGE <{_SMTP_USER}>"
+        msg["From"] = f"BRIDGE <{cfg['user']}>"
         msg["To"] = to
         msg["Subject"] = subject
         msg["Reply-To"] = "bridgejobkr@gmail.com"
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         ctx = ssl.create_default_context()
-        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
+        with smtplib.SMTP(cfg["host"], cfg["port"]) as server:
             server.ehlo()
             server.starttls(context=ctx)
             server.ehlo()
-            server.login(_SMTP_USER, _SMTP_PASS)
+            server.login(cfg["user"], cfg["password"])
             # SECURITY: 수신자 1명만 전달
-            server.sendmail(_SMTP_USER, [to], msg.as_string())
+            server.sendmail(cfg["user"], [to], msg.as_string())
 
-        log.info("이메일 발송 성공: %s → %s", subject, to)
+        log.info("이메일 발송 성공(%s): %s → %s", provider, subject, to)
         return True
 
     except Exception as e:
-        log.error("이메일 발송 실패 (to=%s): %s", to, e, exc_info=True)
+        log.error("이메일 발송 실패(%s, to=%s): %s", provider, to, e, exc_info=True)
         return False
 
 
@@ -288,7 +303,7 @@ def send_employer_confirmation(to_email: str, school_name: str, contact_name: st
     </body>
     </html>
     """
-    return _send_email(to_email, subject, html)
+    return _send_email(to_email, subject, html, provider="naver")
 
 
 # ── 새 채용의뢰 접수 → 관리자 알림 ──────────────────────────────────────────
