@@ -1,5 +1,15 @@
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react";
-import DOMPurify from "dompurify";
+
+// DOMPurify: SSR에서 window 없으면 크래시 → lazy require로 클라이언트 전용 로드
+let _DOMPurify = null;
+function sanitizeHtml(html) {
+  if (typeof window === 'undefined') return '';
+  if (!_DOMPurify) {
+    const mod = require('dompurify');
+    _DOMPurify = mod.default || mod;
+  }
+  return _DOMPurify.sanitize(html);
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -653,7 +663,7 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
                   <p>From: {sender}</p><p>To: {allRecipientEmails[0]?.email||"—"} <span style={{color:"#16a34a",fontSize:"0.7rem"}}>(개별)</span></p>
                   <p style={{marginTop:6,fontWeight:700,color:"#111",fontSize:"0.9rem"}}>{subject.replace(/\{\{name\}\}/g,initRecipients[0]?.name||"")}</p>
                 </div>
-                <div style={{padding:"14px",fontSize:"0.88rem",lineHeight:1.7}} dangerouslySetInnerHTML={{__html:DOMPurify.sanitize(previewHtml)}}/>
+                <div style={{padding:"14px",fontSize:"0.88rem",lineHeight:1.7}} dangerouslySetInnerHTML={{__html:sanitizeHtml(previewHtml)}}/>
                 {attachments.length>0&&<div style={{padding:"8px 14px",borderTop:"1px solid #eee",fontSize:"0.75rem",color:"#888"}}>첨부: {attachments.map(a=>a.name).join(", ")}</div>}
               </div>
             </div>
