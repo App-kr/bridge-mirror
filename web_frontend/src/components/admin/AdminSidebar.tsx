@@ -92,7 +92,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/kakao-setup', label: '카카오 로그인 설정', icon: <KeyRound size={ICON_SIZE} /> },
       { href: '/admin/partners', label: '파트너', icon: <Handshake size={ICON_SIZE} /> },
       { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
-      { href: '/admin/inquiries', label: '문의', icon: <MessageSquare size={ICON_SIZE} /> },
+      { href: '/admin/inquiries', label: '에이전시', icon: <MessageSquare size={ICON_SIZE} /> },
       { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
     ],
   },
@@ -148,8 +148,8 @@ export default function AdminSidebar() {
         // 최초 로드(0→N)에도 알림 (prev===0 && newCount>0)
         if (notifPermRef.current === 'granted') {
           try {
-            new Notification('BRIDGE 새 문의', {
-              body: `새로운 문의 ${added}건이 접수되었습니다`,
+            new Notification('BRIDGE 새 에이전시', {
+              body: `새로운 에이전시 ${added}건이 접수되었습니다`,
               icon: '/icon.svg',
               tag: 'bridge-inquiry',
             })

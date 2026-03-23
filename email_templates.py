@@ -40,7 +40,16 @@ _SMTP_PASS = _SMTP_CONFIG["gmail"]["password"]
 
 def _send_email(to: str, subject: str, html_body: str, provider: str = "gmail") -> bool:
     """SMTP 이메일 발송. provider='gmail'|'naver'. 실패 시 False (예외 미전파).
-    SECURITY: CC/BCC 없음, Reply-To bridgejobkr@gmail.com 고정."""
+    SECURITY: CC/BCC 없음, Reply-To bridgejobkr@gmail.com 고정, 블랙리스트 차단."""
+    # SECURITY: 블랙리스트 체크 (api_server 의존)
+    try:
+        from api_server import _is_email_blacklisted
+        if _is_email_blacklisted(to):
+            log.warning("블랙리스트 차단 (to=%s) — 발송 거부", to)
+            return False
+    except ImportError:
+        pass  # 독립 실행 시 블랙리스트 체크 불가 — 통과
+
     cfg = _SMTP_CONFIG.get(provider, _SMTP_CONFIG["gmail"])
     if not cfg["user"] or not cfg["password"]:
         log.warning("SMTP(%s) 미설정 — 이메일 발송 스킵 (to=%s)", provider, to)

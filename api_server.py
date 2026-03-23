@@ -2407,16 +2407,81 @@ def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bri
         return False
 
 
+# ── 이메일 블랙리스트 시스템 ─────────────────────────────────────────────────
+# 블랙리스트 이메일로는 후보자 정보를 절대 발송하지 않음
+# 이메일은 해싱(SHA-256)으로 저장하여 DB 유출 시에도 원문 노출 차단
+
+import hashlib
+
+_BLACKLIST_CACHE: set[str] | None = None
+_BLACKLIST_CACHE_TS: float = 0
+
+
+def _email_hash(email: str) -> str:
+    """이메일 → SHA-256 해시 (소문자 정규화)."""
+    return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+
+
+def _ensure_email_blacklist_table():
+    """email_blacklist 테이블 자동 생성."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_blacklist (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_hash  TEXT NOT NULL UNIQUE,
+                label       TEXT DEFAULT '',
+                reason      TEXT DEFAULT '',
+                added_at    TEXT DEFAULT (datetime('now')),
+                added_by    TEXT DEFAULT 'admin'
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _load_blacklist_hashes() -> set[str]:
+    """블랙리스트 해시 캐시 로드 (60초 TTL)."""
+    global _BLACKLIST_CACHE, _BLACKLIST_CACHE_TS
+    now = time.time()
+    if _BLACKLIST_CACHE is not None and (now - _BLACKLIST_CACHE_TS) < 60:
+        return _BLACKLIST_CACHE
+    _ensure_email_blacklist_table()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        rows = conn.execute("SELECT email_hash FROM email_blacklist").fetchall()
+        _BLACKLIST_CACHE = {r[0] for r in rows}
+        _BLACKLIST_CACHE_TS = now
+    finally:
+        conn.close()
+    return _BLACKLIST_CACHE
+
+
+def _is_email_blacklisted(email: str) -> bool:
+    """이메일이 블랙리스트에 있는지 확인."""
+    hashes = _load_blacklist_hashes()
+    return _email_hash(email) in hashes
+
+
 def _secure_send_email(to_email: str, subject: str, html_body: str,
                        skip_pii_scan: bool = False) -> tuple[bool, str]:
     """보안 규칙 적용 이메일 발송. (성공여부, 메시지) 반환.
 
     Security rules applied:
+    0. 블랙리스트 차단 — 등록된 이메일 발송 불가
     1. 개별 발송 (CC/BCC 없음) — _smtp_send에서 강제
     2. PII 스캔 — 본문에 개인정보 감지 시 차단
     3. Rate limit — 3초 간격, 10/분, 200/일
     4. Reply-To 격리 — bridgejobkr@gmail.com
     """
+    # SECURITY: 블랙리스트 차단
+    if _is_email_blacklisted(to_email):
+        _log_email.warning("블랙리스트 차단 (to=%s)", to_email)
+        return False, "블랙리스트 등록 이메일 — 발송 차단됨"
+
     # SECURITY: PII 스캔
     if not skip_pii_scan:
         violations = _pii_scan_body(html_body)
@@ -7497,6 +7562,14 @@ async def _handle_mail_send(request: Request):
     if not subject:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
 
+    # SECURITY: 블랙리스트 필터링 — 차단된 이메일 자동 제거
+    blocked = [e for e in recipients if _is_email_blacklisted(e)]
+    if blocked:
+        logging.getLogger("bridge.mail").warning("블랙리스트 차단 %d건: %s", len(blocked), blocked[:3])
+        recipients = [e for e in recipients if not _is_email_blacklisted(e)]
+        if not recipients:
+            raise HTTPException(status_code=403, detail="모든 수신자가 블랙리스트에 등록되어 발송할 수 없습니다.")
+
     smtp_key = "naver" if "naver" in sender_label.lower() else "gmail"
     cfg = SMTP_CONFIG[smtp_key]
 
@@ -7592,6 +7665,87 @@ async def send_mail(request: Request):
 @app.post("/api/admin/mail/send-bulk", tags=["admin"])
 async def send_mail_bulk(request: Request):
     return await _handle_mail_send(request)
+
+
+# ─── 이메일 블랙리스트 관리 API ──────────────────────────────────────────────
+
+@app.get("/api/admin/email-blacklist", tags=["admin"])
+async def admin_list_blacklist(request: Request):
+    """블랙리스트 목록 (해시+라벨만 반환 — 원문 이메일 미포함)."""
+    _check_admin(request)
+    _ensure_email_blacklist_table()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        rows = conn.execute(
+            "SELECT id, label, reason, added_at FROM email_blacklist ORDER BY id"
+        ).fetchall()
+        data = [{"id": r[0], "label": r[1], "reason": r[2], "added_at": r[3]} for r in rows]
+    finally:
+        conn.close()
+    return ok(data=data)
+
+
+@app.post("/api/admin/email-blacklist", tags=["admin"])
+async def admin_add_blacklist(request: Request, body: dict):
+    """블랙리스트에 이메일 추가 (이메일은 SHA-256 해시로 저장)."""
+    _check_admin(request)
+    emails = body.get("emails", [])
+    label = body.get("label", "")
+    reason = body.get("reason", "agency")
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(",") if e.strip()]
+    if not emails:
+        raise HTTPException(status_code=400, detail="이메일을 입력하세요.")
+    _ensure_email_blacklist_table()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    added = 0
+    try:
+        for email in emails:
+            h = _email_hash(email)
+            try:
+                conn.execute(
+                    "INSERT INTO email_blacklist (email_hash, label, reason) VALUES (?, ?, ?)",
+                    (h, label or email.split("@")[0][:20], reason),
+                )
+                added += 1
+            except sqlite3.IntegrityError:
+                pass  # 이미 등록됨
+        conn.commit()
+    finally:
+        conn.close()
+    # 캐시 무효화
+    global _BLACKLIST_CACHE
+    _BLACKLIST_CACHE = None
+    return ok(message=f"{added}건 블랙리스트 등록 완료", data={"added": added, "total_input": len(emails)})
+
+
+@app.delete("/api/admin/email-blacklist/{bl_id}", tags=["admin"])
+async def admin_remove_blacklist(bl_id: int, request: Request):
+    """블랙리스트 항목 삭제."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("DELETE FROM email_blacklist WHERE id = ?", (bl_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    global _BLACKLIST_CACHE
+    _BLACKLIST_CACHE = None
+    return ok(message=f"블랙리스트 #{bl_id} 삭제 완료")
+
+
+@app.post("/api/admin/email-blacklist/check", tags=["admin"])
+async def admin_check_blacklist(request: Request, body: dict):
+    """이메일이 블랙리스트에 있는지 확인."""
+    _check_admin(request)
+    email = body.get("email", "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="이메일을 입력하세요.")
+    blocked = _is_email_blacklisted(email)
+    return ok(data={"email": email, "blocked": blocked})
 
 
 # ─── 엔드포인트 3: 템플릿 목록 ───────────────────────────────────────────────

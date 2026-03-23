@@ -209,7 +209,7 @@ export default function InquiriesPage() {
       {/* 헤더 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">구인자 리스트 (채용의뢰)</h1>
+          <h1 className="text-lg font-bold text-gray-900">에이전시 관리</h1>
           <p className="text-xs text-gray-500">
             {loading ? '로딩 중...' : `총 ${total.toLocaleString()}건`}
             {searchQuery && ` (검색: "${searchQuery}")`}
