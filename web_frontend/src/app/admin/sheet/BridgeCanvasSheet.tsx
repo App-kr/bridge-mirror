@@ -1983,9 +1983,14 @@ export default function BridgeCanvasSheet() {
           if (pool[i] === ivMeetLink) setIvMeetLink(np[0])
         }
         const addLink = () => {
-          const link = ivNewLink.trim()
-          if (!link || !link.startsWith('http')) return
-          const np = [...pool, link]
+          const raw = ivNewLink.trim()
+          if (!raw) return
+          // 여러 줄 또는 공백으로 구분된 링크도 한번에 추가
+          const links = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.startsWith('http') && s.includes('meet.google.com/'))
+          if (!links.length) return
+          const unique = links.filter(l => !pool.includes(l))
+          if (!unique.length) { setIvNewLink(''); return }
+          const np = [...pool, ...unique]
           setIvMeetPool(np); localStorage.setItem(MEET_POOL_KEY, JSON.stringify(np))
           setIvNewLink('')
         }
@@ -2203,14 +2208,16 @@ export default function BridgeCanvasSheet() {
                     </div>
 
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <input value={ivNewLink} onChange={e => setIvNewLink(e.target.value)} placeholder="https://meet.google.com/..."
-                        style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12, color: '#000', boxSizing: 'border-box', fontFamily: F }}
-                        onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
+                      <textarea value={ivNewLink} onChange={e => setIvNewLink(e.target.value)}
+                        placeholder="https://meet.google.com/xxx-yyyy-zzz&#10;여러 링크를 한번에 붙여넣기 가능"
+                        rows={ivNewLink.includes('\n') ? 3 : 1}
+                        style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12, color: '#000', boxSizing: 'border-box', fontFamily: F, resize: 'vertical', lineHeight: 1.6 }}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
                       <button onClick={addLink}
-                        style={{ padding: '8px 14px', background: '#000', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>추가</button>
+                        style={{ padding: '8px 14px', background: '#000', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F, alignSelf: 'flex-end' }}>추가</button>
                     </div>
-                    <div style={{ fontSize: 11, color: '#999' }}>
-                      <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 500 }}>meet.google.com/new</a> 에서 방 생성 → 링크 복사 → 여기에 추가
+                    <div style={{ fontSize: 11, color: '#999', lineHeight: 1.6 }}>
+                      <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 500 }}>meet.google.com/new</a> 에서 방 생성 → 링크 복사 → 여기에 추가 (여러 개 동시 가능)
                     </div>
                   </div>
                 </div>

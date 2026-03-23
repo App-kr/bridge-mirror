@@ -740,10 +740,12 @@ function MeetSettingsModal({
   const [newLink, setNewLink] = useState('')
 
   const addLink = () => {
-    const url = newLink.trim()
-    if (!url || !url.includes('meet.google.com/')) return
-    if (links.includes(url)) return
-    setLinks([...links, url])
+    const raw = newLink.trim()
+    if (!raw) return
+    const urls = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.includes('meet.google.com/'))
+    const unique = urls.filter(u => !links.includes(u))
+    if (!unique.length) { setNewLink(''); return }
+    setLinks([...links, ...unique])
     setNewLink('')
   }
 
@@ -786,9 +788,10 @@ function MeetSettingsModal({
 
           {/* Add new */}
           <div className="flex gap-2 mt-2">
-            <input className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://meet.google.com/xxx-xxxx-xxx"
+            <textarea className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" placeholder={"https://meet.google.com/xxx-xxxx-xxx\n여러 링크를 한번에 붙여넣기 가능"}
+              rows={newLink.includes('\n') ? 3 : 1}
               value={newLink} onChange={e => setNewLink(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addLink() }} />
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
             <button type="button" onClick={addLink}
               className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 shrink-0">
               + 추가
