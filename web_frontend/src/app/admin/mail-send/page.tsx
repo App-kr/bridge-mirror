@@ -118,7 +118,6 @@ export default function MailSendPage() {
     const f = loadSaved(FOOTER_KEY, BODY_FOOTER)
     return `${h}\n\n${f}`
   })
-  const [selectedTemplate, setSelectedTemplate] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<SendResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -134,7 +133,6 @@ export default function MailSendPage() {
   const [bodySaved, setBodySaved] = useState(false)
 
   // 템플릿 관리 패널
-  const [showTplPanel, setShowTplPanel] = useState(false)
   const [tplTab, setTplTab] = useState<'list'|'edit'|'new'>('list')
   const [editTpl, setEditTpl] = useState<Template|null>(null)
   const [editTplSubject, setEditTplSubject] = useState('')
@@ -191,7 +189,6 @@ export default function MailSendPage() {
 
   // Apply template: insert between header and footer
   const applyTemplate = (key: string) => {
-    setSelectedTemplate(key)
     setShowTemplateMenu(false)
     const t = templates.find(tp => tp.template_key === key)
     if (t) {
