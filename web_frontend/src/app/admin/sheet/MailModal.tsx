@@ -15,6 +15,7 @@ interface MailModalProps {
 }
 
 function loadSavedTemplates(): MailTemplate[] {
+  if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(LS_KEY)
     return raw ? JSON.parse(raw) : []
@@ -22,6 +23,7 @@ function loadSavedTemplates(): MailTemplate[] {
 }
 
 function persistTemplates(all: MailTemplate[]) {
+  if (typeof window === 'undefined') return
   const toSave = all.filter(t => {
     const def = MAIL_TEMPLATES.find(d => d.key === t.key)
     if (!def) return true

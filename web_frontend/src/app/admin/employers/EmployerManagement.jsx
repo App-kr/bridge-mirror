@@ -444,7 +444,7 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
   const[activeEditor,setActiveEditor]=useState(1);
   const editorRef=useRef(null);
   const editorRef2=useRef(null);
-  const[pos,setPos]=useState({x:window.innerWidth/2-625,y:window.innerHeight/2-490});
+  const[pos,setPos]=useState(()=>({x:(typeof window!=='undefined'?window.innerWidth:1280)/2-625,y:(typeof window!=='undefined'?window.innerHeight:800)/2-490}));
   const[dragging,setDragging]=useState(false);
   const dragStart=useRef(null);
   const[sendResult,setSendResult]=useState(null); // {ok,fail}

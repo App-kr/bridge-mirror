@@ -38,6 +38,7 @@ const DEFAULT_MEET_POOL = [
   'https://meet.google.com/kmt-ydhj-fmf',
 ]
 function loadMeetPool(): string[] {
+  if (typeof window === 'undefined') return DEFAULT_MEET_POOL
   try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
   return DEFAULT_MEET_POOL
 }
@@ -47,10 +48,11 @@ function pickRandomMeet(): string { const p = loadMeetPool(); return p[Math.floo
 const IV_PREFS_KEY = 'bridge_iv_prefs'
 interface IvPrefs { time: string; duration: number; autoSend: boolean }
 function loadIvPrefs(): IvPrefs {
+  if (typeof window === 'undefined') return { time: '14:00', duration: 20, autoSend: true }
   try { const s = localStorage.getItem(IV_PREFS_KEY); if (s) return JSON.parse(s) } catch { /* */ }
   return { time: '14:00', duration: 20, autoSend: true }
 }
-function saveIvPrefs(p: IvPrefs) { localStorage.setItem(IV_PREFS_KEY, JSON.stringify(p)) }
+function saveIvPrefs(p: IvPrefs) { if (typeof window !== 'undefined') localStorage.setItem(IV_PREFS_KEY, JSON.stringify(p)) }
 
 /* ── 집중관리 탭 필터 — 진행중/계약중 강사 ── */
 const FOCUS_STAGES = new Set(['interview', 'proposal', 'signed', 'guide_sent', 'guide_done', 'caution'])
