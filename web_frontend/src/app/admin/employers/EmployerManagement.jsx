@@ -1,14 +1,24 @@
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react";
 
-// DOMPurify: SSR에서 window 없으면 크래시 → lazy require로 클라이언트 전용 로드
+// DOMPurify: SSR에서 window 없으면 크래시 → lazy require + try/catch
 let _DOMPurify = null;
 function sanitizeHtml(html) {
   if (typeof window === 'undefined') return '';
   if (!_DOMPurify) {
-    const mod = require('dompurify');
-    _DOMPurify = mod.default || mod;
+    try {
+      const mod = require('dompurify');
+      _DOMPurify = mod.default || mod;
+    } catch (e) {
+      console.warn('[employers] DOMPurify load failed, using raw html:', e);
+      return html || '';
+    }
   }
-  return _DOMPurify.sanitize(html);
+  try {
+    return _DOMPurify.sanitize(html);
+  } catch (e) {
+    console.warn('[employers] DOMPurify.sanitize failed:', e);
+    return html || '';
+  }
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -169,6 +179,7 @@ const _STATUS_MAP = { open:"active", closed:"paused", hot:"new", filled:"paused"
 
 // ─── /api/admin/jobs/v2 raw row → 프론트엔드 포맷 변환 ──
 function mapJobsV2(r) {
+  if (!r || typeof r !== 'object') return { jNumber: '', region: '', city: '', name: '', email: '', emails: [], phone: '', contact: '', kakao: '', teachingAge: '', salary: '', status: 'active', blacklist: false, active: true, isNew: false, confirmed: true, tags: [], memo: '', rawText: '' };
   // jNumber
   const jcode = r.job_code || "";
   const jnum = jcode.replace("Job.","").replace("Job","").trim() || r.brj_id || String(r.id || "");
@@ -1380,20 +1391,22 @@ export default function EmployerManagement(){
   const sentinelDocRef=useRef(null);
 
   useEffect(()=>{
-    const adminKey=localStorage.getItem("bridge_admin_key")||"";
-    const hdrs={"Content-Type":"application/json"};
-    if(adminKey)hdrs["x-admin-key"]=adminKey;
+    let cancelled=false;
     (async()=>{
       try{
+        const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+        const hdrs={"Content-Type":"application/json"};
+        if(adminKey)hdrs["x-admin-key"]=adminKey;
         const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const body=await res.json();
-        const jobs=body?.data?.jobs||[];
+        const jobs=Array.isArray(body?.data?.jobs)?body.data.jobs:[];
         console.log(`[employers] loaded via /api/admin/jobs/v2: ${jobs.length} jobs`);
-        setData(jobs.map(mapJobsV2));
+        if(!cancelled)setData(jobs.map(mapJobsV2));
       }catch(e){console.error("[employers] load failed:",e);}
-      finally{setLoading(false);}
+      finally{if(!cancelled)setLoading(false);}
     })();
+    return()=>{cancelled=true;};
   },[]);
   const[tab,setTab]=useState("active");
   const[mode,setMode]=useState("doc");
