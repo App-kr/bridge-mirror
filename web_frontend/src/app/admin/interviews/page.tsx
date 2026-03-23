@@ -31,14 +31,7 @@ function saveMeetPool(pool: string[]) {
   localStorage.setItem(MEET_POOL_KEY, JSON.stringify(pool))
 }
 
-/** 3글자-4글자-3글자 랜덤 코드 */
-function _rndCode(): string {
-  const c = 'abcdefghijklmnopqrstuvwxyz'
-  const pick = (n: number) => Array.from({ length: n }, () => c[Math.floor(Math.random() * 26)]).join('')
-  return `${pick(3)}-${pick(4)}-${pick(3)}`
-}
-
-/** 예정된 인터뷰와 겹치지 않는 Meet 링크를 랜덤 배정, 풀이 부족하면 Jitsi 자동 생성 */
+/** 예정된 인터뷰와 겹치지 않는 Meet 링크를 랜덤 배정 */
 function pickAvailableMeet(pool: string[], interviews: Interview[], date: string): string {
   // 같은 날 scheduled 인터뷰에서 사용 중인 링크 수집
   const usedOnDate = new Set(
@@ -49,8 +42,8 @@ function pickAvailableMeet(pool: string[], interviews: Interview[], date: string
   // 사용 안 된 링크 우선
   const available = pool.filter(link => !usedOnDate.has(link))
   if (available.length > 0) return available[Math.floor(Math.random() * available.length)]
-  // 모두 사용 중이면 Jitsi 자동 생성 (항상 열림, 권한 불필요)
-  return `https://meet.jit.si/bridge-iv-${_rndCode()}`
+  // 모두 사용 중이면 랜덤 재사용
+  return pool[Math.floor(Math.random() * pool.length)]
 }
 
 interface Interview {

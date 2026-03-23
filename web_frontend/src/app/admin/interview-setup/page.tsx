@@ -59,13 +59,10 @@ const MEET_ROOMS = [
   { label: 'Room 1', code: 'kmt-ydhj-fmf' },
 ]
 
-/** Jitsi 자동 링크 생성 (풀이 부족할 때 폴백) */
-function _rndCode(): string {
-  const c = 'abcdefghijklmnopqrstuvwxyz'
-  const pick = (n: number) => Array.from({ length: n }, () => c[Math.floor(Math.random() * 26)]).join('')
-  return `${pick(3)}-${pick(4)}-${pick(3)}`
+/** 풀에서 랜덤 Meet 링크 반환 */
+function fallbackMeetLink(): string {
+  return `https://meet.google.com/${MEET_ROOMS[0]?.code || 'kmt-ydhj-fmf'}`
 }
-function autoMeetLink(): string { return `https://meet.jit.si/bridge-iv-${_rndCode()}` }
 
 function getDefaultDate(): string {
   const d = new Date()
@@ -166,7 +163,7 @@ function InterviewSetupInner() {
   const generateEmailPreview = useCallback((c: CandidateResult | null, date: string, time: string, dur: number, roomIdx: number) => {
     if (!c) return
     const firstName = (c.full_name || '').split(' ')[0] || c.full_name
-    const meetUrl = roomIdx >= 0 && roomIdx < MEET_ROOMS.length ? `https://meet.google.com/${MEET_ROOMS[roomIdx].code}` : autoMeetLink()
+    const meetUrl = roomIdx >= 0 && roomIdx < MEET_ROOMS.length ? `https://meet.google.com/${MEET_ROOMS[roomIdx].code}` : fallbackMeetLink()
     setEmailSubject(`[BRIDGE] Interview — ${firstName}`)
     setEmailBody(
       `Dear ${firstName},\n\nYour interview has been scheduled.\n\nDate: ${date}\nTime: ${time} KST\nDuration: ${dur} minutes\n\nMeet Link: ${meetUrl}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
@@ -360,11 +357,11 @@ function InterviewSetupInner() {
       const j = await res.json()
       const data = j.data as ConfirmResult
 
-      // GCal 실패 시 폴백 — 선택된 룸 or Jitsi 자동 생성
+      // GCal 실패 시 폴백 — 저장된 Meet 풀에서 선택
       if (data.gcal_error && !data.meet_link) {
         const fallbackLink = selectedRoom >= 0 && selectedRoom < MEET_ROOMS.length
           ? `https://meet.google.com/${MEET_ROOMS[selectedRoom].code}`
-          : autoMeetLink()
+          : fallbackMeetLink()
         data.meet_link = fallbackLink
         await signedFetch(`${API_URL}/api/admin/interviews/${data.id}`, {
           method: 'PATCH',

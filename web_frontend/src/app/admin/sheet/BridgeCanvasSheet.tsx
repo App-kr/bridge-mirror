@@ -32,7 +32,7 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
-/* ── Video Room Pool (Google Meet 수동 등록 or Jitsi 자동 생성) ── */
+/* ── Google Meet Pool (localStorage) ── */
 const MEET_POOL_KEY = 'bridge_meet_pool'
 const DEFAULT_MEET_POOL: string[] = [
   'https://meet.google.com/kmt-ydhj-fmf',
@@ -42,18 +42,21 @@ function loadMeetPool(): string[] {
   try { const s = localStorage.getItem(MEET_POOL_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return a } } catch { /* */ }
   return DEFAULT_MEET_POOL
 }
-/** 3글자-4글자-3글자 랜덤 코드 생성 (Google Meet 스타일) */
-function _rndCode(): string {
-  const c = 'abcdefghijklmnopqrstuvwxyz'
-  const pick = (n: number) => Array.from({ length: n }, () => c[Math.floor(Math.random() * 26)]).join('')
-  return `${pick(3)}-${pick(4)}-${pick(3)}`
-}
-/** 풀에서 랜덤 선택 or Jitsi 자동 생성 */
 function pickRandomMeet(): string {
   const pool = loadMeetPool()
-  if (pool.length >= 2) return pool[Math.floor(Math.random() * pool.length)]
-  // 풀이 1개 이하면 Jitsi 자동 생성 (항상 열림, 권한 불필요)
-  return `https://meet.jit.si/bridge-iv-${_rndCode()}`
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+/** Google Calendar 이벤트 생성 URL (Meet 자동 포함) */
+function buildGCalUrl(title: string, date: string, time: string, durationMin: number, guestEmail?: string): string {
+  // date=YYYY-MM-DD, time=HH:MM → UTC ISO
+  const [y, mo, d] = date.split('-').map(Number)
+  const [h, mi] = time.split(':').map(Number)
+  const start = new Date(y, mo - 1, d, h, mi)
+  const end = new Date(start.getTime() + durationMin * 60000)
+  const fmt = (dt: Date) => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
+  let url = `https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent('BRIDGE Recruitment Interview')}`
+  if (guestEmail) url += `&add=${encodeURIComponent(guestEmail)}`
+  return url
 }
 
 /* ── Interview defaults persistence ── */
@@ -2002,7 +2005,7 @@ export default function BridgeCanvasSheet() {
           const raw = ivNewLink.trim()
           if (!raw) return
           // 여러 줄 또는 공백으로 구분된 링크도 한번에 추가
-          const links = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.startsWith('http') && (s.includes('meet.google.com/') || s.includes('meet.jit.si/') || s.includes('zoom.us/')))
+          const links = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.startsWith('http') && s.includes('meet.google.com/'))
           if (!links.length) return
           const unique = links.filter(l => !pool.includes(l))
           if (!unique.length) { setIvNewLink(''); return }
@@ -2180,71 +2183,87 @@ export default function BridgeCanvasSheet() {
                     )}
                   </div>
 
-                  {/* ═══ RIGHT COLUMN — Video Room ═══ */}
+                  {/* ═══ RIGHT COLUMN — Google Meet ═══ */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {/* Current selected link */}
+                    {/* Google Calendar에서 Meet 생성 */}
                     <div>
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>화상 회의 링크</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 5, background: '#22c55e', flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: '#000', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {ivMeetLink || '(없음)'}
-                        </div>
-                        <a href={ivMeetLink} target="_blank" rel="noopener noreferrer"
-                          style={{ padding: '4px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, textDecoration: 'none', fontFamily: F, flexShrink: 0 }}>입장</a>
-                        <button onClick={() => { if (ivMeetLink) { navigator.clipboard?.writeText(ivMeetLink); showPhotoToast('링크 복사됨') } }}
-                          style={{ padding: '4px 10px', background: '#f3f4f6', color: '#000', borderRadius: 6, fontSize: 11, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F, flexShrink: 0 }}>복사</button>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        <button onClick={() => setIvMeetLink(pickRandomMeet())}
-                          style={{ flex: 1, padding: '8px 0', background: '#1e293b', color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: F }}>
-                          새 링크 생성
-                        </button>
-                        {pool.length >= 2 && (
-                          <button onClick={() => { const r = pool[Math.floor(Math.random() * pool.length)]; setIvMeetLink(r) }}
-                            style={{ flex: 1, padding: '8px 0', background: '#f3f4f6', color: '#1e293b', borderRadius: 8, fontSize: 12, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F }}>
-                            풀에서 선택
-                          </button>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Google Meet 링크</div>
+                      <a
+                        href={buildGCalUrl(
+                          `BRIDGE Interview — ${firstName}`,
+                          ivDate || new Date().toISOString().slice(0, 10),
+                          ivTime || '14:00',
+                          ivDuration,
+                          String(ivTarget.email || '')
                         )}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>항상 열림 &middot; 허가없이 참여 가능 &middot; 인터뷰마다 고유 링크</div>
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: '#1a73e8', color: '#fff', borderRadius: 10, textDecoration: 'none', fontFamily: F, cursor: 'pointer' }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19 4H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H5V8l7 4 7-4v10z" fill="#fff"/></svg>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600 }}>Google Calendar에서 Meet 생성</div>
+                          <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>캘린더 열림 → Meet 자동 포함 → 링크 복사</div>
+                        </div>
+                      </a>
                     </div>
 
-                    {/* Saved pool (collapsible) */}
-                    <details style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                      <summary style={{ padding: '10px 14px', fontSize: 12, fontWeight: 500, color: '#555', cursor: 'pointer', background: '#fafafa', userSelect: 'none' }}>
-                        저장된 회의실 풀 ({pool.length})
-                      </summary>
-                      <div style={{ maxHeight: 200, overflow: 'auto' }}>
-                        {pool.map((link, i) => {
-                          const code = getMeetCode(link) || link.replace(/^https?:\/\//, '').slice(0, 30)
-                          const selected = link === ivMeetLink
-                          return (
-                            <div key={i} style={{
-                              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-                              background: selected ? '#e8f4fd' : (i % 2 === 0 ? '#fff' : '#fafafa'),
-                              borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 12,
-                            }} onClick={() => setIvMeetLink(link)}>
-                              <div style={{ width: 14, height: 14, borderRadius: 7, border: selected ? '2px solid #000' : '2px solid #ccc', background: selected ? '#000' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {selected && <div style={{ width: 6, height: 6, borderRadius: 3, background: '#fff' }} />}
+                    {/* 현재 Meet 링크 */}
+                    <div>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Meet 링크 입력</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input value={ivMeetLink} onChange={e => setIvMeetLink(e.target.value)}
+                          placeholder="캘린더에서 복사한 Meet 링크 붙여넣기"
+                          style={{ flex: 1, padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, color: '#000', boxSizing: 'border-box', fontFamily: F }} />
+                        {ivMeetLink && (
+                          <button onClick={() => { navigator.clipboard?.writeText(ivMeetLink); showPhotoToast('복사됨') }}
+                            style={{ padding: '10px 12px', background: '#f3f4f6', color: '#000', borderRadius: 8, fontSize: 12, fontWeight: 500, border: '1px solid #e5e7eb', cursor: 'pointer', fontFamily: F, flexShrink: 0 }}>복사</button>
+                        )}
+                      </div>
+                      {ivMeetLink && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '10px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: 4, background: '#22c55e', flexShrink: 0 }} />
+                          <span style={{ flex: 1, fontSize: 12, color: '#000', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ivMeetLink}</span>
+                          <a href={ivMeetLink} target="_blank" rel="noopener noreferrer"
+                            style={{ padding: '4px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, textDecoration: 'none', fontFamily: F }}>입장</a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 저장된 풀에서 선택 */}
+                    {pool.length > 0 && (
+                      <details style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                        <summary style={{ padding: '10px 14px', fontSize: 12, fontWeight: 500, color: '#555', cursor: 'pointer', background: '#fafafa', userSelect: 'none' }}>
+                          저장된 Meet 풀 ({pool.length})
+                        </summary>
+                        <div style={{ maxHeight: 180, overflow: 'auto' }}>
+                          {pool.map((link, i) => {
+                            const code = getMeetCode(link) || link.replace(/^https?:\/\//, '').slice(0, 30)
+                            const selected = link === ivMeetLink
+                            return (
+                              <div key={i} style={{
+                                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+                                background: selected ? '#e8f4fd' : (i % 2 === 0 ? '#fff' : '#fafafa'),
+                                borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 12,
+                              }} onClick={() => setIvMeetLink(link)}>
+                                <div style={{ width: 14, height: 14, borderRadius: 7, border: selected ? '2px solid #000' : '2px solid #ccc', background: selected ? '#000' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {selected && <div style={{ width: 6, height: 6, borderRadius: 3, background: '#fff' }} />}
+                                </div>
+                                <span style={{ flex: 1, color: '#000', fontWeight: selected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{code}</span>
+                                <button onClick={e => { e.stopPropagation(); removeLink(i) }} disabled={pool.length <= 1}
+                                  style={{ width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', color: pool.length <= 1 ? '#ddd' : '#ef4444', fontSize: 14, cursor: pool.length <= 1 ? 'default' : 'pointer', flexShrink: 0, fontFamily: F }}>&times;</button>
                               </div>
-                              <span style={{ flex: 1, color: '#000', fontWeight: selected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{code}</span>
-                              <button onClick={e => { e.stopPropagation(); removeLink(i) }} disabled={pool.length <= 1}
-                                style={{ width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', color: pool.length <= 1 ? '#ddd' : '#ef4444', fontSize: 14, cursor: pool.length <= 1 ? 'default' : 'pointer', flexShrink: 0, fontFamily: F }}>&times;</button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      <div style={{ padding: '8px 12px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 6 }}>
-                        <textarea value={ivNewLink} onChange={e => setIvNewLink(e.target.value)}
-                          placeholder="Google Meet / Jitsi 링크 추가"
-                          rows={1}
-                          style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, color: '#000', boxSizing: 'border-box', fontFamily: F, resize: 'none' }}
-                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
-                        <button onClick={addLink}
-                          style={{ padding: '6px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>+</button>
-                      </div>
-                    </details>
+                            )
+                          })}
+                        </div>
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 6 }}>
+                          <input value={ivNewLink} onChange={e => setIvNewLink(e.target.value)}
+                            placeholder="Meet 링크 추가"
+                            style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, color: '#000', boxSizing: 'border-box', fontFamily: F }}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLink() } }} />
+                          <button onClick={addLink}
+                            style={{ padding: '6px 10px', background: '#000', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: F }}>+</button>
+                        </div>
+                      </details>
+                    )}
                   </div>
                 </div>
               )}
