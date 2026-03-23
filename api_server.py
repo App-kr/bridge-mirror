@@ -994,6 +994,13 @@ async def apply(request: Request, body: CandidateApply):
             # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
             threading.Thread(target=_backup_on_submit, args=("apply",), daemon=True).start()
 
+            # Push 알림 (비동기, 실패해도 접수 완료)
+            threading.Thread(
+                target=_notify_push,
+                args=("New Application", f"New candidate applied: #{new_id}", "/admin/m/candidates"),
+                daemon=True,
+            ).start()
+
             return ok(
                 data={"id": new_id, "apply_token": token_out, "mode": "created"},
                 message="지원이 접수되었습니다. 담당자가 검토 후 연락드리겠습니다."
@@ -1079,6 +1086,13 @@ async def inquiry(request: Request, body: ClientInquiry):
                 target=_auto_create_job_from_inquiry,
                 args=(new_id, body.school_name),
                 daemon=True
+            ).start()
+
+            # Push 알림 (비동기, 실패해도 접수 완료)
+            threading.Thread(
+                target=_notify_push,
+                args=("New Inquiry", f"New inquiry from {body.school_name}", "/admin/m/inquiries"),
+                daemon=True,
             ).start()
 
             return ok(
@@ -5213,6 +5227,15 @@ def _maybe_auto_backup():
         logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
 
 
+def _notify_push(title: str, body: str, url: str = "/admin/m") -> None:
+    """Push 알림 발송 (비동기 호출용). 실패해도 무시."""
+    try:
+        from push_api import send_push_to_all
+        send_push_to_all(title=title, body=body, url=url)
+    except Exception as e:
+        logging.getLogger("bridge.push").debug("Push notify skipped: %s", e)
+
+
 def _backup_on_submit(source: str = "") -> None:
     """
     강사 지원 / 채용의뢰 제출 시 즉시 타임스탬프 백업 생성.
@@ -7807,6 +7830,14 @@ try:
     logging.getLogger("bridge.api").info("[STARTUP] inbox/gmail 라우터 등록 완료")
 except Exception as _inbox_err:
     logging.getLogger("bridge.api").warning("[STARTUP] inbox/gmail 라우터 로드 실패 (계속 진행): %s", _inbox_err)
+
+# ── Push 알림 라우터 등록 ─────────────────────────────────────────────────────
+try:
+    from push_api import router as push_router
+    app.include_router(push_router)
+    logging.getLogger("bridge.api").info("[STARTUP] push 라우터 등록 완료")
+except Exception as _push_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] push 라우터 로드 실패 (계속 진행): %s", _push_err)
 
 # ── 결제 라우터 등록 (PAYMENT_ENABLED=false → 모든 엔드포인트 503) ──────────
 try:

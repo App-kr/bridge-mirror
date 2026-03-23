@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, Users, MessageSquare, Mail, MoreHorizontal, Video, Monitor, LogOut } from 'lucide-react'
+import { Home, Users, MessageSquare, Mail, MoreHorizontal, Video, Monitor, LogOut, Settings } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 interface Tab {
@@ -66,6 +66,13 @@ export default function MobileTabBar() {
               >
                 <Video size={20} className="text-[#86868b]" />
                 <span className="text-[15px] font-medium">인터뷰 관리</span>
+              </button>
+              <button
+                onClick={() => { setMoreOpen(false); router.push('/admin/m/settings') }}
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl text-[#1d1d1f] hover:bg-[#f5f5f7] active:bg-[#e5e5e7] transition-colors"
+              >
+                <Settings size={20} className="text-[#86868b]" />
+                <span className="text-[15px] font-medium">설정</span>
               </button>
               <button
                 onClick={() => { setMoreOpen(false); handleDesktopMode() }}
