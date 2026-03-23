@@ -67,7 +67,8 @@ const isFocusRow = (r: DataRow): boolean =>
 function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, EditOverride>): DataRow {
   const cid = String(c.candidate_id ?? c.id ?? '')
   const ov = edits[cid] || {}
-  const cat: CategoryKey = String(c.status) === 'Active' ? 'active' : 'past'
+  const st = String(c.status ?? '')
+  const cat: CategoryKey = st === 'Active' ? 'active' : st === 'Blacklist' ? 'blacklist' : 'past'
   const tattoo = [c.tattoo, c.piercings].filter(Boolean).join('/')
   const ts = String(c.created_at ?? '').slice(0, 10).replace(/-/g, '.').slice(2)
   const isWebForm = String(c.source) === 'web_form'
@@ -86,11 +87,11 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     name: (ov.name as string) ?? String(c.full_name ?? ''),
     mgtNum: c.sheet_number != null ? String(c.sheet_number) : String(c.row_id ?? ''),
     arc: (ov.arc as string) ?? String(c.arc_holders ?? ''),
-    nationality: (ov.nationality as string) ?? String(c.nationality ?? ''),
+    nationality: ((ov.nationality as string) ?? String(c.nationality ?? '')).replace(/[\r\n]+/g, ' ').trim(),
     background: (ov.background as string) ?? String(c.ancestry ?? ''),
     age: (ov.age as string) ?? String(c.dob ?? ''),
     gender: (ov.gender as string) ?? String(c.gender ?? ''),
-    currentLoc: (ov.currentLoc as string) ?? String(c.current_location ?? ''),
+    currentLoc: ((ov.currentLoc as string) ?? String(c.current_location ?? '')).replace(/[\r\n]+/g, ' ').trim(),
     startDate: (ov.startDate as string) ?? String(c.start_date ?? ''),
     university: (ov.university as string) ?? String(c.target ?? ''),
     prefRegion: (ov.prefRegion as string) ?? String(c.area_prefs ?? ''),

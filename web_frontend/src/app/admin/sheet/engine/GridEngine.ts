@@ -1039,8 +1039,10 @@ export class GridEngine {
     } = {}
   ): void {
     if (rawText === null || rawText === undefined || rawText === '') return
-    const text = String(rawText)
+    let text = String(rawText)
     if (!text.trim()) return
+    // singleLine: 줄바꿈 강제 제거 — 국적/현위치 등 짧은 컬럼 세로 렌더링 방지
+    if (styleOpts.singleLine) text = text.replace(/[\r\n]+/g, ' ').trim()
 
     const { ctx } = this
 
