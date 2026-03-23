@@ -1,5 +1,5 @@
 """
-BRIDGE Document Processor v2.3
+BRIDGE Document Processor v2.5
 후보자 이력서/커버레터에서 PII 삭제 + 강사번호 입력
 
 사용법:
@@ -101,7 +101,8 @@ def get_candidate(number: int):
     db = _get_db()
     row = db.execute(
         "SELECT sheet_number, full_name, nationality, email, "
-        "mobile_phone, kakaotalk, current_location, dob, gender "
+        "mobile_phone, kakaotalk, current_location, dob, gender, "
+        "candidate_id, photo_url "
         "FROM candidates WHERE sheet_number = ?",
         (number,),
     ).fetchone()
@@ -117,6 +118,8 @@ def get_candidate(number: int):
         "current_location": _try_decrypt(row[6]),
         "dob": _try_decrypt(row[7]) if row[7] else "",
         "gender": _try_decrypt(row[8]) if row[8] else "",
+        "candidate_id": row[9] or "",
+        "photo_url": row[10] or "",
     }
 
 
@@ -1973,14 +1976,15 @@ def cmd_batch(args):
 
 
 def cmd_download(args):
-    """download 명령: S3에서 후보자 파일 다운로드"""
+    """download 명령: S3에서 후보자 이력서+사진 다운로드 → PII 삭제 → PDF 출력"""
     number = args.number
     candidate = get_candidate(number)
     if not candidate:
         print(f"[ERROR] #{number} 후보자를 찾을 수 없습니다")
         return
 
-    print(f"  #{number} {candidate['full_name']}")
+    cand_id = candidate.get("candidate_id", "")
+    print(f"  #{number} {candidate['full_name']} (ID: {cand_id or 'N/A'})")
 
     # bx.py로 AWS 자격증명 로드
     try:
@@ -2007,14 +2011,20 @@ def cmd_download(args):
         aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
     )
 
-    # S3에서 후보자 관련 파일 검색 (prefix 패턴)
-    prefixes_to_try = [
+    # S3 경로: candidate_id 기반 (cnd_xxxx) + sheet_number 폴백
+    prefixes_to_try = []
+    if cand_id:
+        prefixes_to_try.append(f"candidates/{cand_id}/")
+    prefixes_to_try.extend([
         f"candidates/cnd_{number}/",
         f"candidates/{number}/",
         f"resumes/{number}/",
-    ]
+    ])
 
-    downloaded = []
+    _DOC_EXTS = {".pdf", ".docx", ".doc", ".hwp"}
+    _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+    downloaded_docs = []
+    downloaded_photo = None
     dest_dir = args.output or str(INCOMING_DIR)
     Path(dest_dir).mkdir(parents=True, exist_ok=True)
 
@@ -2024,53 +2034,117 @@ def cmd_download(args):
             for obj in response.get("Contents", []):
                 key = obj["Key"]
                 ext = Path(key).suffix.lower()
-                if ext not in (".pdf", ".docx", ".doc", ".hwp"):
-                    continue
+                s3_name = Path(key).name
 
-                filename = f"{number}_{Path(key).name}"
-                dest = Path(dest_dir) / filename
-                print(f"  Downloading: {key} -> {filename}")
-                s3.download_file(bucket, key, str(dest))
-                downloaded.append(dest)
-        except Exception as e:
-            # prefix가 없을 수 있음 → 조용히 넘김
+                if ext in _DOC_EXTS:
+                    filename = f"{number}_{s3_name}"
+                    dest = Path(dest_dir) / filename
+                    print(f"  [DOC] {key} → {filename}")
+                    s3.download_file(bucket, key, str(dest))
+                    downloaded_docs.append(dest)
+                elif ext in _IMG_EXTS and not downloaded_photo:
+                    # 사진: thumb 제외, 원본 우선
+                    if "thumb" in s3_name.lower():
+                        continue
+                    filename = f"{number}_photo{ext}"
+                    dest = Path(dest_dir) / filename
+                    print(f"  [PHOTO] {key} → {filename}")
+                    s3.download_file(bucket, key, str(dest))
+                    downloaded_photo = dest
+        except Exception:
             pass
 
-    if downloaded:
-        print(f"\n  {len(downloaded)}개 다운로드 완료 → {dest_dir}")
-        if not args.no_process:
-            print(f"\n  자동 처리 시작...")
-            for f in downloaded:
-                try:
-                    ext = f.suffix.lower()
-                    if ext == ".docx":
-                        doc, logs = process_docx(f, number, candidate)
-                    elif ext == ".pdf":
-                        doc, logs = process_pdf(f, number, candidate)
-                    else:
-                        continue
-
-                    backup_original(f)
-                    DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
-                    out_name = _build_output_filename(number, candidate, ext)
-                    out_path = DEFAULT_OUTPUT / out_name
-
-                    if ext == ".docx":
-                        doc.save(str(out_path))
-                    elif ext == ".pdf":
-                        doc.save(str(out_path), garbage=4, deflate=True)
-                        doc.close()
-
-                    if logs:
-                        save_log(f, number, logs)
-                    print(f"  [OK] {out_path.name} (PII {len(logs)}건 삭제)")
-
-                except Exception as e:
-                    print(f"  [ERROR] {f.name}: {e}")
-    else:
+    total = len(downloaded_docs) + (1 if downloaded_photo else 0)
+    if total == 0:
         print(f"  S3에서 파일을 찾을 수 없습니다")
         print(f"  수동으로 파일을 incoming/에 넣고 batch 명령 사용:")
         print(f"    python doc_processor.py batch")
+        return
+
+    print(f"\n  {total}개 다운로드 완료 (문서 {len(downloaded_docs)}, 사진 {1 if downloaded_photo else 0})")
+
+    if args.no_process:
+        return
+
+    # ── 자동 처리 ──
+    import tempfile
+    print(f"\n  자동 처리 시작...")
+    temp_pdfs = []
+
+    for f in downloaded_docs:
+        try:
+            ext = f.suffix.lower()
+            is_cover = _is_cover_letter(f)
+
+            if ext == ".docx":
+                doc, logs = process_docx(
+                    f, number, candidate, photo_path=None if is_cover else downloaded_photo)
+            elif ext == ".pdf":
+                doc, logs = process_pdf(
+                    f, number, candidate, photo_path=None if is_cover else downloaded_photo)
+            else:
+                continue
+
+            backup_original(f)
+
+            if ext == ".docx":
+                tmp_docx = Path(tempfile.mktemp(suffix=".docx"))
+                doc.save(str(tmp_docx))
+                tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                label = "cover" if is_cover else "resume"
+                if _convert_docx_to_pdf(tmp_docx, tmp_pdf):
+                    temp_pdfs.append((label, tmp_pdf))
+                    tmp_docx.unlink()
+                else:
+                    temp_pdfs.append((f"{label}_docx", tmp_docx))
+            elif ext == ".pdf":
+                tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                doc.save(str(tmp_pdf), garbage=4, deflate=True)
+                doc.close()
+                label = "cover" if is_cover else "resume"
+                temp_pdfs.append((label, tmp_pdf))
+
+            f.unlink()
+            if logs:
+                save_log(f, number, logs)
+            print(f"  PII {len(logs)}건 삭제: {f.name}")
+
+        except Exception as e:
+            print(f"  [ERROR] {f.name}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # ── 최종 PDF 병합/출력 ──
+    DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
+    final_name = _build_output_filename(number, candidate, ".pdf")
+    final_path = DEFAULT_OUTPUT / final_name
+
+    pdf_parts = [p for _, p in temp_pdfs if p.suffix == ".pdf"]
+    if len(pdf_parts) >= 2:
+        cover_p = next((p for t, p in temp_pdfs if "cover" in t and p.suffix == ".pdf"), None)
+        resume_p = next((p for t, p in temp_pdfs if "resume" in t and p.suffix == ".pdf"), None)
+        _merge_pdfs(cover_p, resume_p, final_path)
+        print(f"  Output: {final_name} (커버레터+이력서 병합)")
+    elif len(pdf_parts) == 1:
+        shutil.move(str(pdf_parts[0]), str(final_path))
+        print(f"  Output: {final_name}")
+    else:
+        docx_parts = [p for _, p in temp_pdfs if p.suffix == ".docx"]
+        if docx_parts:
+            final_path = DEFAULT_OUTPUT / _build_output_filename(number, candidate, ".docx")
+            shutil.move(str(docx_parts[0]), str(final_path))
+            print(f"  Output: {final_path.name} (DOCX — PDF 변환 실패)")
+
+    for _, tmp in temp_pdfs:
+        if tmp.exists():
+            tmp.unlink()
+
+    # 사진 정리
+    if downloaded_photo and downloaded_photo.exists():
+        backup_original(downloaded_photo)
+        downloaded_photo.unlink()
+
+    print(f"  [OK] {final_path.name}")
 
 
 def cmd_setup(_args=None):
@@ -2079,7 +2153,7 @@ def cmd_setup(_args=None):
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n  BRIDGE Document Processor v2.3 — 폴더 구조")
+    print(f"\n  BRIDGE Document Processor v2.5 — 폴더 구조")
     print(f"  {'─' * 50}")
     print(f"  incoming/   : {INCOMING_DIR}")
     print(f"  processed/  : {DEFAULT_OUTPUT}")
@@ -2114,7 +2188,7 @@ def cmd_init_db(_args=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="BRIDGE Document Processor v2.3 — PII 삭제 + 강사번호"
+        description="BRIDGE Document Processor v2.5 — PII 삭제 + 강사번호"
     )
     sub = parser.add_subparsers(dest="command")
 
