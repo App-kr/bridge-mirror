@@ -1128,8 +1128,10 @@ export class GridEngine {
       }
     }
 
-    // Alignment
-    const align = styleOpts.align || 'left'
+    // Alignment — 텍스트가 셀보다 넓으면 left로 전환 (첫글자 보장)
+    const maxLineW = lines.reduce((mx, l) => Math.max(mx, ctx.measureText(l).width), 0)
+    const wantAlign = styleOpts.align || 'left'
+    const align = (wantAlign !== 'left' && maxLineW > maxW) ? 'left' : wantAlign
     ctx.textAlign = align as CanvasTextAlign
     let baseX: number
     if (align === 'right') baseX = cellX + cellW - PAD
