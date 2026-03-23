@@ -976,20 +976,32 @@ async def apply(request: Request, body: CandidateApply):
             payload["status"]     = "Active"
             payload["created_at"] = now_iso
 
-            # sheet_number 자동 할당 (MAX+1, 최소 10000)
-            cur_max = conn.execute(
-                "SELECT MAX(sheet_number) FROM candidates"
-            ).fetchone()[0] or 0
-            payload["sheet_number"] = max(int(cur_max) + 1, 10000)
-
             db_payload = _map_apply_payload(payload)
-            cols = ", ".join(db_payload.keys())
-            placeholders = ", ".join("?" * len(db_payload))
+            # sheet_number: INSERT 서브쿼리로 원자적 할당 (동시접수 race 방지)
+            db_payload["sheet_number"] = None  # placeholder
+            cols = list(db_payload.keys())
+            vals = list(db_payload.values())
+            sn_idx = cols.index("sheet_number")
+            # 서브쿼리로 MAX+1 계산 (최소 10000)
+            ph = []
+            final_vals = []
+            for i, c in enumerate(cols):
+                if i == sn_idx:
+                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
+                else:
+                    ph.append("?")
+                    final_vals.append(vals[i])
             conn.execute(
-                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
-                list(db_payload.values()),
+                f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
+                final_vals,
             )
             conn.commit()
+            # 할당된 sheet_number 조회 (응답/후속 처리용)
+            sn_row = conn.execute(
+                "SELECT sheet_number FROM candidates WHERE candidate_id = ?",
+                (new_id,),
+            ).fetchone()
+            payload["sheet_number"] = sn_row[0] if sn_row else 0
 
             token_out = _make_candidate_token(new_id)
 
@@ -1800,18 +1812,29 @@ async def admin_create_candidate(request: Request, body: dict):
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
-            # sheet_number 자동 할당: 현재 MAX 이상 + 5자리 체계 보장 (10000~)
-            cur_max = conn.execute(
-                "SELECT MAX(sheet_number) FROM candidates"
-            ).fetchone()[0] or 0
-            record["sheet_number"] = max(int(cur_max) + 1, 10000)
-            cols = ", ".join(record.keys())
-            placeholders = ", ".join("?" for _ in record)
+            # sheet_number: INSERT 서브쿼리로 원자적 할당 (동시접수 race 방지)
+            record["sheet_number"] = None  # placeholder
+            cols = list(record.keys())
+            vals = list(record.values())
+            sn_idx = cols.index("sheet_number")
+            ph = []
+            final_vals = []
+            for i, c in enumerate(cols):
+                if i == sn_idx:
+                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
+                else:
+                    ph.append("?")
+                    final_vals.append(vals[i])
             conn.execute(
-                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
-                list(record.values()),
+                f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
+                final_vals,
             )
             conn.commit()
+            sn_row = conn.execute(
+                "SELECT sheet_number FROM candidates WHERE candidate_id = ?",
+                (cid,),
+            ).fetchone()
+            record["sheet_number"] = sn_row[0] if sn_row else 0
             return ok(data={"candidate_id": cid, "sheet_number": record["sheet_number"]}, message="후보자 등록 완료")
         finally:
             conn.close()
