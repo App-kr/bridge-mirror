@@ -4951,9 +4951,13 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
 
         candidate = dict(row)
         brj_number = candidate.get("sheet_number") or 0
+        # sheet_number 없으면 candidate_id 끝 4자리 숫자로 임시 번호 생성
         if not brj_number:
-            _log_upload.info("[AutoProcess] %s — sheet_number 없음, 스킵", entity_id)
-            return
+            _digits = re.sub(r"[^0-9]", "", entity_id)[-4:]
+            brj_number = int(_digits) if _digits else 0
+            if not brj_number:
+                _log_upload.info("[AutoProcess] %s — 번호 생성 불가, 스킵", entity_id)
+                return
 
         # 복호화 시도 (암호화된 필드)
         for field in ("full_name", "email", "mobile_phone", "kakaotalk",
@@ -5033,7 +5037,26 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                 allowed_category="resume",
             )
 
-            # 7. DB 업데이트
+            # 7. 이전 processed 파일 정리 (S3 orphan 방지)
+            old_key_row = conn.execute(
+                "SELECT cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
+                (entity_id,),
+            ).fetchone()
+            old_s3_key = old_key_row[0] if old_key_row else None
+            if old_s3_key and old_s3_key != result["s3_key"]:
+                try:
+                    s3_delete_file(old_s3_key)
+                    _log_upload.info("[AutoProcess] 이전 processed 삭제: %s", old_s3_key)
+                except Exception:
+                    pass
+            # 이전 file_uploads 레코드 soft-delete
+            conn.execute(
+                "UPDATE file_uploads SET is_deleted = 1 "
+                "WHERE entity_id = ? AND file_type = 'cv_processed' AND is_deleted = 0",
+                (entity_id,),
+            )
+
+            # 8. DB 업데이트
             conn.execute(
                 "UPDATE candidates SET cv_processed_s3_key = ? WHERE candidate_id = ?",
                 (result["s3_key"], entity_id),
@@ -5219,6 +5242,106 @@ async def get_processed_cv(candidate_id: str, request: Request):
         raise HTTPException(404, "Processed CV not found")
     url = s3_presigned_url(row[0], expires=3600)
     return ok(data={"url": url, "s3_key": row[0]})
+
+
+@app.delete("/api/admin/candidates/{candidate_id}/processed-cv", tags=["admin"])
+async def delete_processed_cv(candidate_id: str, request: Request):
+    """Processed CV 삭제 (S3 + DB). 원본 CV는 유지."""
+    _check_admin(request)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+            if row and row[0]:
+                try:
+                    s3_delete_file(row[0])
+                except Exception:
+                    pass
+                conn.execute(
+                    "UPDATE candidates SET cv_processed_s3_key = NULL WHERE candidate_id = ?",
+                    (candidate_id,),
+                )
+                conn.execute(
+                    "UPDATE file_uploads SET is_deleted = 1 "
+                    "WHERE entity_id = ? AND file_type = 'cv_processed' AND is_deleted = 0",
+                    (candidate_id,),
+                )
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        _log_upload.error("delete processed-cv failed: %s", e)
+        raise HTTPException(500, "삭제 실패")
+    return ok(message="Processed CV deleted.")
+
+
+@app.post("/api/admin/candidates/{candidate_id}/reprocess-cv", tags=["admin"])
+async def reprocess_cv(candidate_id: str, request: Request):
+    """수동 재처리 트리거 — sheet_number 변경 후 호출."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        # 가장 최근 CV 업로드의 s3_key 조회
+        row = conn.execute(
+            "SELECT s3_key FROM file_uploads "
+            "WHERE entity_id = ? AND file_type IN ('cv', 'cover_letter') "
+            "AND s3_key IS NOT NULL AND is_deleted = 0 "
+            "ORDER BY rowid DESC LIMIT 1",
+            (candidate_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        raise HTTPException(404, "Original CV not found in S3")
+    threading.Thread(
+        target=_auto_process_resume,
+        args=(candidate_id, row[0]),
+        daemon=True,
+    ).start()
+    return ok(message="Reprocessing started.")
+
+
+@app.delete("/api/admin/files/{file_id}", tags=["admin"])
+async def delete_uploaded_file(file_id: int, request: Request):
+    """업로드 파일 삭제 (S3 + soft-delete). 원본·첨부 모두 대응."""
+    _check_admin(request)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT s3_key, entity_id, file_type FROM file_uploads WHERE id = ? AND is_deleted = 0",
+                (file_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "File not found")
+            s3_key, eid, ftype = row[0], row[1], row[2]
+            if s3_key:
+                try:
+                    s3_delete_file(s3_key)
+                except Exception:
+                    pass
+            conn.execute("UPDATE file_uploads SET is_deleted = 1 WHERE id = ?", (file_id,))
+            # cv_processed 삭제 시 candidates 컬럼도 정리
+            if ftype == "cv_processed" and eid:
+                conn.execute(
+                    "UPDATE candidates SET cv_processed_s3_key = NULL WHERE candidate_id = ?",
+                    (eid,),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_upload.error("delete file failed: %s", e)
+        raise HTTPException(500, "삭제 실패")
+    return ok(message="File deleted.")
 
 
 @app.post("/api/admin/upload-image", tags=["admin"])
