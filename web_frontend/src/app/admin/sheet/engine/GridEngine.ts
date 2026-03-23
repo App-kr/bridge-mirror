@@ -1000,7 +1000,6 @@ export class GridEngine {
           color: style?.color,
           strikethrough: style?.strikethrough,
           align: style?.align || (isKey ? 'center' : 'left'),
-          singleLine: true,
         })
       }
     }
@@ -1063,8 +1062,7 @@ export class GridEngine {
     const maxW = Math.max(1, cellW - PAD * 2)
     const maxH = Math.max(1, cellH - PAD * 2)
     const lineH = Math.ceil(fs * 1.5)
-    // 좁은 컬럼(CJK 4자 미만)은 무조건 singleLine — 세로 렌더링 방지
-    const forceSingle = styleOpts.singleLine || maxW < fs * 4
+    const forceSingle = !!styleOpts.singleLine
     if (forceSingle) text = text.replace(/[\r\n]+/g, ' ').trim()
     const maxLines = forceSingle ? 1 : Math.max(1, Math.floor(maxH / lineH))
 
@@ -1147,12 +1145,15 @@ export class GridEngine {
 
     // Strikethrough — only when explicitly requested, uses fillRect (no stroke)
     if (styleOpts.strikethrough === true && lines.length > 0) {
-      const strikeY = Math.round(cellY + PAD + lineH * 0.55)
-      const textW = Math.min(ctx.measureText(lines[0]).width, maxW)
-      const sx = align === 'center' ? cellX + (cellW - textW) / 2
-              : align === 'right' ? cellX + cellW - PAD - textW
-              : cellX + PAD
-      ctx.fillRect(sx, strikeY, textW, 1)
+      for (let li = 0; li < lines.length; li++) {
+        const strikeY = Math.round(cellY + PAD + li * lineH + fs * 0.55)
+        if (strikeY >= cellY + cellH) break
+        const textW = Math.min(ctx.measureText(lines[li]).width, maxW)
+        const sx = align === 'center' ? cellX + (cellW - textW) / 2
+                : align === 'right' ? cellX + cellW - PAD - textW
+                : cellX + PAD
+        ctx.fillRect(sx, strikeY, textW, 1)
+      }
     }
 
     ctx.textAlign = 'left'
