@@ -364,6 +364,8 @@ export class GridEngine {
 
   private onGhostMouseDown = (e: MouseEvent): void => {
     if (this.editor.isEditing()) return
+    // 우클릭(button=2)은 contextmenu 핸들러에서 처리 — 다중 선택 보존
+    if (e.button === 2) return
 
     // Check for row resize drag first
     const resizeRow = this.nearRowBorder(e)
@@ -1103,14 +1105,27 @@ export class GridEngine {
       return result
     }
 
-    let lines = buildLines(text)
+    let lines: string[]
 
-    // Ellipsis for overflow
-    if (lines.length > maxLines) {
-      lines = lines.slice(0, maxLines)
-      let last = lines[maxLines - 1] || ''
-      while (last.length > 0 && ctx.measureText(last + '\u2026').width > maxW) last = last.slice(0, -1)
-      lines[maxLines - 1] = last + (last ? '\u2026' : '')
+    if (styleOpts.singleLine) {
+      // singleLine: 문자 단위 직접 잘림 + 말줄임 (word-wrap 건너뜀)
+      if (ctx.measureText(text).width <= maxW) {
+        lines = [text]
+      } else {
+        let t = text
+        while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1)
+        lines = [t + '\u2026']
+      }
+    } else {
+      lines = buildLines(text)
+
+      // Ellipsis for overflow
+      if (lines.length > maxLines) {
+        lines = lines.slice(0, maxLines)
+        let last = lines[maxLines - 1] || ''
+        while (last.length > 0 && ctx.measureText(last + '\u2026').width > maxW) last = last.slice(0, -1)
+        lines[maxLines - 1] = last + (last ? '\u2026' : '')
+      }
     }
 
     // Alignment
