@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const city = searchParams.get('city')?.trim().toLowerCase()
     const isHot = searchParams.get('is_hot')
-    const limit = Math.min(Number(searchParams.get('limit') ?? 50), 2000)
+    const limit = Math.min(Number(searchParams.get('limit') ?? 50), 100)
     const offset = Number(searchParams.get('offset') ?? 0)
     const includeAll = searchParams.get('include_all') === 'true'
 

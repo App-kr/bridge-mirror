@@ -866,6 +866,7 @@ async def list_jobs(
     - include_closed: true면 closed 포함 (admin용)
     - limit / offset: 페이지네이션
     """
+    limit = min(max(limit, 1), 100)  # 스크래핑 방지: 1~100 강제
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         return bridge_error("RATE_LIMIT", "Too many requests. Please slow down.", retryable=True, status=429)
     try:
@@ -3720,10 +3721,14 @@ def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
 @app.get("/api/community/{board}", tags=["community"])
 async def community_list(
     board: str,
+    request: Request,
     limit: int = 30,
     offset: int = 0,
     category: Optional[str] = None,
 ):
+    limit = min(max(limit, 1), 50)  # 스크래핑 방지
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=40):
+        return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -3752,7 +3757,9 @@ async def community_list(
 
 
 @app.get("/api/community/{board}/{post_id}", tags=["community"])
-async def community_get(board: str, post_id: int):
+async def community_get(board: str, post_id: int, request: Request):
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=40):
+        return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6948,8 +6955,10 @@ class PartnerUpdate(BaseModel):
 
 
 @app.get("/api/partners", tags=["public"])
-async def public_list_partners():
+async def public_list_partners(request: Request):
     """공개 파트너 목록 (활성 파트너만)."""
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=15):
+        return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -7117,13 +7126,21 @@ except Exception as _e:
 
 
 @app.get("/api/settings", tags=["public"])
-async def public_get_settings():
+async def public_get_settings(request: Request):
     """공개 사이트 설정 (footer 등)."""
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=15):
+        return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
+    # 공개 허용 키만 반환 (민감 설정 노출 방지)
+    _PUBLIC_SETTING_KEYS = {
+        "nav_menu", "hero_title", "hero_subtitle", "hero_cta_text", "hero_cta_url",
+        "footer_text", "footer_links", "company_name", "company_email",
+        "kakao_channel_url", "site_description",
+    }
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
         rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
-        settings = {r[0]: r[1] for r in rows}
+        settings = {r[0]: r[1] for r in rows if r[0] in _PUBLIC_SETTING_KEYS}
     finally:
         conn.close()
     return ok(data={"settings": settings})
@@ -7373,11 +7390,15 @@ async def admin_analytics(request: Request, days: int = Query(30, ge=1, le=365))
 
 @app.get("/api/testimonials", tags=["testimonials"])
 async def testimonials_list(
+    request: Request,
     limit: int = 20,
     offset: int = 0,
     random: int = 0,
 ):
     """공개 리뷰 목록. random=1이면 랜덤 순서."""
+    limit = min(max(limit, 1), 30)  # 스크래핑 방지
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=15):
+        return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:

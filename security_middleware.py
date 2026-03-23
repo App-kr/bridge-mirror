@@ -53,6 +53,62 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 # ═══════════════════════════════════════════════════════════════
 # 이 나라에서 오는 공격 패턴은 임계치를 낮춰 빠르게 차단
 # (정상 사용자는 공격 패턴을 안 보내므로 영향 없음)
+# ═══════════════════════════════════════════════════════════════
+# 봇/스크래퍼 User-Agent 차단 (Google Sheets IMPORTXML 등)
+# ═══════════════════════════════════════════════════════════════
+SCRAPER_UA_PATTERNS: list[re.Pattern] = [
+    # Google Sheets IMPORTXML / IMPORTHTML / IMPORTDATA
+    re.compile(r"Google-Spreadsheet", re.IGNORECASE),
+    re.compile(r"GoogleBot", re.IGNORECASE),
+    re.compile(r"Google-Apps-Script", re.IGNORECASE),
+    # Generic scraper/bot patterns
+    re.compile(r"python-requests", re.IGNORECASE),
+    re.compile(r"python-urllib", re.IGNORECASE),
+    re.compile(r"scrapy", re.IGNORECASE),
+    re.compile(r"curl/", re.IGNORECASE),
+    re.compile(r"wget/", re.IGNORECASE),
+    re.compile(r"httpx/", re.IGNORECASE),
+    re.compile(r"axios/", re.IGNORECASE),
+    re.compile(r"node-fetch", re.IGNORECASE),
+    re.compile(r"go-http-client", re.IGNORECASE),
+    re.compile(r"java/", re.IGNORECASE),
+    re.compile(r"libwww-perl", re.IGNORECASE),
+    re.compile(r"PostmanRuntime", re.IGNORECASE),
+    re.compile(r"insomnia/", re.IGNORECASE),
+    re.compile(r"Paw/", re.IGNORECASE),
+    re.compile(r"HeadlessChrome", re.IGNORECASE),
+    re.compile(r"PhantomJS", re.IGNORECASE),
+    re.compile(r"Selenium", re.IGNORECASE),
+    re.compile(r"Puppeteer", re.IGNORECASE),
+    re.compile(r"Playwright", re.IGNORECASE),
+    re.compile(r"CasperJS", re.IGNORECASE),
+    re.compile(r"HTTrack", re.IGNORECASE),
+    re.compile(r"SemrushBot", re.IGNORECASE),
+    re.compile(r"AhrefsBot", re.IGNORECASE),
+    re.compile(r"MJ12bot", re.IGNORECASE),
+    re.compile(r"DotBot", re.IGNORECASE),
+    re.compile(r"BLEXBot", re.IGNORECASE),
+    re.compile(r"DataForSeoBot", re.IGNORECASE),
+    re.compile(r"PetalBot", re.IGNORECASE),
+    re.compile(r"Bytespider", re.IGNORECASE),
+    re.compile(r"GPTBot", re.IGNORECASE),
+    re.compile(r"CCBot", re.IGNORECASE),
+    re.compile(r"ClaudeBot", re.IGNORECASE),
+    re.compile(r"anthropic-ai", re.IGNORECASE),
+]
+
+# admin 인증 경로는 봇 차단 예외 (API 클라이언트 허용)
+_BOT_CHECK_EXEMPT_PREFIXES = ("/api/admin/", "/api/apply", "/api/inquiry", "/api/track")
+
+def _is_scraper_ua(ua: str) -> bool:
+    """User-Agent가 스크래퍼/봇인지 판별"""
+    if not ua:
+        return True  # UA 없음 = 봇으로 간주
+    for pat in SCRAPER_UA_PATTERNS:
+        if pat.search(ua):
+            return True
+    return False
+
 STRICT_COUNTRIES: set[str] = {
     "US", "GB", "ZA",        # 미국, 영국, 남아공
     "CN",                    # 중국
@@ -350,12 +406,18 @@ class RateLimiter:
 
     RULES = {
         # (endpoint_prefix, max_requests, window_seconds)
-        "/api/admin":    (300, 60),
-        "/api/security": (10,  60),
-        "/api/apply":    (5,   300),
-        "/api/inquiry":  (5,   300),
-        "/auth":         (10,  60),
-        "default":       (120, 60),
+        "/api/admin":        (300, 60),
+        "/api/security":     (10,  60),
+        "/api/apply":        (5,   300),
+        "/api/inquiry":      (5,   300),
+        "/auth":             (10,  60),
+        # 공개 데이터 — 스크래핑 방지 강화
+        "/api/jobs":         (30,  60),
+        "/api/community":    (40,  60),
+        "/api/testimonials": (15,  60),
+        "/api/partners":     (15,  60),
+        "/api/settings":     (15,  60),
+        "default":           (120, 60),
     }
 
     def _get_rule(self, path: str):
@@ -612,6 +674,21 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Not found."},
                     headers={"X-Request-ID": req_id},
                 )
+
+        # 0-0-1. 봇/스크래퍼 UA 차단 (Google Sheets IMPORTXML 등)
+        _ua = request.headers.get("user-agent", "")
+        _exempt_bot = any(path.startswith(p) for p in _BOT_CHECK_EXEMPT_PREFIXES)
+        if not _exempt_bot and _is_scraper_ua(_ua):
+            ip_blacklist.record_attack(client_ip, f"scraper_ua")
+            audit.log("SCRAPER_BLOCKED", {
+                "ip": client_ip, "path": path,
+                "ua": _ua[:200],
+            }, "WARNING")
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Access denied."},
+                headers={"X-Request-ID": req_id},
+            )
 
         # 0-1. 유효한 admin key가 있으면 블랙리스트/rate limit 바이패스
         _admin_key = os.getenv("ADMIN_API_KEY", "").strip()
