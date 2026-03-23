@@ -140,6 +140,28 @@ _GENDER_KR = {
 }
 
 
+def _is_cover_letter(filepath: Path) -> bool:
+    """파일명으로 커버레터 여부 판별"""
+    s = filepath.stem.lower()
+    return any(kw in s for kw in (
+        "cover letter", "coverletter", "cover_letter", "cl_", "cl ",
+        "cl-", "커버레터", "커버", "자기소개",
+    ))
+
+
+def _merge_pdfs(cover_pdf: Path, resume_pdf: Path, output_pdf: Path):
+    """커버레터 PDF + 이력서 PDF → 단일 PDF 병합"""
+    import fitz
+    merged = fitz.open()
+    for src_path in [cover_pdf, resume_pdf]:
+        if src_path and src_path.exists():
+            src = fitz.open(str(src_path))
+            merged.insert_pdf(src)
+            src.close()
+    merged.save(str(output_pdf), garbage=4, deflate=True)
+    merged.close()
+
+
 def _build_output_filename(number: int, candidate: dict = None, ext: str = ".docx") -> str:
     """출력 파일명: 3060영국_여(89born).docx"""
     nat_kr = ""
@@ -609,6 +631,40 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             # 학원명만 단독으로 있는 짧은 줄 → 삭제
             log.append(f"KR_ACADEMY_DEL: {stripped[:40]}")
             continue
+
+        # Case 4: 긴 문장 내 한국 업체명 인라인 삭제 (커버레터 본문)
+        # "I taught at POLY in Busan" → "I taught in South Korea"
+        if has_kr_work and len(stripped) >= 40:
+            modified = stripped
+            for kw in KR_WORKPLACE_KEYWORDS:
+                pat = re.compile(
+                    r"(?:at|for|with|in)\s+" + re.escape(kw) + r"(?:\s+(?:in|at|,))?",
+                    re.I,
+                )
+                if pat.search(modified):
+                    log.append(f"KR_INLINE_DEL: {kw}")
+                    modified = pat.sub("in", modified)
+                # 단독 등장도 제거 (대소문자 무시, 단어 경계)
+                pat2 = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                if pat2.search(modified):
+                    modified = pat2.sub("", modified)
+            # 한국 도시명도 인라인 제거
+            for city in KR_KEYWORDS:
+                if len(city) > 2 and city.lower() not in ("korea", "south korea", "rok",
+                        "republic of korea", "한국"):
+                    city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
+                    if city_pat.search(modified):
+                        log.append(f"KR_CITY_DEL: {city}")
+                        modified = city_pat.sub("", modified)
+            # 잔여 정리: 이중 공백, 쉼표 연속, "in in"
+            modified = re.sub(r"\s{2,}", " ", modified)
+            modified = re.sub(r",\s*,", ",", modified)
+            modified = re.sub(r"\bin\s+in\b", "in", modified)
+            modified = re.sub(r",\s*\.", ".", modified)
+            modified = modified.strip()
+            if modified != stripped:
+                kept_lines2.append(modified)
+                continue
 
         kept_lines2.append(line)
     result = "\n".join(kept_lines2)
@@ -1152,10 +1208,11 @@ def backup_original(filepath: Path):
     return dest
 
 
-def save_log(filepath: Path, brj_number: int, logs: list[str]):
+def save_log(filepath, brj_number: int, logs: list[str]):
     """삭제 로그 저장"""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = LOG_DIR / f"BRJ{brj_number}_{filepath.stem}.json"
+    stem = filepath.stem if isinstance(filepath, Path) else str(filepath).replace("#", "")
+    log_path = LOG_DIR / f"BRJ{brj_number}_{stem}.json"
     data = {
         "source": str(filepath),
         "brj_number": brj_number,
@@ -1317,8 +1374,34 @@ def cmd_lookup(args):
     print()
 
 
+def _resolve_candidate(filepath: Path) -> tuple[int | None, dict | None]:
+    """파일에서 후보자 번호+정보 자동 탐지. Returns (number, candidate_dict)."""
+    candidate = auto_detect_candidate(filepath)
+    if candidate and candidate.get("sheet_number"):
+        return candidate["sheet_number"], candidate
+
+    nums = re.findall(r"(\d{3,5})", filepath.stem)
+    if nums:
+        num = int(nums[0])
+        cand = get_candidate(num)
+        return num, cand
+
+    # DOCX → 이메일 기반 매칭
+    if filepath.suffix.lower() == ".docx":
+        try:
+            for em in _extract_emails_from_docx(filepath):
+                cand = find_candidate_by_email(em)
+                if cand:
+                    if cand.get("sheet_number"):
+                        return cand["sheet_number"], cand
+                    return None, cand  # 번호 없지만 후보자 정보 있음
+        except Exception:
+            pass
+    return None, None
+
+
 def cmd_batch(args):
-    """batch 명령: incoming/ 폴더 전체 일괄 처리"""
+    """batch 명령: incoming/ 폴더 전체 일괄 처리 (커버레터+이력서 자동 병합)"""
     dry = args.dry
     incoming = INCOMING_DIR
     if not incoming.exists() or not any(incoming.iterdir()):
@@ -1338,151 +1421,214 @@ def cmd_batch(args):
         return
 
     mode = "DRY RUN" if dry else "BATCH"
-    print(f"\n{'=' * 60}")
-    print(f"  BRIDGE Document Processor v2.3  [{mode}]")
-    print(f"  Incoming: {incoming}")
-    print(f"  Output:   {DEFAULT_OUTPUT}")
-    print(f"  Files:    {len(files)}")
-    print(f"{'=' * 60}\n")
 
-    # 각 파일 처리 (auto_detect_candidate로 번호 자동 감지)
-    class FakeArgs:
-        pass
-    fake = FakeArgs()
-    fake.output = str(DEFAULT_OUTPUT)
-    fake.dry = dry
-    fake.number = None
+    # ── 파일 분류: 커버레터 vs 이력서 ──
+    cover_letters = []
+    resumes = []
+    for f in files:
+        if _is_cover_letter(f):
+            cover_letters.append(f)
+        else:
+            resumes.append(f)
 
-    # incoming에서 사진 파일 목록 수집
-    photo_map = {}  # number → photo_path
+    # ── 사진 맵 수집 ──
+    photo_map = {}
     for f in incoming.iterdir():
         if f.suffix.lower() in (".jpg", ".jpeg", ".png") and not f.name.startswith(("~", ".")):
-            # 파일명에서 번호 추출
             nums = re.findall(r"(\d{3,5})", f.stem)
             for n in nums:
                 photo_map[int(n)] = f
 
-    for filepath in files:
-        fake.input = str(filepath)
-        print(f"[{mode}] {filepath.name}")
+    # ── 후보자별 그룹핑 ──
+    # key = candidate_number, value = {"resume": Path, "cover": Path, ...}
+    groups = {}  # number → {resume, cover, candidate}
 
-        candidate = auto_detect_candidate(filepath)
-        current_number = None
+    for filepath in resumes:
+        num, cand = _resolve_candidate(filepath)
+        if not num:
+            db = _get_db()
+            max_num = db.execute("SELECT MAX(sheet_number) FROM candidates").fetchone()[0] or 3000
+            num = max_num + 1
+        groups[num] = {"resume": filepath, "cover": None, "candidate": cand}
 
-        if candidate:
-            current_number = candidate["sheet_number"]
-            print(f"  Auto: #{current_number} {candidate['full_name']}")
+    # 커버레터를 같은 번호 이력서에 매칭
+    for filepath in cover_letters:
+        num, cand = _resolve_candidate(filepath)
+        if num and num in groups:
+            groups[num]["cover"] = filepath
+            if cand and not groups[num]["candidate"]:
+                groups[num]["candidate"] = cand
+        elif num:
+            groups[num] = {"resume": None, "cover": filepath, "candidate": cand}
         else:
-            # 파일명에 번호 없으면 → DOCX에서 이메일 추출하여 DB 매칭
-            nums = re.findall(r"(\d{3,5})", filepath.stem)
-            if nums:
-                current_number = int(nums[0])
-                candidate = get_candidate(current_number)
-                if candidate:
-                    print(f"  Filename: #{current_number} {candidate['full_name']}")
-                else:
-                    print(f"  Filename: #{current_number} (DB에 없음)")
-            elif filepath.suffix.lower() == ".docx":
-                # 이메일 기반 매칭
-                try:
-                    doc_emails = _extract_emails_from_docx(filepath)
-                    for em in doc_emails:
-                        cand = find_candidate_by_email(em)
-                        if cand:
-                            candidate = cand  # 국적/성별 정보 보존
-                            if cand.get("sheet_number"):
-                                current_number = cand["sheet_number"]
-                                print(f"  Email match: #{current_number} {cand['full_name']} ({em})")
-                            else:
-                                print(f"  Email found: {cand['full_name']} ({em}) — 번호 미등록")
-                            break
-                except Exception:
-                    pass
-                if not current_number:
-                    # 번호 없으면 다음 가용 번호 자동 할당
-                    db = _get_db()
-                    max_num = db.execute(
-                        "SELECT MAX(sheet_number) FROM candidates"
-                    ).fetchone()[0] or 3000
-                    current_number = max_num + 1
-                    print(f"  Auto-assign: #{current_number} (신규 번호)")
+            # 번호 매칭 실패 → 이력서 1개만 있으면 그것에 붙임
+            if len(resumes) == 1:
+                only_num = next(iter(groups))
+                groups[only_num]["cover"] = filepath
             else:
-                print(f"  [SKIP] 파일명에 번호 없음. 파일명에 강사번호 포함 필요")
-                continue
+                db = _get_db()
+                max_num = db.execute("SELECT MAX(sheet_number) FROM candidates").fetchone()[0] or 3000
+                num = max_num + 1
+                groups[num] = {"resume": None, "cover": filepath, "candidate": cand}
 
-        # 사진 찾기
+    total = len(groups)
+    print(f"\n{'=' * 60}")
+    print(f"  BRIDGE Document Processor v2.4  [{mode}]")
+    print(f"  Incoming:  {incoming}")
+    print(f"  Output:    {DEFAULT_OUTPUT}")
+    print(f"  Resumes:   {len(resumes)} | Cover Letters: {len(cover_letters)}")
+    print(f"  Groups:    {total}")
+    print(f"{'=' * 60}\n")
+
+    import tempfile
+
+    for current_number, grp in groups.items():
+        resume_path = grp["resume"]
+        cover_path = grp["cover"]
+        candidate = grp["candidate"]
+
+        label = f"#{current_number}"
+        if candidate:
+            label += f" {candidate.get('full_name', '')}"
+        print(f"[{mode}] {label}")
+        if resume_path:
+            print(f"  Resume: {resume_path.name}")
+        if cover_path:
+            print(f"  Cover:  {cover_path.name}")
+
         photo = photo_map.get(current_number)
+        all_logs = []
+        temp_pdfs = []  # (순서, pdf_path) — 최종 병합용
 
         try:
-            ext = filepath.suffix.lower()
-            if ext == ".docx":
-                doc, logs = process_docx(filepath, current_number, candidate, dry, photo_path=photo)
-            elif ext == ".pdf":
-                doc, logs = process_pdf(filepath, current_number, candidate, dry)
-            else:
-                continue
+            # ── 커버레터 처리 ──
+            if cover_path:
+                ext = cover_path.suffix.lower()
+                if ext == ".docx":
+                    # 커버레터 DOCX: PII 제거 (번호/사진 삽입 안 함)
+                    cl_doc, cl_logs = process_docx(
+                        cover_path, current_number, candidate, dry, photo_path=None
+                    )
+                    all_logs.extend(cl_logs)
+                    if not dry:
+                        backup_original(cover_path)
+                        # 임시 DOCX 저장 → PDF 변환
+                        tmp_docx = Path(tempfile.mktemp(suffix=".docx"))
+                        cl_doc.save(str(tmp_docx))
+                        tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                        if _convert_docx_to_pdf(tmp_docx, tmp_pdf):
+                            temp_pdfs.append(("cover", tmp_pdf))
+                            tmp_docx.unlink()
+                        else:
+                            temp_pdfs.append(("cover_docx", tmp_docx))
+                        cover_path.unlink()
+                elif ext == ".pdf":
+                    cl_doc, cl_logs = process_pdf(
+                        cover_path, current_number, candidate, dry
+                    )
+                    all_logs.extend(cl_logs)
+                    if not dry:
+                        backup_original(cover_path)
+                        tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                        cl_doc.save(str(tmp_pdf), garbage=4, deflate=True)
+                        cl_doc.close()
+                        temp_pdfs.append(("cover", tmp_pdf))
+                        cover_path.unlink()
 
-            if logs:
-                print(f"  PII {len(logs)}건 {'발견' if dry else '삭제'}:")
-                for l in logs[:10]:
+            # ── 이력서 처리 ──
+            if resume_path:
+                ext = resume_path.suffix.lower()
+                if ext == ".docx":
+                    doc, res_logs = process_docx(
+                        resume_path, current_number, candidate, dry, photo_path=photo
+                    )
+                    all_logs.extend(res_logs)
+                    if not dry:
+                        backup_original(resume_path)
+                        tmp_docx = Path(tempfile.mktemp(suffix=".docx"))
+                        doc.save(str(tmp_docx))
+                        tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                        if _convert_docx_to_pdf(tmp_docx, tmp_pdf):
+                            temp_pdfs.append(("resume", tmp_pdf))
+                            tmp_docx.unlink()
+                        else:
+                            temp_pdfs.append(("resume_docx", tmp_docx))
+                        resume_path.unlink()
+                elif ext == ".pdf":
+                    doc, res_logs = process_pdf(
+                        resume_path, current_number, candidate, dry
+                    )
+                    all_logs.extend(res_logs)
+                    if not dry:
+                        backup_original(resume_path)
+                        tmp_pdf = Path(tempfile.mktemp(suffix=".pdf"))
+                        doc.save(str(tmp_pdf), garbage=4, deflate=True)
+                        doc.close()
+                        temp_pdfs.append(("resume", tmp_pdf))
+                        resume_path.unlink()
+
+            # ── 로그 출력 ──
+            if all_logs:
+                print(f"  PII {len(all_logs)}건 {'발견' if dry else '삭제'}:")
+                for l in all_logs[:10]:
                     print(f"    - {l}")
-                if len(logs) > 10:
-                    print(f"    ... +{len(logs)-10}건")
+                if len(all_logs) > 10:
+                    print(f"    ... +{len(all_logs)-10}건")
 
             if dry:
-                if ext == ".pdf":
-                    doc.close()
                 print(f"  [DRY] 미리보기 완료\n")
                 continue
 
-            backup = backup_original(filepath)
-            print(f"  Backup: {backup.name}")
-
+            # ── 최종 PDF 병합/출력 ──
             DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
+            final_name = _build_output_filename(current_number, candidate, ".pdf")
+            final_path = DEFAULT_OUTPUT / final_name
 
-            if ext == ".docx":
-                # DOCX → 임시 저장 → PDF 변환
-                docx_name = _build_output_filename(current_number, candidate, ".docx")
-                docx_path = DEFAULT_OUTPUT / docx_name
-                doc.save(str(docx_path))
+            pdf_parts = [p for _, p in temp_pdfs if p.suffix == ".pdf"]
+            if len(pdf_parts) >= 2:
+                # 커버레터 + 이력서 PDF 병합
+                cover_p = next((p for t, p in temp_pdfs if "cover" in t), None)
+                resume_p = next((p for t, p in temp_pdfs if "resume" in t), None)
+                _merge_pdfs(cover_p, resume_p, final_path)
+                print(f"  Output: {final_name} (커버레터+이력서 병합 PDF)")
+            elif len(pdf_parts) == 1:
+                shutil.move(str(pdf_parts[0]), str(final_path))
+                print(f"  Output: {final_name} (PDF)")
+            else:
+                # PDF 변환 실패 — DOCX 그대로 출력
+                docx_parts = [p for _, p in temp_pdfs if p.suffix == ".docx"]
+                if docx_parts:
+                    final_path = DEFAULT_OUTPUT / _build_output_filename(
+                        current_number, candidate, ".docx")
+                    shutil.move(str(docx_parts[0]), str(final_path))
+                    print(f"  Output: {final_path.name} (DOCX — PDF 변환 실패)")
 
-                pdf_name = _build_output_filename(current_number, candidate, ".pdf")
-                pdf_path = DEFAULT_OUTPUT / pdf_name
-                if _convert_docx_to_pdf(docx_path, pdf_path):
-                    docx_path.unlink()  # DOCX 삭제 (PDF만 유지)
-                    out_path = pdf_path
-                    print(f"  Output: {pdf_path.name} (PDF)")
-                else:
-                    out_path = docx_path
-                    print(f"  Output: {docx_path.name} (DOCX — PDF 변환 실패)")
-            elif ext == ".pdf":
-                out_name = _build_output_filename(current_number, candidate, ".pdf")
-                out_path = DEFAULT_OUTPUT / out_name
-                doc.save(str(out_path), garbage=4, deflate=True)
-                doc.close()
-                print(f"  Output: {out_path.name}")
+            # 임시 파일 정리
+            for _, tmp in temp_pdfs:
+                if tmp.exists():
+                    tmp.unlink()
 
-            if logs:
-                log_path = save_log(filepath, current_number, logs)
+            if all_logs:
+                log_path = save_log(
+                    resume_path or cover_path or Path(f"#{current_number}"),
+                    current_number, all_logs,
+                )
                 print(f"  Log: {log_path.name}")
-
-            # 처리 완료된 파일을 incoming에서 제거
-            filepath.unlink()
 
             # DB 기록
             try:
-                file_size = out_path.stat().st_size if out_path.exists() else 0
+                file_size = final_path.stat().st_size if final_path.exists() else 0
                 _record_file_upload(
                     entity_id=current_number,
-                    file_type=out_path.suffix.lstrip("."),
-                    file_url=str(out_path),
+                    file_type=final_path.suffix.lstrip("."),
+                    file_url=str(final_path),
                     file_size=file_size,
                 )
                 print(f"  [DB] file_uploads 기록 완료")
             except Exception as db_err:
                 print(f"  [DB WARN] 기록 실패 (무시): {db_err}")
 
-            print(f"  [OK] (incoming에서 제거됨)\n")
+            print(f"  [OK]\n")
 
         except Exception as e:
             print(f"  [ERROR] {e}\n")
