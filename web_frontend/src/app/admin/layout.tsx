@@ -48,9 +48,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <>{children}</>
   }
 
+  const isSubPage = pathname !== '/admin'
+
   return (
-    <div className="fixed inset-0 bg-[#f5f5f7] flex overflow-hidden z-50">
+    <div className="fixed inset-0 bg-[#f5f5f7] flex flex-col lg:flex-row overflow-hidden z-50">
       <AdminSidebar />
+
+      {/* ── 중/소 화면 상단 네비바 (lg 미만) ── */}
+      {isSubPage && (
+        <div className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-white border-b border-[#e5e5e7] shrink-0 z-40"
+             style={{ paddingLeft: 52 }}>
+          <button
+            type="button"
+            onClick={() => router.push('/admin')}
+            className="flex items-center gap-1.5 text-[13px] font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 11L5 7L9 3"/>
+            </svg>
+            대시보드
+          </button>
+          <span className="text-[11px] text-[#aaa]">/</span>
+          <span className="text-[12px] text-[#555] font-medium truncate">
+            {pathname?.split('/').pop()?.replace(/-/g, ' ')}
+          </span>
+        </div>
+      )}
+
       <main className="flex-1 min-w-0 overflow-hidden h-full">
         {isFullWidth ? (
           <div className="w-full h-full">
