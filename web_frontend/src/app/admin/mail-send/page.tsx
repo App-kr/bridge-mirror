@@ -834,7 +834,7 @@ function ProfileBuilder({
         const data = await res.json()
         setResults(data.data || [])
       } catch {
-        /* silent */
+        setResults([])
       }
     }, 300)
     return () => clearTimeout(timer)
@@ -880,7 +880,7 @@ function ProfileBuilder({
       const data = await res.json()
       setPreviewHtml(data.data?.html || '')
     } catch {
-      /* silent */
+      setPreviewHtml('<p style="color:#ef4444">프로필 HTML 생성에 실패했습니다.</p>')
     } finally {
       setLoading(false)
     }

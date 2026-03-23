@@ -97,8 +97,8 @@ export default function InquiriesPage() {
       }
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.detail ?? 'Error')
-      setRows(json.data.inquiries)
-      setTotal(json.data.total)
+      setRows(json.data?.inquiries ?? [])
+      setTotal(json.data?.total ?? 0)
     } catch (e) {
       setError(e instanceof Error ? e.message : '데이터 로드 실패')
     } finally {

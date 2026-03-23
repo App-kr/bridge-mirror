@@ -106,10 +106,10 @@ function MatchingPageInner() {
         throw new Error(j.detail || j.error || `Error ${res.status}`)
       }
       const j = await res.json()
-      const data = j.data
-      setCandidate(data.candidate)
-      setMatched(data.matched || [])
-      setUnmatched(data.unmatched || [])
+      const data = j.data ?? {}
+      setCandidate(data.candidate ?? null)
+      setMatched(data.matched ?? [])
+      setUnmatched(data.unmatched ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
