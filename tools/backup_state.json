@@ -1079,8 +1079,24 @@
       "git": "f5bd33e",
       "files": 2088,
       "db_hash": "fcc82bb56425"
+    },
+    {
+      "dir": "20260323_230622__direct-test-improvements",
+      "task": "direct-test-improvements",
+      "ts": "2026.03.23 23:06:27",
+      "git": "47d9bbb",
+      "files": 2088,
+      "db_hash": "fcc82bb56425"
+    },
+    {
+      "dir": "20260323_231747__상위보안강화",
+      "task": "상위보안강화",
+      "ts": "2026.03.23 23:17:50",
+      "git": "85516f9",
+      "files": 2088,
+      "db_hash": "fcc82bb56425"
     }
   ],
-  "last_backup": "2026.03.23 22:49:18",
-  "total_count": 135
+  "last_backup": "2026.03.23 23:17:51",
+  "total_count": 137
 }

@@ -1263,9 +1263,19 @@ def _check_admin(request: Request):
     """ADMIN_API_KEY 헤더 검증. 키 미설정 시 항상 접근 차단 (개발/프로덕션 구분 없음)."""
     if not _ADMIN_KEY:
         raise HTTPException(status_code=503, detail={"isError": True, "errorCategory": "DB_UNAVAILABLE", "isRetryable": True, "context": "관리자 기능이 비활성화되어 있습니다."})
+    # ── brute-force 방어: 10회 실패 시 5분 차단 ──
+    ip_h = _ip_hash(request)
+    now = _time.time()
+    fails = [t for t in _AUTH_FAIL.get(ip_h, []) if now - t < 300]
+    if len(fails) >= 10:
+        raise HTTPException(status_code=429, detail={"isError": True, "errorCategory": "RATE_LIMIT", "isRetryable": True, "context": "인증 시도가 너무 많습니다. 5분 후 다시 시도하세요."})
     if not hmac.compare_digest(request.headers.get("x-admin-key", "").strip(), _ADMIN_KEY.strip()):
+        fails.append(now)
+        _AUTH_FAIL[ip_h] = fails
         _log_unauthorized_access(request)
         raise HTTPException(status_code=403, detail={"isError": True, "errorCategory": "ADMIN_KEY_INVALID", "isRetryable": False, "context": "관리자 키가 올바르지 않습니다."})
+    # 인증 성공 시 실패 기록 초기화
+    _AUTH_FAIL.pop(ip_h, None)
 
 
 @app.post("/api/admin/login", tags=["admin"])
@@ -3455,6 +3465,7 @@ _BOARDS = {
     "support_kr", "support", "about", "korea", "tips", "testimonials", "information",
 }
 _RATE_LIMIT: dict[str, list] = {}  # ip_hash → [timestamps]
+_AUTH_FAIL: dict[str, list] = {}   # ip_hash → [fail timestamps] (brute-force 방어)
 
 import hashlib, time as _time
 
