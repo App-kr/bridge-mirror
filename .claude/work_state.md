@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-23 (세션 15 — 안정화 + 상태 정리)
+최근 업데이트: 2026-03-24 (세션 16 — OPUS Final 보안 강화)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,39 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-24 세션 16 (OPUS Final 보안 강화)
+- fix(security): 보안 감사 6건 수정 (`47d9bbb`)
+  - [HIGH] /api/upload 인증 누락 → _check_admin 전체 적용
+  - [HIGH] SMTP 예외 메시지 노출 → 일반 메시지로 교체
+  - [MEDIUM] 메일 rate limit 우회 → _mail_rate_check 추가
+  - [MEDIUM] employer email 평문 응답 → 마스킹 처리
+  - [LOW] change-password PBKDF2 해시 노출 제거
+  - [LOW] S3 업로드 오류 메시지 노출 제거
+- fix(security): 쿠키 SameSite/Secure 플래그 4곳 통일 (`6113b79`)
+  - AdminAuthContext, EditModeBar, AdminSidebar, admin/page
+- fix(api): brute-force + 상위 보안 시스템 (`bf188d1`)
+  - **세션 토큰 시스템**: /24 서브넷 바인딩, 8시간 만료, 슬라이딩 갱신
+  - **ADMIN_ALLOWED_IPS 화이트리스트**: CIDR 지원, 환경변수 설정
+  - **CSRF Origin 검증**: 관리자 mutation 요청의 Origin 헤더 검증
+  - **AdminAuditMiddleware**: 모든 admin POST/PATCH/DELETE 감사 로그
+  - **BodySizeLimitMiddleware**: 10MB 요청 크기 제한
+  - **TrustedHostMiddleware**: 허용 도메인만 접근
+  - 세션 관리 API: /logout, /sessions, /sessions(DELETE)
+- feat(security): 세션 토큰 프론트엔드 지원 (`f7a9547`)
+  - useAdminAuth: session_token 저장/전송/폐기
+  - headers/signedFetch/adminFetch 모두 x-admin-token 헤더 자동 첨부
+
+### 보안 계층 현황 (7계층)
+| # | 계층 | 상태 |
+|---|------|------|
+| 1 | HMAC 서명 (X-Bridge-Signature) | ✅ |
+| 2 | 세션 토큰 (/24 서브넷 바인딩) | ✅ NEW |
+| 3 | IP 화이트리스트 (ADMIN_ALLOWED_IPS) | ✅ NEW |
+| 4 | IP 블랙리스트 (누진차단+허니팟) | ✅ |
+| 5 | Rate Limiting (엔드포인트별+국가별) | ✅ |
+| 6 | 공격 탐지 (SQLi/XSS/SSRF/LLM) | ✅ |
+| 7 | CSRF Origin 검증 | ✅ NEW |
 
 ## 2026-03-23 세션 15 (안정화 + 상태 점검)
 - fix(employers): Error Boundary + DOMPurify 안전화 (`bd221c6`)
