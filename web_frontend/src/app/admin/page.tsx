@@ -372,14 +372,14 @@ export default function AdminDashboardPage() {
       {/* ── 관리 메뉴 바로가기 ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {[
-          { href: '/admin/settings', label: '사이트 설정', desc: '이름·히어로·네비·CTA·SNS', icon: '⚙️' },
-          { href: '/admin/candidates', label: '원어민 관리', desc: '전체 후보자 DB', icon: '👤' },
+          { href: '/admin/sheet', label: '원어민 관리', desc: '전체 후보자 시트', icon: '👤' },
           { href: '/admin/employers', label: '구인자 관리', desc: '고용주 문의·매칭', icon: '🏢' },
-          { href: '/admin/posts', label: '게시물 관리', desc: '전체 게시판 콘텐츠', icon: '📝' },
+          { href: '/admin/applications', label: '업체 관리', desc: '지원 현황', icon: '🏬' },
           { href: '/admin/jobs', label: '채용공고', desc: 'Job Board 관리', icon: '💼' },
-          { href: '/admin/banners', label: '배너 관리', desc: '사이트 배너 이미지', icon: '🖼️' },
+          { href: '/admin/posts', label: '게시물 관리', desc: '전체 게시판 콘텐츠', icon: '📝' },
           { href: '/admin/mail-send', label: '메일 발송', desc: '이메일 작성·발송', icon: '📧' },
-          { href: '/admin/sheet', label: '스프레드시트', desc: '원어민 전체 시트', icon: '📊' },
+          { href: '/admin/banners', label: '배너 관리', desc: '사이트 배너 이미지', icon: '🖼️' },
+          { href: '/admin/settings', label: '사이트 설정', desc: '이름·히어로·네비·CTA·SNS', icon: '⚙️' },
         ].map((item) => (
           <Link
             key={item.href}
