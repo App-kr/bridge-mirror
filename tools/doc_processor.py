@@ -101,7 +101,7 @@ def get_candidate(number: int):
     db = _get_db()
     row = db.execute(
         "SELECT sheet_number, full_name, nationality, email, "
-        "mobile_phone, kakaotalk, current_location "
+        "mobile_phone, kakaotalk, current_location, dob, gender "
         "FROM candidates WHERE sheet_number = ?",
         (number,),
     ).fetchone()
@@ -115,25 +115,81 @@ def get_candidate(number: int):
         "mobile_phone": _try_decrypt(row[4]),
         "kakaotalk": _try_decrypt(row[5]),
         "current_location": _try_decrypt(row[6]),
+        "dob": _try_decrypt(row[7]) if row[7] else "",
+        "gender": _try_decrypt(row[8]) if row[8] else "",
     }
+
+
+# 국적 영→한 매핑
+_NAT_KR = {
+    "american": "미국", "us": "미국", "usa": "미국", "united states": "미국",
+    "british": "영국", "uk": "영국", "united kingdom": "영국", "english": "영국",
+    "irish": "아일랜드", "ireland": "아일랜드", "n. ireland": "아일랜드",
+    "northern irish": "아일랜드",
+    "canadian": "캐나다", "canada": "캐나다",
+    "australian": "호주", "australia": "호주",
+    "new zealander": "뉴질랜드", "new zealand": "뉴질랜드", "kiwi": "뉴질랜드",
+    "south african": "남아공", "south africa": "남아공",
+    "filipino": "필리핀", "philippines": "필리핀",
+    "indian": "인도", "india": "인도",
+}
+
+_GENDER_KR = {
+    "male": "남", "m": "남", "남": "남", "남성": "남",
+    "female": "여", "f": "여", "여": "여", "여성": "여",
+}
+
+
+def _build_output_filename(number: int, candidate: dict = None, ext: str = ".docx") -> str:
+    """출력 파일명: 3060영국_여(89born).docx"""
+    nat_kr = ""
+    gender_kr = ""
+    birth_yr = ""
+
+    if candidate:
+        # 국적
+        nat_raw = (candidate.get("nationality") or "").strip().lower()
+        nat_kr = _NAT_KR.get(nat_raw, nat_raw[:4] if nat_raw else "")
+
+        # 성별
+        gen_raw = (candidate.get("gender") or "").strip().lower()
+        gender_kr = _GENDER_KR.get(gen_raw, gen_raw[:1] if gen_raw else "")
+
+        # 생년 (2자리)
+        dob = (candidate.get("dob") or "").strip()
+        if dob:
+            # "1989-05-15", "1989", "89", "May 15, 1989" 등
+            yr_match = re.search(r"(19|20)(\d{2})", dob)
+            if yr_match:
+                birth_yr = yr_match.group(2)
+            elif re.match(r"^\d{2}$", dob):
+                birth_yr = dob
+
+    parts = [str(number)]
+    if nat_kr:
+        parts.append(nat_kr)
+    if gender_kr:
+        parts.append(f"_{gender_kr}")
+    if birth_yr:
+        parts.append(f"({birth_yr}born)")
+
+    return "".join(parts) + ext
 
 
 def find_candidate_by_email(email: str):
     """이메일로 후보자 검색 → dict or None (정확 매칭 우선, 없으면 LIKE)"""
     db = _get_db()
+    _COLS = ("sheet_number, full_name, nationality, email, "
+             "mobile_phone, kakaotalk, current_location, dob, gender")
     # 정확 매칭
     row = db.execute(
-        "SELECT sheet_number, full_name, nationality, email, "
-        "mobile_phone, kakaotalk, current_location "
-        "FROM candidates WHERE email = ? LIMIT 1",
+        f"SELECT {_COLS} FROM candidates WHERE email = ? LIMIT 1",
         (email,),
     ).fetchone()
     if not row:
         # 암호화된 이메일일 수 있으므로 전체 스캔 (느리지만 정확)
         rows = db.execute(
-            "SELECT sheet_number, full_name, nationality, email, "
-            "mobile_phone, kakaotalk, current_location "
-            "FROM candidates WHERE email IS NOT NULL AND email != ''"
+            f"SELECT {_COLS} FROM candidates WHERE email IS NOT NULL AND email != ''"
         ).fetchall()
         for r in rows:
             decrypted = _try_decrypt(r[3])
@@ -150,6 +206,8 @@ def find_candidate_by_email(email: str):
         "mobile_phone": _try_decrypt(row[4]),
         "kakaotalk": _try_decrypt(row[5]),
         "current_location": _try_decrypt(row[6]),
+        "dob": _try_decrypt(row[7]) if row[7] else "",
+        "gender": _try_decrypt(row[8]) if row[8] else "",
     }
 
 
@@ -295,6 +353,14 @@ PII_LINE_LABELS = [
     ("email", True), ("e-mail", True),
     ("phone", True), ("telephone", True), ("mobile", True),
     ("cell", True), ("tel", True),
+    ("korean telephone", True), ("u.k. telephone", True),
+    ("uk telephone", True), ("us telephone", True),
+    ("home phone", True), ("work phone", True), ("cell phone", True),
+    ("contact", True), ("contact number", True),
+    # 주소
+    ("permanent address", True), ("home address", True),
+    ("mailing address", True), ("address", True),
+    ("current address", True),
     # SNS (colon 필수)
     ("kakao", True), ("kakaotalk", True),
     ("line id", True), ("line", True),
@@ -306,9 +372,11 @@ PII_LINE_LABELS = [
     ("portfolio", True),
     # 신원
     ("passport", True), ("passport number", True), ("passport no", True),
+    ("date of birth", True), ("dob", True),
+    ("national id", True), ("ssn", True),
     # 한국어
     ("이메일", True), ("전화", True), ("연락처", True),
-    ("카카오", True), ("여권", True),
+    ("카카오", True), ("여권", True), ("주소", True),
 ]
 
 # 위치 라벨 → 한국이면 "Korea"로 변환
@@ -328,14 +396,24 @@ WORKPLACE_LABELS = [
 
 # 한국 학원/학교 키워드 (경력줄에서 한국 근무지 감지용)
 KR_WORKPLACE_KEYWORDS = frozenset([
+    # 대형 프랜차이즈
     "ecc", "ybm", "pagoda", "avalon", "chungdahm", "cdl", "jle",
     "poly", "sle", "aclipse", "epik", "gepik", "smoe", "jlec",
+    "slp", "rise", "cdi", "bcm", "gnb", "iei", "ael", "tel",
+    "hess", "ewha", "april", "top edu", "dada", "dadahak",
+    "wonderland", "maple bear", "little america", "little fox",
+    "english muse", "english plus", "emg education",
+    "altiora", "bricks", "jungchul", "jeongchul",
+    "sisa", "hansol", "daekyo", "kumon", "chungjae",
+    "global adventure", "hampson", "engoo",
+    # 일반 유형
     "english village", "language school", "language academy",
     "language institute", "language center", "language centre",
     "hagwon", "학원", "어학원", "영어학원", "유치원", "어린이집",
     "elementary school", "middle school", "high school",
     "international school", "kindergarten", "preschool",
     "after-school", "afterschool", "after school",
+    "private academy", "teaching academy", "english academy",
 ])
 
 # 경력줄에서 한국 근무 상세 축약 패턴
@@ -489,9 +567,7 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
 
-    # ── Pass 2.5: 한국 근무 경력줄 — 업체명+지역만 삭제, 직책·설명 유지 ──
-    # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022"
-    # → "S.Korea, March 2021 - Sept 2022"
+    # ── Pass 2.5: 한국 관련 줄 처리 ──
     lines2 = result.split("\n")
     kept_lines2 = []
     for line in lines2:
@@ -500,15 +576,40 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
         # 한국 키워드가 포함된 줄인지 확인
         has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
         has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
-        if has_kr and (has_kr_work or has_kr):
-            # 날짜 범위 추출
-            date_match = RE_DATE_RANGE.search(stripped)
-            if date_match:
-                date_str = date_match.group(0).strip()
-                log.append(f"KR_EXP_REDACT: {stripped[:80]}")
-                # 업체명+지역 삭제, "S.Korea, 기간"만 남김
-                kept_lines2.append(f"S.Korea, {date_str}")
+
+        if has_kr:
+            # Case 1: 경력줄 — "YBM ECC, Uijeongbu, South Korea, March 2021"
+            if has_kr_work:
+                date_match = RE_DATE_RANGE.search(stripped)
+                if date_match:
+                    date_str = date_match.group(0).strip()
+                    log.append(f"KR_EXP_REDACT: {stripped[:80]}")
+                    kept_lines2.append(f"S.Korea, {date_str}")
+                    continue
+
+            # Case 2: 위치셀 — "Busan, S.Korea" 또는 "Masan, S. Korea"
+            # 한국 도시명 제거 → "S.Korea"만
+            kr_loc_match = re.match(
+                r"^[\w\s-]*(?:" + "|".join(re.escape(kw) for kw in KR_KEYWORDS if len(kw) > 2) + r").*$",
+                s_lower,
+            )
+            if kr_loc_match and len(stripped) < 50:
+                # 날짜가 같은 줄에 있으면 유지
+                date_match = RE_DATE_RANGE.search(stripped)
+                if date_match:
+                    log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
+                    kept_lines2.append(f"S.Korea, {date_match.group(0).strip()}")
+                else:
+                    log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
+                    kept_lines2.append("S.Korea")
                 continue
+
+        # Case 3: 한국 학원명만 있는 줄 (korea 키워드 없이) — "POLY", "TOP Edu"
+        if has_kr_work and not has_kr and len(stripped) < 40:
+            # 학원명만 단독으로 있는 짧은 줄 → 삭제
+            log.append(f"KR_ACADEMY_DEL: {stripped[:40]}")
+            continue
+
         kept_lines2.append(line)
     result = "\n".join(kept_lines2)
 
@@ -699,6 +800,13 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
                         _replace_with_bold_korea(para, cleaned)
                     else:
                         _replace_in_runs(para, cleaned)
+                    # 하이퍼링크/필드코드 등 runs에 안 잡히는 요소 강제 클리어
+                    if not cleaned.strip() and para.text.strip():
+                        from docx.oxml.ns import qn
+                        for child in list(para._element):
+                            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                            if tag in ("hyperlink", "r", "fldSimple", "smartTag"):
+                                para._element.remove(child)
 
     # 헤더/푸터 — 전체 삭제 (이름/주소/연락처 모두 비움)
     def _clean_header_footer(paragraphs, section_name="header"):
@@ -1095,7 +1203,7 @@ def cmd_process(args):
 
             # 저장
             output_dir.mkdir(parents=True, exist_ok=True)
-            out_name = f"BRJ{current_number}_{filepath.stem}{ext}"
+            out_name = _build_output_filename(current_number, candidate, ext)
             out_path = output_dir / out_name
 
             if ext == ".docx":
@@ -1208,10 +1316,13 @@ def cmd_batch(args):
                     doc_emails = _extract_emails_from_docx(filepath)
                     for em in doc_emails:
                         cand = find_candidate_by_email(em)
-                        if cand and cand.get("sheet_number"):
-                            candidate = cand
-                            current_number = cand["sheet_number"]
-                            print(f"  Email match: #{current_number} {cand['full_name']} ({em})")
+                        if cand:
+                            candidate = cand  # 국적/성별 정보 보존
+                            if cand.get("sheet_number"):
+                                current_number = cand["sheet_number"]
+                                print(f"  Email match: #{current_number} {cand['full_name']} ({em})")
+                            else:
+                                print(f"  Email found: {cand['full_name']} ({em}) — 번호 미등록")
                             break
                 except Exception:
                     pass
@@ -1256,7 +1367,7 @@ def cmd_batch(args):
             print(f"  Backup: {backup.name}")
 
             DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
-            out_name = f"BRJ{current_number}_{filepath.stem}{ext}"
+            out_name = _build_output_filename(current_number, candidate, ext)
             out_path = DEFAULT_OUTPUT / out_name
 
             if ext == ".docx":
@@ -1379,7 +1490,7 @@ def cmd_download(args):
 
                     backup_original(f)
                     DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
-                    out_name = f"BRJ{number}_{f.stem}{ext}"
+                    out_name = _build_output_filename(number, candidate, ext)
                     out_path = DEFAULT_OUTPUT / out_name
 
                     if ext == ".docx":
