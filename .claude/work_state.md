@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-23 (세션 12 — CV 자동처리 파이프라인)
+최근 업데이트: 2026-03-23 (세션 14 — 자동화 + 성능 + 안정성)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,20 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-23 세션 14 완료 (자동화 + 성능 + 안정성)
+- feat(auto): sheet_number 웹폼 자동 할당 (`3e7f85c`)
+  - /api/apply INSERT 시 MAX(sheet_number)+1 자동 부여 (기존: NULL)
+- feat(auto): 인터뷰 리마인더 서버 스레드 (`3e7f85c`)
+  - 10분 주기 daemon thread — Render에서 자동 실행
+  - Windows Task Scheduler 의존성 제거
+- fix(stability): sheet_number race condition 제거 (`967bce4`)
+  - /api/apply + /api/admin/candidates: INSERT 서브쿼리 원자화
+- perf(sheet): 열 뷰포트 컬링 (`9a3656b`)
+  - GridEngine draw(): 화면 밖 열 skip (PASS 1/2 + 헤더)
+  - 50개 열 중 ~15개만 visible → drawCell 호출 70% 감소
+- chore: sql.js + @types/sql.js 의존성 제거 (`9a3656b`)
+  - ~1.4MB 번들 절감
 
 ## 2026-03-23 세션 12 완료 (CV 자동처리 + 메일 이력서 자동첨부)
 - feat(auto-process): CV 업로드 시 PII 자동 제거 파이프라인
@@ -129,7 +143,7 @@
 ### 핵심 기능
 | 우선순위 | 항목 | 비고 |
 |---------|------|------|
-| High | Canvas Sheet: 가상 렌더링 (Phase 4) | 3000행 성능 |
+| ~~High~~ | ~~Canvas Sheet: 가상 렌더링 (Phase 4)~~ | ✅ 행+열 컬링 완료 `9a3656b` |
 | High | Social Auto Platform | 계정 준비 후 시작 |
 | High | YouTube Shorts 환경 준비 | 계정 준비 후 시작 |
 
@@ -137,7 +151,9 @@
 | 우선순위 | 항목 | 비고 |
 |---------|------|------|
 | High | og-image.png 누락 | SNS 공유 시 이미지 깨짐 |
-| Medium | sql.js 미사용 의존성 제거 (1.4MB 번들) | 미사용 확인완료 |
+| ~~Medium~~ | ~~sql.js 미사용 의존성 제거~~ | ✅ `9a3656b` |
+| Medium | ag-grid 미사용 의존성 제거 | AllCandidatesGrid dead code |
+| Low | Gmail 자동동기화 | Render 환경변수 GMAIL_SYNC_ENABLED=true 설정만 |
 
 ### SEO/코드 정리
 | 우선순위 | 항목 | 비고 |
