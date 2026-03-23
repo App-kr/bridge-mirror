@@ -1485,41 +1485,56 @@ def cmd_batch(args):
     photo_map = {}
     for f in incoming.iterdir():
         if f.suffix.lower() in (".jpg", ".jpeg", ".png") and not f.name.startswith(("~", ".")):
-            nums = re.findall(r"(\d{3,5})", f.stem)
-            for n in nums:
-                photo_map[int(n)] = f
+            photo_map[f.stem.lower()] = f
+
+    # ── 자동 번호 카운터 (충돌 방지) ──
+    db = _get_db()
+    _next_auto = (db.execute("SELECT MAX(sheet_number) FROM candidates").fetchone()[0] or 3000) + 1
 
     # ── 후보자별 그룹핑 ──
-    # key = candidate_number, value = {"resume": Path, "cover": Path, ...}
     groups = {}  # number → {resume, cover, candidate}
 
     for filepath in resumes:
         num, cand = _resolve_candidate(filepath)
         if not num:
-            db = _get_db()
-            max_num = db.execute("SELECT MAX(sheet_number) FROM candidates").fetchone()[0] or 3000
-            num = max_num + 1
+            num = _next_auto
+            _next_auto += 1
         groups[num] = {"resume": filepath, "cover": None, "candidate": cand}
 
-    # 커버레터를 같은 번호 이력서에 매칭
+    # 커버레터 매칭: 번호 → 파일명 이름 유사도 → 신규 그룹
+    _stop_words = {"cover", "letter", "resume", "copy", "of", "the", "for"}
     for filepath in cover_letters:
         num, cand = _resolve_candidate(filepath)
+
+        # 1) 번호 매칭
         if num and num in groups:
             groups[num]["cover"] = filepath
             if cand and not groups[num]["candidate"]:
                 groups[num]["candidate"] = cand
-        elif num:
-            groups[num] = {"resume": None, "cover": filepath, "candidate": cand}
-        else:
-            # 번호 매칭 실패 → 이력서 1개만 있으면 그것에 붙임
-            if len(resumes) == 1:
-                only_num = next(iter(groups))
-                groups[only_num]["cover"] = filepath
-            else:
-                db = _get_db()
-                max_num = db.execute("SELECT MAX(sheet_number) FROM candidates").fetchone()[0] or 3000
-                num = max_num + 1
-                groups[num] = {"resume": None, "cover": filepath, "candidate": cand}
+            continue
+
+        # 2) 파일명 이름 유사도 매칭 ("Cover letter - grace peers" ↔ "Copy of Resume - grace peers")
+        cl_words = set(re.findall(r"[a-z]{3,}", filepath.stem.lower())) - _stop_words
+        matched = False
+        for gnum, grp in groups.items():
+            if grp["resume"] and not grp["cover"]:
+                res_words = set(re.findall(r"[a-z]{3,}", grp["resume"].stem.lower())) - _stop_words
+                common = cl_words & res_words
+                if len(common) >= 1:
+                    groups[gnum]["cover"] = filepath
+                    if cand and not grp["candidate"]:
+                        grp["candidate"] = cand
+                    print(f"  [MATCH] Cover ↔ Resume by name: {common}")
+                    matched = True
+                    break
+        if matched:
+            continue
+
+        # 3) 신규 그룹
+        if not num:
+            num = _next_auto
+            _next_auto += 1
+        groups[num] = {"resume": None, "cover": filepath, "candidate": cand}
 
     total = len(groups)
     print(f"\n{'=' * 60}")
@@ -1546,7 +1561,18 @@ def cmd_batch(args):
         if cover_path:
             print(f"  Cover:  {cover_path.name}")
 
-        photo = photo_map.get(current_number)
+        # 사진 매칭: 번호 → 이름 유사도
+        photo = None
+        for pk, pf in photo_map.items():
+            if str(current_number) in pk:
+                photo = pf
+                break
+        if not photo and candidate and candidate.get("full_name"):
+            name_parts = candidate["full_name"].lower().split()
+            for pk, pf in photo_map.items():
+                if any(part in pk for part in name_parts if len(part) >= 3):
+                    photo = pf
+                    break
         all_logs = []
         temp_pdfs = []  # (순서, pdf_path) — 최종 병합용
 
