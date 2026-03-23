@@ -1,5 +1,5 @@
 """
-BRIDGE Document Processor v2.2
+BRIDGE Document Processor v2.3
 후보자 이력서/커버레터에서 PII 삭제 + 강사번호 입력
 
 사용법:
@@ -191,6 +191,15 @@ RE_KR_ADDRESS = re.compile(
 
 RE_PASSPORT = re.compile(r"\b[A-Z]{1,2}\d{7,8}\b")
 
+# 영문 주소 패턴: "123 Street Name, City, ST 12345" 또는 "City, State ZIP"
+RE_EN_ADDRESS = re.compile(
+    r"\d{1,5}\s+[\w\s.]+(?:St(?:reet)?|Ave(?:nue)?|Blvd|Boulevard|Dr(?:ive)?|"
+    r"Rd|Road|Ln|Lane|Ct|Court|Way|Pl(?:ace)?|Trail|Tr|Circle|Cir|Pike|Pkwy|Hwy)"
+    r"[.,]?\s*(?:(?:Apt|Suite|Ste|Unit|#)\s*\w+[.,]?\s*)?"
+    r"(?:\w[\w\s]*,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?)?",
+    re.I,
+)
+
 # 한국 도시/지역 키워드 (소문자)
 KR_KEYWORDS = frozenset([
     "korea", "seoul", "busan", "daegu", "incheon", "gwangju",
@@ -252,6 +261,36 @@ WORKPLACE_LABELS = [
     "school name", "academy name", "hagwon",
     "현 직장", "근무지", "학원명", "학교명",
 ]
+
+# 한국 학원/학교 키워드 (경력줄에서 한국 근무지 감지용)
+KR_WORKPLACE_KEYWORDS = frozenset([
+    "ecc", "ybm", "pagoda", "avalon", "chungdahm", "cdl", "jle",
+    "poly", "sle", "aclipse", "epik", "gepik", "smoe", "jlec",
+    "english village", "language school", "language academy",
+    "language institute", "language center", "language centre",
+    "hagwon", "학원", "어학원", "영어학원", "유치원", "어린이집",
+    "elementary school", "middle school", "high school",
+    "international school", "kindergarten", "preschool",
+    "after-school", "afterschool", "after school",
+])
+
+# 경력줄에서 한국 근무 상세 축약 패턴
+# "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022" → "South Korea, March 2021 - Sept 2022"
+# 날짜 패턴: "Jan 2021", "2021-2023", "March 2021 - Sept 2022", "2021 - Present"
+_MONTH = (
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+)
+RE_DATE_RANGE = re.compile(
+    r"(?:,\s*)?"
+    r"(" + _MONTH + r"\.?\s*)?"
+    r"(\d{4})"
+    r"(?:\s*[-\u2013~]\s*"
+    r"(?:" + _MONTH + r"\.?\s*)?"
+    r"(?:\d{4}|[Pp]resent|[Cc]urrent)"
+    r")?",
+    re.I,
+)
 
 
 # ══════════════════════════════════════════════════════
@@ -383,6 +422,32 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
         return "Korea"
     result = RE_KR_ADDRESS.sub(addr_replacer, result)
 
+    # 영문 주소 삭제 (거리+도시+주/zip)
+    _sub(RE_EN_ADDRESS, "", "EN_ADDR")
+
+    # ── Pass 2.5: 한국 근무 경력줄 축약 ──
+    # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022"
+    # → "South Korea, March 2021 - Sept 2022"
+    lines2 = result.split("\n")
+    kept_lines2 = []
+    for line in lines2:
+        stripped = line.strip()
+        s_lower = stripped.lower()
+        # 한국 키워드가 포함된 줄인지 확인
+        has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
+        has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
+        if has_kr and (has_kr_work or has_kr):
+            # 날짜 범위 추출
+            date_match = RE_DATE_RANGE.search(stripped)
+            if date_match:
+                date_str = date_match.group(1).strip()
+                log.append(f"KR_EXP_REDACT: {stripped[:80]}")
+                # 직장 상세를 "South Korea, 기간"으로 축약
+                kept_lines2.append(f"South Korea, {date_str}")
+                continue
+        kept_lines2.append(line)
+    result = "\n".join(kept_lines2)
+
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
         name = candidate.get("full_name", "")
@@ -486,6 +551,29 @@ def _replace_in_runs(paragraph, cleaned_text):
                 run.text = ""
 
 
+def _extract_names_from_filename(filepath: Path) -> list[str]:
+    """파일명에서 사람 이름 추출. 'Resume-DoniaBland2026 (1) - Donia Bland.docx' → ['Donia Bland', ...]"""
+    stem = filepath.stem
+    # " - Name" 패턴 (가장 흔함)
+    parts = re.split(r"\s*-\s*", stem)
+    names = []
+    for part in parts:
+        # 숫자만/키워드만 제외
+        clean = re.sub(r"\(\d+\)", "", part).strip()
+        clean = re.sub(r"\d{4,}", "", clean).strip()
+        if clean.lower() in ("resume", "cv", "cover letter", "coverletter", ""):
+            continue
+        # 2단어 이상이면 이름으로 간주
+        words = clean.split()
+        if len(words) >= 2 and all(w[0].isupper() for w in words if w):
+            names.append(clean)
+            # 개별 단어도 추가 (3글자 이상)
+            for w in words:
+                if len(w) >= 3:
+                    names.append(w)
+    return names
+
+
 def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: bool = False):
     """DOCX 처리: PII 삭제 + 번호 삽입. Returns (doc, log_entries)"""
     import docx
@@ -493,14 +581,56 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: b
     doc = docx.Document(str(filepath))
     all_logs = []
 
+    # 파일명에서 이름 추출 (DB 불일치 대비)
+    filename_names = _extract_names_from_filename(filepath)
+
     def _process_paragraphs(paragraphs, section_name="body"):
         for para in paragraphs:
             original = para.text
             if not original.strip():
                 continue
             cleaned, log = remove_pii(original, candidate)
+            # 파일명에서 추출한 이름도 삭제
+            for fn_name in filename_names:
+                pat = re.compile(re.escape(fn_name), re.I)
+                if pat.search(cleaned):
+                    log.append(f"FILENAME_NAME: {fn_name}")
+                    cleaned = pat.sub("", cleaned)
             if cleaned != original:
                 all_logs.extend([f"[{section_name}] {l}" for l in log])
+                if not dry:
+                    _replace_in_runs(para, cleaned)
+
+    # 헤더/푸터 — 공격적 삭제 (이름/주소/연락처 모두 비움)
+    def _clean_header_footer(paragraphs, section_name="header"):
+        for para in paragraphs:
+            original = para.text
+            if not original.strip():
+                continue
+            cleaned = original
+            # 파일명 이름 삭제
+            for fn_name in filename_names:
+                pat = re.compile(re.escape(fn_name), re.I)
+                cleaned = pat.sub("", cleaned)
+            # DB 후보자 이름 삭제
+            if candidate and candidate.get("full_name"):
+                for variant in _name_variants(candidate["full_name"]):
+                    cleaned = re.sub(re.escape(variant), "", cleaned, flags=re.I)
+            # PII 패턴 삭제
+            cleaned, log = remove_pii(cleaned, candidate)
+            # 도시+주 패턴 (City, ST 또는 City, State)
+            cleaned = re.sub(
+                r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*,\s*[A-Z]{2}\b",
+                "", cleaned
+            )
+            # 남은 텍스트가 거의 없으면 (순수 PII였음) 전체 비움
+            remaining = cleaned.strip()
+            if len(remaining) < 3:
+                cleaned = ""
+            if cleaned != original:
+                all_logs.extend([f"[{section_name}] {l}" for l in log])
+                if cleaned != original:
+                    all_logs.append(f"[{section_name}] HDR_CLEAN: {original.strip()[:60]}")
                 if not dry:
                     _replace_in_runs(para, cleaned)
 
@@ -513,22 +643,21 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None, dry: b
             for cell in row.cells:
                 _process_paragraphs(cell.paragraphs, f"table{ti}")
 
-    # 헤더/푸터
+    # 헤더/푸터 — 공격적 삭제
     for si, section in enumerate(doc.sections):
         for hf_name, hf in [("header", section.header), ("footer", section.footer)]:
             if hf and hf.paragraphs:
-                _process_paragraphs(hf.paragraphs, f"{hf_name}{si}")
-        # first_page 헤더/푸터
+                _clean_header_footer(hf.paragraphs, f"{hf_name}{si}")
         try:
             fph = section.first_page_header
             if fph and fph.paragraphs:
-                _process_paragraphs(fph.paragraphs, f"first_header{si}")
+                _clean_header_footer(fph.paragraphs, f"first_header{si}")
         except Exception:
             pass
         try:
             fpf = section.first_page_footer
             if fpf and fpf.paragraphs:
-                _process_paragraphs(fpf.paragraphs, f"first_footer{si}")
+                _clean_header_footer(fpf.paragraphs, f"first_footer{si}")
         except Exception:
             pass
 
@@ -896,7 +1025,7 @@ def cmd_batch(args):
 
     mode = "DRY RUN" if dry else "BATCH"
     print(f"\n{'=' * 60}")
-    print(f"  BRIDGE Document Processor v2.2  [{mode}]")
+    print(f"  BRIDGE Document Processor v2.3  [{mode}]")
     print(f"  Incoming: {incoming}")
     print(f"  Output:   {DEFAULT_OUTPUT}")
     print(f"  Files:    {len(files)}")
@@ -1109,7 +1238,7 @@ def cmd_setup(_args=None):
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n  BRIDGE Document Processor v2.2 — 폴더 구조")
+    print(f"\n  BRIDGE Document Processor v2.3 — 폴더 구조")
     print(f"  {'─' * 50}")
     print(f"  incoming/   : {INCOMING_DIR}")
     print(f"  processed/  : {DEFAULT_OUTPUT}")
@@ -1144,7 +1273,7 @@ def cmd_init_db(_args=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="BRIDGE Document Processor v2.2 — PII 삭제 + 강사번호"
+        description="BRIDGE Document Processor v2.3 — PII 삭제 + 강사번호"
     )
     sub = parser.add_subparsers(dest="command")
 
