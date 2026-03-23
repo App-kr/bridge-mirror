@@ -5,6 +5,7 @@ import { API_URL } from '@/lib/api'
 
 const STORAGE_KEY = 'bridge_admin_key'
 const EXPIRY_KEY = 'bridge_admin_key_expiry'
+const SESSION_KEY = 'bridge_session_token'
 const KEY_TTL = 86400000 // 24시간 (ms)
 const MAX_WAKE_RETRIES = 3
 const WAKE_DELAY = 3000
@@ -18,10 +19,16 @@ function getStoredKey(): string {
   if (expiry && Date.now() > parseInt(expiry, 10)) {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(EXPIRY_KEY)
+    localStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     return ''
   }
   return key
+}
+
+function getSessionToken(): string {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(SESSION_KEY) || ''
 }
 
 async function createHmacSignature(key: string, body: string): Promise<string> {
@@ -100,11 +107,13 @@ export function useAdminAuth() {
       .then(r => r.json())
       .then(json => {
         const key = json?.data?.api_key
+        const sessionToken = json?.data?.session_token
         if (key) {
           setAdminKey(key)
           setAuthed(true)
           localStorage.setItem(STORAGE_KEY, key)
           localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
+          if (sessionToken) localStorage.setItem(SESSION_KEY, sessionToken)
           const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
           document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
         } else {
@@ -115,7 +124,7 @@ export function useAdminAuth() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** 비밀번호로 서버 로그인 → API 키 받아서 저장 */
+  /** 비밀번호로 서버 로그인 → API 키 + 세션 토큰 저장 */
   const login = useCallback(async (password: string): Promise<string | null> => {
     setWaking(false)
     try {
@@ -136,12 +145,14 @@ export function useAdminAuth() {
 
       const json = await res.json()
       const key = json?.data?.api_key
+      const sessionToken = json?.data?.session_token
       if (!key) return '서버 응답이 올바르지 않습니다.'
 
       setAdminKey(key)
       setAuthed(true)
       localStorage.setItem(STORAGE_KEY, key)
       localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
+      if (sessionToken) localStorage.setItem(SESSION_KEY, sessionToken)
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
 
@@ -159,20 +170,32 @@ export function useAdminAuth() {
   }, [])
 
   const logout = useCallback(() => {
+    // 서버 세션 폐기 (fire-and-forget)
+    const token = getSessionToken()
+    const key = getStoredKey()
+    if (token || key) {
+      const h: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (key) h['x-admin-key'] = key
+      if (token) h['x-admin-token'] = token
+      fetch(`${API_URL}/api/admin/logout`, { method: 'POST', headers: h }).catch(() => {})
+    }
     setAdminKey('')
     setAuthed(false)
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(EXPIRY_KEY)
+    localStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
   }, [])
 
   const headers = useCallback((): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
+    const st = getSessionToken()
+    if (st) h['x-admin-token'] = st
     return h
   }, [adminKey])
 
-  /** HMAC 서명 포함 fetch — POST/PUT/PATCH/DELETE 시 자동 서명 + Render wake-up */
+  /** HMAC 서명 + 세션 토큰 포함 fetch — POST/PUT/PATCH/DELETE 시 자동 서명 + Render wake-up */
   const signedFetch = useCallback(async (
     url: string,
     options?: RequestInit,
@@ -182,6 +205,8 @@ export function useAdminAuth() {
     const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
     const h: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
+    const st = getSessionToken()
+    if (st) h['x-admin-token'] = st
 
     if (method !== 'GET' && method !== 'HEAD' && adminKey) {
       const bodyStr = typeof options?.body === 'string' ? options.body : ''
@@ -202,7 +227,10 @@ export function useAdminAuth() {
     options?: RequestInit,
     onWaking?: (attempt: number) => void,
   ): Promise<Response> => {
-    const h = { 'Content-Type': 'application/json', ...(adminKey ? { 'x-admin-key': adminKey } : {}) }
+    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (adminKey) h['x-admin-key'] = adminKey
+    const st = getSessionToken()
+    if (st) h['x-admin-token'] = st
     const res = await fetchWithWake(
       url,
       { ...options, headers: { ...h, ...(options?.headers as Record<string, string> ?? {}) } },
