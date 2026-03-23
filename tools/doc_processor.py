@@ -1,20 +1,22 @@
 """
-BRIDGE Document Processor v2.0
+BRIDGE Document Processor v2.1
 후보자 이력서/커버레터에서 PII 삭제 + 강사번호 입력
 
 사용법:
-  python doc_processor.py process <파일/폴더> [--number N] [--output DIR] [--dry]
-  python doc_processor.py lookup <이름 또는 이메일>
+  python doc_processor.py setup                              # 폴더 구조 확인
+  python doc_processor.py batch [--dry]                      # incoming/ 일괄 처리
+  python doc_processor.py process <파일> --number 3057       # 단일 파일 처리
+  python doc_processor.py download 3057                      # S3 다운로드+처리
+  python doc_processor.py lookup "이름 또는 이메일"            # 후보자 검색
 
-예시:
-  python doc_processor.py process resume.docx --number 3057
-  python doc_processor.py process resume.pdf --number 3057
-  python doc_processor.py process "Q:/incoming/" --dry         # 미리보기만
-  python doc_processor.py lookup "Tahliso"
+워크플로우:
+  1) incoming/ 폴더에 파일 넣기 (파일명에 강사번호 포함: 3057_resume.pdf)
+  2) batch --dry  → 미리보기 확인
+  3) batch        → 처리 실행 (processed/ 에 결과, originals/ 에 원본 백업)
 
 지원 형식: .docx (서식 보존), .pdf (인-플레이스 redaction)
 Python: "D:/Phtyon 3/python.exe"
-의존성: python-docx, PyMuPDF (fitz), python-dotenv, cryptography
+의존성: python-docx, PyMuPDF (fitz), python-dotenv, cryptography, boto3(S3용)
 """
 
 import argparse
