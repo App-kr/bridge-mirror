@@ -55,6 +55,15 @@ from prompt_guard import sanitize, scan
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
+# bx vault → 환경변수 주입 (Windows only)
+try:
+    import sys as _bx_sys
+    _bx_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    from bx import load_to_env as _bx_load
+    _bx_load()
+except Exception:
+    pass
+
 logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     level=logging.INFO,
@@ -88,8 +97,7 @@ def _check_auth(chat_id: int) -> bool:
 
 
 def _get_api_key() -> str | None:
-    """Get API key — try .env first, then vault."""
-    # .env direct read
+    """Get API key — try env → bx vault → KeyVault."""
     env_keys = {
         "claude": "ANTHROPIC_API_KEY",
         "gemini": "GOOGLE_API_KEY",
@@ -99,7 +107,16 @@ def _get_api_key() -> str | None:
     if key and key != "여기에_키_붙여넣기":
         return key
 
-    # Vault fallback
+    # bx vault fallback
+    try:
+        from bx import _read as _bx_read
+        key = _bx_read(env_name) or ""
+        if key:
+            return key
+    except Exception:
+        pass
+
+    # KeyVault fallback
     providers = list_providers()
     provider_info = providers.get(config.provider, {})
     key_name = provider_info.get("key_name", "anthropic_api_key")
@@ -547,19 +564,23 @@ def main():
     """Start the Telegram bot."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     if not token:
-        print("ERROR: TELEGRAM_BOT_TOKEN not set in .env")
+        # vault fallback (bx 암호화 저장소)
+        try:
+            import sys as _s
+            _s.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+            from bx import _read as _bx_read
+            token = _bx_read("TELEGRAM_BOT_TOKEN") or ""
+        except Exception:
+            pass
+    if not token:
+        print("ERROR: TELEGRAM_BOT_TOKEN not set in .env or vault")
         print("  1. @BotFather에서 봇 생성")
         print("  2. .env에 TELEGRAM_BOT_TOKEN=your_token 추가")
         print("  3. 다시 실행")
         return
 
-    # Verify API keys
-    providers = list_providers()
-    has_key = False
-    for name, info in providers.items():
-        if vault.has(info["key_name"]):
-            has_key = True
-            break
+    # Verify API keys (vault OR env)
+    has_key = bool(_get_api_key())
 
     if not has_key:
         print("ERROR: No API key configured.")

@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-23 (세션 14 — 자동화 + 성능 + 안정성)
+최근 업데이트: 2026-03-23 (세션 15 — 안정화 + 상태 정리)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -11,19 +11,43 @@
 ## 현재 진행 중인 작업
 없음
 
-## 2026-03-23 세션 14 완료 (자동화 + 성능 + 안정성)
-- feat(auto): sheet_number 웹폼 자동 할당 (`3e7f85c`)
-  - /api/apply INSERT 시 MAX(sheet_number)+1 자동 부여 (기존: NULL)
-- feat(auto): 인터뷰 리마인더 서버 스레드 (`3e7f85c`)
-  - 10분 주기 daemon thread — Render에서 자동 실행
-  - Windows Task Scheduler 의존성 제거
-- fix(stability): sheet_number race condition 제거 (`967bce4`)
-  - /api/apply + /api/admin/candidates: INSERT 서브쿼리 원자화
-- perf(sheet): 열 뷰포트 컬링 (`9a3656b`)
-  - GridEngine draw(): 화면 밖 열 skip (PASS 1/2 + 헤더)
-  - 50개 열 중 ~15개만 visible → drawCell 호출 70% 감소
-- chore: sql.js + @types/sql.js 의존성 제거 (`9a3656b`)
-  - ~1.4MB 번들 절감
+## 2026-03-23 세션 15 (안정화 + 상태 점검)
+- fix(employers): Error Boundary + DOMPurify 안전화 (`bd221c6`)
+  - Vercel 런타임 크래시 방지: EmployerErrorBoundary 클래스 추가
+  - DOMPurify require() try/catch 래핑
+  - mapJobsV2 null 입력 방어, useEffect cleanup
+- fix(stability): sheet_number 동시접수 race condition 제거 (`967bce4`)
+- 미완료 목록 정리: og-image/securityGuard/Cookie/CSP 이미 완료 확인 → 제거
+
+## 2026-03-23 세션 14 완료 (자동화 확장 — CV 파이프라인 + 서버 스레드)
+- feat(auto-process): CV 업로드 시 PII 자동 제거 파이프라인 (`ada2665`)
+  - _auto_process_resume: 백그라운드 스레드로 S3 원본 보관 + processed 버전 별도 저장
+  - MailModal: 이력서 자동첨부 토글 (attach_cv_ids)
+  - FormData/JSON 듀얼 파싱, MIME 첨부 지원
+  - DB: cv_processed_s3_key, file_uploads.s3_key 컬럼 추가
+- fix(auto-process): 1차 감사 3건 수정 (`f621535`)
+  - Critical: sheet_number 없는 웹 지원자 스킵 → candidate_id 숫자 폴백
+  - S3 orphan 정리 + CRUD 엔드포인트 3개 추가
+- fix(auto-process): 2차 감사 3건 수정 (`4a0e1fa`)
+  - photo_url UPDATE WHERE id→candidate_id
+  - 수동 첨부파일 drop 버그 수정
+  - busy_timeout 추가
+- feat(auto): sheet_number 웹폼 자동 할당 + 리마인더 스레드 (`3e7f85c`)
+  - /api/apply INSERT 시 MAX(sheet_number)+1 자동 할당 (최소 10000)
+  - 인터뷰 리마인더 백그라운드 스레드 (10분 주기, Render 서버 내장)
+
+## 2026-03-23 세션 13 완료 (데이터 동기화 + Inbox API)
+- fix(data): interview 이중매핑 수정 (`97f6ca9`)
+  - NEW_COL_MAP col 17: `interview_time` → `recruiter_memo` (포지션제안 한국어 메모)
+  - col 17 "Interview" = 지원처/제안 메모 ≠ col 21 "Interview time" = 가용시간
+  - 12건 recruiter_memo 업데이트, 전체 40명 × 9필드 검증 — 불일치 0건
+  - ichigo.milk@me.com (Wendy Veronie) INSERT 완료
+  - 중복 Thobeka Mhlongo 논리삭제 (Active 40명 유지)
+- feat(inbox): 상세/메모/배정 3개 엔드포인트 추가 (`0aecfc1`)
+  - GET /api/admin/inbox/{id} — 상세 조회
+  - PATCH /api/admin/inbox/{id}/notes — 메모 저장
+  - PATCH /api/admin/inbox/{id}/assign — 담당자 배정
+  - inbox_api.py에 구현 (inbox/[id]/page.tsx 프론트엔드 호출 커버)
 
 ## 2026-03-23 세션 12 완료 (CV 자동처리 + 메일 이력서 자동첨부)
 - feat(auto-process): CV 업로드 시 PII 자동 제거 파이프라인
@@ -143,22 +167,23 @@
 ### 핵심 기능
 | 우선순위 | 항목 | 비고 |
 |---------|------|------|
-| ~~High~~ | ~~Canvas Sheet: 가상 렌더링 (Phase 4)~~ | ✅ 행+열 컬링 완료 `9a3656b` |
+| High | Canvas Sheet: 가상 렌더링 (Phase 4) | 3000행 성능 |
 | High | Social Auto Platform | 계정 준비 후 시작 |
 | High | YouTube Shorts 환경 준비 | 계정 준비 후 시작 |
+| Medium | sql.js 미사용 의존성 제거 (1.4MB 번들) | 미사용 확인완료 |
 
-### 보안/인프라
-| 우선순위 | 항목 | 비고 |
-|---------|------|------|
-| High | og-image.png 누락 | SNS 공유 시 이미지 깨짐 |
-| ~~Medium~~ | ~~sql.js 미사용 의존성 제거~~ | ✅ `9a3656b` |
-| Medium | ag-grid 미사용 의존성 제거 | AllCandidatesGrid dead code |
-| Low | Gmail 자동동기화 | Render 환경변수 GMAIL_SYNC_ENABLED=true 설정만 |
+### 완료 확인 (제거)
+| 항목 | 상태 |
+|------|------|
+| ~~og-image.png 누락~~ | ✅ opengraph-image.tsx 동적 생성 구현됨 |
+| ~~securityGuard /api/security/report~~ | ✅ api_server.py:5528 구현됨 |
+| ~~Cookie Secure 플래그~~ | ✅ `2af0803` |
+| ~~CSP unsafe-eval 제거~~ | ✅ `7a085ea` |
+| ~~공개페이지 SEO metadata~~ | ✅ `43f97dd` |
 
 ### SEO/코드 정리
 | 우선순위 | 항목 | 비고 |
 |---------|------|------|
-| ~~Medium~~ | ~~공개페이지 SEO metadata~~ | ✅ `43f97dd` |
 | Low | CSV/Excel 내보내기 | |
 | Low | .github/workflows push (PAT 필요) | |
 

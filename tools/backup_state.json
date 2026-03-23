@@ -999,8 +999,80 @@
       "git": "43f97dd",
       "files": 2035,
       "db_hash": "f15c7ba31972"
+    },
+    {
+      "dir": "20260323_105604__rpa-safe-date-v4",
+      "task": "rpa-safe-date-v4",
+      "ts": "2026.03.23 10:56:08",
+      "git": "fe5831d",
+      "files": 2052,
+      "db_hash": "3aa7c7670238"
+    },
+    {
+      "dir": "20260323_105617__rpa-safe-date-v4",
+      "task": "rpa-safe-date-v4",
+      "ts": "2026.03.23 10:56:21",
+      "git": "fe5831d",
+      "files": 2052,
+      "db_hash": "3aa7c7670238"
+    },
+    {
+      "dir": "20260323_112641__canvas-sheet-bugs-fix",
+      "task": "canvas-sheet-bugs-fix",
+      "ts": "2026.03.23 11:26:46",
+      "git": "4d617b8",
+      "files": 2057,
+      "db_hash": "badb69b81bb0"
+    },
+    {
+      "dir": "20260323_112713__canvas-sheet-bugs-fix",
+      "task": "canvas-sheet-bugs-fix",
+      "ts": "2026.03.23 11:27:17",
+      "git": "4d617b8",
+      "files": 2057,
+      "db_hash": "badb69b81bb0"
+    },
+    {
+      "dir": "20260323_121334__site-full-audit",
+      "task": "site-full-audit",
+      "ts": "2026.03.23 12:13:39",
+      "git": "749a10c",
+      "files": 2073,
+      "db_hash": "5b909e00b43b"
+    },
+    {
+      "dir": "20260323_121816__SSR가드수정",
+      "task": "SSR가드수정",
+      "ts": "2026.03.23 12:18:19",
+      "git": "bfe719d",
+      "files": 2073,
+      "db_hash": "5b909e00b43b"
+    },
+    {
+      "dir": "20260323_125401__mail-send-template-integration",
+      "task": "mail-send-template-integration",
+      "ts": "2026.03.23 12:54:05",
+      "git": "3b7bd18",
+      "files": 2088,
+      "db_hash": "ebfab0d4e540"
+    },
+    {
+      "dir": "20260323_133029__interview-col-fix",
+      "task": "interview-col-fix",
+      "ts": "2026.03.23 13:30:34",
+      "git": "18358b7",
+      "files": 2089,
+      "db_hash": "6709b6b36a68"
+    },
+    {
+      "dir": "20260323_133044__interview-col-fix",
+      "task": "interview-col-fix",
+      "ts": "2026.03.23 13:30:48",
+      "git": "18358b7",
+      "files": 2089,
+      "db_hash": "6709b6b36a68"
     }
   ],
-  "last_backup": "2026.03.23 09:56:17",
-  "total_count": 125
+  "last_backup": "2026.03.23 13:30:48",
+  "total_count": 134
 }
