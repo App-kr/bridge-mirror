@@ -114,7 +114,7 @@ NEW_COL_MAP = {
     14: 'experience',
     15: 'employment',
     16: 'job_prefs',
-    17: 'interview_time',
+    17: 'recruiter_memo',
     18: 'contract_offered',
     19: 'current_salary',
     20: 'desired_salary',
