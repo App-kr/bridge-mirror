@@ -233,9 +233,9 @@ def send_interview_invitation_employer(
 # ── 구인자 확인 이메일 (Korean) ──────────────────────────────────────────────
 
 def send_employer_confirmation(to_email: str, school_name: str, contact_name: str = "") -> bool:
-    """구인자 채용 문의 접수 확인 이메일 (Korean) — Claude.ai 확정 템플릿"""
+    """구인자 채용 문의 접수 확인 이메일 (Korean) — Google Form 자동회신 동일"""
     name_display = contact_name if contact_name else "담당자"
-    subject = f"{name_display}님, BRIDGE 채용 신청이 완료되었습니다."
+    subject = f"{name_display}/원장님, BRIDGE 채용 신청이 완료되었습니다."
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -246,28 +246,35 @@ def send_employer_confirmation(to_email: str, school_name: str, contact_name: st
       </div>
 
       <div style="padding: 30px 0;">
-        <p>안녕하세요, {name_display}님</p>
+        <p>안녕하세요, {name_display}/원장님</p>
 
-        <p>귀하의 BRIDGE 원어민 채용 신청서가 접수되었습니다.</p>
+        <p>전국의 교육 기관 및 기업에 최적의 인재를 매칭해 온 원어민 전문 헤드헌팅 BRIDGE AGENCY 입니다.</p>
+
+        <p>귀하의 채용 신청서가 접수되었습니다.</p>
 
         <div style="background: #f5f5f7; padding: 20px; margin: 24px 0; border-radius: 12px;">
           <p style="margin: 0 0 12px; font-weight: 600; color: #1d1d1f;">채용 절차</p>
           <ul style="margin: 0; padding-left: 20px; color: #424245; line-height: 1.9;">
             <li><strong>매칭 상담:</strong> 카카오톡을 통해 상세 조건 확인 및 인재 매칭</li>
             <li><strong>정보 제공:</strong> 채용 시장 동향 소식지 발송</li>
-            <li><strong>인터뷰:</strong> 접수해주신 연락처(카카오톡)으로 의사소통 및 이메일로 인터뷰 링크 전송</li>
           </ul>
         </div>
 
-        <p>틀린 정보가 있다면 이 이메일로 회신주세요.</p>
-
         <div style="background: #fef3c7; border: 1px solid #fbbf24; padding: 16px 20px; margin: 24px 0; border-radius: 12px;">
-          <p style="margin: 0; font-weight: 600; color: #92400e; font-size: 13px;">⚠️ 유의사항</p>
+          <p style="margin: 0; font-weight: 600; color: #92400e; font-size: 13px;">유의사항</p>
           <p style="margin: 8px 0 0; color: #78350f; font-size: 13px; line-height: 1.7;">
-            불투명한 중개 경로를 통한 피해 사례가 보고되고 있습니다.
-            모든 공식 절차는 BRIDGE Team 안내에 따라 진행하시기 바랍니다.
+            불법적이거나 불투명한 중개 경로를 통한 피해 사례가 보고되고 있습니다.
+            모든 공식 절차는 BRIDGE Team 안내에 따라 안전하게 진행하시기 바랍니다.
           </p>
         </div>
+
+        <p>매칭에는 다소 시일이 소요될 수 있으며, 적합한 후보자가 확보되는 대로 안내드리겠습니다.</p>
+
+        <p>틀린 정보가 있다면 이 이메일로 회신주세요.</p>
+
+        <p style="margin-top: 12px; font-size: 12px; color: #6e6e73;">
+          ※ 사업자 미등록 기관의 경우, 선불 결제가 필요할 수 있습니다.
+        </p>
 
         <p style="color: #6e6e73; margin-top: 30px;">
           감사합니다.<br>
@@ -276,7 +283,7 @@ def send_employer_confirmation(to_email: str, school_name: str, contact_name: st
       </div>
 
       <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center; font-size: 12px; color: #86868b;">
-        <p>The BRIDGE Team · <a href="https://bridgejob.co.kr" style="color: #0071e3;">bridgejob.co.kr</a></p>
+        <p>The BRIDGE Team &middot; <a href="https://bridgejob.co.kr" style="color: #0071e3;">bridgejob.co.kr</a></p>
       </div>
     </body>
     </html>
