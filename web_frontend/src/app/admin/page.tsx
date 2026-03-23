@@ -63,6 +63,9 @@ const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.Respons
 const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: false })
 const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false })
+const CartesianGrid = dynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false })
+const AreaChart = dynamic(() => import('recharts').then(m => m.AreaChart), { ssr: false })
+const Area = dynamic(() => import('recharts').then(m => m.Area), { ssr: false })
 
 const API = API_URL
 const SEEN_POSTS_KEY = 'bridge_admin_seen_posts'
@@ -142,8 +145,28 @@ interface AnalyticsData {
   campaigns: { source: string; medium: string; campaign: string; count: number }[]
 }
 
-const PIE_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
-const BAR_COLORS = ['#0071e3', '#34c759', '#ff9f0a', '#ff3b30', '#af52de', '#ff2d55', '#5ac8fa']
+const PIE_COLORS = ['#00d4ff', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#f472b6', '#818cf8']
+const BAR_COLORS = PIE_COLORS
+
+/* SpaceX-style glass tooltip */
+interface TPayload { name: string; value: number | string }
+function GlassTooltip({ active, payload, label }: { active?: boolean; payload?: TPayload[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: 'rgba(15,23,42,0.92)', backdropFilter: 'blur(16px)',
+      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12,
+      padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+    }}>
+      <div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4, letterSpacing: '0.02em' }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {p.name}: {typeof p.value === 'number' ? p.value.toLocaleString() : p.value}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 const boardLabel = (b: string) => {
   const map: Record<string, string> = {
@@ -522,92 +545,88 @@ export default function AdminDashboardPage() {
 
           {/* ── 차트 2개 ─────────────────────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">월별 접수 추이</h2>
+            <div className="rounded-2xl p-5 border border-[#1e293b]" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}>
+              <h2 className="text-[15px] font-semibold text-white/90 mb-4 tracking-tight">월별 접수 추이</h2>
               {monthly.length > 0 ? (
                 <div style={{ width: '100%', height: 220 }}>
                   <ResponsiveContainer>
                     <BarChart data={monthly}>
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#0071e3" radius={[6, 6, 0, 0]} name="접수" />
+                      <defs>
+                        <linearGradient id="barGradMonth" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#00d4ff" stopOpacity={0.9}/>
+                          <stop offset="100%" stopColor="#0071e3" stopOpacity={0.3}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<GlassTooltip />} />
+                      <Bar dataKey="count" fill="url(#barGradMonth)" radius={[6, 6, 0, 0]} name="접수" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <p className="text-[#86868b] text-sm py-8 text-center">데이터 없음</p>
+                <p className="text-[#475569] text-sm py-8 text-center">데이터 없음</p>
               )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">채널별 비율</h2>
+            <div className="rounded-2xl p-5 border border-[#1e293b]" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}>
+              <h2 className="text-[15px] font-semibold text-white/90 mb-4 tracking-tight">채널별 비율</h2>
               {sources.length > 0 ? (
                 <div className="flex flex-col sm:flex-row items-center gap-4">
-                  <div className="shrink-0" style={{ width: 150, height: 150 }}>
+                  <div className="shrink-0 relative" style={{ width: 170, height: 170 }}>
                     <ResponsiveContainer>
                       <PieChart>
                         <Pie data={sources} dataKey="count" nameKey="label"
-                          cx="50%" cy="50%" outerRadius={75} innerRadius={40}>
+                          cx="50%" cy="50%" outerRadius={80} innerRadius={48}
+                          stroke="rgba(255,255,255,0.05)" strokeWidth={1}>
                           {sources.map((_, idx) => (
                             <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip content={<GlassTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-white tabular-nums">{totalSourceCount}</div>
+                        <div className="text-[10px] text-[#64748b] tracking-widest uppercase">Total</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2.5 text-sm">
                     {sources.map((s, idx) => (
-                      <div key={s.source} className="flex items-center gap-2">
+                      <div key={s.source} className="flex items-center gap-2.5">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                        <span className="text-[#424245] text-[13px]">{s.label}</span>
-                        <span className="font-semibold text-[#1d1d1f] text-[13px]">{s.count}</span>
+                          style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length], boxShadow: `0 0 6px ${PIE_COLORS[idx % PIE_COLORS.length]}40` }} />
+                        <span className="text-[#94a3b8] text-[13px]">{s.label}</span>
+                        <span className="font-semibold text-white text-[13px] tabular-nums">{s.count}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               ) : (
-                <p className="text-[#86868b] text-sm py-8 text-center">데이터 없음</p>
+                <p className="text-[#475569] text-sm py-8 text-center">데이터 없음</p>
               )}
             </div>
           </div>
 
-          {/* ── 유입 채널 비중 (실제 데이터 그래프) ────────────── */}
+          {/* ── 유입 채널 비중 ────────────── */}
           {exposureData.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <h2 className="text-[15px] font-semibold text-[#1d1d1f] mb-5">유입 채널 비중</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* 가로 바 그래프 */}
-                <div className="space-y-3">
-                  {exposureData.map((d) => (
-                    <div key={d.label} className="flex items-center gap-3">
-                      <span className="text-[13px] text-[#424245] w-24 shrink-0 font-medium">{d.label}</span>
-                      <div className="flex-1 h-[8px] bg-[#f5f5f7] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${d.pct}%`, backgroundColor: d.color }} />
-                      </div>
-                      <span className="text-[12px] font-semibold text-[#1d1d1f] w-12 text-right tabular-nums">{d.pct}%</span>
-                      <span className="text-[11px] text-[#86868b] w-10 text-right tabular-nums">{d.count}건</span>
+            <div className="rounded-2xl p-5 border border-[#1e293b]" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}>
+              <h2 className="text-[15px] font-semibold text-white/90 mb-5 tracking-tight">유입 채널 비중</h2>
+              <div className="space-y-3.5">
+                {exposureData.map((d, idx) => (
+                  <div key={d.label} className="flex items-center gap-3 anim-slide-in" style={{ animationDelay: `${idx * 60}ms` }}>
+                    <span className="text-[13px] text-[#94a3b8] w-24 shrink-0 font-medium">{d.label}</span>
+                    <div className="flex-1 h-[8px] bg-white/5 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${d.pct}%`, background: `linear-gradient(90deg, ${d.color}, ${d.color}66)`, boxShadow: `0 0 8px ${d.color}30` }} />
                     </div>
-                  ))}
-                </div>
-                {/* recharts 바 차트 */}
-                <div style={{ width: '100%', height: 200 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={exposureData} layout="vertical">
-                      <XAxis type="number" tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: '#424245' }} axisLine={false} tickLine={false} width={80} />
-                      <Tooltip />
-                      <Bar dataKey="count" radius={[0, 6, 6, 0]} name="유입">
-                        {exposureData.map((d, idx) => (
-                          <Cell key={idx} fill={d.color} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                    <span className="text-[13px] font-bold text-white w-12 text-right tabular-nums">{d.pct}%</span>
+                    <span className="text-[11px] text-[#64748b] w-10 text-right tabular-nums">{d.count}건</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -731,22 +750,29 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-                  <h3 className="text-[15px] font-semibold text-[#1d1d1f] mb-4">일별 방문 추이</h3>
+                <div className="rounded-2xl p-5 border border-[#1e293b]" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}>
+                  <h3 className="text-[15px] font-semibold text-white/90 mb-4 tracking-tight">일별 방문 추이</h3>
                   {analytics.daily.length > 0 ? (
                     <div style={{ width: '100%', height: 220 }}>
                       <ResponsiveContainer>
-                        <BarChart data={analytics.daily}>
-                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#86868b' }} axisLine={false} tickLine={false}
+                        <AreaChart data={analytics.daily}>
+                          <defs>
+                            <linearGradient id="areaGradDaily" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#34d399" stopOpacity={0.3}/>
+                              <stop offset="100%" stopColor="#34d399" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
                             tickFormatter={(v: string) => v.slice(5)} />
-                          <YAxis tick={{ fontSize: 11, fill: '#86868b' }} axisLine={false} tickLine={false} />
-                          <Tooltip />
-                          <Bar dataKey="count" fill="#34c759" radius={[4, 4, 0, 0]} name="방문" />
-                        </BarChart>
+                          <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <Tooltip content={<GlassTooltip />} />
+                          <Area type="monotone" dataKey="count" stroke="#34d399" strokeWidth={2} fill="url(#areaGradDaily)" name="방문" dot={false} />
+                        </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
-                    <p className="text-[#86868b] text-sm py-4 text-center">데이터 수집 중...</p>
+                    <p className="text-[#475569] text-sm py-4 text-center">데이터 수집 중...</p>
                   )}
                 </div>
               </div>

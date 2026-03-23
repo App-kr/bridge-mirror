@@ -18,6 +18,7 @@ import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, Chev
 let _DOMPurify: any = null
 function sanitizeHtml(html: string): string {
   if (typeof window === 'undefined') return ''
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   if (!_DOMPurify) { const m = require('dompurify'); _DOMPurify = m.default || m }
   return _DOMPurify.sanitize(html)
 }
