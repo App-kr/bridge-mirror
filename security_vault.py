@@ -16,9 +16,15 @@ import os
 import base64
 import hashlib
 from pathlib import Path
-from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+# .env 로드 시도 (있으면 사용, 없어도 vault 폴백 존재)
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).parent / ".env"
+    if _env_path.exists():
+        load_dotenv(dotenv_path=_env_path)
+except ImportError:
+    pass
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -32,18 +38,37 @@ NONCE_SIZE = 12  # 96-bit nonce — NIST recommended for AES-GCM
 
 # ── Key Derivation ─────────────────────────────────────────────────────────────
 
-def _derive_key() -> bytes:
+def _get_field_key_raw() -> str:
     """
-    Derive a 32-byte AES-256 key from the BRIDGE_FIELD_KEY environment variable.
-    SHA-256 is used to guarantee exactly 32 bytes regardless of raw key length.
-    Raises EnvironmentError if BRIDGE_FIELD_KEY is not set.
+    BRIDGE_FIELD_KEY 조회.
+    1순위: 환경변수 (Render 프로덕션)
+    2순위: MasterVault v3 (로컬 개발 — .env 없어도 동작)
     """
     raw = os.environ.get("BRIDGE_FIELD_KEY", "").strip()
-    if not raw:
-        raise EnvironmentError(
-            "BRIDGE_FIELD_KEY is not set or empty. "
-            "Check your .env file."
-        )
+    if raw:
+        return raw
+    # vault 폴백 (로컬 개발용)
+    try:
+        import sys
+        _tools = Path(__file__).parent / "tools"
+        if str(_tools) not in sys.path:
+            sys.path.insert(0, str(_tools))
+        from master_vault import get_secret
+        return get_secret("BRIDGE_FIELD_KEY")
+    except Exception:
+        pass
+    raise EnvironmentError(
+        "BRIDGE_FIELD_KEY 없음. "
+        "python tools/master_vault.py seal BRIDGE_FIELD_KEY 로 등록하세요."
+    )
+
+
+def _derive_key() -> bytes:
+    """
+    Derive a 32-byte AES-256 key from BRIDGE_FIELD_KEY.
+    SHA-256 guarantees exactly 32 bytes regardless of raw key length.
+    """
+    raw = _get_field_key_raw()
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 

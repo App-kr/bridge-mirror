@@ -90,6 +90,7 @@ bridge-overnight/
 .bx/
 vault/data/
 mail_log_*.json
+.vault.enc.json
 
 # ── Archive (large test data, old files) ─────────────────────
 archive/
