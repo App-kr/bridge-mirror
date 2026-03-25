@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-24 (세션 16 — OPUS Final 보안 강화)
+최근 업데이트: 2026-03-26 (세션 17 — Settings 오류 수정 + 라우터 다운 전 백업)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -10,6 +10,20 @@
 
 ## 현재 진행 중인 작업
 없음
+
+## 2026-03-26 세션 17 (Settings 오류 수정 + 라우터 다운 전 백업)
+- fix(settings): settings.local.json 잘못된 CLAUDE_TOOL_NAME 패턴 6개 제거 (`8298e06`)
+  - 이전 훅 스크립트가 남긴 `CLAUDE_TOOL_NAME=Bash` 포함 비정상 항목 792→786개
+  - :* 문법 오류로 Claude Code 시작 시 Settings Error 발생하던 문제 해결
+  - 인덱스: [778], [780], [786], [787], [788], [791]
+- **특이사항**: 해킹 시도 극심으로 오늘밤 공유기 차단 예정 — 재시작 후 이 파일로 복구
+
+## ⚠️ 라우터 재연결 후 체크리스트
+1. Render 백엔드 (api.bridgejob.co.kr) 정상 응답 확인
+2. Vercel 프론트엔드 (bridgejob.co.kr) 정상 로드 확인
+3. 관리자 로그인 → 세션 토큰 재발급 확인
+4. 텔레그램 알림 재연결 확인
+5. 공격 로그 확인: api_server.py 감사 로그 / security_log.jsonl
 
 ## 2026-03-24 세션 16 (OPUS Final 보안 강화)
 - fix(security): 보안 감사 6건 수정 (`47d9bbb`)
