@@ -1,15 +1,95 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-03-26 (세션 17 — Settings 오류 수정 + 라우터 다운 전 백업)
+최근 업데이트: 2026-03-26 (세션 18 — 보안 재건 + 3중암호화 미완료)
 
 ## 세션 재시작 방법
 1. `/clear`
 2. `@.claude/work_state.md`
-3. `'미완료 작업부터 계속'` 또는 원하는 작업 명시
+3. `'보안 3중암호화 작업 이어서'`
 
 ---
 
-## 현재 진행 중인 작업
-없음
+## ⚠️ 현재 진행 중인 작업 (내일 이어서)
+
+### 배경
+- 네이버/쿠팡/페북/인스타 등 다수 계정 해킹시도 (인도/터키)
+- Gemini와 작업 중 .env 파일 소각 + git filter-repo 실행
+- MasterVault v3.0 구축 완료 (c3aefce)
+- **지금 필요**: 3중암호화 + master.db git 제거 + 전체 PII 암호화
+
+### 완료된 것 (세션 18)
+- `tools/master_vault.py` — Session-Ephemeral AES-256-GCM vault (c3aefce) ✅
+- `tools/migrate_env_to_vault.py` — .env → vault 마이그레이션 스크립트 ✅
+- `security_vault.py` — vault 폴백 추가 (.env 없어도 동작) ✅
+- `.gitignore` — .vault.enc.json 추가 ✅
+- ClaudeBlog AES-256-GCM 업그레이드 (encrypt_secrets.py + secret_loader.py) ✅
+- Gemini 잘못된 변경 5파일 되돌림 (from secure_vault import 오류 제거) ✅
+- web_frontend/.env.production 복원 ✅
+
+### 미완료 — 내일 이어서 할 것 (우선순위 순)
+
+#### 1순위: master.db → git 완전 소각 [매우 중요]
+- `git rm --cached master.db` (git tracking 제거)
+- `.gitignore`에서 `!master.db` 예외 제거 → `*.db`만 남기기
+- `git filter-repo --path master.db --invert-paths` (히스토리 소각)
+- `git push --force` (force push 필요)
+- **주의**: Render는 `/data/master.db` 별도 사용 → 영향 없음
+
+#### 2순위: security_vault.py → 3중 AES-256-GCM 암호화 추가
+설계 확정:
+```
+T3v1 포맷: magic(4) + nonce1(12) + nonce2(12) + nonce3(12) + ciphertext
+L1_key = SHA-256(base_key + b"L1" + column_name)
+L2_key = SHA-256(base_key + b"L2" + nonce1)
+L3_key = SHA-256(base_key + b"L3" + nonce2 + nonce1)
+ct1 = AES-GCM(L1_key, n1).encrypt(plaintext)
+ct2 = AES-GCM(L2_key, n2).encrypt(ct1)
+ct3 = AES-GCM(L3_key, n3).encrypt(ct2)
+output = base64(T3v1 + n1 + n2 + n3 + ct3)
+최소 출력: ~124자 (30자 이상 보장)
+```
+추가 함수:
+- `triple_encrypt_field(plaintext, column_name)` — 3중 암호화
+- `triple_decrypt_field(encoded, column_name)` — 3중 복호화
+- `auto_decrypt_value(value, column_name)` — T3v1/단순 자동 판별
+- `is_t3_encrypted(value)` — T3v1 감지
+- `rotate_db_encryption(db_path)` — 전체 DB 재암호화 (세션 변경 효과)
+
+#### 3순위: encrypt_migrate.py → 전체 PII 필드 확장
+현재: dob, nationality, current_location, reference, korean_criminal_record (일부)
+추가 필요 (candidates):
+- name, email, phone, kakao_id
+- gender, passport_number, home_country, emergency_contact
+기존 단일암호화 → T3v1 마이그레이션 포함
+
+추가 필요 (client_inquiries) — 업체 1100명 포함:
+- contact_name, email, phone, company_name, business_registration
+- school_name(=school_location), memo
+
+#### 4순위: api_server.py → auto_decrypt 적용
+- `auto_decrypt_value()` 사용하는 `_decrypt_candidate_full(row)` 헬퍼
+- 관리자 엔드포인트 읽기 시 자동 복호화
+- 3중암호화된 값도 투명하게 복호화
+
+### 사용자 요구사항 (반드시 준수)
+- 관리자(나)에게는 원문 표시
+- git/외부에는 절대 평문 없음
+- 3중암호화 + 세션마다 자동변경 (rotate_db_encryption 실행 시)
+- 30자 이상 암호화값 (설계상 ~124자)
+- 업체 연락처(client_inquiries) 포함 모든 PII
+
+### 현재 커밋 상태
+- 최신: c3aefce (MasterVault v3.0)
+- master.db 아직 git tracking 중 → 내일 제거 필요
+- .env 파일 없음 → vault setup 필요
+
+### BRIDGE_FIELD_KEY 상태
+- .env 삭제됨, 백업에도 없음
+- 새 키 입력 필요: `python tools/master_vault.py setup`
+- BRIDGE_FIELD_KEY 새로 입력하면 기존 암호화 4개 필드는 null 처리 후 재입력
+
+### Render 환경변수 (별도 관리 중, 영향 없음)
+- BRIDGE_FIELD_KEY, JWT_SECRET 등 Render 대시보드에 설정됨
+- /data/master.db (1GB 영구디스크) — git master.db와 무관
 
 ## 2026-03-26 세션 17 (Settings 오류 수정 + 라우터 다운 전 백업)
 - fix(settings): settings.local.json 잘못된 CLAUDE_TOOL_NAME 패턴 6개 제거 (`8298e06`)
