@@ -1,56 +1,107 @@
 #!/bin/sh
-# Bridge Pre-commit Hook — DB + Secret 스캔
-# 대기업 표준: GitHub Secret Protection 동급
-# 설치: git config core.hooksPath .githooks
+# Bridge Pre-commit Security Hook v2.0
+# Claude Code 공동 커밋 시크릿 노출 2배 위험 대응 강화 버전
 
-# ── 1. DB 파일 커밋 차단 ────────────────────────────────────────
-STAGED_DB=$(git diff --cached --name-only | grep -E '\.(db|sqlite|sqlite3)$')
-if [ -n "$STAGED_DB" ]; then
-    echo ""
-    echo "❌ [BRIDGE SECURITY] DB 파일 커밋 차단!"
-    echo "   다음 파일이 staging area에 있습니다:"
-    echo "$STAGED_DB" | sed 's/^/   - /'
-    echo ""
-    echo "   DB는 git에 절대 커밋하지 않습니다."
-    echo "   Render는 /data/master.db 독립 운용 중 — git 불필요"
-    echo "   해결: git reset HEAD <file>"
-    echo ""
-    exit 1
-fi
+echo "[pre-commit] ====== Bridge 보안 검사 시작 ======"
 
-# ── 2. .key / .pem 파일 차단 ────────────────────────────────────
-STAGED_KEYS=$(git diff --cached --name-only | grep -E '\.(key|pem|p12|pfx)$')
-if [ -n "$STAGED_KEYS" ]; then
-    echo ""
-    echo "❌ [BRIDGE SECURITY] 암호화 키 파일 커밋 차단!"
-    echo "$STAGED_KEYS" | sed 's/^/   - /'
-    echo "   해결: git reset HEAD <file>"
-    echo ""
-    exit 1
-fi
+FAIL=0
 
-# ── 3. .env 파일 차단 (.env.example 제외) ───────────────────────
-STAGED_ENV=$(git diff --cached --name-only | grep -E '\.env' | grep -v '\.env\.example' | grep -v '\.env\.production')
-if [ -n "$STAGED_ENV" ]; then
-    echo ""
-    echo "❌ [BRIDGE SECURITY] .env 파일 커밋 차단!"
-    echo "$STAGED_ENV" | sed 's/^/   - /'
-    echo "   해결: git reset HEAD <file>"
-    echo ""
-    exit 1
-fi
+# ── 1. gitleaks 시크릿 스캔 (최우선) ────────────────────────────────────
+GITLEAKS_PATH="C:/Users/Scarlett/AppData/Local/Microsoft/WinGet/Packages/Gitleaks.Gitleaks_Microsoft.Winget.Source_8wekyb3d8bbwe/gitleaks.exe"
 
-# ── 4. Gitleaks 스캔 (설치된 경우) ─────────────────────────────
 if command -v gitleaks > /dev/null 2>&1; then
-    gitleaks protect --staged --config .gitleaks.toml --no-banner 2>&1
-    if [ $? -ne 0 ]; then
-        echo ""
-        echo "❌ [BRIDGE SECURITY] Gitleaks가 시크릿을 탐지했습니다!"
-        echo "   커밋 취소됨. git diff --staged 로 확인하세요."
-        echo ""
-        exit 1
-    fi
+  GITLEAKS_CMD="gitleaks"
+elif [ -f "$GITLEAKS_PATH" ]; then
+  GITLEAKS_CMD="$GITLEAKS_PATH"
+else
+  GITLEAKS_CMD=""
 fi
 
-echo "✅ [BRIDGE SECURITY] Pre-commit 검사 통과"
-exit 0
+if [ -n "$GITLEAKS_CMD" ]; then
+  echo "[pre-commit] gitleaks 스캔 중..."
+  "$GITLEAKS_CMD" protect --staged --config=.gitleaks.toml --no-banner
+  if [ $? -ne 0 ]; then
+    echo "[BLOCKED] gitleaks: 시크릿 감지됨. 커밋 차단."
+    FAIL=1
+  else
+    echo "[OK] gitleaks: 시크릿 없음"
+  fi
+else
+  echo "[WARNING] gitleaks 미설치. 즉시 설치 필요: winget install gitleaks"
+  echo "[WARNING] 수동 패턴 검사로 대체 진행..."
+fi
+
+# ── 2. .env / DB 파일 추적 방지 ──────────────────────────────────────────
+STAGED=$(git diff --cached --name-only)
+
+echo "$STAGED" | grep -qE "^\.env($|\.)" && {
+  echo "[BLOCKED] .env 파일 커밋 차단"
+  FAIL=1
+}
+
+echo "$STAGED" | grep -qE "\.(db|sqlite|sqlite3)$" && {
+  echo "[BLOCKED] DB 파일 커밋 차단"
+  FAIL=1
+}
+
+echo "$STAGED" | grep -qE "master\.salt$|active_keys\.enc$|key_rotation\.jsonl$" && {
+  echo "[BLOCKED] Vault 핵심 파일 커밋 차단"
+  FAIL=1
+}
+
+# ── 3. TOTP / Vault 시크릿 패턴 직접 검사 ───────────────────────────────
+echo "[pre-commit] 시크릿 패턴 직접 검사 중..."
+
+DIFF=$(git diff --cached)
+
+echo "$DIFF" | grep -iqE "(totp.{0,20}secret|admin.{0,20}totp).{0,10}[=:].{0,5}[A-Z2-7]{16,}" && {
+  echo "[BLOCKED] TOTP 시크릿 패턴 감지"
+  FAIL=1
+}
+
+echo "$DIFF" | grep -iqE "VAULT_PASSPHRASE\s*[=:]\s*[^\s\$]" && {
+  echo "[BLOCKED] VAULT_PASSPHRASE 평문 감지"
+  FAIL=1
+}
+
+echo "$DIFF" | grep -iqE "VAULT_HMAC_KEY\s*[=:]\s*[a-fA-F0-9]{32,}" && {
+  echo "[BLOCKED] VAULT_HMAC_KEY 평문 감지"
+  FAIL=1
+}
+
+echo "$DIFF" | grep -iqE "(password|passwd|pwd)\s*[=:]\s*[\"']?[^\s\"'\$\{]{8,}" && {
+  echo "[BLOCKED] 평문 비밀번호 패턴 감지"
+  FAIL=1
+}
+
+# ── 4. Claude Code 공동 커밋 특화: 임시 파일 / 디버그 출력 차단 ─────────
+echo "$STAGED" | grep -qE "^(tmp_|temp_|debug_|test_secret)" && {
+  echo "[BLOCKED] 임시/디버그 파일 커밋 차단"
+  FAIL=1
+}
+
+echo "$DIFF" | grep -qE "print\(.*secret|print\(.*password|print\(.*token|console\.log.*secret" && {
+  echo "[WARNING] 시크릿 출력 코드(print/console.log) 감지됨. 확인 요망."
+}
+
+# ── 5. QR 이미지 파일 차단 ───────────────────────────────────────────────
+echo "$STAGED" | grep -qiE "(totp|qr|auth).*(png|jpg|jpeg|gif)" && {
+  echo "[BLOCKED] TOTP QR 이미지 파일 커밋 차단"
+  FAIL=1
+}
+
+# ── 6. audit.jsonl 평문 포함 여부 검사 ──────────────────────────────────
+echo "$STAGED" | grep -q "audit.jsonl" && {
+  echo "[WARNING] audit.jsonl 커밋 시도. 의도적인 경우 무시. 민감 내용 포함 금지."
+}
+
+# ── 최종 결과 ────────────────────────────────────────────────────────────
+echo "[pre-commit] ======================================"
+if [ $FAIL -eq 1 ]; then
+  echo "[BLOCKED] 보안 검사 실패. 커밋 차단됨."
+  echo "[안내] 시크릿을 환경변수 또는 Vault로 이동 후 재시도하십시오."
+  exit 1
+else
+  echo "[OK] 모든 보안 검사 통과. 커밋 진행."
+  exit 0
+fi

@@ -121,3 +121,18 @@ bridge_agent/*.ico
 web_frontend/tsconfig.tsbuildinfo
 .env.scraper
 build_log*.txt
+
+# ── MasterVault & Watchdog (PHASE 7 추가 — 절대 커밋 금지) ────────────────
+.vault/
+*.enc
+master.salt
+active_keys.enc
+key_rotation.jsonl
+ddns_last_ip.txt
+ddns_watchdog.log
+bridge_security.log
+audit.jsonl
+security_log.jsonl
+bridge_totp_qr.png
+setup_totp.py
+init_vault_env.py
