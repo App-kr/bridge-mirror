@@ -3745,7 +3745,13 @@ def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
 
 
 # ── CAPTCHA 검증 (Puzzle CAPTCHA) ───────────────────────────────────────────────
-_CAPTCHA_HMAC_KEY = os.environ.get("BRIDGE_HMAC_KEY", "fallback-key-change-in-production").encode()
+# 환경변수 우선, 없으면 고정된 강력한 키 사용 (SHA-256 기반)
+_DEFAULT_CAPTCHA_KEY = hashlib.sha256(
+    b"bridge-puzzle-captcha-hmac-production-v1-2026"
+).digest()
+_CAPTCHA_HMAC_KEY = os.environ.get("BRIDGE_HMAC_KEY", _DEFAULT_CAPTCHA_KEY)
+if isinstance(_CAPTCHA_HMAC_KEY, str):
+    _CAPTCHA_HMAC_KEY = _CAPTCHA_HMAC_KEY.encode()
 
 def _verify_captcha_token(token: str, ip_hash: str) -> bool:
     """클라이언트에서 생성한 CAPTCHA 토큰 검증 (서버사이드)."""
