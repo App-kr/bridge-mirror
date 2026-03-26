@@ -11,6 +11,7 @@
 
 import { useState, useRef } from 'react'
 import GuidePopup from '@/components/GuidePopup'
+import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
 
@@ -765,6 +766,13 @@ export default function InquiryPage() {
                 <p><strong>Anti-Discrimination:</strong> Discrimination based on gender, age, race, or nationality is illegal under Korean Labor Law.</p>
                 <p><strong>Data Privacy:</strong> Your information is securely stored for recruitment and visa support purposes only.</p>
               </div>
+
+              {/* CAPTCHA Verification */}
+              <PuzzleCaptcha
+                onVerified={(token) => setForm((p) => ({ ...p, captcha_token: token }))}
+                onError={(error) => alert(`CAPTCHA Error: ${error}`)}
+              />
+
               <div>
                 <Label required>동의 여부</Label>
                 <SingleTog

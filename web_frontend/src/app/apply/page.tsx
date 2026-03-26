@@ -11,6 +11,7 @@
 import { useState, useRef } from 'react'
 import { resizeImage } from '@/lib/image-resize'
 import GuidePopup from '@/components/GuidePopup'
+import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
 
@@ -1037,6 +1038,12 @@ export default function ApplyPage() {
                 </div>
               </div>
             </section>
+
+            {/* CAPTCHA Verification */}
+            <PuzzleCaptcha
+              onVerified={(token) => setForm((p) => ({ ...p, captcha_token: token }))}
+              onError={(error) => alert(`CAPTCHA Error: ${error}`)}
+            />
 
             {/* Agreement */}
             <section className="card space-y-4">
