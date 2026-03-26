@@ -1,0 +1,21 @@
+name: Deploy Backend to Render
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api_server.py'
+      - 'security_middleware.py'
+      - 'bridge_agent/**'
+      - 'backend/**'
+      - 'tools/prompt_guard.py'
+      - 'requirements.txt'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Deploy
+        run: |
+          curl -sf "${{ secrets.RENDER_DEPLOY_HOOK }}" \
+            || echo "::warning::Render deploy hook failed"
