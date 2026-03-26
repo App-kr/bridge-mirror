@@ -1,0 +1,50 @@
+# Gitleaks 설정 — Bridge 프로젝트 Secret 스캔 규칙
+# 참조: https://github.com/gitleaks/gitleaks
+# 대기업 표준: GitHub Secret Protection, GitGuardian 동급 설정
+
+title = "Bridge Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "bridge-field-key"
+description = "Bridge Field Encryption Key"
+regex = '''BRIDGE_FIELD_KEY\s*=\s*[A-Za-z0-9+/]{40,}'''
+tags = ["bridge", "encryption", "key"]
+
+[[rules]]
+id = "bridge-admin-key"
+description = "Bridge Admin API Key"
+regex = '''ADMIN_API_KEY\s*=\s*[A-Za-z0-9_-]{20,}'''
+tags = ["bridge", "admin", "api-key"]
+
+[[rules]]
+id = "bridge-jwt-secret"
+description = "JWT Secret"
+regex = '''JWT_SECRET\s*=\s*[A-Za-z0-9+/=_-]{32,}'''
+tags = ["jwt", "secret"]
+
+[[rules]]
+id = "sqlite-db-file"
+description = "SQLite database file committed — PII risk"
+path = '''\.db$'''
+regex = '''SQLite format'''
+tags = ["database", "pii", "critical"]
+
+[allowlist]
+description = "Bridge 허용 패턴"
+paths = [
+    ".env.example",
+    "web_frontend/.env.example",
+    "web_frontend/.env.production",
+    ".gitleaks.toml",
+    "CLAUDE.md",
+    ".claude/",
+]
+regexes = [
+    # 예시/플레이스홀더 값 허용
+    '''your[-_]key[-_]here''',
+    '''example[-_]key''',
+    '''NEXT_PUBLIC_API_URL''',
+]

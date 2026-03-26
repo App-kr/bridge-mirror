@@ -1,0 +1,56 @@
+#!/bin/sh
+# Bridge Pre-commit Hook — DB + Secret 스캔
+# 대기업 표준: GitHub Secret Protection 동급
+# 설치: git config core.hooksPath .githooks
+
+# ── 1. DB 파일 커밋 차단 ────────────────────────────────────────
+STAGED_DB=$(git diff --cached --name-only | grep -E '\.(db|sqlite|sqlite3)$')
+if [ -n "$STAGED_DB" ]; then
+    echo ""
+    echo "❌ [BRIDGE SECURITY] DB 파일 커밋 차단!"
+    echo "   다음 파일이 staging area에 있습니다:"
+    echo "$STAGED_DB" | sed 's/^/   - /'
+    echo ""
+    echo "   DB는 git에 절대 커밋하지 않습니다."
+    echo "   Render는 /data/master.db 독립 운용 중 — git 불필요"
+    echo "   해결: git reset HEAD <file>"
+    echo ""
+    exit 1
+fi
+
+# ── 2. .key / .pem 파일 차단 ────────────────────────────────────
+STAGED_KEYS=$(git diff --cached --name-only | grep -E '\.(key|pem|p12|pfx)$')
+if [ -n "$STAGED_KEYS" ]; then
+    echo ""
+    echo "❌ [BRIDGE SECURITY] 암호화 키 파일 커밋 차단!"
+    echo "$STAGED_KEYS" | sed 's/^/   - /'
+    echo "   해결: git reset HEAD <file>"
+    echo ""
+    exit 1
+fi
+
+# ── 3. .env 파일 차단 (.env.example 제외) ───────────────────────
+STAGED_ENV=$(git diff --cached --name-only | grep -E '\.env' | grep -v '\.env\.example' | grep -v '\.env\.production')
+if [ -n "$STAGED_ENV" ]; then
+    echo ""
+    echo "❌ [BRIDGE SECURITY] .env 파일 커밋 차단!"
+    echo "$STAGED_ENV" | sed 's/^/   - /'
+    echo "   해결: git reset HEAD <file>"
+    echo ""
+    exit 1
+fi
+
+# ── 4. Gitleaks 스캔 (설치된 경우) ─────────────────────────────
+if command -v gitleaks > /dev/null 2>&1; then
+    gitleaks protect --staged --config .gitleaks.toml --no-banner 2>&1
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "❌ [BRIDGE SECURITY] Gitleaks가 시크릿을 탐지했습니다!"
+        echo "   커밋 취소됨. git diff --staged 로 확인하세요."
+        echo ""
+        exit 1
+    fi
+fi
+
+echo "✅ [BRIDGE SECURITY] Pre-commit 검사 통과"
+exit 0

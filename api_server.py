@@ -310,7 +310,12 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "X-XSS-Protection": "1; mode=block",
+        # X-XSS-Protection deprecated (OWASP 2025) — disabled, CSP replaces it
+        "X-XSS-Protection": "0",
+        # HSTS: 2년 + subdomains + preload (Google/Apple/Microsoft 표준)
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+        # Permissions-Policy: 불필요 기능 비활성화
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
     }
 
     def _add_sec_headers(self, response):

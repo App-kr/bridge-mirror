@@ -16,11 +16,12 @@ google_service_account*.json
 CREDENTIALS_REFERENCE.md
 
 # ── Databases ─────────────────────────────────────────────────
+# DB는 git에 절대 포함하지 않음 (Render는 /data/master.db 독립 운용)
 *.db
-!master.db
 *.db-shm
 *.db-wal
-master.db.backup_*
+master.db
+master.db.*
 *.sqlite
 *.sqlite3
 data/
