@@ -8845,6 +8845,15 @@ def _interview_reminder_loop():
 threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").start()
 
 
+# ── Resume Converter 라우터 등록 ─────────────────────────────────────────────
+try:
+    from resume_api import router as resume_router
+    app.include_router(resume_router)
+    logging.getLogger("bridge.api").info("[STARTUP] resume_api 라우터 등록 완료")
+except Exception as _resume_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] resume_api 라우터 로드 실패 (계속 진행): %s", _resume_err)
+
+
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn

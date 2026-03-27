@@ -1,0 +1,9 @@
+{
+  "_comment": "이 파일을 config.json으로 복사하여 설정하세요",
+  "vault_path": "Q:/Claudework/.vault/",
+  "output_dir": "Q:/Claudework/bridge base/tools/resume_converter/output/",
+  "inbox_dir":  "Q:/Claudework/bridge base/tools/resume_converter/inbox/",
+  "sheet_id":   "AUTO_DETECT",
+  "service_account_path": "",
+  "python_exe": "D:/Phtyon 3/python.exe"
+}

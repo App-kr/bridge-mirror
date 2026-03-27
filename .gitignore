@@ -26,6 +26,14 @@ master.db.*
 *.sqlite3
 data/
 
+# ── Resume Converter 임시 폴더 (PII 포함) ─────────────────────
+tools/resume_converter/inbox/*/
+tools/resume_converter/processing/
+tools/resume_converter/output/
+tools/resume_converter/originals/
+tools/resume_converter/logs/
+tools/resume_converter/.rc_key
+
 # ── Legacy data / CSV dumps ───────────────────────────────────
 *.csv
 *.dump
