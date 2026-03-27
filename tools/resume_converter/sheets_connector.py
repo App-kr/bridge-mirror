@@ -40,10 +40,19 @@ def _get_sheet_id() -> Optional[str]:
 def _get_sa_credential() -> Optional[dict]:
     """
     서비스계정 자격증명 우선순위:
+      0. gc_sa.enc (Argon2id+ChaCha20+AES 3중 암호화) — 최우선
       1. 환경변수 GOOGLE_SERVICE_ACCOUNT_JSON (JSON 문자열)
       2. config.json → service_account_path (파일 경로)
-      3. Q:/Claudework/.vault/ 에서 *service_account*.json 탐색
+    디스크에 JSON 평문 재생성 없음.
     """
+    # 0. gc_sa.enc 복호화 (최우선 — 메모리만)
+    try:
+        from .vault_import import load_service_account_dict, VAULT_FILE
+        if VAULT_FILE.exists():
+            return load_service_account_dict()
+    except Exception as e:
+        log.debug(f"gc_sa.enc 로드 실패 (폴백 시도): {e}")
+
     # 1. 환경변수
     raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     if raw:
@@ -57,16 +66,11 @@ def _get_sa_credential() -> Optional[dict]:
     cfg = _load_config()
     sa_path = cfg.get("service_account_path", "")
     if sa_path and Path(sa_path).exists():
+        log.warning(
+            "config.json의 평문 JSON 경로 사용 중 → "
+            "run_vault_import.bat 으로 보안 vault에 저장하세요"
+        )
         return json.loads(Path(sa_path).read_text(encoding="utf-8"))
-
-    # 3. vault 탐색
-    vault = Path("Q:/Claudework/.vault")
-    if vault.exists():
-        for f in vault.glob("*service_account*.json"):
-            try:
-                return json.loads(f.read_text(encoding="utf-8"))
-            except Exception:
-                continue
 
     return None
 
