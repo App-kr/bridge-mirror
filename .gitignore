@@ -136,3 +136,8 @@ security_log.jsonl
 bridge_totp_qr.png
 setup_totp.py
 init_vault_env.py
+
+# ── Network Security & Device Registry (세션 21 추가) ─────────────
+.device_registry.json
+.trusted_ips.json
+.device_key
