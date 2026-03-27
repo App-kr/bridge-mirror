@@ -1,30 +1,36 @@
-Option Explicit
-Dim sh, fso, base, launcher, pythonw
-Set sh  = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-base     = fso.GetParentFolderName(WScript.ScriptFullName)
-launcher = base & "\launcher.pyw"
+' BRIDGE Craigslist RPA Launcher
+' Windows VBScript 실행기
 
-' Python313 우선 탐색 (Python314는 encodings 손상으로 제외)
-Dim c(5), i
-c(0) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python313\pythonw.exe"
-c(1) = "C:\Python313\pythonw.exe"
-c(2) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python312\pythonw.exe"
-c(3) = "C:\Python312\pythonw.exe"
-c(4) = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Programs\Python\Python311\pythonw.exe"
-c(5) = "C:\Python311\pythonw.exe"
-pythonw = ""
-For i = 0 To 5
-    If fso.FileExists(c(i)) Then pythonw = c(i) : Exit For
-Next
+Dim objShell, objFSO, strPath, strCmd, intExitCode
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
 
-If pythonw = "" Then
-    MsgBox "pythonw.exe 를 찾을 수 없습니다." & Chr(13) & "Python 3.11 이상이 설치되어 있는지 확인하세요.", 16, "BRIDGE RPA 오류"
-ElseIf Not fso.FileExists(launcher) Then
-    MsgBox "launcher.pyw 를 찾을 수 없습니다." & Chr(13) & launcher, 16, "BRIDGE RPA 오류"
-Else
-    ' 0 = 숨김 창 (CMD 없음), False = 대기하지 않음
-    sh.Run """" & pythonw & """ """ & launcher & """", 0, False
+' 스크립트 디렉토리
+strPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
+
+' 인자 처리 (기본값: --dry-run)
+Dim args, argStr
+Set args = WScript.Arguments
+argStr = "--dry-run --limit 1"
+If args.Count > 0 Then
+    argStr = ""
+    Dim i
+    For i = 0 To args.Count - 1
+        argStr = argStr & " """ & args(i) & """"
+    Next
 End If
 
-Set sh = Nothing : Set fso = Nothing
+' 명령어 실행
+strCmd = "python """ & strPath & "\craigslist_auto_rpa.py""" & argStr
+intExitCode = objShell.Run(strCmd, 1, True)
+
+' 에러 확인
+If intExitCode <> 0 Then
+    MsgBox "RPA 실행 실패" & vbCrLf & vbCrLf & _
+           "종료 코드: " & intExitCode & vbCrLf & vbCrLf & _
+           "해결 방법:" & vbCrLf & _
+           "1. auto_vault_setup.py 실행" & vbCrLf & _
+           "2. python craigslist_auto_rpa.py --dry-run (cmd에서)" & vbCrLf & _
+           "3. RPA_GUIDE.md 참조", _
+           vbExclamation, "Craigslist RPA - 오류"
+End If
