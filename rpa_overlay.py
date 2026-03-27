@@ -97,21 +97,32 @@ class RPAOverlay:
     CARD   = "#ffffff"      # header default
     TEXT1  = "#1d1d1f"
     TEXT2  = "#6e6e73"
-    BLUE   = "#0071e3"
-    RED    = "#ff3b30"
-    GREEN  = "#34c759"
-    SEP    = "#d2d2d7"
-    HOVER  = "#e8e8ed"
-    X_GRAY = "#86868b"
-    BAR_BG = "#e5e5ea"
-    GOLD   = "#ff9500"
+    # ── 2026 Dark Mode Palette ──
+    BLUE   = "#60a5fa"  # 밝은 파랑
+    RED    = "#ff6b6b"  # 밝은 빨강
+    GREEN  = "#22c55e"  # 밝은 초록
+    SEP    = "#404040"  # 어두운 분리선
+    HOVER  = "#333333"  # 호버 배경
+    X_GRAY = "#999999"  # 밝은 회색
+    BAR_BG = "#2a2a2a"  # 진행바 배경
+    GOLD   = "#fbbf24"  # 밝은 황색
+    TEXT1  = "#ffffff"  # 기본 텍스트
+    TEXT2  = "#cccccc"  # 보조 텍스트
 
-    # 계정별 전체 창 색상 (BG, CARD) — 2026 fresh palette
+    # 계정별 색상 (가로선) — Dark Mode
+    ACCOUNT_COLORS = {
+        "coreabridge@gmail.com":    "#22c55e",  # Green
+        "airelair00@gmail.com":     "#a855f7",  # Purple
+        "ferrari812fast@gmail.com": "#92400e",  # Brown
+        "bridgejobkr@gmail.com":    "#808080",  # Gray
+    }
+
+    # Dark Mode 배경색 (BG, CARD)
     _WINDOW_COLORS = {
-        "coreabridge@gmail.com":    ("#b8d4b8", "#d2ebd2"),  # 선명한 세이지 그린
-        "airelair00@gmail.com":     ("#c4b8e8", "#dbd4f5"),  # 선명한 라벤더
-        "ferrari812fast@gmail.com": ("#e0c89c", "#f2e2c0"),  # 선명한 앰버
-        "bridgejobkr@gmail.com":    ("#c8c8c8", "#e0e0e0"),  # 선명한 뉴트럴
+        "coreabridge@gmail.com":    ("#1a1a1a", "#252525"),
+        "airelair00@gmail.com":     ("#1a1a1a", "#252525"),
+        "ferrari812fast@gmail.com": ("#1a1a1a", "#252525"),
+        "bridgejobkr@gmail.com":    ("#1a1a1a", "#252525"),
     }
 
     _STATUS_CYCLE = [
@@ -135,6 +146,7 @@ class RPAOverlay:
         self._email            = ""
         self._bot_t            = 0.0
         self._restore_monitor  = None
+        self._account_color    = self.GREEN  # 계정별 색상
 
     # ── Restore flag monitor (안전망) ──────────
     def _start_restore_monitor(self):
@@ -196,6 +208,8 @@ class RPAOverlay:
                             (self.__class__.BG, self.__class__.CARD))
         self.BG   = bg_c
         self.CARD = card_c
+        # 계정별 다리 색상 설정
+        self._account_color = self.ACCOUNT_COLORS.get(email.lower(), self.GREEN)
 
         def _safe_build():
             try:
@@ -405,7 +419,7 @@ class RPAOverlay:
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
         self._prog_bar_canvas.pack()
-        self._draw_pill_bar(BAR_W, BAR_H, cur, tot)
+        self._draw_bridge_bar(BAR_W, BAR_H, cur, tot, self._account_color)
 
         # 상태 행: ● dot + 텍스트 (바 아래)
         status_row = tk.Frame(body, bg=self.BG)
@@ -616,8 +630,9 @@ class RPAOverlay:
             int(g1 + (g2 - g1) * t),
             int(b1 + (b2 - b1) * t))
 
-    # ── Pill progress bar ──────────────────────
-    def _draw_pill_bar(self, bar_w, bar_h, cur, tot):
+    # ── Bridge progress bar (다리 모양) ──────────────────────
+    def _draw_bridge_bar(self, bar_w, bar_h, cur, tot, account_color="#22c55e"):
+        """다리 모양 진행바 — 가로선들로 다리를 짓는 모양"""
         c = self._prog_bar_canvas
         if not c:
             return
@@ -627,25 +642,28 @@ class RPAOverlay:
         except Exception:
             return
         c.delete("all")
-        r = bar_h
 
-        c.create_rectangle(r // 2, 0, bar_w - r // 2, bar_h,
-                           fill=self.BAR_BG, outline="")
-        c.create_oval(0, 0, r, bar_h, fill=self.BAR_BG, outline="")
-        c.create_oval(bar_w - r, 0, bar_w, bar_h, fill=self.BAR_BG, outline="")
+        # 최대 10개 줄 (포스팅)
+        max_lines = 10
+        line_h = 3
+        line_spacing = 4
+        total_h = max_lines * (line_h + line_spacing)
 
-        pct     = 0.0 if tot <= 0 else min(1.0, cur / tot)
-        fill_px = int(pct * bar_w)
+        for i in range(max_lines):
+            y = i * line_spacing
 
-        if fill_px > 0:
-            c.create_oval(0, 0, r, bar_h, fill=self.GREEN, outline="")
-            right_x = min(fill_px, bar_w - r // 2)
-            if right_x > r // 2:
-                c.create_rectangle(r // 2, 0, right_x, bar_h,
-                                   fill=self.GREEN, outline="")
-            if fill_px >= bar_w - r // 2:
-                c.create_oval(bar_w - r, 0, bar_w, bar_h,
-                              fill=self.GREEN, outline="")
+            if i < cur:
+                # 완료된 줄 — 밝은 색상
+                c.create_rectangle(0, y, bar_w, y + line_h,
+                                 fill=account_color, outline="")
+            elif i == cur:
+                # 진행 중인 줄 — 계정 색상 (깜박임은 _blink에서 처리)
+                c.create_rectangle(0, y, bar_w, y + line_h,
+                                 fill=account_color, outline="")
+            else:
+                # 아직 안 한 줄 — 어두운 색상
+                c.create_rectangle(0, y, bar_w, y + line_h,
+                                 fill="#3a3a3a", outline="")
 
     # ── Status blink ──────────────────────────
     def _start_status_blink(self, root):
@@ -690,7 +708,7 @@ class RPAOverlay:
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_pill_bar(318, 16, cur, tot)
+            self._draw_bridge_bar(318, 16, cur, tot, self._account_color)
         except Exception:
             pass
 
