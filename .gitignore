@@ -141,3 +141,11 @@ init_vault_env.py
 .device_registry.json
 .trusted_ips.json
 .device_key
+
+# ── Security Hardening (세션 21 추가) ────────────────────────────
+security_config/
+!security_config/SECURITY_GUIDE.md
+security_config/keys/
+security_config/wireguard/
+security_config/render.env
+security_config/firewall_rules.json
