@@ -195,22 +195,34 @@ except ImportError:
     print("[ERROR] pip install selenium webdriver-manager")
     sys.exit(1)
 
-# ── 비밀번호 복호화 헬퍼 ──────────────────────────────────────────────────────
-def _decrypt_env_password(raw: str) -> str:
-    """ENC: 접두사 비밀번호를 Fernet 복호화. 평문이면 그대로 반환."""
-    if not raw.startswith("ENC:"):
-        return raw
+# ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
+def _load_craigslist_credentials():
+    """RPA Credential Vault에서 Craigslist 자격증명 로드 (3중 암호화)
+
+    ENV 절대 사용 금지 — vault에서만 로드
+    """
     try:
-        from crypto_util import decrypt_value
-        return decrypt_value(raw)
+        from tools.rpa_credential_vault import CredentialVault
+        vault = CredentialVault()
+        email = vault.get_decrypted("email")
+        password = vault.get_decrypted("password")
+
+        if not email or not password:
+            print("[ERROR] Credential Vault가 초기화되지 않았습니다.")
+            print("먼저 실행하세요: python tools/rpa_credential_vault.py setup")
+            sys.exit(1)
+
+        return email, password
+    except ImportError:
+        print("[ERROR] RPA Credential Vault를 찾을 수 없습니다.")
+        sys.exit(1)
     except Exception as e:
-        print(f"  [ERROR] 비밀번호 복호화 실패: {e}")
-        print(f"  .bridge.key 파일 확인 또는 python crypto_util.py setup 실행")
+        print(f"[ERROR] 자격증명 로드 실패: {e}")
         sys.exit(1)
 
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
-CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
-CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
+# 초기 로드 (--account 지정 시 1410-1417에서 재로드됨)
+CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials()
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 
@@ -1406,15 +1418,13 @@ def main():
             except Exception:
                 acct_lock.unlink(missing_ok=True)
 
-    # ── 계정별 .env 재로딩 (--account 지정 시) ──
+    # ── Credential Vault 재로딩 (--account 지정 시) ──
+    # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
     if args.account:
-        _load_account_env(args.account)
-        # 환경변수 재읽기
         global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
-        CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
-        CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
-        CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
-        CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
+        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials()
+        CL_CITY     = "seoul"  # 기본값 유지
+        CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
         CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
 
     # ── 파일 무결성 체크 ──

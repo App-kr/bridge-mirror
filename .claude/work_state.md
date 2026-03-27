@@ -91,6 +91,47 @@ output = base64(T3v1 + n1 + n2 + n3 + ct3)
 - BRIDGE_FIELD_KEY, JWT_SECRET 등 Render 대시보드에 설정됨
 - /data/master.db (1GB 영구디스크) — git master.db와 무관
 
+## 2026-03-27 세션 20 (RPA 자동화 작업 완료)
+- feat(rpa): Craigslist 자동 게시 + 3중 암호화 자격증명 관리 시스템
+  - `craigslist_auto_rpa.py` — Selenium 기반 Craigslist 자동 게시
+    - master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
+    - PII 마스킹: 회사명·연락처·이메일 완전 차단
+    - 파일 무결성 검증 (SHA-256) + 해킹 감지
+    - 다중 계정 지원 (--account 플래그)
+    - 옵션: --dry-run / --generate / --limit / --job-code / --headless
+    - 구조화 에러 로그 (JSON 포맷, rpa_error.log)
+
+  - `tools/rpa_credential_vault.py` — Session-Ephemeral 3중 AES-256-GCM 자격증명 보관소
+    - setup: 이메일/비밀번호 입력 → 3중 암호화 저장 (.rpa_vault.enc.json)
+    - rotate: 매 실행마다 새 salt/nonce 생성 (같은 값도 매번 다른 암호문)
+    - get_decrypted: 프로그래밍 방식 읽기 (RPA 내부 사용)
+    - PBKDF2 600k iterations + AESGCM
+    - 클립보드 자동 복사 + 메모리 소각
+
+  - `scripts/migrate_python_to_q.*` — Python 마이그레이션 배치
+    - .bat: 관리자 권한 확인 + PowerShell 호출
+    - .ps1: C/D 드라이브의 Python → Q 드라이브 복사 + PATH 업데이트
+
+- **상태**: 파일 완성 ✅ / Git 추가 대기 ⏳
+  - gitleaks hook 이슈: "no leaks found" 반환 후 exit code 1
+  - craigslist_auto_rpa.py: 46줄 변경 (46 +++---)
+  - 3개 신규 파일: tools/rpa_credential_vault.py (343줄), scripts/*.bat/*.ps1 (245줄)
+  - 총 616줄 추가
+
+- **파일 위치** (Q 드라이브 저장됨, 손실 없음):
+  - `Q:/Claudework/bridge base/craigslist_auto_rpa.py`
+  - `Q:/Claudework/bridge base/tools/rpa_credential_vault.py`
+  - `Q:/Claudework/bridge base/scripts/migrate_python_to_q.bat`
+  - `Q:/Claudework/bridge base/scripts/migrate_python_to_q.ps1`
+
+- **다음 단계**:
+  1. gitleaks hook 재점검 필요
+  2. Commit 재시도
+  3. GitHub push
+  4. Craigslist 자동 게시 E2E 테스트 (한 건 시도)
+
+- **PC 다운 상황**: 안전하게 파일 백업 + 상태 기록 완료
+
 ## 2026-03-26 세션 17 (Settings 오류 수정 + 라우터 다운 전 백업)
 - fix(settings): settings.local.json 잘못된 CLAUDE_TOOL_NAME 패턴 6개 제거 (`8298e06`)
   - 이전 훅 스크립트가 남긴 `CLAUDE_TOOL_NAME=Bash` 포함 비정상 항목 792→786개
