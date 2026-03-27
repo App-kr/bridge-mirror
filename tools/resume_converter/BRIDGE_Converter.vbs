@@ -1,0 +1,29 @@
+' BRIDGE Resume Converter — 숨김 런처 (CMD 창 없음)
+Option Explicit
+
+Dim sh, fso, py, toolDir, cmd
+Set sh  = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+py      = "D:\Phtyon 3\python.exe"
+toolDir = "Q:\Claudework\bridge base\tools"
+
+' python.exe 존재 확인
+If Not fso.FileExists(py) Then py = "python"
+
+' 작업 디렉토리 설정 (resume_converter 패키지 부모)
+sh.CurrentDirectory = toolDir
+
+' sys.path 포함하여 실행 (모듈 검색 경로 보장)
+cmd = Chr(34) & py & Chr(34) & _
+      " -X utf8 -c " & _
+      Chr(34) & _
+      "import sys,os;" & _
+      "sys.path.insert(0,r'" & toolDir & "');" & _
+      "from resume_converter.main_gui import main;main()" & _
+      Chr(34)
+
+sh.Run cmd, 0, False
+
+Set fso = Nothing
+Set sh  = Nothing
