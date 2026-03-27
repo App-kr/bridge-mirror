@@ -206,8 +206,6 @@ def integrity_check() -> bool:
 
 # ── Selenium 지연 로드 (--dry-run/--generate 모드에서는 필요 없음) ──────────
 _SKIP_SELENIUM = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
-print(f"[DEBUG] sys.argv = {sys.argv}", file=sys.stderr)
-print(f"[DEBUG] _SKIP_SELENIUM = {_SKIP_SELENIUM}", file=sys.stderr)
 
 if not _SKIP_SELENIUM:
     try:
@@ -1828,4 +1826,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[ABORT] 사용자에 의해 중단됨")
+        sys.exit(0)
+    except Exception as e:
+        import traceback
+        print(f"\n[FATAL ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
