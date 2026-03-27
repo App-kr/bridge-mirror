@@ -32,10 +32,32 @@ import re
 import sqlite3
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+# ── 글로벌 에러 핸들러 ────────────────────────────────────────────────────────
+ERROR_LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "rpa_crash.log"
+ERROR_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def _global_exception_handler(exc_type, exc_value, exc_traceback):
+    """모든 에러를 파일에 기록"""
+    with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"\n{'='*70}\n")
+        f.write(f"[CRASH] {datetime.now().isoformat()}\n")
+        f.write(f"{'='*70}\n")
+        f.write(f"Error: {exc_type.__name__}: {exc_value}\n\n")
+        f.write("Traceback:\n")
+        traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+
+    # 콘솔에도 출력
+    print(f"\n[CRITICAL ERROR] {exc_type.__name__}: {exc_value}")
+    print(f"에러 상세: {ERROR_LOG_FILE}")
+    print("프로그램이 종료됩니다.")
+
+sys.excepthook = _global_exception_handler
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
 BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
@@ -196,22 +218,31 @@ except ImportError:
     sys.exit(1)
 
 # ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
-def _load_craigslist_credentials():
+def _load_craigslist_credentials(account_name: str = "gray"):
     """RPA Credential Vault에서 Craigslist 자격증명 로드 (3중 암호화)
 
     ENV 절대 사용 금지 — vault에서만 로드
+
+    계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
     """
     try:
         from tools.rpa_credential_vault import CredentialVault
         vault = CredentialVault()
-        email = vault.get_decrypted("email")
-        password = vault.get_decrypted("password")
+
+        # 계정별 키 생성
+        email_key = f"{account_name}_email"
+        password_key = f"{account_name}_password"
+
+        email = vault.get_decrypted(email_key)
+        password = vault.get_decrypted(password_key)
 
         if not email or not password:
-            print("[ERROR] Credential Vault가 초기화되지 않았습니다.")
-            print("먼저 실행하세요: python tools/rpa_credential_vault.py setup")
+            print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
+            print("사용 가능한 계정: gray(회색), green(초록), brown(갈색), purple(보라)")
+            print("실행 예시: python craigslist_auto_rpa.py --account gray --limit 1")
             sys.exit(1)
 
+        print(f"✓ 계정 [{account_name}] 로드됨: {email}")
         return email, password
     except ImportError:
         print("[ERROR] RPA Credential Vault를 찾을 수 없습니다.")
@@ -220,11 +251,18 @@ def _load_craigslist_credentials():
         print(f"[ERROR] 자격증명 로드 실패: {e}")
         sys.exit(1)
 
+# ── 계정 선택 파싱 ────────────────────────────────────────────────────────────
+_ACCOUNT = "gray"  # 기본값: 회색
+if "--account" in sys.argv:
+    idx = sys.argv.index("--account")
+    if idx + 1 < len(sys.argv):
+        _ACCOUNT = sys.argv[idx + 1]
+
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
-# 초기 로드 (--account 지정 시 1410-1417에서 재로드됨)
+# 초기 로드 (--account 지정 시 재로드)
 # dry-run/generate 모드에서는 자격증명 불필요 — lazy load
 _SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv
-CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials() if not _SKIP_CREDS else ("", ""))
+CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 

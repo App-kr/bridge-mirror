@@ -51,6 +51,26 @@ KDF_ITERATIONS = 600_000
 NONCE_BYTES = 12
 SALT_BYTES = 32
 
+# ── Craigslist 계정 정보 ──────────────────────────────────────────────────
+ACCOUNTS = {
+    "gray": {
+        "name": "회색",
+        "email": "bridgejobkr@gmail.com",
+    },
+    "green": {
+        "name": "초록",
+        "email": "Coreabridge@gmail.com",
+    },
+    "brown": {
+        "name": "갈색",
+        "email": "ferrari812fast@gmail.com",
+    },
+    "purple": {
+        "name": "보라",
+        "email": "airelair00@gmail.com",
+    },
+}
+
 # ── 3중 암호화 헬퍼 ──────────────────────────────────────────────────────────
 
 def _kdf(master_key: bytes, salt: bytes) -> bytes:
@@ -217,40 +237,35 @@ class CredentialVault:
             return ""
 
     def setup(self):
-        """초기 설정: 4개 계정(회색, 갈색, 보라색, 초록색) 이메일+비밀번호 입력 → 3중 암호화 저장"""
+        """초기 설정: 4개 계정 비밀번호만 입력 → 3중 암호화 저장"""
         print("\n" + "="*70)
-        print("  RPA CREDENTIAL VAULT v3.0 - Initial Setup (4 Accounts)")
+        print("  RPA 암호화 세팅 - Initial Setup")
         print("="*70)
-        print("\n[안내] Craigslist 4개 계정을 3중 암호화로 저장합니다.")
-        print("       순서: 회색 → 갈색 → 보라색 → 초록색")
+        print("\n[안내] Craigslist 4개 계정의 비밀번호를 3중 암호화로 저장합니다.")
+        print("       계정은 자동 로드되고, 비밀번호만 입력하시면 됩니다.")
         print("       평문으로 저장되지 않으며, 매번 다른 암호문으로 변환됩니다.\n")
 
         # 마스터 키 입력
         master_key = self._load_master_key()
         print("✓ 마스터 키 입력됨\n")
 
-        # 4개 계정 입력
-        accounts = {
-            "gray": "회색",
-            "brown": "갈색",
-            "purple": "보라색",
-            "green": "초록색",
-        }
-
         vault_data = {}
+        order = ["gray", "green", "brown", "purple"]  # 회색, 초록, 갈색, 보라 순서
 
-        for account_key, account_name in accounts.items():
-            print(f"\n{'='*70}")
-            print(f"  [{account_name}] Craigslist 계정 등록")
-            print(f"{'='*70}")
+        for account_key in order:
+            account_info = ACCOUNTS[account_key]
+            account_name = account_info["name"]
+            email = account_info["email"]
 
-            # 이메일 입력
-            email = getpass.getpass(f"📧 [{account_name}] 이메일 (보이지 않음): ")
-            if not email:
-                print(f"❌ [{account_name}] 이메일이 입력되지 않았습니다.")
-                continue
+            print(f"\n" + "!"*70)
+            print(f"!")
+            print(f"!  [{account_name}] 계정")
+            print(f"!")
+            print(f"!  아이디: {email}")
+            print(f"!")
+            print("!"*70 + "\n")
 
-            # 비밀번호 입력
+            # 비밀번호만 입력
             password = getpass.getpass(f"🔐 [{account_name}] 비밀번호 (보이지 않음): ")
             if not password:
                 print(f"❌ [{account_name}] 비밀번호가 입력되지 않았습니다.")
@@ -263,21 +278,21 @@ class CredentialVault:
             print(" ✓")
 
             # 메모리 소각
-            email_arr = bytearray(email.encode('utf-8'))
             password_arr = bytearray(password.encode('utf-8'))
-            email_arr[:] = b'\x00' * len(email_arr)
             password_arr[:] = b'\x00' * len(password_arr)
-            del email, password, email_arr, password_arr
+            del password, password_arr
 
         self._write_vault(vault_data)
 
         print("\n" + "="*70)
-        print("✅ 4개 계정 설정 완료!")
+        print("✅ 4개 계정 암호화 설정 완료!")
         print("="*70)
         print("\n등록된 계정:")
-        for account_key, account_name in accounts.items():
+        for account_key in order:
+            account_name = ACCOUNTS[account_key]["name"]
+            email = ACCOUNTS[account_key]["email"]
             if f"{account_key}_email" in vault_data:
-                print(f"  ✓ [{account_name}] gray_email, gray_password (등)")
+                print(f"  ✓ [{account_name}] {email}")
 
         print("\n이제 매번 RPA 실행 전에:")
         print("  python tools/rpa_credential_vault.py rotate")
@@ -286,7 +301,7 @@ class CredentialVault:
         print("  vault = CredentialVault()")
         print("  email = vault.get_decrypted('gray_email')")
         print("  password = vault.get_decrypted('gray_password')")
-        print("\n다른 계정: brown_email, purple_email, green_email 등")
+        print("\n다른 계정: green_email, brown_email, purple_email 등")
 
         # 메모리 소각
         master_key_arr = bytearray(master_key)
@@ -299,7 +314,7 @@ class CredentialVault:
         같은 평문도 매번 다른 salt/nonce로 인해 완전히 다른 암호문 생성
         """
         print("\n" + "="*70)
-        print("  RPA CREDENTIAL VAULT v3.0 - Rotate Encryption (4 Accounts)")
+        print("  RPA 암호화 세팅 - Rotate Encryption")
         print("="*70)
 
         vault = self._read_vault()
@@ -313,13 +328,12 @@ class CredentialVault:
         print("✓ 마스터 키 입력됨\n")
 
         # 4개 계정 복호화
-        accounts = ["gray", "brown", "purple", "green"]
-        account_names = {"gray": "회색", "brown": "갈색", "purple": "보라색", "green": "초록색"}
+        order = ["gray", "green", "brown", "purple"]
         decrypted = {}
 
         print("🔓 기존 자격증명 4개 계정 복호화 중...", end="", flush=True)
         try:
-            for account in accounts:
+            for account in order:
                 email_key = f"{account}_email"
                 password_key = f"{account}_password"
                 if email_key in vault and password_key in vault:
@@ -347,10 +361,11 @@ class CredentialVault:
         print(f"\n📂 Vault 파일: {VAULT_FILE}")
         print(f"🔐 상태: 3중 암호화 (평문 저장 없음)")
         print("\n회전된 계정:")
-        for account in accounts:
+        for account in order:
             if account in decrypted:
-                name = account_names.get(account, "?")
-                print(f"  ✓ [{name}] {account}_email, {account}_password")
+                account_name = ACCOUNTS[account]["name"]
+                email = ACCOUNTS[account]["email"]
+                print(f"  ✓ [{account_name}] {email}")
 
         # 메모리 소각
         master_key_arr = bytearray(master_key)
