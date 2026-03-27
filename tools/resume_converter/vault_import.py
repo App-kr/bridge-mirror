@@ -269,6 +269,23 @@ def clear_cached_creds() -> None:
         _cached_creds = None
 
 
+# ── 설정값 저장/로드 (keyring 기반) ────────────────────────────────────────
+_KR_CONFIG_SERVICE = "BRIDGE_RC_CONFIG_V1"
+
+
+def save_config_value(key: str, value: str) -> None:
+    """
+    소규모 설정값을 Windows Credential Manager에 저장.
+    key 예: 'sheet_id', 'anthropic_api_key'
+    """
+    keyring.set_password(_KR_CONFIG_SERVICE, key, value)
+
+
+def load_config_value(key: str) -> Optional[str]:
+    """Windows Credential Manager에서 설정값 로드. 없으면 None."""
+    return keyring.get_password(_KR_CONFIG_SERVICE, key)
+
+
 # ── GUI 모드 ───────────────────────────────────────────────────────────────
 def run_gui() -> None:
     root = tk.Tk()

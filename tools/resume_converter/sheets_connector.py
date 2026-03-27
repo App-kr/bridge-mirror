@@ -29,10 +29,22 @@ def _load_config() -> dict:
 
 
 def _get_sheet_id() -> Optional[str]:
-    """시트 ID 우선순위: 환경변수 → config.json → None"""
+    """시트 ID 우선순위: 설정창(keyring) → 환경변수 → config.json → None"""
+    # 0. 설정창에서 저장한 값 (keyring)
+    try:
+        from .vault_import import load_config_value
+        stored = load_config_value("sheet_id")
+        if stored and stored.strip():
+            return stored.strip()
+    except Exception:
+        pass
+
+    # 1. 환경변수
     sid = os.getenv("GOOGLE_SHEETS_CANDIDATES_ID", "").strip()
     if sid:
         return sid
+
+    # 2. config.json
     cfg = _load_config()
     return cfg.get("sheet_id") or None
 

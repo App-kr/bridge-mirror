@@ -228,13 +228,22 @@ def analyze_pii_focus(text: str, api_key: str) -> PIIResult:
 
 # ── 로드 API 키 ────────────────────────────────────────────────────────────
 def load_api_key() -> Optional[str]:
-    """환경변수 → vault → None 순서로 Anthropic API 키 로드."""
+    """설정창(keyring) → 환경변수 → vault → None 순서로 Anthropic API 키 로드."""
+    # 0. 설정창에서 저장한 값 (keyring)
+    try:
+        from .vault_import import load_config_value
+        stored = load_config_value("anthropic_api_key")
+        if stored and stored.strip():
+            return stored.strip()
+    except Exception:
+        pass
+
     # 1. 환경변수
     key = os.getenv("ANTHROPIC_API_KEY", "")
     if key:
         return key
 
-    # 2. vault
+    # 2. vault 파일
     vault_path = Path("Q:/Claudework/.vault/anthropic.key")
     if vault_path.exists():
         return vault_path.read_text(encoding="utf-8").strip()

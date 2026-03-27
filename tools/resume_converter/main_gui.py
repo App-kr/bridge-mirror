@@ -103,12 +103,21 @@ class BridgeConverterApp:
             )
             rb.pack(side="left", padx=4)
 
+        # ⚙ 설정 버튼
+        tk.Button(
+            toolbar, text="⚙",
+            command=lambda: SettingsWindow(self.root),
+            bg=C_SIDEBAR, fg=C_SUBTEXT, activebackground=C_HOVER,
+            font=("Helvetica", 14), relief="flat",
+            cursor="hand2", bd=0,
+        ).pack(side="right", padx=4, pady=4)
+
         # 구글시트 상태
         self._sheet_label = tk.Label(
             toolbar, text="● 시트 연결 확인 중...",
             font=("Helvetica", 9), fg=C_SUBTEXT, bg=C_SIDEBAR
         )
-        self._sheet_label.pack(side="right", padx=16)
+        self._sheet_label.pack(side="right", padx=8)
 
         # ── 3패널 메인 ──────────────────────────────────────────────────
         main_frame = tk.Frame(self.root, bg=C_BG)
@@ -668,6 +677,164 @@ class BridgeConverterApp:
 
     def run(self):
         self.root.mainloop()
+
+
+# ── 설정 창 ───────────────────────────────────────────────────────────────
+class SettingsWindow(tk.Toplevel):
+    """설정 Toplevel 창 — 시트ID·API키·서비스계정 관리."""
+
+    def __init__(self, parent: tk.Tk):
+        super().__init__(parent)
+        self.title("설정")
+        self.geometry("440x500")
+        self.resizable(False, False)
+        self.configure(bg=C_BG)
+        self.grab_set()          # modal
+        self.focus_force()
+        self._build()
+
+    def _build(self):
+        # ── 헤더 ──────────────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=C_SIDEBAR, height=44,
+                       highlightbackground=C_BORDER, highlightthickness=1)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text="  ⚙  설정", font=("Helvetica", 12, "bold"),
+                 fg=C_TEXT, bg=C_SIDEBAR).pack(side="left", pady=10, padx=12)
+
+        body = tk.Frame(self, bg=C_BG, padx=16, pady=12)
+        body.pack(fill="both", expand=True)
+
+        # ── 1. Google Sheets 연동 ──────────────────────────────────────
+        sec1 = tk.LabelFrame(body, text="Google Sheets 연동",
+                              font=("Helvetica", 10, "bold"),
+                              bg=C_BG, fg=C_TEXT, padx=10, pady=8,
+                              relief="flat", highlightbackground=C_BORDER,
+                              highlightthickness=1)
+        sec1.pack(fill="x", pady=(0, 12))
+
+        tk.Label(sec1, text="스프레드시트 ID:", bg=C_BG, fg=C_SUBTEXT,
+                 font=("Helvetica", 9)).pack(anchor="w")
+
+        row1 = tk.Frame(sec1, bg=C_BG)
+        row1.pack(fill="x", pady=(2, 0))
+
+        self._sheet_id_var = tk.StringVar()
+        try:
+            from .vault_import import load_config_value
+            self._sheet_id_var.set(load_config_value("sheet_id") or "")
+        except Exception:
+            pass
+
+        tk.Entry(row1, textvariable=self._sheet_id_var,
+                 font=("Helvetica", 9), width=30, relief="flat", bd=1,
+                 highlightbackground=C_BORDER, highlightthickness=1
+                 ).pack(side="left", padx=(0, 8))
+        tk.Button(row1, text="저장", command=self._save_sheet_id,
+                  bg=C_PRIMARY, fg="white", font=("Helvetica", 9),
+                  relief="flat", padx=10, pady=2, cursor="hand2"
+                  ).pack(side="left")
+
+        tk.Label(sec1,
+                 text="※ 향후 홈페이지 제출(admin/sheet)로 교체 예정",
+                 bg=C_BG, fg=C_SUBTEXT, font=("Helvetica", 8)
+                 ).pack(anchor="w", pady=(6, 0))
+
+        # ── 2. Anthropic API Key ───────────────────────────────────────
+        sec2 = tk.LabelFrame(body, text="Anthropic API Key (PII 분석용)",
+                              font=("Helvetica", 10, "bold"),
+                              bg=C_BG, fg=C_TEXT, padx=10, pady=8,
+                              relief="flat", highlightbackground=C_BORDER,
+                              highlightthickness=1)
+        sec2.pack(fill="x", pady=(0, 12))
+
+        row2 = tk.Frame(sec2, bg=C_BG)
+        row2.pack(fill="x", pady=(2, 0))
+
+        self._api_key_var  = tk.StringVar()
+        self._api_key_show = tk.BooleanVar(value=False)
+        try:
+            from .vault_import import load_config_value
+            self._api_key_var.set(load_config_value("anthropic_api_key") or "")
+        except Exception:
+            pass
+
+        self._api_entry = tk.Entry(
+            row2, textvariable=self._api_key_var,
+            font=("Helvetica", 9), width=26, show="●",
+            relief="flat", bd=1,
+            highlightbackground=C_BORDER, highlightthickness=1,
+        )
+        self._api_entry.pack(side="left", padx=(0, 4))
+
+        tk.Checkbutton(row2, text="표시", variable=self._api_key_show,
+                       bg=C_BG, fg=C_SUBTEXT, font=("Helvetica", 8),
+                       command=self._toggle_api_show,
+                       activebackground=C_BG
+                       ).pack(side="left", padx=4)
+
+        tk.Button(sec2, text="저장", command=self._save_api_key,
+                  bg=C_PRIMARY, fg="white", font=("Helvetica", 9),
+                  relief="flat", padx=10, pady=2, cursor="hand2"
+                  ).pack(anchor="e", pady=(8, 0))
+
+        # ── 3. Google 서비스계정 ───────────────────────────────────────
+        sec3 = tk.LabelFrame(body, text="Google 서비스계정",
+                              font=("Helvetica", 10, "bold"),
+                              bg=C_BG, fg=C_TEXT, padx=10, pady=8,
+                              relief="flat", highlightbackground=C_BORDER,
+                              highlightthickness=1)
+        sec3.pack(fill="x", pady=(0, 12))
+
+        from pathlib import Path as _P
+        _enc = _P("Q:/Claudework/.vault/gc_sa.enc")
+        ok   = _enc.exists()
+        tk.Label(sec3,
+                 text="✅ gc_sa.enc 암호화 저장됨" if ok else "❌ 미설정",
+                 bg=C_BG, fg=C_PRIMARY if ok else C_DANGER,
+                 font=("Helvetica", 9, "bold")).pack(anchor="w")
+
+        tk.Button(sec3, text="서비스계정 재임포트 (JSON 선택)",
+                  command=self._reimport_sa,
+                  bg=C_WARN, fg="white", font=("Helvetica", 9),
+                  relief="flat", padx=8, pady=4, cursor="hand2"
+                  ).pack(anchor="w", pady=(8, 0))
+
+        # ── 닫기 ──────────────────────────────────────────────────────
+        tk.Button(body, text="닫기", command=self.destroy,
+                  bg=C_BORDER, fg=C_TEXT, font=("Helvetica", 10),
+                  relief="flat", padx=18, pady=6, cursor="hand2"
+                  ).pack(side="right", pady=(4, 0))
+
+    # ── 동작 ──────────────────────────────────────────────────────────
+    def _save_sheet_id(self):
+        sid = self._sheet_id_var.get().strip()
+        try:
+            from .vault_import import save_config_value
+            save_config_value("sheet_id", sid)
+            messagebox.showinfo("저장 완료", "시트 ID가 저장되었습니다.", parent=self)
+        except Exception as e:
+            messagebox.showerror("저장 실패", str(e), parent=self)
+
+    def _save_api_key(self):
+        key = self._api_key_var.get().strip()
+        try:
+            from .vault_import import save_config_value
+            save_config_value("anthropic_api_key", key)
+            messagebox.showinfo("저장 완료", "API 키가 저장되었습니다.", parent=self)
+        except Exception as e:
+            messagebox.showerror("저장 실패", str(e), parent=self)
+
+    def _toggle_api_show(self):
+        self._api_entry.config(show="" if self._api_key_show.get() else "●")
+
+    def _reimport_sa(self):
+        try:
+            from .vault_import import run_gui as _vault_gui
+            self.destroy()
+            _vault_gui()
+        except Exception as e:
+            messagebox.showerror("오류", str(e), parent=self)
 
 
 # ── 진입점 ────────────────────────────────────────────────────────────────
