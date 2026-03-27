@@ -1,15 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Device Registry System v1.0
-기기 등록 및 관리 — MAC주소 기반 화이트리스트
+Device Registry System v2.0 — MAC 기반 기기 관리 + 3중 암호화
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-사용:
-  python device_registry.py register "Device Name" [optional_ip]
-  python device_registry.py list
+사용법:
+  # 1. 현재 PC 자동 등록
+  python device_registry.py register "Device Name" [ip]
+
+  # 2. 원격 기기 등록 (MAC 직접 입력)
+  python device_registry.py register-remote "AA:BB:CC:DD:EE:FF" "Device Name" [ip]
+
+  # 3. 대화형 마법사
+  python device_registry.py register-interactive
+
+  # 4. 기기 목록
+  python device_registry.py list [--decrypt]
+
+  # 5. 기기 검증
   python device_registry.py verify <mac_address> [ip_address]
+
+  # 6. 기기 차단
   python device_registry.py revoke <mac_address>
+
+  # 7. 네트워크 점검
   python device_registry.py check-network
+
+고급 옵션:
+  --encrypt          3중 AES-256-GCM 암호화 저장
+  --decrypt          암호화된 값 복호화
+  --master-key FILE  마스터 키 파일 위치 지정
 """
 
 import os
@@ -18,6 +38,8 @@ import hashlib
 import subprocess
 import platform
 import sys
+import base64
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -28,10 +50,154 @@ if platform.system() == "Windows":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
+# 암호화 라이브러리
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    _CRYPTO = True
+except ImportError:
+    _CRYPTO = False
+    print("⚠️ cryptography 라이브러리 필요: pip install cryptography")
+
 # Configuration
 REGISTRY_FILE = Path(__file__).parent.parent / ".device_registry.json"
 ENCRYPTION_KEY_FILE = Path(__file__).parent.parent / ".device_key"
 TRUSTED_IPS_FILE = Path(__file__).parent.parent / ".trusted_ips.json"
+KDF_ITERATIONS = 600_000  # PBKDF2
+NONCE_BYTES = 12
+SALT_BYTES = 32
+
+# ── 3중 AES-256-GCM 암호화 헬퍼 ──────────────────────────────────────
+
+def _ensure_master_key(master_key_file: Optional[Path] = None) -> Optional[bytes]:
+    """마스터 키 획득 또는 생성"""
+    if not _CRYPTO:
+        return None
+
+    key_file = master_key_file or ENCRYPTION_KEY_FILE
+
+    if key_file.exists():
+        with open(key_file, 'rb') as f:
+            return f.read(32)
+
+    # 새 키 생성
+    print("🔑 새로운 마스터 키를 생성합니다...")
+    key = secrets.token_bytes(32)
+
+    with open(key_file, 'wb') as f:
+        f.write(key)
+    os.chmod(key_file, 0o600)
+    print(f"✅ 마스터 키 저장: {key_file}")
+
+    return key
+
+
+def _kdf(master_key: bytes, salt: bytes) -> bytes:
+    """PBKDF2-SHA256: 마스터키 + salt → 32바이트 세션키"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=KDF_ITERATIONS,
+    )
+    return kdf.derive(master_key)
+
+
+def _triple_encrypt(plaintext: str, master_key: bytes, field_name: str) -> str:
+    """
+    3중 AES-256-GCM 암호화:
+    L1 = AES-GCM(KDF(key + "L1" + field), nonce1)
+    L2 = AES-GCM(KDF(key + "L2" + nonce1), nonce2)
+    L3 = AES-GCM(KDF(key + "L3" + nonce2), nonce3)
+    """
+    if not _CRYPTO:
+        return plaintext
+
+    plaintext_bytes = plaintext.encode('utf-8')
+
+    # Layer 1
+    salt1 = secrets.token_bytes(SALT_BYTES)
+    nonce1 = secrets.token_bytes(NONCE_BYTES)
+    key1 = _kdf(master_key + b"L1" + field_name.encode(), salt1)
+    cipher1 = AESGCM(key1)
+    ct1 = cipher1.encrypt(nonce1, plaintext_bytes, None)
+
+    # Layer 2
+    salt2 = secrets.token_bytes(SALT_BYTES)
+    nonce2 = secrets.token_bytes(NONCE_BYTES)
+    key2 = _kdf(master_key + b"L2" + nonce1, salt2)
+    cipher2 = AESGCM(key2)
+    ct2 = cipher2.encrypt(nonce2, ct1, None)
+
+    # Layer 3
+    salt3 = secrets.token_bytes(SALT_BYTES)
+    nonce3 = secrets.token_bytes(NONCE_BYTES)
+    key3 = _kdf(master_key + b"L3" + nonce2, salt3)
+    cipher3 = AESGCM(key3)
+    ct3 = cipher3.encrypt(nonce3, ct2, None)
+
+    # 포맷: T3v1 + salt1 + salt2 + salt3 + nonce1 + nonce2 + nonce3 + ct3
+    output = (
+        b"T3v1" +
+        salt1 + salt2 + salt3 +
+        nonce1 + nonce2 + nonce3 +
+        ct3
+    )
+
+    return base64.b64encode(output).decode('utf-8')
+
+
+def _triple_decrypt(ciphertext: str, master_key: bytes, field_name: str) -> Optional[str]:
+    """3중 AES-256-GCM 복호화"""
+    if not _CRYPTO:
+        return None
+
+    try:
+        data = base64.b64decode(ciphertext)
+
+        if not data.startswith(b"T3v1"):
+            return None
+
+        # 파싱
+        offset = 4
+        salt1 = data[offset:offset+SALT_BYTES]
+        offset += SALT_BYTES
+        salt2 = data[offset:offset+SALT_BYTES]
+        offset += SALT_BYTES
+        salt3 = data[offset:offset+SALT_BYTES]
+        offset += SALT_BYTES
+
+        nonce1 = data[offset:offset+NONCE_BYTES]
+        offset += NONCE_BYTES
+        nonce2 = data[offset:offset+NONCE_BYTES]
+        offset += NONCE_BYTES
+        nonce3 = data[offset:offset+NONCE_BYTES]
+        offset += NONCE_BYTES
+
+        ct3 = data[offset:]
+
+        # Layer 3 복호화
+        key3 = _kdf(master_key + b"L3" + nonce2, salt3)
+        cipher3 = AESGCM(key3)
+        ct2 = cipher3.decrypt(nonce3, ct3, None)
+
+        # Layer 2 복호화
+        key2 = _kdf(master_key + b"L2" + nonce1, salt2)
+        cipher2 = AESGCM(key2)
+        ct1 = cipher2.decrypt(nonce2, ct2, None)
+
+        # Layer 1 복호화
+        key1 = _kdf(master_key + b"L1" + field_name.encode(), salt1)
+        cipher1 = AESGCM(key1)
+        plaintext = cipher1.decrypt(nonce1, ct1, None)
+
+        return plaintext.decode('utf-8')
+
+    except Exception as e:
+        print(f"⚠️ 복호화 실패: {e}")
+        return None
+
 
 class DeviceRegistry:
     """기기 등록 관리자"""
@@ -147,35 +313,48 @@ class DeviceRegistry:
             pass
         return None
 
-    def register_device(self, device_name: str, ip_address: Optional[str] = None) -> bool:
-        """기기 등록"""
+    def register_device(self, device_name: str, ip_address: Optional[str] = None, encrypt: bool = False, master_key: Optional[bytes] = None) -> bool:
+        """기기 등록 (현재 PC 자동 감지)"""
         mac = self._get_system_mac()
         if not mac:
             print("❌ MAC주소를 조회할 수 없습니다")
             return False
 
-        local_ip = self._get_local_ip() or "unknown"
-        public_ip = self._get_public_ip() or "unknown"
-        ip_to_register = ip_address or local_ip
+        return self.register_device_by_mac(mac, device_name, ip_address, encrypt, master_key)
+
+    def register_device_by_mac(self, mac: str, device_name: str, ip_address: Optional[str] = None, encrypt: bool = False, master_key: Optional[bytes] = None) -> bool:
+        """기기 등록 (MAC 직접 입력 — 원격 등록용)"""
+        mac = mac.upper()
+        local_ip = ip_address or self._get_local_ip() or "unknown"
+        public_ip = "remote" if encrypt else (self._get_public_ip() or "unknown")
 
         if mac in self.registry['devices']:
             print(f"⚠️ 이미 등록된 기기입니다: {self.registry['devices'][mac]['name']}")
             return False
 
-        self.registry['devices'][mac] = {
+        device_data = {
             "name": device_name,
             "mac": mac,
             "local_ip": local_ip,
             "public_ip": public_ip,
-            "registered_ip": ip_to_register,
+            "registered_ip": ip_address or local_ip,
             "registered_at": datetime.now().isoformat(),
             "last_seen": datetime.now().isoformat(),
-            "status": "active"
+            "status": "active",
+            "encrypted": encrypt
         }
 
+        # 3중 암호화 옵션
+        if encrypt and _CRYPTO and master_key:
+            device_data["name"] = _triple_encrypt(device_name, master_key, "device_name")
+            device_data["mac_encrypted"] = _triple_encrypt(mac, master_key, "mac")
+            print(f"🔒 3중 AES-256-GCM 암호화로 저장됨")
+
+        self.registry['devices'][mac] = device_data
+
         # 신뢰 IP 추가
-        if ip_to_register != "unknown":
-            self.trusted_ips['ips'][ip_to_register] = {
+        if ip_address and ip_address != "unknown":
+            self.trusted_ips['ips'][ip_address] = {
                 "device": device_name,
                 "mac": mac,
                 "added_at": datetime.now().isoformat()
@@ -188,11 +367,12 @@ class DeviceRegistry:
         print(f"   기기명: {device_name}")
         print(f"   MAC: {mac}")
         print(f"   로컬 IP: {local_ip}")
-        print(f"   공인 IP: {public_ip}")
+        if not encrypt:
+            print(f"   공인 IP: {public_ip}")
 
         return True
 
-    def list_devices(self) -> None:
+    def list_devices(self, decrypt: bool = False, master_key: Optional[bytes] = None) -> None:
         """등록된 기기 목록"""
         if not self.registry['devices']:
             print("등록된 기기가 없습니다")
@@ -202,10 +382,29 @@ class DeviceRegistry:
         print("-" * 80)
         for mac, device in self.registry['devices'].items():
             status_icon = "✅" if device['status'] == "active" else "⛔"
-            print(f"{status_icon} {device['name']}")
-            print(f"   MAC: {mac}")
+
+            # 암호화 여부 확인
+            is_encrypted = device.get('encrypted', False)
+            name = device['name']
+            display_mac = mac
+
+            # 복호화 옵션
+            if is_encrypted and decrypt and _CRYPTO and master_key:
+                if 'mac_encrypted' in device:
+                    decrypted_mac = _triple_decrypt(device['mac_encrypted'], master_key, "mac")
+                    if decrypted_mac:
+                        display_mac = decrypted_mac
+                decrypted_name = _triple_decrypt(name, master_key, "device_name")
+                if decrypted_name:
+                    name = decrypted_name
+                name += " 🔓"  # 복호화 표시
+
+            print(f"{status_icon} {name}")
+            print(f"   MAC: {display_mac}")
             print(f"   로컬 IP: {device['local_ip']} | 공인 IP: {device['public_ip']}")
             print(f"   등록일: {device['registered_at'][:10]}")
+            if is_encrypted:
+                print(f"   🔒 3중 암호화 저장")
             print()
 
     def verify_device(self, mac: str, ip_address: Optional[str] = None) -> Tuple[bool, str]:
@@ -340,24 +539,75 @@ class DeviceRegistry:
 def main():
     import sys
 
-    registry = DeviceRegistry()
-
     if len(sys.argv) < 2:
         print(__doc__)
         return
 
     cmd = sys.argv[1].lower()
+    encrypt = "--encrypt" in sys.argv
+    decrypt = "--decrypt" in sys.argv
+    master_key = None
+
+    # 마스터 키 획득
+    if encrypt or decrypt:
+        if not _CRYPTO:
+            print("❌ cryptography 라이브러리 필요: pip install cryptography")
+            return
+        master_key = _ensure_master_key()
+
+    registry = DeviceRegistry()
 
     if cmd == "register":
         if len(sys.argv) < 3:
-            print("사용법: device_registry.py register \"Device Name\" [optional_ip]")
+            print("사용법: device_registry.py register \"Device Name\" [ip] [--encrypt]")
             return
         name = sys.argv[2]
-        ip = sys.argv[3] if len(sys.argv) > 3 else None
-        registry.register_device(name, ip)
+        ip = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith("--") else None
+        registry.register_device(name, ip, encrypt, master_key)
+
+    elif cmd == "register-remote":
+        if len(sys.argv) < 4:
+            print("사용법: device_registry.py register-remote \"AA:BB:CC:DD:EE:FF\" \"Device Name\" [ip] [--encrypt]")
+            return
+        mac = sys.argv[2]
+        name = sys.argv[3]
+        ip = sys.argv[4] if len(sys.argv) > 4 and not sys.argv[4].startswith("--") else None
+        registry.register_device_by_mac(mac, name, ip, encrypt, master_key)
+
+    elif cmd == "register-interactive":
+        print("\n🧙 기기 등록 마법사")
+        print("=" * 60)
+
+        print("\n1. MAC 주소를 입력하세요 (예: AA:BB:CC:DD:EE:FF)")
+        print("   현재 PC의 MAC: getmac 명령으로 확인 가능")
+        mac = input("MAC: ").strip().upper()
+
+        print("\n2. 기기 이름을 입력하세요 (예: My Laptop)")
+        name = input("기기명: ").strip()
+
+        print("\n3. IP 주소를 입력하세요 (선택사항, Enter로 건너뛰기)")
+        ip = input("IP: ").strip() or None
+
+        print("\n4. 3중 암호화로 저장할까요? (y/n, 기본값: n)")
+        enc = input("암호화: ").strip().lower() == "y"
+
+        if enc:
+            master_key = _ensure_master_key()
+
+        print("\n✅ 다음 정보로 등록하시겠습니까?")
+        print(f"   MAC: {mac}")
+        print(f"   기기명: {name}")
+        print(f"   IP: {ip or '(자동)'}")
+        print(f"   암호화: {'YES 🔒' if enc else 'NO'}")
+
+        confirm = input("\n계속 진행? (y/n): ").strip().lower() == "y"
+        if confirm:
+            registry.register_device_by_mac(mac, name, ip, enc, master_key)
+        else:
+            print("❌ 취소됨")
 
     elif cmd == "list":
-        registry.list_devices()
+        registry.list_devices(decrypt, master_key)
 
     elif cmd == "verify":
         if len(sys.argv) < 3:
