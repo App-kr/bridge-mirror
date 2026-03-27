@@ -222,7 +222,9 @@ def _load_craigslist_credentials():
 
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
 # 초기 로드 (--account 지정 시 1410-1417에서 재로드됨)
-CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials()
+# dry-run/generate 모드에서는 자격증명 불필요 — lazy load
+_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv
+CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials() if not _SKIP_CREDS else ("", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 
