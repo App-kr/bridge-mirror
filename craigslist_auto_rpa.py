@@ -204,18 +204,68 @@ def integrity_check() -> bool:
         return False
     return True
 
-try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support.ui import WebDriverWait, Select
-    from selenium.webdriver.support import expected_conditions as EC
-    from webdriver_manager.chrome import ChromeDriverManager
-except ImportError:
-    print("[ERROR] pip install selenium webdriver-manager")
-    sys.exit(1)
+# ── Selenium 지연 로드 (--dry-run/--generate 모드에서는 필요 없음) ──────────
+_SKIP_SELENIUM = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
+print(f"[DEBUG] sys.argv = {sys.argv}", file=sys.stderr)
+print(f"[DEBUG] _SKIP_SELENIUM = {_SKIP_SELENIUM}", file=sys.stderr)
+
+if not _SKIP_SELENIUM:
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support.ui import WebDriverWait, Select
+        from selenium.webdriver.support import expected_conditions as EC
+        from webdriver_manager.chrome import ChromeDriverManager
+    except ImportError as e:
+        print(f"[ERROR] Selenium이 설치되지 않았습니다.")
+        print(f"설치 명령: pip install selenium webdriver-manager")
+        print(f"에러 상세: {e}")
+        sys.exit(1)
+else:
+    # --dry-run/--generate 모드: 더미 객체 정의 (타입 힌트 호환)
+    class _DummyWebDriver:
+        class Chrome:
+            def __init__(self, *args, **kwargs): pass
+            def quit(self): pass
+        class WebDriver:
+            pass
+
+    class _DummyService:
+        pass
+
+    class _DummyOptions:
+        pass
+
+    class _DummyBy:
+        pass
+
+    class _DummyKeys:
+        pass
+
+    class _DummyWebDriverWait:
+        pass
+
+    class _DummySelect:
+        pass
+
+    class _DummyEC:
+        pass
+
+    class _DummyCDM:
+        pass
+
+    webdriver = _DummyWebDriver()
+    Service = _DummyService
+    Options = _DummyOptions
+    By = _DummyBy
+    Keys = _DummyKeys
+    WebDriverWait = _DummyWebDriverWait
+    Select = _DummySelect
+    EC = _DummyEC
+    ChromeDriverManager = _DummyCDM
 
 # ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
 def _load_craigslist_credentials(account_name: str = "gray"):
