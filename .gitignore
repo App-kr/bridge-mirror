@@ -149,3 +149,4 @@ security_config/keys/
 security_config/wireguard/
 security_config/render.env
 security_config/firewall_rules.json
+.env
