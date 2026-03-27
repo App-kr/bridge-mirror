@@ -18,6 +18,14 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   '/about': [
     { href: '/about', label: 'About BRIDGE', labelKr: '회사 소개' },
   ],
+  '/employers': [
+    { href: '/employers', label: 'For Teachers', labelKr: '원어민강사' },
+    { href: '/jobs', label: 'Browse Jobs', labelKr: '구인 공고' },
+  ],
+  '/job-seekers': [
+    { href: '/job-seekers', label: 'For Employers', labelKr: '원어민 채용' },
+    { href: '/inquiry', label: 'Post a Job', labelKr: '채용 의뢰' },
+  ],
   '/community/korea': [
     { href: '/community/korea', label: 'Living in Korea', labelKr: '한국 생활' },
     { href: '/community/korea?tag=culture', label: 'Korean Culture', labelKr: '한국 문화' },
@@ -49,9 +57,11 @@ interface CtaButton { href: string; label: string }
 
 const DEFAULT_MOBILE_LINKS: NavItem[] = [
   { href: '/about', label: 'About us' },
+  { href: '/employers', label: 'For Teachers' },
+  { href: '/job-seekers', label: 'For Employers' },
+  { href: '/jobs', label: 'Job Board' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
-  { href: '/jobs', label: 'Job Board' },
   { href: '/community/support', label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
   { href: '/community', label: 'Community' },
