@@ -204,6 +204,14 @@ def integrity_check() -> bool:
         return False
     return True
 
+# ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
+# cl_post() 함수에서 단계별 상태를 업데이트할 수 있도록 전역 함수 정의
+def _dummy_update_status(text: str):
+    """더미 함수 — main()에서 실제 함수로 교체됨."""
+    pass
+
+_update_status = _dummy_update_status
+
 # ── Selenium 지연 로드 (--dry-run/--generate 모드에서는 필요 없음) ──────────
 _SKIP_SELENIUM = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
 
@@ -893,6 +901,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
     # ── seoul.craigslist.org → "post to classifieds" 클릭 ─
     # accounts.craigslist.org 에서 시작하면 지역이 다르게 잡힘
     # seoul.craigslist.org 에서 시작해야 Seoul 이 자동 선택됨
+    _update_status("접속중")
     print("  [POST] seoul.craigslist.org → post to classifieds...")
     driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
     _delay(2, 3)
@@ -978,6 +987,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             #   3) 레이블 href에 'edu' 포함 링크
             #   4) DOM에 education 텍스트가 있으면 부모 클릭
             # ─────────────────────────────────────────────────────────────────
+            _update_status("게시판 선택중")
             print("카테고리: education 선택")
 
             # 현재 페이지 HTML 저장 (디버그 — 카테고리 선택 실패 시 원인 파악용)
@@ -1065,6 +1075,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step in ("attr", "edit"):
             # 광고 폼 입력 (?s=edit 또는 ?s=attr)
+            _update_status("글작성중")
             print("폼 입력")
             _delay(1, 2)
             # 첫 진입 시 HTML 소스 저장 (디버그용)
@@ -1195,6 +1206,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step in ("img", "editimage"):
             # 이미지 업로드 — B.jpg 첨부
+            _update_status("사진첨부중")
             # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
             #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
@@ -1254,6 +1266,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step == "preview":
             # 미리보기 → CAPTCHA 체크 후 publish
+            _update_status("포스팅중")
             print("미리보기 → publish")
             if _has_captcha(driver):
                 print("    CAPTCHA 감지 — 브라우저에서 해결하세요...")
@@ -1693,6 +1706,8 @@ def main():
     try:
         from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
+        # 전역 _update_status 함수 설정 (cl_post()에서 사용)
+        globals()['_update_status'] = update_status
     except ImportError:
         _HAS_OVERLAY = False
 
