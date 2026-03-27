@@ -1,20 +1,20 @@
 # register-audio-startup.ps1
-# 로그인 시 스피커 강제 설정 작업을 Task Scheduler에 등록
+# USB Headset auto-detection task registration
 
 $taskName = "BridgeAudioStartup"
 $scriptPath = "Q:\Claudework\bridge base\scripts\audio\audio-startup.ps1"
 
-# 기존 작업 제거
+# Remove existing task
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-    Write-Host "기존 작업 제거됨"
+    Write-Host "Existing task removed"
 }
 
 $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
     -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
 
-# 로그인 시 + 10초 딜레이 (드라이버 로드 대기)
+# At login + 10 second delay (driver init)
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = "PT10S"
 
@@ -35,8 +35,9 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "로그인 시 스피커를 기본 오디오 장치로 강제 설정 (헤드셋 자동 선택 방지)" `
+    -Description "Auto-switch audio to speaker on login. USB headset auto-detection enabled." `
     -Force | Out-Null
 
-Write-Host "✅ '$taskName' 작업 등록 완료"
-Write-Host "   실행 조건: 로그인 후 10초 대기 → 스피커 강제 설정"
+Write-Host "OK: '$taskName' task registered"
+Write-Host "    Trigger: Login + 10s delay"
+Write-Host "    Actions: Speaker default + USB headset monitor"

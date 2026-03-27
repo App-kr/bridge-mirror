@@ -12,6 +12,23 @@ global gTestBackup := ""
 ; ===== WM_NCHITTEST — drag EQ window by top bar =====
 OnMessage(0x84, EQ_HitTest)
 
+; ===== 모니터 신호 감지 (USB 이벤트 기반) =====
+SetTimer CheckMonitorSignal, 1000
+
+CheckMonitorSignal() {
+    headsetSignal := "Q:\Claudework\bridge base\scripts\audio\signal-headset-on.txt"
+    speakerSignal := "Q:\Claudework\bridge base\scripts\audio\signal-speaker-on.txt"
+
+    if FileExist(headsetSignal) {
+        FileDelete(headsetSignal)
+        ShowOverlay("🎧", "Headset ON", "Captain 780", "0x6C5CE7")
+    }
+    if FileExist(speakerSignal) {
+        FileDelete(speakerSignal)
+        ShowOverlay("🔊", "Speaker ON", "Stand Mic + Speaker", "0xFFA502")
+    }
+}
+
 EQ_HitTest(wParam, lParam, msg, hwnd) {
     global gEqGui
     if !IsObject(gEqGui)
