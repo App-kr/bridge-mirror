@@ -1082,10 +1082,10 @@ def ask_integrity_password() -> bool:
 
 # ── Account list ──────────────────────────────────────────────────────────────
 _ACCOUNT_LIST = [
-    ("account1", "coreabridge@gmail.com",    "#c8dcc8"),  # 옅은 초록
-    ("account2", "airelair00@gmail.com",      "#d8d0e8"),  # 옅은 보라
-    ("account3", "ferrari812fast@gmail.com",  "#e8d8c0"),  # 옅은 갈색
-    ("account4", "bridgejobkr@gmail.com",     "#d4d4d4"),  # 옅은 회색
+    ("green", "Coreabridge@gmail.com",        "#c8dcc8"),  # 옅은 초록
+    ("purple", "airelair00@gmail.com",        "#d8d0e8"),  # 옅은 보라
+    ("brown", "ferrari812fast@gmail.com",     "#e8d8c0"),  # 옅은 갈색
+    ("gray", "bridgejobkr@gmail.com",         "#d4d4d4"),  # 옅은 회색
 ]
 
 _LAST_RUN_FILE = Path(__file__).resolve().parent / "logs" / ".last_run.json"

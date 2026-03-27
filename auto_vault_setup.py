@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 BRIDGE Craigslist RPA — Vault Setup
 ====================================
@@ -10,8 +11,17 @@ BRIDGE Craigslist RPA — Vault Setup
   python auto_vault_setup.py --reset            # 모든 계정 초기화
 """
 
+import io
 import json
 import sys
+import os
+
+# UTF-8 인코딩 강제
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding.lower() != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 from pathlib import Path
 
 VAULT_FILE = Path(__file__).resolve().parent / ".rpa_vault.json"
@@ -39,27 +49,27 @@ def save_vault(vault: dict):
     """vault 파일 저장"""
     with open(VAULT_FILE, "w", encoding="utf-8") as f:
         json.dump(vault, f, ensure_ascii=False, indent=2)
-    print(f"✅ Vault 저장됨: {VAULT_FILE}")
+    print(f"[OK] Vault saved: {VAULT_FILE}")
 
 def setup_account(vault: dict, account: str):
     """특정 계정 설정"""
     desc = ACCOUNTS.get(account, "알 수 없는 계정")
-    print(f"\n📝 [{account}] {desc} 설정")
+    print(f"\n[SETUP] [{account}] {desc}")
     print("-" * 50)
 
-    email = input(f"  이메일: ").strip()
+    email = input(f"  Email: ").strip()
     if not email:
-        print("  ❌ 이메일이 비어있습니다. 건너뜁니다.")
+        print("  [SKIP] Email empty, skipping.")
         return
 
-    password = input(f"  비밀번호: ").strip()
+    password = input(f"  Password: ").strip()
     if not password:
-        print("  ❌ 비밀번호가 비어있습니다. 건너뜁니다.")
+        print("  [SKIP] Password empty, skipping.")
         return
 
     vault[f"{account}_email"] = email
     vault[f"{account}_password"] = password
-    print(f"  ✅ [{account}] 저장됨")
+    print(f"  [OK] [{account}] saved")
 
 def main():
     import argparse
@@ -82,27 +92,27 @@ def main():
     vault = load_vault()
 
     if args.reset:
-        print("⚠️  Vault을 초기화합니다...")
-        confirm = input("정말 초기화하시겠습니까? (yes/no): ").strip().lower()
+        print("[WARN] Resetting vault...")
+        confirm = input("Confirm (yes/no): ").strip().lower()
         if confirm == "yes":
             vault = {}
             save_vault(vault)
-            print("✅ Vault 초기화 완료")
+            print("[OK] Vault reset")
         else:
-            print("❌ 취소됨")
+            print("[CANCEL] Cancelled")
         return
 
     if args.account:
         if args.account not in ACCOUNTS:
-            print(f"❌ 알 수 없는 계정: {args.account}")
-            print(f"   사용 가능: {', '.join(ACCOUNTS.keys())}")
+            print(f"[ERROR] Unknown account: {args.account}")
+            print(f"[INFO] Available: {', '.join(ACCOUNTS.keys())}")
             sys.exit(1)
         setup_account(vault, args.account)
     else:
-        print("\n🔐 Craigslist RPA Vault Setup")
+        print("\n[RPA] Craigslist RPA Vault Setup")
         print("=" * 50)
-        print("다음 계정의 이메일과 비밀번호를 입력하세요.")
-        print("(계정을 건너뛰려면 비워두고 엔터를 누르세요)")
+        print("Enter email and password for each account.")
+        print("(Leave blank to skip)")
 
         for account in ACCOUNTS.keys():
             setup_account(vault, account)
@@ -111,12 +121,12 @@ def main():
 
     if vault:
         save_vault(vault)
-        print("\n✅ 설정 완료!")
-        print("\n실행 예시:")
+        print("\n[OK] Setup complete!")
+        print("\nExample:")
         print("  python craigslist_auto_rpa.py --dry-run")
         print("  python craigslist_auto_rpa.py --account gray --limit 1")
     else:
-        print("\n⚠️  저장된 계정이 없습니다.")
+        print("\n[WARN] No accounts configured.")
 
 if __name__ == "__main__":
     main()

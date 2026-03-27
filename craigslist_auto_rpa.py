@@ -724,7 +724,7 @@ def _find_chrome_binary() -> str | None:
     return None
 
 
-def build_driver(headless: bool = False) -> webdriver.Chrome:
+def build_driver(headless: bool = True) -> webdriver.Chrome:
     opts = Options()
 
     # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
@@ -1519,7 +1519,7 @@ def main():
     # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
     if args.account:
         global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
-        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials()
+        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(args.account)
         CL_CITY     = "seoul"  # 기본값 유지
         CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
         CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
