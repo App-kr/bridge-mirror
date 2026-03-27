@@ -219,22 +219,31 @@ except ImportError:
 
 # ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
 def _load_craigslist_credentials(account_name: str = "gray"):
-    """RPA Credential Vault에서 Craigslist 자격증명 로드 (3중 암호화)
+    """Craigslist 자격증명을 .rpa_vault.json에서 로드 (간단한 JSON)
 
-    ENV 절대 사용 금지 — vault에서만 로드
+    ENV 절대 사용 금지 — vault JSON에서만 로드
 
     계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
     """
     try:
-        from tools.rpa_credential_vault import CredentialVault
-        vault = CredentialVault()
+        vault_path = Path(__file__).resolve().parent / ".rpa_vault.json"
+
+        if not vault_path.exists():
+            print(f"[ERROR] Vault 파일을 찾을 수 없습니다: {vault_path}")
+            print("\n먼저 비밀번호를 설정하세요:")
+            print("  python auto_vault_setup.py")
+            sys.exit(1)
+
+        # JSON에서 로드
+        with open(vault_path, "r", encoding="utf-8") as f:
+            vault_data = json.load(f)
 
         # 계정별 키 생성
         email_key = f"{account_name}_email"
         password_key = f"{account_name}_password"
 
-        email = vault.get_decrypted(email_key)
-        password = vault.get_decrypted(password_key)
+        email = vault_data.get(email_key)
+        password = vault_data.get(password_key)
 
         if not email or not password:
             print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
@@ -242,10 +251,10 @@ def _load_craigslist_credentials(account_name: str = "gray"):
             print("실행 예시: python craigslist_auto_rpa.py --account gray --limit 1")
             sys.exit(1)
 
-        print(f"✓ 계정 [{account_name}] 로드됨: {email}")
+        print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
         return email, password
-    except ImportError:
-        print("[ERROR] RPA Credential Vault를 찾을 수 없습니다.")
+    except json.JSONDecodeError:
+        print(f"[ERROR] Vault 파일이 손상되었습니다: {vault_path}")
         sys.exit(1)
     except Exception as e:
         print(f"[ERROR] 자격증명 로드 실패: {e}")
@@ -260,8 +269,8 @@ if "--account" in sys.argv:
 
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
 # 초기 로드 (--account 지정 시 재로드)
-# dry-run/generate 모드에서는 자격증명 불필요 — lazy load
-_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv
+# dry-run/generate/--help 모드에서는 자격증명 불필요 — lazy load
+_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
 CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
