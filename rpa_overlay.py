@@ -1172,6 +1172,14 @@ def ask_account_selection():
         root.lift()
         root.focus_force()
 
+        # ── Windows 포커스 강화 (cmd 창 뒤로 안 가게) ──
+        try:
+            import ctypes as _ct3
+            _hwnd = root.winfo_id()
+            _ct3.windll.user32.SetForegroundWindow(_hwnd)
+        except Exception:
+            pass
+
         border = tk.Frame(root, bg=_SEP, padx=1, pady=1)
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=_CARD)
