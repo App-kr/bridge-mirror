@@ -32,6 +32,7 @@ interface TagPopup { rowIdx: number; x: number; y: number }
 
 const API = API_URL
 const PAGE_SIZE = 150
+const PARALLEL   = 5    // 동시 요청 수 — 3000행 기준 ~4배 빠름, 행수 무제한
 /* ── Google Meet Pool (localStorage) ── */
 const MEET_POOL_KEY = 'bridge_meet_pool'
 const DEFAULT_MEET_POOL: string[] = [
@@ -319,42 +320,91 @@ export default function BridgeCanvasSheet() {
   useEffect(() => { if (ready) prefsRef.current.saveTabData(data) }, [data, ready])
 
   /* ── Data fetching: AUTO-LOAD ALL ── */
+  /* ── 로딩 상태 refs (중복 방지 + scroll-triggered lazy load) ── */
+  const loadOffsetRef    = useRef(0)
+  const isLoadingMoreRef = useRef(false)
+  const dbTotalRef       = useRef(0)
+
   const loadAllData = useCallback(async () => {
     setLoading(true)
-    let offset = 0
-    const edits = editsRef.current
-    const hdrs = hdrsRef.current
+    loadOffsetRef.current    = 0
+    isLoadingMoreRef.current = true
+    const edits   = editsRef.current
+    const hdrs    = hdrsRef.current
     const allRows: DataRow[] = []
 
-    while (true) {
-      try {
-        const res = await fetch(
-          `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${offset}`,
-          { headers: hdrs() },
-        )
-        if (!res.ok) break
-        const json = await res.json()
-        const raw: Record<string, unknown>[] = json.data?.candidates ?? []
-        const total: number = json.data?.total ?? 0
-        setDbTotal(total)
+    try {
+      /* ① 첫 페이지 — 즉시 표시 + total 파악 */
+      const res0 = await fetch(
+        `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=0`,
+        { headers: hdrs() },
+      )
+      if (!res0.ok) { setLoading(false); isLoadingMoreRef.current = false; return }
+      const json0  = await res0.json()
+      const raw0: Record<string, unknown>[] = json0.data?.candidates ?? []
+      const total: number = json0.data?.total ?? 0
+      setDbTotal(total)
+      dbTotalRef.current = total
 
-        const newRows = raw.map((c, i) => mapRow(c, offset + i, edits))
-        allRows.push(...newRows)
-        offset += raw.length
+      raw0.forEach((c, i) => allRows.push(mapRow(c, i, edits)))
+      loadOffsetRef.current = raw0.length
+      setLoaded(allRows.length)
+      const dc0 = deletedCidsRef.current
+      setDbAll(dc0.size > 0 ? allRows.filter(r => !dc0.has(String(r._cid ?? ''))) : [...allRows])
+      setNewCount(raw0.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length)
+
+      if (raw0.length < PAGE_SIZE || allRows.length >= total) {
+        setLoading(false)
+        setLastSync(new Date().toLocaleTimeString())
+        isLoadingMoreRef.current = false
+        return
+      }
+
+      /* ② 나머지 — PARALLEL 페이지씩 병렬 로딩 (행수 무제한) */
+      while (loadOffsetRef.current < total) {
+        const batchOffsets: number[] = []
+        for (let i = 0; i < PARALLEL; i++) {
+          const off = loadOffsetRef.current + i * PAGE_SIZE
+          if (off >= total) break
+          batchOffsets.push(off)
+        }
+        if (batchOffsets.length === 0) break
+
+        const results = await Promise.all(
+          batchOffsets.map(async off => {
+            try {
+              const r = await fetch(
+                `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${off}`,
+                { headers: hdrs() },
+              )
+              if (!r.ok) return { off, rows: [] as Record<string, unknown>[] }
+              const j = await r.json()
+              return { off, rows: (j.data?.candidates ?? []) as Record<string, unknown>[] }
+            } catch {
+              return { off, rows: [] as Record<string, unknown>[] }
+            }
+          })
+        )
+
+        // 오프셋 순서 보장 후 allRows에 삽입
+        results.sort((a, b) => a.off - b.off)
+        for (const { off, rows } of results) {
+          rows.forEach((c, i) => allRows.push(mapRow(c, off + i, edits)))
+        }
+
+        loadOffsetRef.current += batchOffsets.length * PAGE_SIZE
         setLoaded(allRows.length)
-        // 세션 중 삭제된 CID는 제외 — 리로드 시 복원 방지
         const dc = deletedCidsRef.current
         setDbAll(dc.size > 0 ? allRows.filter(r => !dc.has(String(r._cid ?? ''))) : [...allRows])
 
-        if (offset === 0) {
-          const nc = raw.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length
-          setNewCount(nc)
-        }
-        if (raw.length < PAGE_SIZE || offset >= total) break
-      } catch { break }
-    }
+        // 마지막 배치가 PAGE_SIZE 미만이면 서버 데이터 소진
+        if (results.some(r => r.rows.length < PAGE_SIZE)) break
+      }
+    } catch { /* 네트워크 오류 무시 */ }
+
     setLoading(false)
     setLastSync(new Date().toLocaleTimeString())
+    isLoadingMoreRef.current = false
   }, [])
 
   useEffect(() => {
@@ -763,7 +813,13 @@ export default function BridgeCanvasSheet() {
     onColumnResize: (colKey: string, width: number) => {
       setCols(prev => prev.map(c => c.key === colKey ? { ...c, w: width } : c))
     },
-    onRequestMore: () => {},
+    onRequestMore: () => {
+      // 이미 로딩 중이거나 전체 완료 시 무시
+      if (isLoadingMoreRef.current) return
+      if (dbTotalRef.current > 0 && dbAllRef.current.length >= dbTotalRef.current) return
+      // 미완료 데이터가 있으면 전체 로드 재개
+      if (dbAllRef.current.length < dbTotalRef.current) loadAllData()
+    },
     onPhotoClick: () => {},
     onMailClick: (_ri: number, row: DataRow) => {
       openMailModal([row])
