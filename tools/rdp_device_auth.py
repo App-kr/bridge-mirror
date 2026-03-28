@@ -19,20 +19,40 @@ def get_device_mac() -> Optional[str]:
     """현재 연결된 기기의 MAC 주소 반환"""
     try:
         result = subprocess.run(
-            ['getmac', '/all'],
+            ['cmd', '/c', 'getmac'],
             capture_output=True,
             text=True,
+            encoding='utf-16-le',
             timeout=5
         )
         # 첫 번째 물리 주소 추출 (하이픈 제거)
         for line in result.stdout.split('\n'):
-            if 'Physical Address' in line or '물리적 주소' in line:
+            if 'Physical Address' in line or '물리적 주소' in line or 'MAC' in line:
                 continue
             if line.strip() and '-' in line:
                 mac = line.split()[0].upper().replace('-', ':')
-                return mac
+                if len(mac) == 17:  # MAC 형식 검증
+                    return mac
     except Exception as e:
         log(f"[ERROR] MAC 조회 실패: {e}")
+        # 대체 방법: ipconfig 사용
+        try:
+            result = subprocess.run(
+                ['ipconfig', '/all'],
+                capture_output=True,
+                text=True,
+                encoding='cp949',
+                timeout=5
+            )
+            for line in result.stdout.split('\n'):
+                if '물리적 주소' in line or 'Physical Address' in line:
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        mac = parts[-1].strip().replace('-', ':').upper()
+                        if len(mac) == 17:
+                            return mac
+        except:
+            pass
     return None
 
 def get_local_ip() -> Optional[str]:

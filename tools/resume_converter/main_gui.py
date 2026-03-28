@@ -121,11 +121,22 @@ class BridgeConverterApp:
         self._blink_base   = ""
         self._blink_dots   = 0
         self._blink_after: Optional[str] = None
+        self._blink_error  = False   # True → 빨간 깜박
 
         # PII 패널 펼침 상태
         self._pii_expanded = False
 
+        # 단계 실행 중 중복 방지
+        self._step_running = False
+
+        # 사진 크롭 결과 (bytes) — 단계 간 전달
+        self._photo_bytes: Optional[bytes] = None
+
+        # 파일목록 5개 고정 슬롯 (ftype → Treeview iid)
+        self._file_slot_ids: dict[str, str] = {}
+
         self._build_ui()
+        self._configure_styles()
         self._check_sheet_connection()
 
     # ══════════════════════════════════════════════════════════════════
@@ -423,32 +434,51 @@ class BridgeConverterApp:
                              highlightbackground=C_BORDER, highlightthickness=1)
         flf.pack(fill="both", expand=True)
 
-        f_cols = ("분류", "파일명", "크기", "상태")
+        # ── 5개 고정 슬롯 (한 사람 = 사진+이력서+커버레터+추천서+기타) ──
+        f_cols = ("구분", "파일명", "크기", "상태")
         self._file_tv = ttk.Treeview(flf, columns=f_cols,
                                       show="headings",
-                                      selectmode="browse")
-        self._file_tv.heading("분류",   text="분류")
+                                      selectmode="browse",
+                                      height=5)
+        self._file_tv.heading("구분",   text="구분")
         self._file_tv.heading("파일명", text="파일명")
         self._file_tv.heading("크기",   text="크기")
         self._file_tv.heading("상태",   text="상태")
-        self._file_tv.column("분류",   width=72,  minwidth=60,  anchor="center")
+        self._file_tv.column("구분",   width=80,  minwidth=72,  anchor="center")
         self._file_tv.column("파일명", width=260, minwidth=140)
-        self._file_tv.column("크기",   width=66,  minwidth=56,  anchor="center")
-        self._file_tv.column("상태",   width=78,  minwidth=60,  anchor="center")
+        self._file_tv.column("크기",   width=68,  minwidth=56,  anchor="center")
+        self._file_tv.column("상태",   width=80,  minwidth=64,  anchor="center")
+        # 슬롯별 배경색
         self._file_tv.tag_configure("photo",  background="#FFF8E1")
         self._file_tv.tag_configure("resume", background="#E8F5E9")
         self._file_tv.tag_configure("cover",  background="#E3F2FD")
         self._file_tv.tag_configure("rec",    background="#FCE4EC")
+        self._file_tv.tag_configure("unknown",background="#F5F5F5")
+        # 상태별 글자색
+        self._file_tv.tag_configure("st_done",    foreground="#1D9E75")
+        self._file_tv.tag_configure("st_err",     foreground="#E24B4A")
+        self._file_tv.tag_configure("st_working", foreground="#EF9F27")
         self._file_tv.bind("<Delete>", self._delete_selected_file)
 
-        fl_sb = ttk.Scrollbar(flf, orient="vertical", command=self._file_tv.yview)
-        self._file_tv.configure(yscrollcommand=fl_sb.set)
-        fl_sb.pack(side="right", fill="y")
         self._file_tv.pack(fill="both", expand=True)
 
-        tk.Button(flf, text="선택 삭제 (Del)",
+        # 5개 슬롯 미리 생성
+        _slots = [
+            ("photo",   "📷 사진"),
+            ("resume",  "📄 이력서"),
+            ("cover",   "📝 커버레터"),
+            ("rec",     "📋 추천서"),
+            ("unknown", "📎 기타"),
+        ]
+        for ftype, label in _slots:
+            iid = self._file_tv.insert("", "end",
+                                        values=(label, "(없음)", "—", "—"),
+                                        tags=(ftype,))
+            self._file_slot_ids[ftype] = iid
+
+        tk.Button(flf, text="선택 슬롯 초기화 (Del)",
                   command=self._delete_selected_file,
-                  bg=C_BG, fg=C_SUB, font=(F, 10),
+                  bg=C_BG, fg=C_SUB, font=(F, 11),
                   relief="flat", cursor="hand2").pack(anchor="e", pady=(2, 0))
 
         # 하단: PII 탐지 결과 (드래그로 크기 조절)
