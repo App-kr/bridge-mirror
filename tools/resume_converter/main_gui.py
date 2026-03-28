@@ -1487,11 +1487,14 @@ class BridgeConverterApp:
         out_path = self._output_dir / fname
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        # ── 3. PII 패턴 수집 (원본에서 제거할 텍스트) ───────────────
-        pii_texts = []
+        # ── 3. Claude API PII 목록 (있으면 보조로 사용) ─────────────
+        api_pii: list[str] = []
         if self._pii_result:
-            pii_texts = [m.original_value for m in self._pii_result.pii_found
-                         if m.original_value and len(m.original_value.strip()) >= 3]
+            api_pii = [
+                m.original_value.strip()
+                for m in self._pii_result.pii_found
+                if m.original_value and len(m.original_value.strip()) >= 3
+            ]
 
         # ── 4. 커버 페이지 결정 ──────────────────────────────────────
         page_w, page_h = A4
@@ -1512,38 +1515,41 @@ class BridgeConverterApp:
             merged.insert_pdf(cover_doc)
             cover_doc.close()
 
-        # ── 5. 원본 파일 보존 + 인라인 PII 제거 ─────────────────────
+        # ── 5. 원본 파일 보존 + PII 직접 제거 ───────────────────────
         for ftype in ["cover", "resume", "rec"]:
             p = self._files.get(ftype)
             if not p or not p.exists():
                 continue
 
             if p.suffix.lower() == ".pdf":
-                # PDF: 원본 페이지 그대로 복사 + PII 텍스트 흰색 제거 (마스킹 아님)
                 src_doc = fitz.open(str(p))
-                if pii_texts:
-                    for page in src_doc:
-                        for text in pii_texts:
-                            areas = page.search_for(text, quads=False)
-                            for rect in areas:
-                                # fill=(1,1,1) = 흰색 = 텍스트 완전 삭제 (검은박스 아님)
-                                page.add_redact_annot(rect, fill=(1, 1, 1))
-                        page.apply_redactions()
+                for page in src_doc:
+                    # 이 페이지 텍스트에서 직접 PII 추출 (정규식 — API 불필요)
+                    page_text = page.get_text()
+                    local_pii = _regex_pii(page_text)
+                    # Claude API 결과 보조 합산 (중복 제거, 순서 유지)
+                    all_pii = list(dict.fromkeys(api_pii + local_pii))
+                    # 실제 삭제 (흰색 fill = 텍스트 내용 완전 소거)
+                    _redact_pdf_page(page, all_pii)
                 merged.insert_pdf(src_doc)
                 src_doc.close()
 
             elif p.suffix.lower() in (".docx", ".doc"):
-                # DOCX: python-docx로 PII 텍스트 제거 후 텍스트 PDF 삽입
-                # (레이아웃 완전 보존은 Word/LibreOffice 필요 — 추후 지원)
+                # DOCX: 각 단락에서 regex PII 직접 제거 후 텍스트 PDF 삽입
                 try:
                     from docx import Document as DocxDoc
                     from .pdf_builder import text_to_pdf_bytes
                     doc = DocxDoc(str(p))
-                    full_text = "\n".join(para.text for para in doc.paragraphs)
-                    # PII 제거
-                    cleaned = full_text
-                    for pii in pii_texts:
-                        cleaned = cleaned.replace(pii, "[REMOVED]")
+                    cleaned_paras = []
+                    for para in doc.paragraphs:
+                        t = para.text
+                        # 정규식 PII 제거
+                        local_pii = _regex_pii(t)
+                        all_pii = list(dict.fromkeys(api_pii + local_pii))
+                        for pii in all_pii:
+                            t = t.replace(pii, "")
+                        cleaned_paras.append(t)
+                    cleaned = "\n".join(cleaned_paras)
                     docx_pdf = text_to_pdf_bytes(cleaned, ftype.upper())
                     src_doc  = fitz.open("pdf", docx_pdf)
                     merged.insert_pdf(src_doc)
@@ -1817,6 +1823,129 @@ class BridgeConverterApp:
 
 
 # ── 진입점 ─────────────────────────────────────────────────────────────────
+def _regex_pii(text: str) -> list[str]:
+    """PDF 페이지 텍스트에서 정규식으로 PII 직접 추출 (Claude API 불필요).
+
+    추출 대상:
+      - 이메일 주소
+      - 전화번호 (한국 010, 국제 +82, 일반 국제)
+      - 주소 (한국식)
+      - SNS/LinkedIn URL, 카카오 ID
+      - 한국 학원/학교명
+      - 영문 University/College + Korea 패턴
+    """
+    import re
+    found: list[str] = []
+
+    # ── 이메일 ──────────────────────────────────────────────────────
+    found += re.findall(
+        r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', text)
+
+    # ── 전화번호 — 한국 (010-xxxx-xxxx, +82-10-xxxx-xxxx 등) ───────
+    found += re.findall(
+        r'(?:\+82|0082)[\s.\-]?1[0-9][\s.\-]?\d{3,4}[\s.\-]?\d{4}', text)
+    found += re.findall(
+        r'\+\d{10,15}', text)           # +821029006080 같은 붙여쓰기
+    found += re.findall(
+        r'0(?:10|11|16|17|18|19)[\s.\-]?\d{3,4}[\s.\-]?\d{4}', text)
+    # 국제 전화 (일반 형식)
+    found += re.findall(
+        r'\+\d{1,3}[\s.\-]\(?\d{1,4}\)?[\s.\-]\d{3,4}[\s.\-]\d{3,4}', text)
+
+    # ── 한국 주소 ────────────────────────────────────────────────────
+    found += re.findall(
+        r'(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)'
+        r'[가-힣\s\d,.\-]{2,40}'
+        r'(?:시|구|동|로|길|번길|번지|읍|면|리)(?:\s*\d+)?', text)
+
+    # ── SNS / 링크드인 ────────────────────────────────────────────────
+    found += re.findall(
+        r'(?:instagram\.com|linkedin\.com/in|facebook\.com|twitter\.com|t\.me)'
+        r'[/\s]?\S{2,50}', text, re.IGNORECASE)
+    found += re.findall(
+        r'(?:카카오|kakao|카톡)[:\s]+\S{2,30}', text, re.IGNORECASE)
+
+    # ── 한국 학원/학교명 (한글 접미사) ──────────────────────────────
+    found += re.findall(
+        r'[A-Za-z가-힣]{2,30}'
+        r'(?:어학원|학원|학교|유치원|교육원|교습소|영어학원|어린이집)', text)
+
+    # ── 영문 교육기관 + 한국 도시/국가 패턴 (줄바꿈 금지) ──────────
+    # 예: "FiE Korea University | Jeonju | South Korea"
+    # 예: "Avalon Langcon Education | Cheonan | South Korea"
+    found += re.findall(
+        r'[A-Z][A-Za-z \t&]{2,35}'
+        r'(?:University|College|Institute|Academy|School|Education|Langcon|Learning)'
+        r'(?:[ \t]*\|[ \t]*[A-Za-z][A-Za-z \t]{2,25}'
+        r'(?:[ \t]*\|[ \t]*[A-Za-z][A-Za-z \t]{2,25})?)?',
+        text)
+
+    # ── 정리: 공백 트림, 짧은 것 제거, 중복 제거 ────────────────────
+    cleaned = []
+    seen: set[str] = set()
+    for item in found:
+        s = item.strip()
+        if len(s) >= 5 and s not in seen:
+            cleaned.append(s)
+            seen.add(s)
+    return cleaned
+
+
+def _pii_search_variants(text: str) -> list[str]:
+    """PII 검색용 변형 목록 생성.
+
+    전화번호가 PDF에 "+82 10 2900 6080" 또는 "+821029006080" 등으로
+    저장될 수 있으므로 여러 형식을 시도.
+    파이프(|) 구분자 포함 시 각 파트도 검색.
+    """
+    import re
+    variants: set[str] = {text}
+
+    # 구두점 제거 버전
+    stripped = re.sub(r'[\s\-\.\(\)]', '', text)
+    if stripped and stripped != text and len(stripped) >= 5:
+        variants.add(stripped)
+
+    # 대시→공백 정규화 버전
+    spaced = re.sub(r'[\-\.]', ' ', text).strip()
+    if spaced != text and len(spaced) >= 5:
+        variants.add(spaced)
+
+    # 파이프 구분자: 각 파트 별도 검색 (학교명 | 도시 | 국가 형식)
+    if '|' in text:
+        for part in text.split('|'):
+            p = part.strip()
+            if len(p) >= 4:
+                variants.add(p)
+
+    return [v for v in variants if v and len(v.strip()) >= 3]
+
+
+def _redact_pdf_page(page, pii_list: list[str]) -> None:
+    """PDF 페이지에서 PII 텍스트를 완전 삭제.
+
+    PyMuPDF add_redact_annot + apply_redactions():
+      - 텍스트 내용을 PDF 콘텐츠 스트림에서 실제 제거 (단순 오버레이 아님)
+      - fill=(1,1,1) = 흰색 → 삭제된 자리 빈 공백으로 보임
+    """
+    if not pii_list:
+        return
+    annotated = False
+    for pii in pii_list:
+        for variant in _pii_search_variants(pii):
+            if len(variant.strip()) < 3:
+                continue
+            try:
+                rects = page.search_for(variant, quads=False)
+            except Exception:
+                continue
+            for r in rects:
+                page.add_redact_annot(r, fill=(1, 1, 1))
+                annotated = True
+    if annotated:
+        page.apply_redactions()
+
+
 def _build_id_only_cover_page(
     buf: "io.BytesIO",
     candidate_id: str,
