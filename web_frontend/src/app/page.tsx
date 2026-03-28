@@ -710,7 +710,7 @@ export default function HomePage() {
         )}
         {/* Row 1 — Schools & Institutions */}
         <div className="mb-4">
-          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+          <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em] text-center mb-3">
             Schools &amp; Institutions
           </p>
           <div className="relative" aria-hidden="true">
@@ -718,7 +718,7 @@ export default function HomePage() {
               {[...schoolNames, ...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/70 tracking-[0.05em]"
                 >
                   {name}
                 </span>
@@ -729,15 +729,15 @@ export default function HomePage() {
 
         {/* Row 2 — Our Partner */}
         <div>
-          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
-            Our Partner
+          <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.15em] text-center mb-3">
+            Our Partners
           </p>
           <div className="relative" aria-hidden="true">
             <div className="marquee-track marquee-track--mid">
               {[...academyNames, ...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/70 tracking-[0.05em]"
                 >
                   {name}
                 </span>
