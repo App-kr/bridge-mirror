@@ -237,7 +237,19 @@ class BridgeConverterApp:
                   bg=C_PRI, fg="white",
                   font=(F, 11, "bold"), relief="flat",
                   padx=10, pady=5, cursor="hand2"
-                  ).pack(fill="x", padx=12, pady=(12, 4))
+                  ).pack(fill="x", padx=12, pady=(12, 2))
+
+        # API 키 설정 (이름 제거에 필요)
+        api_status = self._get_api_key_status()
+        self._api_btn = tk.Button(
+            panel,
+            text=f"  Claude API  {api_status}",
+            command=self._open_api_key_dialog,
+            bg=C_HOVER if api_status == "✓" else C_QERR,
+            fg=C_TEXT,
+            font=(F, 10), relief="flat",
+            padx=10, pady=3, cursor="hand2")
+        self._api_btn.pack(fill="x", padx=12, pady=(0, 4))
 
         # ── 강사 카드 ──────────────────────────────────────────
         card = tk.LabelFrame(panel, text="강사 정보", font=(F, 11, "bold"),
@@ -1047,6 +1059,89 @@ class BridgeConverterApp:
             self._pii_container.pack(fill="both", expand=True)
             self._pii_toggle_btn.config(text="  PII 탐지 결과 숨기기")
             self._pii_expanded = True
+
+    # ══════════════════════════════════════════════════════════════════
+    # API 키 설정
+    # ══════════════════════════════════════════════════════════════════
+
+    _API_KEY_FILE = BASE_DIR / ".api_key"
+
+    def _get_api_key_status(self) -> str:
+        """API 키 상태: '✓' 또는 '미설정'."""
+        from .pii_engine import load_api_key
+        return "✓" if load_api_key() else "미설정"
+
+    def _open_api_key_dialog(self) -> None:
+        """Anthropic API 키 입력/수정 다이얼로그."""
+        from tkinter import simpledialog
+        from .pii_engine import load_api_key
+
+        current = load_api_key() or ""
+        hint = f"현재: {current[:8]}...{current[-4:]}" if current else "미설정 — 이름 제거 기능 사용 불가"
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Claude API 키 설정")
+        dlg.geometry("500x220")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.configure(bg=C_SIDE)
+
+        tk.Label(dlg, text="Anthropic API 키 입력", font=(F, 13, "bold"),
+                 bg=C_SIDE, fg=C_TEXT).pack(pady=(18, 2))
+        tk.Label(dlg, text=hint, font=(F, 10), bg=C_SIDE, fg=C_SUB).pack(pady=(0, 10))
+
+        entry_var = tk.StringVar()
+        entry = tk.Entry(dlg, textvariable=entry_var, font=(FM, 11),
+                         width=45, show="•",
+                         relief="flat", bd=1,
+                         highlightbackground=C_BORDER, highlightthickness=1)
+        entry.pack(padx=24, ipady=5)
+        entry.focus()
+
+        show_var = tk.BooleanVar(value=False)
+        def _toggle_show():
+            entry.config(show="" if show_var.get() else "•")
+        tk.Checkbutton(dlg, text="키 표시", variable=show_var,
+                       command=_toggle_show, bg=C_SIDE,
+                       font=(F, 10)).pack(pady=4)
+
+        def _save():
+            key = entry_var.get().strip()
+            if not key:
+                messagebox.showwarning("입력 오류", "API 키를 입력하세요.", parent=dlg)
+                return
+            if not key.startswith("sk-ant-"):
+                if not messagebox.askyesno("확인", "일반적인 Anthropic 키는 'sk-ant-'로 시작합니다.\n그래도 저장하시겠습니까?", parent=dlg):
+                    return
+            self._API_KEY_FILE.write_text(key, encoding="utf-8")
+            status = self._get_api_key_status()
+            self._api_btn.config(
+                text=f"  Claude API  {status}",
+                bg=C_HOVER if status == "✓" else C_QERR)
+            messagebox.showinfo("저장 완료", f"API 키가 저장되었습니다.\n경로: {self._API_KEY_FILE}", parent=dlg)
+            dlg.destroy()
+
+        def _clear():
+            if self._API_KEY_FILE.exists():
+                self._API_KEY_FILE.unlink()
+            self._api_btn.config(text="  Claude API  미설정", bg=C_QERR)
+            messagebox.showinfo("삭제 완료", "API 키가 삭제되었습니다.", parent=dlg)
+            dlg.destroy()
+
+        btn_row = tk.Frame(dlg, bg=C_SIDE)
+        btn_row.pack(pady=12)
+        tk.Button(btn_row, text="저장", command=_save,
+                  bg=C_PRI, fg="white", font=(F, 11, "bold"),
+                  relief="flat", padx=20, pady=4, cursor="hand2"
+                  ).pack(side="left", padx=8)
+        tk.Button(btn_row, text="삭제", command=_clear,
+                  bg=C_DANGER, fg="white", font=(F, 11),
+                  relief="flat", padx=20, pady=4, cursor="hand2"
+                  ).pack(side="left", padx=8)
+        tk.Button(btn_row, text="취소", command=dlg.destroy,
+                  bg=C_BORDER, fg=C_TEXT, font=(F, 11),
+                  relief="flat", padx=20, pady=4, cursor="hand2"
+                  ).pack(side="left", padx=8)
 
     # ══════════════════════════════════════════════════════════════════
     # 시트 연결
