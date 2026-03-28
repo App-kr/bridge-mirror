@@ -1550,12 +1550,12 @@ class BridgeConverterApp:
 
         핵심 원칙:
           - 새 이력서 생성 X → 제출된 원본 파일을 그대로 유지
-          - PyMuPDF로 원본 PDF 페이지를 복사하면서 PII 텍스트만 검은 박스 처리
-          - 커버 페이지(ID + 사진)를 1페이지에 추가하고 나머지 원본 페이지 병합
+          - cover → resume → rec 순서로 병합
+          - PyMuPDF apply_redactions(fill=None) = 텍스트 스트림 완전 삭제 (흰박스 아님)
+          - 이력서 첫 페이지 상단: 이름 헤더 완전 삭제 + 강사 번호만 삽입
         """
         import fitz  # PyMuPDF
-        from .pdf_builder import build_filename, _build_cover_page
-        from reportlab.lib.pagesizes import A4
+        from .pdf_builder import build_filename
 
         # ── 1. meta 정보: 인스턴스 변수 → 시트 조회 순 ──────────────
         nat = self._nationality or ""
@@ -1591,24 +1591,8 @@ class BridgeConverterApp:
                 if m.original_value and len(m.original_value.strip()) >= 3
             ]
 
-        # ── 4. 커버 페이지 결정 ──────────────────────────────────────
-        page_w, page_h = A4
+        # ── 4. PDF 조립 (원본 파일 순서대로 PII 제거 후 병합) ────────
         merged = fitz.open()
-
-        if self._photo_from_resume:
-            # 이력서 본문에 이미 사진 있음 → ID만 좌상단·우상단에 크게 표시
-            cover_buf = io.BytesIO()
-            _build_id_only_cover_page(cover_buf, cid, page_w, page_h)
-            cover_doc = fitz.open("pdf", cover_buf.getvalue())
-            merged.insert_pdf(cover_doc)
-            cover_doc.close()
-        else:
-            # 별도 사진 있음 → 기존 커버(사진 + ID)
-            cover_buf = io.BytesIO()
-            _build_cover_page(cover_buf, cid, self._photo_bytes, page_w, page_h)
-            cover_doc = fitz.open("pdf", cover_buf.getvalue())
-            merged.insert_pdf(cover_doc)
-            cover_doc.close()
 
         # ── 5. 원본 파일 보존 + PII 직접 제거 ───────────────────────
         for ftype in ["cover", "resume", "rec"]:
@@ -1617,6 +1601,7 @@ class BridgeConverterApp:
                 continue
 
             if p.suffix.lower() == ".pdf":
+                is_resume = (ftype == "resume")
                 src_doc = fitz.open(str(p))
                 for page_idx, page in enumerate(src_doc):
                     # ① 섹션 전체 삭제 (contact / references / 상단 헤더)
@@ -1626,6 +1611,9 @@ class BridgeConverterApp:
                     local_pii = _regex_pii(page_text)
                     all_pii = list(dict.fromkeys(api_pii + local_pii))
                     _redact_pdf_page(page, all_pii)
+                    # ③ 이력서 첫 페이지: 강사 번호만 상단 삽입
+                    if is_resume and page_idx == 0:
+                        _overlay_id_on_resume_page(page, cid)
                 merged.insert_pdf(src_doc)
                 src_doc.close()
 
@@ -1689,7 +1677,7 @@ class BridgeConverterApp:
 
         # ── 6. 저장 ─────────────────────────────────────────────────
         merged.save(str(out_path), deflate=True,
-                    garbage=3, clean=True)
+                    garbage=4, clean=True)
         size = out_path.stat().st_size
         merged.close()
 
@@ -2058,7 +2046,7 @@ def _redact_pdf_page(page, pii_list: list[str]) -> None:
 
     PyMuPDF add_redact_annot + apply_redactions():
       - 텍스트 내용을 PDF 콘텐츠 스트림에서 실제 제거 (단순 오버레이 아님)
-      - fill=(1,1,1) = 흰색 → 삭제된 자리 빈 공백으로 보임
+      - fill=None = 투명 (흰색 박스 없음, 빈 공간으로 대체)
     """
     if not pii_list:
         return
@@ -2072,7 +2060,7 @@ def _redact_pdf_page(page, pii_list: list[str]) -> None:
             except Exception:
                 continue
             for r in rects:
-                page.add_redact_annot(r, fill=(1, 1, 1))
+                page.add_redact_annot(r, fill=None)
                 annotated = True
     if annotated:
         page.apply_redactions()
@@ -2173,13 +2161,36 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
             if cap > 10:
                 regions.append((0.0, cap))
 
-    # ── 적용 ───────────────────────────────────────────────────────────
+    # ── 적용 (fill=None = 투명, 스트림 완전 삭제) ────────────────────
     for r_top, r_bot in regions:
         if r_bot > r_top:
             rect = fitz.Rect(0, r_top, page_w, r_bot)
-            page.add_redact_annot(rect, fill=(1, 1, 1))
+            page.add_redact_annot(rect, fill=None)
     if regions:
         page.apply_redactions()
+
+
+def _overlay_id_on_resume_page(page, candidate_id: str) -> None:
+    """이력서 첫 페이지 좌상단에 강사 번호만 삽입.
+
+    _redact_pii_sections_pdf(is_first_page=True)가 이미 상단 이름 헤더를
+    스트림에서 완전 삭제한 뒤, 그 자리에 candidate_id 숫자만 크게 삽입.
+
+    배치: (18pt, 32pt) — 좌상단 여백 내
+    글자: 28pt Helvetica-Bold, 검정
+    """
+    import fitz
+    try:
+        page.insert_text(
+            (18, 32),
+            candidate_id,
+            fontsize=28,
+            fontname="helv",
+            color=(0, 0, 0),
+            render_mode=0,
+        )
+    except Exception as e:
+        log.warning(f"ID 오버레이 실패: {e}")
 
 
 def _clear_pii_sections_docx(doc) -> None:
