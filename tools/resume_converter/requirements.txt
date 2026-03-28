@@ -1,5 +1,6 @@
 # BRIDGE Resume Converter — Requirements
-# Python 3.10+ 권장 (D:\Phtyon 3\ 또는 Q:\Claudework\.venv\)
+# Python 3.13+ (C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\)
+# 설치: pip3.exe install -r requirements.txt
 
 # 이미지 처리
 Pillow>=10.0.0
@@ -8,6 +9,7 @@ opencv-python>=4.8.0
 # PDF
 pikepdf>=8.0.0
 pdfplumber>=0.10.0
+PyMuPDF>=1.24.0
 reportlab>=4.0.0
 
 # 문서
