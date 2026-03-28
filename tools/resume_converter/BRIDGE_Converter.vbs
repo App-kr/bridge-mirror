@@ -35,8 +35,8 @@ cmd = Chr(34) & py & Chr(34) & _
       "from resume_converter.main_gui import main;main()" & _
       Chr(34)
 
-' 창 스타일 1 = 일반 (정상 표시), False = 비동기 실행
-sh.Run cmd, 1, False
+' 창 스타일 0 = 숨김 (CMD 창 없음), False = 비동기 실행
+sh.Run cmd, 0, False
 
 Set fso = Nothing
 Set sh  = Nothing
