@@ -33,6 +33,7 @@ tools/resume_converter/output/
 tools/resume_converter/originals/
 tools/resume_converter/logs/
 tools/resume_converter/.rc_key
+tools/resume_converter/.api_key
 
 # ── Legacy data / CSV dumps ───────────────────────────────────
 *.csv
