@@ -7,10 +7,13 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 
 toolDir = "Q:\Claudework\bridge base\tools"
 
-' pythonw.exe 우선 (콘솔창 없는 GUI 전용)
+' Python313 (공백없는 경로 — 최우선)
 Dim pyw, pyc
-pyw = "D:\Phtyon 3\pythonw.exe"
-pyc = "D:\Phtyon 3\python.exe"
+pyw = "C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\pythonw.exe"
+pyc = "C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe"
+
+If Not fso.FileExists(pyw) Then pyw = "D:\Phtyon 3\pythonw.exe"
+If Not fso.FileExists(pyc) Then pyc = "D:\Phtyon 3\python.exe"
 
 If fso.FileExists(pyw) Then
     py = pyw
