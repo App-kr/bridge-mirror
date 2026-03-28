@@ -1618,13 +1618,13 @@ class BridgeConverterApp:
 
             if p.suffix.lower() == ".pdf":
                 src_doc = fitz.open(str(p))
-                for page in src_doc:
-                    # 이 페이지 텍스트에서 직접 PII 추출 (정규식 — API 불필요)
+                for page_idx, page in enumerate(src_doc):
+                    # ① 섹션 전체 삭제 (contact / references / 상단 헤더)
+                    _redact_pii_sections_pdf(page, is_first_page=(page_idx == 0))
+                    # ② 개별 PII 값 삭제 (이메일·전화 등 잔류 텍스트)
                     page_text = page.get_text()
                     local_pii = _regex_pii(page_text)
-                    # Claude API 결과 보조 합산 (중복 제거, 순서 유지)
                     all_pii = list(dict.fromkeys(api_pii + local_pii))
-                    # 실제 삭제 (흰색 fill = 텍스트 내용 완전 소거)
                     _redact_pdf_page(page, all_pii)
                 merged.insert_pdf(src_doc)
                 src_doc.close()
@@ -1636,7 +1636,10 @@ class BridgeConverterApp:
                     from .pdf_builder import text_to_pdf_bytes
                     doc = DocxDoc(str(p))
 
-                    # 전체 문서 텍스트에서 PII 목록 수집 (페이지 전체 컨텍스트)
+                    # ① 섹션 전체 삭제 (contact / references / 상단 이름 헤더)
+                    _clear_pii_sections_docx(doc)
+
+                    # ② 전체 문서 텍스트에서 개별 PII 목록 수집
                     full_text = "\n".join(
                         p2.text for p2 in doc.paragraphs
                     )
@@ -2073,6 +2076,175 @@ def _redact_pdf_page(page, pii_list: list[str]) -> None:
                 annotated = True
     if annotated:
         page.apply_redactions()
+
+
+# ── PII 섹션 헤더 패턴 ────────────────────────────────────────────────────────
+# 삭제 대상 섹션: contact / references / personal details 등
+_RE_PII_SECTION = re.compile(
+    r'^\s*(?:'
+    r'contact(?:\s+(?:information|details?|info|us|me|number|numbers?))?'
+    r'|personal(?:\s+(?:details?|information|info|data|profile|statement))?'
+    r'|(?:email|e[-\s]?mail|phone|mobile|cell|telephone|fax|address|location)'
+    r'(?:\s+(?:info(?:rmation)?|details?|number|address))?'
+    r'|references?(?:\s*[&/]\s*referees?)?'
+    r'|referees?'
+    r'|emergency\s+contacts?'
+    r'|연락처|개인\s*정보|참고인|추천인|레퍼런스'
+    r')\s*:?\s*$',
+    re.IGNORECASE,
+)
+
+# 콘텐츠 섹션 (이 섹션이 시작되면 삭제 종료)
+_RE_CONTENT_SECTION = re.compile(
+    r'^\s*(?:'
+    r'education(?:al)?(?:\s+background)?|academic(?:\s+background)?'
+    r'|qualifications?|academic\s+qualifications?'
+    r'|(?:work\s+)?experience|employment(?:\s+history)?|career(?:\s+history)?'
+    r'|professional\s+(?:experience|background|profile|development)'
+    r'|skills?(?:\s+[&/]\s*(?:competencies?|abilities?))?'
+    r'|competencies?|abilities?|core\s+competencies?'
+    r'|summary|profile|career\s+(?:summary|objective)'
+    r'|about(?:\s+me)?|objective|career\s+objective'
+    r'|certifications?|credentials?|licenses?|accreditations?'
+    r'|awards?|achievements?|accomplishments?'
+    r'|languages?(?:\s+skills?)?|hobbies|interests?|extracurricular'
+    r'|학력|경력|기술|자격증?|자기소개|소개|관심사'
+    r')\s*:?\s*$',
+    re.IGNORECASE,
+)
+
+
+def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
+    """PDF 페이지에서 PII 섹션 전체를 흰색 사각형으로 완전 삭제.
+
+    A) contact / references / personal details 섹션 헤더 탐지
+       → 다음 콘텐츠 섹션 직전까지 전체 흰색 rect 삭제
+    B) 첫 페이지 상단 이름+연락처 헤더
+       → 첫 콘텐츠 섹션 직전까지 전체 삭제 (최대 페이지 50%)
+    """
+    import fitz
+
+    raw_blocks = page.get_text("blocks")
+    blocks = sorted(raw_blocks, key=lambda b: b[1])  # y0 오름차순
+    page_h = page.rect.height
+    page_w = page.rect.width
+
+    # ── 블록 분류: pii_hdr | content_hdr | body ───────────────────────────
+    classified: list[tuple[float, float, str]] = []   # (y0, y1, cls)
+    for b in blocks:
+        x0, y0, x1, y1, text, *_ = b
+        if not text.strip():
+            continue
+        first_line = text.strip().split('\n')[0].strip()
+        if _RE_PII_SECTION.match(first_line):
+            classified.append((y0, y1, 'pii'))
+        elif _RE_CONTENT_SECTION.match(first_line):
+            classified.append((y0, y1, 'content'))
+        else:
+            classified.append((y0, y1, 'body'))
+
+    regions: list[tuple[float, float]] = []  # (y_top, y_bot) for redaction
+
+    # ── A: PII 섹션 → 다음 콘텐츠 섹션까지 ──────────────────────────────
+    n = len(classified)
+    for i, (y0, y1, cls) in enumerate(classified):
+        if cls != 'pii':
+            continue
+        r_top = max(0.0, y0 - 8)    # 섹션 헤더 위 여백 포함
+        r_bot = min(page_h, y1 + page_h * 0.5)   # 기본 절반 페이지
+        for j in range(i + 1, n):
+            nxt_y0, nxt_y1, nxt_cls = classified[j]
+            if nxt_cls == 'content':
+                r_bot = nxt_y0 - 4   # 콘텐츠 섹션 직전까지
+                break
+            elif nxt_cls == 'pii':
+                r_bot = nxt_y1       # 연속 PII 섹션 → 끝까지
+        regions.append((r_top, r_bot))
+
+    # ── B: 첫 페이지 최상단 이름+연락처 헤더 ────────────────────────────
+    if is_first_page:
+        first_content_y: float | None = None
+        for y0, y1, cls in classified:
+            if cls == 'content':
+                first_content_y = y0
+                break
+        if first_content_y is not None:
+            cap = min(first_content_y - 4, page_h * 0.50)
+            if cap > 10:
+                regions.append((0.0, cap))
+
+    # ── 적용 ───────────────────────────────────────────────────────────
+    for r_top, r_bot in regions:
+        if r_bot > r_top:
+            rect = fitz.Rect(0, r_top, page_w, r_bot)
+            page.add_redact_annot(rect, fill=(1, 1, 1))
+    if regions:
+        page.apply_redactions()
+
+
+def _clear_pii_sections_docx(doc) -> None:
+    """DOCX 문서에서 PII 섹션 전체를 run-level로 삭제.
+
+    A) contact / references / personal details 섹션 → 다음 콘텐츠 섹션까지
+    B) 첫 콘텐츠 섹션 이전의 최상단 이름+연락처 헤더 전체
+    """
+    paras = list(doc.paragraphs)
+    n = len(paras)
+    if n == 0:
+        return
+
+    # 단락 분류
+    flags: list[str] = []
+    for para in paras:
+        t = para.text.strip()
+        if not t:
+            flags.append('empty')
+        elif _RE_PII_SECTION.match(t):
+            flags.append('pii')
+        elif _RE_CONTENT_SECTION.match(t):
+            flags.append('content')
+        else:
+            flags.append('body')
+
+    # 삭제할 인덱스 수집
+    kill: set[int] = set()
+
+    # ── A: PII 섹션 → 다음 콘텐츠 섹션까지 ─────────────────────────────
+    in_pii = False
+    for i, f in enumerate(flags):
+        if f == 'pii':
+            in_pii = True
+        elif f == 'content':
+            in_pii = False
+        if in_pii:
+            kill.add(i)
+
+    # ── B: 첫 콘텐츠 섹션 이전 최상단 헤더 전체 ─────────────────────────
+    first_content = next((i for i, f in enumerate(flags) if f == 'content'), None)
+    if first_content is not None and first_content > 0:
+        for i in range(first_content):
+            kill.add(i)
+
+    # ── run 텍스트 제거 ───────────────────────────────────────────────────
+    for i in kill:
+        for run in paras[i].runs:
+            run.text = ''
+
+    # ── 테이블도 동일 처리: 테이블 전체가 최상단 헤더 영역에 있으면 제거 ──
+    # (간단 처리: 첫 콘텐츠 단락 인덱스 기준으로 테이블은 별도 판별 불가
+    #  → 테이블 내 PII 섹션 헤더 셀 탐지로 처리)
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                cell_text = cell.text.strip()
+                if _RE_PII_SECTION.match(cell_text):
+                    # 이 셀이 속한 테이블의 모든 셀 제거
+                    for r2 in tbl.rows:
+                        for c2 in r2.cells:
+                            for para in c2.paragraphs:
+                                for run in para.runs:
+                                    run.text = ''
+                    break
 
 
 def _build_id_only_cover_page(
