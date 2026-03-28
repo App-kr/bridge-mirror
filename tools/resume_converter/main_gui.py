@@ -1133,45 +1133,106 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _run_current_step(self):
+        """단계 실행 — 백그라운드 스레드 + 깜박 애니메이션."""
         step = self._current_step
-        if step == 1:
-            self._run_face_crop()
-        elif step == 2:
-            self._run_pii()
-        elif step == 3:
-            self._run_build_pdf()
-        elif step == 4:
-            self._run_save()
+        if step == 0:
+            self._set_file_status(None, "확인")
+            self._status_var.set("✓ 파일 확인 완료")
+            self._status_lbl.config(fg=C_PRI)
+            return
 
-    def _run_face_crop(self):
+        if self._step_running:
+            return
+        self._step_running = True
+        self._next_btn.config(state="disabled")
+        self._prev_btn.config(state="disabled")
+
+        step_ftypes = {
+            1: ["photo"],
+            2: ["resume", "cover", "rec"],
+            3: ["resume", "cover", "rec"],
+            4: [],
+        }
+        ftypes = step_ftypes.get(step, [])
+        for ft in ftypes:
+            self._set_file_status(ft, "처리중...")
+
+        self._start_blink(STEP_ACTIONS[step])
+        cid = self._candidate_id.get().strip() or "0000"
+
+        def _worker():
+            err = None
+            try:
+                if step == 1:
+                    self._exec_face_crop()
+                elif step == 2:
+                    self._exec_pii()
+                elif step == 3:
+                    self._exec_build_pdf(cid)
+            except Exception as e:
+                err = str(e)
+            self.root.after(0, lambda e=err: self._on_step_done(step, ftypes, e))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_step_done(self, step: int, ftypes: list, err: str | None):
+        """단계 완료 콜백 — UI 스레드에서 실행."""
+        self._step_running = False
+        self._stop_blink()
+        self._next_btn.config(state="normal")
+        self._prev_btn.config(state="normal")
+
+        if err:
+            self._start_blink_error(f"{STEPS[step]} 오류")
+            for ft in ftypes:
+                self._set_file_status(ft, "✖ 오류")
+            messagebox.showerror("처리 오류", f"{STEPS[step]} 실패:\n{err}")
+        else:
+            self._status_var.set(f"✓ {STEPS[step]} 완료")
+            self._status_lbl.config(fg=C_PRI)
+            for ft in ftypes:
+                self._set_file_status(ft, "✓ 완료")
+            if step == 4:
+                self._run_save()
+
+    def _exec_face_crop(self):
+        """[Thread] 사진 크롭 — self._photo_bytes 에 결과 저장."""
         from .face_crop import crop_face, FaceNotFoundError
         photo = self._files.get("photo")
         if not photo:
+            resume = self._files.get("resume")
+            if resume and resume.suffix.lower() == ".pdf":
+                from .pipeline import _extract_photo_from_pdf
+                data = _extract_photo_from_pdf(resume)
+                if data:
+                    self._photo_bytes = data
+                    self.root.after(0, lambda d=data: self._show_photo_preview(d))
             return
-        try:
-            data   = crop_face(photo)
-            img    = Image.open(io.BytesIO(data)).resize((150, 200), Image.LANCZOS)
-            tk_img = ImageTk.PhotoImage(img)
-            self._preview_lbl.configure(image=tk_img, text="")
-            self._preview_lbl.image = tk_img
-        except FaceNotFoundError:
-            messagebox.showwarning("얼굴 미감지",
-                                   "얼굴을 찾지 못했습니다. 수동 영역 선택이 필요합니다.")
+        data = crop_face(photo)
+        self._photo_bytes = data
+        self.root.after(0, lambda d=data: self._show_photo_preview(d))
 
-    def _run_pii(self):
+    def _show_photo_preview(self, data: bytes):
+        img    = Image.open(io.BytesIO(data)).resize((150, 200), Image.LANCZOS)
+        tk_img = ImageTk.PhotoImage(img)
+        self._preview_lbl.configure(image=tk_img, text="")
+        self._preview_lbl.image = tk_img
+
+    def _exec_pii(self):
+        """[Thread] PII 탐지."""
         from .pii_engine import analyze_pii, load_api_key
+        from .pipeline import _extract_text
         api_key  = load_api_key()
         all_text = ""
         for ftype in ["cover", "resume", "rec"]:
             p = self._files.get(ftype)
             if p:
-                from .pipeline import _extract_text
                 all_text += f"\n=== {ftype.upper()} ===\n{_extract_text(p)}\n"
         if not all_text.strip():
             return
         result = analyze_pii(all_text, api_key)
         self._pii_result = result
-        self._show_pii_result(result)
+        self.root.after(0, lambda r=result: self._show_pii_result(r))
 
     def _show_pii_result(self, result):
         self._pii_text.config(state="normal")
@@ -1197,16 +1258,18 @@ class BridgeConverterApp:
         if not self._pii_expanded:
             self._toggle_pii()
 
-    def _run_build_pdf(self):
-        cid = self._candidate_id.get().strip() or "0000"
+    def _exec_build_pdf(self, cid: str):
+        """[Thread] PDF 생성."""
         from .pdf_builder import build_pdf
         out, size = build_pdf(
             candidate_id=cid,
-            photo_bytes=None,
+            photo_bytes=self._photo_bytes,
             cover_text=self._pii_result.cleaned_text if self._pii_result else None,
             out_dir=OUTPUT_DIR)
-        self._meta_info_labels["size"].config(text=f"{size // 1024}KB")
-        self._fname_lbl.config(text=out.name)
+        self.root.after(0, lambda o=out, s=size: (
+            self._meta_info_labels["size"].config(text=f"{s // 1024}KB"),
+            self._fname_lbl.config(text=o.name),
+        ))
 
     def _run_save(self):
         messagebox.showinfo("저장 완료", "PDF 변환이 완료되었습니다.")
