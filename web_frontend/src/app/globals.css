@@ -298,24 +298,37 @@
 }
 .marquee-track {
   display: flex;
+  flex-shrink: 0;
   width: max-content;
+  min-width: 100%;
   animation: marquee 40s linear infinite;
   will-change: transform;
+  -webkit-animation: marquee 40s linear infinite;
 }
 .marquee-track:hover {
   animation-play-state: paused;
+  -webkit-animation-play-state: paused;
 }
 .marquee-track--slow {
   animation-duration: 55s;
+  -webkit-animation-duration: 55s;
+}
+.marquee-track--mid {
+  animation-duration: 28s;
+  -webkit-animation-duration: 28s;
 }
 .marquee-track-reverse {
   display: flex;
+  flex-shrink: 0;
   width: max-content;
+  min-width: 100%;
   animation: marquee-reverse 45s linear infinite;
   will-change: transform;
+  -webkit-animation: marquee-reverse 45s linear infinite;
 }
 .marquee-track-reverse:hover {
   animation-play-state: paused;
+  -webkit-animation-play-state: paused;
 }
 
 /* ── Skeleton loading wave ── */

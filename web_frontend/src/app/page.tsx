@@ -709,18 +709,22 @@ export default function HomePage() {
           </div>
         )}
         {/* Row 1 — Schools & Institutions */}
-        <div className="mb-4">
-          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+        <div className="mb-6">
+          <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.2em] text-center mb-4">
             Schools &amp; Institutions
           </p>
-          <div className="relative" aria-hidden="true">
+          <div className="relative overflow-hidden" aria-hidden="true">
+            {/* Edge fade */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
             <div className="marquee-track marquee-track--slow">
-              {[...schoolNames, ...schoolNames, ...schoolNames].map((name, i) => (
+              {[...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/75 tracking-[0.04em]"
                 >
                   {name}
+                  <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
                 </span>
               ))}
             </div>
@@ -729,17 +733,21 @@ export default function HomePage() {
 
         {/* Row 2 — Our Partner */}
         <div>
-          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.15em] text-center mb-3">
+          <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.2em] text-center mb-4">
             Our Partner
           </p>
-          <div className="relative" aria-hidden="true">
+          <div className="relative overflow-hidden" aria-hidden="true">
+            {/* Edge fade */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
             <div className="marquee-track marquee-track--mid">
-              {[...academyNames, ...academyNames, ...academyNames].map((name, i) => (
+              {[...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
-                  className="shrink-0 px-6 sm:px-8 text-[0.85rem] font-semibold select-none whitespace-nowrap text-white/50 tracking-[0.05em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/75 tracking-[0.04em]"
                 >
                   {name}
+                  <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
                 </span>
               ))}
             </div>
