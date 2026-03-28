@@ -146,7 +146,15 @@ class BridgeConverterApp:
         # 완료 블링크
         self._done_blink_after: Optional[str] = None
 
+        # 강사 메타 (시트에서 로드)
+        self._nationality = ""
+        self._gender      = ""
+        self._birth_year  = ""
+        self._id_load_timer: Optional[str] = None
+
         self._build_ui()
+        # 강사번호 변경 시 자동 시트 조회
+        self._candidate_id.trace_add("write", self._on_id_change)
         self._configure_styles()
         self._check_sheet_connection()
 
@@ -1200,21 +1208,38 @@ class BridgeConverterApp:
     def _load_from_sheet(self):
         cid = self._candidate_id.get().strip()
         if not cid:
-            messagebox.showwarning("입력 필요", "강사 번호를 입력하세요.")
             return
         try:
             from .sheets_connector import get_candidate_info
             info = get_candidate_info(cid)
             if info:
+                self._nationality = info.get("nationality", "")
+                self._gender      = info.get("gender", "")
+                self._birth_year  = info.get("birth_year", "")
                 self._meta_label.config(
-                    text=(f"국적: {info.get('nationality', '?')}  "
-                          f"성별: {info.get('gender', '?')}  "
-                          f"생년: {info.get('birth_year', '?')}"))
+                    text=(f"국적: {self._nationality or '?'}  "
+                          f"성별: {self._gender or '?'}  "
+                          f"생년: {self._birth_year or '?'}"))
                 self._update_fname_preview(info)
             else:
-                self._meta_label.config(text="번호를 찾을 수 없음")
+                self._meta_label.config(text="시트 미등록")
         except Exception as e:
             self._meta_label.config(text=f"조회 실패: {e}")
+
+    def _on_id_change(self, *args):
+        """강사번호 입력 시 0.8초 후 시트 자동 조회."""
+        cid = self._candidate_id.get().strip()
+        if self._id_load_timer:
+            self.root.after_cancel(self._id_load_timer)
+            self._id_load_timer = None
+        # 4자리 이상 + 시트 연결된 경우에만 자동 조회
+        if len(cid) >= 4 and self._sheet_connected:
+            self._id_load_timer = self.root.after(800, self._load_from_sheet)
+        # 번호 바뀌면 기존 메타 초기화
+        if len(cid) != len(self._candidate_id.get().strip()):
+            self._nationality = ""
+            self._gender = ""
+            self._birth_year = ""
 
     def _refresh_unproc(self):
         for row in self._unproc_tv.get_children():
@@ -1415,20 +1440,118 @@ class BridgeConverterApp:
             self._toggle_pii()
 
     def _exec_build_pdf(self, cid: str):
-        """[Thread] PDF 생성."""
-        from .pdf_builder import build_pdf
-        out, size = build_pdf(
-            candidate_id=cid,
-            photo_bytes=self._photo_bytes,
-            cover_text=self._pii_result.cleaned_text if self._pii_result else None,
-            out_dir=self._output_dir)
-        self._last_output_path = out
-        self.root.after(0, lambda o=out, s=size: (
+        """[Thread] PDF 생성 — 원본 파일 보존 + PII 인라인 제거.
+
+        핵심 원칙:
+          - 새 이력서 생성 X → 제출된 원본 파일을 그대로 유지
+          - PyMuPDF로 원본 PDF 페이지를 복사하면서 PII 텍스트만 검은 박스 처리
+          - 커버 페이지(ID + 사진)를 1페이지에 추가하고 나머지 원본 페이지 병합
+        """
+        import fitz  # PyMuPDF
+        from .pdf_builder import build_filename, _build_cover_page
+        from reportlab.lib.pagesizes import A4
+
+        # ── 1. meta 정보: 인스턴스 변수 → 시트 조회 순 ──────────────
+        nat = self._nationality or ""
+        gen = self._gender      or ""
+        yr  = self._birth_year  or ""
+        if not (nat or gen or yr):
+            try:
+                from .sheets_connector import get_candidate_info
+                info = get_candidate_info(cid)
+                if info:
+                    nat = info.get("nationality", "")
+                    gen = info.get("gender", "")
+                    yr  = info.get("birth_year", "")
+                    self._nationality = nat
+                    self._gender      = gen
+                    self._birth_year  = yr
+                    self.root.after(0, lambda: self._meta_label.config(
+                        text=f"국적: {nat or '?'}  성별: {gen or '?'}  생년: {yr or '?'}"))
+            except Exception:
+                pass
+
+        # ── 2. 출력 파일명 결정 ──────────────────────────────────────
+        fname    = build_filename(cid, nat, gen, yr)
+        out_path = self._output_dir / fname
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+
+        # ── 3. PII 패턴 수집 (원본에서 제거할 텍스트) ───────────────
+        pii_texts = []
+        if self._pii_result:
+            pii_texts = [m.original_value for m in self._pii_result.pii_found
+                         if m.original_value and len(m.original_value.strip()) >= 3]
+
+        # ── 4. 커버 페이지 (ID + 사진) ──────────────────────────────
+        page_w, page_h = A4
+        cover_buf = io.BytesIO()
+        _build_cover_page(cover_buf, cid, self._photo_bytes, page_w, page_h)
+
+        merged     = fitz.open()
+        cover_doc  = fitz.open("pdf", cover_buf.getvalue())
+        merged.insert_pdf(cover_doc)
+        cover_doc.close()
+
+        # ── 5. 원본 파일 보존 + 인라인 PII 제거 ─────────────────────
+        for ftype in ["cover", "resume", "rec"]:
+            p = self._files.get(ftype)
+            if not p or not p.exists():
+                continue
+
+            if p.suffix.lower() == ".pdf":
+                # PDF: 원본 페이지 그대로 복사 + PII 텍스트 검은 박스 처리
+                src_doc = fitz.open(str(p))
+                if pii_texts:
+                    for page in src_doc:
+                        for text in pii_texts:
+                            areas = page.search_for(text, quads=False)
+                            for rect in areas:
+                                page.add_redact_annot(rect, fill=(0, 0, 0))
+                        page.apply_redactions()
+                merged.insert_pdf(src_doc)
+                src_doc.close()
+
+            elif p.suffix.lower() in (".docx", ".doc"):
+                # DOCX: python-docx로 PII 텍스트 제거 후 텍스트 PDF 삽입
+                # (레이아웃 완전 보존은 Word/LibreOffice 필요 — 추후 지원)
+                try:
+                    from docx import Document as DocxDoc
+                    from .pdf_builder import text_to_pdf_bytes
+                    doc = DocxDoc(str(p))
+                    full_text = "\n".join(para.text for para in doc.paragraphs)
+                    # PII 제거
+                    cleaned = full_text
+                    for pii in pii_texts:
+                        cleaned = cleaned.replace(pii, "[REMOVED]")
+                    docx_pdf = text_to_pdf_bytes(cleaned, ftype.upper())
+                    src_doc  = fitz.open("pdf", docx_pdf)
+                    merged.insert_pdf(src_doc)
+                    src_doc.close()
+                except Exception as e:
+                    log.warning(f"DOCX 처리 실패: {e}")
+
+        # ── 6. 저장 ─────────────────────────────────────────────────
+        merged.save(str(out_path), deflate=True,
+                    garbage=3, clean=True)
+        size = out_path.stat().st_size
+        merged.close()
+
+        pages_count = 0
+        try:
+            tmp = fitz.open(str(out_path))
+            pages_count = len(tmp)
+            tmp.close()
+        except Exception:
+            pass
+
+        self._last_output_path = out_path
+        self.root.after(0, lambda o=out_path, s=size, pg=pages_count: (
             self._meta_info_labels["size"].config(text=f"{s // 1024}KB"),
+            self._meta_info_labels["pages"].config(text=str(pg) if pg else "—"),
             self._fname_lbl.config(text=o.name),
         ))
         # 생성된 PDF 첫 페이지 미리보기
-        self._render_pdf_page_preview(out)
+        self._render_pdf_page_preview(out_path)
 
     def _run_save(self):
         """저장 완료 상태: 진행바 꽉 채우기 + 블링크."""
