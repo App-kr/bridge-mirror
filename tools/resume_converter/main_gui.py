@@ -353,7 +353,7 @@ class BridgeConverterApp:
     def _build_center(self, parent) -> tk.Frame:
         panel = tk.Frame(parent, bg=C_BG)
 
-        # 드롭 영역
+        # 드롭 영역 (고정 높이 — 드래그 대상 아님)
         dz = tk.Frame(panel, bg=C_HOVER, height=100,
                        highlightbackground=C_PRI, highlightthickness=2,
                        cursor="hand2")
@@ -369,78 +369,7 @@ class BridgeConverterApp:
             dz.drop_target_register(DND_FILES)
             dz.dnd_bind("<<Drop>>", self._on_drop)
 
-        # ── 파일 목록 (Treeview 다단) ──────────────────────
-        flf = tk.LabelFrame(panel, text="파일 목록", font=(F, 11, "bold"),
-                             bg=C_BG, fg=C_TEXT, padx=6, pady=4,
-                             relief="flat",
-                             highlightbackground=C_BORDER, highlightthickness=1)
-        flf.pack(fill="x", padx=14, pady=4)
-
-        f_cols = ("분류", "파일명", "크기", "상태")
-        self._file_tv = ttk.Treeview(flf, columns=f_cols,
-                                      show="headings", height=7,
-                                      selectmode="browse")
-        self._file_tv_expanded = False
-        self._file_tv.heading("분류",   text="분류")
-        self._file_tv.heading("파일명", text="파일명")
-        self._file_tv.heading("크기",   text="크기")
-        self._file_tv.heading("상태",   text="상태")
-        self._file_tv.column("분류",   width=72,  minwidth=60,  anchor="center")
-        self._file_tv.column("파일명", width=260, minwidth=140)
-        self._file_tv.column("크기",   width=66,  minwidth=56,  anchor="center")
-        self._file_tv.column("상태",   width=78,  minwidth=60,  anchor="center")
-        self._file_tv.tag_configure("photo",  background="#FFF8E1")
-        self._file_tv.tag_configure("resume", background="#E8F5E9")
-        self._file_tv.tag_configure("cover",  background="#E3F2FD")
-        self._file_tv.tag_configure("rec",    background="#FCE4EC")
-        self._file_tv.bind("<Delete>", self._delete_selected_file)
-        self._file_tv.pack(fill="x")
-
-        fbr = tk.Frame(flf, bg=C_BG)
-        fbr.pack(fill="x", pady=(2, 0))
-        tk.Button(fbr, text="선택 삭제 (Del)",
-                  command=self._delete_selected_file,
-                  bg=C_BG, fg=C_SUB, font=(F, 10),
-                  relief="flat", cursor="hand2").pack(side="right")
-        self._file_tv_expand_btn = tk.Button(
-            fbr, text="목록 펼치기  ▼",
-            command=self._toggle_file_list,
-            bg=C_BG, fg=C_PRI, font=(F, 10),
-            relief="flat", cursor="hand2")
-        self._file_tv_expand_btn.pack(side="left")
-
-        # ── PII 탐지 결과 (접기/펼치기) ──────────────────
-        pii_hdr = tk.Frame(panel, bg=C_BG)
-        pii_hdr.pack(fill="x", padx=14, pady=(4, 0))
-
-        self._pii_toggle_btn = tk.Button(
-            pii_hdr, text="  PII 탐지 결과 보기",
-            command=self._toggle_pii,
-            bg=C_BG, fg=C_SUB, font=(F, 10),
-            relief="flat", cursor="hand2", anchor="w")
-        self._pii_toggle_btn.pack(side="left", fill="x", expand=True)
-
-        self._focus_btn = tk.Button(
-            pii_hdr, text="집중 점검",
-            command=self._focus_check,
-            bg=C_WARN, fg="white", font=(F, 10),
-            relief="flat", padx=6, pady=1,
-            cursor="hand2", state="disabled")
-        self._focus_btn.pack(side="right")
-
-        self._pii_container = tk.Frame(panel, bg=C_BG)
-        # 기본 숨김
-
-        self._pii_text = scrolledtext.ScrolledText(
-            self._pii_container, font=(FM, 11), height=3,
-            bg="#FAFAFA", relief="flat", selectbackground=C_HOVER)
-        self._pii_text.pack(fill="both", expand=True, padx=14, pady=(0, 4))
-        self._pii_text.tag_config("red",    foreground=C_DANGER, background="#FEF2F2")
-        self._pii_text.tag_config("yellow", foreground=C_WARN,   background="#FFFBEB")
-        self._pii_text.tag_config("green",  foreground=C_PRI,    background="#F0FDF4")
-        self._pii_text.bind("<<Selection>>", self._on_pii_select)
-
-        # ── 하단 버튼 ────────────────────────────────────
+        # 하단 버튼 (항상 고정)
         btf = tk.Frame(panel, bg=C_BG,
                         highlightbackground=C_BORDER, highlightthickness=1)
         btf.pack(fill="x", padx=14, pady=8, side="bottom")
@@ -480,18 +409,83 @@ class BridgeConverterApp:
                                     padx=14, pady=6, cursor="hand2")
         self._next_btn.pack(side="right", padx=8, pady=6)
 
-        return panel
+        # ── 세로 PanedWindow: 파일목록 ↕ PII영역 (드래그 자유) ──
+        vpaned = ttk.PanedWindow(panel, orient="vertical")
+        vpaned.pack(fill="both", expand=True, padx=14, pady=(0, 4))
 
-    # ── 파일 목록 펼치기 토글 ──────────────────────────────────────────
-    def _toggle_file_list(self):
-        if self._file_tv_expanded:
-            self._file_tv.config(height=7)
-            self._file_tv_expand_btn.config(text="목록 펼치기  ▼")
-            self._file_tv_expanded = False
-        else:
-            self._file_tv.config(height=14)
-            self._file_tv_expand_btn.config(text="목록 접기  ▲")
-            self._file_tv_expanded = True
+        # 상단: 파일 목록 (드래그로 크기 조절)
+        top_pane = tk.Frame(vpaned, bg=C_BG)
+        vpaned.add(top_pane, weight=3)
+
+        flf = tk.LabelFrame(top_pane, text="파일 목록", font=(F, 11, "bold"),
+                             bg=C_BG, fg=C_TEXT, padx=6, pady=4,
+                             relief="flat",
+                             highlightbackground=C_BORDER, highlightthickness=1)
+        flf.pack(fill="both", expand=True)
+
+        f_cols = ("분류", "파일명", "크기", "상태")
+        self._file_tv = ttk.Treeview(flf, columns=f_cols,
+                                      show="headings",
+                                      selectmode="browse")
+        self._file_tv.heading("분류",   text="분류")
+        self._file_tv.heading("파일명", text="파일명")
+        self._file_tv.heading("크기",   text="크기")
+        self._file_tv.heading("상태",   text="상태")
+        self._file_tv.column("분류",   width=72,  minwidth=60,  anchor="center")
+        self._file_tv.column("파일명", width=260, minwidth=140)
+        self._file_tv.column("크기",   width=66,  minwidth=56,  anchor="center")
+        self._file_tv.column("상태",   width=78,  minwidth=60,  anchor="center")
+        self._file_tv.tag_configure("photo",  background="#FFF8E1")
+        self._file_tv.tag_configure("resume", background="#E8F5E9")
+        self._file_tv.tag_configure("cover",  background="#E3F2FD")
+        self._file_tv.tag_configure("rec",    background="#FCE4EC")
+        self._file_tv.bind("<Delete>", self._delete_selected_file)
+
+        fl_sb = ttk.Scrollbar(flf, orient="vertical", command=self._file_tv.yview)
+        self._file_tv.configure(yscrollcommand=fl_sb.set)
+        fl_sb.pack(side="right", fill="y")
+        self._file_tv.pack(fill="both", expand=True)
+
+        tk.Button(flf, text="선택 삭제 (Del)",
+                  command=self._delete_selected_file,
+                  bg=C_BG, fg=C_SUB, font=(F, 10),
+                  relief="flat", cursor="hand2").pack(anchor="e", pady=(2, 0))
+
+        # 하단: PII 탐지 결과 (드래그로 크기 조절)
+        bot_pane = tk.Frame(vpaned, bg=C_BG)
+        vpaned.add(bot_pane, weight=1)
+
+        pii_hdr = tk.Frame(bot_pane, bg=C_BG)
+        pii_hdr.pack(fill="x", pady=(4, 0))
+
+        self._pii_toggle_btn = tk.Button(
+            pii_hdr, text="  PII 탐지 결과 보기",
+            command=self._toggle_pii,
+            bg=C_BG, fg=C_SUB, font=(F, 10),
+            relief="flat", cursor="hand2", anchor="w")
+        self._pii_toggle_btn.pack(side="left", fill="x", expand=True)
+
+        self._focus_btn = tk.Button(
+            pii_hdr, text="집중 점검",
+            command=self._focus_check,
+            bg=C_WARN, fg="white", font=(F, 10),
+            relief="flat", padx=6, pady=1,
+            cursor="hand2", state="disabled")
+        self._focus_btn.pack(side="right")
+
+        self._pii_container = tk.Frame(bot_pane, bg=C_BG)
+        # 기본 숨김
+
+        self._pii_text = scrolledtext.ScrolledText(
+            self._pii_container, font=(FM, 11),
+            bg="#FAFAFA", relief="flat", selectbackground=C_HOVER)
+        self._pii_text.pack(fill="both", expand=True, pady=(0, 4))
+        self._pii_text.tag_config("red",    foreground=C_DANGER, background="#FEF2F2")
+        self._pii_text.tag_config("yellow", foreground=C_WARN,   background="#FFFBEB")
+        self._pii_text.tag_config("green",  foreground=C_PRI,    background="#F0FDF4")
+        self._pii_text.bind("<<Selection>>", self._on_pii_select)
+
+        return panel
 
     # ── 우측 패널 ──────────────────────────────────────────────────────
     def _build_right(self, parent) -> tk.Frame:
@@ -845,43 +839,103 @@ class BridgeConverterApp:
             self._simple_sheet_dialog()
 
     def _simple_sheet_dialog(self):
+        """연결 설정 다이얼로그 — Bridge API (기본) + Google Sheets (폴백)."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Google Sheets 연결")
-        dlg.geometry("420x210")
+        dlg.title("데이터 소스 연결 설정")
+        dlg.geometry("480x420")
         dlg.resizable(False, False)
         dlg.grab_set()
         dlg.configure(bg=C_SIDE)
 
-        tk.Label(dlg, text="Spreadsheet ID:", font=(F, 11),
-                 bg=C_SIDE).pack(padx=20, pady=(16, 2), anchor="w")
-        sid_var = tk.StringVar()
-        tk.Entry(dlg, textvariable=sid_var, font=(F, 11), width=42
-                 ).pack(padx=20, fill="x")
+        try:
+            import keyring
+            _kr = keyring
+        except ImportError:
+            messagebox.showerror("keyring 없음",
+                                  "pip install keyring 을 실행하세요.", parent=dlg)
+            dlg.destroy()
+            return
 
-        tk.Label(dlg, text="API Key:", font=(F, 11),
-                 bg=C_SIDE).pack(padx=20, pady=(8, 2), anchor="w")
+        # 현재 저장값 로드
+        def _get(key, default=""):
+            try:
+                return _kr.get_password("BRIDGE_RC_CONFIG_V1", key) or default
+            except Exception:
+                return default
+
+        source_var = tk.StringVar(value=_get("source", "bridge"))
+
+        # ── 소스 선택 ──────────────────────────────────────────────
+        src_frame = tk.LabelFrame(dlg, text="데이터 소스", font=(F, 11, "bold"),
+                                   bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
+        src_frame.pack(fill="x", padx=18, pady=(14, 6))
+        for val, lbl in [("bridge", "Bridge 관리자 API  (권장 — 실시간 연동)"),
+                          ("sheets", "Google Sheets  (폴백)")]:
+            tk.Radiobutton(src_frame, text=lbl, variable=source_var, value=val,
+                           bg=C_SIDE, fg=C_TEXT, selectcolor=C_SIDE,
+                           font=(F, 11), activebackground=C_HOVER
+                           ).pack(anchor="w")
+
+        # ── Bridge API ─────────────────────────────────────────────
+        ba_frame = tk.LabelFrame(dlg, text="Bridge API 설정", font=(F, 11, "bold"),
+                                  bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
+        ba_frame.pack(fill="x", padx=18, pady=4)
+
+        tk.Label(ba_frame, text="관리자 비밀번호:", font=(F, 10),
+                 bg=C_SIDE).pack(anchor="w")
+        pw_var = tk.StringVar()
+        tk.Entry(ba_frame, textvariable=pw_var, font=(F, 11), show="*", width=38
+                 ).pack(fill="x", pady=(0, 4))
+        tk.Label(ba_frame,
+                 text="API URL은 운영 도메인(api.bridgejob.co.kr)이 자동 적용됩니다.",
+                 font=(F, 9), fg=C_SUB, bg=C_SIDE
+                 ).pack(anchor="w")
+
+        # ── Google Sheets ──────────────────────────────────────────
+        gs_frame = tk.LabelFrame(dlg, text="Google Sheets 설정 (폴백용)",
+                                  font=(F, 11, "bold"),
+                                  bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
+        gs_frame.pack(fill="x", padx=18, pady=4)
+
+        tk.Label(gs_frame, text="Spreadsheet ID:", font=(F, 10),
+                 bg=C_SIDE).pack(anchor="w")
+        sid_var = tk.StringVar(value=_get("sheet_id"))
+        tk.Entry(gs_frame, textvariable=sid_var, font=(F, 11), width=38
+                 ).pack(fill="x", pady=(0, 4))
+        tk.Label(gs_frame, text="Service Account JSON Key:", font=(F, 10),
+                 bg=C_SIDE).pack(anchor="w")
         key_var = tk.StringVar()
-        tk.Entry(dlg, textvariable=key_var, font=(F, 11), width=42, show="*"
-                 ).pack(padx=20, fill="x")
+        tk.Entry(gs_frame, textvariable=key_var, font=(F, 11), show="*", width=38
+                 ).pack(fill="x")
 
         def _save():
-            sid = sid_var.get().strip()
-            key = key_var.get().strip()
-            if not sid or not key:
-                messagebox.showwarning("입력 필요", "ID와 API 키를 입력하세요.", parent=dlg)
+            source = source_var.get()
+            pw     = pw_var.get().strip()
+            sid    = sid_var.get().strip()
+            key    = key_var.get().strip()
+
+            if source == "bridge" and not pw:
+                messagebox.showwarning("입력 필요", "관리자 비밀번호를 입력하세요.", parent=dlg)
+                return
+            if source == "sheets" and (not sid):
+                messagebox.showwarning("입력 필요", "Spreadsheet ID를 입력하세요.", parent=dlg)
                 return
             try:
-                import keyring
-                keyring.set_password("BRIDGE_RC_CONFIG_V1", "sheet_id", sid)
-                keyring.set_password("BRIDGE_RC_CONFIG_V1", "api_key",  key)
+                _kr.set_password("BRIDGE_RC_CONFIG_V1", "source", source)
+                if pw:
+                    _kr.set_password("BRIDGE_RC_CONFIG_V1", "admin_pw", pw)
+                if sid:
+                    _kr.set_password("BRIDGE_RC_CONFIG_V1", "sheet_id", sid)
+                if key:
+                    _kr.set_password("BRIDGE_RC_CONFIG_V1", "sa_json", key)
                 dlg.destroy()
                 self._check_sheet_connection()
             except Exception as e:
                 messagebox.showerror("저장 실패", str(e), parent=dlg)
 
-        tk.Button(dlg, text="저장 & 연결", command=_save,
-                  bg=C_PRI, fg="white", font=(F, 11),
-                  relief="flat", padx=12, pady=4).pack(pady=12)
+        tk.Button(dlg, text="저장 & 연결 테스트", command=_save,
+                  bg=C_PRI, fg="white", font=(F, 11, "bold"),
+                  relief="flat", padx=14, pady=5).pack(pady=10)
 
     def _check_sheet_connection(self):
         def _check():
