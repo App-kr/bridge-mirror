@@ -61,8 +61,8 @@ class BridgeConverterApp:
             self.root = tk.Tk()
 
         self.root.title("BRIDGE Resume Converter")
-        self.root.geometry("1280x800")
-        self.root.minsize(960, 640)
+        self.root.geometry("1400x860")
+        self.root.minsize(1000, 680)
         self.root.configure(bg=C_BG)
 
         # 상태
@@ -88,7 +88,7 @@ class BridgeConverterApp:
         toolbar.pack_propagate(False)
 
         logo = tk.Label(toolbar, text="  BRIDGE Converter",
-                        font=("Helvetica", 14, "bold"),
+                        font=("Helvetica", 16, "bold"),
                         fg=C_PRIMARY, bg=C_SIDEBAR)
         logo.pack(side="left", padx=12, pady=8)
 
@@ -99,14 +99,14 @@ class BridgeConverterApp:
             rb = tk.Radiobutton(
                 mode_frame, text=m, variable=self._mode, value=m,
                 bg=C_SIDEBAR, fg=C_TEXT, selectcolor=C_SIDEBAR,
-                font=("Helvetica", 10), activebackground=C_HOVER,
+                font=("Helvetica", 12), activebackground=C_HOVER,
             )
             rb.pack(side="left", padx=4)
 
         # 구글시트 상태
         self._sheet_label = tk.Label(
             toolbar, text="● 시트 연결 확인 중...",
-            font=("Helvetica", 9), fg=C_SUBTEXT, bg=C_SIDEBAR
+            font=("Helvetica", 11), fg=C_SUBTEXT, bg=C_SIDEBAR
         )
         self._sheet_label.pack(side="right", padx=16)
 
@@ -121,16 +121,15 @@ class BridgeConverterApp:
         sep1 = tk.Frame(main_frame, width=1, bg=C_BORDER)
         sep1.pack(side="left", fill="y")
 
-        # 가운데 패널
-        self._center_panel = self._build_center_panel(main_frame)
-        self._center_panel.pack(side="left", fill="both", expand=True)
+        # 가운데+우측 — PanedWindow (드래그로 폭 조절 가능)
+        paned = ttk.PanedWindow(main_frame, orient="horizontal")
+        paned.pack(side="left", fill="both", expand=True)
 
-        sep2 = tk.Frame(main_frame, width=1, bg=C_BORDER)
-        sep2.pack(side="left", fill="y")
+        self._center_panel = self._build_center_panel(paned)
+        paned.add(self._center_panel, weight=3)
 
-        # 우측 패널
-        self._right_panel = self._build_right_panel(main_frame)
-        self._right_panel.pack(side="right", fill="y")
+        self._right_panel = self._build_right_panel(paned)
+        paned.add(self._right_panel, weight=1)
 
     # ── 좌측 패널 ────────────────────────────────────────────────────────
     def _build_left_panel(self, parent) -> tk.Frame:
@@ -138,14 +137,14 @@ class BridgeConverterApp:
         panel.pack_propagate(False)
 
         # 강사 카드
-        card = tk.LabelFrame(panel, text="강사 정보", font=("Helvetica", 10, "bold"),
+        card = tk.LabelFrame(panel, text="강사 정보", font=("Helvetica", 12, "bold"),
                               bg=C_SIDEBAR, fg=C_TEXT, padx=8, pady=6,
                               relief="flat", bd=1,
                               highlightbackground=C_BORDER, highlightthickness=1)
         card.pack(fill="x", padx=12, pady=(16, 8))
 
         tk.Label(card, text="강사 번호:", bg=C_SIDEBAR, fg=C_SUBTEXT,
-                 font=("Helvetica", 9)).grid(row=0, column=0, sticky="w")
+                 font=("Helvetica", 11)).grid(row=0, column=0, sticky="w")
         id_entry = tk.Entry(card, textvariable=self._candidate_id,
                             font=("Helvetica", 11, "bold"), width=10,
                             relief="flat", bd=1,
@@ -158,19 +157,19 @@ class BridgeConverterApp:
             card, text="시트에서 불러오기",
             command=self._load_from_sheet,
             bg=C_PRIMARY, fg="white",
-            font=("Helvetica", 9), relief="flat", padx=6, pady=3,
+            font=("Helvetica", 11), relief="flat", padx=6, pady=3,
             cursor="hand2",
         )
         load_btn.grid(row=2, column=0, sticky="ew", pady=(6, 2))
 
         self._meta_label = tk.Label(card, text="",
                                      bg=C_SIDEBAR, fg=C_SUBTEXT,
-                                     font=("Helvetica", 8), wraplength=200,
+                                     font=("Helvetica", 12), wraplength=200,
                                      justify="left")
         self._meta_label.grid(row=3, column=0, sticky="w")
 
         # 처리 단계 목록
-        steps_frame = tk.LabelFrame(panel, text="처리 단계", font=("Helvetica", 10, "bold"),
+        steps_frame = tk.LabelFrame(panel, text="처리 단계", font=("Helvetica", 12, "bold"),
                                      bg=C_SIDEBAR, fg=C_TEXT, padx=8, pady=6,
                                      relief="flat", bd=1,
                                      highlightbackground=C_BORDER, highlightthickness=1)
@@ -184,29 +183,29 @@ class BridgeConverterApp:
                            font=("Helvetica", 12))
             dot.pack(side="left")
             tk.Label(row_f, text=step, bg=C_SIDEBAR, fg=C_TEXT,
-                     font=("Helvetica", 9)).pack(side="left", padx=4)
+                     font=("Helvetica", 11)).pack(side="left", padx=4)
             self._step_dots.append(dot)
 
         # 전체 진행 바
         tk.Label(panel, text="전체 진행:", bg=C_SIDEBAR, fg=C_SUBTEXT,
-                 font=("Helvetica", 9)).pack(padx=12, anchor="w", pady=(8, 2))
+                 font=("Helvetica", 11)).pack(padx=12, anchor="w", pady=(8, 2))
         self._progress = ttk.Progressbar(panel, length=200, mode="determinate",
                                           maximum=len(self._steps))
         self._progress.pack(padx=12, fill="x")
 
         # 미처리 목록 드롭다운
         tk.Label(panel, text="미처리 목록:", bg=C_SIDEBAR, fg=C_SUBTEXT,
-                 font=("Helvetica", 9)).pack(padx=12, anchor="w", pady=(12, 2))
+                 font=("Helvetica", 11)).pack(padx=12, anchor="w", pady=(12, 2))
         self._unprocessed_var = tk.StringVar()
         self._unprocessed_combo = ttk.Combobox(
             panel, textvariable=self._unprocessed_var,
-            font=("Helvetica", 9), state="readonly",
+            font=("Helvetica", 11), state="readonly",
         )
         self._unprocessed_combo.pack(padx=12, fill="x")
         self._unprocessed_combo.bind("<<ComboboxSelected>>", self._on_select_unprocessed)
 
         tk.Button(panel, text="목록 새로고침", command=self._refresh_unprocessed,
-                  bg=C_BG, fg=C_TEXT, font=("Helvetica", 8), relief="flat",
+                  bg=C_BG, fg=C_TEXT, font=("Helvetica", 12), relief="flat",
                   cursor="hand2").pack(padx=12, pady=4, fill="x")
 
         return panel
@@ -226,7 +225,7 @@ class BridgeConverterApp:
         drop_lbl = tk.Label(drop_zone,
                             text="파일을 드래그하거나 클릭하여 추가\n(사진 / 이력서 / 커버레터 / 추천서)",
                             bg=C_HOVER, fg=C_PRIMARY,
-                            font=("Helvetica", 10), justify="center")
+                            font=("Helvetica", 12), justify="center")
         drop_lbl.pack(expand=True)
         drop_zone.bind("<Button-1>", self._browse_files)
         drop_lbl.bind("<Button-1>", self._browse_files)
@@ -237,27 +236,27 @@ class BridgeConverterApp:
             drop_zone.dnd_bind("<<Drop>>", self._on_drop)
 
         # 파일 목록
-        list_frame = tk.LabelFrame(panel, text="파일 목록", font=("Helvetica", 10, "bold"),
+        list_frame = tk.LabelFrame(panel, text="파일 목록", font=("Helvetica", 12, "bold"),
                                     bg=C_BG, fg=C_TEXT, padx=8, pady=6,
                                     relief="flat", highlightbackground=C_BORDER,
                                     highlightthickness=1)
         list_frame.pack(fill="x", padx=16, pady=4)
 
         self._file_listbox = tk.Listbox(list_frame, height=5,
-                                         font=("Helvetica", 9),
+                                         font=("Helvetica", 11),
                                          selectbackground=C_HOVER,
                                          relief="flat", bd=0)
         self._file_listbox.pack(fill="x")
 
         # PII 결과 텍스트뷰
-        pii_frame = tk.LabelFrame(panel, text="PII 탐지 결과", font=("Helvetica", 10, "bold"),
+        pii_frame = tk.LabelFrame(panel, text="PII 탐지 결과", font=("Helvetica", 12, "bold"),
                                    bg=C_BG, fg=C_TEXT, padx=8, pady=6,
                                    relief="flat", highlightbackground=C_BORDER,
                                    highlightthickness=1)
         pii_frame.pack(fill="both", expand=True, padx=16, pady=4)
 
         self._pii_text = scrolledtext.ScrolledText(
-            pii_frame, font=("Courier", 9), height=10,
+            pii_frame, font=("Courier", 11), height=5,
             bg="#FAFAFA", relief="flat",
             selectbackground=C_HOVER,
         )
@@ -271,7 +270,7 @@ class BridgeConverterApp:
             pii_frame, text="선택 영역 집중 점검",
             command=self._focus_check,
             bg=C_WARN, fg="white",
-            font=("Helvetica", 9), relief="flat", padx=8, pady=3,
+            font=("Helvetica", 11), relief="flat", padx=8, pady=3,
             cursor="hand2", state="disabled",
         )
         self._focus_btn.pack(anchor="e", pady=4)
@@ -284,27 +283,27 @@ class BridgeConverterApp:
         self._prev_btn = tk.Button(btn_frame, text="◀ 이전",
                                     command=self._prev_step,
                                     bg=C_BORDER, fg=C_TEXT,
-                                    font=("Helvetica", 9), relief="flat",
+                                    font=("Helvetica", 11), relief="flat",
                                     padx=10, pady=5, cursor="hand2")
         self._prev_btn.pack(side="left")
 
         tk.Button(btn_frame, text="⏭ 건너뜀",
                   command=self._skip_step,
                   bg=C_BORDER, fg=C_TEXT,
-                  font=("Helvetica", 9), relief="flat",
+                  font=("Helvetica", 11), relief="flat",
                   padx=10, pady=5, cursor="hand2").pack(side="left", padx=4)
 
         self._pause_btn = tk.Button(btn_frame, text="⏸ 일시정지",
                                      command=self._toggle_pause,
                                      bg=C_BORDER, fg=C_TEXT,
-                                     font=("Helvetica", 9), relief="flat",
+                                     font=("Helvetica", 11), relief="flat",
                                      padx=10, pady=5, cursor="hand2")
         self._pause_btn.pack(side="left", padx=4)
 
         self._next_btn = tk.Button(btn_frame, text="다음 단계 ▶",
                                     command=self._next_step,
                                     bg=C_PRIMARY, fg="white",
-                                    font=("Helvetica", 10, "bold"), relief="flat",
+                                    font=("Helvetica", 12, "bold"), relief="flat",
                                     padx=12, pady=6, cursor="hand2")
         self._next_btn.pack(side="right")
 
@@ -316,7 +315,7 @@ class BridgeConverterApp:
         panel.pack_propagate(False)
 
         # PDF 썸네일
-        preview_frame = tk.LabelFrame(panel, text="PDF 미리보기", font=("Helvetica", 10, "bold"),
+        preview_frame = tk.LabelFrame(panel, text="PDF 미리보기", font=("Helvetica", 12, "bold"),
                                        bg=C_SIDEBAR, fg=C_TEXT, padx=8, pady=6,
                                        relief="flat", highlightbackground=C_BORDER,
                                        highlightthickness=1)
@@ -325,11 +324,11 @@ class BridgeConverterApp:
         self._preview_label = tk.Label(preview_frame, bg="#E0E0E0",
                                         width=28, height=14,
                                         text="미리보기\n없음", fg=C_SUBTEXT,
-                                        font=("Helvetica", 9))
+                                        font=("Helvetica", 11))
         self._preview_label.pack()
 
         # 메타 정보
-        meta_frame = tk.LabelFrame(panel, text="파일 정보", font=("Helvetica", 10, "bold"),
+        meta_frame = tk.LabelFrame(panel, text="파일 정보", font=("Helvetica", 12, "bold"),
                                     bg=C_SIDEBAR, fg=C_TEXT, padx=8, pady=6,
                                     relief="flat", highlightbackground=C_BORDER,
                                     highlightthickness=1)
@@ -340,9 +339,9 @@ class BridgeConverterApp:
             row = tk.Frame(meta_frame, bg=C_SIDEBAR)
             row.pack(fill="x", pady=1)
             tk.Label(row, text=f"{label}:", bg=C_SIDEBAR, fg=C_SUBTEXT,
-                     font=("Helvetica", 9), width=8, anchor="w").pack(side="left")
+                     font=("Helvetica", 11), width=8, anchor="w").pack(side="left")
             lbl = tk.Label(row, text="—", bg=C_SIDEBAR, fg=C_TEXT,
-                           font=("Helvetica", 9, "bold"))
+                           font=("Helvetica", 11, "bold"))
             lbl.pack(side="left")
             self._meta_info_labels[key] = lbl
 
@@ -350,9 +349,9 @@ class BridgeConverterApp:
         fname_frame = tk.Frame(panel, bg=C_SIDEBAR)
         fname_frame.pack(fill="x", padx=12, pady=4)
         tk.Label(fname_frame, text="파일명:", bg=C_SIDEBAR, fg=C_SUBTEXT,
-                 font=("Helvetica", 9)).pack(anchor="w")
+                 font=("Helvetica", 11)).pack(anchor="w")
         self._fname_label = tk.Label(fname_frame, text="—", bg=C_SIDEBAR,
-                                      fg=C_TEXT, font=("Helvetica", 9, "bold"),
+                                      fg=C_TEXT, font=("Helvetica", 11, "bold"),
                                       wraplength=250, justify="left")
         self._fname_label.pack(anchor="w")
 
@@ -362,12 +361,12 @@ class BridgeConverterApp:
         # 숨김 상태로 시작
         self._dup_title  = tk.Label(self._dup_card, text="⚠ 중복 제출 감지",
                                      bg="#FFF8E1", fg=C_WARN,
-                                     font=("Helvetica", 9, "bold"))
+                                     font=("Helvetica", 11, "bold"))
         self._dup_body   = tk.Label(self._dup_card, text="", bg="#FFF8E1",
-                                     fg=C_TEXT, font=("Helvetica", 8),
+                                     fg=C_TEXT, font=("Helvetica", 12),
                                      wraplength=240, justify="left")
         self._dup_btn    = tk.Button(self._dup_card, text="비교",
-                                      bg=C_WARN, fg="white", font=("Helvetica", 8),
+                                      bg=C_WARN, fg="white", font=("Helvetica", 12),
                                       relief="flat", padx=6, cursor="hand2")
 
         # 재지원 알림 (빨간 카드)
@@ -375,20 +374,20 @@ class BridgeConverterApp:
                                      highlightbackground=C_DANGER, highlightthickness=1)
         self._reapp_title = tk.Label(self._reapp_card, text="🔴 재지원 감지",
                                       bg="#FEF2F2", fg=C_DANGER,
-                                      font=("Helvetica", 9, "bold"))
+                                      font=("Helvetica", 11, "bold"))
         self._reapp_body  = tk.Label(self._reapp_card, text="", bg="#FEF2F2",
-                                      fg=C_TEXT, font=("Helvetica", 8),
+                                      fg=C_TEXT, font=("Helvetica", 12),
                                       wraplength=240, justify="left")
 
         btn_row = tk.Frame(self._reapp_card, bg="#FEF2F2")
         self._reapp_view_btn = tk.Button(btn_row, text="이전 파일 보기",
-                                          bg=C_BG, fg=C_DANGER, font=("Helvetica", 8),
+                                          bg=C_BG, fg=C_DANGER, font=("Helvetica", 12),
                                           relief="flat", padx=4, cursor="hand2")
         self._reapp_del_btn  = tk.Button(btn_row, text="삭제",
-                                          bg=C_DANGER, fg="white", font=("Helvetica", 8),
+                                          bg=C_DANGER, fg="white", font=("Helvetica", 12),
                                           relief="flat", padx=4, cursor="hand2")
         self._reapp_keep_btn = tk.Button(btn_row, text="유지",
-                                          bg=C_BG, fg=C_TEXT, font=("Helvetica", 8),
+                                          bg=C_BG, fg=C_TEXT, font=("Helvetica", 12),
                                           relief="flat", padx=4, cursor="hand2")
         for b in [self._reapp_view_btn, self._reapp_del_btn, self._reapp_keep_btn]:
             b.pack(side="left", padx=2)
