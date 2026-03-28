@@ -1535,20 +1535,52 @@ class BridgeConverterApp:
                 src_doc.close()
 
             elif p.suffix.lower() in (".docx", ".doc"):
-                # DOCX: 각 단락에서 regex PII 직접 제거 후 텍스트 PDF 삽입
+                # DOCX: run-level inline PII 교체 (포맷 보존) → PDF 변환
                 try:
                     from docx import Document as DocxDoc
                     from .pdf_builder import text_to_pdf_bytes
                     doc = DocxDoc(str(p))
-                    cleaned_paras = []
-                    for para in doc.paragraphs:
-                        t = para.text
-                        # 정규식 PII 제거
-                        local_pii = _regex_pii(t)
-                        all_pii = list(dict.fromkeys(api_pii + local_pii))
+
+                    # 전체 문서 텍스트에서 PII 목록 수집 (페이지 전체 컨텍스트)
+                    full_text = "\n".join(
+                        p2.text for p2 in doc.paragraphs
+                    )
+                    for tbl in doc.tables:
+                        for row in tbl.rows:
+                            for cell in row.cells:
+                                full_text += "\n" + cell.text
+                    local_pii = _regex_pii(full_text)
+                    all_pii = list(dict.fromkeys(api_pii + local_pii))
+
+                    def _clean_run_text(t: str) -> str:
                         for pii in all_pii:
                             t = t.replace(pii, "")
-                        cleaned_paras.append(t)
+                        return t
+
+                    # 1) 단락 run-level 교체
+                    for para in doc.paragraphs:
+                        for run in para.runs:
+                            if run.text:
+                                run.text = _clean_run_text(run.text)
+
+                    # 2) 테이블 셀 run-level 교체 (기존 누락 부분)
+                    for tbl in doc.tables:
+                        for row in tbl.rows:
+                            for cell in row.cells:
+                                for para in cell.paragraphs:
+                                    for run in para.runs:
+                                        if run.text:
+                                            run.text = _clean_run_text(run.text)
+
+                    # 3) 수정된 DOCX → 평문 추출 → PDF (포맷 보존 변환기 없는 환경 대응)
+                    cleaned_paras = [
+                        para.text for para in doc.paragraphs
+                    ]
+                    for tbl in doc.tables:
+                        for row in tbl.rows:
+                            row_cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                            if row_cells:
+                                cleaned_paras.append("  |  ".join(row_cells))
                     cleaned = "\n".join(cleaned_paras)
                     docx_pdf = text_to_pdf_bytes(cleaned, ftype.upper())
                     src_doc  = fitz.open("pdf", docx_pdf)
@@ -1862,8 +1894,10 @@ def _regex_pii(text: str) -> list[str]:
     found += re.findall(
         r'(?:instagram\.com|linkedin\.com/in|facebook\.com|twitter\.com|t\.me)'
         r'[/\s]?\S{2,50}', text, re.IGNORECASE)
+    # 카카오: 한글(카카오/카톡) + 영문(kakao/kakaotalk) + ID 접미사 포함
     found += re.findall(
-        r'(?:카카오|kakao|카톡)[:\s]+\S{2,30}', text, re.IGNORECASE)
+        r'(?:카카오|카톡|kakao(?:talk)?(?:\s*(?:id|아이디))?)[:\s]+\S{2,30}',
+        text, re.IGNORECASE)
 
     # ── 한국 학원/학교명 (한글 접미사) ──────────────────────────────
     found += re.findall(

@@ -26,7 +26,42 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas as rl_canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import pdfplumber
+
+# ── 한글 폰트 등록 (맑은 고딕 — 윈도우 기본) ──────────────────────────────
+_KOREAN_FONT: str | None = None
+_KOREAN_FONT_BOLD: str | None = None
+
+def _init_korean_font() -> None:
+    """맑은 고딕(또는 굴림) TTF 등록. 한 번만 실행."""
+    global _KOREAN_FONT, _KOREAN_FONT_BOLD
+    if _KOREAN_FONT:
+        return
+    import os
+    candidates = [
+        ("C:/Windows/Fonts/malgun.ttf",   "C:/Windows/Fonts/malgunbd.ttf"),
+        ("C:/Windows/Fonts/gulim.ttc",    "C:/Windows/Fonts/gulim.ttc"),
+    ]
+    for reg, bold in candidates:
+        if os.path.exists(reg):
+            try:
+                pdfmetrics.registerFont(TTFont("KO", reg))
+                _KOREAN_FONT = "KO"
+                try:
+                    if reg != bold and os.path.exists(bold):
+                        pdfmetrics.registerFont(TTFont("KO-Bold", bold))
+                        _KOREAN_FONT_BOLD = "KO-Bold"
+                    else:
+                        _KOREAN_FONT_BOLD = "KO"
+                except Exception:
+                    _KOREAN_FONT_BOLD = "KO"
+                break
+            except Exception:
+                continue
+
+_init_korean_font()
 
 log = logging.getLogger("pdf_builder")
 
@@ -100,43 +135,67 @@ def _build_cover_page(
 
 # ── 텍스트 → PDF 변환 ──────────────────────────────────────────────────────
 def text_to_pdf_bytes(text: str, title: str = "") -> bytes:
-    """plain text → PDF bytes (reportlab)."""
-    buf = io.BytesIO()
+    """plain text → PDF bytes (reportlab, 한글 지원).
+
+    맑은 고딕 TTF가 있으면 한글 렌더링, 없으면 Helvetica 폴백.
+    CJK 글자는 폭을 12px로 계산해 줄바꿈 정확도 향상.
+    """
+    buf     = io.BytesIO()
     page_w, page_h = A4
-    c   = rl_canvas.Canvas(buf, pagesize=A4)
-    c.setFont("Helvetica", 10)
+    c       = rl_canvas.Canvas(buf, pagesize=A4)
+    margin  = 1.5 * cm
+    line_h  = 16      # 한글 가독성을 위해 14 → 16
+    max_w   = page_w - 3 * cm
+
+    # 폰트 선택
+    body_font  = _KOREAN_FONT      if _KOREAN_FONT      else "Helvetica"
+    title_font = _KOREAN_FONT_BOLD if _KOREAN_FONT_BOLD else "Helvetica-Bold"
+
+    def _line_width(s: str) -> float:
+        """글자폭 추정: CJK 12px, ASCII 6px."""
+        return sum(12 if ord(ch) > 0x2E7F else 6 for ch in s)
+
+    def _draw_line(canvas_obj, s: str, x: float, y: float) -> None:
+        canvas_obj.drawString(x, y, s)
+
+    def _new_page() -> float:
+        c.showPage()
+        c.setFont(body_font, 10)
+        return page_h - 1.5 * cm
+
+    c.setFont(body_font, 10)
 
     if title:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(1.5 * cm, page_h - 1.5 * cm, title)
-        c.setFont("Helvetica", 10)
+        c.setFont(title_font, 12)
+        c.drawString(margin, page_h - 1.5 * cm, title)
+        c.setFont(body_font, 10)
         y = page_h - 2.5 * cm
     else:
         y = page_h - 1.5 * cm
 
-    line_h  = 14
-    max_w   = page_w - 3 * cm
-    margin  = 1.5 * cm
-
-    # 간단한 줄 바꿈 (CJK 미처리 — 추후 확장 가능)
-    for line in text.split("\n"):
-        # 긴 줄 자동 줄바꿈
-        while len(line) * 6 > max_w:
-            chunk = line[:int(max_w / 6)]
-            c.drawString(margin, y, chunk)
+    for raw_line in text.split("\n"):
+        # 긴 줄 자동 줄바꿈 (CJK 폭 보정)
+        while _line_width(raw_line) > max_w:
+            # 들어갈 수 있는 글자 수 계산
+            acc = 0
+            cut = 0
+            for ch in raw_line:
+                w = 12 if ord(ch) > 0x2E7F else 6
+                if acc + w > max_w:
+                    break
+                acc += w
+                cut += 1
+            chunk    = raw_line[:cut]
+            raw_line = raw_line[cut:]
+            _draw_line(c, chunk, margin, y)
             y -= line_h
-            line = line[int(max_w / 6):]
             if y < 2 * cm:
-                c.showPage()
-                c.setFont("Helvetica", 10)
-                y = page_h - 1.5 * cm
+                y = _new_page()
 
-        c.drawString(margin, y, line)
+        _draw_line(c, raw_line, margin, y)
         y -= line_h
         if y < 2 * cm:
-            c.showPage()
-            c.setFont("Helvetica", 10)
-            y = page_h - 1.5 * cm
+            y = _new_page()
 
     c.save()
     return buf.getvalue()
