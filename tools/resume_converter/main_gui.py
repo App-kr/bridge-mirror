@@ -354,7 +354,7 @@ class BridgeConverterApp:
         panel = tk.Frame(parent, bg=C_BG)
 
         # 드롭 영역
-        dz = tk.Frame(panel, bg=C_HOVER, height=70,
+        dz = tk.Frame(panel, bg=C_HOVER, height=100,
                        highlightbackground=C_PRI, highlightthickness=2,
                        cursor="hand2")
         dz.pack(fill="x", padx=14, pady=(14, 6))
@@ -378,8 +378,9 @@ class BridgeConverterApp:
 
         f_cols = ("분류", "파일명", "크기", "상태")
         self._file_tv = ttk.Treeview(flf, columns=f_cols,
-                                      show="headings", height=4,
+                                      show="headings", height=7,
                                       selectmode="browse")
+        self._file_tv_expanded = False
         self._file_tv.heading("분류",   text="분류")
         self._file_tv.heading("파일명", text="파일명")
         self._file_tv.heading("크기",   text="크기")
@@ -401,6 +402,12 @@ class BridgeConverterApp:
                   command=self._delete_selected_file,
                   bg=C_BG, fg=C_SUB, font=(F, 10),
                   relief="flat", cursor="hand2").pack(side="right")
+        self._file_tv_expand_btn = tk.Button(
+            fbr, text="목록 펼치기  ▼",
+            command=self._toggle_file_list,
+            bg=C_BG, fg=C_PRI, font=(F, 10),
+            relief="flat", cursor="hand2")
+        self._file_tv_expand_btn.pack(side="left")
 
         # ── PII 탐지 결과 (접기/펼치기) ──────────────────
         pii_hdr = tk.Frame(panel, bg=C_BG)
@@ -425,7 +432,7 @@ class BridgeConverterApp:
         # 기본 숨김
 
         self._pii_text = scrolledtext.ScrolledText(
-            self._pii_container, font=(FM, 11), height=5,
+            self._pii_container, font=(FM, 11), height=3,
             bg="#FAFAFA", relief="flat", selectbackground=C_HOVER)
         self._pii_text.pack(fill="both", expand=True, padx=14, pady=(0, 4))
         self._pii_text.tag_config("red",    foreground=C_DANGER, background="#FEF2F2")
@@ -475,9 +482,20 @@ class BridgeConverterApp:
 
         return panel
 
+    # ── 파일 목록 펼치기 토글 ──────────────────────────────────────────
+    def _toggle_file_list(self):
+        if self._file_tv_expanded:
+            self._file_tv.config(height=7)
+            self._file_tv_expand_btn.config(text="목록 펼치기  ▼")
+            self._file_tv_expanded = False
+        else:
+            self._file_tv.config(height=14)
+            self._file_tv_expand_btn.config(text="목록 접기  ▲")
+            self._file_tv_expanded = True
+
     # ── 우측 패널 ──────────────────────────────────────────────────────
     def _build_right(self, parent) -> tk.Frame:
-        panel = tk.Frame(parent, bg=C_SIDE, width=290)
+        panel = tk.Frame(parent, bg=C_SIDE, width=340)
         panel.pack_propagate(False)
 
         prf = tk.LabelFrame(panel, text="PDF 미리보기", font=(F, 11, "bold"),
@@ -487,7 +505,7 @@ class BridgeConverterApp:
         prf.pack(fill="x", padx=12, pady=14)
 
         self._preview_lbl = tk.Label(prf, bg="#E0E0E0",
-                                      width=28, height=14,
+                                      width=34, height=20,
                                       text="미리보기\n없음",
                                       fg=C_SUB, font=(F, 11))
         self._preview_lbl.pack()
