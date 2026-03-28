@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .file_classifier import detect_file_type, INBOX_DIR
-from .face_crop        import crop_face, FaceNotFoundError
+from .face_crop        import crop_face, crop_face_from_bytes, FaceNotFoundError
 from .pii_engine       import analyze_pii, PIIResult, load_api_key
 from .pdf_builder      import build_pdf, build_filename, extract_text_from_pdf
 from .security         import encrypt_file, secure_delete, secure_delete_dir, log_processing
@@ -118,7 +118,19 @@ class Pipeline:
         self._emit("[2/5] 얼굴 크롭")
         photo_path = job.files.get("photo")
         if not photo_path:
-            self._emit("  사진 없음 — 건너뜀")
+            # 별도 사진 없음 → 이력서 PDF 내장 이미지 탐색
+            resume_path = job.files.get("resume")
+            if resume_path and resume_path.suffix.lower() == ".pdf":
+                self._emit("  별도 사진 없음 — 이력서 내 사진 탐색 중...")
+                extracted = _extract_photo_from_pdf(resume_path)
+                if extracted:
+                    job.photo_bytes = extracted
+                    self._emit(f"  이력서 내장 사진 사용 ({len(extracted)//1024}KB)")
+                    return self._pause(PausePoint.FACE_CROP, job)
+                else:
+                    self._emit("  내장 사진 없음 — 건너뜀")
+            else:
+                self._emit("  사진 없음 — 건너뜀")
             return self._pause(PausePoint.FACE_CROP, job)
 
         try:
@@ -292,6 +304,68 @@ def _extract_text(path: Path) -> str:
         except Exception as e:
             log.warning(f"DOCX 텍스트 추출 실패: {e}")
     return ""
+
+
+# ── PDF 내장 이미지에서 얼굴 사진 추출 ────────────────────────────────────
+def _extract_photo_from_pdf(pdf_path: Path) -> bytes | None:
+    """
+    PDF 내장 이미지 중 얼굴이 감지되는 첫 번째 이미지를 크롭하여 반환.
+
+    - 앞 3페이지만 검사 (사진은 보통 1~2페이지)
+    - 크기 필터: 60~1200px (로고·배경 제외)
+    - 가로형 이미지 제외 (너비 > 높이×1.5)
+
+    Returns:
+        bytes: crop_face_from_bytes() 결과 (300×400 JPEG), 없으면 None
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        log.warning("PyMuPDF 미설치 — PDF 내장 사진 추출 불가")
+        return None
+
+    try:
+        doc = fitz.open(str(pdf_path))
+    except Exception as e:
+        log.warning(f"PDF 열기 실패: {e}")
+        return None
+
+    result = None
+    try:
+        for page_num in range(min(3, len(doc))):
+            page = doc[page_num]
+            images = page.get_images(full=True)
+
+            for img_info in images:
+                xref = img_info[0]
+                try:
+                    base_img = doc.extract_image(xref)
+                except Exception:
+                    continue
+
+                w = base_img.get("width",  0)
+                h = base_img.get("height", 0)
+
+                # 크기 필터: 너무 작은 아이콘 / 너무 큰 배경 / 가로형 배너 제외
+                if w < 60 or h < 60:
+                    continue
+                if w > 1200 or h > 1200:
+                    continue
+                if w > h * 1.5:
+                    continue
+
+                try:
+                    result = crop_face_from_bytes(base_img["image"])
+                    return result   # 첫 얼굴 발견 즉시 반환
+                except FaceNotFoundError:
+                    continue        # 이 이미지엔 얼굴 없음
+                except Exception as e:
+                    log.debug(f"이미지 처리 실패 (xref={xref}): {e}")
+                    continue
+    finally:
+        doc.close()
+
+    return result
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────

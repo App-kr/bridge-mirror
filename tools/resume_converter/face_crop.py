@@ -192,6 +192,48 @@ def crop_face(
     return data
 
 
+# ── bytes 입력 크롭 (PDF 내장 이미지용) ───────────────────────────────────
+def crop_face_from_bytes(
+    image_bytes: bytes,
+    out_path: Path | None = None,
+) -> bytes:
+    """
+    bytes로 전달된 이미지에서 얼굴 크롭.
+    PDF 내장 이미지 처리에 사용.
+
+    Returns:
+        bytes: 300x400px JPEG (150dpi)
+
+    Raises:
+        FaceNotFoundError: 얼굴 미감지
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+    img.load()
+    img = img.convert("RGB")
+    img_w, img_h = img.size
+
+    faces = detect_faces(img)
+    if not faces:
+        raise FaceNotFoundError("얼굴을 감지하지 못했습니다 (내장 이미지)")
+
+    x, y, w, h = faces[0]
+    left, top, right, bottom = _calc_crop_box(x, y, w, h, img_w, img_h)
+
+    cropped = img.crop((left, top, right, bottom))
+    resized = cropped.resize((300, 400), Image.LANCZOS)
+    clean   = _strip_exif(resized)
+
+    buf = io.BytesIO()
+    clean.save(buf, format="JPEG", quality=92, dpi=(150, 150))
+    data = buf.getvalue()
+
+    if out_path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(data)
+
+    return data
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import sys
