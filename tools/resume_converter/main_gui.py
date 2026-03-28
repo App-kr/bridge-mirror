@@ -597,6 +597,34 @@ class BridgeConverterApp:
         return panel
 
     # ══════════════════════════════════════════════════════════════════
+    # 스타일 설정 (Treeview 폰트 크게)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _configure_styles(self):
+        style = ttk.Style()
+        style.configure("Treeview",
+                        font=(F, 12),
+                        rowheight=28)
+        style.configure("Treeview.Heading",
+                        font=(F, 12, "bold"))
+
+    # ══════════════════════════════════════════════════════════════════
+    # 파일 상태 헬퍼
+    # ══════════════════════════════════════════════════════════════════
+
+    def _set_file_status(self, ftype: str | None, status: str):
+        """Treeview 슬롯 상태 컬럼 업데이트. ftype=None 이면 전체."""
+        targets = [ftype] if ftype else list(self._file_slot_ids.keys())
+        for ft in targets:
+            iid = self._file_slot_ids.get(ft)
+            if not iid:
+                continue
+            vals = list(self._file_tv.item(iid, "values"))
+            if len(vals) >= 4 and vals[1] != "(없음)":
+                vals[3] = status
+                self._file_tv.item(iid, values=tuple(vals))
+
+    # ══════════════════════════════════════════════════════════════════
     # 모드 토글
     # ══════════════════════════════════════════════════════════════════
 
@@ -637,31 +665,53 @@ class BridgeConverterApp:
 
     def _add_files(self, paths: list):
         from .file_classifier import detect_file_type
-        icons = {"photo": "사진", "resume": "이력서", "cover": "커버레터", "rec": "추천서"}
+        _labels = {
+            "photo":   "📷 사진",
+            "resume":  "📄 이력서",
+            "cover":   "📝 커버레터",
+            "rec":     "📋 추천서",
+            "unknown": "📎 기타",
+        }
         for p in paths:
             if not p.exists():
                 continue
-            ftype  = detect_file_type(p)
+            ftype   = detect_file_type(p)
             self._files[ftype] = p
-            size_kb = p.stat().st_size // 1024
-            label   = icons.get(ftype, ftype)
-            self._file_tv.insert("", "end",
-                                  values=(label, p.name, f"{size_kb}KB", "대기"),
-                                  tags=(ftype,))
+            size_b  = p.stat().st_size
+            if size_b < 1024:
+                size_str = f"{size_b}B"
+            elif size_b < 1024 * 1024:
+                size_str = f"{size_b // 1024}KB"
+            else:
+                size_str = f"{size_b // (1024*1024):.1f}MB"
+            label = _labels.get(ftype, "📎 기타")
+            iid   = self._file_slot_ids.get(ftype)
+            if iid:
+                self._file_tv.item(iid,
+                                   values=(label, p.name, size_str, "대기"),
+                                   tags=(ftype,))
         self._update_fname_preview()
 
     def _delete_selected_file(self, event=None):
         sel = self._file_tv.selection()
         if not sel:
             return
-        item = sel[0]
-        vals = self._file_tv.item(item, "values")
-        rev  = {"사진": "photo", "이력서": "resume",
-                "커버레터": "cover", "추천서": "rec"}
-        ftype = rev.get(vals[0]) if vals else None
+        iid  = sel[0]
+        # ftype 역조회
+        ftype = None
+        for ft, sid in self._file_slot_ids.items():
+            if sid == iid:
+                ftype = ft
+                break
         if ftype and ftype in self._files:
             del self._files[ftype]
-        self._file_tv.delete(item)
+        # 슬롯 초기화 (행 삭제 대신)
+        _labels = {
+            "photo": "📷 사진", "resume": "📄 이력서",
+            "cover": "📝 커버레터", "rec": "📋 추천서", "unknown": "📎 기타",
+        }
+        label = _labels.get(ftype, "—")
+        self._file_tv.item(iid, values=(label, "(없음)", "—", "—"), tags=(ftype,))
 
     # ══════════════════════════════════════════════════════════════════
     # 대기열
@@ -690,11 +740,14 @@ class BridgeConverterApp:
         self._queue.append(item)
         self._refresh_queue_tv()
 
-        # 입력 초기화
+        # 입력 초기화 (슬롯은 삭제 아닌 초기화)
         self._candidate_id.set("")
         self._files.clear()
-        for row in self._file_tv.get_children():
-            self._file_tv.delete(row)
+        self._photo_bytes = None
+        _labels = {"photo": "📷 사진", "resume": "📄 이력서",
+                   "cover": "📝 커버레터", "rec": "📋 추천서", "unknown": "📎 기타"}
+        for ft, iid in self._file_slot_ids.items():
+            self._file_tv.item(iid, values=(_labels[ft], "(없음)", "—", "—"), tags=(ft,))
         self._meta_label.config(text="")
         messagebox.showinfo("추가 완료",
                              f"강사 {cid}번이 {len(self._queue)}번 슬롯에 추가됐습니다.")
@@ -782,21 +835,34 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _start_blink(self, text: str):
-        self._blink_base = text
-        self._blink_dots = 0
+        """초록 깜박 — 정상 처리 중."""
+        self._stop_blink()
+        self._blink_base  = text
+        self._blink_dots  = 0
+        self._blink_error = False
+        self._do_blink()
+
+    def _start_blink_error(self, text: str):
+        """빨간 깜박 — 오류 발생."""
+        self._stop_blink()
+        self._blink_base  = text
+        self._blink_dots  = 0
+        self._blink_error = True
         self._do_blink()
 
     def _do_blink(self):
         dots = "." * (self._blink_dots % 4)
-        self._status_var.set(f"⚙  {self._blink_base}{dots}")
+        icon = "✖" if self._blink_error else "⚙"
+        self._status_var.set(f"{icon}  {self._blink_base}{dots}")
         self._blink_dots += 1
-        self._blink_after = self.root.after(480, self._do_blink)
+        color = C_DANGER if self._blink_error else C_WARN
+        self._status_lbl.config(fg=color)
+        self._blink_after = self.root.after(400, self._do_blink)
 
     def _stop_blink(self):
         if self._blink_after:
             self.root.after_cancel(self._blink_after)
             self._blink_after = None
-        self._status_var.set("")
 
     # ══════════════════════════════════════════════════════════════════
     # 컨트롤 버튼
@@ -827,6 +893,8 @@ class BridgeConverterApp:
             self._refresh_queue_tv()
 
     def _next_step(self):
+        if self._step_running:
+            return
         if self._current_step < len(STEPS) - 1:
             self._current_step += 1
             self._update_step_ui()
@@ -835,12 +903,24 @@ class BridgeConverterApp:
             self._finish()
 
     def _prev_step(self):
+        if self._step_running:
+            return
         if self._current_step > 0:
             self._current_step -= 1
             self._update_step_ui()
+            self._stop_blink()
+            self._status_var.set("")
 
     def _skip_step(self):
-        self._next_step()
+        if self._step_running:
+            return
+        self._set_file_status(None, "건너뜀")
+        self._stop_blink()
+        self._status_var.set(f"↩ {STEPS[self._current_step]} 건너뜀")
+        self._status_lbl.config(fg=C_SUB)
+        if self._current_step < len(STEPS) - 1:
+            self._current_step += 1
+            self._update_step_ui()
 
     # ══════════════════════════════════════════════════════════════════
     # PII 패널 토글
