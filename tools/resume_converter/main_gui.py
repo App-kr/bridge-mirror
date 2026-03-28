@@ -60,13 +60,12 @@ C_QDONE  = "#F1F8E9"
 C_QERR   = "#FFEBEE"
 
 # ── 단계 정의 ─────────────────────────────────────────────────────────────
-STEPS = ["파일 확인", "사진 크롭", "PII 제거", "PDF 생성", "저장"]
+STEPS = ["파일 확인", "사진 크롭", "PII 제거", "PDF 생성"]
 STEP_ACTIONS = [
     "파일 목록 확인 중",
     "얼굴 감지 & 크롭 중",
     "개인정보 탐지 & 제거 중",
     "이력서 PDF 합치는 중",
-    "파일 저장 중",
 ]
 
 QUEUE_MAX = 5
@@ -139,6 +138,13 @@ class BridgeConverterApp:
         # 인박스 감시 상태
         self._watcher_active = False
         self._watcher_observer = None
+
+        # 출력 폴더 + 마지막 생성 파일
+        self._output_dir: Path = self._load_output_config()
+        self._last_output_path: Optional[Path] = None
+
+        # 완료 블링크
+        self._done_blink_after: Optional[str] = None
 
         self._build_ui()
         self._configure_styles()
@@ -230,30 +236,20 @@ class BridgeConverterApp:
                               highlightbackground=C_BORDER, highlightthickness=1)
         card.pack(fill="x", padx=12, pady=(0, 6))
 
-        tk.Label(card, text="강사 번호:", bg=C_SIDE, fg=C_SUB,
-                 font=(F, 10)).grid(row=0, column=0, sticky="w")
-
         vcmd = (panel.register(self._validate_id), "%P")
         self._id_entry = tk.Entry(
             card, textvariable=self._candidate_id,
-            font=(F, 12, "bold"), width=10,
+            font=(F, 13, "bold"), width=10,
             validate="key", validatecommand=vcmd,
             relief="flat", bd=1,
             highlightbackground=C_BORDER, highlightthickness=1)
-        self._id_entry.grid(row=1, column=0, sticky="ew", pady=2)
+        self._id_entry.grid(row=0, column=0, sticky="ew", pady=2)
         card.columnconfigure(0, weight=1)
-
-        tk.Button(card, text="시트에서 불러오기",
-                  command=self._load_from_sheet,
-                  bg=C_HOVER, fg=C_PRI,
-                  font=(F, 10), relief="flat",
-                  padx=6, pady=2, cursor="hand2"
-                  ).grid(row=2, column=0, sticky="ew", pady=(4, 2))
 
         self._meta_label = tk.Label(
             card, text="", bg=C_SIDE, fg=C_SUB,
             font=(F, 10), wraplength=220, justify="left")
-        self._meta_label.grid(row=3, column=0, sticky="w")
+        self._meta_label.grid(row=1, column=0, sticky="w")
 
         # ── 대기열 ─────────────────────────────────────────────
         qf = tk.LabelFrame(panel, text=f"처리 대기열  (최대 {QUEUE_MAX}명)",
@@ -346,7 +342,7 @@ class BridgeConverterApp:
         u_cols = ("ID", "이름", "오류")
         self._unproc_tv = ttk.Treeview(
             uf, columns=u_cols, show="tree headings",
-            height=4, selectmode="browse")
+            height=8, selectmode="browse")
         self._unproc_tv.heading("ID",   text="ID")
         self._unproc_tv.heading("이름", text="이름")
         self._unproc_tv.heading("오류", text="오류 내용")
@@ -540,47 +536,76 @@ class BridgeConverterApp:
 
     # ── 우측 패널 ──────────────────────────────────────────────────────
     def _build_right(self, parent) -> tk.Frame:
-        panel = tk.Frame(parent, bg=C_SIDE, width=340)
+        panel = tk.Frame(parent, bg=C_SIDE, width=360)
         panel.pack_propagate(False)
 
-        prf = tk.LabelFrame(panel, text="PDF 미리보기", font=(F, 11, "bold"),
+        # ── PDF 미리보기 (꽉 채움) ─────────────────────────────────
+        prf = tk.LabelFrame(panel, text="미리보기 (이력서/사진)", font=(F, 11, "bold"),
                              bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
                              relief="flat",
                              highlightbackground=C_BORDER, highlightthickness=1)
-        prf.pack(fill="both", expand=True, padx=12, pady=(14, 6))
+        prf.pack(fill="both", expand=True, padx=12, pady=(14, 4))
 
         self._preview_lbl = tk.Label(prf, bg="#E0E0E0",
-                                      text="미리보기\n없음",
+                                      text="파일 추가 시\n자동 표시",
                                       fg=C_SUB, font=(F, 11))
         self._preview_lbl.pack(fill="both", expand=True)
 
-        mf = tk.LabelFrame(panel, text="파일 정보", font=(F, 11, "bold"),
-                            bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
-                            relief="flat",
-                            highlightbackground=C_BORDER, highlightthickness=1)
-        mf.pack(fill="x", padx=12, pady=4)
+        # ── 파일 정보 (컴팩트) ────────────────────────────────────
+        mf = tk.Frame(panel, bg=C_SIDE, padx=12, pady=2)
+        mf.pack(fill="x")
 
         self._meta_info_labels = {}
-        for key, label in [("size", "용량"), ("pages", "페이지"), ("pii_count", "삭제 항목")]:
-            row = tk.Frame(mf, bg=C_SIDE)
-            row.pack(fill="x", pady=1)
-            tk.Label(row, text=f"{label}:", bg=C_SIDE, fg=C_SUB,
-                     font=(F, 11), width=8, anchor="w").pack(side="left")
-            lbl = tk.Label(row, text="—", bg=C_SIDE, fg=C_TEXT,
-                           font=(F, 11, "bold"))
-            lbl.pack(side="left")
+        info_row = tk.Frame(mf, bg=C_SIDE)
+        info_row.pack(fill="x")
+        for key, label in [("size", "용량"), ("pages", "페이지"), ("pii_count", "삭제항목")]:
+            tk.Label(info_row, text=f"{label}:", bg=C_SIDE, fg=C_SUB,
+                     font=(F, 10), anchor="w").pack(side="left", padx=(0, 2))
+            lbl = tk.Label(info_row, text="—", bg=C_SIDE, fg=C_TEXT,
+                           font=(F, 10, "bold"))
+            lbl.pack(side="left", padx=(0, 8))
             self._meta_info_labels[key] = lbl
 
-        fnf = tk.Frame(panel, bg=C_SIDE)
-        fnf.pack(fill="x", padx=12, pady=4)
-        tk.Label(fnf, text="파일명:", bg=C_SIDE, fg=C_SUB,
-                 font=(F, 11)).pack(anchor="w")
-        self._fname_lbl = tk.Label(fnf, text="—", bg=C_SIDE,
-                                    fg=C_TEXT, font=(F, 11, "bold"),
-                                    wraplength=250, justify="left")
+        self._fname_lbl = tk.Label(mf, text="", bg=C_SIDE,
+                                    fg=C_TEXT, font=(F, 10, "bold"),
+                                    wraplength=320, justify="left")
         self._fname_lbl.pack(anchor="w")
 
-        # 중복 감지 카드
+        # ── 저장 완료 블링크 라벨 ─────────────────────────────────
+        self._save_done_lbl = tk.Label(
+            panel, text="", bg=C_SIDE, fg=C_PRI,
+            font=(F, 13, "bold"), pady=4)
+        self._save_done_lbl.pack(fill="x", padx=12)
+
+        # ── 출력 폴더 위젯 ────────────────────────────────────────
+        off = tk.LabelFrame(panel, text="저장 폴더", font=(F, 11, "bold"),
+                             bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
+                             relief="flat",
+                             highlightbackground=C_BORDER, highlightthickness=1)
+        off.pack(fill="x", padx=12, pady=(4, 6))
+
+        self._outdir_lbl = tk.Label(
+            off, text=str(self._output_dir),
+            bg=C_SIDE, fg=C_TEXT, font=(F, 9),
+            wraplength=290, justify="left", anchor="w")
+        self._outdir_lbl.pack(fill="x")
+
+        obr = tk.Frame(off, bg=C_SIDE)
+        obr.pack(fill="x", pady=(4, 0))
+        tk.Button(obr, text="폴더 변경",
+                  command=self._pick_output_dir,
+                  bg=C_BORDER, fg=C_TEXT, font=(F, 10),
+                  relief="flat", padx=6, cursor="hand2").pack(side="left")
+        tk.Button(obr, text="폴더 열기 →",
+                  command=self._open_output_dir,
+                  bg=C_PRI, fg="white", font=(F, 10, "bold"),
+                  relief="flat", padx=6, cursor="hand2").pack(side="left", padx=4)
+        tk.Button(obr, text="최근 파일 열기",
+                  command=self._open_last_output,
+                  bg=C_HOVER, fg=C_PRI, font=(F, 10),
+                  relief="flat", padx=6, cursor="hand2").pack(side="right")
+
+        # ── 중복/재지원 카드 (숨김 상태) ─────────────────────────
         self._dup_card  = tk.Frame(panel, bg="#FFF8E1",
                                     highlightbackground=C_WARN, highlightthickness=1)
         self._dup_title = tk.Label(self._dup_card, text="⚠ 중복 제출 감지",
@@ -592,7 +617,6 @@ class BridgeConverterApp:
                                      bg=C_WARN, fg="white", font=(F, 11),
                                      relief="flat", padx=6, cursor="hand2")
 
-        # 재지원 카드
         self._reapp_card  = tk.Frame(panel, bg="#FEF2F2",
                                       highlightbackground=C_DANGER, highlightthickness=1)
         self._reapp_title = tk.Label(self._reapp_card, text="재지원 감지",
@@ -738,6 +762,13 @@ class BridgeConverterApp:
         if candidate_num_detected and not self._candidate_id.get().strip():
             self._candidate_id.set(candidate_num_detected)
         self._update_fname_preview()
+        # 로드된 PDF가 있으면 첫 페이지 미리보기 (백그라운드)
+        for ftype in ["resume", "cover", "rec"]:
+            p = self._files.get(ftype)
+            if p and p.suffix.lower() == ".pdf":
+                threading.Thread(target=lambda pp=p: self._render_pdf_page_preview(pp),
+                                 daemon=True).start()
+                break
 
     def _delete_selected_file(self, event=None):
         sel = self._file_tv.selection()
@@ -1278,24 +1309,24 @@ class BridgeConverterApp:
         self._next_btn.config(state="normal")
         self._prev_btn.config(state="normal")
 
+        last_step = len(STEPS) - 1  # 마지막 단계 인덱스 (PDF 생성)
         if err:
             self._start_blink_error(f"{STEPS[step]} 오류")
             self._set_file_status(None, "✖ 오류")
             messagebox.showerror("처리 오류", f"{STEPS[step]} 실패:\n{err}")
         else:
             self._set_file_status(None, "✓ 완료")
-            if step == 4:
-                self._status_var.set("✓ 저장 완료")
+            if step == last_step:
+                # PDF 생성 완료 = 전체 완료
+                self._status_var.set("✓ PDF 생성 완료")
                 self._status_lbl.config(fg=C_PRI)
-                self._run_save()
-            elif self._mode.get() == "자동" and self._current_step < len(STEPS) - 1:
-                # 자동 모드: 0.8초 후 다음 단계 자동 실행
+                self._run_save()   # 진행바 꽉 + 블링크
+            elif self._mode.get() == "자동" and self._current_step < last_step:
                 self._status_var.set(f"✓ {STEPS[step]} 완료 — 자동 진행 중...")
                 self._status_lbl.config(fg=C_PRI)
                 self.root.after(800, self._next_step)
             else:
-                # 반자동: 다음 단계 안내
-                next_hint = f" — 다음 단계 ▶ 클릭" if self._current_step < len(STEPS) - 1 else ""
+                next_hint = f" — 다음 단계 ▶ 클릭" if self._current_step < last_step else ""
                 self._status_var.set(f"✓ {STEPS[step]} 완료{next_hint}")
                 self._status_lbl.config(fg=C_PRI)
 
@@ -1390,19 +1421,151 @@ class BridgeConverterApp:
             candidate_id=cid,
             photo_bytes=self._photo_bytes,
             cover_text=self._pii_result.cleaned_text if self._pii_result else None,
-            out_dir=OUTPUT_DIR)
+            out_dir=self._output_dir)
+        self._last_output_path = out
         self.root.after(0, lambda o=out, s=size: (
             self._meta_info_labels["size"].config(text=f"{s // 1024}KB"),
             self._fname_lbl.config(text=o.name),
         ))
+        # 생성된 PDF 첫 페이지 미리보기
+        self._render_pdf_page_preview(out)
 
     def _run_save(self):
-        messagebox.showinfo("저장 완료", "PDF 변환이 완료되었습니다.")
+        """저장 완료 상태: 진행바 꽉 채우기 + 블링크."""
+        # 진행바 꽉 채우기
+        self._progress.config(maximum=len(STEPS))
+        self._progress["value"] = len(STEPS)
+        # 블링크 시작
+        self._save_done_blink_state = True
+        self._do_save_done_blink()
+
+    def _do_save_done_blink(self):
+        """저장 완료 라벨 초록 블링크."""
+        if hasattr(self, "_save_done_blink_state") and self._save_done_blink_state:
+            cur = self._save_done_lbl.cget("text")
+            if "✓" in cur:
+                self._save_done_lbl.config(text="", bg=C_SIDE)
+            else:
+                self._save_done_lbl.config(
+                    text="  ✓  저장 완료!", bg="#E8F5E9", fg=C_PRI)
+            self._done_blink_after = self.root.after(600, self._do_save_done_blink)
+
+    def _stop_save_done_blink(self):
+        self._save_done_blink_state = False
+        if self._done_blink_after:
+            self.root.after_cancel(self._done_blink_after)
+            self._done_blink_after = None
+        self._save_done_lbl.config(text="  ✓  저장 완료!", bg="#E8F5E9", fg=C_PRI)
 
     def _finish(self):
-        messagebox.showinfo("완료", "모든 단계가 완료되었습니다.")
+        self._run_save()
         self._current_step = 0
         self._update_step_ui()
+
+    # ══════════════════════════════════════════════════════════════════
+    # PDF 페이지 미리보기 렌더링 (PyMuPDF)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _render_pdf_page_preview(self, pdf_path: Path):
+        """[Thread 안전] PyMuPDF로 PDF 첫 페이지 → 우측 패널 표시."""
+        try:
+            import fitz  # PyMuPDF
+            doc = fitz.open(str(pdf_path))
+            if len(doc) == 0:
+                doc.close()
+                return
+            page = doc[0]
+            # A4 비율 (210:297 ≈ 0.707) 로 렌더
+            self._preview_lbl.update_idletasks()
+            pw = self._preview_lbl.winfo_width()
+            ph = self._preview_lbl.winfo_height()
+            if pw < 80: pw = 300
+            if ph < 80: ph = 420
+            # 패널 크기에 맞게 스케일 결정
+            scale_x = pw / page.rect.width
+            scale_y = ph / page.rect.height
+            scale = min(scale_x, scale_y) * 0.95
+            mat = fitz.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img_data = pix.tobytes("png")
+            doc.close()
+            self.root.after(0, lambda d=img_data: self._show_doc_preview(d))
+        except Exception as e:
+            log.warning(f"PDF 미리보기 실패: {e}")
+
+    def _show_doc_preview(self, data: bytes):
+        """A4 비율 문서 미리보기 표시."""
+        try:
+            img    = Image.open(io.BytesIO(data))
+            tk_img = ImageTk.PhotoImage(img)
+            self._preview_lbl.configure(image=tk_img, text="")
+            self._preview_lbl.image = tk_img
+        except Exception as e:
+            log.warning(f"미리보기 표시 실패: {e}")
+
+    # ══════════════════════════════════════════════════════════════════
+    # 출력 폴더 관리
+    # ══════════════════════════════════════════════════════════════════
+
+    def _load_output_config(self) -> Path:
+        """config.json에서 output_dir 읽기. 없으면 기본 output/ 폴더."""
+        try:
+            if CONFIG_PATH.exists():
+                import json
+                cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+                d = cfg.get("output_dir")
+                if d:
+                    p = Path(d)
+                    if p.exists() or True:  # 없어도 일단 사용
+                        return p
+        except Exception:
+            pass
+        return OUTPUT_DIR
+
+    def _save_output_config(self):
+        """output_dir을 config.json에 저장."""
+        try:
+            import json
+            cfg = {}
+            if CONFIG_PATH.exists():
+                try:
+                    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            cfg["output_dir"] = str(self._output_dir)
+            CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
+                                   encoding="utf-8")
+        except Exception as e:
+            log.warning(f"config 저장 실패: {e}")
+
+    def _pick_output_dir(self):
+        """폴더 선택 다이얼로그."""
+        d = filedialog.askdirectory(
+            title="저장 폴더 선택",
+            initialdir=str(self._output_dir))
+        if d:
+            self._output_dir = Path(d)
+            self._output_dir.mkdir(parents=True, exist_ok=True)
+            self._outdir_lbl.config(text=str(self._output_dir))
+            self._save_output_config()
+
+    def _open_output_dir(self):
+        """저장 폴더를 탐색기에서 열기."""
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(self._output_dir))
+
+    def _open_last_output(self):
+        """최근 생성된 파일 열기."""
+        if self._last_output_path and self._last_output_path.exists():
+            os.startfile(str(self._last_output_path))
+        else:
+            # 폴더의 가장 최근 PDF 열기
+            pdfs = sorted(self._output_dir.glob("*.pdf"),
+                          key=lambda p: p.stat().st_mtime, reverse=True)
+            if pdfs:
+                os.startfile(str(pdfs[0]))
+            else:
+                messagebox.showinfo("파일 없음", "저장된 파일이 없습니다.")
 
     # ══════════════════════════════════════════════════════════════════
     # UI 업데이트 헬퍼
@@ -1420,6 +1583,10 @@ class BridgeConverterApp:
                 dot.config(text="○", fg=C_BORDER)
                 lbl.config(fg=C_TEXT, font=(F, 11))
         self._progress["value"] = self._current_step
+        # 처음으로 돌아가면 블링크 중지 + 초기화
+        if self._current_step == 0:
+            self._stop_save_done_blink()
+            self._save_done_lbl.config(text="", bg=C_SIDE)
 
     def _update_fname_preview(self, info: dict | None = None):
         cid = self._candidate_id.get().strip() or "?"
