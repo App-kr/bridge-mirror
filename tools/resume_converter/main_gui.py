@@ -104,7 +104,8 @@ class BridgeConverterApp:
         # ── 상태 ─────────────────────────────────────────────────────
         self._mode          = tk.StringVar(value="반자동")
         self._candidate_id  = tk.StringVar()
-        self._files: dict[str, Path] = {}
+        self._files: dict[str, Path] = {}            # pipeline용 (ftype → 마지막 파일)
+        self._files_multi: dict[str, list] = {}      # 표시용 (ftype → [Path, ...])
         self._pii_result    = None
         self._current_step  = 0
         self._paused        = False
@@ -132,8 +133,8 @@ class BridgeConverterApp:
         # 사진 크롭 결과 (bytes) — 단계 간 전달
         self._photo_bytes: Optional[bytes] = None
 
-        # 파일목록 5개 고정 슬롯 (ftype → Treeview iid)
-        self._file_slot_ids: dict[str, str] = {}
+        # 파일목록 그룹 헤더 (ftype → Treeview group iid)
+        self._group_iids: dict[str, str] = {}
 
         self._build_ui()
         self._configure_styles()
@@ -434,49 +435,57 @@ class BridgeConverterApp:
                              highlightbackground=C_BORDER, highlightthickness=1)
         flf.pack(fill="both", expand=True)
 
-        # ── 5개 고정 슬롯 (한 사람 = 사진+이력서+커버레터+추천서+기타) ──
-        f_cols = ("구분", "파일명", "크기", "상태")
+        # ── 그룹형 파일 목록 (5그룹, 각 그룹 여러 파일 가능) ──
+        f_cols = ("파일명", "크기", "상태")
         self._file_tv = ttk.Treeview(flf, columns=f_cols,
-                                      show="headings",
+                                      show="tree headings",
                                       selectmode="browse",
-                                      height=5)
-        self._file_tv.heading("구분",   text="구분")
+                                      height=9)
+        self._file_tv.heading("#0",    text="구분")
         self._file_tv.heading("파일명", text="파일명")
         self._file_tv.heading("크기",   text="크기")
         self._file_tv.heading("상태",   text="상태")
-        self._file_tv.column("구분",   width=80,  minwidth=72,  anchor="center")
-        self._file_tv.column("파일명", width=260, minwidth=140)
+        self._file_tv.column("#0",    width=110, minwidth=90,  stretch=False)
+        self._file_tv.column("파일명", width=240, minwidth=120)
         self._file_tv.column("크기",   width=68,  minwidth=56,  anchor="center")
-        self._file_tv.column("상태",   width=80,  minwidth=64,  anchor="center")
-        # 슬롯별 배경색
-        self._file_tv.tag_configure("photo",  background="#FFF8E1")
-        self._file_tv.tag_configure("resume", background="#E8F5E9")
-        self._file_tv.tag_configure("cover",  background="#E3F2FD")
-        self._file_tv.tag_configure("rec",    background="#FCE4EC")
-        self._file_tv.tag_configure("unknown",background="#F5F5F5")
-        # 상태별 글자색
-        self._file_tv.tag_configure("st_done",    foreground="#1D9E75")
-        self._file_tv.tag_configure("st_err",     foreground="#E24B4A")
-        self._file_tv.tag_configure("st_working", foreground="#EF9F27")
+        self._file_tv.column("상태",   width=86,  minwidth=64,  anchor="center")
+        # 그룹 헤더 배경색
+        self._file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 11, "bold"))
+        self._file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 11, "bold"))
+        self._file_tv.tag_configure("grp_cover",   background="#CCE5FF", font=(F, 11, "bold"))
+        self._file_tv.tag_configure("grp_rec",     background="#F8D7DA", font=(F, 11, "bold"))
+        self._file_tv.tag_configure("grp_unknown", background="#E2E3E5", font=(F, 11, "bold"))
+        # 파일 행 배경색
+        self._file_tv.tag_configure("photo",   background="#FFFDE7")
+        self._file_tv.tag_configure("resume",  background="#F1F8F1")
+        self._file_tv.tag_configure("cover",   background="#EDF5FF")
+        self._file_tv.tag_configure("rec",     background="#FFF0F3")
+        self._file_tv.tag_configure("unknown", background="#FAFAFA")
         self._file_tv.bind("<Delete>", self._delete_selected_file)
 
-        self._file_tv.pack(fill="both", expand=True)
+        sb = ttk.Scrollbar(flf, orient="vertical", command=self._file_tv.yview)
+        self._file_tv.configure(yscrollcommand=sb.set)
+        self._file_tv.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
 
-        # 5개 슬롯 미리 생성
-        _slots = [
+        # 5개 그룹 헤더 생성 (항상 펼침)
+        _groups = [
             ("photo",   "📷 사진"),
             ("resume",  "📄 이력서"),
             ("cover",   "📝 커버레터"),
             ("rec",     "📋 추천서"),
             ("unknown", "📎 기타"),
         ]
-        for ftype, label in _slots:
+        for ftype, label in _groups:
             iid = self._file_tv.insert("", "end",
-                                        values=(label, "(없음)", "—", "—"),
-                                        tags=(ftype,))
-            self._file_slot_ids[ftype] = iid
+                                        text=label,
+                                        values=("", "", ""),
+                                        tags=(f"grp_{ftype}",),
+                                        open=True)
+            self._group_iids[ftype] = iid
+            self._files_multi[ftype] = []
 
-        tk.Button(flf, text="선택 슬롯 초기화 (Del)",
+        tk.Button(flf, text="선택 파일 제거 (Del)",
                   command=self._delete_selected_file,
                   bg=C_BG, fg=C_SUB, font=(F, 11),
                   relief="flat", cursor="hand2").pack(anchor="e", pady=(2, 0))
@@ -526,13 +535,12 @@ class BridgeConverterApp:
                              bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
                              relief="flat",
                              highlightbackground=C_BORDER, highlightthickness=1)
-        prf.pack(fill="x", padx=12, pady=14)
+        prf.pack(fill="both", expand=True, padx=12, pady=(14, 6))
 
         self._preview_lbl = tk.Label(prf, bg="#E0E0E0",
-                                      width=34, height=20,
                                       text="미리보기\n없음",
                                       fg=C_SUB, font=(F, 11))
-        self._preview_lbl.pack()
+        self._preview_lbl.pack(fill="both", expand=True)
 
         mf = tk.LabelFrame(panel, text="파일 정보", font=(F, 11, "bold"),
                             bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
@@ -613,16 +621,17 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _set_file_status(self, ftype: str | None, status: str):
-        """Treeview 슬롯 상태 컬럼 업데이트. ftype=None 이면 전체."""
-        targets = [ftype] if ftype else list(self._file_slot_ids.keys())
-        for ft in targets:
-            iid = self._file_slot_ids.get(ft)
-            if not iid:
+        """그룹 내 모든 파일 행의 상태 컬럼 업데이트. ftype=None 이면 전체."""
+        groups = [ftype] if ftype else list(self._group_iids.keys())
+        for ft in groups:
+            gid = self._group_iids.get(ft)
+            if not gid:
                 continue
-            vals = list(self._file_tv.item(iid, "values"))
-            if len(vals) >= 4 and vals[1] != "(없음)":
-                vals[3] = status
-                self._file_tv.item(iid, values=tuple(vals))
+            for child in self._file_tv.get_children(gid):
+                vals = list(self._file_tv.item(child, "values"))
+                if len(vals) >= 3:
+                    vals[2] = status
+                    self._file_tv.item(child, values=tuple(vals))
 
     # ══════════════════════════════════════════════════════════════════
     # 모드 토글
@@ -665,53 +674,81 @@ class BridgeConverterApp:
 
     def _add_files(self, paths: list):
         from .file_classifier import detect_file_type
-        _labels = {
-            "photo":   "📷 사진",
-            "resume":  "📄 이력서",
-            "cover":   "📝 커버레터",
-            "rec":     "📋 추천서",
-            "unknown": "📎 기타",
-        }
         for p in paths:
             if not p.exists():
                 continue
-            ftype   = detect_file_type(p)
+            ftype = detect_file_type(p)
+            # 파이프라인용 (마지막 파일로 덮어씀)
             self._files[ftype] = p
-            size_b  = p.stat().st_size
-            if size_b < 1024:
-                size_str = f"{size_b}B"
-            elif size_b < 1024 * 1024:
-                size_str = f"{size_b // 1024}KB"
+            # 다중 파일 목록
+            if ftype not in self._files_multi:
+                self._files_multi[ftype] = []
+            # 중복 방지 (같은 이름 파일 재추가 시 갱신)
+            existing = [i for i, q in enumerate(self._files_multi[ftype])
+                        if q.name == p.name]
+            if existing:
+                self._files_multi[ftype][existing[0]] = p
             else:
-                size_str = f"{size_b // (1024*1024):.1f}MB"
-            label = _labels.get(ftype, "📎 기타")
-            iid   = self._file_slot_ids.get(ftype)
-            if iid:
-                self._file_tv.item(iid,
-                                   values=(label, p.name, size_str, "대기"),
-                                   tags=(ftype,))
+                self._files_multi[ftype].append(p)
+
+            size_b   = p.stat().st_size
+            size_str = (f"{size_b}B"            if size_b < 1024 else
+                        f"{size_b // 1024}KB"   if size_b < 1024*1024 else
+                        f"{size_b // (1024*1024):.1f}MB")
+
+            # 그룹 헤더 아래 자식 행 추가 또는 갱신
+            gid = self._group_iids.get(ftype, self._group_iids.get("unknown"))
+            if gid is None:
+                continue
+            # 이미 같은 이름의 자식 행이 있으면 갱신, 없으면 추가
+            updated = False
+            for child in self._file_tv.get_children(gid):
+                cv = self._file_tv.item(child, "values")
+                if cv and cv[0] == p.name:
+                    self._file_tv.item(child,
+                                       values=(p.name, size_str, "대기"),
+                                       tags=(ftype,))
+                    updated = True
+                    break
+            if not updated:
+                self._file_tv.insert(gid, "end",
+                                     text="",
+                                     values=(p.name, size_str, "대기"),
+                                     tags=(ftype,))
+            # 그룹 펼치기
+            self._file_tv.item(gid, open=True)
         self._update_fname_preview()
 
     def _delete_selected_file(self, event=None):
         sel = self._file_tv.selection()
         if not sel:
             return
-        iid  = sel[0]
-        # ftype 역조회
+        iid = sel[0]
+        # 그룹 헤더는 삭제 불가
+        if iid in self._group_iids.values():
+            return
+        # 부모 그룹에서 ftype 역조회
+        parent_iid = self._file_tv.parent(iid)
         ftype = None
-        for ft, sid in self._file_slot_ids.items():
-            if sid == iid:
+        for ft, gid in self._group_iids.items():
+            if gid == parent_iid:
                 ftype = ft
                 break
-        if ftype and ftype in self._files:
-            del self._files[ftype]
-        # 슬롯 초기화 (행 삭제 대신)
-        _labels = {
-            "photo": "📷 사진", "resume": "📄 이력서",
-            "cover": "📝 커버레터", "rec": "📋 추천서", "unknown": "📎 기타",
-        }
-        label = _labels.get(ftype, "—")
-        self._file_tv.item(iid, values=(label, "(없음)", "—", "—"), tags=(ftype,))
+        # 파일 이름 조회
+        vals = self._file_tv.item(iid, "values")
+        fname = vals[0] if vals else ""
+        # _files_multi 에서 제거
+        if ftype and ftype in self._files_multi:
+            self._files_multi[ftype] = [
+                q for q in self._files_multi[ftype] if q.name != fname
+            ]
+            # 파이프라인 dict 갱신 (마지막 남은 파일로 대체)
+            if self._files_multi[ftype]:
+                self._files[ftype] = self._files_multi[ftype][-1]
+            elif ftype in self._files:
+                del self._files[ftype]
+        # Treeview 행 삭제
+        self._file_tv.delete(iid)
 
     # ══════════════════════════════════════════════════════════════════
     # 대기열
@@ -740,14 +777,15 @@ class BridgeConverterApp:
         self._queue.append(item)
         self._refresh_queue_tv()
 
-        # 입력 초기화 (슬롯은 삭제 아닌 초기화)
+        # 입력 초기화
         self._candidate_id.set("")
         self._files.clear()
         self._photo_bytes = None
-        _labels = {"photo": "📷 사진", "resume": "📄 이력서",
-                   "cover": "📝 커버레터", "rec": "📋 추천서", "unknown": "📎 기타"}
-        for ft, iid in self._file_slot_ids.items():
-            self._file_tv.item(iid, values=(_labels[ft], "(없음)", "—", "—"), tags=(ft,))
+        # 그룹 내 모든 자식 행 삭제
+        for ft, gid in self._group_iids.items():
+            for child in self._file_tv.get_children(gid):
+                self._file_tv.delete(child)
+            self._files_multi[ft] = []
         self._meta_label.config(text="")
         messagebox.showinfo("추가 완료",
                              f"강사 {cid}번이 {len(self._queue)}번 슬롯에 추가됐습니다.")
@@ -1147,15 +1185,9 @@ class BridgeConverterApp:
         self._next_btn.config(state="disabled")
         self._prev_btn.config(state="disabled")
 
-        step_ftypes = {
-            1: ["photo"],
-            2: ["resume", "cover", "rec"],
-            3: ["resume", "cover", "rec"],
-            4: [],
-        }
-        ftypes = step_ftypes.get(step, [])
-        for ft in ftypes:
-            self._set_file_status(ft, "처리중...")
+        # 로드된 모든 파일을 "처리중..." 으로 표시 (어떤 단계든 진행 중임을 보여줌)
+        ftypes = list(self._files.keys())
+        self._set_file_status(None, "처리중...")
 
         self._start_blink(STEP_ACTIONS[step])
         cid = self._candidate_id.get().strip() or "0000"
@@ -1184,16 +1216,17 @@ class BridgeConverterApp:
 
         if err:
             self._start_blink_error(f"{STEPS[step]} 오류")
-            for ft in ftypes:
-                self._set_file_status(ft, "✖ 오류")
+            self._set_file_status(None, "✖ 오류")
             messagebox.showerror("처리 오류", f"{STEPS[step]} 실패:\n{err}")
         else:
             self._status_var.set(f"✓ {STEPS[step]} 완료")
             self._status_lbl.config(fg=C_PRI)
-            for ft in ftypes:
-                self._set_file_status(ft, "✓ 완료")
+            self._set_file_status(None, "✓ 완료")
             if step == 4:
                 self._run_save()
+            elif self._mode.get() == "자동" and self._current_step < len(STEPS) - 1:
+                # 자동 모드: 0.8초 후 다음 단계 자동 실행
+                self.root.after(800, self._next_step)
 
     def _exec_face_crop(self):
         """[Thread] 사진 크롭 — self._photo_bytes 에 결과 저장."""
@@ -1213,7 +1246,20 @@ class BridgeConverterApp:
         self.root.after(0, lambda d=data: self._show_photo_preview(d))
 
     def _show_photo_preview(self, data: bytes):
-        img    = Image.open(io.BytesIO(data)).resize((150, 200), Image.LANCZOS)
+        """우측 패널 크기에 맞춰 미리보기 이미지 동적 스케일."""
+        self._preview_lbl.update_idletasks()
+        w = self._preview_lbl.winfo_width()
+        h = self._preview_lbl.winfo_height()
+        # 최소 보장 크기
+        if w < 80:
+            w = 280
+        if h < 80:
+            h = 380
+        # 3:4 비율 유지 (세로가 더 큰 경우 우선)
+        target_w = min(w - 8, int((h - 8) * 3 / 4))
+        target_h = int(target_w * 4 / 3)
+        img    = Image.open(io.BytesIO(data)).resize(
+                     (max(target_w, 60), max(target_h, 80)), Image.LANCZOS)
         tk_img = ImageTk.PhotoImage(img)
         self._preview_lbl.configure(image=tk_img, text="")
         self._preview_lbl.image = tk_img
