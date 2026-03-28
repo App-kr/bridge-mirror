@@ -131,6 +131,8 @@ class BridgeConverterApp:
 
         # 사진 크롭 결과 (bytes) — 단계 간 전달
         self._photo_bytes: Optional[bytes] = None
+        # 사진이 이력서 본문 내장인지 여부 (True = 커버에 사진 추가 안 함)
+        self._photo_from_resume: bool = False
 
         # 파일목록 그룹 헤더 (ftype → Treeview group iid)
         self._group_iids: dict[str, str] = {}
@@ -1359,14 +1361,22 @@ class BridgeConverterApp:
         """[Thread] 사진 크롭 — self._photo_bytes 에 결과 저장."""
         from .face_crop import crop_face, FaceNotFoundError
         photo = self._files.get("photo")
+        self._photo_from_resume = False  # 매번 초기화
+
         if not photo:
+            # 별도 사진 없음 → 이력서 본문 내장 사진 탐색
             resume = self._files.get("resume")
             if resume and resume.suffix.lower() == ".pdf":
                 from .pipeline import _extract_photo_from_pdf
                 data = _extract_photo_from_pdf(resume)
                 if data:
                     self._photo_bytes = data
+                    self._photo_from_resume = True  # 본문 내장 사진
                     self.root.after(0, lambda d=data: self._show_photo_preview(d))
+                    self.root.after(0, lambda: (
+                        self._status_var.set("ℹ 이력서 내장 사진 감지 — 커버에 사진 생략, ID만 표시"),
+                        self._status_lbl.config(fg=C_WARN),
+                    ))
             return
         try:
             data = crop_face(photo)
@@ -1378,6 +1388,7 @@ class BridgeConverterApp:
                 self._status_lbl.config(fg=C_WARN),
             ))
         self._photo_bytes = data
+        self._photo_from_resume = False
         self.root.after(0, lambda d=data: self._show_photo_preview(d))
 
     def _show_photo_preview(self, data: bytes):
@@ -1482,15 +1493,24 @@ class BridgeConverterApp:
             pii_texts = [m.original_value for m in self._pii_result.pii_found
                          if m.original_value and len(m.original_value.strip()) >= 3]
 
-        # ── 4. 커버 페이지 (ID + 사진) ──────────────────────────────
+        # ── 4. 커버 페이지 결정 ──────────────────────────────────────
         page_w, page_h = A4
-        cover_buf = io.BytesIO()
-        _build_cover_page(cover_buf, cid, self._photo_bytes, page_w, page_h)
+        merged = fitz.open()
 
-        merged     = fitz.open()
-        cover_doc  = fitz.open("pdf", cover_buf.getvalue())
-        merged.insert_pdf(cover_doc)
-        cover_doc.close()
+        if self._photo_from_resume:
+            # 이력서 본문에 이미 사진 있음 → ID만 좌상단·우상단에 크게 표시
+            cover_buf = io.BytesIO()
+            _build_id_only_cover_page(cover_buf, cid, page_w, page_h)
+            cover_doc = fitz.open("pdf", cover_buf.getvalue())
+            merged.insert_pdf(cover_doc)
+            cover_doc.close()
+        else:
+            # 별도 사진 있음 → 기존 커버(사진 + ID)
+            cover_buf = io.BytesIO()
+            _build_cover_page(cover_buf, cid, self._photo_bytes, page_w, page_h)
+            cover_doc = fitz.open("pdf", cover_buf.getvalue())
+            merged.insert_pdf(cover_doc)
+            cover_doc.close()
 
         # ── 5. 원본 파일 보존 + 인라인 PII 제거 ─────────────────────
         for ftype in ["cover", "resume", "rec"]:
@@ -1499,14 +1519,15 @@ class BridgeConverterApp:
                 continue
 
             if p.suffix.lower() == ".pdf":
-                # PDF: 원본 페이지 그대로 복사 + PII 텍스트 검은 박스 처리
+                # PDF: 원본 페이지 그대로 복사 + PII 텍스트 흰색 제거 (마스킹 아님)
                 src_doc = fitz.open(str(p))
                 if pii_texts:
                     for page in src_doc:
                         for text in pii_texts:
                             areas = page.search_for(text, quads=False)
                             for rect in areas:
-                                page.add_redact_annot(rect, fill=(0, 0, 0))
+                                # fill=(1,1,1) = 흰색 = 텍스트 완전 삭제 (검은박스 아님)
+                                page.add_redact_annot(rect, fill=(1, 1, 1))
                         page.apply_redactions()
                 merged.insert_pdf(src_doc)
                 src_doc.close()
@@ -1796,6 +1817,98 @@ class BridgeConverterApp:
 
 
 # ── 진입점 ─────────────────────────────────────────────────────────────────
+def _build_id_only_cover_page(
+    buf: "io.BytesIO",
+    candidate_id: str,
+    page_w: float,
+    page_h: float,
+) -> None:
+    """
+    사진이 이력서 본문에 이미 있을 때 사용하는 커버 페이지.
+
+    레이아웃:
+      - 상단 가로선 아래 강사 ID를 좌상단 + 우상단 양쪽에 크게 표시
+      - 중앙 BRIDGE 로고 텍스트 + 안내 문구
+      - 하단 회색 가로선 + 처리일자
+
+    Args:
+        buf:          출력 BytesIO
+        candidate_id: 강사 번호 (예: "3060")
+        page_w, page_h: reportlab A4 기준 (pt)
+    """
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import datetime
+
+    c = rl_canvas.Canvas(buf, pagesize=(page_w, page_h))
+
+    # ── 배경 ──────────────────────────────────────────────────────────
+    c.setFillColor(colors.HexColor("#FFFFFF"))
+    c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
+
+    # ── 상단 진한 헤더 바 ─────────────────────────────────────────────
+    bar_h = 60
+    c.setFillColor(colors.HexColor("#1D1D2E"))
+    c.rect(0, page_h - bar_h, page_w, bar_h, fill=1, stroke=0)
+
+    # BRIDGE 로고 (헤더 바 안, 가운데)
+    c.setFillColor(colors.HexColor("#1D9E75"))
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(page_w / 2, page_h - bar_h + 20, "BRIDGE")
+
+    # ── 강사 ID — 좌상단 ──────────────────────────────────────────────
+    # 헤더 바 바로 아래부터 시작
+    top_y = page_h - bar_h - 70
+
+    # 좌상단 ID 박스
+    c.setFillColor(colors.HexColor("#F0FBF6"))
+    c.roundRect(18*mm, top_y, 60*mm, 42, radius=6, fill=1, stroke=0)
+    c.setFillColor(colors.HexColor("#1D9E75"))
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(20*mm, top_y + 28, "CANDIDATE ID")
+    c.setFillColor(colors.HexColor("#1D1D2E"))
+    c.setFont("Helvetica-Bold", 26)
+    c.drawString(20*mm, top_y + 8, str(candidate_id))
+
+    # 우상단 ID 박스 (미러)
+    rx = page_w - 18*mm - 60*mm
+    c.setFillColor(colors.HexColor("#F0FBF6"))
+    c.roundRect(rx, top_y, 60*mm, 42, radius=6, fill=1, stroke=0)
+    c.setFillColor(colors.HexColor("#1D9E75"))
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(rx + 4, top_y + 28, "CANDIDATE ID")
+    c.setFillColor(colors.HexColor("#1D1D2E"))
+    c.setFont("Helvetica-Bold", 26)
+    c.drawString(rx + 4, top_y + 8, str(candidate_id))
+
+    # ── 중앙 안내 텍스트 ──────────────────────────────────────────────
+    mid_y = page_h / 2
+    c.setFillColor(colors.HexColor("#5F6368"))
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(page_w / 2, mid_y + 20,
+                        "This document has been processed by BRIDGE.")
+    c.setFont("Helvetica", 10)
+    c.drawCentredString(page_w / 2, mid_y,
+                        "Personal Identifiable Information (PII) has been removed.")
+    c.setFont("Helvetica", 10)
+    c.drawCentredString(page_w / 2, mid_y - 20,
+                        "Photo is retained in the original resume pages below.")
+
+    # ── 하단 처리일자 ─────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#E8EAED"))
+    c.line(18*mm, 50, page_w - 18*mm, 50)
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    c.setFillColor(colors.HexColor("#5F6368"))
+    c.setFont("Helvetica", 9)
+    c.drawString(18*mm, 34, f"Processed: {today}")
+    c.drawRightString(page_w - 18*mm, 34, "BRIDGE ESL Recruitment")
+
+    c.save()
+
+
 def main():
     app = BridgeConverterApp()
     app.run()
