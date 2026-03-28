@@ -102,7 +102,7 @@ class BridgeConverterApp:
         self.root.configure(bg=C_BG)
 
         # ── 상태 ─────────────────────────────────────────────────────
-        self._mode          = tk.StringVar(value="반자동")
+        self._mode          = tk.StringVar(value="자동")
         self._candidate_id  = tk.StringVar()
         self._files: dict[str, Path] = {}            # pipeline용 (ftype → 마지막 파일)
         self._files_multi: dict[str, list] = {}      # 표시용 (ftype → [Path, ...])
@@ -135,6 +135,10 @@ class BridgeConverterApp:
 
         # 파일목록 그룹 헤더 (ftype → Treeview group iid)
         self._group_iids: dict[str, str] = {}
+
+        # 인박스 감시 상태
+        self._watcher_active = False
+        self._watcher_observer = None
 
         self._build_ui()
         self._configure_styles()
@@ -173,6 +177,14 @@ class BridgeConverterApp:
                   bg=C_SIDE, fg=C_PRI, font=(F, 11),
                   relief="flat", padx=8, cursor="hand2"
                   ).pack(side="left", padx=4)
+
+        # 인박스 감시 버튼
+        self._watcher_btn = tk.Button(
+            bar, text="● 인박스 감시",
+            command=self._toggle_inbox_watcher,
+            bg=C_BORDER, fg=C_TEXT, font=(F, 11),
+            relief="flat", padx=8, cursor="hand2")
+        self._watcher_btn.pack(side="left", padx=4)
 
         # 시트 상태 (우측)
         self._sheet_label = tk.Label(
@@ -673,11 +685,16 @@ class BridgeConverterApp:
             self._add_files([Path(p) for p in self.root.tk.splitlist(event.data)])
 
     def _add_files(self, paths: list):
-        from .file_classifier import detect_file_type
+        from .file_classifier import detect_file_type, extract_number
+        candidate_num_detected = None
         for p in paths:
             if not p.exists():
                 continue
             ftype = detect_file_type(p)
+            # 파일명에서 강사번호 자동 추출
+            num = extract_number(p.name)
+            if num and not candidate_num_detected:
+                candidate_num_detected = num
             # 파이프라인용 (마지막 파일로 덮어씀)
             self._files[ftype] = p
             # 다중 파일 목록
@@ -717,6 +734,9 @@ class BridgeConverterApp:
                                      tags=(ftype,))
             # 그룹 펼치기
             self._file_tv.item(gid, open=True)
+        # 강사번호 자동 채우기 (비어 있을 때만)
+        if candidate_num_detected and not self._candidate_id.get().strip():
+            self._candidate_id.set(candidate_num_detected)
         self._update_fname_preview()
 
     def _delete_selected_file(self, event=None):
@@ -834,8 +854,11 @@ class BridgeConverterApp:
         self.root.after(0, lambda: self._status_var.set("모든 항목 처리 완료"))
 
     def _process_item(self, item: QueueItem):
+        """대기열 항목 처리 — 동기 실행 (worker thread 내부)."""
         self._files = item.files
         self.root.after(0, lambda: self._candidate_id.set(item.candidate_id))
+        cid = item.candidate_id
+
         for step_idx in range(len(STEPS)):
             while self._paused and not self._stopped:
                 time.sleep(0.3)
@@ -844,16 +867,26 @@ class BridgeConverterApp:
             self._current_step = step_idx
             self.root.after(0, self._update_step_ui)
             self._start_blink(STEP_ACTIONS[step_idx])
+            self.root.after(0, lambda: self._set_file_status(None, "처리중..."))
+
+            # 각 단계 직접 실행 (thread 내부에서 동기 호출)
             if step_idx == 1:
-                self.root.after(0, self._run_face_crop)
+                self._exec_face_crop()
             elif step_idx == 2:
-                self.root.after(0, self._run_pii)
+                self._exec_pii()
             elif step_idx == 3:
-                self.root.after(0, self._run_build_pdf)
-            elif step_idx == 4:
-                self.root.after(0, self._run_save)
-            time.sleep(0.8)
+                self._exec_build_pdf(cid)
+            # step 0 (파일 확인), step 4 (저장): 별도 로직 없음
+
+            self.root.after(0, lambda si=step_idx: self._set_file_status(None, "✓ 완료"))
+            time.sleep(0.4)
+
         self._stop_blink()
+        self.root.after(0, lambda: (
+            self._status_var.set("✓ 전체 처리 완료"),
+            self._status_lbl.config(fg=C_PRI),
+        ))
+        self.root.after(200, self._run_save)
 
     def _refresh_queue_tv(self):
         for row in self._queue_tv.get_children():
@@ -1098,6 +1131,37 @@ class BridgeConverterApp:
             self.root.after(0, lambda: self._sheet_label.config(text=text, fg=color))
         threading.Thread(target=_check, daemon=True).start()
 
+    def _toggle_inbox_watcher(self):
+        """인박스 폴더 감시 시작/중지 토글."""
+        if not self._watcher_active:
+            try:
+                from .file_classifier import start_watcher
+                self._watcher_observer = start_watcher(
+                    on_duplicate_fn=lambda num, old, new: self.root.after(
+                        0, lambda: self.show_duplicate_alert(num, old, new)),
+                    on_reapply_fn=lambda num, old: self.root.after(
+                        0, lambda: self.show_reapply_alert(num, old)),
+                )
+                self._watcher_active = True
+                self._watcher_btn.config(
+                    text="● 감시중 ON", bg=C_PRI, fg="white")
+                self._status_var.set(f"✓ 인박스 감시 시작 — {INBOX_DIR}")
+                self._status_lbl.config(fg=C_PRI)
+            except Exception as e:
+                messagebox.showerror("감시 오류", f"인박스 감시 시작 실패:\n{e}")
+        else:
+            try:
+                from .file_classifier import stop_watcher
+                stop_watcher()
+            except Exception:
+                pass
+            self._watcher_active = False
+            self._watcher_observer = None
+            self._watcher_btn.config(
+                text="● 인박스 감시", bg=C_BORDER, fg=C_TEXT)
+            self._status_var.set("인박스 감시 중지됨")
+            self._status_lbl.config(fg=C_SUB)
+
     # ══════════════════════════════════════════════════════════════════
     # 시트 / 미처리 목록
     # ══════════════════════════════════════════════════════════════════
@@ -1219,14 +1283,21 @@ class BridgeConverterApp:
             self._set_file_status(None, "✖ 오류")
             messagebox.showerror("처리 오류", f"{STEPS[step]} 실패:\n{err}")
         else:
-            self._status_var.set(f"✓ {STEPS[step]} 완료")
-            self._status_lbl.config(fg=C_PRI)
             self._set_file_status(None, "✓ 완료")
             if step == 4:
+                self._status_var.set("✓ 저장 완료")
+                self._status_lbl.config(fg=C_PRI)
                 self._run_save()
             elif self._mode.get() == "자동" and self._current_step < len(STEPS) - 1:
                 # 자동 모드: 0.8초 후 다음 단계 자동 실행
+                self._status_var.set(f"✓ {STEPS[step]} 완료 — 자동 진행 중...")
+                self._status_lbl.config(fg=C_PRI)
                 self.root.after(800, self._next_step)
+            else:
+                # 반자동: 다음 단계 안내
+                next_hint = f" — 다음 단계 ▶ 클릭" if self._current_step < len(STEPS) - 1 else ""
+                self._status_var.set(f"✓ {STEPS[step]} 완료{next_hint}")
+                self._status_lbl.config(fg=C_PRI)
 
     def _exec_face_crop(self):
         """[Thread] 사진 크롭 — self._photo_bytes 에 결과 저장."""
@@ -1241,7 +1312,15 @@ class BridgeConverterApp:
                     self._photo_bytes = data
                     self.root.after(0, lambda d=data: self._show_photo_preview(d))
             return
-        data = crop_face(photo)
+        try:
+            data = crop_face(photo)
+        except FaceNotFoundError:
+            # 얼굴 미감지 → 원본 사진 그대로 사용 (파이프라인 계속)
+            data = photo.read_bytes()
+            self.root.after(0, lambda: (
+                self._status_var.set("⚠ 얼굴 미감지 — 원본 사진 사용"),
+                self._status_lbl.config(fg=C_WARN),
+            ))
         self._photo_bytes = data
         self.root.after(0, lambda d=data: self._show_photo_preview(d))
 
