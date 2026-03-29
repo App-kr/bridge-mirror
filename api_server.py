@@ -4380,19 +4380,82 @@ except Exception as _e:
 
 
 def _ensure_community_schema():
-    """community_posts 테이블에 content_type, sort_order, category 컬럼 추가."""
+    """community_posts 테이블 생성 + 컬럼 추가 + 자동 시드."""
+    import json as _json
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
+    # ── 1. CREATE TABLE (처음 배포 또는 DB 초기화 후 자동 복구)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS community_posts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            board       TEXT    NOT NULL DEFAULT 'support',
+            title       TEXT    NOT NULL,
+            body        TEXT    NOT NULL,
+            author_hash TEXT,
+            image_paths TEXT    DEFAULT '[]',
+            pinned      INTEGER DEFAULT 0,
+            views       INTEGER DEFAULT 0,
+            created_at  TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+            updated_at  TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+            is_deleted  INTEGER DEFAULT 0,
+            category    TEXT    DEFAULT NULL,
+            content_type TEXT   DEFAULT 'markdown',
+            sort_order  INTEGER DEFAULT 0
+        )
+    """)
+    # ── 2. ALTER TABLE (기존 DB에 컬럼 없을 경우)
     for col_sql in (
         "ALTER TABLE community_posts ADD COLUMN content_type TEXT DEFAULT 'markdown'",
         "ALTER TABLE community_posts ADD COLUMN sort_order INTEGER DEFAULT 0",
         "ALTER TABLE community_posts ADD COLUMN category TEXT DEFAULT NULL",
+        "ALTER TABLE community_posts ADD COLUMN image_paths TEXT DEFAULT '[]'",
+        "ALTER TABLE community_posts ADD COLUMN updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
     ):
         try:
             conn.execute(col_sql)
         except Exception:
             pass
+    # boards 테이블 먼저 생성 (boards 시드보다 앞서야 함)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS boards (
+            id TEXT PRIMARY KEY, label TEXT NOT NULL, label_kr TEXT,
+            display_mode TEXT DEFAULT 'list', sort_order INTEGER DEFAULT 0,
+            is_hidden INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
+    # ── 3. 자동 시드 (posts가 0개일 때 seed 파일에서 복원)
+    count = conn.execute("SELECT COUNT(*) FROM community_posts WHERE is_deleted=0").fetchone()[0]
+    if count == 0:
+        seed_path = Path(__file__).parent / "migrations" / "community_seed.json"
+        if seed_path.exists():
+            try:
+                data = _json.loads(seed_path.read_text(encoding="utf-8"))
+                # boards 시드 (없으면)
+                for b in data.get("boards", []):
+                    conn.execute("""
+                        INSERT OR IGNORE INTO boards (id, label, label_kr, display_mode, sort_order, is_hidden)
+                        VALUES (?,?,?,?,?,?)
+                    """, (b["id"], b["label"], b.get("label_kr"), b.get("display_mode","list"),
+                          b.get("sort_order",0), b.get("is_hidden",0)))
+                # posts 시드
+                for p in data.get("posts", []):
+                    conn.execute("""
+                        INSERT INTO community_posts
+                            (board, title, body, author_hash, image_paths, pinned, content_type, sort_order, category)
+                        SELECT ?,?,?,?,?,?,?,?,?
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM community_posts WHERE title=? AND board=? AND is_deleted=0
+                        )
+                    """, (p["board"], p["title"], p["body"], p.get("author_hash","bridge_admin"),
+                          p.get("image_paths","[]"), p.get("pinned",0), p.get("content_type","markdown"),
+                          p.get("sort_order",0), p.get("category"),
+                          p["title"], p["board"]))
+                conn.commit()
+                logging.getLogger("bridge.api").info(
+                    "_ensure_community_schema: 시드 %d posts 복원 완료", len(data.get("posts",[])))
+            except Exception as _se:
+                logging.getLogger("bridge.api").warning("community seed 스킵: %s", _se)
     conn.close()
 
 
@@ -6629,7 +6692,8 @@ async def admin_soft_delete_job_v2(brj_id: str, request: Request):
 # ── Admin: Boards 관리 ─────────────────────────────────────────────────────────
 
 def _ensure_boards_table():
-    """boards 테이블 생성 (없으면)."""
+    """boards 테이블 생성 + 기본 보드 시드 (없으면)."""
+    import json as _json
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("""
@@ -6644,6 +6708,24 @@ def _ensure_boards_table():
         )
     """)
     conn.commit()
+    # 빈 테이블이면 seed 파일에서 복원
+    count = conn.execute("SELECT COUNT(*) FROM boards").fetchone()[0]
+    if count == 0:
+        seed_path = Path(__file__).parent / "migrations" / "community_seed.json"
+        if seed_path.exists():
+            try:
+                data = _json.loads(seed_path.read_text(encoding="utf-8"))
+                for b in data.get("boards", []):
+                    conn.execute("""
+                        INSERT OR IGNORE INTO boards (id, label, label_kr, display_mode, sort_order, is_hidden)
+                        VALUES (?,?,?,?,?,?)
+                    """, (b["id"], b["label"], b.get("label_kr"), b.get("display_mode","list"),
+                          b.get("sort_order",0), b.get("is_hidden",0)))
+                conn.commit()
+                logging.getLogger("bridge.api").info(
+                    "_ensure_boards_table: %d boards 복원", len(data.get("boards",[])))
+            except Exception as _se:
+                logging.getLogger("bridge.api").warning("boards seed 스킵: %s", _se)
     conn.close()
 
 try:
@@ -7460,6 +7542,56 @@ async def admin_analytics(request: Request, days: int = Query(30, ge=1, le=365))
 # ══════════════════════════════════════════════════════════════════════════════
 # TESTIMONIALS API
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _ensure_testimonials_schema():
+    """testimonials 테이블 자동 생성 + 시드 (Render DB 초기화 복구)."""
+    import json as _json
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS testimonials (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT    NOT NULL,
+            country     TEXT    NOT NULL DEFAULT '',
+            photo_url   TEXT    DEFAULT NULL,
+            rating      INTEGER DEFAULT 5,
+            review_text TEXT    NOT NULL,
+            sort_order  INTEGER DEFAULT 0,
+            is_visible  INTEGER DEFAULT 1,
+            is_deleted  INTEGER DEFAULT 0,
+            created_at  TEXT    DEFAULT '',
+            updated_at  TEXT    DEFAULT ''
+        )
+    """)
+    conn.commit()
+    # 자동 시드 (빈 테이블일 때)
+    count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0").fetchone()[0]
+    if count == 0:
+        seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
+        if seed_path.exists():
+            try:
+                items = _json.loads(seed_path.read_text(encoding="utf-8"))
+                for t in items:
+                    conn.execute("""
+                        INSERT INTO testimonials (name, country, photo_url, rating, review_text, sort_order, is_visible, is_deleted, created_at, updated_at)
+                        SELECT ?,?,?,?,?,?,1,0,?,?
+                        WHERE NOT EXISTS (SELECT 1 FROM testimonials WHERE name=? AND review_text=? AND is_deleted=0)
+                    """, (t["name"], t.get("country",""), t.get("photo_url"), t.get("rating",5),
+                          t["review_text"], t.get("sort_order",0), t.get("created_at",""), t.get("updated_at",""),
+                          t["name"], t["review_text"]))
+                conn.commit()
+                logging.getLogger("bridge.api").info(
+                    "_ensure_testimonials_schema: 시드 %d rows 복원", len(items))
+            except Exception as _se:
+                logging.getLogger("bridge.api").warning("testimonials seed 스킵: %s", _se)
+    conn.close()
+
+
+try:
+    _ensure_testimonials_schema()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_testimonials_schema 스킵: %s", _e)
+
 
 @app.get("/api/testimonials", tags=["testimonials"])
 async def testimonials_list(
