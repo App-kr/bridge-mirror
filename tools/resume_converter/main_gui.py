@@ -2104,86 +2104,110 @@ _RE_CONTENT_SECTION = re.compile(
 
 
 def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
-    """PDF 페이지에서 PII 섹션 전체를 흰색 사각형으로 완전 삭제.
+    """PDF 페이지에서 PII 섹션 전체를 완전 삭제.
 
     A) contact / references / personal details 섹션 헤더 탐지
-       → 다음 콘텐츠 섹션 직전까지 전체 흰색 rect 삭제
-    B) 첫 페이지 상단 이름+연락처 헤더
-       → 첫 콘텐츠 섹션 직전까지 전체 삭제 (최대 페이지 50%)
+       → 다음 콘텐츠 섹션 직전까지 삭제
+       → 사이드바 레이아웃 자동 감지 (x < 40%): 사이드바 열만 삭제,
+         메인 열 콘텐츠(Experience 등) 보호
+    B) 첫 페이지 최상단 이름+연락처 헤더
+       → 첫 콘텐츠 섹션 직전까지 전체 너비 삭제 (최대 50%)
     """
     import fitz
 
     raw_blocks = page.get_text("blocks")
+    if not raw_blocks:
+        return
     blocks = sorted(raw_blocks, key=lambda b: b[1])  # y0 오름차순
     page_h = page.rect.height
     page_w = page.rect.width
 
-    # ── 블록 분류: pii_hdr | content_hdr | body ───────────────────────────
-    classified: list[tuple[float, float, str]] = []   # (y0, y1, cls)
+    # 사이드바 임계값: 블록 x1 < 40% = 사이드바 열
+    SIDEBAR_X = page_w * 0.40
+
+    # ── 블록 분류: (x0, y0, x1, y1, cls, in_sidebar) ─────────────────────
+    classified: list[tuple[float, float, float, float, str, bool]] = []
     for b in blocks:
         x0, y0, x1, y1, text, *_ = b
         if not text.strip():
             continue
         first_line = text.strip().split('\n')[0].strip()
+        in_sidebar = (x1 < SIDEBAR_X)
         if _RE_PII_SECTION.match(first_line):
-            classified.append((y0, y1, 'pii'))
+            classified.append((x0, y0, x1, y1, 'pii', in_sidebar))
         elif _RE_CONTENT_SECTION.match(first_line):
-            classified.append((y0, y1, 'content'))
+            classified.append((x0, y0, x1, y1, 'content', in_sidebar))
         else:
-            classified.append((y0, y1, 'body'))
+            classified.append((x0, y0, x1, y1, 'body', in_sidebar))
 
-    regions: list[tuple[float, float]] = []  # (y_top, y_bot) for redaction
+    regions: list[tuple[float, float, float, float]] = []  # (rx0, ry0, rx1, ry1)
 
-    # ── A: PII 섹션 → 다음 콘텐츠 섹션까지 ──────────────────────────────
+    # ── A: PII 섹션 → 같은 열의 다음 콘텐츠 섹션까지 ────────────────────
     n = len(classified)
-    for i, (y0, y1, cls) in enumerate(classified):
+    for i, (x0, y0, x1, y1, cls, in_sidebar) in enumerate(classified):
         if cls != 'pii':
             continue
-        r_top = max(0.0, y0 - 8)    # 섹션 헤더 위 여백 포함
-        r_bot = min(page_h, y1 + page_h * 0.5)   # 기본 절반 페이지
-        for j in range(i + 1, n):
-            nxt_y0, nxt_y1, nxt_cls = classified[j]
-            if nxt_cls == 'content':
-                r_bot = nxt_y0 - 4   # 콘텐츠 섹션 직전까지
-                break
-            elif nxt_cls == 'pii':
-                r_bot = nxt_y1       # 연속 PII 섹션 → 끝까지
-        regions.append((r_top, r_bot))
+
+        r_top = max(0.0, y0 - 8)
+        r_bot = min(page_h, y1 + page_h * 0.6)  # 기본 fallback
+
+        if in_sidebar:
+            # 사이드바 PII: 사이드바 열(x=0~SIDEBAR_X)만 삭제
+            rx0, rx1 = 0.0, SIDEBAR_X
+            for j in range(i + 1, n):
+                ny0, ny1, ncls, nside = classified[j][1], classified[j][3], classified[j][4], classified[j][5]
+                if nside and ncls == 'content':
+                    r_bot = ny0 - 4
+                    break
+                elif nside and ncls == 'pii':
+                    r_bot = ny1  # 연속 PII 섹션 → 아래로 확장
+        else:
+            # 메인 열 PII (Reference 등): 전체 너비 삭제
+            rx0, rx1 = 0.0, page_w
+            for j in range(i + 1, n):
+                ny0, ny1, ncls, nside = classified[j][1], classified[j][3], classified[j][4], classified[j][5]
+                if (not nside) and ncls == 'content':
+                    r_bot = ny0 - 4
+                    break
+                elif (not nside) and ncls == 'pii':
+                    r_bot = ny1
+
+        regions.append((rx0, r_top, rx1, r_bot))
 
     # ── B: 첫 페이지 최상단 이름+연락처 헤더 ────────────────────────────
     if is_first_page:
         first_content_y: float | None = None
-        for y0, y1, cls in classified:
+        for x0, y0, x1, y1, cls, in_sidebar in classified:
             if cls == 'content':
                 first_content_y = y0
                 break
         if first_content_y is not None:
             cap = min(first_content_y - 4, page_h * 0.50)
             if cap > 10:
-                regions.append((0.0, cap))
+                regions.append((0.0, 0.0, page_w, cap))
 
-    # ── 적용 (fill=None = 투명, 스트림 완전 삭제) ────────────────────
-    for r_top, r_bot in regions:
+    # ── 적용 (fill=None = 스트림 완전 삭제) ─────────────────────────────
+    for rx0, r_top, rx1, r_bot in regions:
         if r_bot > r_top:
-            rect = fitz.Rect(0, r_top, page_w, r_bot)
+            rect = fitz.Rect(rx0, r_top, rx1, r_bot)
             page.add_redact_annot(rect, fill=None)
     if regions:
         page.apply_redactions()
 
 
 def _overlay_id_on_resume_page(page, candidate_id: str) -> None:
-    """이력서 첫 페이지 좌상단에 강사 번호만 삽입.
+    """이력서 첫 페이지 상단에 강사 번호만 삽입.
 
     _redact_pii_sections_pdf(is_first_page=True)가 이미 상단 이름 헤더를
-    스트림에서 완전 삭제한 뒤, 그 자리에 candidate_id 숫자만 크게 삽입.
+    스트림에서 완전 삭제한 뒤, 그 자리에 candidate_id 숫자만 삽입.
 
-    배치: (18pt, 32pt) — 좌상단 여백 내
+    배치: (20pt, 72pt) — 상단 여백 안, 자연스러운 위치 (약 25mm)
     글자: 28pt Helvetica-Bold, 검정
     """
     import fitz
     try:
         page.insert_text(
-            (18, 32),
+            (20, 72),
             candidate_id,
             fontsize=28,
             fontname="helv",
