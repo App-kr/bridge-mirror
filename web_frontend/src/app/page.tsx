@@ -717,7 +717,12 @@ export default function HomePage() {
             {/* Edge fade */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
-            <div className="marquee-track marquee-track--slow">
+            <motion.div
+              className="flex"
+              style={{ width: 'max-content' }}
+              animate={{ x: ['0%', '-50%'] }}
+              transition={{ x: { duration: 55, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
+            >
               {[...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
@@ -727,7 +732,7 @@ export default function HomePage() {
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
                 </span>
               ))}
-            </div>
+            </motion.div>
           </div>
         </div>
 
@@ -740,7 +745,12 @@ export default function HomePage() {
             {/* Edge fade */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
-            <div className="marquee-track marquee-track--mid">
+            <motion.div
+              className="flex"
+              style={{ width: 'max-content' }}
+              animate={{ x: ['0%', '-50%'] }}
+              transition={{ x: { duration: 28, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
+            >
               {[...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
@@ -750,7 +760,7 @@ export default function HomePage() {
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
                 </span>
               ))}
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
