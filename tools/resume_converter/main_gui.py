@@ -69,8 +69,15 @@ STEP_ACTIONS = [
     "이력서 PDF 합치는 중",
 ]
 
-QUEUE_MAX = 5
+QUEUE_MAX = 15  # 확장: 5 → 15 (여러 작업 동시 처리)
 HOMEPAGE  = "https://www.bridgejob.co.kr"
+
+# ── 파일 포맷 규칙 ─────────────────────────────────────────────────────────
+# 형식: {ID}_{국가}_{성별}({생년}).pdf
+# 예: 5325미국_여성(96born).pdf
+FILE_FORMAT_PATTERN = re.compile(
+    r"^(\d+)_([가-힣\w]+)_(남성|여성|기타)\((\d{2}born)\)\.pdf$", re.IGNORECASE
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("main_gui")
@@ -471,7 +478,7 @@ class BridgeConverterApp:
         self._file_tv = ttk.Treeview(flf, columns=f_cols,
                                       show="tree headings",
                                       selectmode="browse",
-                                      height=9)
+                                      height=20)  # 확장: 9 → 20 (여러 파일 표시)
         self._file_tv.heading("#0",    text="구분")
         self._file_tv.heading("파일명", text="파일명")
         self._file_tv.heading("크기",   text="크기")
@@ -498,6 +505,13 @@ class BridgeConverterApp:
         self._file_tv.configure(yscrollcommand=sb.set)
         self._file_tv.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
+
+        # ── 파일 목록 전체에 드래그드롭 등록 ──────────────────────────────────
+        if _DND_AVAILABLE:
+            self._file_tv.drop_target_register(DND_FILES)
+            self._file_tv.dnd_bind("<<Drop>>", self._on_drop)
+            flf.drop_target_register(DND_FILES)
+            flf.dnd_bind("<<Drop>>", self._on_drop)
 
         # 5개 그룹 헤더 생성 (항상 펼침)
         _groups = [
@@ -557,9 +571,9 @@ class BridgeConverterApp:
 
         return panel
 
-    # ── 우측 패널 ──────────────────────────────────────────────────────
+    # ── 우측 패널 (축소: 360→280px) ──────────────────────────────────────────
     def _build_right(self, parent) -> tk.Frame:
-        panel = tk.Frame(parent, bg=C_SIDE, width=360)
+        panel = tk.Frame(parent, bg=C_SIDE, width=280)  # 확장: 미리보기 축소
         panel.pack_propagate(False)
 
         # ── PDF 미리보기 (꽉 채움) ─────────────────────────────────
