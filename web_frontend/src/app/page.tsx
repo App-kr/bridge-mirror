@@ -716,12 +716,12 @@ export default function HomePage() {
           <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.2em] text-center mb-4">
             Schools &amp; Institutions
           </p>
-          <div className="relative overflow-hidden" aria-hidden="true">
+          <div className="relative overflow-hidden h-8" aria-hidden="true">
             {/* Edge fade */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
             <motion.div
-              className="flex"
+              className="flex items-center"
               style={{ width: 'max-content' }}
               animate={{ x: ['0%', '-50%'] }}
               transition={{ x: { duration: 45, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
@@ -744,12 +744,12 @@ export default function HomePage() {
           <p className="text-[11px] font-semibold text-white/60 uppercase tracking-[0.2em] text-center mb-4">
             Our Partner
           </p>
-          <div className="relative overflow-hidden" aria-hidden="true">
+          <div className="relative overflow-hidden h-8" aria-hidden="true">
             {/* Edge fade */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10" style={{ background: 'linear-gradient(to right, #111111, transparent)' }} />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10" style={{ background: 'linear-gradient(to left, #111111, transparent)' }} />
             <motion.div
-              className="flex"
+              className="flex items-center"
               style={{ width: 'max-content' }}
               animate={{ x: ['0%', '-50%'] }}
               transition={{ x: { duration: 24, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
