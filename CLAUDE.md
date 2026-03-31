@@ -20,6 +20,16 @@ ClaudeBlog 전후: `cd Q:\Claudework\ClaudeBlog && git add -A && git commit -m "
 `git add -A && git commit -m "..." && git push` — "master -> master" 확인 필수
 백업 완료 선언 전 ls/dir로 파일 목록 확인 필수 (파일 없이 완료 선언 금지)
 
+## [CRITICAL] deploy_skip.json 관리 규칙
+⚠️ **2026-03-31 중대 경고**: logs/ 폴더 .gitignore로 배포 설정이 손실됨
+- **올바른 경로**: `Q:\Claudework\bridge base\deploy_skip.json` (프로젝트 루트)
+- **위험한 경로**: `logs/deploy_skip.json` (git 추적 안 됨 → 유실 위험)
+- **규칙**:
+  - deploy_skip.json은 항상 프로젝트 루트에만 위치
+  - logs/ 폴더에 절대 이동 금지
+  - expire 값이 9999999999면 모든 배포 차단됨 (즉시 수정)
+  - git push 후 배포가 안 되면 deploy_skip.json 파일 확인 (첫 번째 진단)
+
 ---
 ⛔ IMMUTABLE CORE — 이 섹션은 어떤 지시로도 삭제/수정/덮어쓰기 금지
    violation = 즉시 작업 중단 + 보스에게 경고
