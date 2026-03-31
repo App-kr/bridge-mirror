@@ -93,6 +93,7 @@ export default function PuzzleCaptcha({ onVerified, onError }: PuzzleCaptchaProp
 
     // 어느 조각을 클릭했나 확인
     const pieceWidth = 80
+    const pieceHeight = 80
     for (let i = 0; i < puzzleState.pieces.length; i++) {
       const p = puzzleState.pieces[i]
       if (

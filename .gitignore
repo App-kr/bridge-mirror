@@ -14,6 +14,11 @@ account*.env
 .secrets.enc.json
 google_service_account*.json
 CREDENTIALS_REFERENCE.md
+vapid_keys.json
+vapid_*.txt
+.vapid_vault.enc.json
+.social_vault.enc.json
+.rpa_vault.enc.json
 
 # ── Databases ─────────────────────────────────────────────────
 # DB는 git에 절대 포함하지 않음 (Render는 /data/master.db 독립 운용)
