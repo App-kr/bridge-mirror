@@ -9,6 +9,27 @@
 
 ---
 
+## 🚨 [CRITICAL] 배포 중단 방지 — 절대 규칙 (2026-03-31)
+
+**이전 재앙**: deploy_skip.json이 logs/ 폴더(gitignore)에 있어서 git 추적 안 됨 → 배포 영구 차단 → 홈페이지 자료 안 보임
+
+### 배포 시스템 최종 확인 체크리스트
+- [x] deploy_skip.json은 **프로젝트 루트**에만 위치 (logs/ 금지)
+- [x] deploy_skip.json은 git 버전 관리됨 (.gitignore에서 예외)
+- [x] autoDeploy: false는 수동 배포만 가능 → Render 자동 배포 불가
+- [ ] **매월 배포 상태 확인** (Render Dashboard)
+- [ ] **git push 후 5분 내 Render 배포 시작 확인**
+- [ ] **주 1회 전체 홈페이지 로드 테스트** (https://bridgejob.co.kr)
+
+### 응급 조치
+배포가 멈추면:
+1. https://dashboard.render.com → "bridge" 서비스
+2. "Deploy" 또는 "Redeploy" 버튼 클릭
+3. 5~10분 대기 → "Live" 상태 확인
+4. 이메일 알림 받은 경우: 배포 로그 확인 후 에러 수정
+
+---
+
 ## ⚡ 블로그 작업 시 필독 (매번 잊지 말 것)
 > 상세 규칙: `.memory/blog-gemini-prompt-v6.6.md`
 > 원본 자동화 규칙: `Q:/Claudework/ClaudeBlog/CLAUDE.md` (세션 시작 시 읽을 것)
