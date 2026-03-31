@@ -495,34 +495,32 @@ def _is_korea(text: str) -> bool:
 def _replace_workplace_generic(value: str) -> str:
     """
     근무처 명을 일반명으로 대체.
-    - 기호 제거
-    - "academy", "institute", "school", "university" 등 키워드 추출
-    - 없으면 "Academy" 또는 "English Institute" 기본값 사용
+    - 영어 관련: "English"
+    - 학원/아카데미: "Academy"
+    - 대학: "University"
     """
     cleaned = value.strip()
     if not cleaned:
-        return "Academy"
+        return "English"
 
-    # 기호 제거 (숫자/문자/공백만 남김)
+    # 기호 제거
     cleaned = re.sub(r"[!@#$%&*\-_~'\".,;():\[\]{}/?\\]+", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
     lower = cleaned.lower()
 
     # 키워드 매칭 (우선순위 순)
-    if any(kw in lower for kw in ["english", "esl", "language", "english institute", "english academy"]):
-        return "English Institute"
-    if any(kw in lower for kw in ["academy", "hagwon", "cram"]):
+    if any(kw in lower for kw in ["english", "esl", "language", "polyglot", "poly", "ybm", "ecc"]):
+        return "English"
+    if any(kw in lower for kw in ["academy", "hagwon", "cram", "institute", "school"]):
         return "Academy"
-    if any(kw in lower for kw in ["institute"]):
-        return "Institute"
-    if any(kw in lower for kw in ["university", "college", "school"]):
+    if any(kw in lower for kw in ["university", "college"]):
         return "University"
     if any(kw in lower for kw in ["company", "corporation", "co", "ltd", "inc"]):
         return "Company"
 
     # 기본값
-    return "Academy"
+    return "English"
 
 
 def _name_variants(full_name: str) -> list[str]:
@@ -648,8 +646,31 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
 
-    # ── Pass 2.5: SKIP (Pass 3/4에서 처리) ──
-    # Pass 3/4에서 이름, 위치, 근무처를 모두 처리하므로 여기서는 처리 안 함
+    # ── Pass 2.5: 한국 도시명 처리 ──
+    # "Daegu, South Korea" → "South Korea"
+    # "Seoul" → ""
+    for city in KR_KEYWORDS:
+        if len(city) > 2 and city.lower() not in ("korea", "south korea", "rok"):
+            # 단어 경계로 정확하게 매칭
+            pat = re.compile(r"\b" + re.escape(city) + r"\b", re.IGNORECASE)
+            if pat.search(result):
+                log.append(f"KR_CITY→REMOVE: {city}")
+                # 도시명 제거, 앞뒤 쉼표/공백 정리
+                result = pat.sub("", result)
+                result = re.sub(r",\s*,", ",", result)
+                result = re.sub(r"^\s*,\s*", "", result, flags=re.MULTILINE)
+                result = re.sub(r"\s*,\s*$", "", result, flags=re.MULTILINE)
+
+    # ── Pass 2.6: 한국 업체명 처리 ──
+    # "YBM ECC" → "English"
+    # "POLY" → "English"
+    # "Academy" → "Academy"
+    for workplace in KR_WORKPLACE_KEYWORDS:
+        pat = re.compile(r"\b" + re.escape(workplace) + r"\b", re.IGNORECASE)
+        if pat.search(result):
+            generic = _replace_workplace_generic(workplace)
+            log.append(f"KR_WORKPLACE→{generic}: {workplace}")
+            result = pat.sub(generic, result)
 
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
@@ -663,19 +684,22 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
 
                 # 성이 2글자 이상인 경우 삭제
                 if len(last_name) >= 2:
-                    # 전체 이름을 찾아 성만 제거
+                    # 방법 1: 전체 이름을 찾아 성만 제거
                     # "Jodie Dumas" → "Jodie"
-                    full_name_pat = re.compile(re.escape(name), re.IGNORECASE)
-                    if full_name_pat.search(result):
-                        log.append(f"FULLNAME_CLEAN: {name} -> {first_name}")
+                    full_name_pat = re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)
+                    matches = full_name_pat.findall(result)
+                    if matches:
+                        log.append(f"FULLNAME→{first_name}: {name}")
                         result = full_name_pat.sub(first_name, result)
 
-                    # 추가: 성만 단어 경계로 삭제
-                    # 이미 위에서 처리되지 않은 경우
+                    # 방법 2: 성만 단어 경계로 삭제
                     last_name_pat = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
-                    if last_name_pat.search(result):
-                        log.append(f"LASTNAME_CLEANUP: {last_name}")
+                    matches = last_name_pat.findall(result)
+                    if matches:
+                        log.append(f"LASTNAME→DELETE: {last_name}")
                         result = last_name_pat.sub("", result)
+                        # 앞뒤 공백 정리
+                        result = re.sub(r"\s+", " ", result)
 
         # DB에서 가져온 이메일/전화/카카오도 직접 삭제
         for field in ("email", "mobile_phone", "kakaotalk"):

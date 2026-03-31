@@ -1,1 +1,8 @@
-{}
+{
+  "127.0.0.1": {
+    "count": 1,
+    "offenses": 0,
+    "reason": "scraper_ua",
+    "until": ""
+  }
+}
