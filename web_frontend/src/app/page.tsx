@@ -721,12 +721,12 @@ export default function HomePage() {
               className="flex"
               style={{ width: 'max-content' }}
               animate={{ x: ['0%', '-50%'] }}
-              transition={{ x: { duration: 40, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
+              transition={{ x: { duration: 45, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
             >
               {[...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
-                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/85 tracking-[0.04em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/60 tracking-[0.04em]"
                 >
                   {name}
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
@@ -749,12 +749,12 @@ export default function HomePage() {
               className="flex"
               style={{ width: 'max-content' }}
               animate={{ x: ['0%', '-50%'] }}
-              transition={{ x: { duration: 22, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
+              transition={{ x: { duration: 24, ease: 'linear', repeat: Infinity, repeatType: 'loop' } }}
             >
               {[...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
-                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/85 tracking-[0.04em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/60 tracking-[0.04em]"
                 >
                   {name}
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
