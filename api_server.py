@@ -1,7 +1,9 @@
 """
-BRIDGE API Server  v2.3
+BRIDGE API Server  v2.4 (2026-03-31 hotfix)
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
+
+🔥 Hotfix: Render 강제 재배포 — API 403 에러 해결
 
 엔드포인트:
   GET  /              → 상태 확인
