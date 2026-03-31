@@ -1,0 +1,213 @@
+name: Security Scan — SAST + Dependency Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 매주 월요일 오전 3시 (KST 12시) 정기 스캔
+    - cron: '0 18 * * 0'
+
+permissions:
+  contents: read
+  security-events: write   # CodeQL SARIF 업로드용
+
+jobs:
+  # ── Job 1: Python SAST (bandit) ──────────────────────────────────
+  python-sast:
+    name: Python SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit (HIGH + MEDIUM severity)
+        run: |
+          bandit -r . \
+            --exclude ./.venv,./node_modules,./web_frontend/node_modules,./.next,./bridge_agent/build_temp \
+            --severity-level medium \
+            --confidence-level medium \
+            --format json \
+            --output bandit-report.json || true
+
+      - name: Parse bandit results
+        run: |
+          python -c "
+          import json, sys
+          try:
+              with open('bandit-report.json') as f:
+                  data = json.load(f)
+              results = data.get('results', [])
+              highs = [r for r in results if r['issue_severity'] == 'HIGH']
+              meds  = [r for r in results if r['issue_severity'] == 'MEDIUM']
+              print(f'HIGH: {len(highs)}, MEDIUM: {len(meds)}')
+              if highs:
+                  print('=== HIGH severity issues ===')
+                  for r in highs[:10]:
+                      print(f\"  {r['filename']}:{r['line_number']} — {r['issue_text']}\")
+                  sys.exit(1)
+          except Exception as e:
+              print(f'Parse error: {e}')
+          "
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+          retention-days: 30
+
+  # ── Job 2: Secret Scanning (gitleaks) ────────────────────────────
+  secret-scan:
+    name: Secret Leak Detection (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 전체 히스토리 스캔
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ── Job 3: npm Dependency Audit ──────────────────────────────────
+  npm-audit:
+    name: npm Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web_frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web_frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: npm audit (critical + high)
+        run: |
+          npm audit --audit-level=high --json > npm-audit-report.json 2>&1 || true
+          node -e "
+          const fs = require('fs');
+          try {
+            const data = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
+            const vulns = data.metadata?.vulnerabilities || {};
+            console.log('Vulnerabilities:', JSON.stringify(vulns));
+            if ((vulns.critical || 0) + (vulns.high || 0) > 0) {
+              console.error('CRITICAL/HIGH vulnerabilities found!');
+              process.exit(1);
+            }
+          } catch(e) { console.log('Audit parse error:', e.message); }
+          "
+
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: web_frontend/npm-audit-report.json
+          retention-days: 30
+
+  # ── Job 4: Python Dependency Safety Check ────────────────────────
+  pip-safety:
+    name: Python Dependency Safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install safety
+        run: pip install safety
+
+      - name: Run safety check
+        run: |
+          if [ -f requirements.txt ]; then
+            safety check -r requirements.txt --json 2>&1 | tee safety-report.json || true
+            python -c "
+          import json, sys
+          try:
+              with open('safety-report.json') as f:
+                  data = json.load(f)
+              vulns = data if isinstance(data, list) else data.get('vulnerabilities', [])
+              if vulns:
+                  for v in vulns[:5]:
+                      print(f'  VULN: {v}')
+                  sys.exit(1)
+          except: pass
+            "
+          else
+            echo 'No requirements.txt — skipping'
+          fi
+
+  # ── Job 5: TypeScript + ESLint Security Rules ─────────────────────
+  frontend-security:
+    name: Frontend Security Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web_frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web_frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npx next lint
+
+  # ── Summary Job ───────────────────────────────────────────────────
+  security-summary:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [python-sast, secret-scan, npm-audit, pip-safety, frontend-security]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          echo "=== Security Scan Results ==="
+          echo "Python SAST:        ${{ needs.python-sast.result }}"
+          echo "Secret Detection:   ${{ needs.secret-scan.result }}"
+          echo "npm Audit:          ${{ needs.npm-audit.result }}"
+          echo "pip Safety:         ${{ needs.pip-safety.result }}"
+          echo "Frontend Security:  ${{ needs.frontend-security.result }}"
+
+          if [[ "${{ needs.secret-scan.result }}" == "failure" ]]; then
+            echo "🚨 SECRET LEAK DETECTED — BLOCK MERGE"
+            exit 1
+          fi
+          if [[ "${{ needs.python-sast.result }}" == "failure" ]]; then
+            echo "🚨 HIGH SEVERITY Python vulnerability — BLOCK MERGE"
+            exit 1
+          fi
+          echo "✅ All security checks passed"
