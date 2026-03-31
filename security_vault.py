@@ -30,6 +30,31 @@ from argon2.low_level import hash_secret_raw, Type
 
 logger = logging.getLogger("bridge.vault")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PUBLIC API — PII 필드 암호화/복호화 (api_server.py에서 호출)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def encrypt_field(value, *args, **kwargs):
+    """
+    PII 필드 암호화 (현재: 미구현 — plaintext 반환)
+    나중에 3중 암호화 구현 예정
+    """
+    return value
+
+
+def decrypt_field(value, *args, **kwargs):
+    """
+    PII 필드 복호화 (현재: 미구현 — plaintext 반환)
+    """
+    return value
+
+
+def is_encrypted(value, *args, **kwargs):
+    """
+    암호화 여부 확인 (현재: 항상 False)
+    """
+    return False
+
 # ── Render [ENC:] 환경변수 전역 복호화 계층 (가장 먼저 실행됨) ──────────────
 def unseal_render_environment():
     """

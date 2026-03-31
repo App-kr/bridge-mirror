@@ -8993,11 +8993,11 @@ threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").
 async def process_resume_files(
     request: Request,
     candidate_id: str = None,
-    files_resume: list[UploadFile] = File(default=None),
-    files_cover: list[UploadFile] = File(default=None),
-    files_photo: list[UploadFile] = File(default=None),
-    files_reference: list[UploadFile] = File(default=None),
-    files_other: list[UploadFile] = File(default=None),
+    files_resume: list[UploadFile] = FastFile(default=None),
+    files_cover: list[UploadFile] = FastFile(default=None),
+    files_photo: list[UploadFile] = FastFile(default=None),
+    files_reference: list[UploadFile] = FastFile(default=None),
+    files_other: list[UploadFile] = FastFile(default=None),
 ):
     """
     이력서 파일 일괄 처리 (PII 제거)
