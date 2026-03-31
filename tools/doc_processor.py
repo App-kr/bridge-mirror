@@ -492,6 +492,39 @@ def _is_korea(text: str) -> bool:
     return any(kw in lower for kw in KR_KEYWORDS)
 
 
+def _replace_workplace_generic(value: str) -> str:
+    """
+    근무처 명을 일반명으로 대체.
+    - 기호 제거
+    - "academy", "institute", "school", "university" 등 키워드 추출
+    - 없으면 "Academy" 또는 "English Institute" 기본값 사용
+    """
+    cleaned = value.strip()
+    if not cleaned:
+        return "Academy"
+
+    # 기호 제거 (숫자/문자/공백만 남김)
+    cleaned = re.sub(r"[!@#$%&*\-_~'\".,;():\[\]{}/?\\]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    lower = cleaned.lower()
+
+    # 키워드 매칭 (우선순위 순)
+    if any(kw in lower for kw in ["english", "esl", "language", "english institute", "english academy"]):
+        return "English Institute"
+    if any(kw in lower for kw in ["academy", "hagwon", "cram"]):
+        return "Academy"
+    if any(kw in lower for kw in ["institute"]):
+        return "Institute"
+    if any(kw in lower for kw in ["university", "college", "school"]):
+        return "University"
+    if any(kw in lower for kw in ["company", "corporation", "co", "ltd", "inc"]):
+        return "Company"
+
+    # 기본값
+    return "Academy"
+
+
 def _name_variants(full_name: str) -> list[str]:
     """
     이름의 모든 인식 가능 변형 생성.
@@ -615,95 +648,36 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
 
-    # ── Pass 2.5: 한국 관련 줄 처리 ──
-    lines2 = result.split("\n")
-    kept_lines2 = []
-    for line in lines2:
-        stripped = line.strip()
-        s_lower = stripped.lower()
-        # 한국 키워드가 포함된 줄인지 확인
-        has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
-        has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
-
-        if has_kr:
-            # Case 1: 경력줄 — "YBM ECC, Uijeongbu, South Korea, March 2021"
-            if has_kr_work:
-                date_match = RE_DATE_RANGE.search(stripped)
-                if date_match:
-                    date_str = date_match.group(0).strip()
-                    log.append(f"KR_EXP_REDACT: {stripped[:80]}")
-                    kept_lines2.append(f"South Korea, {date_str}")
-                    continue
-
-            # Case 2: 위치셀 — "Busan, South Korea" 또는 "Masan, S. Korea"
-            # 한국 도시명 제거 → "South Korea"만
-            kr_loc_match = re.match(
-                r"^[\w\s-]*(?:" + "|".join(re.escape(kw) for kw in KR_KEYWORDS if len(kw) > 2) + r").*$",
-                s_lower,
-            )
-            if kr_loc_match and len(stripped) < 50:
-                # 날짜가 같은 줄에 있으면 유지
-                date_match = RE_DATE_RANGE.search(stripped)
-                if date_match:
-                    log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
-                    kept_lines2.append(f"South Korea, {date_match.group(0).strip()}")
-                else:
-                    log.append(f"KR_LOC_CLEAN: {stripped[:60]}")
-                    kept_lines2.append("South Korea")
-                continue
-
-        # Case 3: 한국 학원명만 있는 줄 (korea 키워드 없이) — "POLY", "TOP Edu"
-        if has_kr_work and not has_kr and len(stripped) < 40:
-            # 학원명만 단독으로 있는 짧은 줄 → 삭제
-            log.append(f"KR_ACADEMY_DEL: {stripped[:40]}")
-            continue
-
-        # Case 4: 긴 문장 내 한국 업체명 인라인 삭제 (커버레터 본문)
-        # "I taught at POLY in Busan" → "I taught in South Korea"
-        if has_kr_work and len(stripped) >= 40:
-            modified = stripped
-            for kw in KR_WORKPLACE_KEYWORDS:
-                pat = re.compile(
-                    r"(?:at|for|with|in)\s+" + re.escape(kw) + r"(?:\s+(?:in|at|,))?",
-                    re.I,
-                )
-                if pat.search(modified):
-                    log.append(f"KR_INLINE_DEL: {kw}")
-                    modified = pat.sub("in", modified)
-                # 단독 등장도 제거 (대소문자 무시, 단어 경계)
-                pat2 = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
-                if pat2.search(modified):
-                    modified = pat2.sub("", modified)
-            # 한국 도시명도 인라인 제거
-            for city in KR_KEYWORDS:
-                if len(city) > 2 and city.lower() not in ("korea", "south korea", "rok",
-                        "republic of korea", "한국"):
-                    city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
-                    if city_pat.search(modified):
-                        log.append(f"KR_CITY_DEL: {city}")
-                        modified = city_pat.sub("", modified)
-            # 잔여 정리: 이중 공백, 쉼표 연속, "in in"
-            modified = re.sub(r"\s{2,}", " ", modified)
-            modified = re.sub(r",\s*,", ",", modified)
-            modified = re.sub(r"\bin\s+in\b", "in", modified)
-            modified = re.sub(r",\s*\.", ".", modified)
-            modified = modified.strip()
-            if modified != stripped:
-                kept_lines2.append(modified)
-                continue
-
-        kept_lines2.append(line)
-    result = "\n".join(kept_lines2)
+    # ── Pass 2.5: SKIP (Pass 3/4에서 처리) ──
+    # Pass 3/4에서 이름, 위치, 근무처를 모두 처리하므로 여기서는 처리 안 함
 
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
         name = candidate.get("full_name", "")
         if name:
-            for variant in _name_variants(name):
-                pat = re.compile(re.escape(variant), re.IGNORECASE)
-                if pat.search(result):
-                    log.append(f"NAME: {variant}")
-                    result = pat.sub("", result)
+            # 성(Last name)만 삭제 (이름/First name은 유지)
+            words = name.strip().split()
+            if len(words) >= 2:
+                last_name = words[-1]
+                first_name = words[0]
+
+                # 성이 2글자 이상인 경우 삭제
+                if len(last_name) >= 2:
+                    # 방법 1: 단어 경계로 매칭
+                    pat = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
+                    if pat.search(result):
+                        log.append(f"LASTNAME_DEL: {last_name}")
+                        result = pat.sub("", result)
+
+                    # 방법 2: 라벨 뒤의 전체 이름에서 성만 제거
+                    # "Name: John Smith" → "Name: John"
+                    full_name_pat = re.compile(
+                        r"(name\s*:?\s*)" + re.escape(name),
+                        re.IGNORECASE
+                    )
+                    if full_name_pat.search(result):
+                        log.append(f"NAME_LABEL_CLEAN: {name} -> {first_name}")
+                        result = full_name_pat.sub(rf"\1{first_name}", result)
 
         # DB에서 가져온 이메일/전화/카카오도 직접 삭제
         for field in ("email", "mobile_phone", "kakaotalk"):
@@ -715,21 +689,32 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
                     result = re.sub(escaped, "", result, flags=re.I)
 
     # ── Pass 4: 위치/직장 라벨 값 처리 ──
+    # LOCATION_LABELS: "Current Location: Seoul, South Korea" → "Current Location: South Korea"
     for label in LOCATION_LABELS:
-        pat = re.compile(rf"({re.escape(label)}\s*:?\s*)(.+)", re.I)
+        # 라벨 다음에 : 또는 공백이 올 수 있음
+        pat = re.compile(
+            r"^([ \t]*)" + re.escape(label) + r"([ \t]*:[ \t]*)(.+)$",
+            re.MULTILINE | re.IGNORECASE
+        )
         def _loc_rep(m):
-            prefix, value = m.group(1), m.group(2).strip()
+            indent, colon, value = m.group(1), m.group(2), m.group(3).strip()
             if _is_korea(value):
-                log.append(f"LOC→Korea: {value[:40]}")
-                return f"{prefix}Korea"
+                log.append(f"LOC→SouthKorea: {value[:40]}")
+                return f"{indent}{label}{colon}South Korea"
             return m.group(0)
         result = pat.sub(_loc_rep, result)
 
+    # WORKPLACE_LABELS: "Current Employer: YBM ECC" → "Current Employer: Academy"
     for label in WORKPLACE_LABELS:
-        pat = re.compile(rf"({re.escape(label)}\s*:?\s*)(.+)", re.I)
+        pat = re.compile(
+            r"^([ \t]*)" + re.escape(label) + r"([ \t]*:[ \t]*)(.+)$",
+            re.MULTILINE | re.IGNORECASE
+        )
         def _work_rep(m):
-            log.append(f"WORKPLACE_DEL: {m.group(2).strip()[:40]}")
-            return m.group(1)
+            indent, colon, original_value = m.group(1), m.group(2), m.group(3).strip()
+            generic_value = _replace_workplace_generic(original_value)
+            log.append(f"WORKPLACE→{generic_value}: {original_value[:40]}")
+            return f"{indent}{label}{colon}{generic_value}"
         result = pat.sub(_work_rep, result)
 
     # 빈줄 정리

@@ -79,6 +79,14 @@ function ResumeConverterInner() {
 
   const removeFile = (idx: number) => setFiles(prev => prev.filter((_, i) => i !== idx))
 
+  const clearAll = () => {
+    setFiles([])
+    setCandidateId('')
+    setJobStatus(null)
+    setPiiText('')
+    setIsProcessing(false)
+  }
+
   // ── 처리 시작 ──────────────────────────────────────────────────────
   const startProcessing = async () => {
     if (!candidateId.trim()) { alert('강사 번호를 입력하세요.'); return }
@@ -170,13 +178,21 @@ function ResumeConverterInner() {
               <p className="text-[12px] text-[#5F6368]">PII 제거 + 증명사진 크롭 + PDF 조립</p>
             </div>
           </div>
-          <button
-            onClick={loadUnprocessed}
-            className="flex items-center gap-1.5 text-[12px] text-[#5F6368] hover:text-[#202124] transition-colors"
-          >
-            <RefreshCw size={14} />
-            목록 새로고침
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-1.5 text-[12px] px-3 py-2 text-[#E24B4A] hover:bg-[#fef2f2] rounded-lg transition-colors font-medium"
+            >
+              초기화
+            </button>
+            <button
+              onClick={loadUnprocessed}
+              className="flex items-center gap-1.5 text-[12px] text-[#5F6368] hover:text-[#202124] transition-colors"
+            >
+              <RefreshCw size={14} />
+              목록 새로고침
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
@@ -349,9 +365,9 @@ function ResumeConverterInner() {
 }
 
 export default function ResumeConverterPage() {
-  return (
-    <AdminAuth>
-      <ResumeConverterInner />
-    </AdminAuth>
-  )
+  const { authed, login, waking } = useAdminAuth()
+
+  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
+
+  return <ResumeConverterInner />
 }

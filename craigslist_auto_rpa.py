@@ -929,9 +929,26 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         print(f"  [?s={step}] ", end="", flush=True)
 
         if step == "copyfromanother":
-            # "copy from another posting?" → 그냥 continue (skip)
-            print("이전 게시물 복사 스킵")
-            _advance(driver, step)
+            # "Re-use selected data?" 페이지에서 "skip" 버튼 명시적 클릭
+            # _advance()는 button[type='submit'] = "re-use selected data"를 클릭해
+            # ?s= 파라미터가 바뀌지 않아 stuck 루프 발생 → skip 버튼 직접 타겟
+            print("이전 게시물 복사 스킵 (skip 버튼 직접 클릭)")
+            try:
+                skip_btns = driver.find_elements(
+                    By.XPATH,
+                    "//input[@value='skip' or @value='Skip']"
+                    " | //button[normalize-space()='skip' or normalize-space()='Skip']"
+                )
+                if skip_btns:
+                    _js_click(driver, skip_btns[0])
+                    _delay(1.0, 1.5)
+                    _wait_step_change(driver, step, 10)
+                    _delay(1.0, 2.0)
+                else:
+                    # skip 버튼 못 찾으면 기존 방식 fallback
+                    _advance(driver, step)
+            except Exception:
+                _advance(driver, step)
 
         elif step == "area":
             # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
