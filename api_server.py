@@ -8987,13 +8987,262 @@ def _interview_reminder_loop():
 threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").start()
 
 
-# ── Resume Converter 라우터 등록 ─────────────────────────────────────────────
-try:
-    from resume_api import router as resume_router
-    app.include_router(resume_router)
-    logging.getLogger("bridge.api").info("[STARTUP] resume_api 라우터 등록 완료")
-except Exception as _resume_err:
-    logging.getLogger("bridge.api").warning("[STARTUP] resume_api 라우터 로드 실패 (계속 진행): %s", _resume_err)
+# ── Resume Converter API — 이력서 PII 제거 ──────────────────────────────────────
+
+@app.post("/api/resume/process", tags=["admin"])
+async def process_resume_files(
+    request: Request,
+    candidate_id: str = None,
+    files_resume: list[UploadFile] = File(default=None),
+    files_cover: list[UploadFile] = File(default=None),
+    files_photo: list[UploadFile] = File(default=None),
+    files_reference: list[UploadFile] = File(default=None),
+    files_other: list[UploadFile] = File(default=None),
+):
+    """
+    이력서 파일 일괄 처리 (PII 제거)
+
+    5개 섹션 독립 처리:
+    - files_resume: 이력서 (PDF/DOCX)
+    - files_cover: 커버레터 (PDF/DOCX)
+    - files_photo: 사진 (JPG/PNG/WEBP)
+    - files_reference: 추천서 (PDF/DOCX)
+    - files_other: 기타 파일
+    """
+    # 관리자 인증
+    _check_admin(request)
+
+    # 입력값 검증
+    if not candidate_id or not candidate_id.strip():
+        raise HTTPException(status_code=400, detail="candidate_id는 필수입니다")
+
+    candidate_id = candidate_id.strip()
+
+    # 파일 섹션 수집
+    file_sections = {
+        "resume": files_resume or [],
+        "cover": files_cover or [],
+        "photo": files_photo or [],
+        "reference": files_reference or [],
+        "other": files_other or [],
+    }
+
+    total_files = sum(len(files) for files in file_sections.values())
+    if total_files == 0:
+        raise HTTPException(status_code=400, detail="최소 1개 이상의 파일을 제공해야 합니다")
+
+    # 후보자 정보 로드 (PII 제거 시 참고용)
+    candidate_dict = None
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
+        try:
+            num = int(candidate_id)
+            row = conn.execute(
+                "SELECT full_name, email, mobile_phone FROM candidates WHERE sheet_number = ? LIMIT 1",
+                (num,)
+            ).fetchone()
+            if row:
+                candidate_dict = {
+                    "full_name": _try_decrypt(row[0]) if row[0] else "",
+                    "email": _try_decrypt(row[1]) if row[1] else "",
+                    "mobile_phone": _try_decrypt(row[2]) if row[2] else "",
+                }
+        except (ValueError, sqlite3.Error):
+            pass
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+    # 파일 처리
+    def _process_file(file_bytes: bytes, file_name: str, candidate_dict: dict = None) -> dict:
+        """파일 처리 (PII 제거)"""
+        import io
+        import tempfile
+
+        try:
+            file_ext = Path(file_name).suffix.lower()
+
+            # 이미지 파일 (처리 안 함)
+            if file_ext in ('.jpg', '.jpeg', '.png', '.webp', '.gif'):
+                return {
+                    "file_name": file_name,
+                    "file_type": "image",
+                    "processed": False,
+                    "pii_count": 0,
+                    "size_before": len(file_bytes),
+                    "size_after": len(file_bytes),
+                    "error": None,
+                }
+
+            # DOCX 처리
+            if file_ext in ('.docx', '.doc'):
+                try:
+                    sys.path.insert(0, str(Path(__file__).resolve().parent))
+                    from tools.doc_processor import process_docx
+
+                    with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+                        tmp.write(file_bytes)
+                        tmp_path = Path(tmp.name)
+
+                    try:
+                        doc, log_entries = process_docx(
+                            tmp_path,
+                            brj_number=0,
+                            candidate=candidate_dict,
+                            dry=False
+                        )
+
+                        output = io.BytesIO()
+                        doc.save(output)
+                        processed_bytes = output.getvalue()
+
+                        pii_count = len([l for l in log_entries if any(
+                            kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"]
+                        )])
+
+                        return {
+                            "file_name": file_name,
+                            "file_type": "docx",
+                            "processed": True,
+                            "pii_count": pii_count,
+                            "size_before": len(file_bytes),
+                            "size_after": len(processed_bytes),
+                            "error": None,
+                        }
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
+
+                except Exception as e:
+                    return {
+                        "file_name": file_name,
+                        "file_type": "docx",
+                        "processed": False,
+                        "pii_count": 0,
+                        "size_before": len(file_bytes),
+                        "size_after": 0,
+                        "error": f"처리 실패: {str(e)}",
+                    }
+
+            # PDF 처리
+            elif file_ext == '.pdf':
+                try:
+                    sys.path.insert(0, str(Path(__file__).resolve().parent))
+                    from tools.doc_processor import process_pdf
+
+                    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                        tmp.write(file_bytes)
+                        tmp_path = Path(tmp.name)
+
+                    try:
+                        doc, log_entries = process_pdf(
+                            tmp_path,
+                            brj_number=0,
+                            candidate=candidate_dict,
+                            dry=False
+                        )
+
+                        processed_bytes = doc.write()
+
+                        pii_count = len([l for l in log_entries if any(
+                            kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"]
+                        )])
+
+                        return {
+                            "file_name": file_name,
+                            "file_type": "pdf",
+                            "processed": True,
+                            "pii_count": pii_count,
+                            "size_before": len(file_bytes),
+                            "size_after": len(processed_bytes),
+                            "error": None,
+                        }
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
+
+                except Exception as e:
+                    return {
+                        "file_name": file_name,
+                        "file_type": "pdf",
+                        "processed": False,
+                        "pii_count": 0,
+                        "size_before": len(file_bytes),
+                        "size_after": 0,
+                        "error": f"처리 실패: {str(e)}",
+                    }
+
+            else:
+                return {
+                    "file_name": file_name,
+                    "file_type": "unknown",
+                    "processed": False,
+                    "pii_count": 0,
+                    "size_before": len(file_bytes),
+                    "size_after": 0,
+                    "error": f"지원하지 않는 파일 형식: {file_ext}",
+                }
+
+        except Exception as e:
+            return {
+                "file_name": file_name,
+                "file_type": "unknown",
+                "processed": False,
+                "pii_count": 0,
+                "size_before": len(file_bytes),
+                "size_after": 0,
+                "error": f"예상치 못한 오류: {str(e)}",
+            }
+
+    # 모든 섹션 처리
+    results = {"resume": [], "cover": [], "photo": [], "reference": [], "other": []}
+    total_pii = 0
+    processed_count = 0
+    failed_count = 0
+
+    for section_name, file_list in file_sections.items():
+        for upload_file in file_list:
+            try:
+                file_bytes = await upload_file.read()
+                result = _process_file(file_bytes, upload_file.filename, candidate_dict)
+                results[section_name].append(result)
+
+                if result.get("processed"):
+                    processed_count += 1
+                    total_pii += result.get("pii_count", 0)
+                else:
+                    if result.get("error"):
+                        failed_count += 1
+
+            except Exception as e:
+                results[section_name].append({
+                    "file_name": upload_file.filename,
+                    "file_type": "unknown",
+                    "processed": False,
+                    "pii_count": 0,
+                    "size_before": 0,
+                    "size_after": 0,
+                    "error": f"업로드 처리 오류: {str(e)}",
+                })
+                failed_count += 1
+
+    # 로깅
+    logging.getLogger("bridge.resume").info(
+        f"[RESUME] candidate_id={candidate_id}, files={total_files}, "
+        f"processed={processed_count}, pii={total_pii}"
+    )
+
+    return ok(
+        data={
+            "candidate_id": candidate_id,
+            "pii_count": total_pii,
+            "files_processed": results,
+            "total_files": total_files,
+            "processed_files": processed_count,
+            "failed_files": failed_count,
+        }
+    )
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
