@@ -240,7 +240,10 @@ export default function HomePage() {
           if (schools.length > 0) setSchoolNames(schools)
         }
       })
-      .catch(() => { /* keep fallback */ })
+      .catch(err => {
+        console.error('[Partners API Error]', err)
+        // Fallback 유지 — 데이터 로드 실패 시 기본값 사용
+      })
   }, [])
 
   // ── Refresh handlers ──
