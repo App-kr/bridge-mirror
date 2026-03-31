@@ -1135,8 +1135,16 @@
       "git": "25856135",
       "files": 2152,
       "db_hash": "9512cfd7b9c7"
+    },
+    {
+      "dir": "20260401_085718__홈_Featured_카드_빈필드_11+a_표시",
+      "task": "홈 Featured 카드 빈필드 11+a 표시",
+      "ts": "2026.04.01 08:57:31",
+      "git": "aa2ed983",
+      "files": 2154,
+      "db_hash": "9512cfd7b9c7"
     }
   ],
-  "last_backup": "2026.03.31 23:26:23",
-  "total_count": 142
+  "last_backup": "2026.04.01 08:57:31",
+  "total_count": 143
 }
