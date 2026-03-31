@@ -22,6 +22,7 @@ import { useEditMode, NewPostButton, SectionEditLink } from '@/components/EditMo
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SplitEditor, { type PostData, type ContentType } from '@/components/admin/SplitEditor'
 import { API_URL } from '@/lib/api'
+import { sanitizeReviewText } from '@/lib/sanitizeText'
 import { useDragReorder } from '@/hooks/useDragReorder'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -1891,7 +1892,7 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
                         </svg>
                       ))}
                     </div>
-                    <p className="text-sm text-[#424245] leading-relaxed line-clamp-2">{t.review_text}</p>
+                    <p className="text-sm text-[#424245] leading-relaxed line-clamp-2">{sanitizeReviewText(t.review_text)}</p>
                     <span className="text-xs text-[#0071e3] font-medium mt-1.5 block group-hover:underline">Read more</span>
                   </div>
                 </button>
@@ -1997,7 +1998,7 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
 
               <div className="border-t border-[#f5f5f7] pt-5">
                 <span className="text-3xl text-[#d1d1d6] leading-none font-serif">&ldquo;</span>
-                <p className="text-[15px] text-[#424245] leading-[1.8] mt-2">{selectedReview.review_text}</p>
+                <p className="text-[15px] text-[#424245] leading-[1.8] mt-2 whitespace-pre-wrap">{sanitizeReviewText(selectedReview.review_text)}</p>
               </div>
             </motion.div>
           </motion.div>

@@ -26,6 +26,7 @@ import { seededShuffle } from '@/lib/seededShuffle'
 import { TESTIMONIALS, type TestimonialEntry } from '@/data/testimonials'
 import type { PublicJob, AgeGroup } from '@/types'
 import { API_URL } from '@/lib/api'
+import { sanitizeReviewText } from '@/lib/sanitizeText'
 
 // ── Fallback testimonials (subset of static pool) ──
 const FALLBACK_TESTIMONIALS: TestimonialEntry[] = TESTIMONIALS.slice(0, 4)
@@ -526,7 +527,7 @@ export default function HomePage() {
                     <div>
                       <span className="text-[#2997ff]/40 text-4xl font-serif leading-none select-none block mb-3">&ldquo;</span>
                       <p className="text-[#d1d1d6] text-sm leading-relaxed line-clamp-5">
-                        {t.text}
+                        {sanitizeReviewText(t.text)}
                       </p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
