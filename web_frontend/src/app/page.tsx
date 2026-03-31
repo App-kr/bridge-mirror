@@ -726,7 +726,7 @@ export default function HomePage() {
               {[...schoolNames, ...schoolNames].map((name, i) => (
                 <span
                   key={`s-${i}`}
-                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/60 tracking-[0.04em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white tracking-[0.04em]"
                 >
                   {name}
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
@@ -754,7 +754,7 @@ export default function HomePage() {
               {[...academyNames, ...academyNames].map((name, i) => (
                 <span
                   key={`a-${i}`}
-                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white/60 tracking-[0.04em]"
+                  className="shrink-0 px-5 sm:px-7 text-[0.9rem] font-semibold select-none whitespace-nowrap text-white tracking-[0.04em]"
                 >
                   {name}
                   <span className="ml-5 sm:ml-7 text-white/25 text-xs">·</span>
