@@ -633,30 +633,24 @@ export default function HomePage() {
                       </div>
 
                       <div className="space-y-2 text-[13px]">
-                        {job.teaching_age && job.teaching_age.length > 0 && (
-                          <div className="flex justify-between gap-2">
-                            <span className="text-[#636366] font-medium shrink-0">Student Age</span>
-                            <span className="text-[#a1a1a6] text-right">{formatTeachingAge(job.teaching_age)}</span>
-                          </div>
-                        )}
-                        {job.working_hours && (
-                          <div className="flex justify-between gap-2">
-                            <span className="text-[#636366] font-medium shrink-0">Hours</span>
-                            <span className="text-[#a1a1a6] text-right">{job.working_hours}</span>
-                          </div>
-                        )}
-                        {job.monthly_salary && (
-                          <div className="flex justify-between gap-2">
-                            <span className="text-[#636366] font-medium shrink-0">Salary</span>
-                            <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary}</span>
-                          </div>
-                        )}
-                        {job.housing && (
-                          <div className="flex justify-between gap-2">
-                            <span className="text-[#636366] font-medium shrink-0">Benefits</span>
-                            <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing}</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Student Age</span>
+                          <span className="text-[#a1a1a6] text-right">
+                            {(job.teaching_age && job.teaching_age.length > 0) ? formatTeachingAge(job.teaching_age) : '11+a'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Hours</span>
+                          <span className="text-[#a1a1a6] text-right">{job.working_hours || '11+a'}</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Salary</span>
+                          <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary || '11+a'}</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Benefits</span>
+                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing || '11+a'}</span>
+                        </div>
                       </div>
 
                       <div className="mt-5 pt-4 border-t border-white/[0.06] text-right">
