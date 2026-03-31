@@ -57,6 +57,24 @@
           "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\pre_hook.bat\""
         }
       ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\secret_scanner.py\""
+        }
+      ]
+    },
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\runtime_guard.py\""
+        }
+      ]
     }
   ],
   "PostToolUse": [
@@ -94,7 +112,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "cmd /c \"Q:\\Claudework\\bridge base\\tools\\stop_hook.bat\""
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\stop_hook.py\""
         }
       ]
     },

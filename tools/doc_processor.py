@@ -659,25 +659,23 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             words = name.strip().split()
             if len(words) >= 2:
                 last_name = words[-1]
-                first_name = words[0]
+                first_name = " ".join(words[:-1])  # 성을 제외한 모든 단어
 
                 # 성이 2글자 이상인 경우 삭제
                 if len(last_name) >= 2:
-                    # 방법 1: 단어 경계로 매칭
-                    pat = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
-                    if pat.search(result):
-                        log.append(f"LASTNAME_DEL: {last_name}")
-                        result = pat.sub("", result)
-
-                    # 방법 2: 라벨 뒤의 전체 이름에서 성만 제거
-                    # "Name: John Smith" → "Name: John"
-                    full_name_pat = re.compile(
-                        r"(name\s*:?\s*)" + re.escape(name),
-                        re.IGNORECASE
-                    )
+                    # 전체 이름을 찾아 성만 제거
+                    # "Jodie Dumas" → "Jodie"
+                    full_name_pat = re.compile(re.escape(name), re.IGNORECASE)
                     if full_name_pat.search(result):
-                        log.append(f"NAME_LABEL_CLEAN: {name} -> {first_name}")
-                        result = full_name_pat.sub(rf"\1{first_name}", result)
+                        log.append(f"FULLNAME_CLEAN: {name} -> {first_name}")
+                        result = full_name_pat.sub(first_name, result)
+
+                    # 추가: 성만 단어 경계로 삭제
+                    # 이미 위에서 처리되지 않은 경우
+                    last_name_pat = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
+                    if last_name_pat.search(result):
+                        log.append(f"LASTNAME_CLEANUP: {last_name}")
+                        result = last_name_pat.sub("", result)
 
         # DB에서 가져온 이메일/전화/카카오도 직접 삭제
         for field in ("email", "mobile_phone", "kakaotalk"):
@@ -689,33 +687,65 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
                     result = re.sub(escaped, "", result, flags=re.I)
 
     # ── Pass 4: 위치/직장 라벨 값 처리 ──
-    # LOCATION_LABELS: "Current Location: Seoul, South Korea" → "Current Location: South Korea"
-    for label in LOCATION_LABELS:
-        # 라벨 다음에 : 또는 공백이 올 수 있음
-        pat = re.compile(
-            r"^([ \t]*)" + re.escape(label) + r"([ \t]*:[ \t]*)(.+)$",
-            re.MULTILINE | re.IGNORECASE
-        )
-        def _loc_rep(m):
-            indent, colon, value = m.group(1), m.group(2), m.group(3).strip()
-            if _is_korea(value):
-                log.append(f"LOC→SouthKorea: {value[:40]}")
-                return f"{indent}{label}{colon}South Korea"
-            return m.group(0)
-        result = pat.sub(_loc_rep, result)
+    # 모든 줄을 검사하여 라벨을 포함하는 줄을 처리
+    lines_final = result.split("\n")
+    final_lines = []
 
-    # WORKPLACE_LABELS: "Current Employer: YBM ECC" → "Current Employer: Academy"
-    for label in WORKPLACE_LABELS:
-        pat = re.compile(
-            r"^([ \t]*)" + re.escape(label) + r"([ \t]*:[ \t]*)(.+)$",
-            re.MULTILINE | re.IGNORECASE
-        )
-        def _work_rep(m):
-            indent, colon, original_value = m.group(1), m.group(2), m.group(3).strip()
-            generic_value = _replace_workplace_generic(original_value)
-            log.append(f"WORKPLACE→{generic_value}: {original_value[:40]}")
-            return f"{indent}{label}{colon}{generic_value}"
-        result = pat.sub(_work_rep, result)
+    for line in lines_final:
+        stripped = line.strip()
+        modified = line
+        found = False
+
+        # LOCATION_LABELS 검사
+        for label in LOCATION_LABELS:
+            # "Location: Seoul" 또는 "location : seoul" 등 다양한 형식 대응
+            label_pat = re.compile(
+                r"(.*?)\b" + re.escape(label) + r"\s*:?\s*(.+)",
+                re.IGNORECASE
+            )
+            m = label_pat.match(stripped)
+            if m:
+                prefix, value = m.group(1), m.group(2).strip()
+                if _is_korea(value):
+                    # 도시명 제거: "Daegu, South Korea" → "South Korea"
+                    # KR_KEYWORDS의 도시명들을 모두 제거
+                    cleaned_value = value
+                    for city in KR_KEYWORDS:
+                        if len(city) > 2:
+                            city_pat = re.compile(r"\b" + re.escape(city) + r"\s*,?\s*", re.IGNORECASE)
+                            cleaned_value = city_pat.sub("", cleaned_value).strip()
+
+                    # 결과가 비면 "South Korea"로 설정
+                    if not cleaned_value or cleaned_value.lower() == "south korea":
+                        cleaned_value = "South Korea"
+
+                    log.append(f"LOCATION→{cleaned_value}: {value[:40]}")
+                    # 원래 라인 구조 유지
+                    indent = len(line) - len(line.lstrip())
+                    modified = " " * indent + stripped.replace(value, cleaned_value)
+                    found = True
+                    break
+
+        if not found:
+            # WORKPLACE_LABELS 검사
+            for label in WORKPLACE_LABELS:
+                label_pat = re.compile(
+                    r"(.*?)\b" + re.escape(label) + r"\s*:?\s*(.+)",
+                    re.IGNORECASE
+                )
+                m = label_pat.match(stripped)
+                if m:
+                    prefix, value = m.group(1), m.group(2).strip()
+                    generic_value = _replace_workplace_generic(value)
+                    log.append(f"WORKPLACE→{generic_value}: {value[:40]}")
+                    indent = len(line) - len(line.lstrip())
+                    modified = " " * indent + stripped.replace(value, generic_value)
+                    found = True
+                    break
+
+        final_lines.append(modified)
+
+    result = "\n".join(final_lines)
 
     # 빈줄 정리
     result = re.sub(r"\n{3,}", "\n\n", result)

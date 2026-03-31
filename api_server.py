@@ -8944,6 +8944,14 @@ try:
 except Exception as _push_err:
     logging.getLogger("bridge.api").warning("[STARTUP] push 라우터 로드 실패 (계속 진행): %s", _push_err)
 
+# ── 소셜 미디어 자동 게시 라우터 등록 ──────────────────────────────────────
+try:
+    from social_api import router as social_router
+    app.include_router(social_router)
+    logging.getLogger("bridge.api").info("[STARTUP] social 라우터 등록 완료")
+except Exception as _social_err:
+    logging.getLogger("bridge.api").warning("[STARTUP] social 라우터 로드 실패 (계속 진행): %s", _social_err)
+
 # ── 결제 라우터 등록 (PAYMENT_ENABLED=false → 모든 엔드포인트 503) ──────────
 try:
     from backend.routers.payments import router as payments_router
