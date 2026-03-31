@@ -9045,9 +9045,9 @@ async def process_resume_files(
             ).fetchone()
             if row:
                 candidate_dict = {
-                    "full_name": _try_decrypt(row[0]) if row[0] else "",
-                    "email": _try_decrypt(row[1]) if row[1] else "",
-                    "mobile_phone": _try_decrypt(row[2]) if row[2] else "",
+                    "full_name": str(row[0]) if row[0] else "",
+                    "email": str(row[1]) if row[1] else "",
+                    "mobile_phone": str(row[2]) if row[2] else "",
                 }
         except (ValueError, sqlite3.Error):
             pass
