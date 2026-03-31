@@ -156,6 +156,18 @@ init_vault_env.py
 .trusted_ips.json
 .device_key
 
+# ── Private Network / Infrastructure Docs (보안 문서) ─────────────
+docs/PRIVATE_NETWORK_SETUP*.md
+docs/PRIVATE_*.md
+docs/*_SETUP_PRIVATE*.md
+*PRIVATE_NETWORK*
+PRIVATE_NETWORK_SETUP*
+docs/obsidian/
+# Audit runtime data (append-only, not for git)
+audit/*.jsonl
+audit/ip_blacklist.json
+audit/ip_permanent_ban.json
+
 # ── Security Hardening (세션 21 추가) ────────────────────────────
 security_config/
 !security_config/SECURITY_GUIDE.md

@@ -25,6 +25,10 @@ const securityHeaders = [
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
+      // SRI 강제: 외부 script/style은 integrity 없이 로드 불가
+      "require-sri-for script style",
+      // upgrade-insecure-requests: HTTP 요청을 HTTPS로 강제 업그레이드
+      "upgrade-insecure-requests",
     ].join('; '),
   },
 ]
