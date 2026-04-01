@@ -12,90 +12,28 @@ import GuidePopup from '@/components/GuidePopup'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
+import { INQUIRY_DEFAULTS } from '@/lib/form-defaults'
 
 const API = API_URL
 
-// ── Default Options (하드코딩 폴백) ──────────────────────────────────────────
-
-const BUSINESS_REG_DEFAULT = [
-  '등록기관 Registered Institution',
-  '현시간 미등록 Unregistered Institution',
-]
-
-const HIRE_HIST_DEFAULT = ['채용이력O', '채용이력X']
-
-const NATIVE_COUNT_DEFAULT = [
-  '없음','1명','2명','3명','4명','5명','6명',
-  '7~9명','10~14명','15~20명','20명이상','30명이상',
-]
-
-const VACANCIES_DEFAULT = ['1명','2명','3명','4명','5명','6명','7명','8명','9명','10명']
-
-const CONTRACT_TYPE_DEFAULT = ['Full time', 'Part time']
-
-const TEACHING_AGE_DEFAULT = [
-  '48개월 미만 baby','영유아 Pre-K, ~5세미만','유치원 Kindergarten',
-  '초등학생 Elementary','중학생 Middle School',
-  '고등학생 High School','대학생/ 성인 Adult',
-]
-
-const CLASS_SIZE_DEFAULT = ['~5명 이내','~8명 이내','~12명 이내','12명 이상','20명이상']
-
-const AVG_LESSONS_DEFAULT = [
-  '주 10-15시간','주 15-20시간','주 20-25시간',
-  '주 25-30시간','주 30-35시간','주 35시간 이상',
-]
-
-const PREFERRED_CANDIDATE_DEFAULT = [
-  '영어권 원어민 Native Teachers','교포 Kyopo',
-  'F비자 소지자 F Visa','한국인 Koreans','무관 No Preference',
-]
-
-const SALARY_RANGES_DEFAULT = [
-  '2,20 KRW - 2,30 KRW','2,30 KRW - 2,40 KRW','2,40 KRW - 2,50 KRW',
-  '2,50 KRW - 2,60 KRW','2,60 KRW - 2,70 KRW','2,70 KRW - 2,80 KRW',
-  '2,80 KRW - 2,90 KRW','2,90 KRW - 3,00 KRW','3,00 KRW - 3,20 KRW',
-  '3,20 KRW - 3,50 KRW','3,50 KRW - 4,50 KRW','4,50 KRW - 6,50 KRW',
-  '시급제 또는 기타',
-]
-
-const TRAVEL_SUPPORT_DEFAULT = [
-  '국내교통비지원 Domestic allowance',
-  '왕복항공지원 Round trip support',
-  '입국만지원 Entry','출국만지원 Departure',
-  '규정에따른비용지원 Travel expenses',
-  '제공없음 Not provided',
-]
-
-const MEAL_OPTS_DEFAULT = ['식사제공','식대제공','식사식대제공없음']
-
-const HOUSING_OPTS_DEFAULT = [
-  '풀옵션 하우징 Fully furnished housing',
-  '개인기숙사 Dormitory',
-  '월세지원 Housing allowance',
-  '월세 및 보증금지원 Allowance and deposit support',
-  '다양한 지원가능 Negotiable',
-  '숙소미제공 No housing provided',
-]
-
-const BENEFITS_OPTS_DEFAULT = [
-  '비자스폰 (E) Working Visa sponsorship',
-  '퇴직금 Severance Pay (월급제 필수*)',
-  '교통비 Transportation expenses',
-  '국민연금 National Pension (SA제외 월급제 필수*)',
-  '건강보험 Medical Insurance',
-  '비자 건강검진 Medical check support',
-  '정착 지원금 Settlement Allowance',
-  '재계약 보너스 Renewal Bonus',
-  '계약완료 보너스 Contract Completion Bonus',
-  '본인/자녀 교육지원 Education support',
-  '기타 Bonus (연휴, 생일, 성과금등)',
-]
-
-const VACATION_INC_DEFAULT = [
-  '포함 Including weekends',
-  '주말,공휴일제외 Excluding weekends',
-]
+// ── Default Options (form-defaults.ts 공유 참조) ──────────────────────────
+const {
+  BUSINESS_REG:        BUSINESS_REG_DEFAULT,
+  HIRE_HIST:           HIRE_HIST_DEFAULT,
+  NATIVE_COUNT:        NATIVE_COUNT_DEFAULT,
+  VACANCIES:           VACANCIES_DEFAULT,
+  CONTRACT_TYPE:       CONTRACT_TYPE_DEFAULT,
+  TEACHING_AGE:        TEACHING_AGE_DEFAULT,
+  CLASS_SIZE:          CLASS_SIZE_DEFAULT,
+  AVG_LESSONS:         AVG_LESSONS_DEFAULT,
+  PREFERRED_CANDIDATE: PREFERRED_CANDIDATE_DEFAULT,
+  SALARY_RANGES:       SALARY_RANGES_DEFAULT,
+  TRAVEL_SUPPORT:      TRAVEL_SUPPORT_DEFAULT,
+  MEAL_OPTS:           MEAL_OPTS_DEFAULT,
+  HOUSING_OPTS:        HOUSING_OPTS_DEFAULT,
+  BENEFITS_OPTS:       BENEFITS_OPTS_DEFAULT,
+  VACATION_INC:        VACATION_INC_DEFAULT,
+} = INQUIRY_DEFAULTS
 
 const STEP_LABELS = ['기본정보', '급여 및 복지', '개인정보 동의']
 

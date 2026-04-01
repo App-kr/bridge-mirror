@@ -12,125 +12,35 @@ import GuidePopup from '@/components/GuidePopup'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
+import { APPLY_DEFAULTS } from '@/lib/form-defaults'
 
 const API       = API_URL
 const TOKEN_KEY = 'bridge_apply_token'
 
-// ── Default Options (하드코딩 폴백 — DB 미설정 시 사용) ───────────────────────
-
-const HOW_TO_DEFAULT = [
-  'Friend Referral','Previous Experience','Google','Reddit',
-  'Facebook','Instagram','YouTube','ESL Cafe','LinkedIn','Other',
-]
-
-const NATIONALITIES_DEFAULT = [
-  'USA','United Kingdom','Canada','Ireland',
-  'Australia','New Zealand','South Africa',
-  'F (Korean diaspora or overseas Korean)','South Korea','Other',
-]
-
-const ANCESTRY_DEFAULT = [
-  'Korean','Chinese, Hong Kong, or Taiwanese','Japanese',
-  'Mongolian or Other East Asian (excluding above)','Indian','Native American',
-  'White or European','Pakistani, Afghan, Bangladeshi','Black or African American',
-  'Middle Eastern or North African','Hispanic or Latino','Mixed or Multiracial',
-  'Pacific Islander','Other','Prefer not to disclose',
-]
-
-const EDUCATION_DEFAULT = [
-  'Graduated, but diploma not available',
-  "Bachelor's degree from one of the 7 eligible countries",
-  "Bachelor's degree (other country)",
-  'Master','Doctor','Associate','Online degree','Did not graduate',
-  "I have a bachelor's or higher from Korea",
-]
-
-const CERTIFICATION_DEFAULT = [
-  'Teaching license (Official Teaching License/Credential)',
-  'PGCE (Postgraduate Certificate in Education)',
-  'TEFL','TESOL','DELTA','CELTA','On the process','No certification',
-]
-
-const E_VISA_DEFAULT = ['Recorded','Never obtained an E visa']
-
-const PASSPORT_DEFAULT = [
-  'Expires within 2 years',
-  'Valid for more than 2 years',
-  'Scheduled for renewal within the period',
-]
-
-const CRIMINAL_RECORD_DEFAULT = [
-  'Issued and apostille completed',
-  'Issued but awaiting apostille',
-  'Never applied for a new one',
-  'Holding a visa and recently left Korea',
-]
-
-const DOC_STATUS_DEFAULT = [
-  'Already have a valid visa',
-  'All documents completed (Criminal check + Degree apostilled)',
-  'Degree / CBC at final apostille stage (confirmed return date)',
-  'Never applied for any documents',
-  'Holding a visa and recently left Korea within 1 month',
-  'Other',
-]
-
-const TARGET_AGE_DEFAULT = [
-  'Pre-K ~ Kindergarten','Elementary school level','Middle school level',
-  'High school level','Adults','No preferences',
-]
-
-const AREA_PREFS_DEFAULT = [
-  'Metropolitan city','Medium size city','Small city','No preference',
-]
-
-const EXPERIENCE_DEFAULT = [
-  'None','Less than 6 months','6 months to 1 year',
-  'over 1 year','over 2 year','over 3 year','over 4 year','over 5 year',
-  'over 6 year','over 7 year','over 8 year','over 9 year','over 10 year',
-  'over 15 year','over 20 year','Overseas full-time teaching experience only',
-]
-
-const EMPLOYMENT_DEFAULT = [
-  'The school is aware','Not working in Korea','Do not know',
-  'I will inform them very soon',
-  'School do know, but references cannot be verified',
-  'Contract terminated early I have a Letter of Release',
-]
-
-const MARITAL_DEFAULT = [
-  'Married','Coming with Dependents (Children or Family)',
-  'Single or Coming Alone','Divorced','No comment',
-  'Planning to get married within a year',
-]
-
-const HOUSING_DEFAULT = [
-  'I would like to use the school provided housing',
-  'I am willing to pay monthly for better housing',
-  'I have enough deposit and will handle the monthly rent on my own',
-  'I have housing so no support is needed',
-]
-
-const DEPENDENTS_PETS_DEFAULT = [
-  'I am coming alone','Young children (under age 6)',
-  'School age children or Family members','Dog(s)','Cat(s)','Other pets',
-]
-
-const PERSONAL_DEFAULT = [
-  'Zero tattoos or piercings','Visible but can be covered',
-  'Visible tattoo (cannot be covered)',
-  'Facial piercings (nose lip eyebrow etc cannot be removed)',
-]
-
-const RELIGION_DEFAULT = [
-  'Irreligious','Christianity','Buddhism','Judaism','Islam','Hinduism',
-  'Does not celebrate events such as births due to specific beliefs or affiliations',
-  'Other',
-]
-
-const HEALTH_DEFAULT  = ['I have not','I have a condition','Prefer not to say']
-const CRC_DEFAULT     = ['Clean record','I have a record','Prefer not to answer']
-const KR_CRC_DEFAULT  = ['Clean record','I have a record','Not applicable (never lived in Korea)','Prefer not to answer']
+// ── Default Options (form-defaults.ts 공유 참조) ──────────────────────────
+const {
+  HOW_TO:          HOW_TO_DEFAULT,
+  NATIONALITIES:   NATIONALITIES_DEFAULT,
+  ANCESTRY:        ANCESTRY_DEFAULT,
+  EDUCATION:       EDUCATION_DEFAULT,
+  CERTIFICATION:   CERTIFICATION_DEFAULT,
+  E_VISA:          E_VISA_DEFAULT,
+  PASSPORT:        PASSPORT_DEFAULT,
+  CRIMINAL_RECORD: CRIMINAL_RECORD_DEFAULT,
+  DOC_STATUS:      DOC_STATUS_DEFAULT,
+  TARGET_AGE:      TARGET_AGE_DEFAULT,
+  AREA_PREFS:      AREA_PREFS_DEFAULT,
+  EXPERIENCE:      EXPERIENCE_DEFAULT,
+  EMPLOYMENT:      EMPLOYMENT_DEFAULT,
+  MARITAL:         MARITAL_DEFAULT,
+  HOUSING:         HOUSING_DEFAULT,
+  DEPENDENTS_PETS: DEPENDENTS_PETS_DEFAULT,
+  PERSONAL:        PERSONAL_DEFAULT,
+  RELIGION:        RELIGION_DEFAULT,
+  HEALTH:          HEALTH_DEFAULT,
+  CRC:             CRC_DEFAULT,
+  KR_CRC:          KR_CRC_DEFAULT,
+} = APPLY_DEFAULTS
 
 const STEP_LABELS = ['Basic Info', 'Preferences', 'Contact & Agreement']
 
