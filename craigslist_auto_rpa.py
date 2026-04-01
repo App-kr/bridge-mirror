@@ -1825,6 +1825,16 @@ def main():
         try:
             if _HAS_OVERLAY:
                 update_status("로그인중")
+            # 자동로그인 유지 설정 확인
+            _auto_login = True
+            if _HAS_OVERLAY:
+                try:
+                    from rpa_overlay import get_auto_login_pref
+                    _auto_login = get_auto_login_pref()
+                except Exception:
+                    pass
+            if not _auto_login:
+                print("  [LOGIN] 자동로그인 OFF — 새 세션으로 로그인")
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
@@ -1885,6 +1895,15 @@ def main():
             _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
             print(f"[SESSION ERROR] {session_exc}")
         finally:
+            # 로그아웃 버튼 눌린 경우 로그아웃 후 종료
+            if _HAS_OVERLAY:
+                try:
+                    from rpa_overlay import is_logout_requested, clear_logout_event
+                    if is_logout_requested():
+                        cl_logout(driver)
+                        clear_logout_event()
+                except Exception:
+                    pass
             driver.quit()
 
         return posted
