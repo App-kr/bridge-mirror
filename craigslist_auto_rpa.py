@@ -374,9 +374,57 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
-def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
+def _migrate_ad_posts_add_account():
+    """account_name 컬럼 + UNIQUE(job_code, seq, platform, account_name) 마이그레이션 (1회성)."""
     conn = get_conn()
-    params: list = []
+    try:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(ad_posts)")]
+        if "account_name" in cols:
+            return  # 이미 마이그레이션됨
+        conn.execute("BEGIN")
+        conn.execute("""
+            CREATE TABLE ad_posts_v2 (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_code        TEXT    NOT NULL,
+                seq             INTEGER NOT NULL DEFAULT 1,
+                platform        TEXT    NOT NULL DEFAULT 'craigslist',
+                account_name    TEXT    NOT NULL DEFAULT '',
+                status          TEXT    NOT NULL DEFAULT 'draft',
+                ad_title        TEXT,
+                ad_body         TEXT,
+                draft_at        TEXT,
+                posted_at       TEXT,
+                screenshot_path TEXT,
+                error_msg       TEXT,
+                posted_url      TEXT,
+                UNIQUE(job_code, seq, platform, account_name)
+            )
+        """)
+        conn.execute("""
+            INSERT INTO ad_posts_v2
+                (id, job_code, seq, platform, account_name, status, ad_title, ad_body,
+                 draft_at, posted_at, screenshot_path, error_msg, posted_url)
+            SELECT id, job_code, seq, platform, '', status, ad_title, ad_body,
+                   draft_at, posted_at, screenshot_path, error_msg, posted_url
+            FROM ad_posts
+        """)
+        conn.execute("DROP TABLE ad_posts")
+        conn.execute("ALTER TABLE ad_posts_v2 RENAME TO ad_posts")
+        conn.execute("COMMIT")
+        print("  [MIGRATE] ad_posts: account_name 컬럼 추가 완료 (4계정 독립 포스팅 지원)")
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        print(f"  [MIGRATE ERROR] {e}")
+    finally:
+        conn.close()
+
+
+def fetch_jobs(job_code: str | None, limit: int, account_name: str = "") -> list[dict]:
+    conn = get_conn()
+    params: list = [account_name]   # NOT EXISTS의 account_name 파라미터
     where_clauses = [
         "j.city IS NOT NULL AND j.city != ''",
         "j.salary_raw IS NOT NULL AND j.salary_raw != ''",
@@ -386,6 +434,7 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
             WHERE ap.job_code = j.job_code
               AND ap.seq = j.seq
               AND ap.platform = 'craigslist'
+              AND ap.account_name = ?
               AND ap.status = 'posted'
         )""",
     ]
@@ -426,11 +475,11 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def save_draft(job: dict, title: str, body: str) -> int:
+def save_draft(job: dict, title: str, body: str, account_name: str = "") -> int:
     conn = get_conn()
     existing = conn.execute(
-        "SELECT id FROM ad_posts WHERE job_code=? AND seq=? AND platform='craigslist'",
-        (job["job_code"], job["seq"])
+        "SELECT id FROM ad_posts WHERE job_code=? AND seq=? AND platform='craigslist' AND account_name=?",
+        (job["job_code"], job["seq"], account_name)
     ).fetchone()
     if existing:
         conn.execute(
@@ -440,9 +489,9 @@ def save_draft(job: dict, title: str, body: str) -> int:
         conn.commit(); conn.close()
         return existing[0]
     cur = conn.execute(
-        "INSERT INTO ad_posts (job_code,seq,platform,status,ad_title,ad_body,draft_at) "
-        "VALUES (?,?,'craigslist','draft',?,?,?)",
-        (job["job_code"], job["seq"], title, body, NOW)
+        "INSERT INTO ad_posts (job_code,seq,platform,account_name,status,ad_title,ad_body,draft_at) "
+        "VALUES (?,?,'craigslist',?,'draft',?,?,?)",
+        (job["job_code"], job["seq"], account_name, title, body, NOW)
     )
     aid = cur.lastrowid
     conn.commit(); conn.close()
@@ -1677,7 +1726,10 @@ def main():
             print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
             sys.exit(1)
 
-    jobs = fetch_jobs(args.job_code, args.limit)
+    # DB 마이그레이션 (account_name 컬럼 없으면 자동 추가)
+    _migrate_ad_posts_add_account()
+
+    jobs = fetch_jobs(args.job_code, args.limit, _ACCOUNT)
     print(f"\n대상 포지션: {len(jobs)}건\n")
     if not jobs:
         print("게시할 포지션 없음 (이미 전부 posted 또는 조건 없음)")
@@ -1712,7 +1764,7 @@ def main():
                        "PII survived redact — post blocked")
             continue
 
-        ad_id = save_draft(job, title, body)
+        ad_id = save_draft(job, title, body, _ACCOUNT)
         ads.append((job, title, body, ad_id))
         print(f"  [DRAFT] {job['job_code']} → ad_posts id={ad_id}")
 
@@ -1840,7 +1892,7 @@ def main():
                 print(f"\n[OVERLAY] 추가 작업 요청: {extra_count}건")
                 overlay_close()
 
-                extra_jobs = fetch_jobs(None, extra_count)
+                extra_jobs = fetch_jobs(None, extra_count, _ACCOUNT)
                 if not extra_jobs:
                     print("추가 게시할 포지션 없음")
                     continue
@@ -1853,7 +1905,7 @@ def main():
                         body = body_clean
                     if not security_check(body, job["job_code"]):
                         continue
-                    ad_id = save_draft(job, title, body)
+                    ad_id = save_draft(job, title, body, _ACCOUNT)
                     extra_ads.append((job, title, body, ad_id))
 
                 extra_posted = _run_post_session(extra_ads)
@@ -1870,7 +1922,7 @@ def main():
                 CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(new_acct)
                 print(f"\n[OVERLAY] 계정 변경: {new_acct} → {CL_EMAIL}")
 
-                new_jobs = fetch_jobs(None, new_limit)
+                new_jobs = fetch_jobs(None, new_limit, new_acct)
                 if not new_jobs:
                     print("게시할 포지션 없음")
                     break
@@ -1883,7 +1935,7 @@ def main():
                         body = body_clean
                     if not security_check(body, job["job_code"]):
                         continue
-                    ad_id = save_draft(job, title, body)
+                    ad_id = save_draft(job, title, body, new_acct)
                     new_ads.append((job, title, body, ad_id))
 
                 extra_posted = _run_post_session(new_ads)
