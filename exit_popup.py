@@ -33,6 +33,7 @@ def _wait_for_pid(pid):
 
 def show_exit_popup():
     root = tk.Tk()
+    root.attributes("-alpha", 0.0)   # 순간 flash 방지 — withdraw 전에 투명화
     root.withdraw()
     root.overrideredirect(True)
     root.attributes("-topmost", True)
@@ -103,6 +104,7 @@ def show_exit_popup():
     hint_lbl.bind("<ButtonPress-1>", _press)
     hint_lbl.bind("<B1-Motion>", _move)
 
+    root.attributes("-alpha", 1.0)   # 완전히 그려진 후 불투명 복원
     root.deiconify()
     root.mainloop()
 

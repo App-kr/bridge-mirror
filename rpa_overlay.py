@@ -1653,6 +1653,7 @@ def ask_already_running(acct_key: str = ""):
             break
 
     root = tk.Tk()
+    root.attributes("-alpha", 0.0)   # flash 방지
     _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
     if _ico.exists():
         try:
