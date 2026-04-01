@@ -1623,6 +1623,9 @@ def main():
                     print("[ABORT] 비밀번호 설정 취소됨.")
                     sys.exit(0)
                 print("[OK] Vault 생성 완료")
+                # 새로 생성된 vault에서 기본 계정 자격증명 로드 (세션 캐시 사용)
+                global CL_EMAIL, CL_PASSWORD
+                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(_ACCOUNT)
             except Exception as _e:
                 print(f"[ERROR] Vault 설정 팝업 실패: {_e}")
                 sys.exit(1)

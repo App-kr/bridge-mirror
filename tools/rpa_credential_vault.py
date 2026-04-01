@@ -51,6 +51,11 @@ KDF_ITERATIONS = 600_000
 NONCE_BYTES = 12
 SALT_BYTES = 32
 
+# ── 세션 마스터 키 캐시 (GUI 설정 후 재입력 방지) ─────────────────────────────
+# setup_from_gui() 호출 후 동일 프로세스 내 get_decrypted() 호출 시 재입력 불필요.
+# 1회 사용 후 자동 소거됨.
+_SESSION_KEY: list = [None]  # bytearray | None
+
 # ── Craigslist 계정 정보 ──────────────────────────────────────────────────
 ACCOUNTS = {
     "gray": {
@@ -198,9 +203,27 @@ class CredentialVault:
         self._master_key = None
 
     def _load_master_key(self) -> bytes:
-        """마스터 키 입력 (화면 미노출)"""
-        key_str = getpass.getpass(MASTER_KEY_PROMPT)
-        return key_str.encode('utf-8')
+        """마스터 키 로드 — 세션 캐시 → GUI 팝업 → 터미널 순서."""
+        # 1. 세션 캐시 (GUI 설정 직후 재입력 방지)
+        if _SESSION_KEY[0] is not None:
+            key = bytes(_SESSION_KEY[0])
+            # 캐시 소거 (1회용)
+            if isinstance(_SESSION_KEY[0], bytearray):
+                _SESSION_KEY[0][:] = b"\x00" * len(_SESSION_KEY[0])
+            _SESSION_KEY[0] = None
+            return key
+        # 2. GUI 팝업 (비인터랙티브 컨텍스트 대응)
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from rpa_overlay import ask_master_key_gui
+            key_str = ask_master_key_gui()
+            if key_str:
+                return key_str.encode("utf-8")
+        except Exception:
+            pass
+        # 3. 터미널 폴백 (인터랙티브 CLI 환경)
+        return getpass.getpass(MASTER_KEY_PROMPT).encode("utf-8")
 
     def _read_vault(self) -> dict:
         """암호화된 vault 파일 읽기"""
@@ -254,7 +277,9 @@ class CredentialVault:
             vault_data[f"{account_key}_email"]    = _triple_encrypt(email, mk)
             vault_data[f"{account_key}_password"] = _triple_encrypt(pw, mk)
         self._write_vault(vault_data)
-        # 메모리 소각
+        # 세션 캐시 저장 — 이후 get_decrypted() 호출 시 재입력 불필요 (1회용)
+        _SESSION_KEY[0] = bytearray(mk)
+        # 원본 mk 소각
         mk_arr = bytearray(mk); mk_arr[:] = b"\x00" * len(mk_arr); del mk, mk_arr
         return True
 

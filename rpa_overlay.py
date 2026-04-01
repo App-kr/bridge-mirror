@@ -2083,6 +2083,101 @@ def ask_vault_setup() -> bool:
     return result[0]
 
 
+def ask_master_key_gui() -> str:
+    """마스터 키 GUI 입력 팝업 — getpass 대체 (비인터랙티브 환경 대응).
+    Returns 입력된 문자열, 취소 시 ""."""
+    result = [""]
+    _BG = "#f5f5f7"; _CARD = "#ffffff"; _SEP = "#d2d2d7"
+    _T1 = "#1d1d1f"; _T2 = "#6e6e73"; _BLUE = "#0071e3"
+    _RED = "#ff3b30"; _HOV = "#e8e8ed"
+
+    def _build():
+        root = tk.Tk()
+        root.title("Craig RPA — 마스터 키 입력")
+        root.overrideredirect(True)
+        root.attributes("-topmost", True)
+        root.configure(bg=_BG)
+
+        w, h = 320, 200
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+        root.lift(); root.focus_force()
+
+        border = tk.Frame(root, bg=_SEP, padx=1, pady=1)
+        border.pack(fill="both", expand=True)
+        card = tk.Frame(border, bg=_CARD)
+        card.pack(fill="both", expand=True)
+
+        _fnt = tkfont.Font(family="Malgun Gothic", size=10)
+        _fnt_sm = tkfont.Font(family="Malgun Gothic", size=9)
+
+        tk.Label(card, text="🔑  마스터 키 입력",
+                 font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                 bg=_CARD, fg=_T1).pack(pady=(16, 2))
+        tk.Label(card, text="저장된 자격증명을 복호화하려면\n마스터 키를 입력하세요",
+                 font=_fnt_sm, bg=_CARD, fg=_T2, justify="center").pack(pady=(0, 8))
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12)
+
+        f = tk.Frame(card, bg=_CARD); f.pack(fill="x", padx=16, pady=(10, 0))
+        e = tk.Entry(f, show="●", font=_fnt, relief="flat", bd=1,
+                     highlightthickness=1, highlightbackground=_SEP, highlightcolor=_BLUE)
+        e.pack(fill="x", ipady=6)
+
+        err_lbl = tk.Label(card, text="", font=_fnt_sm, bg=_CARD, fg=_RED)
+        err_lbl.pack(pady=(4, 0))
+
+        def _submit():
+            val = e.get().strip()
+            if not val:
+                err_lbl.configure(text="마스터 키를 입력하세요"); return
+            result[0] = val
+            root.destroy()
+
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", pady=(8, 0))
+        btn_row = tk.Frame(card, bg=_CARD); btn_row.pack(fill="x")
+
+        ok_lbl = tk.Label(btn_row, text="확인",
+                          font=tkfont.Font(family="Malgun Gothic", size=12, weight="bold"),
+                          bg=_CARD, fg=_BLUE, pady=9, cursor="hand2")
+        ok_lbl.pack(side="left", expand=True, fill="both")
+        ok_lbl.bind("<Button-1>", lambda ev: _submit())
+        ok_lbl.bind("<Enter>", lambda ev: ok_lbl.configure(bg=_HOV))
+        ok_lbl.bind("<Leave>", lambda ev: ok_lbl.configure(bg=_CARD))
+
+        tk.Frame(btn_row, bg=_SEP, width=1).pack(side="left", fill="y")
+
+        cancel_lbl = tk.Label(btn_row, text="취소",
+                              font=tkfont.Font(family="Malgun Gothic", size=12),
+                              bg=_CARD, fg=_RED, pady=9, cursor="hand2")
+        cancel_lbl.pack(side="left", expand=True, fill="both")
+        cancel_lbl.bind("<Button-1>", lambda ev: root.destroy())
+        cancel_lbl.bind("<Enter>", lambda ev: cancel_lbl.configure(bg=_HOV))
+        cancel_lbl.bind("<Leave>", lambda ev: cancel_lbl.configure(bg=_CARD))
+
+        e.focus_set()
+        root.bind("<Return>", lambda ev: _submit())
+
+        def _press(ev): root._dx, root._dy = ev.x_root, ev.y_root
+        def _move(ev):
+            x = root.winfo_x() + ev.x_root - root._dx
+            y = root.winfo_y() + ev.y_root - root._dy
+            root._dx, root._dy = ev.x_root, ev.y_root
+            root.geometry(f"+{x}+{y}")
+        for dw in (card, border):
+            dw.bind("<ButtonPress-1>", _press)
+            dw.bind("<B1-Motion>", _move)
+
+        root.mainloop()
+
+    import threading as _threading
+    if _threading.current_thread() is _threading.main_thread():
+        _build()
+    else:
+        t = _threading.Thread(target=_build, daemon=True)
+        t.start(); t.join(timeout=120)
+    return result[0]
+
+
 # ── Module-level exports ──────────────────────────────────────────────────────
 _overlay        = RPAOverlay()
 show_working    = _overlay.show_working
