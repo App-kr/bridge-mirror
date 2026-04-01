@@ -1721,7 +1721,7 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested
         _HAS_OVERLAY = True
         # 전역 _update_status 함수 설정 (cl_post()에서 사용)
         globals()['_update_status'] = update_status
@@ -1829,10 +1829,11 @@ def main():
         for _ in range(60):
             _time.sleep(1)
             if wants_more():
-                print("\n[OVERLAY] 유저 요청: 5개 더 올리기!")
+                extra_count = wants_more_count()
+                print(f"\n[OVERLAY] 유저 요청: {extra_count}개 더 올리기!")
                 overlay_close()
 
-                extra_jobs = fetch_jobs(None, 5)
+                extra_jobs = fetch_jobs(None, extra_count)
                 if not extra_jobs:
                     print("추가 게시할 포지션 없음")
                     show_complete(posted_count=total_posted)
