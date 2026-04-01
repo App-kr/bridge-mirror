@@ -1,41 +1,32 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-01 (세션 25 — 보안강화 + Python 이동 준비)
+최근 업데이트: 2026-04-01 (세션 26 — doc_processor v2.6 + api_server 사진/국적 수정 완료)
 
 ## 세션 재시작 방법
 1. `/clear`
 2. `@.claude/work_state.md`
-3. `'Python D→Q 이동 이어서'`
 
 ---
 
-## 🔜 내일 바로 시작할 작업 (최우선)
+## ✅ 2026-04-01 완료된 작업
 
-### Python D:\Phtyon 3 → Q:\Phtyon 3 이동
-**상태**: 사전검증 완료, 실행만 남음
+### Python D:\Phtyon 3 → Q:\Phtyon 3 이동 ✅ 완료
+- `Q:\Phtyon 3\python.exe` (3.10.0) 정상 동작
+- `D:\Phtyon 3` → Junction으로 대체 (하위 호환 유지)
+- `D:\Python314` 삭제 완료
+- doc_processor.py docstring 경로 Q: 반영 완료
 
-**검증 완료 항목:**
-- D:\Phtyon 3 = Python 3.10.0, 486MB, 84개 패키지
-- 핵심 패키지 전부 정상 (selenium/anthropic/PyMuPDF/opencv/boto3/pywin32 등)
-- .pth 파일 상대경로만 사용 → 복사 후 문제 없음
-- D:\Phtyon 3은 Windows PATH에 미등록 (직접 경로 호출만)
-- 레지스트리: HKCU\Python\3.10 에 D: 경로 등록됨 → Junction으로 해결됨
-- Q: 로컬 드라이브 (DriveType=3), 여유공간 175GB ✅
+### doc_processor.py v2.6 ✅ 완료
+- 이름: 성(Last name)만 삭제, 이름 유지 — DOCX + PDF
+- RE_KR_RESIDENTIAL 추가 (아파트/빌라/오피스텔 등)
+- KR_WORKPLACE_KEYWORDS 확장
+- Reference 섹션 자동 감지 + 완전 삭제 (_REF_HEADERS)
+- PII 라벨 (nationality/citizenship/race/ethnicity/religion) 줄 삭제
+- 국적 자동 추출 + DB 업데이트 (_extract_nationality_from_text)
 
-**참조 파일 9개** (Junction 적용 시 수정 불필요):
-- .claude/settings.local.json (L262, 263, 467, 468, 574)
-- tools/doc_processor.py (L20)
-- tools/doc_run.bat (L5)
-- tools/resume_converter/run.bat (L5) 외 5개
-
-**실행 순서** (이 순서 반드시 지킬 것):
-```
-1. xcopy "D:\Phtyon 3" "Q:\Phtyon 3" /E /I /H /Y
-2. "Q:\Phtyon 3\python.exe" --version  ← 검증
-3. "Q:\Phtyon 3\python.exe" -c "import selenium, fitz, anthropic; print('OK')"
-4. rmdir /S /Q "D:\Phtyon 3"  ← 2,3번 통과 후에만
-5. mklink /J "D:\Phtyon 3" "Q:\Phtyon 3"  ← 즉시
-6. "D:\Phtyon 3\python.exe" --version  ← 최종확인
-```
+### api_server.py 사진/국적 수정 ✅ 완료
+- files_photo → temp파일 → photo_tmp_path 전달
+- brj_number = int(candidate_id) 사용
+- candidate_dict에 sheet_number, nationality 포함
 
 ---
 

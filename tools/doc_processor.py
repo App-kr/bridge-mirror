@@ -1,5 +1,5 @@
 """
-BRIDGE Document Processor v2.5
+BRIDGE Document Processor v2.6
 후보자 이력서/커버레터에서 PII 삭제 + 강사번호 입력
 
 사용법:
@@ -17,7 +17,7 @@ BRIDGE Document Processor v2.5
   4) 처리 완료 파일은 file_uploads 테이블에 자동 기록 (이력 추적)
 
 지원 형식: .docx (서식 보존), .pdf (인-플레이스 redaction)
-Python: "D:/Phtyon 3/python.exe"
+Python: "Q:/Phtyon 3/python.exe"
 의존성: python-docx, PyMuPDF (fitz), python-dotenv, cryptography, boto3(S3용)
 """
 
@@ -2337,7 +2337,7 @@ def cmd_setup(_args=None):
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n  BRIDGE Document Processor v2.5 — 폴더 구조")
+    print(f"\n  BRIDGE Document Processor v2.6 — 폴더 구조")
     print(f"  {'─' * 50}")
     print(f"  incoming/   : {INCOMING_DIR}")
     print(f"  processed/  : {DEFAULT_OUTPUT}")
@@ -2372,7 +2372,7 @@ def cmd_init_db(_args=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="BRIDGE Document Processor v2.5 — PII 삭제 + 강사번호"
+        description="BRIDGE Document Processor v2.6 — PII 삭제 + 강사번호"
     )
     sub = parser.add_subparsers(dest="command")
 
