@@ -38,8 +38,42 @@ except ImportError:
 _post_more_event = threading.Event()
 _post_more_count = [0]   # +5/10/20개 추가 게시 수
 _stop_event = threading.Event()
+_logout_event = threading.Event()   # 로그아웃 요청 플래그
 _complete_result_val = [None]   # "MORE" / "CHANGE" / "EXIT"
 _complete_done_event = threading.Event()
+
+_PREFS_FILE = Path(__file__).resolve().parent / "logs" / ".rpa_prefs.json"
+
+
+def _load_prefs() -> dict:
+    try:
+        if _PREFS_FILE.exists():
+            return json.loads(_PREFS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_prefs(prefs: dict):
+    try:
+        _PREFS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _PREFS_FILE.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def is_logout_requested() -> bool:
+    """RPA 메인 루프에서 로그아웃 버튼 눌렸는지 체크."""
+    return _logout_event.is_set()
+
+
+def clear_logout_event():
+    _logout_event.clear()
+
+
+def get_auto_login_pref() -> bool:
+    """자동로그인 유지 설정 반환 (기본 True)."""
+    return _load_prefs().get("auto_login", True)
 
 
 def _make_rpa_photoimage(root, size=32):
@@ -502,6 +536,22 @@ class RPAOverlay:
         hide_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         hide_btn.bind("<Enter>", lambda e: hide_btn.configure(bg=_HIDE_HOV))
         hide_btn.bind("<Leave>", lambda e: hide_btn.configure(bg=self.BG))
+
+        tk.Frame(main_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+
+        # 로그아웃: 주황 텍스트
+        _LOGOUT_HOV = "#1e1000"
+        logout_btn = tk.Label(main_row, text="로그아웃",
+                              font=tkfont.Font(family="Malgun Gothic", size=13),
+                              bg=self.BG, fg="#ff9500", cursor="hand2")
+        logout_btn.pack(side="left", expand=True, fill="both", ipady=10)
+        def _do_logout():
+            _logout_event.set()
+            _stop_event.set()
+            self._do_direct_stop(root)
+        logout_btn.bind("<Button-1>", lambda e: _do_logout())
+        logout_btn.bind("<Enter>", lambda e: logout_btn.configure(bg=_LOGOUT_HOV))
+        logout_btn.bind("<Leave>", lambda e: logout_btn.configure(bg=self.BG))
 
         tk.Frame(main_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
@@ -1481,8 +1531,9 @@ def ask_account_selection():
                  bg=_CARD, fg=_T2).pack(pady=(0, 10))
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12, pady=(0, 3))
 
-        last_runs = _load_last_runs()
-        cnt_var   = tk.IntVar(value=10)
+        last_runs    = _load_last_runs()
+        cnt_var      = tk.IntVar(value=10)
+        auto_login_v = tk.BooleanVar(value=_load_prefs().get("auto_login", True))
 
         def _darken(hex_color, factor=0.82):
             """hex 색상을 factor 비율로 어둡게."""
@@ -1535,6 +1586,7 @@ def ask_account_selection():
             arrow.pack(side="right", fill="y")
 
             def _select(aid=acct_id, em=email):
+                _save_prefs({"auto_login": auto_login_v.get()})
                 result[0] = (aid, cnt_var.get())
                 _save_last_run(em)
                 root.destroy()
@@ -1579,6 +1631,19 @@ def ask_account_selection():
         for b, bv in cnt_btns:
             if bv == 10:
                 b.configure(bg=_BLUE, fg="#ffffff")
+
+        # ── 자동로그인 체크박스 ──────────────────────────────────
+        auto_row = tk.Frame(card, bg=_CARD)
+        auto_row.pack(fill="x", padx=16, pady=(2, 6))
+        auto_chk = tk.Checkbutton(
+            auto_row,
+            text="자동로그인 유지  (세션 쿠키 재사용)",
+            variable=auto_login_v,
+            font=tkfont.Font(family="Malgun Gothic", size=9),
+            bg=_CARD, fg=_T2, activebackground=_CARD,
+            selectcolor=_CARD, cursor="hand2",
+        )
+        auto_chk.pack(side="left")
 
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
         cancel_lbl = tk.Label(card, text="나중에 하기 (종료)",
@@ -1880,6 +1945,142 @@ def ask_already_running(acct_key: str = ""):
 
     root.after(8000, lambda: _close() if root.winfo_exists() else None)
     root.mainloop()
+
+
+def ask_vault_setup() -> bool:
+    """Vault 파일 없을 때 비밀번호 입력 팝업.
+    마스터 키 + 4개 계정 비밀번호 입력 → .rpa_vault.enc.json 생성.
+    Returns True if setup completed, False if cancelled."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from tools.rpa_credential_vault import CredentialVault, ACCOUNTS
+    except ImportError:
+        return False
+
+    result = [False]
+    _BG   = "#f5f5f7"; _CARD = "#ffffff"; _SEP = "#d2d2d7"
+    _T1   = "#1d1d1f"; _T2   = "#6e6e73"; _BLUE = "#0071e3"
+    _RED  = "#ff3b30"; _HOV  = "#e8e8ed"
+
+    _ACCT_ORDER = ["gray", "green", "brown", "purple"]
+    _ACCT_LABEL = {"gray": "회색 (bridgejobkr)", "green": "초록 (Coreabridge)",
+                   "brown": "갈색 (ferrari812fast)", "purple": "보라 (airelair00)"}
+
+    def _build():
+        root = tk.Tk()
+        _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+        if _ico.exists():
+            try: root.iconbitmap(str(_ico))
+            except Exception: pass
+        root.title("Craig RPA — 비밀번호 설정")
+        root.overrideredirect(True)
+        root.attributes("-topmost", True)
+        root.configure(bg=_BG)
+
+        w, h = 360, 500
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+        root.lift(); root.focus_force()
+
+        border = tk.Frame(root, bg=_SEP, padx=1, pady=1)
+        border.pack(fill="both", expand=True)
+        card = tk.Frame(border, bg=_CARD)
+        card.pack(fill="both", expand=True)
+
+        tk.Label(card, text="🔐  비밀번호 설정",
+                 font=tkfont.Font(family="Malgun Gothic", size=15, weight="bold"),
+                 bg=_CARD, fg=_T1).pack(pady=(16, 2))
+        tk.Label(card, text="마스터 키와 4개 계정 비밀번호를 입력하세요\n(입력 내용은 화면에 표시되지 않습니다)",
+                 font=tkfont.Font(family="Malgun Gothic", size=9),
+                 bg=_CARD, fg=_T2, justify="center").pack(pady=(0, 8))
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12)
+
+        entries = {}
+        _fnt = tkfont.Font(family="Malgun Gothic", size=10)
+        _fnt_sm = tkfont.Font(family="Malgun Gothic", size=9)
+
+        # 마스터 키
+        f = tk.Frame(card, bg=_CARD); f.pack(fill="x", padx=16, pady=(10, 2))
+        tk.Label(f, text="마스터 키 (기억할 암호)", font=_fnt_sm, bg=_CARD, fg=_T2, anchor="w").pack(fill="x")
+        e = tk.Entry(f, show="●", font=_fnt, relief="flat", bd=1,
+                     highlightthickness=1, highlightbackground=_SEP, highlightcolor=_BLUE)
+        e.pack(fill="x", ipady=5); entries["master"] = e
+
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", padx=12, pady=(8, 0))
+
+        # 4개 계정 비밀번호
+        for ak in _ACCT_ORDER:
+            f = tk.Frame(card, bg=_CARD); f.pack(fill="x", padx=16, pady=(6, 0))
+            tk.Label(f, text=_ACCT_LABEL[ak], font=_fnt_sm, bg=_CARD, fg=_T2, anchor="w").pack(fill="x")
+            e = tk.Entry(f, show="●", font=_fnt, relief="flat", bd=1,
+                         highlightthickness=1, highlightbackground=_SEP, highlightcolor=_BLUE)
+            e.pack(fill="x", ipady=5); entries[ak] = e
+
+        err_lbl = tk.Label(card, text="", font=_fnt_sm, bg=_CARD, fg=_RED)
+        err_lbl.pack(pady=(6, 0))
+
+        def _submit():
+            mk = entries["master"].get().strip()
+            if not mk:
+                err_lbl.configure(text="마스터 키를 입력하세요"); return
+            pws = {}
+            for ak in _ACCT_ORDER:
+                pw = entries[ak].get()
+                if not pw:
+                    err_lbl.configure(text=f"{_ACCT_LABEL[ak]} 비밀번호를 입력하세요"); return
+                pws[ak] = pw
+            vault = CredentialVault()
+            ok = vault.setup_from_gui(mk, pws)
+            if ok:
+                result[0] = True
+                root.destroy()
+            else:
+                err_lbl.configure(text="저장 실패 — 다시 시도하세요")
+
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x", pady=(8, 0))
+        btn_row = tk.Frame(card, bg=_CARD); btn_row.pack(fill="x")
+
+        ok_lbl = tk.Label(btn_row, text="저장",
+                          font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                          bg=_CARD, fg=_BLUE, pady=10, cursor="hand2")
+        ok_lbl.pack(side="left", expand=True, fill="both")
+        ok_lbl.bind("<Button-1>", lambda e: _submit())
+        ok_lbl.bind("<Enter>", lambda e: ok_lbl.configure(bg=_HOV))
+        ok_lbl.bind("<Leave>", lambda e: ok_lbl.configure(bg=_CARD))
+
+        tk.Frame(btn_row, bg=_SEP, width=1).pack(side="left", fill="y")
+
+        cancel_lbl = tk.Label(btn_row, text="취소",
+                              font=tkfont.Font(family="Malgun Gothic", size=13),
+                              bg=_CARD, fg=_RED, pady=10, cursor="hand2")
+        cancel_lbl.pack(side="left", expand=True, fill="both")
+        cancel_lbl.bind("<Button-1>", lambda e: root.destroy())
+        cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg=_HOV))
+        cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg=_CARD))
+
+        entries["master"].focus_set()
+        root.bind("<Return>", lambda e: _submit())
+
+        def _press(e): root._dx, root._dy = e.x_root, e.y_root
+        def _move(e):
+            x = root.winfo_x() + e.x_root - root._dx
+            y = root.winfo_y() + e.y_root - root._dy
+            root._dx, root._dy = e.x_root, e.y_root
+            root.geometry(f"+{x}+{y}")
+        for dw in (card, border):
+            dw.bind("<ButtonPress-1>", _press)
+            dw.bind("<B1-Motion>", _move)
+
+        root.mainloop()
+
+    import threading as _threading
+    if _threading.current_thread() is _threading.main_thread():
+        _build()
+    else:
+        t = _threading.Thread(target=_build, daemon=True)
+        t.start(); t.join(timeout=300)
+    return result[0]
 
 
 # ── Module-level exports ──────────────────────────────────────────────────────

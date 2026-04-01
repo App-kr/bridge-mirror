@@ -1159,8 +1159,16 @@
       "git": "d71ad916",
       "files": 2154,
       "db_hash": "9512cfd7b9c7"
+    },
+    {
+      "dir": "20260401_165422__doc_processor_PDF_redact_fix",
+      "task": "doc_processor PDF redact fix",
+      "ts": "2026.04.01 16:54:28",
+      "git": "ffc2925f",
+      "files": 2164,
+      "db_hash": "80878a0f977c"
     }
   ],
-  "last_backup": "2026.04.01 09:27:51",
-  "total_count": 145
+  "last_backup": "2026.04.01 16:54:28",
+  "total_count": 146
 }

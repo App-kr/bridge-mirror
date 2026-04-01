@@ -879,6 +879,33 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         return False
 
 
+def cl_logout(driver):
+    """Craigslist 로그아웃 — 로그아웃 링크 클릭."""
+    try:
+        print("  [LOGOUT] 로그아웃 중...")
+        driver.get("https://accounts.craigslist.org/login/home")
+        _delay(1.5, 2.0)
+        src = driver.page_source.lower()
+        if "log out" in src or "logout" in src:
+            try:
+                logout_link = driver.find_element(
+                    By.XPATH,
+                    "//a[contains(translate(text(),'LOGOUT','logout'),'log out') or "
+                    "contains(translate(@href,'LOGOUT','logout'),'logout')]"
+                )
+                logout_link.click()
+                _delay(1.5, 2.0)
+                print("  [LOGOUT] 완료 ✅")
+            except Exception:
+                driver.get("https://accounts.craigslist.org/login/home?logout=1")
+                _delay(1.5, 2.0)
+                print("  [LOGOUT] URL 방식 완료 ✅")
+        else:
+            print("  [LOGOUT] 이미 로그아웃 상태")
+    except Exception as e:
+        print(f"  [LOGOUT ERROR] {e}")
+
+
 def _js_click(driver, el):
     driver.execute_script("arguments[0].click();", el)
 
@@ -1584,6 +1611,21 @@ def main():
                     acct_lock.unlink(missing_ok=True)
             except Exception:
                 acct_lock.unlink(missing_ok=True)
+
+    # ── Vault 없으면 GUI setup 팝업 ──────────────────────────────────────────
+    if not args.dry_run and not args.generate and not args.diagnose:
+        _vault_file = Path(__file__).resolve().parent / ".rpa_vault.enc.json"
+        if not _vault_file.exists():
+            try:
+                from rpa_overlay import ask_vault_setup
+                print("[INFO] Vault 파일 없음 — 비밀번호 설정 팝업 표시")
+                if not ask_vault_setup():
+                    print("[ABORT] 비밀번호 설정 취소됨.")
+                    sys.exit(0)
+                print("[OK] Vault 생성 완료")
+            except Exception as _e:
+                print(f"[ERROR] Vault 설정 팝업 실패: {_e}")
+                sys.exit(1)
 
     # ── Credential Vault 재로딩 (--account 지정 시) ──
     # NOTE: ENV는 절대 사용 금지, Vault에서만 로드

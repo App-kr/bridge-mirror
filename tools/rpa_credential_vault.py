@@ -236,6 +236,28 @@ class CredentialVault:
             print(f"[ERROR] 복호화 실패 ({key}): {e}")
             return ""
 
+    def setup_from_gui(self, master_key: str, passwords: dict) -> bool:
+        """GUI에서 수집한 마스터키 + 비밀번호로 vault 생성.
+
+        passwords = {"gray": "pw1", "green": "pw2", "brown": "pw3", "purple": "pw4"}
+        Returns True on success.
+        """
+        if not master_key:
+            return False
+        mk = master_key.encode("utf-8")
+        vault_data = {}
+        for account_key in ["gray", "green", "brown", "purple"]:
+            pw = passwords.get(account_key, "")
+            if not pw:
+                return False
+            email = ACCOUNTS[account_key]["email"]
+            vault_data[f"{account_key}_email"]    = _triple_encrypt(email, mk)
+            vault_data[f"{account_key}_password"] = _triple_encrypt(pw, mk)
+        self._write_vault(vault_data)
+        # 메모리 소각
+        mk_arr = bytearray(mk); mk_arr[:] = b"\x00" * len(mk_arr); del mk, mk_arr
+        return True
+
     def setup(self):
         """초기 설정: 4개 계정 비밀번호만 입력 → 3중 암호화 저장"""
         print("\n" + "="*70)
