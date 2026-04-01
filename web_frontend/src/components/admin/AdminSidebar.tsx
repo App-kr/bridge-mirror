@@ -29,6 +29,7 @@ import {
   Layers,
   LayoutList,
   FilePen,
+  ListChecks,
 } from 'lucide-react'
 
 interface NavItem {
@@ -96,6 +97,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/settings', label: '기본 설정', icon: <Settings size={ICON_SIZE} /> },
       { href: '/admin/inquiries', label: '에이전시', icon: <MessageSquare size={ICON_SIZE} /> },
       { href: '/admin/matching', label: '프로필 매칭 (AI)', icon: <Brain size={ICON_SIZE} /> },
+      { href: '/admin/form-config', label: '폼 옵션 관리', icon: <ListChecks size={ICON_SIZE} /> },
     ],
   },
 ]
