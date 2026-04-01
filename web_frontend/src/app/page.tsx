@@ -652,8 +652,10 @@ export default function HomePage() {
                           <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing || '—'}</span>
                         </div>
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Vacation</span>
-                          <span className="text-[#a1a1a6] text-right">{job.vacation || '11+a'}</span>
+                          <span className="text-[#636366] font-medium shrink-0">Benefits</span>
+                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">
+                            {(job.employee_benefits && job.employee_benefits.length > 0) ? job.employee_benefits.slice(0, 3).join(' · ') : '—'}
+                          </span>
                         </div>
                       </div>
 
