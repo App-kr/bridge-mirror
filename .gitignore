@@ -1,3 +1,6 @@
+# ── Build Artifacts ────────────────────────────────────────────
+tsc_output.txt
+
 # ── Environment & Secrets ──────────────────────────────────────
 .env
 .env.*
