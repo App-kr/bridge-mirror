@@ -9429,11 +9429,8 @@ async def internal_get_form_config(form_name: str, request: Request):
 async def admin_get_form_config(form_name: str, request: Request):
     if form_name not in ("apply", "inquiry"):
         return SafeJSONResponse({"success": False, "detail": "not found"}, status_code=404)
-    auth = _check_admin(request)
-    if not auth["ok"]:
-        _log_unauthorized_access(request)
-        return SafeJSONResponse({"success": False, "detail": auth.get("reason", "인증 실패")}, status_code=403)
-    if not _rate_ok(request):
+    _check_admin(request)   # 실패 시 HTTPException 발생 (FastAPI 자동 처리)
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         return SafeJSONResponse({"success": False, "detail": "Too Many Requests"}, status_code=429)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -9453,11 +9450,8 @@ async def admin_get_form_config(form_name: str, request: Request):
 async def admin_put_form_config(form_name: str, field_key: str, request: Request):
     if form_name not in ("apply", "inquiry"):
         return SafeJSONResponse({"success": False, "detail": "not found"}, status_code=404)
-    auth = _check_admin(request)
-    if not auth["ok"]:
-        _log_unauthorized_access(request)
-        return SafeJSONResponse({"success": False, "detail": auth.get("reason", "인증 실패")}, status_code=403)
-    if not _rate_ok(request):
+    _check_admin(request)
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         return SafeJSONResponse({"success": False, "detail": "Too Many Requests"}, status_code=429)
     try:
         body = await request.json()
@@ -9497,11 +9491,8 @@ async def admin_put_form_config(form_name: str, field_key: str, request: Request
 async def admin_reset_form_config(form_name: str, field_key: str, request: Request):
     if form_name not in ("apply", "inquiry"):
         return SafeJSONResponse({"success": False, "detail": "not found"}, status_code=404)
-    auth = _check_admin(request)
-    if not auth["ok"]:
-        _log_unauthorized_access(request)
-        return SafeJSONResponse({"success": False, "detail": auth.get("reason", "인증 실패")}, status_code=403)
-    if not _rate_ok(request):
+    _check_admin(request)
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         return SafeJSONResponse({"success": False, "detail": "Too Many Requests"}, status_code=429)
     defaults = _FORM_DEFAULTS.get(form_name, {}).get(field_key)
     if defaults is None:
