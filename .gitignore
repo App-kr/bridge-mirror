@@ -24,12 +24,15 @@ vapid_*.txt
 .rpa_vault.enc.json
 
 # ── Databases ─────────────────────────────────────────────────
-# DB는 git에 절대 포함하지 않음 (Render는 /data/master.db 독립 운용)
+# DB 원본은 git 미포함 (Render는 /data/master.db 독립 운용)
+# 암호화 백업(.enc)만 git 허용
 *.db
 *.db-shm
 *.db-wal
 master.db
 master.db.*
+!master.db.enc
+!master.db.enc.meta
 *.sqlite
 *.sqlite3
 data/

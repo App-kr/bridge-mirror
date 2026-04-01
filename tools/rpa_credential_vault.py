@@ -399,5 +399,25 @@ def main():
         print(f"[ERROR] 알 수 없는 명령어: {cmd}")
 
 
+# ── 모듈 레벨 편의 함수 (craigslist_auto_rpa.py에서 import) ─────────────────
+
+def load_credentials(account_name: str) -> tuple:
+    """계정 이름(gray/green/brown/purple)으로 (email, password) 반환.
+
+    craigslist_auto_rpa.py 에서:
+        from tools.rpa_credential_vault import load_credentials
+        email, pw = load_credentials("gray")
+    """
+    if not VAULT_FILE.exists():
+        print(f"[ERROR] Vault 파일 없음: {VAULT_FILE}")
+        print("먼저 실행하세요: python tools/rpa_credential_vault.py setup")
+        return "", ""
+
+    vault = CredentialVault()
+    email    = vault.get_decrypted(f"{account_name}_email")
+    password = vault.get_decrypted(f"{account_name}_password")
+    return email, password
+
+
 if __name__ == "__main__":
     main()
