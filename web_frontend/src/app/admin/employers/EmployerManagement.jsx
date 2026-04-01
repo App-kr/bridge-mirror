@@ -1390,6 +1390,7 @@ export default function EmployerManagement(){
   const searchTimerRef=useRef(null);
   const sentinelRef=useRef(null);
   const sentinelDocRef=useRef(null);
+  const lastJobTotalRef=useRef(0);
 
   useEffect(()=>{
     let cancelled=false;
@@ -1403,11 +1404,31 @@ export default function EmployerManagement(){
         const body=await res.json();
         const jobs=Array.isArray(body?.data?.jobs)?body.data.jobs:[];
         console.log(`[employers] loaded via /api/admin/jobs/v2: ${jobs.length} jobs`);
-        if(!cancelled)setData(jobs.map(mapJobsV2));
+        if(!cancelled){setData(jobs.map(mapJobsV2));lastJobTotalRef.current=jobs.length;}
       }catch(e){console.error("[employers] load failed:",e);}
       finally{if(!cancelled)setLoading(false);}
     })();
     return()=>{cancelled=true;};
+  },[]);
+
+  // 신규 구인의뢰 제출 감지 → 자동 리로드 (30초 polling)
+  useEffect(()=>{
+    const iv=setInterval(async()=>{
+      try{
+        const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+        if(!adminKey)return;
+        const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
+        const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
+        if(!res.ok)return;
+        const body=await res.json();
+        const jobs=Array.isArray(body?.data?.jobs)?body.data.jobs:[];
+        if(lastJobTotalRef.current>0&&jobs.length>lastJobTotalRef.current){
+          setData(jobs.map(mapJobsV2));
+        }
+        lastJobTotalRef.current=jobs.length;
+      }catch{/* ignore */}
+    },30_000);
+    return()=>clearInterval(iv);
   },[]);
   const[tab,setTab]=useState("active");
   const[mode,setMode]=useState("doc");

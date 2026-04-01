@@ -1112,6 +1112,15 @@ async def apply(request: Request, body: CandidateApply):
             # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
             threading.Thread(target=_backup_on_submit, args=("apply",), daemon=True).start()
 
+            # 원본 JSON 별도 보관 (암호화 전 평문 → 암호화 후 독립 파일, 불변 원본)
+            _raw_apply = body.model_dump(exclude_none=True)
+            _raw_apply.pop("captcha_token", None)
+            threading.Thread(
+                target=_save_raw_submission,
+                args=(_raw_apply, "apply", str(new_id)),
+                daemon=True,
+            ).start()
+
             # Push 알림 (비동기, 실패해도 접수 완료)
             threading.Thread(
                 target=_notify_push,
@@ -1209,6 +1218,15 @@ async def inquiry(request: Request, body: ClientInquiry):
 
             # 제출 즉시 암호화 백업 (비동기, 실패해도 접수 완료)
             threading.Thread(target=_backup_on_submit, args=("inquiry",), daemon=True).start()
+
+            # 원본 JSON 별도 보관 (암호화 전 평문 → 암호화 후 독립 파일, 불변 원본)
+            _raw_payload = body.model_dump(exclude_none=True)
+            _raw_payload.pop("captcha_token", None)
+            threading.Thread(
+                target=_save_raw_submission,
+                args=(_raw_payload, "inquiry", str(new_id)),
+                daemon=True,
+            ).start()
 
             # 자동 채용공고 생성 (status='pending_review') — 실패해도 접수 완료
             threading.Thread(
@@ -6291,6 +6309,49 @@ def _backup_on_submit(source: str = "") -> None:
 
     except Exception as e:
         _log_bk.error("암호화 백업 실패 (접수는 완료됨): %s", e)
+
+
+def _save_raw_submission(payload: dict, source: str, record_id: str = "") -> None:
+    """
+    제출 시점 원본 JSON을 별도 AES-256-GCM 파일로 보관.
+    backups/raw/raw_{source}_{YYYYMMDD_HHMMSS}_{id}.enc
+    - DB와 독립된 불변 원본 — 관리자도 DB에서 수정해도 이 파일은 보존
+    - 복호화 키: BRIDGE_FIELD_KEY (Render 환경변수, 서버만 보유)
+    - 최근 200개 유지
+    """
+    import json as _j, hashlib as _hs, logging as _lg
+    _log = _lg.getLogger("bridge.raw_backup")
+    try:
+        _key_raw = os.getenv("BRIDGE_FIELD_KEY", "").strip()
+        if not _key_raw:
+            return
+        raw_dir = _BACKUP_DIR.parent / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        fname = f"raw_{source}_{ts}_{record_id}.enc"
+
+        plaintext = _j.dumps({
+            "source": source,
+            "id": record_id,
+            "submitted_at": ts,
+            "payload": payload,
+        }, ensure_ascii=False, default=str).encode("utf-8")
+
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        key = _hs.sha256(_key_raw.encode()).digest()
+        nonce = os.urandom(12)
+        ciphertext = AESGCM(key).encrypt(nonce, plaintext, source.encode())
+        (raw_dir / fname).write_bytes(nonce + ciphertext)
+        _log.info("RAW_BACKUP: %s (%d bytes)", fname, len(plaintext))
+
+        # 최근 200개만 유지
+        files = sorted(raw_dir.glob(f"raw_{source}_*.enc"), key=lambda p: p.stat().st_mtime)
+        for old in files[:-200]:
+            try: old.unlink()
+            except Exception: pass
+    except Exception as e:
+        _log.warning("RAW_BACKUP 실패 (접수는 완료됨): %s", e)
 
 
 # ── 자동 채용공고 생성 Helper (inquiry 접수 시 background thread 호출) ────────
