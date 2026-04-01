@@ -307,8 +307,8 @@ if "--account" in sys.argv:
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
 # 초기 로드 (--account 지정 시 재로드)
 # dry-run/generate/--help 모드에서는 자격증명 불필요 — lazy load
-_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
-CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
+# 자격증명은 main() 안에서 Vault GUI 팝업으로 로드 (모듈 레벨 로드 금지)
+CL_EMAIL, CL_PASSWORD = ("", "")
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 
@@ -1612,9 +1612,11 @@ def main():
             except Exception:
                 acct_lock.unlink(missing_ok=True)
 
-    # ── Vault 없으면 GUI setup 팝업 ──────────────────────────────────────────
+    # ── Vault + Credential 로드 ───────────────────────────────────────────────
+    # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
     if not args.dry_run and not args.generate and not args.diagnose:
         _vault_file = Path(__file__).resolve().parent / ".rpa_vault.enc.json"
+        # 1) Vault 없으면 GUI setup 팝업
         if not _vault_file.exists():
             try:
                 from rpa_overlay import ask_vault_setup
@@ -1623,20 +1625,18 @@ def main():
                     print("[ABORT] 비밀번호 설정 취소됨.")
                     sys.exit(0)
                 print("[OK] Vault 생성 완료")
-                # 새로 생성된 vault에서 기본 계정 자격증명 로드 (세션 캐시 사용)
-                global CL_EMAIL, CL_PASSWORD
-                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(_ACCOUNT)
             except Exception as _e:
                 print(f"[ERROR] Vault 설정 팝업 실패: {_e}")
                 sys.exit(1)
-
-    # ── Credential Vault 재로딩 (--account 지정 시) ──
-    # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
-    if args.account:
+        # 2) Vault에서 자격증명 로드 (계정 선택 후, GUI 마스터 키 팝업 사용)
         global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
-        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(args.account)
-        CL_CITY     = "seoul"  # 기본값 유지
-        CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
+        _acct_to_load = args.account or _ACCOUNT
+        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(_acct_to_load)
+        if not CL_EMAIL or not CL_PASSWORD:
+            print("[ABORT] 자격증명 로드 실패 (마스터 키 오류 또는 취소) — 종료")
+            sys.exit(1)
+        CL_CITY     = "seoul"
+        CL_CONTACT  = "bridgejobkr@gmail.com"
         CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
 
     # ── 파일 무결성 체크 ──

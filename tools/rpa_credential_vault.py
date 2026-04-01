@@ -213,16 +213,24 @@ class CredentialVault:
             _SESSION_KEY[0] = None
             return key
         # 2. GUI 팝업 (비인터랙티브 컨텍스트 대응)
+        _gui_tried = False
         try:
             import sys as _sys
             _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
             from rpa_overlay import ask_master_key_gui
+            _gui_tried = True
             key_str = ask_master_key_gui()
             if key_str:
                 return key_str.encode("utf-8")
+            # 취소됨 → 빈 bytes 반환 (상위에서 "" 처리)
+            raise RuntimeError("마스터 키 입력 취소됨")
+        except RuntimeError:
+            raise
         except Exception:
             pass
-        # 3. 터미널 폴백 (인터랙티브 CLI 환경)
+        # 3. 터미널 폴백 (GUI 없는 CLI 환경에서만)
+        if _gui_tried:
+            raise RuntimeError("GUI 마스터 키 팝업 실패")
         return getpass.getpass(MASTER_KEY_PROMPT).encode("utf-8")
 
     def _read_vault(self) -> dict:
@@ -460,10 +468,14 @@ def load_credentials(account_name: str) -> tuple:
         print("먼저 실행하세요: python tools/rpa_credential_vault.py setup")
         return "", ""
 
-    vault = CredentialVault()
-    email    = vault.get_decrypted(f"{account_name}_email")
-    password = vault.get_decrypted(f"{account_name}_password")
-    return email, password
+    try:
+        vault = CredentialVault()
+        email    = vault.get_decrypted(f"{account_name}_email")
+        password = vault.get_decrypted(f"{account_name}_password")
+        return email, password
+    except RuntimeError as e:
+        print(f"[INFO] 자격증명 로드 중단: {e}")
+        return "", ""
 
 
 if __name__ == "__main__":
