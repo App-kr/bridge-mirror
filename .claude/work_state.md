@@ -1,5 +1,5 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-01 (세션 26 — doc_processor v2.6 + api_server 사진/국적 수정 완료)
+최근 업데이트: 2026-04-01 (세션 27 — doc_processor v2.7 + 사진 S3 폴백 완료)
 
 ## 세션 재시작 방법
 1. `/clear`
@@ -7,15 +7,29 @@
 
 ---
 
-## ✅ 2026-04-01 완료된 작업
+## ✅ 2026-04-01 완료된 작업 (세션 27 추가)
 
-### Python D:\Phtyon 3 → Q:\Phtyon 3 이동 ✅ 완료
+### doc_processor.py v2.7 ✅ 완료 (커밋 7dd93de0, d310c3df)
+- **RE_KR_RESIDENTIAL → PDF _build_search_patterns() 추가**: 부영 1차 아파트 등 한국 아파트명 PDF에서도 삭제
+- **SCHOOL 패턴 줄 단위 스캔**: ndent School 잔류 버그 수정 (페이지 전체 텍스트 → 줄별 스캔)
+- **이름 줄 단위 폴백**: Nandi Mthembu 같은 케이스 풀네임 미검출 시 줄 단위 재시도
+- **전 세계 PII 패턴 추가**: RE_SCHOOL_NAMED, RE_UNIV_OF, RE_US_CITY_STATE, RE_FOREIGN_CITY, RE_AGE_MENTION, RE_VISA_STATUS
+- **Pass 2.7/2.8**: 학교명 → University/School 일반화, 외국 도시/나이/비자 삭제
+- **전화 False Positive 수정**: 연도 범위 (2017-2021 등) 전화번호로 오인식 차단
+- **KR_WORKPLACE_KEYWORDS**: "april" 제거 (April 2016 오인식 방지)
+
+### api_server.py 사진 S3 폴백 ✅ 완료 (커밋 3c910d4b)
+- **DB photo_url 조회 추가**: SELECT에 photo_url 컬럼 추가
+- **S3 폴백**: 폼 사진 없으면 DB photo_url → s3_download_bytes() → 임시파일 생성
+- **오류 로깅 추가**: 기존 `except Exception: pass` → logging.warning() 출력
+
+### 2026-04-01 이전 완료 (세션 26)
+#### Python D:\Phtyon 3 → Q:\Phtyon 3 이동 ✅
 - `Q:\Phtyon 3\python.exe` (3.10.0) 정상 동작
 - `D:\Phtyon 3` → Junction으로 대체 (하위 호환 유지)
 - `D:\Python314` 삭제 완료
-- doc_processor.py docstring 경로 Q: 반영 완료
 
-### doc_processor.py v2.6 ✅ 완료
+#### doc_processor.py v2.6 ✅
 - 이름: 성(Last name)만 삭제, 이름 유지 — DOCX + PDF
 - RE_KR_RESIDENTIAL 추가 (아파트/빌라/오피스텔 등)
 - KR_WORKPLACE_KEYWORDS 확장
@@ -23,7 +37,7 @@
 - PII 라벨 (nationality/citizenship/race/ethnicity/religion) 줄 삭제
 - 국적 자동 추출 + DB 업데이트 (_extract_nationality_from_text)
 
-### api_server.py 사진/국적 수정 ✅ 완료
+#### api_server.py (v2.6) ✅
 - files_photo → temp파일 → photo_tmp_path 전달
 - brj_number = int(candidate_id) 사용
 - candidate_dict에 sheet_number, nationality 포함
@@ -32,13 +46,17 @@
 
 ---
 
-## ⚠️ 현재 진행 중인 작업 (내일 이어서)
+## ⚠️ 내일 이어서 할 작업 (우선순위 순)
 
-### 배경
-- 네이버/쿠팡/페북/인스타 등 다수 계정 해킹시도 (인도/터키)
-- Gemini와 작업 중 .env 파일 소각 + git filter-repo 실행
-- MasterVault v3.0 구축 완료 (c3aefce)
-- **지금 필요**: 3중암호화 + master.db git 제거 + 전체 PII 암호화
+### 1순위: 이력서 변환기 실제 테스트 [Render 배포 후]
+- Render 대시보드 → bridge-n7hk → Manual Deploy 클릭 (아직 미배포)
+- 배포 후 /admin/resume-converter에서 테스트:
+  - PDF + 사진 함께 업로드 → 사진 삽입 확인
+  - PDF만 업로드 (사진 미업로드) → S3 폴백 작동 확인
+  - 이름(성 삭제/이름 유지), 아파트명, 학교명 결과 확인
+- Render 로그에서 `[RESUME]` 로그 확인
+
+### 2순위: doc_processor 추가 테스트 (7개 샘플 파일 기준)
 
 ### 완료된 것 (세션 18)
 - `tools/master_vault.py` — Session-Ephemeral AES-256-GCM vault (c3aefce) ✅
