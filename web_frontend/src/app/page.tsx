@@ -235,8 +235,14 @@ export default function HomePage() {
       .then(d => {
         const partners = d?.data?.partners ?? []
         if (partners.length > 0) {
-          const academies = partners.filter((p: { category: string }) => p.category === 'academy').map((p: { name: string }) => p.name)
-          const schools = partners.filter((p: { category: string }) => p.category === 'school').map((p: { name: string }) => p.name)
+          const academies = partners
+            .filter((p: { category: string }) => p.category === 'academy')
+            .map((p: { name: string }) => p.name)
+            .filter((n: string | null) => n && n.trim().length > 0)
+          const schools = partners
+            .filter((p: { category: string }) => p.category === 'school')
+            .map((p: { name: string }) => p.name)
+            .filter((n: string | null) => n && n.trim().length > 0)
           if (academies.length > 0) setAcademyNames(academies)
           if (schools.length > 0) setSchoolNames(schools)
         }
