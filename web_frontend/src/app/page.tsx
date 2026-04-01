@@ -636,20 +636,24 @@ export default function HomePage() {
                         <div className="flex justify-between gap-2">
                           <span className="text-[#636366] font-medium shrink-0">Student Age</span>
                           <span className="text-[#a1a1a6] text-right">
-                            {(job.teaching_age && job.teaching_age.length > 0) ? formatTeachingAge(job.teaching_age) : '11+a'}
+                            {(job.teaching_age && job.teaching_age.length > 0) ? formatTeachingAge(job.teaching_age) : (job.teaching_age_raw || '—')}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-[#636366] font-medium shrink-0">Hours</span>
-                          <span className="text-[#a1a1a6] text-right">{job.working_hours || '11+a'}</span>
+                          <span className="text-[#a1a1a6] text-right">{job.working_hours || '—'}</span>
                         </div>
                         <div className="flex justify-between gap-2">
                           <span className="text-[#636366] font-medium shrink-0">Salary</span>
-                          <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary || '11+a'}</span>
+                          <span className="text-[#a1a1a6] text-right truncate">{job.monthly_salary || '—'}</span>
                         </div>
                         <div className="flex justify-between gap-2">
-                          <span className="text-[#636366] font-medium shrink-0">Benefits</span>
-                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing || '11+a'}</span>
+                          <span className="text-[#636366] font-medium shrink-0">Housing</span>
+                          <span className="text-[#a1a1a6] text-right truncate max-w-[140px]">{job.housing || '—'}</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#636366] font-medium shrink-0">Vacation</span>
+                          <span className="text-[#a1a1a6] text-right">{job.vacation || '11+a'}</span>
                         </div>
                       </div>
 
