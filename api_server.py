@@ -7550,43 +7550,45 @@ def _ensure_testimonials_schema():
     import json as _json
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS testimonials (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT    NOT NULL,
-            country     TEXT    NOT NULL DEFAULT '',
-            photo_url   TEXT    DEFAULT NULL,
-            rating      INTEGER DEFAULT 5,
-            review_text TEXT    NOT NULL,
-            sort_order  INTEGER DEFAULT 0,
-            is_visible  INTEGER DEFAULT 1,
-            is_deleted  INTEGER DEFAULT 0,
-            created_at  TEXT    DEFAULT '',
-            updated_at  TEXT    DEFAULT ''
-        )
-    """)
-    conn.commit()
-    # 자동 시드 (빈 테이블일 때)
-    count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0").fetchone()[0]
-    if count == 0:
-        seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
-        if seed_path.exists():
-            try:
-                items = _json.loads(seed_path.read_text(encoding="utf-8"))
-                for t in items:
-                    conn.execute("""
-                        INSERT INTO testimonials (name, country, photo_url, rating, review_text, sort_order, is_visible, is_deleted, created_at, updated_at)
-                        SELECT ?,?,?,?,?,?,1,0,?,?
-                        WHERE NOT EXISTS (SELECT 1 FROM testimonials WHERE name=? AND review_text=? AND is_deleted=0)
-                    """, (t["name"], t.get("country",""), t.get("photo_url"), t.get("rating",5),
-                          t["review_text"], t.get("sort_order",0), t.get("created_at",""), t.get("updated_at",""),
-                          t["name"], t["review_text"]))
-                conn.commit()
-                logging.getLogger("bridge.api").info(
-                    "_ensure_testimonials_schema: 시드 %d rows 복원", len(items))
-            except Exception as _se:
-                logging.getLogger("bridge.api").warning("testimonials seed 스킵: %s", _se)
-    conn.close()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS testimonials (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    NOT NULL,
+                country     TEXT    NOT NULL DEFAULT '',
+                photo_url   TEXT    DEFAULT NULL,
+                rating      INTEGER DEFAULT 5,
+                review_text TEXT    NOT NULL,
+                sort_order  INTEGER DEFAULT 0,
+                is_visible  INTEGER DEFAULT 1,
+                is_deleted  INTEGER DEFAULT 0,
+                created_at  TEXT    DEFAULT '',
+                updated_at  TEXT    DEFAULT ''
+            )
+        """)
+        conn.commit()
+        # 자동 시드 (빈 테이블일 때)
+        count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0").fetchone()[0]
+        if count == 0:
+            seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
+            if seed_path.exists():
+                try:
+                    items = _json.loads(seed_path.read_text(encoding="utf-8"))
+                    for t in items:
+                        conn.execute("""
+                            INSERT INTO testimonials (name, country, photo_url, rating, review_text, sort_order, is_visible, is_deleted, created_at, updated_at)
+                            SELECT ?,?,?,?,?,?,1,0,?,?
+                            WHERE NOT EXISTS (SELECT 1 FROM testimonials WHERE name=? AND review_text=? AND is_deleted=0)
+                        """, (t["name"], t.get("country",""), t.get("photo_url"), t.get("rating",5),
+                              t["review_text"], t.get("sort_order",0), t.get("created_at",""), t.get("updated_at",""),
+                              t["name"], t["review_text"]))
+                    conn.commit()
+                    logging.getLogger("bridge.api").info(
+                        "_ensure_testimonials_schema: 시드 %d rows 복원", len(items))
+                except Exception as _se:
+                    logging.getLogger("bridge.api").warning("testimonials seed 스킵: %s", _se)
+    finally:
+        conn.close()
 
 
 try:
@@ -7608,6 +7610,8 @@ async def testimonials_list(
         return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
+    total = 0
+    data: list = []
     try:
         total = conn.execute(
             "SELECT COUNT(*) FROM testimonials WHERE is_visible = 1 AND is_deleted = 0"
@@ -7624,6 +7628,15 @@ async def testimonials_list(
             )
         cols = [d[0] for d in cur.description]
         data = [dict(zip(cols, r)) for r in cur.fetchall()]
+    except Exception as _e:
+        logging.getLogger("bridge.api").error("testimonials_list DB 오류: %s", _e)
+        # 테이블 미존재 등 DB 오류 → 빈 목록 반환 (프론트엔드 크래시 방지)
+        total = 0
+        data = []
+        try:
+            _ensure_testimonials_schema()
+        except Exception:
+            pass
     finally:
         conn.close()
     if random and data:
