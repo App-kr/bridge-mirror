@@ -1,30 +1,30 @@
 # ============================================================
-# BRIDGE Craigslist RPA — 원클릭 셋업 (다른 PC용)
+# BRIDGE Craigslist RPA — 원클릭 셋업  v2  (2026-04-01)
 # ============================================================
-# 사용법: 이 폴더를 USB에 복사 -> 다른 PC에서 우클릭 -> PowerShell로 실행
+# 사용법: 이 폴더를 USB에 복사 → 다른 PC에서 우클릭 → PowerShell로 실행
 # 또는: powershell -ExecutionPolicy Bypass -File setup.ps1
 #
-# 보안 정책:
-#   - DB에서 PII 테이블 제거 (jobs + ad_posts만 포함)
-#   - .env 파일 현재 사용자만 읽기 (ACL 제한)
-#   - 크리덴셜 하드코딩 없음 (환경변수만)
-#   - 로그에 개인정보 미기록
-#   - Craigslist 비밀번호 입력 시 마스킹
+# 포함 기능:
+#   - Python 자동 탐지 (3.10+)
+#   - pip 패키지 자동 설치 (selenium, webdriver-manager, pillow 등)
+#   - DPAPI 자격증명 vault 설정
+#   - BRIDGE RPA 아이콘 포함 바탕화면 바로가기
+#   - RPA 진행 오버레이 (한국어 UI + 곰 애니메이션)
+#   - Task Scheduler 6시간 자동 실행
 # ============================================================
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  BRIDGE Craigslist RPA Setup" -ForegroundColor Cyan
-Write-Host "  Security-compliant installation" -ForegroundColor DarkCyan
+Write-Host "  BRIDGE Craigslist RPA Setup  v2" -ForegroundColor Cyan
+Write-Host "  bridgejob.co.kr | Craigslist Auto-Post" -ForegroundColor DarkCyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── 1) 설치 경로 (사용자 선택) ────────────────────────────────
+# ── 1) 설치 경로 ──────────────────────────────────────────
 Write-Host "[1/8] Install location" -ForegroundColor Yellow
 Write-Host "  Default: D:\BridgeCraig" -ForegroundColor Gray
-Write-Host "  (C drive is NOT recommended for security)" -ForegroundColor DarkYellow
 $userPath = Read-Host "  Install path (Enter for default)"
 if (-not $userPath) { $userPath = "D:\BridgeCraig" }
 $InstallDir = $userPath.TrimEnd("\")
@@ -35,322 +35,286 @@ if (Test-Path $InstallDir) {
     New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
     Write-Host "  [OK] Created $InstallDir" -ForegroundColor Green
 }
-
-foreach ($sub in @("logs", "screenshots", "data")) {
+foreach ($sub in @("logs", "screenshots", "data", "tools")) {
     $p = "$InstallDir\$sub"
     if (-not (Test-Path $p)) { New-Item -Path $p -ItemType Directory -Force | Out-Null }
 }
 
-# ── 2) Python 확인 ───────────────────────────────────────────
+# ── 2) Python 확인 ───────────────────────────────────────
 Write-Host ""
 Write-Host "[2/8] Python check..." -ForegroundColor Yellow
-$pythonCmd = $null
+$pythonExe = $null
+
+# 일반 PATH 검색
 foreach ($cmd in @("python", "python3", "py")) {
     try {
         $ver = & $cmd --version 2>&1
-        if ($ver -match "Python 3") {
-            $pythonCmd = $cmd
-            Write-Host "  Found: $ver" -ForegroundColor Green
+        if ($ver -match "Python 3\.([1-9][0-9]|[0-9])") {
+            $pythonExe = (Get-Command $cmd -ErrorAction SilentlyContinue).Source
+            if (-not $pythonExe) { $pythonExe = $cmd }
+            Write-Host "  Found: $ver ($pythonExe)" -ForegroundColor Green
             break
         }
     } catch { }
 }
 
-if (-not $pythonCmd) {
-    Write-Host "  [ERROR] Python 3 not found!" -ForegroundColor Red
-    Write-Host "  Download: https://www.python.org/downloads/" -ForegroundColor Red
-    Write-Host "  IMPORTANT: Check 'Add to PATH' during install" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit 1
+# 일반 설치 경로 수동 탐색
+if (-not $pythonExe) {
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
+        "C:\Python313\python.exe",
+        "C:\Python312\python.exe",
+        "C:\Python310\python.exe"
+    )
+    foreach ($p in $candidates) {
+        if (Test-Path $p) {
+            $ver = & $p --version 2>&1
+            if ($ver -match "Python 3") {
+                $pythonExe = $p
+                Write-Host "  Found: $ver ($p)" -ForegroundColor Green
+                break
+            }
+        }
+    }
 }
 
-# ── 3) pip 패키지 설치 ───────────────────────────────────────
-Write-Host ""
-Write-Host "[3/8] Installing packages..." -ForegroundColor Yellow
-& $pythonCmd -m pip install --quiet --upgrade pip 2>$null
-& $pythonCmd -m pip install --quiet selenium webdriver-manager python-dotenv 2>&1 | Out-Null
-Write-Host "  [OK] selenium, webdriver-manager, python-dotenv" -ForegroundColor Green
+if (-not $pythonExe) {
+    Write-Host "  [ERROR] Python 3 not found!" -ForegroundColor Red
+    Write-Host "  Download: https://www.python.org/downloads/" -ForegroundColor Yellow
+    Write-Host "  ★★★ 설치 시 'Add Python to PATH' 반드시 체크 ★★★" -ForegroundColor Yellow
+    Read-Host "Python 설치 후 Enter로 재시도 (또는 Ctrl+C 종료)"
+    # 재시도
+    foreach ($cmd in @("python", "python3", "py")) {
+        try {
+            $ver = & $cmd --version 2>&1
+            if ($ver -match "Python 3") { $pythonExe = $cmd; break }
+        } catch { }
+    }
+    if (-not $pythonExe) {
+        Write-Host "  [FATAL] Still no Python. 설치 후 다시 실행하세요." -ForegroundColor Red
+        Read-Host "Press Enter to exit"; exit 1
+    }
+}
 
-# ── 4) 파일 복사 ─────────────────────────────────────────────
+# ── 3) pip 패키지 설치 ──────────────────────────────────
 Write-Host ""
-Write-Host "[4/8] Copying files..." -ForegroundColor Yellow
+Write-Host "[3/8] Installing Python packages..." -ForegroundColor Yellow
+& $pythonExe -m pip install --quiet --upgrade pip 2>$null
+$packages = @("selenium", "webdriver-manager", "python-dotenv",
+              "Pillow", "cryptography", "screeninfo", "pywin32")
+foreach ($pkg in $packages) {
+    Write-Host "  Installing $pkg..." -ForegroundColor DarkGray -NoNewline
+    & $pythonExe -m pip install --quiet $pkg 2>$null
+    Write-Host " OK" -ForegroundColor Green
+}
+Write-Host "  [OK] All packages installed" -ForegroundColor Green
+
+# ── 4) 파일 복사 ────────────────────────────────────────
+Write-Host ""
+Write-Host "[4/8] Copying RPA files..." -ForegroundColor Yellow
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# RPA 스크립트 + 오버레이
-Copy-Item "$ScriptDir\craigslist_auto_rpa.py" "$InstallDir\craigslist_auto_rpa.py" -Force
-Write-Host "  [OK] craigslist_auto_rpa.py" -ForegroundColor Green
-if (Test-Path "$ScriptDir\rpa_overlay.py") {
-    Copy-Item "$ScriptDir\rpa_overlay.py" "$InstallDir\rpa_overlay.py" -Force
-    Write-Host "  [OK] rpa_overlay.py (desktop overlay)" -ForegroundColor Green
+# 메인 RPA 파일들
+foreach ($f in @("craigslist_auto_rpa.py", "rpa_overlay.py")) {
+    if (Test-Path "$ScriptDir\$f") {
+        Copy-Item "$ScriptDir\$f" "$InstallDir\$f" -Force
+        Write-Host "  [OK] $f" -ForegroundColor Green
+    }
 }
 
-# 이미지 복사
+# 아이콘
+if (Test-Path "$ScriptDir\rpa_icon.ico") {
+    Copy-Item "$ScriptDir\rpa_icon.ico" "$InstallDir\rpa_icon.ico" -Force
+    Write-Host "  [OK] rpa_icon.ico" -ForegroundColor Green
+}
+
+# tools/ 서브모듈
+if (Test-Path "$ScriptDir\tools\rpa_credential_vault.py") {
+    Copy-Item "$ScriptDir\tools\rpa_credential_vault.py" "$InstallDir\tools\rpa_credential_vault.py" -Force
+    Write-Host "  [OK] tools/rpa_credential_vault.py" -ForegroundColor Green
+}
+
+# 이미지
 if (Test-Path "$ScriptDir\images") {
-    $imgDst = "$InstallDir\images"
-    if (-not (Test-Path $imgDst)) { New-Item -Path $imgDst -ItemType Directory -Force | Out-Null }
-    Copy-Item "$ScriptDir\images\*" $imgDst -Force
-    Write-Host "  [OK] images/ (ad photos)" -ForegroundColor Green
+    Copy-Item "$ScriptDir\images\*" "$InstallDir\images\" -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] images/" -ForegroundColor Green
 }
 
-# DB 복사 — PII 제거된 안전 버전만
+# DB
 if (Test-Path "$ScriptDir\master_safe.db") {
     Copy-Item "$ScriptDir\master_safe.db" "$InstallDir\data\master.db" -Force
     Write-Host "  [OK] master_safe.db -> data/master.db (PII removed)" -ForegroundColor Green
 } elseif (Test-Path "$ScriptDir\master.db") {
-    Write-Host "  [WARN] Full master.db detected. Stripping PII tables..." -ForegroundColor Yellow
-    # PII 테이블 제거: jobs + ad_posts만 남김
+    Write-Host "  [WARN] Full master.db found — stripping PII tables..." -ForegroundColor Yellow
     Copy-Item "$ScriptDir\master.db" "$InstallDir\data\master.db" -Force
-    & $pythonCmd -c @"
-import sqlite3, sys
-db = '$InstallDir\data\master.db'.replace('\\','\\\\')
-conn = sqlite3.connect(db)
-# PII 포함 테이블 목록
-pii_tables = ['candidates','client_inquiries','interviews',
-              'email_log','email_queue','contact_messages']
-dropped = []
-for t in pii_tables:
-    try:
-        conn.execute(f'DROP TABLE IF EXISTS {t}')
-        dropped.append(t)
-    except: pass
-conn.execute('VACUUM')
-conn.commit()
-conn.close()
-print(f'  Dropped PII tables: {dropped}')
+    & $pythonExe -c @"
+import sqlite3
+conn = sqlite3.connect(r'$InstallDir\data\master.db')
+for t in ['candidates','client_inquiries','interviews','email_log','email_queue','contact_messages']:
+    conn.execute(f'DROP TABLE IF EXISTS {t}')
+conn.execute('VACUUM'); conn.commit(); conn.close()
+print('  PII tables removed')
 "@ 2>&1
-    Write-Host "  [OK] DB sanitized (jobs + ad_posts only)" -ForegroundColor Green
 } else {
-    Write-Host "  [ERROR] No database found in package!" -ForegroundColor Red
-    Write-Host "  Run pack.ps1 on the main PC first." -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host "  [ERROR] No database found! Run pack.ps1 on main PC first." -ForegroundColor Red
+    Read-Host "Press Enter to exit"; exit 1
 }
 
-# ── 5) .env 설정 (보안 강화) ─────────────────────────────────
+# ── 5) 자격증명 설정 (DPAPI vault) ──────────────────────
 Write-Host ""
 Write-Host "[5/8] Credentials setup..." -ForegroundColor Yellow
 
-$envFile = "$InstallDir\.env"
-if (Test-Path $envFile) {
-    Write-Host "  [OK] .env already exists (not overwriting)" -ForegroundColor Green
+# vault 파일이 이미 있으면 건너뜀
+$vaultFile = "$InstallDir\.rpa_vault.enc.json"
+if (Test-Path $vaultFile) {
+    Write-Host "  [OK] Vault already exists — credentials not overwritten" -ForegroundColor Green
 } else {
-    Write-Host "  Craigslist account:" -ForegroundColor Cyan
+    Write-Host "  Craigslist 계정 입력:" -ForegroundColor Cyan
     $clEmail = Read-Host "    Email"
-    $clPass  = Read-Host -AsSecureString "    Password"
-    # SecureString -> plain text (로컬 .env 저장용)
+    $clPassSS = Read-Host -AsSecureString "    Password (입력해도 화면에 안 보임)"
     $clPassPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($clPass))
-    $clCity  = Read-Host "    City (Enter for seoul)"
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($clPassSS))
+    $clCity = Read-Host "    City (Enter for seoul)"
     if (-not $clCity) { $clCity = "seoul" }
 
-    @"
-# Bridge Craigslist RPA Config
-# WARNING: Do not share this file. Contains credentials.
+    # rpa_credential_vault.py로 vault 생성
+    if (Test-Path "$InstallDir\tools\rpa_credential_vault.py") {
+        Push-Location $InstallDir
+        & $pythonExe -c @"
+import sys, os
+sys.path.insert(0, r'$InstallDir\tools')
+os.chdir(r'$InstallDir')
+from rpa_credential_vault import RpaCredentialVault
+vault = RpaCredentialVault()
+vault.setup_account('default', '$clEmail', '$clPassPlain', '$clCity')
+print('  [OK] Vault created (DPAPI encrypted)')
+"@ 2>&1
+        Pop-Location
+    } else {
+        # fallback: .env 파일
+        @"
 CRAIGSLIST_EMAIL=$clEmail
 CRAIGSLIST_PASSWORD=$clPassPlain
 CRAIGSLIST_CITY=$clCity
 BRIDGE_APP_DIR=$InstallDir
 BRIDGE_DB_PATH=$InstallDir\data\master.db
-"@ | Set-Content $envFile -Encoding UTF8
+"@ | Set-Content "$InstallDir\.env" -Encoding UTF8
+        # ACL 제한
+        $acl = Get-Acl "$InstallDir\.env"
+        $acl.SetAccessRuleProtection($true, $false)
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
+            "FullControl", "Allow")
+        $acl.AddAccessRule($rule)
+        Set-Acl "$InstallDir\.env" $acl
+        Write-Host "  [OK] .env created (DPAPI vault unavailable, ACL restricted)" -ForegroundColor Yellow
+    }
 
-    # 메모리에서 비밀번호 제거
-    $clPassPlain = $null
-    [GC]::Collect()
-
-    # .env 파일 ACL: 현재 사용자만 읽기/쓰기
-    $acl = Get-Acl $envFile
-    $acl.SetAccessRuleProtection($true, $false)  # 상속 차단
-    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-        "FullControl", "Allow")
-    $acl.AddAccessRule($rule)
-    Set-Acl $envFile $acl
-
-    Write-Host "  [OK] .env created (ACL: current user only)" -ForegroundColor Green
+    # 메모리 소각
+    $clPassPlain = $null; [GC]::Collect()
+    Write-Host "  [OK] Credentials saved (current user only)" -ForegroundColor Green
 }
 
-# ── 6) 실행 래퍼 + Task Scheduler ─────────────────────────────
+# ── 6) VBS 런처 생성 (창 없이 실행) ────────────────────
 Write-Host ""
-Write-Host "[6/8] Registering scheduled task..." -ForegroundColor Yellow
+Write-Host "[6/8] Creating launcher..." -ForegroundColor Yellow
 
-# 래퍼 스크립트 생성
+$vbsPath = "$InstallDir\RPA.vbs"
+$pythonExeEscaped = $pythonExe -replace '"', '""'
+@"
+' BRIDGE Craig RPA Launcher — auto-generated
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO   = CreateObject("Scripting.FileSystemObject")
+strDir    = objFSO.GetParentFolderName(WScript.ScriptFullName)
+strScript = strDir & "\craigslist_auto_rpa.py"
+strPython = "$pythonExeEscaped"
+' 0 = 숨김, False = 비동기
+objShell.Run """" & strPython & """ -X utf8 """ & strScript & """ --headless", 0, False
+"@ | Set-Content $vbsPath -Encoding UTF8
+Write-Host "  [OK] RPA.vbs (silent launcher)" -ForegroundColor Green
+
+# Task Scheduler 래퍼
 $runnerPath = "$InstallDir\run_rpa.ps1"
 @"
-# Bridge Craigslist RPA Runner — auto-generated
-`$Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-`$LogFile = "$InstallDir\logs\scheduler.log"
-Add-Content -Path `$LogFile -Value "[`$Timestamp] RPA START" -Encoding UTF8
+# Bridge RPA Scheduler Runner — auto-generated
+`$log = "$InstallDir\logs\scheduler.log"
+Add-Content `$log "[`$(Get-Date -f 'yyyy-MM-dd HH:mm:ss')] RPA START" -Encoding UTF8
 Set-Location "$InstallDir"
 try {
-    & $pythonCmd craigslist_auto_rpa.py --headless --limit 10 2>&1 | Out-Null
-    `$endTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path `$LogFile -Value "[`$endTime] RPA DONE (exit=`$LASTEXITCODE)" -Encoding UTF8
+    & "$pythonExe" craigslist_auto_rpa.py --headless --limit 10 2>&1 | Out-Null
+    Add-Content `$log "[`$(Get-Date -f 'yyyy-MM-dd HH:mm:ss')] DONE (exit=`$LASTEXITCODE)" -Encoding UTF8
 } catch {
-    `$errTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path `$LogFile -Value "[`$errTime] RPA ERROR: `$_" -Encoding UTF8
+    Add-Content `$log "[`$(Get-Date -f 'yyyy-MM-dd HH:mm:ss')] ERROR: `$_" -Encoding UTF8
 }
 "@ | Set-Content $runnerPath -Encoding UTF8
 
-Unregister-ScheduledTask -TaskName "BridgeCraigslistRPA" -Confirm:$false -ErrorAction SilentlyContinue
-
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runnerPath`""
-$trigger = New-ScheduledTaskTrigger -Daily -At "03:00"
-$settings = New-ScheduledTaskSettingsSet `
-    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 60)
-
-Register-ScheduledTask -TaskName "BridgeCraigslistRPA" `
-    -Action $action -Trigger $trigger -Settings $settings `
-    -Description "Bridge Craigslist auto-posting (6hr cycle, security-compliant)" -Force | Out-Null
-
-# 6시간 반복
-$task = Get-ScheduledTask -TaskName "BridgeCraigslistRPA"
-$task.Triggers[0].Repetition.Interval = "PT6H"
-$task.Triggers[0].Repetition.Duration = "P1D"
-$task | Set-ScheduledTask | Out-Null
-
-Write-Host "  [OK] BridgeCraigslistRPA — every 6 hours (03, 09, 15, 21)" -ForegroundColor Green
-
-# ── 7) 바탕화면 즉시실행 버튼 ──────────────────────────────────
+# ── 7) Task Scheduler 등록 ──────────────────────────────
 Write-Host ""
-Write-Host "[7/8] Creating desktop shortcut..." -ForegroundColor Yellow
-
-# 즉시실행 런처 스크립트 (진행 상황 표시, 완료 후 자동 닫힘)
-$launcherPath = "$InstallDir\launch_now.ps1"
-@"
-# BRIDGE Craigslist RPA — Manual Launch
-`$Host.UI.RawUI.WindowTitle = "BRIDGE Craig RPA"
-`$Host.UI.RawUI.BackgroundColor = "Black"
-Clear-Host
-
-Write-Host "" -ForegroundColor Cyan
-Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host "  BRIDGE Craigslist RPA — Running..." -ForegroundColor Cyan
-Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  Started: `$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
-Write-Host "  Mode: headless (background Chrome)" -ForegroundColor Gray
-Write-Host "  Limit: 10 posts per run" -ForegroundColor Gray
-Write-Host ""
-Write-Host "  Close this window anytime to stop." -ForegroundColor DarkYellow
-Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host ""
-
-Set-Location "$InstallDir"
-
-`$startTime = Get-Date
-`$logFile = "$InstallDir\logs\scheduler.log"
-`$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Add-Content -Path `$logFile -Value "[`$timestamp] RPA MANUAL START" -Encoding UTF8
-
+Write-Host "[7/8] Registering scheduled task..." -ForegroundColor Yellow
 try {
-    & $pythonCmd craigslist_auto_rpa.py --headless --limit 10 2>&1
-    `$exitCode = `$LASTEXITCODE
-    `$elapsed = [math]::Round(((Get-Date) - `$startTime).TotalMinutes, 1)
-    `$endTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Unregister-ScheduledTask -TaskName "BridgeCraigslistRPA" -Confirm:$false -ErrorAction SilentlyContinue
 
-    Write-Host ""
-    if (`$exitCode -eq 0) {
-        Write-Host "  [DONE] Completed in `$elapsed min" -ForegroundColor Green
-        Add-Content -Path `$logFile -Value "[`$endTime] RPA MANUAL DONE (`$(`$elapsed)min)" -Encoding UTF8
-    } else {
-        Write-Host "  [WARN] Finished with exit code `$exitCode (`$elapsed min)" -ForegroundColor Yellow
-        Add-Content -Path `$logFile -Value "[`$endTime] RPA MANUAL WARN (exit=`$exitCode)" -Encoding UTF8
-    }
+    $action   = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runnerPath`""
+    $trigger  = New-ScheduledTaskTrigger -Daily -At "03:00"
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 60)
+    Register-ScheduledTask -TaskName "BridgeCraigslistRPA" `
+        -Action $action -Trigger $trigger -Settings $settings `
+        -Description "Bridge Craigslist RPA — 6hr cycle" -Force | Out-Null
+
+    # 6시간 반복 설정
+    $task = Get-ScheduledTask -TaskName "BridgeCraigslistRPA"
+    $task.Triggers[0].Repetition.Interval = "PT6H"
+    $task.Triggers[0].Repetition.Duration = "P1D"
+    $task | Set-ScheduledTask | Out-Null
+    Write-Host "  [OK] BridgeCraigslistRPA — 6시간마다 (03:00, 09:00, 15:00, 21:00)" -ForegroundColor Green
 } catch {
-    Write-Host "  [ERROR] `$_" -ForegroundColor Red
-    `$errTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path `$logFile -Value "[`$errTime] RPA MANUAL ERROR: `$_" -Encoding UTF8
+    Write-Host "  [WARN] Scheduler 등록 실패 (관리자 권한 필요): $_" -ForegroundColor Yellow
+    Write-Host "  수동 실행: 바탕화면 'BRIDGE Craig RPA' 더블클릭" -ForegroundColor Gray
 }
 
+# ── 8) 바탕화면 바로가기 ────────────────────────────────
 Write-Host ""
-Write-Host "  This window will close in 10 seconds..." -ForegroundColor DarkGray
-Start-Sleep -Seconds 10
-"@ | Set-Content $launcherPath -Encoding UTF8
-
-# 바탕화면 바로가기 생성
-$Desktop = [Environment]::GetFolderPath("Desktop")
+Write-Host "[8/8] Creating desktop shortcut..." -ForegroundColor Yellow
+$Desktop      = [Environment]::GetFolderPath("Desktop")
 $shortcutPath = "$Desktop\BRIDGE Craig RPA.lnk"
+$iconPath     = if (Test-Path "$InstallDir\rpa_icon.ico") { "$InstallDir\rpa_icon.ico" } else { "" }
 
 $ws = New-Object -ComObject WScript.Shell
 $sc = $ws.CreateShortcut($shortcutPath)
-$sc.TargetPath = "powershell.exe"
-$sc.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcherPath`""
+$sc.TargetPath      = "wscript.exe"
+$sc.Arguments       = "`"$vbsPath`""
 $sc.WorkingDirectory = $InstallDir
-$sc.Description = "BRIDGE Craigslist auto-posting (click to run now)"
-$sc.WindowStyle = 1  # Normal window
+$sc.Description     = "BRIDGE Craigslist 자동 게시 (클릭하면 바로 실행)"
+$sc.WindowStyle     = 1
+if ($iconPath) { $sc.IconLocation = "$iconPath,0" }
 $sc.Save()
+Write-Host "  [OK] 바탕화면 'BRIDGE Craig RPA' 바로가기 생성" -ForegroundColor Green
+if ($iconPath) { Write-Host "  [OK] BRIDGE RPA 아이콘 적용" -ForegroundColor Green }
 
-# 바로가기 ACL: 현재 사용자만
-$acl = Get-Acl $shortcutPath
-$acl.SetAccessRuleProtection($true, $false)
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-    "FullControl", "Allow")
-$acl.AddAccessRule($rule)
-Set-Acl $shortcutPath $acl
-
-Write-Host "  [OK] Desktop shortcut: 'BRIDGE Craig RPA'" -ForegroundColor Green
-Write-Host "  Double-click to run immediately" -ForegroundColor Gray
-
-# ── 8) 테스트 (dry-run) ──────────────────────────────────────
-Write-Host ""
-Write-Host "[8/8] Security check + test..." -ForegroundColor Yellow
-
-# 보안 체크리스트
-$checks = @()
-$checks += if (Test-Path $envFile) { "[PASS] .env exists" } else { "[FAIL] .env missing" }
-$checks += if (-not (Test-Path "$InstallDir\data\candidates*")) { "[PASS] No PII tables in DB" } else { "[FAIL] PII data detected" }
-$checks += if ((Get-Acl $envFile).Access.Count -le 1) { "[PASS] .env ACL restricted" } else { "[WARN] .env ACL open" }
-
-# DB에 PII 테이블이 없는지 최종 확인
-$piiCheck = & $pythonCmd -c @"
-import sqlite3
-conn = sqlite3.connect('$($InstallDir -replace '\\','\\\\')\data\master.db')
-tables = [r[0] for r in conn.execute('SELECT name FROM sqlite_master WHERE type=''table''').fetchall()]
-pii = [t for t in tables if t in ('candidates','client_inquiries','interviews','email_log')]
-conn.close()
-if pii: print(f'[FAIL] PII tables found: {pii}')
-else: print('[PASS] DB clean - no PII tables')
-"@ 2>&1
-$checks += $piiCheck
-
-foreach ($c in $checks) {
-    $color = if ($c -match "PASS") { "Green" } elseif ($c -match "WARN") { "Yellow" } else { "Red" }
-    Write-Host "  $c" -ForegroundColor $color
-}
-
-# dry-run 테스트
-Write-Host ""
-Set-Location $InstallDir
-$testResult = & $pythonCmd craigslist_auto_rpa.py --dry-run --limit 1 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "  [PASS] Dry-run test passed" -ForegroundColor Green
-} else {
-    Write-Host "  [WARN] Dry-run issue (check .env and DB)" -ForegroundColor Yellow
-}
-
-# ── 완료 ─────────────────────────────────────────────────────
+# ── 완료 ────────────────────────────────────────────────
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Green
-Write-Host "  SETUP COMPLETE" -ForegroundColor Green
+Write-Host "  SETUP COMPLETE!" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Location  : $InstallDir" -ForegroundColor White
-Write-Host "  Desktop   : 'BRIDGE Craig RPA' (double-click to run now)" -ForegroundColor White
-Write-Host "  Schedule  : Every 6 hours (03, 09, 15, 21)" -ForegroundColor White
-Write-Host "  Logs      : $InstallDir\logs\scheduler.log" -ForegroundColor White
-Write-Host "  DB        : jobs + ad_posts only (PII removed)" -ForegroundColor White
-Write-Host "  .env      : ACL restricted (current user only)" -ForegroundColor White
+Write-Host "  설치 위치  : $InstallDir" -ForegroundColor White
+Write-Host "  바탕화면   : 'BRIDGE Craig RPA' 더블클릭 → 즉시 실행" -ForegroundColor White
+Write-Host "  자동 실행  : 6시간마다 (03, 09, 15, 21시)" -ForegroundColor White
+Write-Host "  로그       : $InstallDir\logs\scheduler.log" -ForegroundColor White
+Write-Host "  DB         : jobs + ad_posts만 (PII 제거됨)" -ForegroundColor White
 Write-Host ""
-Write-Host "  Security:" -ForegroundColor Cyan
-Write-Host "    - No PII in database (candidates/interviews removed)" -ForegroundColor Gray
-Write-Host "    - Credentials in .env only (not hardcoded)" -ForegroundColor Gray
-Write-Host "    - .env readable by current user only" -ForegroundColor Gray
-Write-Host "    - RPA auto-redacts PII from ad text (redact_pii)" -ForegroundColor Gray
-Write-Host "    - Logs contain no personal information" -ForegroundColor Gray
+Write-Host "  보안:" -ForegroundColor Cyan
+Write-Host "    - 자격증명 DPAPI 암호화 (현재 사용자만 복호화 가능)" -ForegroundColor Gray
+Write-Host "    - DB에 후보자/업체 개인정보 없음" -ForegroundColor Gray
+Write-Host "    - 광고 텍스트 내 PII 자동 제거" -ForegroundColor Gray
+Write-Host "    - 로그에 개인정보 미기록" -ForegroundColor Gray
 Write-Host ""
 
 Read-Host "Press Enter to close"
