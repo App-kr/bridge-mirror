@@ -164,7 +164,6 @@
       "Bash(cd \"Q:/Claudework/ClaudeBlog\" && .venv/Scripts/python -m py_compile modules/naver_uploader.py && echo \"COMPILE_OK\" && git add modules/naver_uploader.py && git commit -m \"fix: login\\(\\) 쿠키 세션 복구 로직 추가\" && git push origin master 2>&1)",
       "Bash(del:*)",
       "Bash(explorer Q:\\\\Claudework\\\\ClaudeBlog\\\\images:*)",
-      "Bash(D:/Python314/python.exe:*)",
       "Bash(grep DRY\\\\|STEP 2 제목:*)",
       "Bash(Get-Process powershell -ErrorAction SilentlyContinue)",
       "Bash(Select-Object Id, Name, Path, StartTime)",
