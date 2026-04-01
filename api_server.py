@@ -1544,6 +1544,7 @@ _FORM_DEFAULTS: dict[str, dict[str, list[str]]] = {
 
 def _ensure_form_configs():
     """form_configs 테이블 생성 및 기본값 초기 INSERT (없는 행만)"""
+    conn = None
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("""
@@ -1567,9 +1568,11 @@ def _ensure_form_configs():
                         (_fn, _fk, json.dumps(_defaults, ensure_ascii=False)),
                     )
         conn.commit()
-        conn.close()
     except Exception as _fe:
         logging.getLogger("bridge.api").warning("_ensure_form_configs 스킵: %s", _fe)
+    finally:
+        if conn:
+            conn.close()
 
 
 try:
@@ -9197,14 +9200,16 @@ async def process_resume_files(
         try:
             num = int(candidate_id)
             row = conn.execute(
-                "SELECT full_name, email, mobile_phone FROM candidates WHERE sheet_number = ? LIMIT 1",
+                "SELECT full_name, email, mobile_phone, nationality FROM candidates WHERE sheet_number = ? LIMIT 1",
                 (num,)
             ).fetchone()
             if row:
                 candidate_dict = {
+                    "sheet_number": num,
                     "full_name": str(row[0]) if row[0] else "",
                     "email": str(row[1]) if row[1] else "",
                     "mobile_phone": str(row[2]) if row[2] else "",
+                    "nationality": str(row[3]) if row[3] else "",
                 }
         except (ValueError, sqlite3.Error):
             pass
@@ -9212,6 +9217,26 @@ async def process_resume_files(
             conn.close()
     except Exception:
         pass
+
+    # 사진 파일 먼저 추출 (resume/cover 처리 시 photo_path로 전달)
+    photo_tmp_path = None
+    try:
+        if file_sections.get("photo"):
+            import tempfile as _tmpmod
+            photo_file = file_sections["photo"][0]
+            photo_bytes = await photo_file.read()
+            photo_ext = Path(photo_file.filename).suffix.lower() or ".jpg"
+            with _tmpmod.NamedTemporaryFile(suffix=photo_ext, delete=False) as _ptmp:
+                _ptmp.write(photo_bytes)
+                photo_tmp_path = Path(_ptmp.name)
+    except Exception:
+        photo_tmp_path = None
+
+    # brj_number: candidate_id를 정수로 사용
+    try:
+        _brj_number = int(candidate_id) if candidate_id else 0
+    except (ValueError, TypeError):
+        _brj_number = 0
 
     # 파일 처리
     def _process_file(file_bytes: bytes, file_name: str, candidate_dict: dict = None) -> dict:
@@ -9247,9 +9272,10 @@ async def process_resume_files(
                     try:
                         doc, log_entries = process_docx(
                             tmp_path,
-                            brj_number=0,
+                            brj_number=_brj_number,
                             candidate=candidate_dict,
-                            dry=False
+                            dry=False,
+                            photo_path=photo_tmp_path,
                         )
 
                         output = io.BytesIO()
@@ -9296,9 +9322,10 @@ async def process_resume_files(
                     try:
                         doc, log_entries = process_pdf(
                             tmp_path,
-                            brj_number=0,
+                            brj_number=_brj_number,
                             candidate=candidate_dict,
-                            dry=False
+                            dry=False,
+                            photo_path=photo_tmp_path,
                         )
 
                         processed_bytes = doc.write()
@@ -9384,6 +9411,13 @@ async def process_resume_files(
                 })
                 failed_count += 1
 
+    # 사진 임시파일 정리
+    if photo_tmp_path and photo_tmp_path.exists():
+        try:
+            photo_tmp_path.unlink()
+        except Exception:
+            pass
+
     # 로깅
     logging.getLogger("bridge.resume").info(
         f"[RESUME] candidate_id={candidate_id}, files={total_files}, "
@@ -9409,20 +9443,23 @@ async def internal_get_form_config(form_name: str, request: Request):
     if form_name not in ("apply", "inquiry"):
         return SafeJSONResponse({"success": False, "detail": "not found"}, status_code=404)
     svc_key = request.headers.get("x-service-key", "")
-    if not _FORM_CONFIG_READ_KEY or not svc_key or svc_key != _FORM_CONFIG_READ_KEY:
+    if not _FORM_CONFIG_READ_KEY or not svc_key or not hmac.compare_digest(svc_key, _FORM_CONFIG_READ_KEY):
         return SafeJSONResponse({"success": False, "detail": "forbidden"}, status_code=403)
+    conn = None
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         rows = conn.execute(
             "SELECT field_key, options_json FROM form_configs WHERE form_name=?",
             (form_name,),
         ).fetchall()
-        conn.close()
         data = {row[0]: json.loads(row[1]) for row in rows}
         return SafeJSONResponse({"success": True, "data": data})
     except Exception as _e:
         logging.getLogger("bridge.api").error("internal_get_form_config 오류: %s", _e)
         return SafeJSONResponse({"success": False, "detail": "서버 오류"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.get("/api/admin/form-config/{form_name}")
@@ -9432,24 +9469,29 @@ async def admin_get_form_config(form_name: str, request: Request):
     _check_admin(request)   # 실패 시 HTTPException 발생 (FastAPI 자동 처리)
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         return SafeJSONResponse({"success": False, "detail": "Too Many Requests"}, status_code=429)
+    conn = None
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         rows = conn.execute(
             "SELECT field_key, options_json FROM form_configs WHERE form_name=? ORDER BY field_key",
             (form_name,),
         ).fetchall()
-        conn.close()
         data = {row[0]: json.loads(row[1]) for row in rows}
         return SafeJSONResponse({"success": True, "data": data})
     except Exception as _e:
         logging.getLogger("bridge.api").error("admin_get_form_config 오류: %s", _e)
         return SafeJSONResponse({"success": False, "detail": "서버 오류"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.put("/api/admin/form-config/{form_name}/{field_key}")
 async def admin_put_form_config(form_name: str, field_key: str, request: Request):
     if form_name not in ("apply", "inquiry"):
         return SafeJSONResponse({"success": False, "detail": "not found"}, status_code=404)
+    if field_key not in _FORM_DEFAULTS.get(form_name, {}):
+        return SafeJSONResponse({"success": False, "detail": "알 수 없는 field_key"}, status_code=404)
     _check_admin(request)
     if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         return SafeJSONResponse({"success": False, "detail": "Too Many Requests"}, status_code=429)
@@ -9469,6 +9511,7 @@ async def admin_put_form_config(form_name: str, field_key: str, request: Request
             cleaned.append(s)
     if not cleaned:
         return SafeJSONResponse({"success": False, "detail": "유효한 항목이 없습니다"}, status_code=400)
+    conn = None
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute(
@@ -9480,11 +9523,13 @@ async def admin_put_form_config(form_name: str, field_key: str, request: Request
             (form_name, field_key, json.dumps(cleaned, ensure_ascii=False)),
         )
         conn.commit()
-        conn.close()
         return SafeJSONResponse({"success": True, "data": {"options": cleaned}})
     except Exception as _e:
         logging.getLogger("bridge.api").error("admin_put_form_config 오류: %s", _e)
         return SafeJSONResponse({"success": False, "detail": "서버 오류"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.post("/api/admin/form-config/{form_name}/{field_key}/reset")
@@ -9497,6 +9542,7 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
     defaults = _FORM_DEFAULTS.get(form_name, {}).get(field_key)
     if defaults is None:
         return SafeJSONResponse({"success": False, "detail": "알 수 없는 field_key"}, status_code=404)
+    conn = None
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute(
@@ -9508,11 +9554,13 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
             (form_name, field_key, json.dumps(defaults, ensure_ascii=False)),
         )
         conn.commit()
-        conn.close()
         return SafeJSONResponse({"success": True, "data": {"options": defaults}})
     except Exception as _e:
         logging.getLogger("bridge.api").error("admin_reset_form_config 오류: %s", _e)
         return SafeJSONResponse({"success": False, "detail": "서버 오류"}, status_code=500)
+    finally:
+        if conn:
+            conn.close()
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
