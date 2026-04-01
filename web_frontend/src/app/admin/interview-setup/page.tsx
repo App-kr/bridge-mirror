@@ -626,7 +626,7 @@ function InterviewSetupInner() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[14px] font-medium text-[#1d1d1f] truncate">{emp.school_name || 'Unknown'}</span>
+                          <span className="text-[14px] font-medium text-[#1d1d1f]" title={emp.school_name || ''}>{emp.school_name || 'Unknown'}</span>
                           {emp._match_score === 2 && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">Full Match</span>
                           )}

@@ -1143,8 +1143,24 @@
       "git": "aa2ed983",
       "files": 2154,
       "db_hash": "9512cfd7b9c7"
+    },
+    {
+      "dir": "20260401_090009__final_backup_20260401_090002",
+      "task": "final_backup_20260401_090002",
+      "ts": "2026.04.01 09:00:14",
+      "git": "d71ad916",
+      "files": 2154,
+      "db_hash": "9512cfd7b9c7"
+    },
+    {
+      "dir": "20260401_092746__school_name_fix",
+      "task": "school_name_fix",
+      "ts": "2026.04.01 09:27:51",
+      "git": "d71ad916",
+      "files": 2154,
+      "db_hash": "9512cfd7b9c7"
     }
   ],
-  "last_backup": "2026.04.01 08:57:31",
-  "total_count": 143
+  "last_backup": "2026.04.01 09:27:51",
+  "total_count": 145
 }

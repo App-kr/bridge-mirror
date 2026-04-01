@@ -381,7 +381,7 @@ function TableRow({ inq, expanded, onToggle, onUpdate, onRegisterJob, onDuplicat
             {inq.location ? <span className="text-green-500 font-normal">· {inq.location.split(' ')[0]}</span> : null}
           </span>
         </td>
-        <td className="px-3 py-2 font-medium text-gray-900 max-w-[160px] truncate">
+        <td className="px-3 py-2 font-medium text-gray-900 max-w-[240px] truncate" title={inq.school_name ?? ''}>
           {inq.is_duplicate_suspect ? <span className="text-orange-500 mr-1">⚠</span> : null}
           {inq.school_name ?? '—'}
         </td>

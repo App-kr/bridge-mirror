@@ -426,7 +426,7 @@ function MatchingPageInner() {
                     if (!emp) return null
                     return (
                       <div key={id} className="flex items-center justify-between py-1.5 text-[12px]">
-                        <span className="text-[#1d1d1f] truncate max-w-[250px]">{emp.school_name || 'Unknown'}</span>
+                        <span className="text-[#1d1d1f] truncate max-w-[300px]" title={emp.school_name || ''}>{emp.school_name || 'Unknown'}</span>
                         <span className="text-[#86868b] ml-2 shrink-0">{emp.email}</span>
                       </div>
                     )
@@ -476,7 +476,7 @@ function EmployerRow({ emp, checked, onToggle }: { emp: Employer; checked: boole
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[14px] font-medium text-[#1d1d1f] truncate">
+          <span className="text-[14px] font-medium text-[#1d1d1f]" title={emp.school_name || ''}>
             {emp.school_name || 'Unknown School'}
           </span>
           {emp._already_sent && (
