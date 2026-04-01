@@ -143,6 +143,53 @@ _GENDER_KR = {
 }
 
 
+def _extract_nationality_from_text(text: str) -> str:
+    """
+    이력서 텍스트에서 국적 추출.
+    "Nationality: South African" → "south african"
+    Returns 소문자 국적 문자열 or ""
+    """
+    # "Nationality: XXX" 패턴
+    pat = re.compile(r"\bnationality\s*:?\s*([A-Za-z][A-Za-z\s]{2,30})", re.I)
+    m = pat.search(text)
+    if m:
+        val = m.group(1).strip().lower()
+        # 짧은 불필요 단어 제거
+        for noise in ("unknown", "n/a", "na", "none", "other"):
+            if val == noise:
+                return ""
+        return val
+    # "Citizenship: XXX" 패턴 fallback
+    pat2 = re.compile(r"\bcitizenship\s*:?\s*([A-Za-z][A-Za-z\s]{2,30})", re.I)
+    m2 = pat2.search(text)
+    if m2:
+        return m2.group(1).strip().lower()
+    return ""
+
+
+def _update_candidate_nationality(sheet_number: int, nationality_raw: str):
+    """DB의 nationality가 비어있거나 '미상'이면 추출된 값으로 업데이트"""
+    if not nationality_raw or not sheet_number:
+        return
+    try:
+        db = _get_db()
+        row = db.execute(
+            "SELECT nationality FROM candidates WHERE sheet_number = ?", (sheet_number,)
+        ).fetchone()
+        if not row:
+            return
+        current = (_try_decrypt(row[0]) or "").strip()
+        # 비어있거나 "미상"인 경우에만 업데이트
+        if current in ("", "미상", "unknown", "Unknown"):
+            db.execute(
+                "UPDATE candidates SET nationality = ? WHERE sheet_number = ?",
+                (nationality_raw, sheet_number),
+            )
+            db.commit()
+    except Exception:
+        pass  # DB 업데이트 실패는 무시 (처리 계속)
+
+
 def _is_cover_letter(filepath: Path) -> bool:
     """파일명으로 커버레터 여부 판별"""
     s = filepath.stem.lower()
@@ -338,6 +385,12 @@ RE_KR_ADDRESS = re.compile(
 
 RE_PASSPORT = re.compile(r"\b[A-Z]{1,2}\d{7,8}\b")
 
+# 한국 아파트/주거 주소 패턴 ("부영 1차 아파트", "래미안 빌라" 등)
+RE_KR_RESIDENTIAL = re.compile(
+    r"[가-힣]+(?:\s+[가-힣\d]+)*\s+(?:\d+차\s*)?(?:아파트|빌라|오피스텔|주공|맨션|타운하우스|연립)",
+    re.UNICODE,
+)
+
 # 영문 주소 패턴: "123 Street Name, City, ST 12345"
 # 약어(St, Ct, Dr 등)는 오탐 심해서 전체 단어만 매칭
 RE_EN_ADDRESS = re.compile(
@@ -400,6 +453,8 @@ PII_LINE_LABELS = [
     ("passport", True), ("passport number", True), ("passport no", True),
     ("date of birth", True), ("dob", True),
     ("national id", True), ("ssn", True),
+    ("nationality", True), ("citizenship", True),
+    ("race", True), ("ethnicity", True), ("religion", True),
     # 한국어
     ("이메일", True), ("전화", True), ("연락처", True),
     ("카카오", True), ("여권", True), ("주소", True),
@@ -442,6 +497,8 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "language institute", "language center", "language centre",
     "hagwon", "학원", "어학원", "영어학원", "유치원", "어린이집",
     "elementary school", "middle school", "high school",
+    "primary school", "secondary school", "independent school",
+    "grammar school", "boarding school", "prep school",
     "international school", "kindergarten", "preschool",
     "after-school", "afterschool", "after school",
     "private academy", "teaching academy", "english academy",
@@ -642,6 +699,9 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
         log.append(f"KR_ADDR→Korea: {m.group()[:40]}")
         return "Korea"
     result = RE_KR_ADDRESS.sub(addr_replacer, result)
+
+    # 한국 아파트/주거 주소 삭제
+    _sub(RE_KR_RESIDENTIAL, "", "KR_RESID")
 
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
@@ -901,11 +961,43 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
     # 파일명에서 이름 추출 (DB 불일치 대비)
     filename_names = _extract_names_from_filename(filepath)
 
+    # Reference 섹션 헤더 감지용
+    _REF_HEADERS = frozenset({
+        "references", "reference", "professional references",
+        "references & recommendations", "references and recommendations",
+        "referee", "referees", "character references",
+    })
+    _ref_active = [False]  # mutable flag (closure 공유)
+
     def _process_paragraphs(paragraphs, section_name="body"):
         for para in paragraphs:
             original = para.text
             if not original.strip():
                 continue
+
+            stripped_lower = original.strip().lower()
+
+            # Reference 섹션 헤더 감지 → 이후 전체 삭제
+            if stripped_lower in _REF_HEADERS:
+                _ref_active[0] = True
+                all_logs.append(f"[{section_name}] REF_SECTION_START")
+                if not dry:
+                    for run in para.runs:
+                        run.text = ""
+                continue
+
+            # 다음 주요 섹션 헤더가 나오면 Reference 종료
+            if _ref_active[0] and stripped_lower in _RESUME_SECTION_HEADERS:
+                _ref_active[0] = False
+
+            # Reference 섹션 내 내용 전체 삭제
+            if _ref_active[0]:
+                all_logs.append(f"[{section_name}] REF_DEL: {original.strip()[:60]}")
+                if not dry:
+                    for run in para.runs:
+                        run.text = ""
+                continue
+
             cleaned, log = remove_pii(original, candidate)
             # 파일명에서 추출한 이름도 삭제
             for fn_name in filename_names:
@@ -939,6 +1031,19 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
             if not dry:
                 for run in para.runs:
                     run.text = ""
+
+    # ── 사전 처리: PII 삭제 전 국적 추출 → DB 업데이트 ──
+    if not dry and candidate:
+        _full_text = "\n".join(p.text for p in doc.paragraphs)
+        _nat_extracted = _extract_nationality_from_text(_full_text)
+        if _nat_extracted:
+            _current_nat = (candidate.get("nationality") or "").strip()
+            if _current_nat in ("", "미상", "unknown", "Unknown"):
+                candidate["nationality"] = _nat_extracted
+                _update_candidate_nationality(
+                    candidate.get("sheet_number", 0), _nat_extracted
+                )
+                all_logs.append(f"[pre] NAT_EXTRACTED: {_nat_extracted}")
 
     # 본문
     _process_paragraphs(doc.paragraphs, "body")
@@ -1078,6 +1183,19 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
     doc = fitz.open(str(filepath))
     all_logs = []
 
+    # ── 사전 처리: PII 삭제 전 국적 추출 → DB 업데이트 ──
+    if not dry and candidate:
+        _pdf_full_text = "".join(page.get_text() for page in doc)
+        _nat_extracted = _extract_nationality_from_text(_pdf_full_text)
+        if _nat_extracted:
+            _current_nat = (candidate.get("nationality") or "").strip()
+            if _current_nat in ("", "미상", "unknown", "Unknown"):
+                candidate["nationality"] = _nat_extracted
+                _update_candidate_nationality(
+                    candidate.get("sheet_number", 0), _nat_extracted
+                )
+                all_logs.append(f"[pre] NAT_EXTRACTED: {_nat_extracted}")
+
     # 모든 PII 패턴을 수집
     pii_patterns = _build_search_patterns(candidate)
 
@@ -1113,6 +1231,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         # 줄 단위 PII 라벨 검사 → redact 대상 텍스트 수집
         redact_texts = set()
+        replacement_redacts = []  # (원문, 대체텍스트) 쌍
 
         for line in text.split("\n"):
             stripped = line.strip()
@@ -1133,22 +1252,49 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     redact_texts.add(matched)
                     all_logs.append(f"[page{page_num}] {tag}: {matched[:60]}")
 
-        # 후보자 이름 매칭
+        # ── 후보자 이름: 성만 삭제, 이름 유지 (DOCX와 동일 정책) ──
         if candidate and candidate.get("full_name"):
-            for variant in _name_variants(candidate["full_name"]):
-                if variant.lower() in text.lower():
-                    redact_texts.add(variant)
-                    all_logs.append(f"[page{page_num}] NAME: {variant}")
+            name = candidate["full_name"].strip()
+            words = name.split()
+            if len(words) >= 2:
+                last_name = words[-1]
+                first_name = " ".join(words[:-1])
+                # 풀네임 → 이름만 남기기 (replacement redact)
+                if name.lower() in text.lower():
+                    replacement_redacts.append((name, first_name))
+                    all_logs.append(f"[page{page_num}] FULLNAME→{first_name}: {name}")
+                # 성 단독 삭제
+                if len(last_name) >= 2 and last_name.lower() in text.lower():
+                    redact_texts.add(last_name)
+                    all_logs.append(f"[page{page_num}] LASTNAME: {last_name}")
 
-        # 파일명 기반 이름도 redact
+        # 파일명 기반 이름: 성만 redact (이름 유지)
         for fn_name in filename_names:
-            if fn_name.lower() in text.lower():
+            fn_words = fn_name.split()
+            if len(fn_words) >= 2:
+                fn_last = fn_words[-1]
+                fn_first = " ".join(fn_words[:-1])
+                if fn_name.lower() in text.lower():
+                    replacement_redacts.append((fn_name, fn_first))
+                    all_logs.append(f"[page{page_num}] FILENAME_NAME→{fn_first}: {fn_name}")
+                if fn_last.lower() in text.lower():
+                    redact_texts.add(fn_last)
+            elif fn_name.lower() in text.lower():
                 redact_texts.add(fn_name)
                 all_logs.append(f"[page{page_num}] FILENAME_NAME: {fn_name}")
 
-        # PDF 텍스트에서 추출한 이름 redact
+        # PDF 텍스트에서 추출한 이름: 성만 redact
         for pdf_name in _pdf_extracted_names:
-            if pdf_name.lower() in text.lower():
+            pdf_words = pdf_name.split()
+            if len(pdf_words) >= 2:
+                pdf_last = pdf_words[-1]
+                pdf_first = " ".join(pdf_words[:-1])
+                if pdf_name.lower() in text.lower():
+                    replacement_redacts.append((pdf_name, pdf_first))
+                    all_logs.append(f"[page{page_num}] PDF_NAME→{pdf_first}: {pdf_name}")
+                if pdf_last.lower() in text.lower():
+                    redact_texts.add(pdf_last)
+            elif len(pdf_name) >= 3 and pdf_name.lower() in text.lower():
                 redact_texts.add(pdf_name)
                 all_logs.append(f"[page{page_num}] PDF_NAME: {pdf_name}")
 
@@ -1196,7 +1342,6 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
-        replacement_redacts = []
 
         for line in text.split("\n"):
             stripped = line.strip()
