@@ -2098,7 +2098,7 @@ def ask_master_key_gui() -> str:
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
 
-        w, h = 320, 200
+        w, h = 320, 230
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
         root.lift(); root.focus_force()
@@ -2153,6 +2153,107 @@ def ask_master_key_gui() -> str:
         cancel_lbl.bind("<Button-1>", lambda ev: root.destroy())
         cancel_lbl.bind("<Enter>", lambda ev: cancel_lbl.configure(bg=_HOV))
         cancel_lbl.bind("<Leave>", lambda ev: cancel_lbl.configure(bg=_CARD))
+
+        # ── 마스터 키 변경 링크 ────────────────────────────────────────────
+        change_lbl = tk.Label(card, text="마스터 키 변경 ›",
+                              font=_fnt_sm, bg=_CARD, fg=_T2, cursor="hand2")
+        change_lbl.pack(pady=(2, 6))
+
+        def _open_change():
+            """마스터 키 변경 Toplevel 다이얼로그."""
+            try:
+                import sys as _sys2
+                _sys2.path.insert(0, str(Path(__file__).resolve().parent))
+                from tools.rpa_credential_vault import CredentialVault
+            except ImportError:
+                err_lbl.configure(text="vault 모듈 임포트 실패"); return
+
+            top = tk.Toplevel(root)
+            top.overrideredirect(True)
+            top.attributes("-topmost", True)
+            top.configure(bg=_BG)
+            top.grab_set()
+
+            tw, th = 320, 280
+            top.geometry(f"{tw}x{th}+{(sw - tw) // 2}+{(sh - th) // 2}")
+
+            bt = tk.Frame(top, bg=_SEP, padx=1, pady=1)
+            bt.pack(fill="both", expand=True)
+            ct = tk.Frame(bt, bg=_CARD)
+            ct.pack(fill="both", expand=True)
+
+            tk.Label(ct, text="🔑  마스터 키 변경",
+                     font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                     bg=_CARD, fg=_T1).pack(pady=(14, 2))
+            tk.Label(ct, text="현재 키와 새 키를 입력하세요",
+                     font=_fnt_sm, bg=_CARD, fg=_T2).pack(pady=(0, 6))
+            tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", padx=12)
+
+            def _field(parent, label):
+                f2 = tk.Frame(parent, bg=_CARD); f2.pack(fill="x", padx=16, pady=(6, 0))
+                tk.Label(f2, text=label, font=_fnt_sm, bg=_CARD, fg=_T2, anchor="w").pack(fill="x")
+                ent = tk.Entry(f2, show="●", font=_fnt, relief="flat", bd=1,
+                               highlightthickness=1, highlightbackground=_SEP, highlightcolor=_BLUE)
+                ent.pack(fill="x", ipady=5)
+                return ent
+
+            e_old = _field(ct, "현재 마스터 키")
+            e_new = _field(ct, "새 마스터 키")
+            e_cfm = _field(ct, "새 마스터 키 확인")
+
+            err_t = tk.Label(ct, text="", font=_fnt_sm, bg=_CARD, fg=_RED)
+            err_t.pack(pady=(4, 0))
+
+            def _do_rekey():
+                old_k = e_old.get().strip()
+                new_k = e_new.get()
+                cfm_k = e_cfm.get()
+                if not old_k:
+                    err_t.configure(text="현재 마스터 키를 입력하세요"); return
+                if not new_k:
+                    err_t.configure(text="새 마스터 키를 입력하세요"); return
+                if new_k != cfm_k:
+                    err_t.configure(text="새 마스터 키가 일치하지 않습니다"); return
+                if new_k == old_k:
+                    err_t.configure(text="현재 키와 동일합니다"); return
+                vault_obj = CredentialVault()
+                if vault_obj.rekey(old_k, new_k):
+                    # 성공: 메인 입력창에 새 키 자동 입력 + 성공 메시지
+                    e.delete(0, "end")
+                    e.insert(0, new_k)
+                    err_lbl.configure(text="✅ 마스터 키 변경 완료 — 확인을 누르세요", fg=_BLUE)
+                    top.grab_release()
+                    top.destroy()
+                else:
+                    err_t.configure(text="변경 실패 — 현재 마스터 키를 확인하세요")
+
+            tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", pady=(6, 0))
+            br2 = tk.Frame(ct, bg=_CARD); br2.pack(fill="x")
+
+            ok2 = tk.Label(br2, text="변경",
+                           font=tkfont.Font(family="Malgun Gothic", size=12, weight="bold"),
+                           bg=_CARD, fg=_BLUE, pady=9, cursor="hand2")
+            ok2.pack(side="left", expand=True, fill="both")
+            ok2.bind("<Button-1>", lambda ev: _do_rekey())
+            ok2.bind("<Enter>", lambda ev: ok2.configure(bg=_HOV))
+            ok2.bind("<Leave>", lambda ev: ok2.configure(bg=_CARD))
+
+            tk.Frame(br2, bg=_SEP, width=1).pack(side="left", fill="y")
+
+            cx2 = tk.Label(br2, text="취소",
+                           font=tkfont.Font(family="Malgun Gothic", size=12),
+                           bg=_CARD, fg=_RED, pady=9, cursor="hand2")
+            cx2.pack(side="left", expand=True, fill="both")
+            cx2.bind("<Button-1>", lambda ev: [top.grab_release(), top.destroy()])
+            cx2.bind("<Enter>", lambda ev: cx2.configure(bg=_HOV))
+            cx2.bind("<Leave>", lambda ev: cx2.configure(bg=_CARD))
+
+            e_old.focus_set()
+            top.bind("<Return>", lambda ev: _do_rekey())
+
+        change_lbl.bind("<Button-1>", lambda ev: _open_change())
+        change_lbl.bind("<Enter>", lambda ev: change_lbl.configure(fg=_BLUE))
+        change_lbl.bind("<Leave>", lambda ev: change_lbl.configure(fg=_T2))
 
         e.focus_set()
         root.bind("<Return>", lambda ev: _submit())

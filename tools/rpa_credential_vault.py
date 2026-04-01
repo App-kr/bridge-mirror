@@ -267,6 +267,42 @@ class CredentialVault:
             print(f"[ERROR] 복호화 실패 ({key}): {e}")
             return ""
 
+    def rekey(self, old_master_key: str, new_master_key: str) -> bool:
+        """마스터 키 변경 — 전체 vault를 새 키로 재암호화.
+
+        Returns True on success, False on failure (잘못된 현재 키 등).
+        """
+        if not old_master_key or not new_master_key:
+            return False
+        if old_master_key == new_master_key:
+            return False
+
+        old_mk = old_master_key.encode("utf-8")
+        new_mk = new_master_key.encode("utf-8")
+
+        vault_data = self._read_vault()
+        if not vault_data:
+            return False
+
+        new_vault = {}
+        try:
+            for key, blob in vault_data.items():
+                plaintext = _triple_decrypt(blob, old_mk)
+                new_vault[key] = _triple_encrypt(plaintext, new_mk)
+        except Exception as e:
+            print(f"[ERROR] 마스터 키 변경 실패 — 현재 키 오류: {e}")
+            old_arr = bytearray(old_mk); old_arr[:] = b"\x00" * len(old_arr)
+            new_arr = bytearray(new_mk); new_arr[:] = b"\x00" * len(new_arr)
+            del old_mk, new_mk, old_arr, new_arr
+            return False
+
+        self._write_vault(new_vault)
+        # 메모리 소각
+        old_arr = bytearray(old_mk); old_arr[:] = b"\x00" * len(old_arr)
+        new_arr = bytearray(new_mk); new_arr[:] = b"\x00" * len(new_arr)
+        del old_mk, new_mk, old_arr, new_arr
+        return True
+
     def setup_from_gui(self, master_key: str, passwords: dict) -> bool:
         """GUI에서 수집한 마스터키 + 비밀번호로 vault 생성.
 
