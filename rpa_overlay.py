@@ -351,7 +351,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(360, 378)
+        root, card = self._make_window(360, 430)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         try:
@@ -402,7 +402,7 @@ class RPAOverlay:
         # ══ BODY ═══════════════════════════════
         cur, tot = self._progress_var or [0, 0]
         body = tk.Frame(card, bg=self.BG)
-        body.pack(fill="x", padx=20, pady=(14, 0))
+        body.pack(fill="x", padx=20, pady=(10, 0))
 
         # 상단 행: 큰 % (좌) + 카운트 (우) — 2026: 더 큰 숫자
         pct_row = tk.Frame(body, bg=self.BG)
