@@ -535,7 +535,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
             <section className="card space-y-4">
               <Sec title="Attach Your Files" />
-              <Desc text="Upload up to 6 files: passport-style photo, CV/resume, cover letter, certificates (TEFL, degree), and a short video introduction. Accepted formats: JPG, PNG, PDF, DOC, MP4, MOV. Photo max 5 MB, documents max 10 MB, video max 100 MB." />
+              <Desc text="Attach a updated CV, cover letter, and new photo (Using the same photo every year is not recommended). Overseas applicants are kindly requested to submit an introductory video with required documents. To prevent uploading issues, be sure to save it as a low-quality file. (Not a compressed folder)" />
               <div>
                 <input
                   ref={fileInputRef}
@@ -593,7 +593,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label required>Full Name</Label>
-                  <Desc text="Type your full name exactly as it appears on your passport. If you have a nickname, note it after. (e.g. Catherine Ovia Mill ; Cathy)" />
+                  <Desc text="Please type your full name exactly as it appears on your passport. If you have a nickname at school, please make sure to note it after your full name. (e.g. Cather Ovia Mill ; Cathy)" />
                   <input className="input" placeholder="e.g. John Smith"
                     value={form.full_name} onChange={set('full_name')} />
                 </div>
@@ -619,7 +619,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               </div>
               <div>
                 <Label required>Family Ancestry Background</Label>
-                <Desc text='This information is for reference only and will not affect your employment.' />
+                <Desc text='This information is for reference only and will not affect your employment. If you prefer not to answer, please respond with "Prefer not to disclose."' />
                 <Dropdown
                   value={form.ancestry}
                   onChange={(v) => setForm((p) => ({ ...p, ancestry: v }))}
@@ -633,7 +633,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
                 </div>
                 <div>
                   <Label required>Current Location</Label>
-                  <Desc text="If outside Korea, write the country name. If Korean, write city/district. (e.g. Seoul/Gangnam)" />
+                  <Desc text="If you reside outside Korea, write the country name. If you are Korean, write the city/district name. (e.g. Seoul/Gangnam)" />
                   <input className="input" placeholder="e.g. Seoul/Gangnam or USA"
                     value={form.current_location} onChange={set('current_location')} />
                 </div>
@@ -652,7 +652,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Sec title="Education & Qualifications" />
               <div>
                 <Label required>Educational Background</Label>
-                <Desc text="Is your university government-approved in one of the 7 countries and does it grant a standard bachelor's degree or higher?" />
+                <Desc text="Is your university government-approved in one of the 7 countries and does it grant a standard bachelor's degree or higher? (If it is a 3-year program, state your major.)" />
                 <Dropdown value={form.education} onChange={(v) => setForm((p) => ({ ...p, education: v }))} options={EDUCATION} />
               </div>
               <div>
@@ -671,12 +671,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Sec title="Visa & Documents" />
               <div>
                 <Label required>E Visa</Label>
-                <Desc text="Have you previously applied for an E-2, E-1 visa etc.?" />
+                <Desc text="I've previously applied for an E-2, E-1 visa etc." />
                 <SingleTog value={form.e_visa} onChange={(v) => setForm((p) => ({ ...p, e_visa: v }))} options={E_VISA} />
               </div>
               <div>
                 <Label>ARC Holders</Label>
-                <Desc text="If you hold an E or F visa, include the type and expiry date. Student or tourist visas only accepted if all documents are complete. (e.g. E2 25/12/06)" />
+                <Desc text="If you hold an E or F visa, include the type and expiry date. Student or tourist visas will only be accepted if all documents are complete and the visa has sufficient validity. (e.g. E2 25/12/06)" />
                 <input className="input" placeholder="e.g. E2 25/12/06" value={form.arc_holders} onChange={set('arc_holders')} />
               </div>
               <div>
@@ -686,7 +686,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               </div>
               <div>
                 <Label required>Criminal Record</Label>
-                <Desc text="Only documents from designated sources (e.g. U.S. FBI, Canada RCMP) are accepted. Only accept documents with the 7-country nationality approval stamp." />
+                <Desc text="Only documents from designated sources such as the U.S. FBI or Canada's RCMP, etc. are accepted. Only accept documents with the 7-country nationality approval stamp, not other country seals." />
                 <SingleTog value={form.criminal_record} onChange={(v) => setForm((p) => ({ ...p, criminal_record: v }))} options={CRIMINAL_RECORD} />
               </div>
               <div>
@@ -714,17 +714,17 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Sec title="Work Preferences" />
               <div>
                 <Label required>Start Date</Label>
-                <Desc text="Please provide the exact date when you can fully start, or the return date if you're traveling abroad." />
+                <Desc text="Please provide the exact date when you can fully start in case of events, or the return date if you're traveling abroad etc." />
                 <EasyDate value={form.start_date} onChange={(v) => setForm((p) => ({ ...p, start_date: v }))} years={START_YEARS} />
               </div>
               <div>
                 <Label required>Preferred Age Group</Label>
-                <Desc text="Older students generally mean working late hours. Select all that apply." />
+                <Desc text="Preferred age group (mostly, older students mean working late hours). If there is a good offer and wish to teach other age groups as well, please select all of them." />
                 <CheckList value={form.target_age as string[]} onChange={(arr) => setForm((p) => ({ ...p, target_age: arr }))} options={TARGET_AGE} />
               </div>
               <div>
                 <Label required>Area Preferences</Label>
-                <Desc text="If you find an offer attractive and wish to consider other locations, select all that apply." />
+                <Desc text="City size or preferences. If you find the offer attractive and wish to consider other locations as well, please select all of them." />
                 <CheckList value={form.area_prefs as string[]} onChange={(arr) => setForm((p) => ({ ...p, area_prefs: arr }))} options={AREA_PREFS} />
               </div>
               <div>
@@ -747,12 +747,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               </div>
               <div>
                 <Label required>Employment</Label>
-                <Desc text="If you are currently working in Korea, does your employer know you are preparing to find a new job? Being honest helps us help you effectively." />
+                <Desc text="If you are currently working in Korea, does your employer know you are preparing to find a new job? Being honest and truthful helps us help you effectively." />
                 <Dropdown value={form.employment} onChange={(v) => setForm((p) => ({ ...p, employment: v }))} options={EMPLOYMENT} />
               </div>
               <div>
                 <Label>Reference</Label>
-                <Desc text="If you have teaching experience in Korea, provide accurate details: school name, location, contact person's name, position, phone number, and email. If already in your resume, you may skip." />
+                <Desc text="If you have teaching experience in South Korea as a full time teacher, please provide accurate details regardless of the school's current operating status (should be a Korean manager or principal, not a coworker). Please note exact name and location of the school. Required: School name, location, contact person's name, position, phone number, and email. If already in your resume, you may skip. If you have a poor relationship with your employer, please note it." />
                 <textarea className="textarea h-24"
                   placeholder="School name, location, contact person's name, position, phone, email..."
                   value={form.reference} onChange={set('reference')} />
@@ -763,14 +763,14 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Sec title="Salary" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label>Current Salary</Label>
-                  <Desc text="Write only base salary (no allowances). If no Korean salary, enter '0'. Accurate info helps secure the best offer." />
+                  <Label required>Current Salary</Label>
+                  <Desc text="e.g. 2.3 KRW. Write only your base salary (no allowances). If you haven't earned in Korea, enter '0'. Since you will need to submit your current school's tax records for your next job, please be accurate. Providing the correct info now helps us secure the best offer for you." />
                   <input className="input" placeholder="e.g. 2.3 KRW or 0"
                     value={form.current_salary} onChange={set('current_salary')} />
                 </div>
                 <div>
-                  <Label>Desired Salary</Label>
-                  <Desc text="Base salary (without housing) and reason for this salary." />
+                  <Label required>Desired Salary</Label>
+                  <Desc text="e.g. 2.4 KRW. Base salary (without housing), and reason for this salary." />
                   <input className="input" placeholder="e.g. 2.4 KRW — 3 years experience"
                     value={form.desired_salary} onChange={set('desired_salary')} />
                 </div>
@@ -785,22 +785,22 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               </div>
               <div>
                 <Label required>Housing</Label>
-                <Desc text="Please make sure you fully understand housing details, real estate, and costs in Korea before selecting." />
+                <Desc text="Please make sure you fully understand housing details, real estate, and costs in Korea before selecting. You'll find your own place if you can't afford it." />
                 <SingleTog value={form.housing} onChange={(v) => setForm((p) => ({ ...p, housing: v }))} options={HOUSING} />
               </div>
               <div>
                 <Label required>Dependents & Pets</Label>
-                <Desc text="If you have children under age 6, please ensure a reliable childcare support system is in place." />
+                <Desc text="If you have children (under age 6), please ensure a reliable childcare support system is in place to maintain consistent attendance." />
                 <CheckList value={form.dependents_pets as string[]} onChange={(arr) => setForm((p) => ({ ...p, dependents_pets: arr }))} options={DEPENDENTS_PETS} />
               </div>
               <div>
                 <Label required>Personal Considerations</Label>
-                <Desc text="Please honestly inform employers of what they need to know to stay within Korean cultural sensibilities." />
+                <Desc text="Please honestly inform employers of what they need to know to stay in Korean cultural sensibilities." />
                 <SingleTog value={form.personal_considerations} onChange={(v) => setForm((p) => ({ ...p, personal_considerations: v }))} options={PERSONAL} />
               </div>
               <div>
                 <Label required>Religion</Label>
-                <Desc text="If religion affects your work, please make sure to note it in the notes section." />
+                <Desc text="If religion affects your work, please make sure to check the box and note it in the note section." />
                 <Dropdown value={form.religion} onChange={(v) => setForm((p) => ({ ...p, religion: v }))} options={RELIGION} />
               </div>
             </section>
@@ -830,18 +830,13 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <p className="text-xs text-amber-700 -mt-2 mb-1">All fields AES-256 encrypted — never shared publicly.</p>
               <div>
                 <Label required>Health Information</Label>
-                <Desc text="Do you have any medical conditions that the school should be aware of for safe and stable teaching?" />
+                <Desc text="Do you have any medical conditions that the school should be aware of for safe and stable teaching? This may include conditions such as diabetes, vision changes, or other factors affecting safe teaching." />
                 <SingleTog value={form.health_info} onChange={(v) => setForm((p) => ({ ...p, health_info: v }))} options={HEALTH} />
               </div>
               <div>
                 <Label required>Criminal Record Check</Label>
-                <Desc text="Do you have any criminal record in your home country? Used only for visa eligibility and standard screening." />
+                <Desc text="Do you have any criminal record in your home country or in Korea? This information is used only for visa eligibility and standard employment screening." />
                 <SingleTog value={form.criminal_record_check} onChange={(v) => setForm((p) => ({ ...p, criminal_record_check: v }))} options={CRC} />
-              </div>
-              <div>
-                <Label required>Criminal Record in Korea</Label>
-                <Desc text="Have you ever had a criminal record while residing in Korea?" />
-                <SingleTog value={form.korean_criminal_record} onChange={(v) => setForm((p) => ({ ...p, korean_criminal_record: v }))} options={KR_CRC} />
               </div>
             </section>
 
@@ -849,7 +844,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Sec title="Contact Information" />
               <div>
                 <Label required>Interview Time</Label>
-                <Desc text="Google Meet will take 5~10 mins. List specific times you are available between 09:30~18:30 KST. If abroad, double-check the time zone." />
+                <Desc text='Google Meet will take 5~10 mins. List a few specific times you are genuinely available between 09:30~18:30 KST. If you are abroad, double-check the time zone to ensure they are in Korean time. Instead of saying "anytime" and then declining, please provide slots that actually work for you!' />
                 <textarea className="textarea h-20"
                   placeholder="e.g. Mon 10:00 KST, Wed 14:00 KST, Fri 11:00 KST"
                   value={form.interview_time} onChange={set('interview_time')} />
@@ -857,12 +852,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label>KakaoTalk</Label>
-                  <Desc text="This is a KakaoTalk ID, not an email address." />
+                  <Desc text="This is a KakaoTalk ID, not an email address. We're busy too, so we won't contact to bother you unless it's necessary. Please feel free to write it down." />
                   <input className="input" placeholder="KakaoTalk ID" value={form.kakaotalk} onChange={set('kakaotalk')} />
                 </div>
                 <div>
                   <Label required>Mobile Phone</Label>
-                  <Desc text="If you live in Korea, please provide your phone number." />
+                  <Desc text="If you live in Korea, please provide your phone number. Don't worry, we won't call you." />
                   <input className="input" placeholder="+82 10-xxxx-xxxx or +1 555-000-0000"
                     value={form.mobile_phone} onChange={set('mobile_phone')} />
                 </div>

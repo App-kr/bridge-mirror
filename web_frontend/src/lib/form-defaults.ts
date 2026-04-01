@@ -11,7 +11,7 @@ export const APPLY_DEFAULTS: Record<string, string[]> = {
   NATIONALITIES: [
     'USA','United Kingdom','Canada','Ireland',
     'Australia','New Zealand','South Africa',
-    'F (Korean diaspora or overseas Korean)','South Korea','Other',
+    'F (Korean diaspora or overseas Korean)','Other','South Korea',
   ],
   ANCESTRY: [
     'Korean','Chinese, Hong Kong, or Taiwanese','Japanese',
@@ -21,14 +21,14 @@ export const APPLY_DEFAULTS: Record<string, string[]> = {
     'Pacific Islander','Other','Prefer not to disclose',
   ],
   EDUCATION: [
-    'Graduated, but diploma not available',
-    "Bachelor's degree from one of the 7 eligible countries",
-    "Bachelor's degree (other country)",
+    'Graduated BUT diploma not available',
+    'Standard Degree from one of the 7 eligible countries',
+    'Degree from OTHER country',
     'Master','Doctor','Associate','Online degree','Did not graduate',
-    "I have a bachelor's or higher from Korea",
+    'Degree from Korea',
   ],
   CERTIFICATION: [
-    'Teaching license (Official Teaching License/Credential)',
+    'Teaching license Not PGCE Official Teaching License/Credential',
     'PGCE (Postgraduate Certificate in Education)',
     'TEFL','TESOL','DELTA','CELTA','On the process','No certification',
   ],
@@ -48,9 +48,8 @@ export const APPLY_DEFAULTS: Record<string, string[]> = {
     'Already have a valid visa',
     'All documents completed (Criminal check + Degree apostilled)',
     'Degree / CBC at final apostille stage (confirmed return date)',
-    'Never applied for any documents',
-    'Holding a visa and recently left Korea within 1 month',
-    'Other',
+    'Possessing a valid visa and having recently left Korea within the past month',
+    'No documents are prepared or they have expired',
   ],
   TARGET_AGE: [
     'Pre-K ~ Kindergarten','Elementary school level','Middle school level',
@@ -95,7 +94,7 @@ export const APPLY_DEFAULTS: Record<string, string[]> = {
     'Other',
   ],
   HEALTH:  ['I have not','I have a condition','Prefer not to say'],
-  CRC:     ['Clean record','I have a record','Prefer not to answer'],
+  CRC:     ['clean record','I have a record','Prefer not to answer'],
   KR_CRC:  ['Clean record','I have a record','Not applicable (never lived in Korea)','Prefer not to answer'],
 }
 
