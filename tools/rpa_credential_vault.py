@@ -28,6 +28,7 @@ import sys
 import json
 import base64
 import ctypes
+import hashlib
 import secrets
 import getpass
 from pathlib import Path
@@ -50,6 +51,10 @@ MASTER_KEY_PROMPT = "🔑 마스터 입력 장치 키 (보이지 않음): "
 KDF_ITERATIONS = 600_000
 NONCE_BYTES = 12
 SALT_BYTES = 32
+
+# ── 마스터 키 DPAPI 캐시 파일 ─────────────────────────────────────────────────
+# vault 파일 해시와 함께 저장 → vault 미변경 시 재입력 불필요
+_MK_CACHE_FILE = Path(__file__).resolve().parent.parent / ".rpa_mk.enc"
 
 # ── 세션 마스터 키 캐시 (GUI 설정 후 재입력 방지) ─────────────────────────────
 # setup_from_gui() 호출 후 동일 프로세스 내 get_decrypted() 호출 시 재입력 불필요.
@@ -193,6 +198,80 @@ def _scrub(data: bytes):
         ctypes.memmove(id(data), id(b'\x00' * len(data)), len(data))
 
 
+# ── DPAPI 마스터 키 캐시 (Windows CryptProtectData) ──────────────────────────
+
+class _DataBlob(ctypes.Structure):
+    _fields_ = [("cbData", ctypes.c_ulong),
+                ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+
+def _dpapi_encrypt(data: bytes) -> bytes:
+    """CryptProtectData — 현재 Windows 사용자 자격으로 암호화."""
+    b_in = _DataBlob(len(data), ctypes.cast(ctypes.c_char_p(data),
+                                             ctypes.POINTER(ctypes.c_char)))
+    b_out = _DataBlob()
+    if not ctypes.windll.crypt32.CryptProtectData(
+            ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+        raise RuntimeError("DPAPI CryptProtectData 실패")
+    result = ctypes.string_at(b_out.pbData, b_out.cbData)
+    ctypes.windll.kernel32.LocalFree(b_out.pbData)
+    return result
+
+
+def _dpapi_decrypt(data: bytes) -> bytes:
+    """CryptUnprotectData — 현재 Windows 사용자 자격으로 복호화."""
+    b_in = _DataBlob(len(data), ctypes.cast(ctypes.c_char_p(data),
+                                             ctypes.POINTER(ctypes.c_char)))
+    b_out = _DataBlob()
+    if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(b_in), None, None, None, None, 0, ctypes.byref(b_out)):
+        raise RuntimeError("DPAPI CryptUnprotectData 실패")
+    result = ctypes.string_at(b_out.pbData, b_out.cbData)
+    ctypes.windll.kernel32.LocalFree(b_out.pbData)
+    return result
+
+
+def _vault_file_hash() -> str:
+    """vault 파일 SHA-256 (변경 감지용)."""
+    if not VAULT_FILE.exists():
+        return ""
+    return hashlib.sha256(VAULT_FILE.read_bytes()).hexdigest()
+
+
+def _save_mk_cache(mk: bytes):
+    """마스터 키를 DPAPI로 암호화 → 캐시 파일 저장."""
+    try:
+        enc = _dpapi_encrypt(mk)
+        _MK_CACHE_FILE.write_text(
+            json.dumps({"vault_hash": _vault_file_hash(),
+                        "mk_enc": base64.b64encode(enc).decode("ascii")}),
+            encoding="utf-8")
+    except Exception as e:
+        print(f"[WARN] 마스터 키 캐시 저장 실패: {e}")
+
+
+def _load_mk_cache() -> Optional[bytes]:
+    """캐시에서 마스터 키 복호화. vault 변경 시 None 반환."""
+    try:
+        if not _MK_CACHE_FILE.exists():
+            return None
+        payload = json.loads(_MK_CACHE_FILE.read_text(encoding="utf-8"))
+        if payload.get("vault_hash") != _vault_file_hash():
+            _MK_CACHE_FILE.unlink(missing_ok=True)
+            return None
+        return _dpapi_decrypt(base64.b64decode(payload["mk_enc"]))
+    except Exception:
+        return None
+
+
+def _clear_mk_cache():
+    """마스터 키 캐시 삭제 (vault 재암호화 후 호출)."""
+    try:
+        _MK_CACHE_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 # ── 클래스 ───────────────────────────────────────────────────────────────────
 
 class CredentialVault:
@@ -203,16 +282,19 @@ class CredentialVault:
         self._master_key = None
 
     def _load_master_key(self) -> bytes:
-        """마스터 키 로드 — 세션 캐시 → GUI 팝업 → 터미널 순서."""
-        # 1. 세션 캐시 (GUI 설정 직후 재입력 방지)
+        """마스터 키 로드 — 세션캐시 → DPAPI캐시 → GUI팝업 → 터미널 순서."""
+        # 1. 세션 캐시 (vault setup 직후 1회용)
         if _SESSION_KEY[0] is not None:
             key = bytes(_SESSION_KEY[0])
-            # 캐시 소거 (1회용)
             if isinstance(_SESSION_KEY[0], bytearray):
                 _SESSION_KEY[0][:] = b"\x00" * len(_SESSION_KEY[0])
             _SESSION_KEY[0] = None
             return key
-        # 2. GUI 팝업 (비인터랙티브 컨텍스트 대응)
+        # 2. DPAPI 캐시 (vault 미변경이면 팝업 없이 자동 로드)
+        cached = _load_mk_cache()
+        if cached:
+            return cached
+        # 3. GUI 팝업 (캐시 미스 시만 표시)
         _gui_tried = False
         try:
             import sys as _sys
@@ -221,17 +303,20 @@ class CredentialVault:
             _gui_tried = True
             key_str = ask_master_key_gui()
             if key_str:
-                return key_str.encode("utf-8")
-            # 취소됨 → 빈 bytes 반환 (상위에서 "" 처리)
+                mk = key_str.encode("utf-8")
+                _save_mk_cache(mk)   # 다음 실행부터 자동 로드
+                return mk
             raise RuntimeError("마스터 키 입력 취소됨")
         except RuntimeError:
             raise
         except Exception:
             pass
-        # 3. 터미널 폴백 (GUI 없는 CLI 환경에서만)
+        # 4. 터미널 폴백 (GUI 없는 CLI 환경)
         if _gui_tried:
             raise RuntimeError("GUI 마스터 키 팝업 실패")
-        return getpass.getpass(MASTER_KEY_PROMPT).encode("utf-8")
+        mk = getpass.getpass(MASTER_KEY_PROMPT).encode("utf-8")
+        _save_mk_cache(mk)
+        return mk
 
     def _read_vault(self) -> dict:
         """암호화된 vault 파일 읽기"""
@@ -297,6 +382,7 @@ class CredentialVault:
             return False
 
         self._write_vault(new_vault)
+        _save_mk_cache(new_mk)   # 새 키로 DPAPI 캐시 갱신
         # 메모리 소각
         old_arr = bytearray(old_mk); old_arr[:] = b"\x00" * len(old_arr)
         new_arr = bytearray(new_mk); new_arr[:] = b"\x00" * len(new_arr)
@@ -321,7 +407,8 @@ class CredentialVault:
             vault_data[f"{account_key}_email"]    = _triple_encrypt(email, mk)
             vault_data[f"{account_key}_password"] = _triple_encrypt(pw, mk)
         self._write_vault(vault_data)
-        # 세션 캐시 저장 — 이후 get_decrypted() 호출 시 재입력 불필요 (1회용)
+        _save_mk_cache(mk)           # DPAPI 캐시 저장 (이후 재입력 불필요)
+        # 세션 캐시 저장 (1회용)
         _SESSION_KEY[0] = bytearray(mk)
         # 원본 mk 소각
         mk_arr = bytearray(mk); mk_arr[:] = b"\x00" * len(mk_arr); del mk, mk_arr

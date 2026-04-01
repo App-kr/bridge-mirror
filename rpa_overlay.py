@@ -1645,11 +1645,132 @@ def ask_account_selection():
         )
         auto_chk.pack(side="left")
 
+        # ── 마스터 수정 버튼 + 취소 (같은 행) ──────────────────────────────
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
-        cancel_lbl = tk.Label(card, text="나중에 하기 (종료)",
+        bot_row = tk.Frame(card, bg=_CARD)
+        bot_row.pack(fill="x")
+
+        mk_lbl = tk.Label(bot_row, text="🔑 마스터 수정",
+                          font=tkfont.Font(family="Malgun Gothic", size=9),
+                          bg=_CARD, fg=_T2, cursor="hand2", pady=10, padx=14)
+        mk_lbl.pack(side="left")
+        mk_lbl.bind("<Enter>", lambda e: mk_lbl.configure(fg=_BLUE))
+        mk_lbl.bind("<Leave>", lambda e: mk_lbl.configure(fg=_T2))
+
+        def _open_mk_edit():
+            """마스터 키 저장/변경 Toplevel 다이얼로그."""
+            try:
+                import sys as _sys3
+                _sys3.path.insert(0, str(Path(__file__).resolve().parent))
+                from tools.rpa_credential_vault import CredentialVault, _save_mk_cache, _load_mk_cache
+            except ImportError as _ie:
+                return
+
+            top = tk.Toplevel(root)
+            top.overrideredirect(True)
+            top.attributes("-topmost", True)
+            top.configure(bg=_BG)
+            top.grab_set()
+
+            tw, th = 320, 290
+            top.geometry(f"{tw}x{th}+{ox + (sw - tw) // 2}+{oy + (sh - th) // 2}")
+
+            bt = tk.Frame(top, bg=_SEP, padx=1, pady=1)
+            bt.pack(fill="both", expand=True)
+            ct = tk.Frame(bt, bg=_CARD)
+            ct.pack(fill="both", expand=True)
+
+            _fnt_mk  = tkfont.Font(family="Malgun Gothic", size=10)
+            _fnt_mks = tkfont.Font(family="Malgun Gothic", size=9)
+
+            tk.Label(ct, text="🔑  마스터 키 관리",
+                     font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                     bg=_CARD, fg=_T1).pack(pady=(14, 2))
+            tk.Label(ct, text="현재 키만 입력 → 저장   |   새 키도 입력 → 키 변경",
+                     font=_fnt_mks, bg=_CARD, fg=_T2).pack(pady=(0, 6))
+            tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", padx=12)
+
+            def _row(lbl_text):
+                fr = tk.Frame(ct, bg=_CARD); fr.pack(fill="x", padx=16, pady=(6, 0))
+                tk.Label(fr, text=lbl_text, font=_fnt_mks,
+                         bg=_CARD, fg=_T2, anchor="w").pack(fill="x")
+                ent = tk.Entry(fr, show="●", font=_fnt_mk, relief="flat", bd=1,
+                               highlightthickness=1, highlightbackground=_SEP,
+                               highlightcolor=_BLUE)
+                ent.pack(fill="x", ipady=5)
+                return ent
+
+            e_cur = _row("현재 마스터 키")
+            e_new = _row("새 마스터 키  (변경 시만 입력)")
+            e_cfm = _row("새 마스터 키 확인")
+
+            err_mk = tk.Label(ct, text="", font=_fnt_mks, bg=_CARD, fg=_RED)
+            err_mk.pack(pady=(4, 0))
+
+            def _do_save():
+                cur = e_cur.get().strip()
+                nw  = e_new.get()
+                cfm = e_cfm.get()
+                if not cur:
+                    err_mk.configure(text="현재 마스터 키를 입력하세요"); return
+                # 현재 키 검증 (vault 복호화 시도)
+                try:
+                    v = CredentialVault()
+                    v._master_key = cur.encode("utf-8")
+                    test = v.get_decrypted("gray_email")
+                    if not test:
+                        err_mk.configure(text="현재 마스터 키가 올바르지 않습니다"); return
+                except Exception:
+                    err_mk.configure(text="현재 마스터 키가 올바르지 않습니다"); return
+
+                if nw:  # 새 키 입력 있으면 → rekey
+                    if nw != cfm:
+                        err_mk.configure(text="새 마스터 키가 일치하지 않습니다"); return
+                    if nw == cur:
+                        err_mk.configure(text="현재 키와 동일합니다"); return
+                    v2 = CredentialVault()
+                    if v2.rekey(cur, nw):
+                        err_mk.configure(text="✅ 마스터 키 변경 완료", fg=_BLUE)
+                        top.after(1200, lambda: [top.grab_release(), top.destroy()])
+                    else:
+                        err_mk.configure(text="변경 실패 — 다시 시도하세요")
+                else:   # 새 키 없음 → 현재 키 저장만
+                    _save_mk_cache(cur.encode("utf-8"))
+                    err_mk.configure(text="✅ 마스터 키 저장 완료", fg=_BLUE)
+                    top.after(900, lambda: [top.grab_release(), top.destroy()])
+
+            tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", pady=(6, 0))
+            br = tk.Frame(ct, bg=_CARD); br.pack(fill="x")
+
+            ok3 = tk.Label(br, text="저장 / 변경",
+                           font=tkfont.Font(family="Malgun Gothic", size=12, weight="bold"),
+                           bg=_CARD, fg=_BLUE, pady=9, cursor="hand2")
+            ok3.pack(side="left", expand=True, fill="both")
+            ok3.bind("<Button-1>", lambda e: _do_save())
+            ok3.bind("<Enter>", lambda e: ok3.configure(bg=_HOV))
+            ok3.bind("<Leave>", lambda e: ok3.configure(bg=_CARD))
+
+            tk.Frame(br, bg=_SEP, width=1).pack(side="left", fill="y")
+
+            cx3 = tk.Label(br, text="취소",
+                           font=tkfont.Font(family="Malgun Gothic", size=12),
+                           bg=_CARD, fg=_RED, pady=9, cursor="hand2")
+            cx3.pack(side="left", expand=True, fill="both")
+            cx3.bind("<Button-1>", lambda e: [top.grab_release(), top.destroy()])
+            cx3.bind("<Enter>", lambda e: cx3.configure(bg=_HOV))
+            cx3.bind("<Leave>", lambda e: cx3.configure(bg=_CARD))
+
+            e_cur.focus_set()
+            top.bind("<Return>", lambda e: _do_save())
+
+        mk_lbl.bind("<Button-1>", lambda e: _open_mk_edit())
+
+        tk.Frame(bot_row, bg=_SEP, width=1).pack(side="left", fill="y")
+
+        cancel_lbl = tk.Label(bot_row, text="나중에 하기 (종료)",
                               font=tkfont.Font(family="Malgun Gothic", size=12),
                               bg=_CARD, fg=_RED, cursor="hand2", pady=10)
-        cancel_lbl.pack(fill="x")
+        cancel_lbl.pack(side="left", expand=True, fill="both")
         cancel_lbl.bind("<Button-1>", lambda e: root.destroy())
         cancel_lbl.bind("<Enter>", lambda e: cancel_lbl.configure(bg=_HOV))
         cancel_lbl.bind("<Leave>", lambda e: cancel_lbl.configure(bg=_CARD))

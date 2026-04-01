@@ -22,6 +22,7 @@ vapid_*.txt
 .vapid_vault.enc.json
 .social_vault.enc.json
 .rpa_vault.enc.json
+.rpa_mk.enc
 
 # ── Databases ─────────────────────────────────────────────────
 # DB 원본은 git 미포함 (Render는 /data/master.db 독립 운용)
