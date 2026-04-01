@@ -2,7 +2,7 @@
 # USB Headset auto-detection task registration
 
 $taskName = "BridgeAudioStartup"
-$scriptPath = "Q:\Claudework\bridge base\scripts\audio\audio-startup.ps1"
+$vbsPath = "Q:\Claudework\bridge base\scripts\audio\audio_startup_run.vbs"
 
 # Remove existing task
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
@@ -11,8 +11,8 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 }
 
 $action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+    -Execute "wscript.exe" `
+    -Argument "`"$vbsPath`""
 
 # At login + 10 second delay (driver init)
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME

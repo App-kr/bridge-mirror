@@ -39,7 +39,8 @@ Log "Done"
 
 $monitorScript = "Q:\Claudework\bridge base\scripts\audio\audio-monitor.ps1"
 if (Test-Path $monitorScript) {
-    Start-Process -FilePath powershell.exe -ArgumentList "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$monitorScript`"" -WindowStyle Hidden
+    $wsh = New-Object -ComObject WScript.Shell
+    $wsh.Run("powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$monitorScript`"", 0, $false)
     Log "Monitor started - USB detection active"
 } else {
     Log "WARNING: audio-monitor.ps1 not found"
