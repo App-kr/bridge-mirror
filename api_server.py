@@ -9261,7 +9261,7 @@ async def process_resume_files(
         try:
             num = int(candidate_id)
             row = conn.execute(
-                "SELECT full_name, email, mobile_phone, nationality FROM candidates WHERE sheet_number = ? LIMIT 1",
+                "SELECT full_name, email, mobile_phone, nationality, photo_url FROM candidates WHERE sheet_number = ? LIMIT 1",
                 (num,)
             ).fetchone()
             if row:
@@ -9271,6 +9271,7 @@ async def process_resume_files(
                     "email": decrypt_field(str(row[1])) if row[1] else "",
                     "mobile_phone": decrypt_field(str(row[2])) if row[2] else "",
                     "nationality": decrypt_field(str(row[3])) if row[3] else "",
+                    "photo_url": str(row[4]) if row[4] else "",
                 }
         except (ValueError, sqlite3.Error):
             pass
@@ -9280,18 +9281,42 @@ async def process_resume_files(
         pass
 
     # 사진 파일 먼저 추출 (resume/cover 처리 시 photo_path로 전달)
+    _resume_log = logging.getLogger("bridge.resume")
     photo_tmp_path = None
     try:
         if file_sections.get("photo"):
             import tempfile as _tmpmod
             photo_file = file_sections["photo"][0]
             photo_bytes = await photo_file.read()
-            photo_ext = Path(photo_file.filename).suffix.lower() or ".jpg"
-            with _tmpmod.NamedTemporaryFile(suffix=photo_ext, delete=False) as _ptmp:
-                _ptmp.write(photo_bytes)
-                photo_tmp_path = Path(_ptmp.name)
-    except Exception:
+            if photo_bytes:
+                photo_ext = Path(photo_file.filename).suffix.lower() or ".jpg"
+                with _tmpmod.NamedTemporaryFile(suffix=photo_ext, delete=False) as _ptmp:
+                    _ptmp.write(photo_bytes)
+                    photo_tmp_path = Path(_ptmp.name)
+                _resume_log.info("[RESUME] 폼 사진 저장: %s (%d bytes)", photo_tmp_path, len(photo_bytes))
+            else:
+                _resume_log.warning("[RESUME] 폼 사진 bytes가 비어있음 (photo file drained?)")
+    except Exception as _photo_err:
+        _resume_log.warning("[RESUME] 폼 사진 임시파일 생성 실패: %s", _photo_err)
         photo_tmp_path = None
+
+    # 폼 사진 없으면 DB photo_url → S3 폴백
+    if photo_tmp_path is None and candidate_dict and candidate_dict.get("photo_url"):
+        try:
+            import tempfile as _tmpmod_s3
+            _photo_s3_key = candidate_dict["photo_url"]
+            _photo_s3_bytes = s3_download_bytes(_photo_s3_key)
+            if _photo_s3_bytes:
+                _photo_s3_ext = Path(_photo_s3_key).suffix.lower() or ".jpg"
+                with _tmpmod_s3.NamedTemporaryFile(suffix=_photo_s3_ext, delete=False) as _ptmp_s3:
+                    _ptmp_s3.write(_photo_s3_bytes)
+                    photo_tmp_path = Path(_ptmp_s3.name)
+                _resume_log.info("[RESUME] S3 사진 폴백 성공: %s (%d bytes)", _photo_s3_key, len(_photo_s3_bytes))
+            else:
+                _resume_log.warning("[RESUME] S3 사진 폴백: photo_url=%s 이지만 bytes 없음", _photo_s3_key)
+        except Exception as _s3_err:
+            _resume_log.warning("[RESUME] S3 사진 폴백 실패: %s", _s3_err)
+            photo_tmp_path = None
 
     # brj_number: candidate_id를 정수로 사용
     try:
