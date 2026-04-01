@@ -36,24 +36,96 @@ logger = logging.getLogger("bridge.vault")
 
 def encrypt_field(value, *args, **kwargs):
     """
-    PII 필드 암호화 (현재: 미구현 — plaintext 반환)
-    나중에 3중 암호화 구현 예정
+    PII 필드 암호화 — 일반 호환용 stub (plaintext 반환).
+    민감 PII 암호화는 t3_encrypt() 사용.
     """
+    return value
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# T3v1 — BRIDGE_FIELD_KEY 기반 경량 3중 AES-256-GCM
+# Vault(VAULT_PASSPHRASE) 의존 없음. BRIDGE_FIELD_KEY 단독으로 동작.
+# 포맷: base64( b"T3v1" + nonce1(12) + nonce2(12) + nonce3(12) + ciphertext )
+# L1_key = SHA-256(base_key + b"L1" + col_name)   — 컬럼별 키 분리
+# L2_key = SHA-256(base_key + b"L2" + nonce1)      — nonce 바인딩
+# L3_key = SHA-256(base_key + b"L3" + nonce2+nonce1)
+# ════════════════════════════════════════════════════════════════════════════
+
+_T3_MAGIC = b"T3v1"
+
+
+def is_t3_encrypted(value) -> bool:
+    """T3v1 암호화 여부 감지 (base64 디코드 후 magic 확인)."""
+    if not isinstance(value, str) or len(value) < 60:
+        return False
+    try:
+        raw = base64.b64decode(value)
+        return raw[:4] == _T3_MAGIC
+    except Exception:
+        return False
+
+
+def t3_encrypt(plaintext: str, column_name: str = "") -> str:
+    """
+    T3v1 3중 AES-256-GCM 암호화.
+    BRIDGE_FIELD_KEY → SHA-256 → 컬럼별/nonce별 하위 키 3개 파생.
+    매 호출마다 랜덤 nonce 3개 → 같은 값도 매번 다른 암호문.
+    """
+    base = _derive_key()
+    col = column_name.encode()
+    k1 = hashlib.sha256(base + b"L1" + col).digest()
+    n1 = secrets.token_bytes(12)
+    n2 = secrets.token_bytes(12)
+    n3 = secrets.token_bytes(12)
+    k2 = hashlib.sha256(base + b"L2" + n1).digest()
+    k3 = hashlib.sha256(base + b"L3" + n2 + n1).digest()
+    ct1 = AESGCM(k1).encrypt(n1, plaintext.encode("utf-8"), None)
+    ct2 = AESGCM(k2).encrypt(n2, ct1, None)
+    ct3 = AESGCM(k3).encrypt(n3, ct2, None)
+    return base64.b64encode(_T3_MAGIC + n1 + n2 + n3 + ct3).decode("ascii")
+
+
+def t3_decrypt(encoded: str, column_name: str = "") -> str:
+    """T3v1 3중 복호화. magic 불일치 또는 인증 실패 시 ValueError."""
+    raw = base64.b64decode(encoded)
+    if raw[:4] != _T3_MAGIC:
+        raise ValueError("T3v1 magic mismatch")
+    n1, n2, n3 = raw[4:16], raw[16:28], raw[28:40]
+    ct3 = raw[40:]
+    base = _derive_key()
+    col = column_name.encode()
+    k1 = hashlib.sha256(base + b"L1" + col).digest()
+    k2 = hashlib.sha256(base + b"L2" + n1).digest()
+    k3 = hashlib.sha256(base + b"L3" + n2 + n1).digest()
+    ct2 = AESGCM(k3).decrypt(n3, ct3, None)
+    ct1 = AESGCM(k2).decrypt(n2, ct2, None)
+    return AESGCM(k1).decrypt(n1, ct1, None).decode("utf-8")
+
+
+def auto_decrypt_value(value, column_name: str = ""):
+    """T3v1이면 복호화, 아니면 그대로 반환 (plaintext pass-through)."""
+    if not value:
+        return value
+    if is_t3_encrypted(value):
+        try:
+            return t3_decrypt(str(value), column_name)
+        except Exception:
+            return value
     return value
 
 
 def decrypt_field(value, *args, **kwargs):
     """
-    PII 필드 복호화 (현재: 미구현 — plaintext 반환)
+    T3v1 암호화값 자동 복호화. 평문은 그대로 반환 (안전한 pass-through).
+    api_server.py의 _safe_decrypt / _decrypt_row 에서 호출됨.
     """
-    return value
+    col = args[0] if args else kwargs.get("column_name", "")
+    return auto_decrypt_value(value, col)
 
 
 def is_encrypted(value, *args, **kwargs):
-    """
-    암호화 여부 확인 (현재: 항상 False)
-    """
-    return False
+    """T3v1 암호화 여부 확인."""
+    return is_t3_encrypted(value)
 
 # ── Render [ENC:] 환경변수 전역 복호화 계층 (가장 먼저 실행됨) ──────────────
 def unseal_render_environment():

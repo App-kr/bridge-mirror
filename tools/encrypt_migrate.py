@@ -20,29 +20,48 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE))
 sys.stdout.reconfigure(encoding="utf-8")
 
-# .env 로드
+# .env 로드 (없어도 계속)
 try:
     from dotenv import load_dotenv
     load_dotenv(BASE / ".env")
 except ImportError:
     pass
 
-from security_vault import encrypt_field, is_encrypted
+# BX (DPAPI) 로드 — Windows 로컬 실행 시 BRIDGE_FIELD_KEY 자동 주입
+try:
+    from tools.bx import load_to_env as _bx_load
+    _bx_load()
+except Exception:
+    pass
+
+from security_vault import t3_encrypt, is_t3_encrypted as is_encrypted
 
 DB_PATH = BASE / "master.db"
 
 # ── 암호화 대상 필드 ─────────────────────────────────────────────────────────
+# 검색/이메일 발송에 쓰이는 name/email/phone은 평문 유지
 CANDIDATE_FIELDS = [
+    # 기존 (v1)
     "dob",
     "nationality",
     "current_location",
     "reference",
-    "korean_criminal_record",  # 기존에 누락됐던 필드
+    "korean_criminal_record",
+    # 추가 (v2) — 검색 대상 아닌 민감 PII
+    "kakao_id",
+    "passport_number",
+    "home_country",
+    "emergency_contact",
+    "gender",
 ]
 
 INQUIRY_FIELDS = [
+    # 기존 (v1)
     "school_location",
     "memo",
+    # 추가 (v2)
+    "contact_name",
+    "business_registration",
 ]
 
 def p(msg=""):
@@ -99,7 +118,7 @@ def run_migration():
             if is_encrypted(val):
                 cand_stats[field]["already"] += 1
                 continue
-            enc = encrypt_field(val)
+            enc = t3_encrypt(val, field)
             updates.append(f"{field} = ?")
             params.append(enc)
             cand_stats[field]["encrypted"] += 1
@@ -146,7 +165,7 @@ def run_migration():
             if is_encrypted(val):
                 inq_stats[field]["already"] += 1
                 continue
-            enc = encrypt_field(val)
+            enc = t3_encrypt(val, field)
             updates.append(f"{field} = ?")
             params.append(enc)
             inq_stats[field]["encrypted"] += 1
