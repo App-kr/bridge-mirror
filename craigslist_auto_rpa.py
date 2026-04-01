@@ -763,7 +763,7 @@ def _find_chrome_binary() -> str | None:
     return None
 
 
-def build_driver(headless: bool = True, account: str = "default") -> webdriver.Chrome:
+def build_driver(headless: bool = True) -> webdriver.Chrome:
     opts = Options()
 
     # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
@@ -774,20 +774,9 @@ def build_driver(headless: bool = True, account: str = "default") -> webdriver.C
     else:
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
 
-    # 계정별 Chrome 프로필 (수동 로그인 세션 유지 → Further verification 수동 완료 후 재사용)
-    profile_dir = CHROME_PROFILE_DIR / account
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    for lock_name in ("SingletonLock", "SingletonCookie"):
-        lk = profile_dir / lock_name
-        if lk.exists():
-            try: lk.unlink()
-            except Exception: pass
-    opts.add_argument(f"--user-data-dir={profile_dir}")
-    opts.add_argument("--no-first-run")
-    opts.add_argument("--no-default-browser-check")
-
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
+        # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
@@ -839,19 +828,10 @@ def _has_captcha(driver) -> bool:
                for k in ["recaptcha", "g-recaptcha", "hcaptcha"])
 
 
-def cl_login(driver: webdriver.Chrome, headless: bool = False) -> bool:
+def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
     driver.get(CL_LOGIN_URL)
     _delay(2, 3)
-
-    def _is_logged_in(d):
-        src = d.page_source.lower()
-        return "log out" in src or "logout" in src or "make new post" in src
-
-    # ── Chrome 프로필 세션 유지 확인 (재로그인 불필요) ──────────────────────────
-    if _is_logged_in(driver):
-        print("  [LOGIN] 세션 유지 — 재로그인 불필요 ✅")
-        return True
 
     try:
         email_el = WebDriverWait(driver, 15).until(
@@ -867,6 +847,10 @@ def cl_login(driver: webdriver.Chrome, headless: bool = False) -> bool:
 
         # Craigslist 는 로그인 후에도 URL 이 accounts.craigslist.org/login/home 유지
         # → URL 대신 페이지 콘텐츠로 로그인 성공 여부 판단
+        def _is_logged_in(d):
+            src = d.page_source.lower()
+            return "log out" in src or "logout" in src or "make new post" in src
+
         try:
             WebDriverWait(driver, 12).until(_is_logged_in)
             print(f"  [LOGIN] 성공 ✅")
@@ -920,7 +904,7 @@ def cl_login(driver: webdriver.Chrome, headless: bool = False) -> bool:
 
         # CAPTCHA 감지
         if _has_captcha(driver):
-            ok = wait_for_captcha(driver, timeout=120, headless=headless)
+            ok = wait_for_captcha(driver, timeout=120)
             return ok
 
         # 마지막 수단: 추가 30초 대기
@@ -1901,7 +1885,7 @@ def main():
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag, account=acct_label)
+        driver = build_driver(headless=hl_flag)
         posted = 0
 
         try:
@@ -1917,7 +1901,7 @@ def main():
                     pass
             if not _auto_login:
                 print("  [LOGIN] 자동로그인 OFF — 새 세션으로 로그인")
-            if not cl_login(driver, headless=hl_flag):
+            if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
                 return 0
