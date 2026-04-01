@@ -71,6 +71,7 @@ SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
 LOCK_FILE           = BASE_DIR / "logs" / ".rpa_running.lock"
 _STOP_GRACEFUL_FLAG = BASE_DIR / "logs" / ".rpa_stop_graceful.flag"
+CHROME_PROFILE_DIR  = BASE_DIR / ".chrome_rpa_profile"   # 계정별 세션 저장
 # 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
 _IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -762,7 +763,7 @@ def _find_chrome_binary() -> str | None:
     return None
 
 
-def build_driver(headless: bool = True) -> webdriver.Chrome:
+def build_driver(headless: bool = True, account: str = "default") -> webdriver.Chrome:
     opts = Options()
 
     # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
@@ -773,9 +774,20 @@ def build_driver(headless: bool = True) -> webdriver.Chrome:
     else:
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
 
+    # 계정별 Chrome 프로필 (수동 로그인 세션 유지 → Further verification 수동 완료 후 재사용)
+    profile_dir = CHROME_PROFILE_DIR / account
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    for lock_name in ("SingletonLock", "SingletonCookie"):
+        lk = profile_dir / lock_name
+        if lk.exists():
+            try: lk.unlink()
+            except Exception: pass
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    opts.add_argument("--no-first-run")
+    opts.add_argument("--no-default-browser-check")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
-        # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
@@ -827,10 +839,19 @@ def _has_captcha(driver) -> bool:
                for k in ["recaptcha", "g-recaptcha", "hcaptcha"])
 
 
-def cl_login(driver: webdriver.Chrome) -> bool:
+def cl_login(driver: webdriver.Chrome, headless: bool = False) -> bool:
     print("  [1/7] Craigslist 로그인...")
     driver.get(CL_LOGIN_URL)
     _delay(2, 3)
+
+    def _is_logged_in(d):
+        src = d.page_source.lower()
+        return "log out" in src or "logout" in src or "make new post" in src
+
+    # ── Chrome 프로필 세션 유지 확인 (재로그인 불필요) ──────────────────────────
+    if _is_logged_in(driver):
+        print("  [LOGIN] 세션 유지 — 재로그인 불필요 ✅")
+        return True
 
     try:
         email_el = WebDriverWait(driver, 15).until(
@@ -846,10 +867,6 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
         # Craigslist 는 로그인 후에도 URL 이 accounts.craigslist.org/login/home 유지
         # → URL 대신 페이지 콘텐츠로 로그인 성공 여부 판단
-        def _is_logged_in(d):
-            src = d.page_source.lower()
-            return "log out" in src or "logout" in src or "make new post" in src
-
         try:
             WebDriverWait(driver, 12).until(_is_logged_in)
             print(f"  [LOGIN] 성공 ✅")
@@ -857,9 +874,53 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         except Exception:
             pass
 
+        # ── "Further verification required" 감지 ──────────────────────────────
+        src_now = driver.page_source.lower()
+        if "further verification" in src_now:
+            ss_path = SS_DIR / "login_fail.png"
+            driver.save_screenshot(str(ss_path))
+            print(f"  [LOGIN] ⚠️  Further verification required — 로그인 링크 이메일 자동 발송 시도")
+            # "E-mail a login link" 버튼 클릭 → Craigslist가 CL_EMAIL로 1회용 로그인 링크 발송
+            _email_btn_clicked = False
+            try:
+                for sel in [
+                    "input[value='E-mail a login link']",
+                    "button[id*='email']",
+                    "input[name*='email_link']",
+                ]:
+                    try:
+                        btn = driver.find_element(By.CSS_SELECTOR, sel)
+                        _js_click(driver, btn)
+                        _email_btn_clicked = True
+                        break
+                    except Exception:
+                        pass
+                if not _email_btn_clicked:
+                    # XPATH 폴백 — 버튼 텍스트로 찾기
+                    for btn in driver.find_elements(By.XPATH,
+                            "//input[@type='submit'] | //button"):
+                        txt = (btn.get_attribute("value") or btn.text or "").lower()
+                        if "e-mail" in txt or "email" in txt or "link" in txt:
+                            _js_click(driver, btn)
+                            _email_btn_clicked = True
+                            break
+            except Exception:
+                pass
+
+            if _email_btn_clicked:
+                print(f"  ✉️  로그인 링크 이메일 발송됨 → {CL_EMAIL}")
+                print(f"  → {CL_EMAIL} 받은편지함에서 Craigslist 링크 클릭 후 run.bat 재실행")
+                _log_event("warn", "—", "login",
+                           f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
+            else:
+                print(f"  [LOGIN] 이메일 발송 버튼 미발견 — {CL_EMAIL} 수동 확인 필요")
+                _log_event("warn", "—", "login",
+                           "Further verification required — email button not found")
+            return False
+
         # CAPTCHA 감지
         if _has_captcha(driver):
-            ok = wait_for_captcha(driver, timeout=120)
+            ok = wait_for_captcha(driver, timeout=120, headless=headless)
             return ok
 
         # 마지막 수단: 추가 30초 대기
@@ -981,8 +1042,10 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         if _step_count[step] > 3:
             ss = SS_DIR / f"stuck_{step}.png"
             driver.save_screenshot(str(ss))
+            _log_event("error", job.get("job_code","?"), "stuck",
+                       f"?s={step} 반복 3회 초과 — 게시 중단")
             print(f"  [ABORT] ?s={step} 에서 3회 이상 반복 — 스크린샷: {ss}")
-            break
+            return None
         print(f"  [?s={step}] ", end="", flush=True)
 
         if step == "copyfromanother":
@@ -1011,13 +1074,29 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
             print("지역 선택")
             try:
-                # Seoul 또는 korea 옵션 찾기
-                opts = driver.find_elements(By.CSS_SELECTOR, "input[type='radio'], option")
-                for opt in opts:
-                    val = (opt.get_attribute("value") or "").lower()
-                    txt = (opt.text or "").lower()
-                    if "seoul" in val or "seoul" in txt or "korea" in val:
-                        _js_click(driver, opt); _delay(0.5, 1); break
+                # radio 버튼 방식 (Seoul/Korea 값 선택)
+                radio_els = driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
+                if radio_els:
+                    for opt in radio_els:
+                        val = (opt.get_attribute("value") or "").lower()
+                        if "seoul" in val or "korea" in val:
+                            _js_click(driver, opt); _delay(0.5, 1); break
+                else:
+                    # <select> 드롭다운 방식 — JS로 직접 value 설정 후 change 이벤트 발생
+                    for sel_el in driver.find_elements(By.CSS_SELECTOR, "select"):
+                        driver.execute_script("""
+                            var s = arguments[0];
+                            for (var i = 0; i < s.options.length; i++) {
+                                var v = s.options[i].value.toLowerCase();
+                                var t = s.options[i].text.toLowerCase();
+                                if (v.includes('seoul') || t.includes('seoul') || v.includes('korea')) {
+                                    s.selectedIndex = i;
+                                    s.dispatchEvent(new Event('change', {bubbles: true}));
+                                    break;
+                                }
+                            }
+                        """, sel_el)
+                        _delay(0.5, 1); break
             except Exception:
                 pass
             _advance(driver, step)
@@ -1822,7 +1901,7 @@ def main():
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag)
+        driver = build_driver(headless=hl_flag, account=acct_label)
         posted = 0
 
         try:
@@ -1838,7 +1917,7 @@ def main():
                     pass
             if not _auto_login:
                 print("  [LOGIN] 자동로그인 OFF — 새 세션으로 로그인")
-            if not cl_login(driver):
+            if not cl_login(driver, headless=hl_flag):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
                 return 0
