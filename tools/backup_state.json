@@ -1167,8 +1167,16 @@
       "git": "ffc2925f",
       "files": 2164,
       "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260401_172759__presigned-upload-구현",
+      "task": "presigned-upload-구현",
+      "ts": "2026.04.01 17:28:06",
+      "git": "a79e3be5",
+      "files": 2164,
+      "db_hash": "80878a0f977c"
     }
   ],
-  "last_backup": "2026.04.01 16:54:28",
-  "total_count": 146
+  "last_backup": "2026.04.01 17:28:06",
+  "total_count": 147
 }

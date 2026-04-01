@@ -357,7 +357,6 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
         items={[
           '사업자 등록증 사본을 이메일(bridgejobkr@gmail.com)로 보내주세요.',
           '급여, 복지, 근무 조건을 미리 정리해 두시면 빠르게 진행됩니다.',
-          '서비스 수수료 결제 후 공고가 게시됩니다 (계좌이체 또는 PayPal).',
           '* 표시 항목은 필수입니다. 정확한 정보를 입력해 주세요.',
         ]}
         cta="시작하기"
@@ -369,43 +368,28 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
           For Schools & Academies
         </span>
         <h1 className="text-3xl font-black text-gray-900">강사(교사) 구인신청</h1>
-        <p className="text-gray-500 text-sm leading-relaxed">
-          해당 항목은 지원자의 실제 지원 의향을 확인하기 위한 필수 정보입니다.
-          정확하지 않거나 허위 정보를 입력할 경우, 절차가 진행되지 않을 수 있습니다.<br />
-          접수를 완료하신 후 사업자 등록증 사본을 이메일로 보내주시기 바랍니다.
-        </p>
-      </div>
-
-      {/* ── Payment Section ── */}
-      <div className="space-y-3">
-        <p className="text-sm font-semibold text-gray-700">Service Fee & Payment</p>
-        <p className="text-xs text-gray-500">채용 공고 게시 전 서비스 수수료를 먼저 결제해 주세요.</p>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="card !p-6 flex flex-col gap-3 border-2 border-gray-200 hover:border-blue-400 transition-all">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">&#127974;</span>
-              <span className="font-bold text-gray-900">Bank Transfer</span>
-            </div>
-            <div className="space-y-0.5 text-sm">
-              <p className="font-mono text-gray-800 font-semibold">계좌 정보는 문의 시 안내드립니다</p>
-              <p className="text-gray-500">bridgejobkr@gmail.com</p>
-            </div>
-            <p className="text-xs text-gray-400">무통장 입금 후 이메일로 입금 확인 요청</p>
-          </div>
-          <a href="https://www.paypal.com/paypalme/bridgejob" target="_blank" rel="noopener noreferrer"
-            className="card !p-6 flex flex-col gap-3 border-2 border-[#009cde]/30
-                       hover:border-[#009cde] hover:!shadow-lg transition-all
-                       !bg-[#003087] text-white hover:!bg-[#002070]">
-            <div className="flex items-center gap-3">
-              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-[#009cde] shrink-0">
-                <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.59 3.025-2.566 6.082-8.558 6.082H9.825c-.524 0-.968.382-1.05.9l-1.332 8.445-.373 2.368a.533.533 0 0 0 .525.632h3.688c.458 0 .849-.334.92-.789l.038-.196.731-4.63.047-.254c.071-.455.462-.789.92-.789h.58c3.75 0 6.687-1.525 7.545-5.932.357-1.835.173-3.368-.822-4.55z"/>
-              </svg>
-              <div>
-                <p className="text-xs text-blue-200 uppercase tracking-wider">PayPal</p>
-                <p className="font-bold text-white text-lg">Pay via PayPal</p>
-              </div>
-            </div>
-            <p className="text-xs text-blue-200">Instant payment &middot; International cards accepted</p>
+        <div className="space-y-1.5 text-sm text-gray-500 leading-relaxed">
+          <p>
+            작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다.
+            허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니
+            정확하게 입력해 주세요.
+          </p>
+          <p>
+            접수 완료 후{' '}
+            <strong className="text-gray-700 font-semibold">사업자 등록증 사본</strong>을
+            이메일로 보내주시기 바랍니다.
+          </p>
+          <a
+            href="mailto:bridgejobkr@gmail.com?subject=사업자등록증 사본 첨부 - 구인신청"
+            className="inline-flex items-center gap-1.5 mt-0.5 px-3 py-1.5 rounded-lg
+                       bg-gray-100 hover:bg-blue-50 border border-gray-200 hover:border-blue-300
+                       text-gray-700 hover:text-blue-700 text-xs font-medium transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+            </svg>
+            bridgejobkr@gmail.com 으로 보내기
           </a>
         </div>
       </div>
