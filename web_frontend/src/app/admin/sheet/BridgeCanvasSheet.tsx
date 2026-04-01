@@ -324,6 +324,8 @@ export default function BridgeCanvasSheet() {
   const loadOffsetRef    = useRef(0)
   const isLoadingMoreRef = useRef(false)
   const dbTotalRef       = useRef(0)
+  const loadAllDataRef   = useRef<(() => Promise<void>) | null>(null)
+  const lastPollTotalRef = useRef(0)
 
   const loadAllData = useCallback(async () => {
     setLoading(true)
@@ -407,6 +409,8 @@ export default function BridgeCanvasSheet() {
     isLoadingMoreRef.current = false
   }, [])
 
+  useEffect(() => { loadAllDataRef.current = loadAllData }, [loadAllData])
+
   useEffect(() => {
     if (ready) loadAllData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -419,7 +423,14 @@ export default function BridgeCanvasSheet() {
         if (!res.ok) return
         const json = await res.json()
         const rows: Record<string, unknown>[] = json.data?.candidates ?? []
+        const serverTotal: number = json.data?.total ?? 0
         setNewCount(rows.filter(r => String(r.source ?? r.how_to ?? '') === 'web_form').length)
+
+        // 신규 제출 감지 → 자동 리로드 (즉각 sheet 반영)
+        if (lastPollTotalRef.current > 0 && serverTotal > lastPollTotalRef.current) {
+          loadAllDataRef.current?.()
+        }
+        lastPollTotalRef.current = serverTotal
 
         // 신규 접수 배너 감지 — localStorage 마지막 방문 이후 신규 항목
         const lastVisit = localStorage.getItem('bridge_last_sheet_visit') ?? ''
