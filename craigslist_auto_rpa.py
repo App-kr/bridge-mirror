@@ -273,48 +273,29 @@ else:
     EC = _DummyEC
     ChromeDriverManager = _DummyCDM
 
-# ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
+# ── RPA Credential Vault 임포트 (DPAPI + 3×AES-256-GCM) ──────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from tools.rpa_credential_vault import load_credentials as _vault_load
+    _VAULT_AVAILABLE = True
+except ImportError:
+    _VAULT_AVAILABLE = False
+
+
 def _load_craigslist_credentials(account_name: str = "gray"):
-    """Craigslist 자격증명을 .rpa_vault.json에서 로드 (간단한 JSON)
+    """Craigslist 자격증명 — DPAPI+3×AES-256-GCM vault에서 로드.
 
-    ENV 절대 사용 금지 — vault JSON에서만 로드
-
+    평문 파일 절대 사용 금지.
     계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
     """
-    try:
-        vault_path = Path(__file__).resolve().parent / ".rpa_vault.json"
-
-        if not vault_path.exists():
-            print(f"[ERROR] Vault 파일을 찾을 수 없습니다: {vault_path}")
-            print("\n먼저 비밀번호를 설정하세요:")
-            print("  python auto_vault_setup.py")
-            sys.exit(1)
-
-        # JSON에서 로드
-        with open(vault_path, "r", encoding="utf-8") as f:
-            vault_data = json.load(f)
-
-        # 계정별 키 생성
-        email_key = f"{account_name}_email"
-        password_key = f"{account_name}_password"
-
-        email = vault_data.get(email_key)
-        password = vault_data.get(password_key)
-
-        if not email or not password:
-            print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
-            print("사용 가능한 계정: gray(회색), green(초록), brown(갈색), purple(보라)")
-            print("실행 예시: python craigslist_auto_rpa.py --account gray --limit 1")
-            sys.exit(1)
-
-        print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
-        return email, password
-    except json.JSONDecodeError:
-        print(f"[ERROR] Vault 파일이 손상되었습니다: {vault_path}")
+    if not _VAULT_AVAILABLE:
+        print("[ERROR] rpa_credential_vault 모듈을 찾을 수 없습니다.")
+        print(f"  경로 확인: {Path(__file__).resolve().parent / 'tools' / 'rpa_credential_vault.py'}")
         sys.exit(1)
-    except Exception as e:
-        print(f"[ERROR] 자격증명 로드 실패: {e}")
-        sys.exit(1)
+
+    email, password = _vault_load(account_name)
+    print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
+    return email, password
 
 # ── 계정 선택 파싱 ────────────────────────────────────────────────────────────
 _ACCOUNT = "gray"  # 기본값: 회색
@@ -1729,7 +1710,7 @@ def main():
     # DB 마이그레이션 (account_name 컬럼 없으면 자동 추가)
     _migrate_ad_posts_add_account()
 
-    jobs = fetch_jobs(args.job_code, args.limit, _ACCOUNT)
+    jobs = fetch_jobs(args.job_code, args.limit, acct_label)
     print(f"\n대상 포지션: {len(jobs)}건\n")
     if not jobs:
         print("게시할 포지션 없음 (이미 전부 posted 또는 조건 없음)")
@@ -1764,7 +1745,7 @@ def main():
                        "PII survived redact — post blocked")
             continue
 
-        ad_id = save_draft(job, title, body, _ACCOUNT)
+        ad_id = save_draft(job, title, body, acct_label)
         ads.append((job, title, body, ad_id))
         print(f"  [DRAFT] {job['job_code']} → ad_posts id={ad_id}")
 
@@ -1892,7 +1873,7 @@ def main():
                 print(f"\n[OVERLAY] 추가 작업 요청: {extra_count}건")
                 overlay_close()
 
-                extra_jobs = fetch_jobs(None, extra_count, _ACCOUNT)
+                extra_jobs = fetch_jobs(None, extra_count, acct_label)
                 if not extra_jobs:
                     print("추가 게시할 포지션 없음")
                     continue
@@ -1905,7 +1886,7 @@ def main():
                         body = body_clean
                     if not security_check(body, job["job_code"]):
                         continue
-                    ad_id = save_draft(job, title, body, _ACCOUNT)
+                    ad_id = save_draft(job, title, body, acct_label)
                     extra_ads.append((job, title, body, ad_id))
 
                 extra_posted = _run_post_session(extra_ads)
