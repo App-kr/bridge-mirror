@@ -357,7 +357,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(360, 430)
+        root, card = self._make_window(360, 388)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         try:
@@ -382,7 +382,7 @@ class RPAOverlay:
 
         # 스피너(32px) + 타이틀 + 계정명 — 2026 style
         bot_row = tk.Frame(header, bg=CC)
-        bot_row.pack(padx=20, pady=(2, 14), anchor="w")
+        bot_row.pack(padx=20, pady=(2, 8), anchor="w")
 
         spin_c = tk.Canvas(bot_row, width=32, height=32,
                            bg=CC, highlightthickness=0)
@@ -408,15 +408,15 @@ class RPAOverlay:
         # ══ BODY ═══════════════════════════════
         cur, tot = self._progress_var or [0, 0]
         body = tk.Frame(card, bg=self.BG)
-        body.pack(fill="x", padx=20, pady=(10, 0))
+        body.pack(fill="x", padx=20, pady=(6, 0))
 
         # 상단 행: 큰 % (좌) + 카운트 (우) — 2026: 더 큰 숫자
         pct_row = tk.Frame(body, bg=self.BG)
-        pct_row.pack(fill="x", pady=(0, 10))
+        pct_row.pack(fill="x", pady=(0, 6))
 
         self._prog_pct_label = tk.Label(
             pct_row, text=self._pct_text(cur, tot),
-            font=tkfont.Font(family="Malgun Gothic", size=30, weight="bold"),
+            font=tkfont.Font(family="Malgun Gothic", size=24, weight="bold"),
             bg=self.BG, fg=self.TEXT1)
         self._prog_pct_label.pack(side="left")
 
@@ -436,7 +436,7 @@ class RPAOverlay:
 
         # 상태 행: ● dot + 텍스트 (바 아래)
         status_row = tk.Frame(body, bg=self.BG)
-        status_row.pack(fill="x", pady=(9, 0))
+        status_row.pack(fill="x", pady=(5, 0))
 
         self._status_dot_label = tk.Label(
             status_row, text="●",
@@ -452,7 +452,7 @@ class RPAOverlay:
 
         # ══ 개인정보 경고 (2026 inline minimal) ══════
         warn_row = tk.Frame(card, bg=self.BG)
-        warn_row.pack(fill="x", padx=20, pady=(10, 2))
+        warn_row.pack(fill="x", padx=20, pady=(6, 2))
         warn_icon = tk.Label(warn_row, text="\u26a0",
                              font=tkfont.Font(family="Segoe UI Emoji", size=11),
                              bg=self.BG, fg=self.GOLD)
@@ -467,54 +467,53 @@ class RPAOverlay:
         btn_outer.pack(fill="x", side="bottom")
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x", side="bottom")
 
-        # ── +추가 게시 버튼 행 ─────────────────
+        # ── +추가 게시 버튼 행 (ghost style) ─────────────
         more_row = tk.Frame(btn_outer, bg=self.BG)
         more_row.pack(fill="x")
-        _MORE_BG  = "#162016"
-        _MORE_HOV = "#1e3020"
+        _MORE_HOV = "#172817"   # 연한 초록 tint
         for _i, _n in enumerate([5, 10, 20]):
             def _post_more(count=_n):
                 _post_more_count[0] = count
                 _post_more_event.set()
                 self._dismiss_and_remind()
             _mb = tk.Label(more_row,
-                           text=f"+ {_n}개 추가",
-                           font=tkfont.Font(family="Malgun Gothic", size=11),
-                           bg=_MORE_BG, fg=self.GREEN, cursor="hand2")
-            _mb.pack(side="left", expand=True, fill="both", ipady=8)
+                           text=f"＋{_n}개",
+                           font=tkfont.Font(family="Malgun Gothic", size=10),
+                           bg=self.BG, fg=self.GREEN, cursor="hand2")
+            _mb.pack(side="left", expand=True, fill="both", ipady=6)
             _mb.bind("<Button-1>", lambda e, f=_post_more: f())
             _mb.bind("<Enter>",    lambda e, b=_mb: b.configure(bg=_MORE_HOV))
-            _mb.bind("<Leave>",    lambda e, b=_mb: b.configure(bg=_MORE_BG))
+            _mb.bind("<Leave>",    lambda e, b=_mb: b.configure(bg=self.BG))
             if _i < 2:
                 tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
         tk.Frame(btn_outer, bg=self.SEP, height=1).pack(fill="x")
 
-        # ── 숨기기 / 즉시중단 ─────────────────
+        # ── 숨기기 / 즉시중단 (ghost style, 깔끔) ──────────
         main_row = tk.Frame(btn_outer, bg=self.BG)
         main_row.pack(fill="x")
 
-        _HIDE_BG  = "#1a2230"
-        _HIDE_HOV = "#253050"
+        # 숨기기: 차분한 파랑 텍스트
+        _HIDE_HOV = "#0e1828"
         hide_btn = tk.Label(main_row, text="숨기기",
-                            font=tkfont.Font(family="Malgun Gothic", size=14),
-                            bg=_HIDE_BG, fg=self.BLUE, cursor="hand2")
-        hide_btn.pack(side="left", expand=True, fill="both", ipady=12)
+                            font=tkfont.Font(family="Malgun Gothic", size=13),
+                            bg=self.BG, fg="#7aaad8", cursor="hand2")
+        hide_btn.pack(side="left", expand=True, fill="both", ipady=10)
         hide_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
         hide_btn.bind("<Enter>", lambda e: hide_btn.configure(bg=_HIDE_HOV))
-        hide_btn.bind("<Leave>", lambda e: hide_btn.configure(bg=_HIDE_BG))
+        hide_btn.bind("<Leave>", lambda e: hide_btn.configure(bg=self.BG))
 
         tk.Frame(main_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        _KILL_BG  = "#2a1010"
-        _KILL_HOV = "#441818"
+        # 즉시중단: 붉은 텍스트, 호버만 어두운 red tint
+        _KILL_HOV = "#1e0808"
         stop_btn = tk.Label(main_row, text="즉시중단",
-                            font=tkfont.Font(family="Malgun Gothic", size=14, weight="bold"),
-                            bg=_KILL_BG, fg=self.RED, cursor="hand2")
-        stop_btn.pack(side="left", expand=True, fill="both", ipady=12)
+                            font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                            bg=self.BG, fg=self.RED, cursor="hand2")
+        stop_btn.pack(side="left", expand=True, fill="both", ipady=10)
         stop_btn.bind("<Button-1>", lambda e: self._do_direct_stop(root))
         stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_KILL_HOV))
-        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_KILL_BG))
+        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=self.BG))
 
         # 애니메이션
         self._start_status_blink(root)

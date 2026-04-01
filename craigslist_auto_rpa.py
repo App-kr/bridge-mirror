@@ -1508,6 +1508,16 @@ def main():
             print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
         return
 
+    # ── 이미 실행 중이면 창 앞으로 가져오고 즉시 종료 ──────────────────────────
+    if not args.dry_run and not args.generate and not args.diagnose and not args.account:
+        try:
+            from rpa_overlay import _win32_focus_working
+            if _win32_focus_working():
+                print("[OVERLAY] 실행 중인 작업 창을 앞으로 가져왔습니다.")
+                sys.exit(0)
+        except Exception:
+            pass
+
     # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
     if not args.account and not args.dry_run and not args.generate and not args.diagnose:
         try:
@@ -1857,7 +1867,6 @@ def main():
                 if new_acct == "CANCEL":
                     break
 
-                global CL_EMAIL, CL_PASSWORD
                 CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(new_acct)
                 print(f"\n[OVERLAY] 계정 변경: {new_acct} → {CL_EMAIL}")
 
