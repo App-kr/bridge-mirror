@@ -1353,14 +1353,24 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             if len(words) >= 2:
                 last_name = words[-1]
                 first_name = " ".join(words[:-1])
+                text_lower = text.lower()
                 # 풀네임 → 이름만 남기기 (replacement redact)
-                if name.lower() in text.lower():
+                # page.search_for() 는 대소문자 무시 — 원본 케이스 그대로 전달
+                if name.lower() in text_lower:
                     replacement_redacts.append((name, first_name))
                     all_logs.append(f"[page{page_num}] FULLNAME→{first_name}: {name}")
-                # 성 단독 삭제
-                if len(last_name) >= 2 and last_name.lower() in text.lower():
+                # 성 단독 삭제 (풀네임 미검출 시에도 성은 반드시 제거)
+                if len(last_name) >= 2 and last_name.lower() in text_lower:
                     redact_texts.add(last_name)
                     all_logs.append(f"[page{page_num}] LASTNAME: {last_name}")
+                # PDF가 이름을 \n으로 분리 저장하는 경우 대비
+                # → 풀네임 미검출 시 줄 단위로 재시도
+                if name.lower() not in text_lower:
+                    for _line in text.split("\n"):
+                        _ls = _line.strip()
+                        if name.lower() in _ls.lower():
+                            replacement_redacts.append((_ls if len(_ls) < len(name) + 10 else name, first_name))
+                            all_logs.append(f"[page{page_num}] FULLNAME_LINE→{first_name}: {_ls[:50]}")
 
         # 파일명 기반 이름: 성만 redact (이름 유지)
         for fn_name in filename_names:
@@ -1430,30 +1440,37 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         redact_texts.add(m.group())
                         all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
 
-        # ── 학교/기관명 일반화 (전 세계 공통, replacement redact) ──
-        # "Sheffield University" → "University", "University of Auckland" → "University"
-        for m in RE_SCHOOL_NAMED.finditer(text):
-            generic = _school_to_generic(m.group())
-            replacement_redacts.append((m.group(), generic))
-            all_logs.append(f"[page{page_num}] SCHOOL→{generic}: {m.group()[:50]}")
-        for m in RE_UNIV_OF.finditer(text):
-            generic = _school_to_generic(m.group())
-            replacement_redacts.append((m.group(), generic))
-            all_logs.append(f"[page{page_num}] UNIVOF→{generic}: {m.group()[:50]}")
-
-        # ── 외국 도시/주 + 나이 + 비자 (blank redact) ──
-        for m in RE_US_CITY_STATE.finditer(text):
-            redact_texts.add(m.group())
-            all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
-        for m in RE_FOREIGN_CITY.finditer(text):
-            redact_texts.add(m.group())
-            all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
-        for m in RE_AGE_MENTION.finditer(text):
-            redact_texts.add(m.group())
-            all_logs.append(f"[page{page_num}] AGE: {m.group()[:40]}")
-        for m in RE_VISA_STATUS.finditer(text):
-            redact_texts.add(m.group())
-            all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
+        # ── 학교/기관명 일반화 + 외국 도시/나이/비자 — 줄 단위 스캔 ──
+        # 주의: RE_SCHOOL_NAMED 등은 \s+ 포함 → 전체 page text에서 찾으면
+        #       "\n"을 건너 매칭 → page.search_for()가 부분 매칭 → "ndent School" 잔류
+        #       → 반드시 줄(line) 단위로 스캔하여 단일 줄 텍스트만 redact에 추가
+        for _line in text.split("\n"):
+            _ls = _line.strip()
+            if not _ls:
+                continue
+            # 학교/기관명 → replacement redact (generic 이름 삽입)
+            for m in RE_SCHOOL_NAMED.finditer(_ls):
+                _g = _school_to_generic(m.group())
+                replacement_redacts.append((m.group(), _g))
+                all_logs.append(f"[page{page_num}] SCHOOL→{_g}: {m.group()[:50]}")
+            for m in RE_UNIV_OF.finditer(_ls):
+                _g = _school_to_generic(m.group())
+                replacement_redacts.append((m.group(), _g))
+                all_logs.append(f"[page{page_num}] UNIVOF→{_g}: {m.group()[:50]}")
+            # 외국 도시/주 → blank redact
+            for m in RE_US_CITY_STATE.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
+            for m in RE_FOREIGN_CITY.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
+            # 나이/비자 → blank redact
+            for m in RE_AGE_MENTION.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] AGE: {m.group()[:40]}")
+            for m in RE_VISA_STATUS.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
@@ -1596,6 +1613,7 @@ def _build_search_patterns(candidate: dict = None):
         (RE_URL, "URL"),
         (RE_PASSPORT, "PASSPORT"),
         (RE_KR_ADDRESS, "KR_ADDR"),
+        (RE_KR_RESIDENTIAL, "KR_RESID"),   # 부영 1차 아파트 등
         (RE_EN_ADDRESS, "EN_ADDR"),
     ]
 
