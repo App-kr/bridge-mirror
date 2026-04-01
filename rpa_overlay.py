@@ -36,6 +36,7 @@ except ImportError:
     _HAS_SCREENINFO = False
 
 _post_more_event = threading.Event()
+_post_more_count = [0]   # +5/10/20개 추가 게시 수
 _stop_event = threading.Event()
 
 
@@ -85,6 +86,11 @@ def wants_more() -> bool:
     result = _post_more_event.is_set()
     _post_more_event.clear()
     return result
+
+
+def wants_more_count() -> int:
+    """wants_more() 가 True 반환한 후 호출 — 추가 게시 수 반환 (기본 5)"""
+    return _post_more_count[0] if _post_more_count[0] > 0 else 5
 
 
 def stop_requested() -> bool:
@@ -145,8 +151,10 @@ class RPAOverlay:
         self._remind_timer     = None
         self._email            = ""
         self._bot_t            = 0.0
+        self._bear_t           = 0.0
         self._restore_monitor  = None
         self._account_color    = self.GREEN  # 계정별 색상
+        self._bear_frame       = [0]        # 곰 삽질 애니메이션 프레임
 
     # ── Restore flag monitor (안전망) ──────────
     def _start_restore_monitor(self):
@@ -344,7 +352,7 @@ class RPAOverlay:
         _log_overlay("_build_working: Tk() 생성 시작")
         _stop_event.clear()
         CC = self.CARD                 # 계정별 헤더 색
-        root, card = self._make_window(360, 322)
+        root, card = self._make_window(360, 378)
         _log_overlay(f"_build_working: 창 생성 완료 winfo_id={root.winfo_id()}")
 
         try:
@@ -386,8 +394,8 @@ class RPAOverlay:
         if self._email:
             _display_email = self._email.split("@")[0] if "@" in self._email else self._email
             tk.Label(info_col, text=_display_email,
-                     font=tkfont.Font(family="Malgun Gothic", size=10),
-                     bg=CC, fg=self.TEXT2, anchor="w").pack(anchor="w", pady=(3, 0))
+                     font=tkfont.Font(family="Malgun Gothic", size=13, weight="bold"),
+                     bg=CC, fg=self._account_color, anchor="w").pack(anchor="w", pady=(3, 0))
 
         # ══ SEPARATOR ══════════════════════════
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x")
@@ -413,13 +421,13 @@ class RPAOverlay:
             bg=self.BG, fg=self.TEXT2)
         self._prog_count_label.pack(side="right", anchor="s", pady=(0, 6))
 
-        # Pill 프로그레스 바 — 360-2border-40pad = 318
-        BAR_W, BAR_H = 318, 16
+        # 곰 삽질 + 진행바 캔버스 — 360-2border-40pad = 318
+        BAR_W, BAR_H = 318, 72
         self._prog_bar_canvas = tk.Canvas(
             body, width=BAR_W, height=BAR_H,
             bg=self.BG, highlightthickness=0)
         self._prog_bar_canvas.pack()
-        self._draw_bridge_bar(BAR_W, BAR_H, cur, tot, self._account_color)
+        self._draw_bear_bar(BAR_W, BAR_H, cur, tot, self._account_color)
 
         # 상태 행: ● dot + 텍스트 (바 아래)
         status_row = tk.Frame(body, bg=self.BG)
@@ -450,37 +458,63 @@ class RPAOverlay:
         warn_lbl.pack(side="left")
 
         # ══ BUTTONS (하단 고정) ═══════════════════
-        btn_row = tk.Frame(card, bg=self.BG)
-        btn_row.pack(fill="x", side="bottom")
+        btn_outer = tk.Frame(card, bg=self.BG)
+        btn_outer.pack(fill="x", side="bottom")
         tk.Frame(card, bg=self.SEP, height=1).pack(fill="x", side="bottom")
 
-        # 닫기 — 2026: 더 큰 hit area
-        _CLOSE_BG  = "#e8f0fe"
-        _CLOSE_HOV = "#ccddf8"
-        close_btn = tk.Label(btn_row, text="닫기",
-                             font=tkfont.Font(family="Malgun Gothic", size=14),
-                             bg=_CLOSE_BG, fg=self.BLUE, cursor="hand2")
-        close_btn.pack(side="left", expand=True, fill="both", ipady=12)
-        close_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
-        close_btn.bind("<Enter>", lambda e: close_btn.configure(bg=_CLOSE_HOV))
-        close_btn.bind("<Leave>", lambda e: close_btn.configure(bg=_CLOSE_BG))
+        # ── +추가 게시 버튼 행 ─────────────────
+        more_row = tk.Frame(btn_outer, bg=self.BG)
+        more_row.pack(fill="x")
+        _MORE_BG  = "#162016"
+        _MORE_HOV = "#1e3020"
+        for _i, _n in enumerate([5, 10, 20]):
+            def _post_more(count=_n):
+                _post_more_count[0] = count
+                _post_more_event.set()
+                self._dismiss_and_remind()
+            _mb = tk.Label(more_row,
+                           text=f"+ {_n}개 추가",
+                           font=tkfont.Font(family="Malgun Gothic", size=11),
+                           bg=_MORE_BG, fg=self.GREEN, cursor="hand2")
+            _mb.pack(side="left", expand=True, fill="both", ipady=8)
+            _mb.bind("<Button-1>", lambda e, f=_post_more: f())
+            _mb.bind("<Enter>",    lambda e, b=_mb: b.configure(bg=_MORE_HOV))
+            _mb.bind("<Leave>",    lambda e, b=_mb: b.configure(bg=_MORE_BG))
+            if _i < 2:
+                tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+        tk.Frame(btn_outer, bg=self.SEP, height=1).pack(fill="x")
 
-        # 그만하기 — 2026: 더 두드러지는 빨강
-        _STOP_BG  = "#fce8e8"
-        _STOP_HOV = "#f6cccc"
-        stop_btn = tk.Label(btn_row, text="그만하기",
+        # ── 숨기기 / 즉시중단 ─────────────────
+        main_row = tk.Frame(btn_outer, bg=self.BG)
+        main_row.pack(fill="x")
+
+        _HIDE_BG  = "#1a2230"
+        _HIDE_HOV = "#253050"
+        hide_btn = tk.Label(main_row, text="숨기기",
                             font=tkfont.Font(family="Malgun Gothic", size=14),
-                            bg=_STOP_BG, fg=self.RED, cursor="hand2")
+                            bg=_HIDE_BG, fg=self.BLUE, cursor="hand2")
+        hide_btn.pack(side="left", expand=True, fill="both", ipady=12)
+        hide_btn.bind("<Button-1>", lambda e: self._dismiss_and_remind())
+        hide_btn.bind("<Enter>", lambda e: hide_btn.configure(bg=_HIDE_HOV))
+        hide_btn.bind("<Leave>", lambda e: hide_btn.configure(bg=_HIDE_BG))
+
+        tk.Frame(main_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+
+        _KILL_BG  = "#2a1010"
+        _KILL_HOV = "#441818"
+        stop_btn = tk.Label(main_row, text="즉시중단",
+                            font=tkfont.Font(family="Malgun Gothic", size=14, weight="bold"),
+                            bg=_KILL_BG, fg=self.RED, cursor="hand2")
         stop_btn.pack(side="left", expand=True, fill="both", ipady=12)
-        stop_btn.bind("<Button-1>", lambda e: self._confirm_stop_popup(root))
-        stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_STOP_HOV))
-        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_STOP_BG))
+        stop_btn.bind("<Button-1>", lambda e: self._do_direct_stop(root))
+        stop_btn.bind("<Enter>", lambda e: stop_btn.configure(bg=_KILL_HOV))
+        stop_btn.bind("<Leave>", lambda e: stop_btn.configure(bg=_KILL_BG))
 
         # 애니메이션
         self._start_status_blink(root)
         self._start_pulse_bar(root)
+        self._start_bear_anim(root)
 
         self._drag(root, header, bar, bot_row, spin_c, info_col, warn_row, warn_icon, warn_lbl)
         _log_overlay("_build_working: ready.set() 직전 — UI 완성")
@@ -514,7 +548,7 @@ class RPAOverlay:
                     # 화면 밖 방지: 주 모니터 중앙으로 재배치
                     sw = root.winfo_screenwidth()
                     sh = root.winfo_screenheight()
-                    w, h = 360, 322
+                    w, h = 360, 378
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
                     root.attributes("-topmost", True)   # Win32 WM 강제 최상위
                     root.lift()
@@ -665,6 +699,361 @@ class RPAOverlay:
                 c.create_rectangle(0, y, bar_w, y + line_h,
                                  fill="#3a3a3a", outline="")
 
+    # ── 곰 삽질 진행바 ────────────────────────────────────────────────────────
+    def _draw_bear_bar(self, bar_w, bar_h, cur, tot, account_color="#22c55e"):
+        """귀여운 곰이 삽질하며 게이지를 채우는 진행 바
+        캔버스 구조: 상단 52px = 곰, 하단 20px = pill 진행바
+        """
+        c = self._prog_bar_canvas
+        if not c:
+            return
+        try:
+            if not c.winfo_exists():
+                return
+        except Exception:
+            return
+        c.delete("all")
+
+        BAR_Y  = bar_h - 20   # 진행바 시작 y
+        BAR_H2 = 18           # 진행바 높이
+        R      = 9            # pill 반경
+
+        # 진행률 → fill_x
+        pct    = (cur / tot) if tot > 0 else 0.0
+        fill_x = int(bar_w * pct)
+
+        # ── 배경 pill ────────────────────────────────────────────────────────
+        c.create_arc(0, BAR_Y, R * 2, BAR_Y + BAR_H2,
+                     start=90, extent=180, fill=self.BAR_BG, outline="")
+        c.create_arc(bar_w - R * 2, BAR_Y, bar_w, BAR_Y + BAR_H2,
+                     start=270, extent=180, fill=self.BAR_BG, outline="")
+        c.create_rectangle(R, BAR_Y, bar_w - R, BAR_Y + BAR_H2,
+                           fill=self.BAR_BG, outline="")
+
+        # ── 채워진 pill ───────────────────────────────────────────────────────
+        if fill_x >= R * 2:
+            c.create_arc(0, BAR_Y, R * 2, BAR_Y + BAR_H2,
+                         start=90, extent=180, fill=account_color, outline="")
+            right = min(fill_x, bar_w - R)
+            c.create_rectangle(R, BAR_Y, right, BAR_Y + BAR_H2,
+                               fill=account_color, outline="")
+            if fill_x >= bar_w - R:
+                c.create_arc(bar_w - R * 2, BAR_Y, bar_w, BAR_Y + BAR_H2,
+                             start=270, extent=180, fill=account_color, outline="")
+            else:
+                # 채워진 끝 마무리
+                c.create_rectangle(right, BAR_Y, right + R, BAR_Y + BAR_H2,
+                                   fill=account_color, outline="")
+        elif fill_x > 0:
+            c.create_arc(0, BAR_Y, R * 2, BAR_Y + BAR_H2,
+                         start=90, extent=180, fill=account_color, outline="")
+
+        # ── 곰 그리기 (바 위에 올라탐) ───────────────────────────────────────
+        bear_cx = max(18, min(fill_x, bar_w - 18))
+        self._draw_bear_at(c, bear_cx, BAR_Y + 1,
+                           self._bear_frame[0] % 4, account_color)
+
+    def _draw_bear_at(self, c, cx, by, frame, accent):
+        """귀여운 삽질 곰 — 안전모 + 삽.
+        cx: 곰 중심 x / by: 곰 발바닥 y (바 상단) / frame: 0-3 삽질 프레임
+        """
+        # ── 색 팔레트 ──────────────────────────────────────────────
+        BODY    = "#C8921A"   # 황금 갈색
+        LIGHT   = "#EBBF6A"   # 밝은 베이지 (배·주둥이)
+        DARK    = "#7A540C"   # 어두운 갈색 (귀 안쪽)
+        HAT     = "#FFD700"   # 안전모 노랑
+        HAT_RIM = "#E6B800"   # 모자 챙
+        SHOVEL  = "#BBBBBB"   # 삽날 (은색)
+        HANDLE  = "#8B5A2B"   # 삽 자루 (나무색)
+        EYE     = "#1a1a1a"   # 눈
+        NOSE    = "#3A2000"   # 코
+        CHEEK   = "#FF8FAA"   # 볼터치
+
+        HEAD_R = 11           # 머리 반경
+        BODY_W = 12           # 몸 반폭
+        BODY_H = 10           # 몸 반높이
+
+        body_cy = by - BODY_H - 2
+        head_cy = body_cy - HEAD_R - 3
+        head_top = head_cy - HEAD_R
+
+        # ── 꼬리 ──────────────────────────────────────────────────
+        c.create_oval(cx + BODY_W - 3, body_cy - 3,
+                      cx + BODY_W + 5, body_cy + 5,
+                      fill=LIGHT, outline="", tags="bear")
+
+        # ── 몸체 ──────────────────────────────────────────────────
+        c.create_oval(cx - BODY_W, body_cy - BODY_H,
+                      cx + BODY_W, body_cy + BODY_H,
+                      fill=BODY, outline="", tags="bear")
+        c.create_oval(cx - 7, body_cy - 7, cx + 7, body_cy + 5,
+                      fill=LIGHT, outline="", tags="bear")   # 배
+
+        # ── 다리 ──────────────────────────────────────────────────
+        c.create_oval(cx - 10, by - 9, cx - 1, by + 1,
+                      fill=BODY, outline="", tags="bear")
+        c.create_oval(cx + 1,  by - 9, cx + 10, by + 1,
+                      fill=BODY, outline="", tags="bear")
+
+        # ── 왼팔 (정적) ────────────────────────────────────────────
+        c.create_oval(cx - BODY_W - 5, body_cy - 5,
+                      cx - BODY_W + 5, body_cy + 5,
+                      fill=BODY, outline="", tags="bear")
+
+        # ── 오른팔 + 삽 (4프레임 애니메이션) ──────────────────────
+        # frame 0: 삽 위로 들기  frame 1: 내려치기 도중
+        # frame 2: 땅 찍기(임팩트)  frame 3: 복귀 중
+        ARM_POSES = [
+            # (팔끝 dx, 팔끝 dy, 삽끝 dx, 삽끝 dy)
+            (+7,  -17,  +10, -28),   # 0: 위
+            (+13,  -8,  +18, -16),   # 1: 중간 내려치기
+            (+15,  +3,  +18, +12),   # 2: 땅 임팩트
+            (+11,  -6,  +15, -12),   # 3: 복귀 중
+        ]
+        ax1 = cx + BODY_W - 2;  ay1 = body_cy
+        adx, ady, sdx, sdy = ARM_POSES[frame]
+        ax2, ay2 = ax1 + adx, ay1 + ady   # 팔 끝(손)
+        sx2, sy2 = ax1 + sdx, ay1 + sdy   # 삽 끝(날)
+
+        # 삽 자루 (손 → 삽날)
+        c.create_line(ax2, ay2, sx2, sy2,
+                      fill=HANDLE, width=3, capstyle="round", tags="bear")
+        # 삽날 (작은 사각)
+        angle_off = sdy - ady
+        c.create_rectangle(sx2 - 5, sy2 - 3, sx2 + 5, sy2 + 4,
+                           fill=SHOVEL, outline="#888", tags="bear")
+
+        # 팔
+        c.create_line(ax1, ay1, ax2, ay2,
+                      fill=BODY, width=5, capstyle="round", tags="bear")
+        c.create_oval(ax2 - 4, ay2 - 4, ax2 + 4, ay2 + 4,
+                      fill=BODY, outline="", tags="bear")   # 손
+
+        # 임팩트 프레임: 삽날 옆에 작은 먼지 파티클
+        if frame == 2:
+            for px, py, r in [(sx2+10, sy2-2, 3), (sx2+7, sy2+4, 2), (sx2+14, sy2+2, 2)]:
+                c.create_oval(px - r, py - r, px + r, py + r,
+                              fill=accent, outline="", tags="bear")
+
+        # ── 귀 ──────────────────────────────────────────────────────
+        c.create_oval(cx - HEAD_R - 2, head_top - 4,
+                      cx - HEAD_R + 8,  head_top + 7,
+                      fill=BODY, outline="", tags="bear")
+        c.create_oval(cx - HEAD_R + 1, head_top - 1,
+                      cx - HEAD_R + 6,  head_top + 5,
+                      fill=DARK, outline="", tags="bear")
+        c.create_oval(cx + HEAD_R - 7, head_top - 4,
+                      cx + HEAD_R + 2,  head_top + 7,
+                      fill=BODY, outline="", tags="bear")
+        c.create_oval(cx + HEAD_R - 5, head_top - 1,
+                      cx + HEAD_R,      head_top + 5,
+                      fill=DARK, outline="", tags="bear")
+
+        # ── 안전모 ─────────────────────────────────────────────────
+        c.create_arc(cx - HEAD_R + 1, head_top - 6,
+                     cx + HEAD_R - 1,  head_cy + 3,
+                     start=0, extent=180, fill=HAT, outline="", tags="bear")
+        c.create_rectangle(cx - HEAD_R - 3, head_cy - 7,
+                           cx + HEAD_R + 3,  head_cy - 3,
+                           fill=HAT_RIM, outline="", tags="bear")
+
+        # ── 머리 ─────────────────────────────────────────────────────
+        c.create_oval(cx - HEAD_R, head_cy - HEAD_R,
+                      cx + HEAD_R, head_cy + HEAD_R,
+                      fill=BODY, outline="", tags="bear")
+
+        # ── 주둥이 ───────────────────────────────────────────────────
+        c.create_oval(cx - 7, head_cy + 1, cx + 7, head_cy + HEAD_R,
+                      fill=LIGHT, outline="", tags="bear")
+
+        # ── 코 ───────────────────────────────────────────────────────
+        c.create_oval(cx - 3, head_cy + 2, cx + 3, head_cy + 7,
+                      fill=NOSE, outline="", tags="bear")
+
+        # ── 눈 ───────────────────────────────────────────────────────
+        c.create_oval(cx - 8, head_cy - 5, cx - 3, head_cy,
+                      fill=EYE, outline="", tags="bear")
+        c.create_oval(cx + 3,  head_cy - 5, cx + 8, head_cy,
+                      fill=EYE, outline="", tags="bear")
+        # 눈 반짝임
+        c.create_oval(cx - 7, head_cy - 4, cx - 5, head_cy - 2,
+                      fill="white", outline="", tags="bear")
+        c.create_oval(cx + 4,  head_cy - 4, cx + 6, head_cy - 2,
+                      fill="white", outline="", tags="bear")
+
+        # ── 볼터치 ───────────────────────────────────────────────────
+        c.create_oval(cx - HEAD_R + 1, head_cy + 2,
+                      cx - HEAD_R + 8,  head_cy + 7,
+                      fill=CHEEK, outline="", stipple="gray50", tags="bear")
+        c.create_oval(cx + HEAD_R - 7, head_cy + 2,
+                      cx + HEAD_R,      head_cy + 7,
+                      fill=CHEEK, outline="", stipple="gray50", tags="bear")
+
+    def _start_bear_anim(self, root):
+        """곰 삽질 애니메이션 — 독립 타이머로 캔버스 갱신.
+        frame 2(임팩트)는 살짝 길게, 나머지는 빠르게."""
+        def _tick():
+            if not root.winfo_exists():
+                return
+            f = self._bear_frame[0]
+            self._bear_frame[0] = (f + 1) % 4
+            cur, tot = self._progress_var or [0, 0]
+            try:
+                self._draw_bear_bar(318, 72, cur, tot, self._account_color)
+            except Exception:
+                pass
+            # 임팩트 프레임(2)은 220ms, 나머지 110ms
+            delay = 220 if self._bear_frame[0] == 2 else 110
+            root.after(delay, _tick)
+
+        root.after(300, _tick)   # 창 뜨고 0.3초 후 시작
+
+    # ── Bear digging animation bar ────────────
+    def _draw_bear_bar(self, bar_w, bar_h, cur, tot, account_color="#22c55e"):
+        """곰 삽질 애니메이션 프로그레스 바 (canvas 318×72)"""
+        c = self._prog_bar_canvas
+        if not c:
+            return
+        try:
+            if not c.winfo_exists():
+                return
+        except Exception:
+            return
+        c.delete("all")
+
+        pct    = (cur / tot) if tot > 0 else 0.0
+        pct    = max(0.0, min(1.0, pct))
+        fill_x = int(pct * bar_w)
+
+        # ── Pill 게이지 바 (하단 14px) ─────────
+        by1 = bar_h - 14   # 58
+        by2 = bar_h - 2    # 70
+        r   = 6
+        # 배경
+        c.create_rectangle(r, by1, bar_w - r, by2, fill="#2a2a2a", outline="")
+        c.create_oval(0, by1, r * 2, by2,           fill="#2a2a2a", outline="")
+        c.create_oval(bar_w - r * 2, by1, bar_w, by2, fill="#2a2a2a", outline="")
+        # 진행 채우기
+        if fill_x > r:
+            rx2 = min(fill_x, bar_w - r)
+            c.create_rectangle(r, by1, rx2, by2, fill=account_color, outline="")
+            c.create_oval(0, by1, r * 2, by2, fill=account_color, outline="")
+            if fill_x < bar_w - r:
+                c.create_oval(fill_x - r * 2, by1, fill_x, by2,
+                              fill=account_color, outline="")
+            else:
+                c.create_oval(bar_w - r * 2, by1, bar_w, by2,
+                              fill=account_color, outline="")
+
+        # ── 곰 위치 (바 위 중앙) ───────────────
+        bx  = max(20, min(fill_x, bar_w - 20))
+        bfy = by1           # 발 바닥 = 바 표면
+        t   = self._bear_t
+        dig = math.sin(t * 3.5)          # -1 ~ +1
+
+        sway = int(math.sin(t * 3.5) * 1.2)
+        land = int(abs(math.sin(t * 3.5)) * 1.5)
+        bxs  = bx + sway
+        bys  = bfy - land
+
+        # 색
+        B  = "#7a5010";  BL = "#b87828";  BD = "#4a2e08"
+        BP = "#ffaac0";  BK = "#111111"
+        SM = "#c0c8d0";  SH = "#7a5010"
+
+        # 그림자
+        c.create_oval(bx - 13, bys + 2, bx + 13, bys + 6,
+                      fill="#111111", outline="", stipple="gray25")
+
+        # 오른팔 (뒤, 고정)
+        c.create_line(bxs - 6, bys - 18, bxs - 15, bys - 8,
+                      fill=BD, width=4, capstyle="round")
+
+        # 왼팔 + 삽 (앞, 애니메이션)
+        raise_f  = max(0.0, dig)
+        dig_f    = max(0.0, -dig)
+        arm_dx   = int(11 + 4 * raise_f)
+        arm_dy   = int(-8 - 10 * raise_f + 8 * dig_f)
+        ax = bxs + arm_dx;  ay = bys + arm_dy
+        c.create_line(bxs + 5, bys - 18, ax, ay,
+                      fill=BD, width=4, capstyle="round")
+        # 삽 손잡이
+        h_dx = int(2 * dig_f)
+        c.create_line(ax, ay, ax + h_dx, ay + 12,
+                      fill=SH, width=3, capstyle="round")
+        # 삽 날
+        sx, sy = ax + h_dx, ay + 12
+        c.create_polygon(sx - 6, sy, sx + 6, sy,
+                         sx + 7, sy + 9, sx - 7, sy + 9,
+                         fill=SM, outline="#8a9098", width=1)
+        # 흙 튀김
+        if dig_f > 0.5 and tot > 0:
+            for i in range(4):
+                off  = (dig_f - 0.5) * 2
+                dx2  = sx + (-6 + i * 4)
+                dy2  = sy + 9 - int(off * 8) + int(math.sin(t * 8 + i * 1.5) * 3)
+                cr   = 2
+                c.create_oval(dx2 - cr, dy2 - cr, dx2 + cr, dy2 + cr,
+                              fill=BD, outline="")
+
+        # 다리
+        leg_l = int(land)
+        c.create_oval(bxs - 10, bys - 3, bxs -  3, bys + 8 - leg_l,
+                      fill=B, outline=BD, width=1)
+        c.create_oval(bxs +  3, bys - 3, bxs + 10, bys + 8 + leg_l,
+                      fill=B, outline=BD, width=1)
+
+        # 몸통
+        c.create_oval(bxs - 12, bys - 22, bxs + 12, bys + 1,
+                      fill=B, outline=BD, width=1)
+        c.create_oval(bxs - 7, bys - 18, bxs + 7, bys + 0,
+                      fill=BL, outline="")
+
+        # 머리
+        c.create_oval(bxs - 11, bys - 38, bxs + 11, bys - 18,
+                      fill=B, outline=BD, width=1)
+        # 귀 좌
+        c.create_oval(bxs - 14, bys - 42, bxs -  6, bys - 34,
+                      fill=B, outline=BD, width=1)
+        c.create_oval(bxs - 13, bys - 41, bxs -  8, bys - 36,
+                      fill=BP, outline="")
+        # 귀 우
+        c.create_oval(bxs +  6, bys - 42, bxs + 14, bys - 34,
+                      fill=B, outline=BD, width=1)
+        c.create_oval(bxs +  8, bys - 41, bxs + 13, bys - 36,
+                      fill=BP, outline="")
+
+        # 주둥이 + 코
+        c.create_oval(bxs - 6, bys - 28, bxs + 6, bys - 22, fill=BL, outline="")
+        c.create_oval(bxs - 3, bys - 29, bxs + 3, bys - 25, fill=BK, outline="")
+
+        # 눈 (깜박임)
+        blink = 0.5 + 0.5 * math.sin(t * 1.4)
+        ey_h  = max(1, int(4 * blink))
+        ey_y  = bys - 35
+        c.create_oval(bxs - 8, ey_y, bxs - 4, ey_y + ey_h, fill=BK, outline="")
+        if blink > 0.7:
+            c.create_oval(bxs - 8, ey_y, bxs - 6, ey_y + 2, fill="#ffffff", outline="")
+        c.create_oval(bxs + 4, ey_y, bxs + 8, ey_y + ey_h, fill=BK, outline="")
+        if blink > 0.7:
+            c.create_oval(bxs + 4, ey_y, bxs + 6, ey_y + 2, fill="#ffffff", outline="")
+
+        # 볼 홍조
+        c.create_oval(bxs - 11, bys - 27, bxs -  7, bys - 24,
+                      fill=BP, outline="", stipple="gray50")
+        c.create_oval(bxs +  7, bys - 27, bxs + 11, bys - 24,
+                      fill=BP, outline="", stipple="gray50")
+
+        # 땀방울 (작업 중)
+        if tot > 0:
+            sw_t = (t * 1.5) % (2 * math.pi)
+            sw_y = ey_y - 6 - int(abs(math.sin(sw_t)) * 5)
+            sw_x = bxs + 13
+            c.create_oval(sw_x, sw_y, sw_x + 4, sw_y + 6,
+                          fill="#60a5fa", outline="")
+            c.create_oval(sw_x + 1, sw_y - 1, sw_x + 3, sw_y + 1,
+                          fill="#93c5fd", outline="")
+
     # ── Status blink ──────────────────────────
     def _start_status_blink(self, root):
         tick    = [0]
@@ -702,13 +1091,24 @@ class RPAOverlay:
             root.after(500, _pulse)
         _pulse()
 
+    def _start_bear_anim(self, root):
+        """곰 삽질 애니메이션 루프 — 50ms"""
+        def _tick():
+            if not root.winfo_exists():
+                return
+            self._bear_t += 0.05
+            cur, tot = self._progress_var or [0, 0]
+            self._draw_bear_bar(318, 72, cur, tot, self._account_color)
+            root.after(50, _tick)
+        _tick()
+
     def _refresh_progress(self, cur, tot):
         try:
             if self._prog_pct_label and self._prog_pct_label.winfo_exists():
                 self._prog_pct_label.configure(text=self._pct_text(cur, tot))
             if self._prog_count_label and self._prog_count_label.winfo_exists():
                 self._prog_count_label.configure(text=self._prog_text(cur, tot))
-            self._draw_bridge_bar(318, 16, cur, tot, self._account_color)
+            # 바 캔버스는 _start_bear_anim이 담당 — 레이블만 갱신
         except Exception:
             pass
 
@@ -850,11 +1250,27 @@ class RPAOverlay:
 
         self._sep(card)
 
-        def _more():
-            _post_more_event.set()
-            root.destroy()
+        # 추가 게시 버튼 행 (5 / 10 / 20)
+        more_row = tk.Frame(card, bg=self.BG)
+        more_row.pack(fill="x")
+        _MORE_BG  = "#162016"
+        _MORE_HOV = "#1e3020"
+        for _ci, _cn in enumerate([5, 10, 20]):
+            def _more_n(c=_cn):
+                _post_more_count[0] = c
+                _post_more_event.set()
+                root.destroy()
+            _mb = tk.Label(more_row,
+                           text=f"+ {_cn}개 더",
+                           font=tkfont.Font(family="Malgun Gothic", size=13),
+                           bg=_MORE_BG, fg=self.GREEN, cursor="hand2", pady=10)
+            _mb.pack(side="left", expand=True, fill="both")
+            _mb.bind("<Button-1>", lambda e, f=_more_n: f())
+            _mb.bind("<Enter>",    lambda e, b=_mb: b.configure(bg=_MORE_HOV))
+            _mb.bind("<Leave>",    lambda e, b=_mb: b.configure(bg=_MORE_BG))
+            if _ci < 2:
+                tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        self._action(card, "5개 더 올리기  ›", "bold", _more)
         self._sep(card)
         self._action(card, "닫기", "normal", lambda: root.destroy())
 
@@ -1612,9 +2028,10 @@ def ask_already_running(acct_key: str = ""):
 
 
 # ── Module-level exports ──────────────────────────────────────────────────────
-_overlay       = RPAOverlay()
-show_working   = _overlay.show_working
-show_complete  = _overlay.show_complete
+_overlay        = RPAOverlay()
+show_working    = _overlay.show_working
+show_complete   = _overlay.show_complete
 update_progress = _overlay.update_progress
-update_status  = _overlay.update_status
-close          = _overlay.close
+update_status   = _overlay.update_status
+close           = _overlay.close
+# wants_more / wants_more_count 는 모듈 상단에 이미 정의됨
