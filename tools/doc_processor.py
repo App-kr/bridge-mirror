@@ -401,6 +401,62 @@ RE_EN_ADDRESS = re.compile(
     re.I,
 )
 
+# ── 학교/기관명 일반화 (전 세계 공통) ──────────────────────────────────────
+# "Sheffield University", "Lincoln High School" → 기관 유형만 남김
+RE_SCHOOL_NAMED = re.compile(
+    r'\b[A-Z][a-zA-Z\'\-\.]+(?:\s+(?:of|the|at|and|&|[A-Z][a-zA-Z\'\-\.]+)){0,5}\s+'
+    r'(?:University|College|High\s+School|Secondary\s+School|'
+    r'Elementary\s+School|Primary\s+School|Grammar\s+School|'
+    r'Boarding\s+School|Prep\s+School|Junior\s+School|'
+    r'Sixth\s+Form\s+College|Collegiate|Polytechnic)\b'
+)
+# "University of Sheffield", "Institute of Technology" → 기관 유형만 남김
+RE_UNIV_OF = re.compile(
+    r'\b(?:University|Institute|College|School|Academy)\s+of\s+'
+    r'[A-Z][a-zA-Z\s\'\-\.]{2,40}\b'
+)
+
+# 미국 도시+주: "Houston, TX", "New Orleans, Louisiana"
+_US_STATES = (
+    r'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|'
+    r'MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|'
+    r'TX|UT|VT|VA|WA|WV|WI|WY|'
+    r'Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|'
+    r'Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|'
+    r'Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|'
+    r'Mississippi|Missouri|Montana|Nebraska|Nevada|New\s+Hampshire|'
+    r'New\s+Jersey|New\s+Mexico|New\s+York|North\s+Carolina|North\s+Dakota|'
+    r'Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\s+Island|South\s+Carolina|'
+    r'South\s+Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|'
+    r'West\s+Virginia|Wisconsin|Wyoming'
+)
+RE_US_CITY_STATE = re.compile(
+    r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?,\s*(?:' + _US_STATES + r')\b',
+    re.I
+)
+
+# 외국 도시+국가: "Sheffield, United Kingdom", "Beijing, China"
+RE_FOREIGN_CITY = re.compile(
+    r'\b[A-Z][a-zA-Z\s\-]{2,30},\s*'
+    r'(?:United\s+Kingdom|England|Scotland|Wales|Northern\s+Ireland|'
+    r'China|Japan|Germany|France|South\s+Africa|Australia|New\s+Zealand|'
+    r'Canada|USA|United\s+States(?:\s+of\s+America)?|Brazil|India|'
+    r'Philippines|Zimbabwe|Zambia|Nigeria|Kenya|Ghana|Uganda)\b',
+    re.I
+)
+
+# 나이 언급: "I am a 33 year old", "I'm a 34-year-old"
+RE_AGE_MENTION = re.compile(
+    r"\bI(?:'m|\s+am)\s+(?:a\s+)?\d{1,2}[\s\-]?year[\s\-]?old\b",
+    re.I
+)
+
+# 비자 상태 공개: "E-2 VISA ELIGIBLE", "E2 visa holder"
+RE_VISA_STATUS = re.compile(
+    r'\b(?:E-?\d|F-?\d|H-?\d|G-?\d)\s*VISA\b(?:\s+(?:ELIGIBLE|HOLDER|STATUS|SPONSORSHIP))?\b',
+    re.I
+)
+
 # 한국 도시/지역 키워드 (소문자)
 KR_KEYWORDS = frozenset([
     "korea", "seoul", "busan", "daegu", "incheon", "gwangju",
@@ -483,7 +539,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "ecc", "ybm", "pagoda", "avalon", "chungdahm", "cdl", "jle",
     "poly", "sle", "aclipse", "epik", "gepik", "smoe", "jlec",
     "slp", "rise", "cdi", "bcm", "gnb", "iei", "ael", "tel",
-    "hess", "ewha", "april", "top edu", "dada", "dadahak",
+    "hess", "ewha", "top edu", "dada", "dadahak",
     "wonderland", "maple bear", "little america", "little fox",
     "english muse", "english plus", "emg education",
     "altiora", "bricks", "jungchul", "jeongchul",
@@ -580,6 +636,14 @@ def _replace_workplace_generic(value: str) -> str:
 
     # 기본값
     return "English"
+
+
+def _school_to_generic(match_text: str) -> str:
+    """학교/기관명을 일반 유형명으로 대체."""
+    lower = match_text.lower()
+    if "university" in lower or "college" in lower or "polytechnic" in lower:
+        return "University"
+    return "School"
 
 
 def _name_variants(full_name: str) -> list[str]:
@@ -690,10 +754,15 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
     # 전화번호 (7자리+ 숫자만)
     def phone_replacer(m):
         digits = re.sub(r"\D", "", m.group())
-        if len(digits) >= 7:
-            log.append(f"PHONE: {m.group()[:40]}")
-            return ""
-        return m.group()
+        if len(digits) < 7:
+            return m.group()
+        # 연도 범위 오탐 방지: 모든 숫자 그룹이 연도(1900-2099)면 건너뜀
+        # "2022-2023", "2017\n2021-2022", "2015-2020\n2017" 등 커버
+        digit_groups = re.findall(r'\d+', m.group())
+        if digit_groups and all(re.match(r'^(?:19|20)\d{2}$', g) for g in digit_groups):
+            return m.group()
+        log.append(f"PHONE: {m.group()[:40]}")
+        return ""
     result = RE_PHONE.sub(phone_replacer, result)
 
     # 한국 주소 → "Korea"
@@ -733,6 +802,21 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             generic = _replace_workplace_generic(workplace)
             log.append(f"KR_WORKPLACE→{generic}: {workplace}")
             result = pat.sub(generic, result)
+
+    # ── Pass 2.7: 학교/기관명 일반화 (전 세계 공통) ──
+    # "Sheffield University" → "University", "Lincoln High School" → "School"
+    def school_replacer(m):
+        generic = _school_to_generic(m.group())
+        log.append(f"SCHOOL→{generic}: {m.group()[:60]}")
+        return generic
+    result = RE_SCHOOL_NAMED.sub(school_replacer, result)
+    result = RE_UNIV_OF.sub(school_replacer, result)
+
+    # ── Pass 2.8: 외국 도시/주 + 나이 + 비자 삭제 ──
+    _sub(RE_US_CITY_STATE, "", "US_CITY_STATE")
+    _sub(RE_FOREIGN_CITY, "", "FOREIGN_CITY")
+    _sub(RE_AGE_MENTION, "", "AGE_MENTION")
+    _sub(RE_VISA_STATUS, "", "VISA_STATUS")
 
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
@@ -1250,9 +1334,17 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         for pattern, tag in pii_patterns:
             for m in pattern.finditer(text):
                 matched = m.group().strip()
-                if matched and len(matched) > 1:
-                    redact_texts.add(matched)
-                    all_logs.append(f"[page{page_num}] {tag}: {matched[:60]}")
+                if not matched or len(matched) <= 1:
+                    continue
+                # 전화번호 오탐 방지: 7자리 미만 또는 연도 범위 건너뜀
+                if tag == "PHONE":
+                    if len(re.sub(r'\D', '', matched)) < 7:
+                        continue
+                    _dg = re.findall(r'\d+', matched)
+                    if _dg and all(re.match(r'^(?:19|20)\d{2}$', g) for g in _dg):
+                        continue
+                redact_texts.add(matched)
+                all_logs.append(f"[page{page_num}] {tag}: {matched[:60]}")
 
         # ── 후보자 이름: 성만 삭제, 이름 유지 (DOCX와 동일 정책) ──
         if candidate and candidate.get("full_name"):
@@ -1300,47 +1392,68 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 redact_texts.add(pdf_name)
                 all_logs.append(f"[page{page_num}] PDF_NAME: {pdf_name}")
 
-        # ── 한국 학원명/도시명 redact (한국 맥락 있을 때만) ──
-        # 페이지 전체에 한국 관련 키워드가 있는지 먼저 확인
+        # ── 한국 학원명/도시명 redact ──
         page_lower = text.lower()
-        # \bkorea\b → "korea" 단독 매칭 ("korean" 오탐 방지)
-        page_has_korea = bool(re.search(
-            r"\bkorea\b|한국|\bseoul\b|\bbusan\b|서울|부산", page_lower
-        ))
+        # page_has_korea: KR_KEYWORDS 중 하나라도 있으면 True
+        # (기존 좁은 regex 대신 전체 키워드 집합으로 확장 → Gyeonggi 등 오탐 방지)
+        page_has_korea = any(kw in page_lower for kw in KR_KEYWORDS)
 
         keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
-        # 한국 맥락이 없으면 학원명 redact 스킵 (미국 high school 등 오탐 방지)
-        if page_has_korea:
-            for line in text.split("\n"):
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                s_lower = stripped.lower()
-                has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
-                has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
+        # KR_WORKPLACE_KEYWORDS: page_has_korea 게이트 제거 → 항상 적용
+        # (YBM·SLP 등 한국 브랜드는 페이지 맥락 없어도 식별 가능)
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            s_lower = stripped.lower()
+            has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
+            has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
 
-                # 학원명 redact: 같은 줄에 한국 키워드 있거나,
-                # 짧은 줄(<50자)이면 기관명으로 간주 (페이지에 한국 맥락 있으므로)
-                if has_kr_work and (has_kr or len(stripped) < 50):
-                    # 짧은 기관명 줄은 통째로 redact ("GSE English Academy")
-                    if len(stripped) < 50 and not has_kr:
-                        redact_texts.add(stripped)
-                        all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
-                    for kw in KR_WORKPLACE_KEYWORDS:
-                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
-                        for m in kw_pat.finditer(stripped):
-                            redact_texts.add(m.group())
-                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+            # 학원명 redact: 같은 줄에 한국 키워드 있거나, 짧은 줄(<50자)
+            if has_kr_work and (has_kr or len(stripped) < 50):
+                if len(stripped) < 50 and not has_kr:
+                    redact_texts.add(stripped)
+                    all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
+                for kw in KR_WORKPLACE_KEYWORDS:
+                    kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                    for m in kw_pat.finditer(stripped):
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
 
-                # 한국 도시명 redact (korea 자체는 유지)
-                if has_kr:
-                    for city in KR_KEYWORDS:
-                        if len(city) <= 2 or city.lower() in keep_keywords:
-                            continue
-                        city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
-                        for m in city_pat.finditer(stripped):
-                            redact_texts.add(m.group())
-                            all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
+            # 한국 도시명 redact (korea 자체는 유지) — page_has_korea일 때만
+            if page_has_korea and has_kr:
+                for city in KR_KEYWORDS:
+                    if len(city) <= 2 or city.lower() in keep_keywords:
+                        continue
+                    city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
+                    for m in city_pat.finditer(stripped):
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
+
+        # ── 학교/기관명 일반화 (전 세계 공통, replacement redact) ──
+        # "Sheffield University" → "University", "University of Auckland" → "University"
+        for m in RE_SCHOOL_NAMED.finditer(text):
+            generic = _school_to_generic(m.group())
+            replacement_redacts.append((m.group(), generic))
+            all_logs.append(f"[page{page_num}] SCHOOL→{generic}: {m.group()[:50]}")
+        for m in RE_UNIV_OF.finditer(text):
+            generic = _school_to_generic(m.group())
+            replacement_redacts.append((m.group(), generic))
+            all_logs.append(f"[page{page_num}] UNIVOF→{generic}: {m.group()[:50]}")
+
+        # ── 외국 도시/주 + 나이 + 비자 (blank redact) ──
+        for m in RE_US_CITY_STATE.finditer(text):
+            redact_texts.add(m.group())
+            all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
+        for m in RE_FOREIGN_CITY.finditer(text):
+            redact_texts.add(m.group())
+            all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
+        for m in RE_AGE_MENTION.finditer(text):
+            redact_texts.add(m.group())
+            all_logs.append(f"[page{page_num}] AGE: {m.group()[:40]}")
+        for m in RE_VISA_STATUS.finditer(text):
+            redact_texts.add(m.group())
+            all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
@@ -1422,7 +1535,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         page.add_redact_annot(_sr, fill=(1, 1, 1))
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] EMAIL_BBOX: {_st[:60]}")
-                    elif RE_PHONE.search(_st) and len(re.sub(r"\D", "", _st)) >= 7:
+                    elif (RE_PHONE.search(_st) and len(re.sub(r"\D", "", _st)) >= 7
+                          and not all(re.match(r'^(?:19|20)\d{2}$', g) for g in re.findall(r'\d+', _st))):
                         page.add_redact_annot(_sr, fill=(1, 1, 1))
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
@@ -1436,9 +1550,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         # 상단 영역 화이트아웃 (이름/연락처 블록 통째로 덮기)
         # 높이 90px 정도가 일반적 이름+연락처 블록
-        header_rect = fitz.Rect(0, 0, pw, 90)
+        header_rect = fitz.Rect(0, 0, pw, 100)
         first_page.draw_rect(header_rect, color=None, fill=(1, 1, 1))
-        all_logs.append("[page0] HEADER_WHITEOUT: 상단 90px 화이트아웃")
+        all_logs.append("[page0] HEADER_WHITEOUT: 상단 100px 화이트아웃")
 
         # 번호 삽입 (왼쪽 상단, 크고 굵게)
         first_page.insert_text(
