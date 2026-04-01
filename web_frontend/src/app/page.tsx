@@ -33,12 +33,20 @@ const FALLBACK_TESTIMONIALS: TestimonialEntry[] = TESTIMONIALS.slice(0, 4)
 
 // ── Partner lists (fallback when API fails) ──
 const FALLBACK_ACADEMIES = [
-  'Chungdahm', 'YBM', 'Warwick', 'Poly', 'Wall Street English', 'April',
-  'Hillside', 'Sogang', 'Fast Track', 'Avalon', 'DYB', 'Rise Korea',
+  'Chungdahm Learning', 'YBM', 'Warwick Franklin', 'Poly',
+  'Wall Street English', 'April', 'Hillside IYASkola', 'Sogang SLP',
+  'Fast Track Kids', 'Avalon', 'DYB Choisun', 'Rise Korea',
+  'JLS Jungsang', 'Real Class', 'Siwon School',
+  'Korea University Foreign Language Center', 'Crecerse',
+  'LinguaEdu', 'Simson Edu', 'LexKim English', 'MiEdu',
+  'Twinkle Language', 'SDA', 'Wiz Island', 'Kids College',
 ]
 const FALLBACK_SCHOOLS = [
-  'BIFS', 'Dalton', 'TCIS', 'Busan FS', 'Gyeonggi', 'Dulwich Seoul',
-  'KIS', 'Chadwick', 'Gangwon', 'Dwight Seoul',
+  'Busan International Foreign School', 'Dalton School',
+  'Taejon Christian International School', 'Busan Foreign School',
+  'Gyeonggi English Village', 'Dulwich College Seoul',
+  'Korea International School', 'Chadwick International',
+  'Gangwon English Camp', 'Dwight School Seoul',
   'Yongsan International School of Seoul', 'Saint Paul Academy',
   'Paju English Village', 'Seoul Scholars International',
   'North London Collegiate School', 'Seoul Foreign School',
