@@ -1786,11 +1786,12 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
     fetch(`${API}/api/testimonials?limit=${PER_PAGE}&offset=${offset}`)
       .then((r) => r.json())
       .then((j) => {
-        if (j.success) {
+        if (j.success && Array.isArray(j.data?.testimonials)) {
           setTestimonials(j.data.testimonials)
-          setTotal(j.data.total)
+          setTotal(j.data.total ?? 0)
         }
       })
+      .catch(() => { /* 네트워크/파싱 오류 시 현재 상태 유지 */ })
       .finally(() => setTLoading(false))
   }, [page])
 

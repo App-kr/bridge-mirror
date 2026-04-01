@@ -935,7 +935,7 @@ const EXCEL_COLS_DEF=[
   {key:"jNumber",label:"번호",w:100},
   {key:"region",label:"지역",w:90},
   {key:"city",label:"도시",w:84},
-  {key:"name",label:"업체명",w:150},
+  {key:"name",label:"업체명",w:200},
   {key:"email",label:"이메일",w:210},
   {key:"phone",label:"연락처",w:134},
   {key:"teachingAge",label:"연령대",w:124},
@@ -961,6 +961,7 @@ const XCell=({value,onChange,multiline,style:st,selected,onSelect})=>{
     <div
       onClick={onSelect}
       onDoubleClick={()=>{onSelect&&onSelect();setEdit(true);}}
+      title={value||""}
       style={{minHeight:22,padding:"3px 5px",cursor:"default",lineHeight:1.5,
         overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
         outline:selected?"2px solid #2563eb":"none",outlineOffset:-2,
@@ -1359,7 +1360,7 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
 };
 
 
-const ALL_COLS=[{key:"jNumber",label:"NO.",w:80},{key:"region",label:"지역",w:70},{key:"city",label:"도시",w:80},{key:"name",label:"업체명",w:140},{key:"email",label:"이메일",w:200},{key:"phone",label:"연락처",w:130},{key:"teachingAge",label:"연령",w:120},{key:"salary",label:"급여",w:110},{key:"memo",label:"메모",w:260},{key:"status",label:"상태",w:80}];
+const ALL_COLS=[{key:"jNumber",label:"NO.",w:80},{key:"region",label:"지역",w:70},{key:"city",label:"도시",w:80},{key:"name",label:"업체명",w:200},{key:"email",label:"이메일",w:200},{key:"phone",label:"연락처",w:130},{key:"teachingAge",label:"연령",w:120},{key:"salary",label:"급여",w:110},{key:"memo",label:"메모",w:260},{key:"status",label:"상태",w:80}];
 const ColMgr=({cols,setCols,onClose})=>{
   const ak=ALL_COLS.map(c=>c.key);
   const ck=cols.map(c=>c.key);

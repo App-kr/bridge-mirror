@@ -189,7 +189,7 @@ function saveOrder(ids: string[]) {
 const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'province', label: '지역', visible: true, width: 70 },
   { key: 'city', label: '도시', visible: true, width: 90 },
-  { key: 'name', label: '업체명', visible: true, width: 160 },
+  { key: 'name', label: '업체명', visible: true, width: 220 },
   { key: 'age', label: '연령', visible: true, width: 120 },
   { key: 'email', label: '이메일', visible: true, width: 170 },
   { key: 'phone', label: '연락처', visible: true, width: 120 },

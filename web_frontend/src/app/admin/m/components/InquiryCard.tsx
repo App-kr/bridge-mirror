@@ -52,7 +52,7 @@ export default function InquiryCard({ inquiry, onTap, onStatusChange }: InquiryC
           {status === 'new' && (
             <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
           )}
-          <span className="font-semibold text-[15px] text-[#1d1d1f] truncate">
+          <span className="font-semibold text-[15px] text-[#1d1d1f] truncate" title={inquiry.school_name || ''}>
             {inquiry.school_name || 'Unknown School'}
           </span>
         </div>

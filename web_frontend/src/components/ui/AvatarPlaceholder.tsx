@@ -10,7 +10,8 @@ const PASTEL_COLORS = [
   '#FFE0B3',
 ]
 
-function hashName(name: string): number {
+function hashName(name: string | null | undefined): number {
+  if (!name) return 0
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0
@@ -25,6 +26,7 @@ interface AvatarPlaceholderProps {
 }
 
 export default function AvatarPlaceholder({ name, photoUrl, size = 48 }: AvatarPlaceholderProps) {
+  const safeName = name || ''
   if (photoUrl) {
     return (
       <img
@@ -38,7 +40,7 @@ export default function AvatarPlaceholder({ name, photoUrl, size = 48 }: AvatarP
     )
   }
 
-  const bg = PASTEL_COLORS[hashName(name) % PASTEL_COLORS.length]
+  const bg = PASTEL_COLORS[hashName(safeName) % PASTEL_COLORS.length]
   const r = size * 0.5
 
   return (
