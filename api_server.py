@@ -9206,10 +9206,10 @@ async def process_resume_files(
             if row:
                 candidate_dict = {
                     "sheet_number": num,
-                    "full_name": str(row[0]) if row[0] else "",
-                    "email": str(row[1]) if row[1] else "",
-                    "mobile_phone": str(row[2]) if row[2] else "",
-                    "nationality": str(row[3]) if row[3] else "",
+                    "full_name": decrypt_field(str(row[0])) if row[0] else "",
+                    "email": decrypt_field(str(row[1])) if row[1] else "",
+                    "mobile_phone": decrypt_field(str(row[2])) if row[2] else "",
+                    "nationality": decrypt_field(str(row[3])) if row[3] else "",
                 }
         except (ValueError, sqlite3.Error):
             pass
@@ -9286,6 +9286,7 @@ async def process_resume_files(
                             kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"]
                         )])
 
+                        import base64 as _b64
                         return {
                             "file_name": file_name,
                             "file_type": "docx",
@@ -9293,6 +9294,7 @@ async def process_resume_files(
                             "pii_count": pii_count,
                             "size_before": len(file_bytes),
                             "size_after": len(processed_bytes),
+                            "processed_data": _b64.b64encode(processed_bytes).decode(),
                             "error": None,
                         }
                     finally:
@@ -9334,6 +9336,7 @@ async def process_resume_files(
                             kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"]
                         )])
 
+                        import base64 as _b64
                         return {
                             "file_name": file_name,
                             "file_type": "pdf",
@@ -9341,6 +9344,7 @@ async def process_resume_files(
                             "pii_count": pii_count,
                             "size_before": len(file_bytes),
                             "size_after": len(processed_bytes),
+                            "processed_data": _b64.b64encode(processed_bytes).decode(),
                             "error": None,
                         }
                     finally:
