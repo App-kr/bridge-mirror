@@ -1721,7 +1721,7 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested, ask_account_selection
         _HAS_OVERLAY = True
         # 전역 _update_status 함수 설정 (cl_post()에서 사용)
         globals()['_update_status'] = update_status
@@ -1822,22 +1822,18 @@ def main():
     print("=" * 60)
 
     if _HAS_OVERLAY:
-        show_complete(posted_count=total_posted)
+        while True:
+            result = show_complete(posted_count=total_posted)
 
-        # "5개 더 올리기" 대기 (최대 60초)
-        import time as _time
-        for _ in range(60):
-            _time.sleep(1)
-            if wants_more():
-                extra_count = wants_more_count()
-                print(f"\n[OVERLAY] 유저 요청: {extra_count}개 더 올리기!")
+            if result == "MORE":
+                extra_count = 5
+                print(f"\n[OVERLAY] 추가 작업 요청: {extra_count}건")
                 overlay_close()
 
                 extra_jobs = fetch_jobs(None, extra_count)
                 if not extra_jobs:
                     print("추가 게시할 포지션 없음")
-                    show_complete(posted_count=total_posted)
-                    break
+                    continue
 
                 extra_ads = []
                 for job in extra_jobs:
@@ -1853,7 +1849,40 @@ def main():
                 extra_posted = _run_post_session(extra_ads)
                 total_posted += extra_posted
                 print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
-                show_complete(posted_count=total_posted)
+
+            elif result == "CHANGE":
+                print("\n[OVERLAY] 아이디 변경 요청")
+                overlay_close()
+                new_acct, new_limit = ask_account_selection()
+                if new_acct == "CANCEL":
+                    break
+
+                global CL_EMAIL, CL_PASSWORD
+                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(new_acct)
+                print(f"\n[OVERLAY] 계정 변경: {new_acct} → {CL_EMAIL}")
+
+                new_jobs = fetch_jobs(None, new_limit)
+                if not new_jobs:
+                    print("게시할 포지션 없음")
+                    break
+
+                new_ads = []
+                for job in new_jobs:
+                    title, body = generate_ad(job)
+                    body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+                    if removed:
+                        body = body_clean
+                    if not security_check(body, job["job_code"]):
+                        continue
+                    ad_id = save_draft(job, title, body)
+                    new_ads.append((job, title, body, ad_id))
+
+                extra_posted = _run_post_session(new_ads)
+                total_posted += extra_posted
+                print(f"\n변경 계정 {extra_posted}건 완료 (총 {total_posted}건)")
+
+            else:  # "EXIT" or None
+                print("\n[OVERLAY] 종료")
                 break
 
 

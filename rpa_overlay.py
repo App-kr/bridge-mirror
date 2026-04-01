@@ -38,6 +38,8 @@ except ImportError:
 _post_more_event = threading.Event()
 _post_more_count = [0]   # +5/10/20개 추가 게시 수
 _stop_event = threading.Event()
+_complete_result_val = [None]   # "MORE" / "CHANGE" / "EXIT"
+_complete_done_event = threading.Event()
 
 
 def _make_rpa_photoimage(root, size=32):
@@ -258,15 +260,19 @@ class RPAOverlay:
         except Exception:
             pass
 
-    def show_complete(self, posted_count: int = 0):
+    def show_complete(self, posted_count: int = 0) -> str:
         self._is_working = False
         self.close()
+        _complete_result_val[0] = None
+        _complete_done_event.clear()
         self._ready.clear()
         self._thread = threading.Thread(
             target=self._build_complete, args=(posted_count,), daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
         threading.Thread(target=self._play_complete_sound, daemon=True).start()
+        _complete_done_event.wait(timeout=90)
+        return _complete_result_val[0] or "EXIT"
 
     @staticmethod
     def _play_complete_sound():
@@ -1020,13 +1026,74 @@ class RPAOverlay:
 
     # ── COMPLETE window ───────────────────────
     def _build_complete(self, count: int):
-        root, card = self._make_window(320, 250)
+        root = tk.Tk()
+        self._root = root
+        _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
+        if _ico.exists():
+            try:
+                root.iconbitmap(str(_ico))
+            except Exception:
+                pass
+        try:
+            _img = _make_rpa_photoimage(root)
+            root.iconphoto(True, _img)
+            root._rpa_icon = _img
+        except Exception:
+            pass
+        root.overrideredirect(True)
+        root.attributes("-topmost", False)   # 현재 창 뒤에서 열림
+        root.attributes("-alpha", 0.0)
+        root.configure(bg=self.BG)
 
-        bar = self._top_bar(card, root)
+        w, h = 320, 260
+        mx, my, mw, mh = 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
+        if _HAS_SCREENINFO:
+            try:
+                mons = get_monitors()
+                m    = mons[1] if len(mons) >= 2 else mons[0]
+                mx, my, mw, mh = m.x, m.y, m.width, m.height
+            except Exception:
+                pass
+        root.geometry(f"{w}x{h}+{mx + (mw - w) // 2}+{my + (mh - h) // 2}")
+
+        border = tk.Frame(root, bg=self.SEP, padx=1, pady=0)
+        border.pack(fill="both", expand=True)
+        card = tk.Frame(border, bg=self.BG)
+        card.pack(fill="both", expand=True)
+
+        def _set_result(res: str):
+            _complete_result_val[0] = res
+            _complete_done_event.set()
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+        # 페이드 인 (포커스 탈취 없음)
+        def _fade(a=0.0):
+            if not root.winfo_exists():
+                return
+            if a < 1.0:
+                root.attributes("-alpha", a)
+                root.after(16, lambda: _fade(a + 0.07))
+            else:
+                root.attributes("-alpha", 1.0)
+        root.after(10, _fade)
+
+        # 상단 바 (X → EXIT)
+        bar = tk.Frame(card, bg=self.BG, height=28)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
+                      bg=self.BG, fg=self.X_GRAY, cursor="hand2")
+        xb.pack(side="right", padx=(0, 6), pady=(4, 0))
+        xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
+        xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
+        xb.bind("<Button-1>", lambda e: _set_result("EXIT"))
 
         chk = tk.Canvas(card, width=54, height=46,
                         bg=self.BG, highlightthickness=0)
-        chk.pack(pady=(2, 6))
+        chk.pack(pady=(2, 4))
         self._draw_check_animated(chk, root)
 
         title = tk.Label(card, text=f"✓  {count}건 완료!",
@@ -1034,44 +1101,42 @@ class RPAOverlay:
                          bg=self.BG, fg=self.TEXT1)
         title.pack()
 
-        sub = tk.Label(card, text="개인정보 노출이 없는지 확인해 주세요 ⚠",
+        sub = tk.Label(card, text="작업이 완료되었습니다",
                        font=self._fn(10), bg=self.BG, fg=self.TEXT2)
-        sub.pack(pady=(3, 12))
+        sub.pack(pady=(3, 10))
 
         self._sep(card)
 
-        # 추가 게시 버튼 행 (5 / 10 / 20)
-        more_row = tk.Frame(card, bg=self.BG)
-        more_row.pack(fill="x")
-        _MORE_BG  = "#162016"
-        _MORE_HOV = "#1e3020"
-        for _ci, _cn in enumerate([5, 10, 20]):
-            def _more_n(c=_cn):
-                _post_more_count[0] = c
-                _post_more_event.set()
-                root.destroy()
-            _mb = tk.Label(more_row,
-                           text=f"+ {_cn}개 더",
-                           font=tkfont.Font(family="Malgun Gothic", size=13),
-                           bg=_MORE_BG, fg=self.GREEN, cursor="hand2", pady=10)
-            _mb.pack(side="left", expand=True, fill="both")
-            _mb.bind("<Button-1>", lambda e, f=_more_n: f())
-            _mb.bind("<Enter>",    lambda e, b=_mb: b.configure(bg=_MORE_HOV))
-            _mb.bind("<Leave>",    lambda e, b=_mb: b.configure(bg=_MORE_BG))
-            if _ci < 2:
-                tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+        # 3개 선택 버튼 행
+        btn_row = tk.Frame(card, bg=self.BG)
+        btn_row.pack(fill="x")
+        _BTNS = [
+            ("추가 작업", "MORE",   self.GREEN),
+            ("아이디 변경", "CHANGE", self.BLUE),
+            ("종료",     "EXIT",   "#ff3b30"),
+        ]
+        for i, (label, res, color) in enumerate(_BTNS):
+            def _click(r=res):
+                _set_result(r)
+            btn = tk.Label(btn_row, text=label,
+                           font=self._fn(13),
+                           bg=self.BG, fg=color, cursor="hand2", pady=10)
+            btn.pack(side="left", expand=True, fill="both")
+            btn.bind("<Button-1>", lambda e, f=_click: f())
+            btn.bind("<Enter>",    lambda e, b=btn: b.configure(bg=self.HOVER))
+            btn.bind("<Leave>",    lambda e, b=btn: b.configure(bg=self.BG))
+            if i < len(_BTNS) - 1:
+                tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
 
-        self._sep(card)
-        self._action(card, "닫기", "normal", lambda: root.destroy())
-
-        self._drag(root, bar, chk, title, sub)
-        root.after(60000,
-                   lambda: root.destroy() if root.winfo_exists() else None)
+        self._drag(root, bar, chk, title, sub, btn_row)
+        # 60초 후 자동 종료 (기본: EXIT)
+        root.after(60000, lambda: _set_result("EXIT") if root.winfo_exists() else None)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
+        _complete_done_event.set()   # 창이 다른 방법으로 닫힌 경우 보장
 
     # ── Progress helpers ──────────────────────
     @staticmethod
