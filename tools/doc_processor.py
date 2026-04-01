@@ -455,6 +455,8 @@ PII_LINE_LABELS = [
     ("national id", True), ("ssn", True),
     ("nationality", True), ("citizenship", True),
     ("race", True), ("ethnicity", True), ("religion", True),
+    ("birth", True), ("born", True),     # "Birth: UK / 1990"
+    ("gender", True), ("sex", True),     # "Gender: Female"
     # 한국어
     ("이메일", True), ("전화", True), ("연락처", True),
     ("카카오", True), ("여권", True), ("주소", True),
@@ -1388,6 +1390,43 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 )
 
         if redact_texts or replacement_redacts:
+            page.apply_redactions()
+
+        # ── Supplementary: get_text("dict") 기반 정밀 redact ──
+        # 이유: search_for()는 다중 스팬 줄(Bold+Normal 혼합), 사이드바 레이아웃에서 실패 가능
+        # 해결: 각 라인/스팬의 실제 bbox를 직접 사용해 추가 whiteout
+        _pdict = page.get_text("dict", flags=0)
+        _has_extra = False
+        for _blk in _pdict.get("blocks", []):
+            if _blk.get("type") != 0:
+                continue
+            for _lnobj in _blk.get("lines", []):
+                _lspans = _lnobj.get("spans", [])
+                _ltxt = "".join(s.get("text", "") for s in _lspans)
+                _lstripped = _ltxt.strip()
+                if not _lstripped:
+                    continue
+                # PII 라벨 줄 → 전체 라인 bbox whiteout (Bold: "Citizenship:" + Normal: " English" 같은 경우)
+                if _should_skip_line(_lstripped.lower()):
+                    page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
+                    _has_extra = True
+                    all_logs.append(f"[page{page_num}] LINE_BBOX: {_lstripped[:60]}")
+                    continue
+                # 스팬 단위 이메일/전화 (사이드바/컬럼 레이아웃에서 search_for 실패 보완)
+                for _span in _lspans:
+                    _st = _span.get("text", "")
+                    if not _st or len(_st) < 4:
+                        continue
+                    _sr = fitz.Rect(_span["bbox"])
+                    if RE_EMAIL.search(_st):
+                        page.add_redact_annot(_sr, fill=(1, 1, 1))
+                        _has_extra = True
+                        all_logs.append(f"[page{page_num}] EMAIL_BBOX: {_st[:60]}")
+                    elif RE_PHONE.search(_st) and len(re.sub(r"\D", "", _st)) >= 7:
+                        page.add_redact_annot(_sr, fill=(1, 1, 1))
+                        _has_extra = True
+                        all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
+        if _has_extra:
             page.apply_redactions()
 
     # 첫 페이지 상단 화이트아웃 + 번호/사진 삽입
