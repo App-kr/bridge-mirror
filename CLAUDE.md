@@ -183,6 +183,10 @@ STEP 5 [COMMIT]
 @.claude/work_state.md
 @web_frontend/src/app/admin/sheet/sheet_context.md
 
+## [RULE-TKINTER] Tkinter Windows 규칙
+- 위젯 텍스트(Button, Label, Title 등)에 이모지 사용 금지 — GDI deadlock 원인
+- 이모지 대신 텍스트 레이블로만 대체 (예: "✅ 완료" → "[완료]", "🔄" → "[실행중]")
+
 ## [RULE-PYTHON] Python 실행 경로 절대 규칙
 ClaudeBlog 모든 python 실행: `Q:\Claudework\ClaudeBlog\.venv\Scripts\python.exe`
 금지: python 단독 / py 단독 / Python313 경로 / C:/Users/.../python
