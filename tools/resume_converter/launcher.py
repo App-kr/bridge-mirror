@@ -1,123 +1,95 @@
 """
-launcher.py — BRIDGE Converter 런처 v9
-  1) DPI Awareness
-  2) ttk 'clam' 테마 강제
-  3) withdraw() 후 mainloop 진입 → after(0)에서 deiconify() (pre-mainloop 페인트 차단)
-  4) Win32 BringWindowToTop 제거 (cascade repaint 원인)
+launcher.py — BRIDGE Converter 안전 런처 v3
+콘솔 창 숨김 + 에러 로그 기록
 """
 import sys
+import os
 import ctypes
 import traceback
 from pathlib import Path
 
-# ── [1] DPI Awareness ─────────────────────────────────────────────────────
-# 반드시 Tk 생성 전에 호출해야 효과 있음
+# ── 1. 콘솔 창 즉시 숨김 (python.exe 실행 시 나타나는 검은 창) ────────────
 try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # SYSTEM_DPI_AWARE
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
-
-# ── 콘솔 숨김 ─────────────────────────────────────────────────────────────
-try:
-    _hw = ctypes.windll.kernel32.GetConsoleWindow()
-    if _hw:
-        ctypes.windll.user32.ShowWindow(_hw, 0)
+    _hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if _hwnd:
+        ctypes.windll.user32.ShowWindow(_hwnd, 0)  # SW_HIDE
 except Exception:
     pass
 
-# ── 로그 ──────────────────────────────────────────────────────────────────
-_LOG = Path(__file__).parent / "logs" / "launcher.log"
-_LOG.parent.mkdir(exist_ok=True)
+# ── 2. 로그 파일 설정 ─────────────────────────────────────────────────────
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+_LOG_FILE = _LOG_DIR / "launcher.log"
 
+def _log(msg: str):
+    try:
+        with open(_LOG_FILE, "a", encoding="utf-8") as f:
+            import datetime
+            f.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}\n")
+            f.flush()
+    except Exception:
+        pass
 
-def log(msg):
-    with open(_LOG, "a", encoding="utf-8") as f:
-        import datetime
-        f.write(f"{datetime.datetime.now():%H:%M:%S} {msg}\n")
-        f.flush()
+# stderr/stdout 리다이렉트 (pythonw 환경 대비)
+class _FileWriter:
+    def write(self, s):
+        if s and s.strip():
+            _log(f"STDERR: {s.rstrip()}")
+    def flush(self):
+        pass
 
+if sys.stderr is None:
+    sys.stderr = _FileWriter()
+if sys.stdout is None:
+    sys.stdout = _FileWriter()
 
-log("=" * 40)
-log("v9 start")
+_log("=" * 50)
+_log("BRIDGE Converter 시작")
+_log(f"Python: {sys.version[:40]}")
+_log(f"실행 경로: {__file__}")
+_log(f"작업 디렉토리: {os.getcwd()}")
 
-# ── sys.path ──────────────────────────────────────────────────────────────
-_TOOLS = str(Path(__file__).parent.parent)
-if _TOOLS not in sys.path:
-    sys.path.insert(0, _TOOLS)
+# ── 3. sys.path 설정 ──────────────────────────────────────────────────────
+_TOOLS_DIR = str(Path(__file__).parent.parent)
+if _TOOLS_DIR not in sys.path:
+    sys.path.insert(0, _TOOLS_DIR)
+_log(f"sys.path[0]: {sys.path[0]}")
 
+# ── 4. 앱 실행 ────────────────────────────────────────────────────────────
 try:
-    import resume_converter.main_gui as _mg
-
-    # ── [2] ttk 테마 'clam' 강제 ────────────────────────────────────────
-    # Vista/XP 네이티브 Win32 테마는 Windows 10 DWM과 충돌 → 첫 페인트 시 응답없음
-    # clam 테마는 순수 Tk 렌더링 → Win32 의존 없음
-    _original_build_ui = _mg.BridgeConverterApp._build_ui
-
-    def _patched_build_ui(self):
-        import tkinter.ttk as _ttk
-        try:
-            _ttk.Style(self.root).theme_use("clam")
-            log("테마: clam 강제 적용")
-        except Exception as e:
-            log(f"테마 설정 실패 (무시): {e}")
-        _original_build_ui(self)
-
-    _mg.BridgeConverterApp._build_ui = _patched_build_ui
-
-    # TkinterDnD2 비활성화
-    _mg._DND_AVAILABLE = False
-    log("TkinterDnD 비활성화")
-
+    _log("main_gui 임포트 중...")
     from resume_converter.main_gui import BridgeConverterApp
-    log("import OK")
-
+    _log("임포트 완료. 앱 생성...")
     app = BridgeConverterApp()
-    log("BridgeConverterApp() OK")
+    _log("앱 초기화 완료. 창 표시...")
 
-    root = app.root
+    # 창 강제 표시
+    app.root.deiconify()
+    app.root.state("normal")
+    app.root.lift()
+    app.root.focus_force()
+    app.root.attributes("-topmost", True)
+    app.root.after(1500, lambda: app.root.attributes("-topmost", False))
 
-    # 화면 정중앙
-    sw = root.winfo_screenwidth()
-    sh = root.winfo_screenheight()
-    ww, wh = 1440, 900
-    x = max(0, (sw - ww) // 2)
-    y = max(0, (sh - wh) // 2)
-    root.geometry(f"{ww}x{wh}+{x}+{y}")
-    log(f"screen={sw}x{sh} pos={x},{y}")
+    # Tk 콜백 에러도 로그에 기록
+    def _report_cb_exception(exc, val, tb):
+        _log(f"TK CALLBACK ERROR: {exc.__name__}: {val}")
+        _log(traceback.format_exc())
+    app.root.report_callback_exception = _report_cb_exception
 
-    # mainloop 전 페인트 메시지 차단 (pre-paint cascade 방지)
-    root.withdraw()
-
-    def _on_tk_error(exc, val, tb):
-        log(f"TK ERROR: {exc}: {val}")
-    root.report_callback_exception = _on_tk_error
-
-    # ── mainloop 내부에서 창 표시 ─────────────────────────────────────────
-    # BringWindowToTop 제거: WM_WINDOWPOSCHANGED → clam repaint cascade 원인
-    def _show_window():
-        root.deiconify()
-        root.lift()
-        root.focus_force()
-        log("_show_window OK")
-
-    def _heartbeat():
-        log("heartbeat OK - mainloop 정상 동작")
-
-    root.after(0,    _show_window)
-    root.after(300,  _heartbeat)
-    root.after(1500, lambda: root.attributes("-topmost", False))
-
-    log("mainloop 시작")
+    _log("mainloop() 진입")
     app.run()
-    log("종료")
+    _log("정상 종료")
 
 except Exception:
     tb = traceback.format_exc()
-    log(f"FATAL:\n{tb}")
+    _log(f"ERROR:\n{tb}")
     try:
-        ctypes.windll.user32.MessageBoxW(0, f"오류:\n{tb[:500]}", "BRIDGE 오류", 0x10)
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            f"BRIDGE Converter 오류:\n\n{tb[:500]}\n\n로그: {_LOG_FILE}",
+            "BRIDGE Converter 오류",
+            0x10
+        )
     except Exception:
         pass

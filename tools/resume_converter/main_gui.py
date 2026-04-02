@@ -162,10 +162,10 @@ class BridgeConverterApp:
         self._birth_year  = ""
         self._id_load_timer: Optional[str] = None
 
-        self._configure_styles()
         self._build_ui()
         # 강사번호 변경 시 자동 시트 조회
         self._candidate_id.trace_add("write", self._on_id_change)
+        self._configure_styles()
         self._check_sheet_connection()
 
     # ══════════════════════════════════════════════════════════════════
@@ -945,7 +945,7 @@ class BridgeConverterApp:
                 raise InterruptedError("강제 중단됨")
             self._current_step = step_idx
             self.root.after(0, self._update_step_ui)
-            self.root.after(0, lambda s=STEP_ACTIONS[step_idx]: self._start_blink(s))
+            self._start_blink(STEP_ACTIONS[step_idx])
             self.root.after(0, lambda: self._set_file_status(None, "처리중..."))
 
             # 각 단계 직접 실행 (thread 내부에서 동기 호출)
@@ -960,7 +960,7 @@ class BridgeConverterApp:
             self.root.after(0, lambda si=step_idx: self._set_file_status(None, "✓ 완료"))
             time.sleep(0.4)
 
-        self.root.after(0, self._stop_blink)
+        self._stop_blink()
         self.root.after(0, lambda: (
             self._status_var.set("✓ 전체 처리 완료"),
             self._status_lbl.config(fg=C_PRI),
@@ -1332,32 +1332,22 @@ class BridgeConverterApp:
         cid = self._candidate_id.get().strip()
         if not cid:
             return
-
-        def _fetch():
-            try:
-                from .sheets_connector import get_candidate_info
-                info = get_candidate_info(cid)
-                if info:
-                    nat = info.get("nationality", "")
-                    gen = info.get("gender", "")
-                    yr  = info.get("birth_year", "")
-                    def _apply(i=info, n=nat, g=gen, y=yr):
-                        self._nationality = n
-                        self._gender      = g
-                        self._birth_year  = y
-                        self._meta_label.config(
-                            text=(f"국적: {n or '?'}  "
-                                  f"성별: {g or '?'}  "
-                                  f"생년: {y or '?'}"))
-                        self._update_fname_preview(i)
-                    self.root.after(0, _apply)
-                else:
-                    self.root.after(0, lambda: self._meta_label.config(text="시트 미등록"))
-            except Exception as e:
-                _e = str(e)
-                self.root.after(0, lambda: self._meta_label.config(text=f"조회 실패: {_e}"))
-
-        threading.Thread(target=_fetch, daemon=True).start()
+        try:
+            from .sheets_connector import get_candidate_info
+            info = get_candidate_info(cid)
+            if info:
+                self._nationality = info.get("nationality", "")
+                self._gender      = info.get("gender", "")
+                self._birth_year  = info.get("birth_year", "")
+                self._meta_label.config(
+                    text=(f"국적: {self._nationality or '?'}  "
+                          f"성별: {self._gender or '?'}  "
+                          f"생년: {self._birth_year or '?'}"))
+                self._update_fname_preview(info)
+            else:
+                self._meta_label.config(text="시트 미등록")
+        except Exception as e:
+            self._meta_label.config(text=f"조회 실패: {e}")
 
     def _on_id_change(self, *args):
         """강사번호 입력 시 0.8초 후 시트 자동 조회."""
@@ -1697,47 +1687,23 @@ class BridgeConverterApp:
                     # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — docx2pdf/Word COM 사용)
                     import tempfile as _tf
                     import os as _os
-                    import threading as _th
                     _tmp = _tf.NamedTemporaryFile(suffix=".docx", delete=False)
                     doc.save(_tmp.name)
                     _tmp.close()
                     _tmp_pdf = _tmp.name[:-5] + ".pdf"
                     docx_pdf_bytes = None
-                    # 상태 업데이트: Word 변환 중 안내
-                    self.root.after(0, lambda: self._status_var.set(
-                        "⏳ DOCX → PDF 변환 중 (Word 실행, 최대 45초)..."))
-                    # docx2pdf를 별도 스레드 + 타임아웃 45초로 실행
-                    _conv_result: list = [None, None]  # [bytes, error_str]
-                    _conv_event = _th.Event()
-                    _tmp_name_cap = _tmp.name
-                    _tmp_pdf_cap  = _tmp_pdf
-                    def _do_d2p():
-                        try:
-                            import pythoncom
-                            pythoncom.CoInitialize()
-                            try:
-                                from docx2pdf import convert as _d2p
-                                _d2p(_tmp_name_cap, _tmp_pdf_cap)
-                                with open(_tmp_pdf_cap, "rb") as _f:
-                                    _conv_result[0] = _f.read()
-                                try: _os.unlink(_tmp_pdf_cap)
-                                except: pass
-                            finally:
-                                pythoncom.CoUninitialize()
-                        except Exception as _e:
-                            _conv_result[1] = str(_e)
-                        finally:
-                            _conv_event.set()
-                    _th.Thread(target=_do_d2p, daemon=True).start()
-                    _finished = _conv_event.wait(timeout=45)
-                    try: _os.unlink(_tmp.name)
-                    except: pass
-                    if not _finished:
-                        log.warning("docx2pdf 타임아웃(45s) — 평문 폴백 사용")
-                    elif _conv_result[1]:
-                        log.warning(f"docx2pdf 실패 — 평문 폴백 사용: {_conv_result[1]}")
-                    else:
-                        docx_pdf_bytes = _conv_result[0]
+                    try:
+                        from docx2pdf import convert as _d2p
+                        _d2p(_tmp.name, _tmp_pdf)
+                        with open(_tmp_pdf, "rb") as _f:
+                            docx_pdf_bytes = _f.read()
+                        try: _os.unlink(_tmp_pdf)
+                        except: pass
+                    except Exception as _conv_e:
+                        log.warning(f"docx2pdf 실패, 평문 폴백 사용: {_conv_e}")
+                    finally:
+                        try: _os.unlink(_tmp.name)
+                        except: pass
                     if not docx_pdf_bytes:
                         _cparas = [_p2.text for _p2 in doc.paragraphs]
                         for _t in doc.tables:

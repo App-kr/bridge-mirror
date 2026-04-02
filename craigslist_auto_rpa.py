@@ -1490,6 +1490,8 @@ def main():
                         help="계정 ID (account1/account2/account3) → 해당 .env 로딩")
     parser.add_argument("--integrity-reset", nargs="?", const="", default=None,
                         help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
+    parser.add_argument("--all",       action="store_true",
+                        help="4계정 순차 실행 (gray→green→brown→purple)")
     parser.add_argument("--job-code",  default=None)
     parser.add_argument("--limit",     type=int, default=10)
     args = parser.parse_args()
@@ -1552,6 +1554,132 @@ def main():
     # ── 파일 무결성 체크 ──
     if not integrity_check():
         sys.exit(99)
+
+    # ── --all 모드: 4계정 순차 실행 (단일 프로세스, 오버레이 유지) ──
+    if args.all:
+        _ALL_ACCOUNTS = ["gray", "green", "brown", "purple"]
+        grand_total = 0
+        print("=" * 60)
+        print("  BRIDGE Craigslist Auto RPA — 4계정 순차 모드")
+        print("=" * 60)
+
+        # 오버레이 1회 초기화
+        _has_ov = False
+        try:
+            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
+            _has_ov = True
+            globals()['_update_status'] = update_status
+        except ImportError:
+            pass
+
+        for acct_idx, acct_name in enumerate(_ALL_ACCOUNTS):
+            print(f"\n{'='*55}")
+            print(f"  [{acct_idx+1}/4] 계정: {acct_name}")
+            print(f"{'='*55}")
+
+            # 계정 전환
+            global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
+            try:
+                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(acct_name)
+            except SystemExit:
+                print(f"  [SKIP] {acct_name} 자격증명 없음 — 건너뜀")
+                continue
+            CL_CITY     = "seoul"
+            CL_CONTACT  = "bridgejobkr@gmail.com"
+            CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
+
+            jobs = fetch_jobs(args.job_code, args.limit)
+            print(f"  대상 포지션: {len(jobs)}건")
+            if not jobs:
+                print(f"  게시할 포지션 없음 — 다음 계정으로")
+                continue
+
+            ads = []
+            for job in jobs:
+                title, body = generate_ad(job)
+                body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+                if removed:
+                    body = body_clean
+                if not security_check(body, job["job_code"]):
+                    continue
+                ad_id = save_draft(job, title, body)
+                ads.append((job, title, body, ad_id))
+
+            if not ads:
+                print(f"  광고 생성 실패 — 다음 계정으로")
+                continue
+
+            # 오버레이 갱신
+            if _has_ov:
+                show_working(current=0, total=len(ads), email=CL_EMAIL)
+                update_status("로그인중")
+
+            hl_flag = args.headless
+            driver = build_driver(headless=hl_flag, account=acct_name)
+            posted = 0
+            try:
+                if not cl_login(driver):
+                    print(f"  [ABORT] {acct_name} 로그인 실패 — 다음 계정으로")
+                    _log_event("error", "—", "login", f"{acct_name} login failed")
+                    continue
+
+                for i, (job, title, body, ad_id) in enumerate(ads, 1):
+                    if _has_ov and stop_requested():
+                        print("\n[STOP] 사용자 중단 요청")
+                        break
+                    jcode = job["job_code"]
+                    print(f"\n[{i}/{len(ads)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
+                    try:
+                        if _has_ov:
+                            update_status(f"게시중 ({i}/{len(ads)})")
+                        url = cl_post(driver, title, body, job)
+                        ss  = take_screenshot(driver, jcode)
+                        if url and url not in ("", "None", None):
+                            mark_posted(ad_id, url, ss)
+                            print(f"  ✅ 게시 완료: {url}")
+                            _log_event("info", jcode, "posted", "Post successful", {"url": url})
+                            posted += 1
+                            if _has_ov:
+                                update_progress(posted, len(ads))
+                        elif url is None:
+                            mark_error(ad_id, "카테고리 선택 실패")
+                            print(f"  ❌ 카테고리 선택 실패")
+                        else:
+                            mark_error(ad_id, "URL 획득 실패")
+                            print(f"  ⚠️  게시 URL 획득 실패")
+                    except Exception as exc:
+                        mark_error(ad_id, str(exc)[:300])
+                        print(f"  ❌ 예외: {exc}")
+                        continue
+
+                    if i < len(ads):
+                        wait = random.randint(90, 150)
+                        countdown(wait, "다음 게시 대기")
+
+            except Exception as sess_exc:
+                _log_event("error", "—", "session", f"{acct_name}: {sess_exc}")
+                print(f"  [SESSION ERROR] {sess_exc}")
+            finally:
+                driver.quit()
+
+            grand_total += posted
+            print(f"  [{acct_name}] {posted}건 게시 완료")
+
+            # 계정 간 쿨다운
+            if acct_idx < len(_ALL_ACCOUNTS) - 1 and posted > 0:
+                countdown(30, "다음 계정 대기")
+
+        print(f"\n{'='*60}")
+        print(f"  전체 완료: {grand_total}건 게시 (4계정)")
+        print(f"{'='*60}")
+        if _has_ov:
+            show_complete(posted_count=grand_total)
+            import time as _time
+            for _ in range(60):
+                _time.sleep(1)
+                if wants_more():
+                    break
+        return
 
     acct_label = args.account or "default"
     print("=" * 60)
