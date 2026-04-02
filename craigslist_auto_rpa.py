@@ -856,20 +856,44 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         if "further verification" in src_after or "one-time login" in src_after:
             print("  [LOGIN] ⚠️ 추가 인증 필요 — 이메일 로그인 링크 전송 시도...")
             try:
-                # "E-mail a login link" 버튼 클릭
+                # "E-mail a login link" 버튼 클릭 — 여러 형태 대응
                 link_btn = None
+                # 1) CSS selector: input/button value 속성
                 for sel in ["input[value*='login link']", "button[value*='login link']",
-                            "input[type='submit'][value*='mail']"]:
+                            "input[type='submit'][value*='mail']",
+                            "button[type='submit']"]:
                     try:
-                        link_btn = driver.find_element(By.CSS_SELECTOR, sel)
-                        break
+                        el = driver.find_element(By.CSS_SELECTOR, sel)
+                        val = (el.get_attribute("value") or el.text or "").lower()
+                        if "login link" in val or "e-mail" in val:
+                            link_btn = el
+                            break
                     except Exception:
                         pass
+                # 2) input 태그 value 텍스트 매칭
                 if not link_btn:
-                    # 텍스트로 찾기
                     for btn in driver.find_elements(By.TAG_NAME, "input"):
                         if "login link" in (btn.get_attribute("value") or "").lower():
                             link_btn = btn
+                            break
+                # 3) button/a 태그 텍스트 매칭 (Craigslist 2026 UI)
+                if not link_btn:
+                    for tag in ["button", "a"]:
+                        for el in driver.find_elements(By.TAG_NAME, tag):
+                            txt = (el.text or "").lower()
+                            if "login link" in txt or "e-mail a login" in txt:
+                                link_btn = el
+                                break
+                        if link_btn:
+                            break
+                # 4) 빨간 배너 "click here" 링크 폴백
+                if not link_btn:
+                    for a_el in driver.find_elements(By.TAG_NAME, "a"):
+                        txt = (a_el.text or "").lower()
+                        href = (a_el.get_attribute("href") or "").lower()
+                        if "click here" in txt or "one-time" in href or "login_link" in href:
+                            link_btn = a_el
+                            print("  [LOGIN] 'click here' 링크 발견")
                             break
                 if link_btn:
                     link_btn.click()
@@ -1671,7 +1695,7 @@ def main():
                 show_working(current=0, total=len(ads), email=CL_EMAIL)
                 update_status("로그인중")
 
-            hl_flag = args.headless
+            hl_flag = True  # --all 모드: 항상 백그라운드 (사용자 작업 방해 방지)
             driver = None
             try:
                 driver = build_driver(headless=hl_flag, account=acct_name)
@@ -1744,7 +1768,20 @@ def main():
         print(f"\n{'='*60}")
         print(f"  전체 완료: {grand_total}건 게시 (4계정)")
         print(f"{'='*60}")
-        if _has_ov:
+        if grand_total == 0:
+            print("  [WARN] 0건 게시 — 모든 계정 로그인 실패. 완료 처리 안 함.")
+            if _has_ov:
+                try:
+                    update_status("로그인 실패 — 0건 게시")
+                except Exception:
+                    pass
+                import time as _time
+                _time.sleep(5)
+                try:
+                    overlay_close()
+                except Exception:
+                    pass
+        elif _has_ov:
             show_complete(posted_count=grand_total)
             import time as _time
             for _ in range(60):
