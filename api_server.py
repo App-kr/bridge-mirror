@@ -1150,6 +1150,24 @@ async def apply(request: Request, body: CandidateApply):
         err("접수에 실패했습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
+@app.post("/api/apply/refresh", tags=["candidates"])
+async def refresh_apply_token(request: Request):
+    """유효한 지원자 JWT를 새 1시간 토큰으로 갱신.
+
+    Authorization: Bearer <current_token> 헤더 필요.
+    만료된 토큰은 갱신 불가 — 재지원 필요.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Authorization: Bearer <token> 헤더가 필요합니다.")
+    token = auth[7:].strip()
+    candidate_id = _verify_candidate_token(token)
+    if not candidate_id:
+        raise HTTPException(401, "토큰이 만료되었거나 유효하지 않습니다. 재지원 후 새 토큰을 발급받으세요.")
+    new_token = _make_candidate_token(candidate_id)
+    return ok(data={"apply_token": new_token})
+
+
 @app.post("/api/inquiry", status_code=status.HTTP_201_CREATED, tags=["clients"])
 async def inquiry(request: Request, body: ClientInquiry):
     if not _rate_ok(_ip_hash(request), window=3600, max_posts=5):
