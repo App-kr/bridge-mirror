@@ -100,6 +100,10 @@ SCRAPER_UA_PATTERNS: list[re.Pattern] = [
 # admin 인증 경로는 봇 차단 예외 (API 클라이언트 허용)
 _BOT_CHECK_EXEMPT_PREFIXES = ("/api/admin/", "/api/apply", "/api/inquiry", "/api/track")
 
+# 공개 읽기 전용 엔드포인트: GET 요청은 UA 차단 면제 (SEO + 정당한 API 클라이언트)
+# POST/DELETE 등 쓰기는 여전히 UA 차단 적용 (봇 스팸 방지)
+_PUBLIC_GET_PREFIXES = ("/api/community/", "/api/jobs")
+
 def _is_scraper_ua(ua: str) -> bool:
     """User-Agent가 스크래퍼/봇인지 판별"""
     if not ua:
@@ -677,7 +681,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         # 0-0-1. 봇/스크래퍼 UA 차단 (Google Sheets IMPORTXML 등)
         _ua = request.headers.get("user-agent", "")
-        _exempt_bot = any(path.startswith(p) for p in _BOT_CHECK_EXEMPT_PREFIXES)
+        _exempt_bot = (
+            any(path.startswith(p) for p in _BOT_CHECK_EXEMPT_PREFIXES)
+            or (method == "GET" and any(path.startswith(p) for p in _PUBLIC_GET_PREFIXES))
+        )
         if not _exempt_bot and _is_scraper_ua(_ua):
             ip_blacklist.record_attack(client_ip, f"scraper_ua")
             audit.log("SCRAPER_BLOCKED", {
