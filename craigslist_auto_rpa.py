@@ -908,9 +908,15 @@ def cl_login(driver: webdriver.Chrome) -> bool:
             # ── 비헤드리스 모드: Chrome 창 열어두고 최대 5분 대기 ──────────────
             _headless_mode = "--headless" in " ".join(sys.argv)
             if not _headless_mode:
+                # Chrome 창 맨 앞으로 포커스
+                try:
+                    driver.execute_script("window.focus();")
+                    driver.maximize_window()
+                except Exception:
+                    pass
                 print("=" * 60)
                 print("  ⚠️  수동 로그인 필요 — Chrome 창을 닫지 마세요!")
-                print(f"  1. 이 Chrome 창에서 새 탭 열기 (Ctrl+T)")
+                print(f"  1. Chrome 창에서 Ctrl+T → 새 탭")
                 print(f"  2. gmail.com 접속 → {CL_EMAIL} 받은편지함")
                 print(f"  3. Craigslist 로그인 링크 클릭")
                 print(f"  4. 로그인 완료 → 자동으로 계속됩니다 (최대 5분)")
@@ -1914,7 +1920,8 @@ def main():
         """게시 세션 실행 (최초 + '더 올리기' 공통)."""
         hl_flag = args.headless
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
-        if _HAS_OVERLAY:
+        # 비헤드리스 모드(수동 로그인)에서는 overlay 표시 안 함 — Chrome이 가려짐 방지
+        if _HAS_OVERLAY and hl_flag:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
         driver = build_driver(headless=hl_flag)
         posted = 0
