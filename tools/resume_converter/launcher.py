@@ -1,8 +1,9 @@
 """
-launcher.py — BRIDGE Converter 런처 v8
+launcher.py — BRIDGE Converter 런처 v9
   1) DPI Awareness
-  2) ttk 'clam' 테마 강제 (Vista native Win32 첫 페인트 교착 방지)
-  3) Win32 호출 → mainloop 내부 after(0)
+  2) ttk 'clam' 테마 강제
+  3) withdraw() 후 mainloop 진입 → after(0)에서 deiconify() (pre-mainloop 페인트 차단)
+  4) Win32 BringWindowToTop 제거 (cascade repaint 원인)
 """
 import sys
 import ctypes
@@ -40,7 +41,7 @@ def log(msg):
 
 
 log("=" * 40)
-log("v8 start")
+log("v9 start")
 
 # ── sys.path ──────────────────────────────────────────────────────────────
 _TOOLS = str(Path(__file__).parent.parent)
@@ -87,26 +88,25 @@ try:
     root.geometry(f"{ww}x{wh}+{x}+{y}")
     log(f"screen={sw}x{sh} pos={x},{y}")
 
+    # mainloop 전 페인트 메시지 차단 (pre-paint cascade 방지)
+    root.withdraw()
+
     def _on_tk_error(exc, val, tb):
         log(f"TK ERROR: {exc}: {val}")
     root.report_callback_exception = _on_tk_error
 
-    # ── [3] Win32 강제 표시 (mainloop 내부에서 실행) ─────────────────────
-    def _force_show():
-        try:
-            HWND = root.winfo_id()
-            ctypes.windll.user32.ShowWindow(HWND, 9)
-            ctypes.windll.user32.SetForegroundWindow(HWND)
-            ctypes.windll.user32.BringWindowToTop(HWND)
-            log(f"_force_show OK HWND={HWND}")
-        except Exception as e:
-            log(f"_force_show 오류: {e}")
+    # ── mainloop 내부에서 창 표시 ─────────────────────────────────────────
+    # BringWindowToTop 제거: WM_WINDOWPOSCHANGED → clam repaint cascade 원인
+    def _show_window():
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+        log("_show_window OK")
 
     def _heartbeat():
         log("heartbeat OK - mainloop 정상 동작")
 
-    root.attributes("-topmost", True)
-    root.after(0,    _force_show)
+    root.after(0,    _show_window)
     root.after(300,  _heartbeat)
     root.after(1500, lambda: root.attributes("-topmost", False))
 
