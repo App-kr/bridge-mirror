@@ -945,7 +945,7 @@ class BridgeConverterApp:
                 raise InterruptedError("강제 중단됨")
             self._current_step = step_idx
             self.root.after(0, self._update_step_ui)
-            self._start_blink(STEP_ACTIONS[step_idx])
+            self.root.after(0, lambda s=STEP_ACTIONS[step_idx]: self._start_blink(s))
             self.root.after(0, lambda: self._set_file_status(None, "처리중..."))
 
             # 각 단계 직접 실행 (thread 내부에서 동기 호출)
@@ -960,7 +960,7 @@ class BridgeConverterApp:
             self.root.after(0, lambda si=step_idx: self._set_file_status(None, "✓ 완료"))
             time.sleep(0.4)
 
-        self._stop_blink()
+        self.root.after(0, self._stop_blink)
         self.root.after(0, lambda: (
             self._status_var.set("✓ 전체 처리 완료"),
             self._status_lbl.config(fg=C_PRI),
