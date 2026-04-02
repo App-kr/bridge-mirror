@@ -172,6 +172,7 @@ export default function BridgeCanvasSheet() {
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
   const [photoToast, setPhotoToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState('')
   const [newCount, setNewCount] = useState(0)
   const [ready, setReady] = useState(false)
@@ -329,6 +330,7 @@ export default function BridgeCanvasSheet() {
 
   const loadAllData = useCallback(async () => {
     setLoading(true)
+    setFetchError(null)
     loadOffsetRef.current    = 0
     isLoadingMoreRef.current = true
     const edits   = editsRef.current
@@ -341,7 +343,17 @@ export default function BridgeCanvasSheet() {
         `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=0`,
         { headers: hdrs() },
       )
-      if (!res0.ok) { setLoading(false); isLoadingMoreRef.current = false; return }
+      if (!res0.ok) {
+        const msg = res0.status === 403
+          ? `인증 오류 (403) — 재로그인 후 시도`
+          : res0.status >= 500
+          ? `서버 오류 (${res0.status}) — Render 서버 기동 중일 수 있음`
+          : `HTTP ${res0.status} 오류`
+        setFetchError(msg)
+        setLoading(false)
+        isLoadingMoreRef.current = false
+        return
+      }
       const json0  = await res0.json()
       const raw0: Record<string, unknown>[] = json0.data?.candidates ?? []
       const total: number = json0.data?.total ?? 0
@@ -402,7 +414,9 @@ export default function BridgeCanvasSheet() {
         // 마지막 배치가 PAGE_SIZE 미만이면 서버 데이터 소진
         if (results.some(r => r.rows.length < PAGE_SIZE)) break
       }
-    } catch { /* 네트워크 오류 무시 */ }
+    } catch (e) {
+      setFetchError(e instanceof Error ? `네트워크 오류: ${e.message}` : '서버 연결 실패 — Render 서버가 응답하지 않습니다')
+    }
 
     setLoading(false)
     setLastSync(new Date().toLocaleTimeString())
@@ -1438,7 +1452,18 @@ export default function BridgeCanvasSheet() {
             : <span>{dbAll.length.toLocaleString()} / {dbTotal.toLocaleString()}건</span>
           }
         </span>
-        {lastSync && <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}> · {lastSync}</span>}
+        {fetchError && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#dc2626', fontSize: 12, fontWeight: 600 }}>⚠ {fetchError}</span>
+            <button
+              onClick={() => { setFetchError(null); loadAllData() }}
+              style={{ fontSize: 12, color: '#2563eb', cursor: 'pointer', background: 'none', border: '1px solid #2563eb', borderRadius: 4, padding: '2px 8px', fontWeight: 600 }}
+            >
+              재시도
+            </button>
+          </span>
+        )}
+        {lastSync && !fetchError && <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}> · {lastSync}</span>}
         {newCount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}> · 신규 {newCount}</span>}
 
         <div style={{ flex: 1 }} />
