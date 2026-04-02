@@ -732,7 +732,7 @@ def _find_chrome_binary() -> str | None:
     return None
 
 
-def build_driver(headless: bool = True) -> webdriver.Chrome:
+def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
     opts = Options()
 
     # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
@@ -742,6 +742,12 @@ def build_driver(headless: bool = True) -> webdriver.Chrome:
         print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
     else:
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
+
+    # 계정별 Chrome 프로필 → 쿠키/세션 유지
+    profile_dir = Path(__file__).resolve().parent / ".chrome_rpa_profile" / account
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    print(f"  [DRIVER] 프로필: {profile_dir}")
 
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
@@ -799,8 +805,14 @@ def _has_captcha(driver) -> bool:
 
 def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
-    driver.get(CL_LOGIN_URL)
+
+    # ── 쿠키 세션 체크: 이미 로그인 상태면 스킵 ──
+    driver.get("https://accounts.craigslist.org/login/home")
     _delay(2, 3)
+    src_check = driver.page_source.lower()
+    if "log out" in src_check or "logout" in src_check:
+        print("  [LOGIN] 기존 쿠키로 이미 로그인 상태 — 스킵 ✅")
+        return True
 
     try:
         email_el = WebDriverWait(driver, 15).until(
@@ -1558,7 +1570,7 @@ def main():
             print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
             sys.exit(1)
         print("\n[DIAGNOSE] 로그인 후 카테고리 선택 페이지까지 진행합니다...")
-        driver = build_driver(headless=False)
+        driver = build_driver(headless=False, account=acct_label)
         try:
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
@@ -1717,7 +1729,7 @@ def main():
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag)
+        driver = build_driver(headless=hl_flag, account=acct_label)
         posted = 0
 
         try:
