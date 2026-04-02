@@ -37,7 +37,7 @@ export const viewport: Viewport = {
 }
 
 const navLinks = [
-  { href: '/about',                 label: 'About us' },
+  { href: '/community/about',       label: 'About us' },
   { href: '/community/korea',      label: 'Korea' },
   { href: '/community/visa',       label: 'Visa' },
   { href: '/jobs',                  label: 'Job Board' },
