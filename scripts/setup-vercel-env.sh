@@ -11,7 +11,7 @@ echo ""
 
 # 환경변수 정의
 declare -A ENV_VARS=(
-    ["NEXT_PUBLIC_API_URL"]="https://api.bridgejob.co.kr"
+    ["NEXT_PUBLIC_API_URL"]="https://bridge-n7hk.onrender.com"
 )
 
 # 1. Vercel CLI 설치 확인

@@ -478,7 +478,7 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # TrustedHost — 허용된 호스트만 접근 (Host 헤더 위조 방지)
-_TRUSTED_HOSTS = ["bridgejob.co.kr", "www.bridgejob.co.kr", "bridge-n7hk.onrender.com"]
+_TRUSTED_HOSTS = ["bridgejob.co.kr", "www.bridgejob.co.kr", "api.bridgejob.co.kr", "bridge-n7hk.onrender.com"]
 if not _IS_PROD:
     _TRUSTED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_TRUSTED_HOSTS)
