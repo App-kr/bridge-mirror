@@ -134,7 +134,9 @@ def _build_cover_page(
 
 
 # ── 텍스트 → PDF 변환 ──────────────────────────────────────────────────────
-def text_to_pdf_bytes(text: str, title: str = "") -> bytes:
+def text_to_pdf_bytes(text: str, title: str = "",
+                      line_h: float = 16, margin_cm: float = 1.5,
+                      font_size: int = 10) -> bytes:
     """plain text → PDF bytes (reportlab, 한글 지원).
 
     맑은 고딕 TTF가 있으면 한글 렌더링, 없으면 Helvetica 폴백.
@@ -143,9 +145,8 @@ def text_to_pdf_bytes(text: str, title: str = "") -> bytes:
     buf     = io.BytesIO()
     page_w, page_h = A4
     c       = rl_canvas.Canvas(buf, pagesize=A4)
-    margin  = 1.5 * cm
-    line_h  = 16      # 한글 가독성을 위해 14 → 16
-    max_w   = page_w - 3 * cm
+    margin  = margin_cm * cm
+    max_w   = page_w - margin * 2
 
     # 폰트 선택
     body_font  = _KOREAN_FONT      if _KOREAN_FONT      else "Helvetica"
@@ -160,18 +161,19 @@ def text_to_pdf_bytes(text: str, title: str = "") -> bytes:
 
     def _new_page() -> float:
         c.showPage()
-        c.setFont(body_font, 10)
-        return page_h - 1.5 * cm
+        c.setFont(body_font, font_size)
+        return page_h - margin
 
-    c.setFont(body_font, 10)
+    c.setFont(body_font, font_size)
 
+    title_size = font_size + 2
     if title:
-        c.setFont(title_font, 12)
-        c.drawString(margin, page_h - 1.5 * cm, title)
-        c.setFont(body_font, 10)
-        y = page_h - 2.5 * cm
+        c.setFont(title_font, title_size)
+        c.drawString(margin, page_h - margin, title)
+        c.setFont(body_font, font_size)
+        y = page_h - margin - line_h * 1.5
     else:
-        y = page_h - 1.5 * cm
+        y = page_h - margin
 
     for raw_line in text.split("\n"):
         # 긴 줄 자동 줄바꿈 (CJK 폭 보정)
@@ -189,16 +191,36 @@ def text_to_pdf_bytes(text: str, title: str = "") -> bytes:
             raw_line = raw_line[cut:]
             _draw_line(c, chunk, margin, y)
             y -= line_h
-            if y < 2 * cm:
+            if y < margin:
                 y = _new_page()
 
         _draw_line(c, raw_line, margin, y)
         y -= line_h
-        if y < 2 * cm:
+        if y < margin:
             y = _new_page()
 
     c.save()
     return buf.getvalue()
+
+
+# ── 커버레터 1페이지 압축 ───────────────────────────────────────────────────
+def _compress_cover_to_1page(text: str) -> bytes:
+    """커버레터가 1페이지 초과 시 단계적 압축. 최대 1페이지."""
+    attempts = [
+        {"line_h": 16,   "margin_cm": 1.5, "font_size": 11},
+        {"line_h": 14,   "margin_cm": 1.5, "font_size": 11},
+        {"line_h": 14,   "margin_cm": 1.2, "font_size": 11},
+        {"line_h": 13.6, "margin_cm": 1.0, "font_size": 10},
+    ]
+    for kw in attempts:
+        pdf_bytes = text_to_pdf_bytes(text, "Cover Letter", **kw)
+        try:
+            with pikepdf.Pdf.open(io.BytesIO(pdf_bytes)) as p:
+                if len(p.pages) <= 1:
+                    return pdf_bytes
+        except Exception:
+            return pdf_bytes
+    return pdf_bytes  # 최소 설정으로 그냥 반환
 
 
 # ── PDF 에서 텍스트 추출 ───────────────────────────────────────────────────
@@ -249,7 +271,7 @@ def build_pdf(
 
     # ── 텍스트 섹션 ──────────────────────────────────────────────────────
     if cover_text and cover_text.strip():
-        pdf_parts.append(text_to_pdf_bytes(cover_text, "Cover Letter"))
+        pdf_parts.append(_compress_cover_to_1page(cover_text))
 
     if resume_text and resume_text.strip():
         pdf_parts.append(text_to_pdf_bytes(resume_text, "Curriculum Vitae"))

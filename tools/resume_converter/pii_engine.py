@@ -133,6 +133,19 @@ _KR_WORKPLACE = re.compile(
     re.IGNORECASE,
 )
 
+# Reference 섹션 헤더 패턴 — v2.8
+_REF_HEADER_RE = re.compile(
+    r"(?im)^[ \t]*(?:references?|referees?|references?\s+available(?:\s+on\s+request)?)\s*$"
+)
+
+def remove_reference_section(text: str) -> str:
+    """References/Referees 섹션 헤더부터 끝까지 삭제."""
+    m = _REF_HEADER_RE.search(text)
+    if not m:
+        return text
+    return text[:m.start()].rstrip()
+
+
 # PII 라벨 줄 삭제 — v2.7
 _PII_LABEL_RE = re.compile(
     r"^[^\n]*\b(?:nationality|citizenship|race|ethnicity|religion|"
@@ -242,6 +255,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
 
     # ── PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등) ─────────
     cleaned = _PII_LABEL_RE.sub("", cleaned)
+
+    # ── Reference 섹션 전체 삭제 ──────────────────────────────────────────
+    cleaned = remove_reference_section(cleaned)
 
     return cleaned, found
 
