@@ -7858,17 +7858,19 @@ async def testimonials_list(
     total = 0
     data: list = []
     try:
+        # name이 비어있는 행은 불완전 데이터 → 제외 (프론트엔드 이름 공백 방지)
+        _base_cond = "is_visible = 1 AND is_deleted = 0 AND TRIM(COALESCE(name,'')) != ''"
         total = conn.execute(
-            "SELECT COUNT(*) FROM testimonials WHERE is_visible = 1 AND is_deleted = 0"
+            f"SELECT COUNT(*) FROM testimonials WHERE {_base_cond}"
         ).fetchone()[0]
         if not random:
             cur = conn.execute(
-                "SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE is_visible = 1 AND is_deleted = 0 ORDER BY sort_order DESC, id DESC LIMIT ? OFFSET ?",
+                f"SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE {_base_cond} ORDER BY sort_order DESC, id DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             )
         else:
             cur = conn.execute(
-                "SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE is_visible = 1 AND is_deleted = 0 LIMIT ? OFFSET ?",
+                f"SELECT id, name, country, photo_url, rating, review_text, sort_order, created_at FROM testimonials WHERE {_base_cond} LIMIT ? OFFSET ?",
                 (limit, offset),
             )
         cols = [d[0] for d in cur.description]

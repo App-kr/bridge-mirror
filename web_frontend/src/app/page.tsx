@@ -182,8 +182,11 @@ export default function HomePage() {
     fetch('/api/testimonials')
       .then(r => r.json())
       .then(d => {
-        if (d?.success && d.data?.testimonials?.length > 0) {
-          setTestimonials(d.data.testimonials.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
+        const items = d?.data?.testimonials ?? []
+        // name이 비어있는 항목은 불완전 데이터 → 정적 폴백 사용
+        const valid = items.filter((t: { name?: string }) => t.name && t.name.trim())
+        if (d?.success && valid.length > 0) {
+          setTestimonials(valid.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
             text: t.review_text,
             stars: t.rating,
             name: t.name,
@@ -263,8 +266,10 @@ export default function HomePage() {
     fetch(`${API_URL || ''}/api/testimonials?limit=6&random=1`)
       .then(r => r.json())
       .then(d => {
-        if (d?.success && d.data?.testimonials?.length > 0) {
-          setTestimonials(d.data.testimonials.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
+        const items = d?.data?.testimonials ?? []
+        const valid = items.filter((t: { name?: string }) => t.name && t.name.trim())
+        if (d?.success && valid.length > 0) {
+          setTestimonials(valid.map((t: { review_text: string; rating: number; name: string; country: string }) => ({
             text: t.review_text,
             stars: t.rating,
             name: t.name,
