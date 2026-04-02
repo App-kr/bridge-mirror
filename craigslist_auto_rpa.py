@@ -767,6 +767,9 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
+        opts.add_argument("--silent-launch")
+        opts.add_argument("--no-first-run")
+        opts.add_argument("--no-default-browser-check")
         print("  [DRIVER] 백그라운드 모드 (offscreen)")
     else:
         opts.add_argument("--start-maximized")
@@ -855,48 +858,41 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         src_after = driver.page_source.lower()
         if "further verification" in src_after or "one-time login" in src_after:
             print("  [LOGIN] ⚠️ 추가 인증 필요 — 이메일 로그인 링크 전송 시도...")
+            # 디버그: page source 저장 (버튼 구조 분석용)
             try:
-                # "E-mail a login link" 버튼 클릭 — 여러 형태 대응
-                link_btn = None
-                # 1) CSS selector: input/button value 속성
-                for sel in ["input[value*='login link']", "button[value*='login link']",
-                            "input[type='submit'][value*='mail']",
-                            "button[type='submit']"]:
-                    try:
-                        el = driver.find_element(By.CSS_SELECTOR, sel)
-                        val = (el.get_attribute("value") or el.text or "").lower()
-                        if "login link" in val or "e-mail" in val:
-                            link_btn = el
-                            break
-                    except Exception:
-                        pass
-                # 2) input 태그 value 텍스트 매칭
-                if not link_btn:
-                    for btn in driver.find_elements(By.TAG_NAME, "input"):
-                        if "login link" in (btn.get_attribute("value") or "").lower():
-                            link_btn = btn
-                            break
-                # 3) button/a 태그 텍스트 매칭 (Craigslist 2026 UI)
-                if not link_btn:
-                    for tag in ["button", "a"]:
-                        for el in driver.find_elements(By.TAG_NAME, tag):
-                            txt = (el.text or "").lower()
-                            if "login link" in txt or "e-mail a login" in txt:
-                                link_btn = el
-                                break
-                        if link_btn:
-                            break
-                # 4) 빨간 배너 "click here" 링크 폴백
-                if not link_btn:
-                    for a_el in driver.find_elements(By.TAG_NAME, "a"):
-                        txt = (a_el.text or "").lower()
-                        href = (a_el.get_attribute("href") or "").lower()
-                        if "click here" in txt or "one-time" in href or "login_link" in href:
-                            link_btn = a_el
-                            print("  [LOGIN] 'click here' 링크 발견")
-                            break
-                if link_btn:
-                    link_btn.click()
+                _dbg = _LOG_DIR / "login_page_source.html"
+                _dbg.write_text(driver.page_source, encoding="utf-8")
+                print(f"  [LOGIN] 페이지 소스 저장: {_dbg}")
+            except Exception:
+                pass
+            try:
+                # ── JavaScript로 직접 "E-mail a login link" 클릭 (가장 확실) ──
+                clicked = driver.execute_script("""
+                    // 1) 모든 input/button/a 중 "login link" 텍스트 포함 요소 클릭
+                    var targets = document.querySelectorAll('input, button, a');
+                    for (var i = 0; i < targets.length; i++) {
+                        var el = targets[i];
+                        var txt = (el.value || el.textContent || '').toLowerCase();
+                        if (txt.indexOf('login link') !== -1 || txt.indexOf('e-mail a login') !== -1) {
+                            el.click();
+                            return 'clicked: ' + el.tagName + ' = ' + txt.trim().substring(0, 60);
+                        }
+                    }
+                    // 2) "click here" 링크 폴백
+                    var links = document.querySelectorAll('a');
+                    for (var j = 0; j < links.length; j++) {
+                        var a = links[j];
+                        var t = (a.textContent || '').toLowerCase();
+                        if (t.indexOf('click here') !== -1) {
+                            a.click();
+                            return 'clicked: a.click_here = ' + t.trim().substring(0, 60);
+                        }
+                    }
+                    return null;
+                """)
+
+                if clicked:
+                    print(f"  [LOGIN] JS 클릭 성공: {clicked}")
                     print(f"  [LOGIN] 📧 로그인 링크가 {CL_EMAIL}로 전송됨!")
                     print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
                     _log_event("warning", "—", "login",
@@ -916,7 +912,25 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                         if remaining > 0:
                             print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
                 else:
-                    print("  [LOGIN] 이메일 링크 버튼 미발견")
+                    print("  [LOGIN] 이메일 링크 버튼 미발견 (JS 탐색 실패)")
+                    # Selenium 폴백: 기존 방식
+                    link_btn = None
+                    for tag in ["input", "button", "a"]:
+                        for el in driver.find_elements(By.TAG_NAME, tag):
+                            val = (el.get_attribute("value") or el.text or "").lower()
+                            if "login link" in val or "e-mail a login" in val or "click here" in val:
+                                link_btn = el
+                                break
+                        if link_btn:
+                            break
+                    if link_btn:
+                        try:
+                            link_btn.click()
+                        except Exception:
+                            _js_click(driver, link_btn)
+                        print(f"  [LOGIN] Selenium 폴백 클릭 성공")
+                    else:
+                        print("  [LOGIN] 모든 버튼 탐색 실패 — page source 확인 필요")
             except Exception as vex:
                 print(f"  [LOGIN] 인증 처리 오류: {vex}")
 
@@ -1644,10 +1658,11 @@ def main():
         print("  BRIDGE Craigslist Auto RPA — 4계정 순차 모드")
         print("=" * 60)
 
-        # 오버레이 1회 초기화
+        # 오버레이 1회 초기화 (백그라운드 모드 — 사용자 작업 방해 금지)
         _has_ov = False
         try:
-            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
+            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested, set_background_mode
+            set_background_mode(True)  # 모든 팝업이 뒤에서 작동
             _has_ov = True
             globals()['_update_status'] = update_status
         except ImportError:

@@ -16,6 +16,14 @@ from pathlib import Path
 from tkinter import font as tkfont
 import winsound
 
+# ── 백그라운드 모드 (True일 때 어떤 창도 포커스를 뺏지 않음) ──
+_BACKGROUND_MODE = False
+
+def set_background_mode(enabled: bool = True):
+    """전역 백그라운드 모드 설정. True면 topmost/focus_force/BringWindowToTop 전부 비활성."""
+    global _BACKGROUND_MODE
+    _BACKGROUND_MODE = enabled
+
 
 def _log_overlay(msg: str):
     """크래쉬/이벤트 진단 로그 → logs/overlay_debug.log"""
@@ -213,7 +221,10 @@ class RPAOverlay:
         self._restore_monitor.start()
 
     def _bring_to_front(self):
-        """tkinter 스레드에서 창 앞으로 (AttachThreadInput 강제 포커스)."""
+        """tkinter 스레드에서 창 앞으로 (AttachThreadInput 강제 포커스).
+        _BACKGROUND_MODE=True일 때 전부 스킵 — 사용자 작업 방해 방지."""
+        if _BACKGROUND_MODE:
+            return
         try:
             if self._root and self._root.winfo_exists():
                 import ctypes as _ct2
@@ -348,20 +359,22 @@ class RPAOverlay:
         self._ready.clear()
 
     def _deiconify_working(self):
-        """숨겨진 작업창 복원 — tkinter 이벤트 루프 내부에서 호출됨."""
+        """숨겨진 작업창 복원 — tkinter 이벤트 루프 내부에서 호출됨.
+        _BACKGROUND_MODE=True일 때 포커스 강탈 없이 조용히 복원만."""
         if not self._is_working:
             return
         try:
             if self._root and self._root.winfo_exists():
                 self._root.deiconify()
-                self._root.attributes("-topmost", True)
-                self._root.lift()
-                self._root.focus_force()
-                self._root.after(
-                    1500,
-                    lambda: self._root.attributes("-topmost", False)
-                    if self._root and self._root.winfo_exists() else None,
-                )
+                if not _BACKGROUND_MODE:
+                    self._root.attributes("-topmost", True)
+                    self._root.lift()
+                    self._root.focus_force()
+                    self._root.after(
+                        1500,
+                        lambda: self._root.attributes("-topmost", False)
+                        if self._root and self._root.winfo_exists() else None,
+                    )
         except Exception:
             pass
 
@@ -604,12 +617,13 @@ class RPAOverlay:
                     sh = root.winfo_screenheight()
                     w, h = 360, 378
                     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
-                    root.attributes("-topmost", True)   # Win32 WM 강제 최상위
-                    root.lift()
-                    root.focus_force()
-                    _log_overlay("_check_restore: deiconify+topmost 완료")
-                    root.after(2000, lambda: root.attributes("-topmost", False)
-                               if root.winfo_exists() else None)
+                    if not _BACKGROUND_MODE:
+                        root.attributes("-topmost", True)
+                        root.lift()
+                        root.focus_force()
+                        root.after(2000, lambda: root.attributes("-topmost", False)
+                                   if root.winfo_exists() else None)
+                    _log_overlay("_check_restore: deiconify 완료")
             except Exception as _e:
                 _log_overlay(f"_check_restore ERROR: {_e}")
             root.after(400, _check_restore)
@@ -1277,7 +1291,10 @@ class RPAOverlay:
         except Exception:
             pass
         root.overrideredirect(True)
-        root.attributes("-topmost", True)   # 처음 표시 시에만 앞으로
+        if not _BACKGROUND_MODE:
+            root.attributes("-topmost", True)   # 처음 표시 시에만 앞으로
+        else:
+            root.attributes("-topmost", False)
         root.attributes("-alpha", 0.0)
         root.configure(bg=self.BG)
 
@@ -2408,3 +2425,4 @@ update_progress = _overlay.update_progress
 update_status   = _overlay.update_status
 close           = _overlay.close
 # wants_more / wants_more_count 는 모듈 상단에 이미 정의됨
+# set_background_mode는 모듈 상단에 정의됨
