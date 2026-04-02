@@ -453,12 +453,12 @@ export default function BoardPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
-  // Render(primary) → Vercel JSON(fallback when empty)
+  // Render(primary) → Vercel JSON(fallback when empty or error)
   const fetchBoardPosts = useCallback((url: string, fallbackUrl: string) =>
     fetch(url).then((r) => r.json()).then((j) => {
       if (j.success && j.data.posts.length > 0) return j
       return fetch(fallbackUrl).then((r) => r.json())
-    }), [])
+    }).catch(() => fetch(fallbackUrl).then((r) => r.json())), [])
 
   const refreshPosts = useCallback(() => {
     if (!config) return

@@ -1,10 +1,11 @@
 """
-main_gui.py — BRIDGE Resume Converter GUI  v2.0
-Tkinter + TkinterDnD2
-
-레이아웃: 좌측(대기열+내비) / 가운데(편집+파일목록) / 우측(미리보기)
+main_gui.py — BRIDGE Resume Converter GUI v3.0
+규칙:
+  - _configure_styles() 반드시 _build_ui() 이전 호출
+  - 네트워크/IO 전부 daemon thread, UI 업데이트는 root.after(0, cb) 전용
+  - update_idletasks() 금지
+  - watchdog 제거
 """
-
 from __future__ import annotations
 
 import io
@@ -30,18 +31,18 @@ except ImportError:
 
 from PIL import Image, ImageTk
 
-# ── 경로 설정 ─────────────────────────────────────────────────────────────
-BASE_DIR   = Path(__file__).parent
-INBOX_DIR  = BASE_DIR / "inbox"
-OUTPUT_DIR = BASE_DIR / "output"
-LOGS_DIR   = BASE_DIR / "logs"
-CONFIG_PATH= BASE_DIR / "config.json"
+# ── 경로 ──────────────────────────────────────────────────────────────────
+BASE_DIR    = Path(__file__).parent
+INBOX_DIR   = BASE_DIR / "inbox"
+OUTPUT_DIR  = BASE_DIR / "output"
+LOGS_DIR    = BASE_DIR / "logs"
+CONFIG_PATH = BASE_DIR / "config.json"
 
-# ── 폰트 (맑은 고딕 — Windows Korean 시스템 폰트) ─────────────────────────
-F  = "맑은 고딕"   # Malgun Gothic
-FM = "Consolas"    # monospace
+# ── 폰트 ──────────────────────────────────────────────────────────────────
+F  = "맑은 고딕"
+FM = "Consolas"
 
-# ── 색상 팔레트 ───────────────────────────────────────────────────────────
+# ── 색상 ──────────────────────────────────────────────────────────────────
 C_BG     = "#FFFFFF"
 C_SIDE   = "#F8F9FA"
 C_BORDER = "#E8EAED"
@@ -51,16 +52,14 @@ C_DANGER = "#E24B4A"
 C_TEXT   = "#202124"
 C_SUB    = "#5F6368"
 C_HOVER  = "#E8F5F0"
-C_PAUSE  = "#FFCDD2"   # 옅은 붉은 (일시정지)
-C_STOP   = "#E53935"   # 강제중지
-
-# 대기열 행 색
+C_PAUSE  = "#FFCDD2"
+C_STOP   = "#E53935"
 C_QWAIT  = "#FFF9C4"
 C_QACT   = "#E8F5E9"
 C_QDONE  = "#F1F8E9"
 C_QERR   = "#FFEBEE"
 
-# ── 단계 정의 ─────────────────────────────────────────────────────────────
+# ── 단계 ──────────────────────────────────────────────────────────────────
 STEPS = ["파일 확인", "사진 크롭", "PII 제거", "PDF 생성"]
 STEP_ACTIONS = [
     "파일 목록 확인 중",
@@ -69,12 +68,9 @@ STEP_ACTIONS = [
     "이력서 PDF 합치는 중",
 ]
 
-QUEUE_MAX = 15  # 확장: 5 → 15 (여러 작업 동시 처리)
+QUEUE_MAX = 15
 HOMEPAGE  = "https://www.bridgejob.co.kr"
 
-# ── 파일 포맷 규칙 ─────────────────────────────────────────────────────────
-# 형식: {ID}_{국가}_{성별}({생년}).pdf
-# 예: 5325미국_여성(96born).pdf
 FILE_FORMAT_PATTERN = re.compile(
     r"^(\d+)_([가-힣\w]+)_(남성|여성|기타)\((\d{2}born)\)\.pdf$", re.IGNORECASE
 )
@@ -85,17 +81,16 @@ log = logging.getLogger("main_gui")
 
 @dataclass
 class QueueItem:
-    """대기열 항목 — 강사 1인 분량의 파일 묶음."""
-    queue_id:    str
-    candidate_id: str = ""
-    files:       dict = field(default_factory=dict)
-    status:      str  = "대기"     # 대기 | 처리중 | 완료 | 오류
-    error:       str  = ""
-    info:        dict = field(default_factory=dict)
+    queue_id:     str
+    candidate_id: str  = ""
+    files:        dict = field(default_factory=dict)
+    status:       str  = "대기"
+    error:        str  = ""
+    info:         dict = field(default_factory=dict)
 
 
 class BridgeConverterApp:
-    """메인 GUI 앱 v2.0."""
+    """메인 GUI 앱 v3.0."""
 
     def __init__(self):
         if _DND_AVAILABLE:
@@ -108,11 +103,11 @@ class BridgeConverterApp:
         self.root.minsize(1100, 700)
         self.root.configure(bg=C_BG)
 
-        # ── 상태 ─────────────────────────────────────────────────────
+        # ── 상태 ──────────────────────────────────────────────────
         self._mode          = tk.StringVar(value="자동")
         self._candidate_id  = tk.StringVar()
-        self._files: dict[str, Path] = {}            # pipeline용 (ftype → 마지막 파일)
-        self._files_multi: dict[str, list] = {}      # 표시용 (ftype → [Path, ...])
+        self._files: dict[str, Path] = {}
+        self._files_multi: dict[str, list] = {}
         self._pii_result    = None
         self._current_step  = 0
         self._paused        = False
@@ -129,44 +124,51 @@ class BridgeConverterApp:
         self._blink_base   = ""
         self._blink_dots   = 0
         self._blink_after: Optional[str] = None
-        self._blink_error  = False   # True → 빨간 깜박
+        self._blink_error  = False
 
-        # PII 패널 펼침 상태
+        # PII 패널
         self._pii_expanded = False
 
-        # 단계 실행 중 중복 방지
+        # 단계 중복 방지
         self._step_running = False
 
-        # 사진 크롭 결과 (bytes) — 단계 간 전달
+        # 사진
         self._photo_bytes: Optional[bytes] = None
-        # 사진이 이력서 본문 내장인지 여부 (True = 커버에 사진 추가 안 함)
         self._photo_from_resume: bool = False
 
-        # 파일목록 그룹 헤더 (ftype → Treeview group iid)
+        # 파일목록 그룹
         self._group_iids: dict[str, str] = {}
 
-        # 인박스 감시 상태
-        self._watcher_active = False
-        self._watcher_observer = None
-
-        # 출력 폴더 + 마지막 생성 파일
+        # 출력
         self._output_dir: Path = self._load_output_config()
         self._last_output_path: Optional[Path] = None
 
         # 완료 블링크
         self._done_blink_after: Optional[str] = None
 
-        # 강사 메타 (시트에서 로드)
+        # 강사 메타
         self._nationality = ""
         self._gender      = ""
         self._birth_year  = ""
         self._id_load_timer: Optional[str] = None
 
-        self._build_ui()
-        # 강사번호 변경 시 자동 시트 조회
-        self._candidate_id.trace_add("write", self._on_id_change)
+        # ── 핵심 순서: styles 먼저, 그 다음 UI 빌드 ──────────────
         self._configure_styles()
+        self._build_ui()
+        self._candidate_id.trace_add("write", self._on_id_change)
         self._check_sheet_connection()
+
+    # ══════════════════════════════════════════════════════════════════
+    # 스타일 (위젯 생성 전에 호출해야 idle redraw cascade 없음)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _configure_styles(self):
+        style = ttk.Style()
+        style.configure("Treeview",
+                        font=(F, 12),
+                        rowheight=28)
+        style.configure("Treeview.Heading",
+                        font=(F, 12, "bold"))
 
     # ══════════════════════════════════════════════════════════════════
     # UI 빌드
@@ -183,9 +185,10 @@ class BridgeConverterApp:
                  font=(F, 15, "bold"), fg=C_PRI, bg=C_SIDE
                  ).pack(side="left", padx=14, pady=10)
 
-        # ── 모드 토글 (pill 버튼) ──────────────────────────────
+        # 모드 토글
         self._mode_btns: dict[str, tk.Button] = {}
-        pill = tk.Frame(bar, bg=C_BORDER, highlightbackground=C_PRI, highlightthickness=1)
+        pill = tk.Frame(bar, bg=C_BORDER,
+                        highlightbackground=C_PRI, highlightthickness=1)
         pill.pack(side="left", padx=18, pady=13)
         for m in ["자동", "반자동"]:
             b = tk.Button(pill, text=m, font=(F, 11),
@@ -195,22 +198,13 @@ class BridgeConverterApp:
             self._mode_btns[m] = b
         self._update_mode_btns()
 
-        # 홈페이지 버튼
         tk.Button(bar, text="홈페이지",
                   command=lambda: webbrowser.open(HOMEPAGE),
                   bg=C_SIDE, fg=C_PRI, font=(F, 11),
                   relief="flat", padx=8, cursor="hand2"
                   ).pack(side="left", padx=4)
 
-        # 인박스 감시 버튼
-        self._watcher_btn = tk.Button(
-            bar, text="● 인박스 감시",
-            command=self._toggle_inbox_watcher,
-            bg=C_BORDER, fg=C_TEXT, font=(F, 11),
-            relief="flat", padx=8, cursor="hand2")
-        self._watcher_btn.pack(side="left", padx=4)
-
-        # 시트 상태 (우측)
+        # 시트 상태
         self._sheet_label = tk.Label(
             bar, text="● 시트 미연결",
             font=(F, 11), fg=C_DANGER, bg=C_SIDE)
@@ -234,23 +228,16 @@ class BridgeConverterApp:
         self._right_panel = self._build_right(paned)
         paned.add(self._right_panel, weight=1)
 
-        # ── 루트 창 전체 드래그드롭 (어디서나) ───────────────
         if _DND_AVAILABLE:
-            self.root.drop_target_register(DND_FILES)
-            self.root.dnd_bind("<<Drop>>", self._on_drop)
-            main.drop_target_register(DND_FILES)
-            main.dnd_bind("<<Drop>>", self._on_drop)
-            self._left_panel.drop_target_register(DND_FILES)
-            self._left_panel.dnd_bind("<<Drop>>", self._on_drop)
-            self._right_panel.drop_target_register(DND_FILES)
-            self._right_panel.dnd_bind("<<Drop>>", self._on_drop)
+            for w in [self.root, main, self._left_panel, self._right_panel]:
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind("<<Drop>>", self._on_drop)
 
     # ── 좌측 패널 ─────────────────────────────────────────────────────
     def _build_left(self, parent) -> tk.Frame:
         panel = tk.Frame(parent, bg=C_SIDE, width=270)
         panel.pack_propagate(False)
 
-        # 시트 연결하기
         tk.Button(panel, text="  시트 연결하기",
                   command=self._open_sheet_settings,
                   bg=C_PRI, fg="white",
@@ -258,7 +245,6 @@ class BridgeConverterApp:
                   padx=10, pady=5, cursor="hand2"
                   ).pack(fill="x", padx=12, pady=(12, 2))
 
-        # API 키 설정 (이름 제거에 필요)
         api_status = self._get_api_key_status()
         self._api_btn = tk.Button(
             panel,
@@ -270,7 +256,7 @@ class BridgeConverterApp:
             padx=10, pady=3, cursor="hand2")
         self._api_btn.pack(fill="x", padx=12, pady=(0, 4))
 
-        # ── 강사 카드 ──────────────────────────────────────────
+        # 강사 카드
         card = tk.LabelFrame(panel, text="강사 정보", font=(F, 11, "bold"),
                               bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
                               relief="flat",
@@ -292,7 +278,7 @@ class BridgeConverterApp:
             font=(F, 10), wraplength=220, justify="left")
         self._meta_label.grid(row=1, column=0, sticky="w")
 
-        # ── 대기열 ─────────────────────────────────────────────
+        # 대기열
         qf = tk.LabelFrame(panel, text=f"처리 대기열  (최대 {QUEUE_MAX}명)",
                             font=(F, 11, "bold"),
                             bg=C_SIDE, fg=C_TEXT, padx=6, pady=4,
@@ -336,7 +322,7 @@ class BridgeConverterApp:
                   font=(F, 10, "bold"), relief="flat",
                   padx=8, pady=2, cursor="hand2").pack(side="right")
 
-        # ── 처리 단계 ──────────────────────────────────────────
+        # 처리 단계
         sf = tk.LabelFrame(panel, text="처리 단계", font=(F, 11, "bold"),
                             bg=C_SIDE, fg=C_TEXT, padx=8, pady=4,
                             relief="flat",
@@ -353,7 +339,6 @@ class BridgeConverterApp:
             lbl.pack(side="left", padx=4)
             self._step_rows.append((dot, lbl))
 
-        # 현재 작업 깜박 표시
         self._status_var = tk.StringVar(value="")
         self._status_lbl = tk.Label(
             sf, textvariable=self._status_var,
@@ -361,14 +346,12 @@ class BridgeConverterApp:
             font=(F, 10, "bold"), anchor="w", wraplength=220)
         self._status_lbl.pack(fill="x", pady=(4, 0))
 
-        # 전체 진행 바
         tk.Label(panel, text="전체 진행:", bg=C_SIDE, fg=C_SUB,
                  font=(F, 10)).pack(padx=12, anchor="w", pady=(6, 1))
         self._progress = ttk.Progressbar(panel, mode="determinate",
                                           maximum=len(STEPS))
         self._progress.pack(padx=12, fill="x")
 
-        # ── 미처리 목록 (에러 펼치기) ───────────────────────
         self._build_unproc(panel)
 
         return panel
@@ -414,7 +397,6 @@ class BridgeConverterApp:
     def _build_center(self, parent) -> tk.Frame:
         panel = tk.Frame(parent, bg=C_BG)
 
-        # 드롭 영역 (고정 높이 — 드래그 대상 아님)
         dz = tk.Frame(panel, bg=C_HOVER, height=100,
                        highlightbackground=C_PRI, highlightthickness=2,
                        cursor="hand2")
@@ -430,7 +412,7 @@ class BridgeConverterApp:
             dz.drop_target_register(DND_FILES)
             dz.dnd_bind("<<Drop>>", self._on_drop)
 
-        # 하단 버튼 (항상 고정)
+        # 하단 버튼
         btf = tk.Frame(panel, bg=C_BG,
                         highlightbackground=C_BORDER, highlightthickness=1)
         btf.pack(fill="x", padx=14, pady=8, side="bottom")
@@ -470,11 +452,10 @@ class BridgeConverterApp:
                                     padx=14, pady=6, cursor="hand2")
         self._next_btn.pack(side="right", padx=8, pady=6)
 
-        # ── 세로 PanedWindow: 파일목록 ↕ PII영역 (드래그 자유) ──
+        # 파일목록 + PII 영역
         vpaned = ttk.PanedWindow(panel, orient="vertical")
         vpaned.pack(fill="both", expand=True, padx=14, pady=(0, 4))
 
-        # 상단: 파일 목록 (드래그로 크기 조절)
         top_pane = tk.Frame(vpaned, bg=C_BG)
         vpaned.add(top_pane, weight=3)
 
@@ -484,12 +465,11 @@ class BridgeConverterApp:
                              highlightbackground=C_BORDER, highlightthickness=1)
         flf.pack(fill="both", expand=True)
 
-        # ── 그룹형 파일 목록 (5그룹, 각 그룹 여러 파일 가능) ──
         f_cols = ("파일명", "크기", "상태")
         self._file_tv = ttk.Treeview(flf, columns=f_cols,
                                       show="tree headings",
                                       selectmode="browse",
-                                      height=20)  # 확장: 9 → 20 (여러 파일 표시)
+                                      height=20)
         self._file_tv.heading("#0",    text="구분")
         self._file_tv.heading("파일명", text="파일명")
         self._file_tv.heading("크기",   text="크기")
@@ -498,13 +478,11 @@ class BridgeConverterApp:
         self._file_tv.column("파일명", width=240, minwidth=120)
         self._file_tv.column("크기",   width=68,  minwidth=56,  anchor="center")
         self._file_tv.column("상태",   width=86,  minwidth=64,  anchor="center")
-        # 그룹 헤더 배경색
         self._file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 11, "bold"))
         self._file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 11, "bold"))
         self._file_tv.tag_configure("grp_cover",   background="#CCE5FF", font=(F, 11, "bold"))
         self._file_tv.tag_configure("grp_rec",     background="#F8D7DA", font=(F, 11, "bold"))
         self._file_tv.tag_configure("grp_unknown", background="#E2E3E5", font=(F, 11, "bold"))
-        # 파일 행 배경색
         self._file_tv.tag_configure("photo",   background="#FFFDE7")
         self._file_tv.tag_configure("resume",  background="#F1F8F1")
         self._file_tv.tag_configure("cover",   background="#EDF5FF")
@@ -517,22 +495,19 @@ class BridgeConverterApp:
         self._file_tv.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        # ── 파일 목록 전체에 드래그드롭 등록 ──────────────────────────────────
         if _DND_AVAILABLE:
             self._file_tv.drop_target_register(DND_FILES)
             self._file_tv.dnd_bind("<<Drop>>", self._on_drop)
             flf.drop_target_register(DND_FILES)
             flf.dnd_bind("<<Drop>>", self._on_drop)
 
-        # 5개 그룹 헤더 생성 (항상 펼침)
-        _groups = [
+        for ftype, label in [
             ("photo",   "📷 사진"),
             ("resume",  "📄 이력서"),
             ("cover",   "📝 커버레터"),
             ("rec",     "📋 추천서"),
             ("unknown", "📎 기타"),
-        ]
-        for ftype, label in _groups:
+        ]:
             iid = self._file_tv.insert("", "end",
                                         text=label,
                                         values=("", "", ""),
@@ -546,7 +521,6 @@ class BridgeConverterApp:
                   bg=C_BG, fg=C_SUB, font=(F, 11),
                   relief="flat", cursor="hand2").pack(anchor="e", pady=(2, 0))
 
-        # 하단: PII 탐지 결과 (드래그로 크기 조절)
         bot_pane = tk.Frame(vpaned, bg=C_BG)
         vpaned.add(bot_pane, weight=1)
 
@@ -569,7 +543,6 @@ class BridgeConverterApp:
         self._focus_btn.pack(side="right")
 
         self._pii_container = tk.Frame(bot_pane, bg=C_BG)
-        # 기본 숨김
 
         self._pii_text = scrolledtext.ScrolledText(
             self._pii_container, font=(FM, 11),
@@ -582,12 +555,11 @@ class BridgeConverterApp:
 
         return panel
 
-    # ── 우측 패널 (축소: 360→280px) ──────────────────────────────────────────
+    # ── 우측 패널 ─────────────────────────────────────────────────────
     def _build_right(self, parent) -> tk.Frame:
-        panel = tk.Frame(parent, bg=C_SIDE, width=280)  # 확장: 미리보기 축소
+        panel = tk.Frame(parent, bg=C_SIDE, width=280)
         panel.pack_propagate(False)
 
-        # ── PDF 미리보기 (꽉 채움) ─────────────────────────────────
         prf = tk.LabelFrame(panel, text="미리보기 (이력서/사진)", font=(F, 11, "bold"),
                              bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
                              relief="flat",
@@ -599,7 +571,6 @@ class BridgeConverterApp:
                                       fg=C_SUB, font=(F, 11))
         self._preview_lbl.pack(fill="both", expand=True)
 
-        # ── 파일 정보 (컴팩트) ────────────────────────────────────
         mf = tk.Frame(panel, bg=C_SIDE, padx=12, pady=2)
         mf.pack(fill="x")
 
@@ -619,13 +590,11 @@ class BridgeConverterApp:
                                     wraplength=320, justify="left")
         self._fname_lbl.pack(anchor="w")
 
-        # ── 저장 완료 블링크 라벨 ─────────────────────────────────
         self._save_done_lbl = tk.Label(
             panel, text="", bg=C_SIDE, fg=C_PRI,
             font=(F, 13, "bold"), pady=4)
         self._save_done_lbl.pack(fill="x", padx=12)
 
-        # ── 출력 폴더 위젯 ────────────────────────────────────────
         off = tk.LabelFrame(panel, text="저장 폴더", font=(F, 11, "bold"),
                              bg=C_SIDE, fg=C_TEXT, padx=8, pady=6,
                              relief="flat",
@@ -653,7 +622,7 @@ class BridgeConverterApp:
                   bg=C_HOVER, fg=C_PRI, font=(F, 10),
                   relief="flat", padx=6, cursor="hand2").pack(side="right")
 
-        # ── 중복/재지원 카드 (숨김 상태) ─────────────────────────
+        # 중복/재지원 카드
         self._dup_card  = tk.Frame(panel, bg="#FFF8E1",
                                     highlightbackground=C_WARN, highlightthickness=1)
         self._dup_title = tk.Label(self._dup_card, text="⚠ 중복 제출 감지",
@@ -689,23 +658,10 @@ class BridgeConverterApp:
         return panel
 
     # ══════════════════════════════════════════════════════════════════
-    # 스타일 설정 (Treeview 폰트 크게)
-    # ══════════════════════════════════════════════════════════════════
-
-    def _configure_styles(self):
-        style = ttk.Style()
-        style.configure("Treeview",
-                        font=(F, 12),
-                        rowheight=28)
-        style.configure("Treeview.Heading",
-                        font=(F, 12, "bold"))
-
-    # ══════════════════════════════════════════════════════════════════
     # 파일 상태 헬퍼
     # ══════════════════════════════════════════════════════════════════
 
     def _set_file_status(self, ftype: str | None, status: str):
-        """그룹 내 모든 파일 행의 상태 컬럼 업데이트. ftype=None 이면 전체."""
         groups = [ftype] if ftype else list(self._group_iids.keys())
         for ft in groups:
             gid = self._group_iids.get(ft)
@@ -734,7 +690,7 @@ class BridgeConverterApp:
                 btn.config(bg=C_SIDE, fg=C_PRI)
 
     # ══════════════════════════════════════════════════════════════════
-    # 보안: candidate_id 검증 — 숫자만 / 최대 8자리
+    # 보안: candidate_id 검증
     # ══════════════════════════════════════════════════════════════════
 
     def _validate_id(self, value: str) -> bool:
@@ -763,16 +719,12 @@ class BridgeConverterApp:
             if not p.exists():
                 continue
             ftype = detect_file_type(p)
-            # 파일명에서 강사번호 자동 추출
             num = extract_number(p.name)
             if num and not candidate_num_detected:
                 candidate_num_detected = num
-            # 파이프라인용 (마지막 파일로 덮어씀)
             self._files[ftype] = p
-            # 다중 파일 목록
             if ftype not in self._files_multi:
                 self._files_multi[ftype] = []
-            # 중복 방지 (같은 이름 파일 재추가 시 갱신)
             existing = [i for i, q in enumerate(self._files_multi[ftype])
                         if q.name == p.name]
             if existing:
@@ -781,15 +733,13 @@ class BridgeConverterApp:
                 self._files_multi[ftype].append(p)
 
             size_b   = p.stat().st_size
-            size_str = (f"{size_b}B"            if size_b < 1024 else
-                        f"{size_b // 1024}KB"   if size_b < 1024*1024 else
+            size_str = (f"{size_b}B"          if size_b < 1024 else
+                        f"{size_b // 1024}KB" if size_b < 1024*1024 else
                         f"{size_b // (1024*1024):.1f}MB")
 
-            # 그룹 헤더 아래 자식 행 추가 또는 갱신
             gid = self._group_iids.get(ftype, self._group_iids.get("unknown"))
             if gid is None:
                 continue
-            # 이미 같은 이름의 자식 행이 있으면 갱신, 없으면 추가
             updated = False
             for child in self._file_tv.get_children(gid):
                 cv = self._file_tv.item(child, "values")
@@ -804,18 +754,17 @@ class BridgeConverterApp:
                                      text="",
                                      values=(p.name, size_str, "대기"),
                                      tags=(ftype,))
-            # 그룹 펼치기
             self._file_tv.item(gid, open=True)
-        # 강사번호 자동 채우기 (비어 있을 때만)
+
         if candidate_num_detected and not self._candidate_id.get().strip():
             self._candidate_id.set(candidate_num_detected)
         self._update_fname_preview()
-        # 로드된 PDF가 있으면 첫 페이지 미리보기 (백그라운드)
         for ftype in ["resume", "cover", "rec"]:
             p = self._files.get(ftype)
             if p and p.suffix.lower() == ".pdf":
-                threading.Thread(target=lambda pp=p: self._render_pdf_page_preview(pp),
-                                 daemon=True).start()
+                threading.Thread(
+                    target=lambda pp=p: self._render_pdf_page_preview(pp),
+                    daemon=True).start()
                 break
 
     def _delete_selected_file(self, event=None):
@@ -823,30 +772,24 @@ class BridgeConverterApp:
         if not sel:
             return
         iid = sel[0]
-        # 그룹 헤더는 삭제 불가
         if iid in self._group_iids.values():
             return
-        # 부모 그룹에서 ftype 역조회
         parent_iid = self._file_tv.parent(iid)
         ftype = None
         for ft, gid in self._group_iids.items():
             if gid == parent_iid:
                 ftype = ft
                 break
-        # 파일 이름 조회
         vals = self._file_tv.item(iid, "values")
         fname = vals[0] if vals else ""
-        # _files_multi 에서 제거
         if ftype and ftype in self._files_multi:
             self._files_multi[ftype] = [
                 q for q in self._files_multi[ftype] if q.name != fname
             ]
-            # 파이프라인 dict 갱신 (마지막 남은 파일로 대체)
             if self._files_multi[ftype]:
                 self._files[ftype] = self._files_multi[ftype][-1]
             elif ftype in self._files:
                 del self._files[ftype]
-        # Treeview 행 삭제
         self._file_tv.delete(iid)
 
     # ══════════════════════════════════════════════════════════════════
@@ -876,11 +819,9 @@ class BridgeConverterApp:
         self._queue.append(item)
         self._refresh_queue_tv()
 
-        # 입력 초기화
         self._candidate_id.set("")
         self._files.clear()
         self._photo_bytes = None
-        # 그룹 내 모든 자식 행 삭제
         for ft, gid in self._group_iids.items():
             for child in self._file_tv.get_children(gid):
                 self._file_tv.delete(child)
@@ -933,7 +874,6 @@ class BridgeConverterApp:
         self.root.after(0, lambda: self._status_var.set("모든 항목 처리 완료"))
 
     def _process_item(self, item: QueueItem):
-        """대기열 항목 처리 — 동기 실행 (worker thread 내부)."""
         self._files = item.files
         self.root.after(0, lambda: self._candidate_id.set(item.candidate_id))
         cid = item.candidate_id
@@ -948,14 +888,12 @@ class BridgeConverterApp:
             self._start_blink(STEP_ACTIONS[step_idx])
             self.root.after(0, lambda: self._set_file_status(None, "처리중..."))
 
-            # 각 단계 직접 실행 (thread 내부에서 동기 호출)
             if step_idx == 1:
                 self._exec_face_crop()
             elif step_idx == 2:
                 self._exec_pii()
             elif step_idx == 3:
                 self._exec_build_pdf(cid)
-            # step 0 (파일 확인), step 4 (저장): 별도 로직 없음
 
             self.root.after(0, lambda si=step_idx: self._set_file_status(None, "✓ 완료"))
             time.sleep(0.4)
@@ -970,22 +908,20 @@ class BridgeConverterApp:
     def _refresh_queue_tv(self):
         for row in self._queue_tv.get_children():
             self._queue_tv.delete(row)
-        s_icons = {"대기": "대기", "처리중": "처리중", "완료": "완료", "오류": "오류"}
-        tag_map  = {"대기": "wait", "처리중": "active", "완료": "done", "오류": "error"}
+        tag_map = {"대기": "wait", "처리중": "active", "완료": "done", "오류": "error"}
         for i, item in enumerate(self._queue, 1):
             tag = tag_map.get(item.status, "wait")
             self._queue_tv.insert("", "end",
                                    values=(i, item.candidate_id,
                                            len(item.files),
-                                           s_icons.get(item.status, item.status)),
+                                           item.status),
                                    tags=(tag,))
 
     # ══════════════════════════════════════════════════════════════════
-    # 애니메이션 (깜박 점)
+    # 애니메이션
     # ══════════════════════════════════════════════════════════════════
 
     def _start_blink(self, text: str):
-        """초록 깜박 — 정상 처리 중."""
         self._stop_blink()
         self._blink_base  = text
         self._blink_dots  = 0
@@ -993,7 +929,6 @@ class BridgeConverterApp:
         self._do_blink()
 
     def _start_blink_error(self, text: str):
-        """빨간 깜박 — 오류 발생."""
         self._stop_blink()
         self._blink_base  = text
         self._blink_dots  = 0
@@ -1001,8 +936,8 @@ class BridgeConverterApp:
         self._do_blink()
 
     def _do_blink(self):
-        dots = "." * (self._blink_dots % 4)
-        icon = "✖" if self._blink_error else "⚙"
+        dots  = "." * (self._blink_dots % 4)
+        icon  = "✖" if self._blink_error else "⚙"
         self._status_var.set(f"{icon}  {self._blink_base}{dots}")
         self._blink_dots += 1
         color = C_DANGER if self._blink_error else C_WARN
@@ -1093,13 +1028,10 @@ class BridgeConverterApp:
     _API_KEY_FILE = BASE_DIR / ".api_key"
 
     def _get_api_key_status(self) -> str:
-        """API 키 상태: '✓' 또는 '미설정'."""
         from .pii_engine import load_api_key
         return "✓" if load_api_key() else "미설정"
 
     def _open_api_key_dialog(self) -> None:
-        """Anthropic API 키 입력/수정 다이얼로그."""
-        from tkinter import simpledialog
         from .pii_engine import load_api_key
 
         current = load_api_key() or ""
@@ -1137,14 +1069,18 @@ class BridgeConverterApp:
                 messagebox.showwarning("입력 오류", "API 키를 입력하세요.", parent=dlg)
                 return
             if not key.startswith("sk-ant-"):
-                if not messagebox.askyesno("확인", "일반적인 Anthropic 키는 'sk-ant-'로 시작합니다.\n그래도 저장하시겠습니까?", parent=dlg):
+                if not messagebox.askyesno("확인",
+                                            "일반적인 Anthropic 키는 'sk-ant-'로 시작합니다.\n그래도 저장하시겠습니까?",
+                                            parent=dlg):
                     return
             self._API_KEY_FILE.write_text(key, encoding="utf-8")
             status = self._get_api_key_status()
             self._api_btn.config(
                 text=f"  Claude API  {status}",
                 bg=C_HOVER if status == "✓" else C_QERR)
-            messagebox.showinfo("저장 완료", f"API 키가 저장되었습니다.\n경로: {self._API_KEY_FILE}", parent=dlg)
+            messagebox.showinfo("저장 완료",
+                                f"API 키가 저장되었습니다.\n경로: {self._API_KEY_FILE}",
+                                parent=dlg)
             dlg.destroy()
 
         def _clear():
@@ -1182,7 +1118,6 @@ class BridgeConverterApp:
             self._simple_sheet_dialog()
 
     def _simple_sheet_dialog(self):
-        """연결 설정 다이얼로그 — Bridge API (기본) + Google Sheets (폴백)."""
         dlg = tk.Toplevel(self.root)
         dlg.title("데이터 소스 연결 설정")
         dlg.geometry("480x420")
@@ -1199,7 +1134,6 @@ class BridgeConverterApp:
             dlg.destroy()
             return
 
-        # 현재 저장값 로드
         def _get(key, default=""):
             try:
                 return _kr.get_password("BRIDGE_RC_CONFIG_V1", key) or default
@@ -1208,7 +1142,6 @@ class BridgeConverterApp:
 
         source_var = tk.StringVar(value=_get("source", "bridge"))
 
-        # ── 소스 선택 ──────────────────────────────────────────────
         src_frame = tk.LabelFrame(dlg, text="데이터 소스", font=(F, 11, "bold"),
                                    bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
         src_frame.pack(fill="x", padx=18, pady=(14, 6))
@@ -1219,29 +1152,22 @@ class BridgeConverterApp:
                            font=(F, 11), activebackground=C_HOVER
                            ).pack(anchor="w")
 
-        # ── Bridge API ─────────────────────────────────────────────
         ba_frame = tk.LabelFrame(dlg, text="Bridge API 설정", font=(F, 11, "bold"),
                                   bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
         ba_frame.pack(fill="x", padx=18, pady=4)
-
-        tk.Label(ba_frame, text="관리자 비밀번호:", font=(F, 10),
-                 bg=C_SIDE).pack(anchor="w")
+        tk.Label(ba_frame, text="관리자 비밀번호:", font=(F, 10), bg=C_SIDE).pack(anchor="w")
         pw_var = tk.StringVar()
         tk.Entry(ba_frame, textvariable=pw_var, font=(F, 11), show="*", width=38
                  ).pack(fill="x", pady=(0, 4))
         tk.Label(ba_frame,
                  text="API URL은 운영 도메인(api.bridgejob.co.kr)이 자동 적용됩니다.",
-                 font=(F, 9), fg=C_SUB, bg=C_SIDE
-                 ).pack(anchor="w")
+                 font=(F, 9), fg=C_SUB, bg=C_SIDE).pack(anchor="w")
 
-        # ── Google Sheets ──────────────────────────────────────────
         gs_frame = tk.LabelFrame(dlg, text="Google Sheets 설정 (폴백용)",
                                   font=(F, 11, "bold"),
                                   bg=C_SIDE, fg=C_TEXT, padx=12, pady=6)
         gs_frame.pack(fill="x", padx=18, pady=4)
-
-        tk.Label(gs_frame, text="Spreadsheet ID:", font=(F, 10),
-                 bg=C_SIDE).pack(anchor="w")
+        tk.Label(gs_frame, text="Spreadsheet ID:", font=(F, 10), bg=C_SIDE).pack(anchor="w")
         sid_var = tk.StringVar(value=_get("sheet_id"))
         tk.Entry(gs_frame, textvariable=sid_var, font=(F, 11), width=38
                  ).pack(fill="x", pady=(0, 4))
@@ -1256,11 +1182,10 @@ class BridgeConverterApp:
             pw     = pw_var.get().strip()
             sid    = sid_var.get().strip()
             key    = key_var.get().strip()
-
             if source == "bridge" and not pw:
                 messagebox.showwarning("입력 필요", "관리자 비밀번호를 입력하세요.", parent=dlg)
                 return
-            if source == "sheets" and (not sid):
+            if source == "sheets" and not sid:
                 messagebox.showwarning("입력 필요", "Spreadsheet ID를 입력하세요.", parent=dlg)
                 return
             try:
@@ -1293,76 +1218,53 @@ class BridgeConverterApp:
             self.root.after(0, lambda: self._sheet_label.config(text=text, fg=color))
         threading.Thread(target=_check, daemon=True).start()
 
-    def _toggle_inbox_watcher(self):
-        """인박스 폴더 감시 시작/중지 토글."""
-        if not self._watcher_active:
-            try:
-                from .file_classifier import start_watcher
-                self._watcher_observer = start_watcher(
-                    on_duplicate_fn=lambda num, old, new: self.root.after(
-                        0, lambda: self.show_duplicate_alert(num, old, new)),
-                    on_reapply_fn=lambda num, old: self.root.after(
-                        0, lambda: self.show_reapply_alert(num, old)),
-                )
-                self._watcher_active = True
-                self._watcher_btn.config(
-                    text="● 감시중 ON", bg=C_PRI, fg="white")
-                self._status_var.set(f"✓ 인박스 감시 시작 — {INBOX_DIR}")
-                self._status_lbl.config(fg=C_PRI)
-            except Exception as e:
-                messagebox.showerror("감시 오류", f"인박스 감시 시작 실패:\n{e}")
-        else:
-            try:
-                from .file_classifier import stop_watcher
-                stop_watcher()
-            except Exception:
-                pass
-            self._watcher_active = False
-            self._watcher_observer = None
-            self._watcher_btn.config(
-                text="● 인박스 감시", bg=C_BORDER, fg=C_TEXT)
-            self._status_var.set("인박스 감시 중지됨")
-            self._status_lbl.config(fg=C_SUB)
-
     # ══════════════════════════════════════════════════════════════════
     # 시트 / 미처리 목록
     # ══════════════════════════════════════════════════════════════════
 
     def _load_from_sheet(self):
+        """강사번호로 시트 조회 — daemon thread에서 실행."""
         cid = self._candidate_id.get().strip()
         if not cid:
             return
-        try:
-            from .sheets_connector import get_candidate_info
-            info = get_candidate_info(cid)
-            if info:
-                self._nationality = info.get("nationality", "")
-                self._gender      = info.get("gender", "")
-                self._birth_year  = info.get("birth_year", "")
-                self._meta_label.config(
-                    text=(f"국적: {self._nationality or '?'}  "
-                          f"성별: {self._gender or '?'}  "
-                          f"생년: {self._birth_year or '?'}"))
-                self._update_fname_preview(info)
-            else:
-                self._meta_label.config(text="시트 미등록")
-        except Exception as e:
-            self._meta_label.config(text=f"조회 실패: {e}")
+
+        def _fetch():
+            try:
+                from .sheets_connector import get_candidate_info
+                info = get_candidate_info(cid)
+                if info:
+                    nat = info.get("nationality", "")
+                    gen = info.get("gender", "")
+                    yr  = info.get("birth_year", "")
+                    def _apply(i=info, n=nat, g=gen, y=yr):
+                        self._nationality = n
+                        self._gender      = g
+                        self._birth_year  = y
+                        self._meta_label.config(
+                            text=(f"국적: {n or '?'}  "
+                                  f"성별: {g or '?'}  "
+                                  f"생년: {y or '?'}"))
+                        self._update_fname_preview(i)
+                    self.root.after(0, _apply)
+                else:
+                    self.root.after(0, lambda: self._meta_label.config(text="시트 미등록"))
+            except Exception as e:
+                _e = str(e)
+                self.root.after(0, lambda: self._meta_label.config(text=f"조회 실패: {_e}"))
+
+        threading.Thread(target=_fetch, daemon=True).start()
 
     def _on_id_change(self, *args):
-        """강사번호 입력 시 0.8초 후 시트 자동 조회."""
         cid = self._candidate_id.get().strip()
         if self._id_load_timer:
             self.root.after_cancel(self._id_load_timer)
             self._id_load_timer = None
-        # 4자리 이상 + 시트 연결된 경우에만 자동 조회
         if len(cid) >= 4 and self._sheet_connected:
             self._id_load_timer = self.root.after(800, self._load_from_sheet)
-        # 번호 바뀌면 기존 메타 초기화
         if len(cid) != len(self._candidate_id.get().strip()):
             self._nationality = ""
-            self._gender = ""
-            self._birth_year = ""
+            self._gender      = ""
+            self._birth_year  = ""
 
     def _refresh_unproc(self):
         for row in self._unproc_tv.get_children():
@@ -1385,7 +1287,7 @@ class BridgeConverterApp:
             return
         children = self._unproc_tv.get_children(item)
         if children:
-            return  # 이미 자식 있음
+            return
         vals = self._unproc_tv.item(item, "values")
         err = vals[2] if len(vals) > 2 else ""
         if err and err != "정상":
@@ -1414,7 +1316,6 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _run_current_step(self):
-        """단계 실행 — 백그라운드 스레드 + 깜박 애니메이션."""
         step = self._current_step
         if step == 0:
             self._set_file_status(None, "확인")
@@ -1428,10 +1329,7 @@ class BridgeConverterApp:
         self._next_btn.config(state="disabled")
         self._prev_btn.config(state="disabled")
 
-        # 로드된 모든 파일을 "처리중..." 으로 표시 (어떤 단계든 진행 중임을 보여줌)
-        ftypes = list(self._files.keys())
         self._set_file_status(None, "처리중...")
-
         self._start_blink(STEP_ACTIONS[step])
         cid = self._candidate_id.get().strip() or "0000"
 
@@ -1446,18 +1344,17 @@ class BridgeConverterApp:
                     self._exec_build_pdf(cid)
             except Exception as e:
                 err = str(e)
-            self.root.after(0, lambda e=err: self._on_step_done(step, ftypes, e))
+            self.root.after(0, lambda e=err: self._on_step_done(step, err=e))
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _on_step_done(self, step: int, ftypes: list, err: str | None):
-        """단계 완료 콜백 — UI 스레드에서 실행."""
+    def _on_step_done(self, step: int, err: str | None):
         self._step_running = False
         self._stop_blink()
         self._next_btn.config(state="normal")
         self._prev_btn.config(state="normal")
 
-        last_step = len(STEPS) - 1  # 마지막 단계 인덱스 (PDF 생성)
+        last_step = len(STEPS) - 1
         if err:
             self._start_blink_error(f"{STEPS[step]} 오류")
             self._set_file_status(None, "✖ 오류")
@@ -1465,34 +1362,31 @@ class BridgeConverterApp:
         else:
             self._set_file_status(None, "✓ 완료")
             if step == last_step:
-                # PDF 생성 완료 = 전체 완료
                 self._status_var.set("✓ PDF 생성 완료")
                 self._status_lbl.config(fg=C_PRI)
-                self._run_save()   # 진행바 꽉 + 블링크
+                self._run_save()
             elif self._mode.get() == "자동" and self._current_step < last_step:
                 self._status_var.set(f"✓ {STEPS[step]} 완료 — 자동 진행 중...")
                 self._status_lbl.config(fg=C_PRI)
                 self.root.after(800, self._next_step)
             else:
-                next_hint = f" — 다음 단계 ▶ 클릭" if self._current_step < last_step else ""
-                self._status_var.set(f"✓ {STEPS[step]} 완료{next_hint}")
+                hint = f" — 다음 단계 ▶ 클릭" if self._current_step < last_step else ""
+                self._status_var.set(f"✓ {STEPS[step]} 완료{hint}")
                 self._status_lbl.config(fg=C_PRI)
 
     def _exec_face_crop(self):
-        """[Thread] 사진 크롭 — self._photo_bytes 에 결과 저장."""
         from .face_crop import crop_face, FaceNotFoundError
         photo = self._files.get("photo")
-        self._photo_from_resume = False  # 매번 초기화
+        self._photo_from_resume = False
 
         if not photo:
-            # 별도 사진 없음 → 이력서 본문 내장 사진 탐색
             resume = self._files.get("resume")
             if resume and resume.suffix.lower() == ".pdf":
                 from .pipeline import _extract_photo_from_pdf
                 data = _extract_photo_from_pdf(resume)
                 if data:
                     self._photo_bytes = data
-                    self._photo_from_resume = True  # 본문 내장 사진
+                    self._photo_from_resume = True
                     self.root.after(0, lambda d=data: self._show_photo_preview(d))
                     self.root.after(0, lambda: (
                         self._status_var.set("ℹ 이력서 내장 사진 감지 — 커버에 사진 생략, ID만 표시"),
@@ -1502,7 +1396,6 @@ class BridgeConverterApp:
         try:
             data = crop_face(photo)
         except FaceNotFoundError:
-            # 얼굴 미감지 → 원본 사진 그대로 사용 (파이프라인 계속)
             data = photo.read_bytes()
             self.root.after(0, lambda: (
                 self._status_var.set("⚠ 얼굴 미감지 — 원본 사진 사용"),
@@ -1513,16 +1406,13 @@ class BridgeConverterApp:
         self.root.after(0, lambda d=data: self._show_photo_preview(d))
 
     def _show_photo_preview(self, data: bytes):
-        """우측 패널 크기에 맞춰 미리보기 이미지 동적 스케일."""
-        self._preview_lbl.update_idletasks()
+        """우측 패널 사진 미리보기 — update_idletasks 없음."""
         w = self._preview_lbl.winfo_width()
         h = self._preview_lbl.winfo_height()
-        # 최소 보장 크기
         if w < 80:
             w = 280
         if h < 80:
             h = 380
-        # 3:4 비율 유지 (세로가 더 큰 경우 우선)
         target_w = min(w - 8, int((h - 8) * 3 / 4))
         target_h = int(target_w * 4 / 3)
         img    = Image.open(io.BytesIO(data)).resize(
@@ -1532,7 +1422,6 @@ class BridgeConverterApp:
         self._preview_lbl.image = tk_img
 
     def _exec_pii(self):
-        """[Thread] PII 탐지."""
         from .pii_engine import analyze_pii, load_api_key
         from .pipeline import _extract_text
         api_key  = load_api_key()
@@ -1572,18 +1461,9 @@ class BridgeConverterApp:
             self._toggle_pii()
 
     def _exec_build_pdf(self, cid: str):
-        """[Thread] PDF 생성 — 원본 파일 보존 + PII 인라인 제거.
-
-        핵심 원칙:
-          - 새 이력서 생성 X → 제출된 원본 파일을 그대로 유지
-          - cover → resume → rec 순서로 병합
-          - PyMuPDF apply_redactions(fill=None) = 텍스트 스트림 완전 삭제 (흰박스 아님)
-          - 이력서 첫 페이지 상단: 이름 헤더 완전 삭제 + 강사 번호만 삽입
-        """
-        import fitz  # PyMuPDF
+        import fitz
         from .pdf_builder import build_filename
 
-        # ── 1. meta 정보: 인스턴스 변수 → 시트 조회 순 ──────────────
         nat = self._nationality or ""
         gen = self._gender      or ""
         yr  = self._birth_year  or ""
@@ -1603,12 +1483,10 @@ class BridgeConverterApp:
             except Exception:
                 pass
 
-        # ── 2. 출력 파일명 결정 ──────────────────────────────────────
         fname    = build_filename(cid, nat, gen, yr)
         out_path = self._output_dir / fname
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        # ── 3. Claude API PII 목록 (있으면 보조로 사용) ─────────────
         api_pii: list[str] = []
         if self._pii_result:
             api_pii = [
@@ -1617,10 +1495,8 @@ class BridgeConverterApp:
                 if m.original_value and len(m.original_value.strip()) >= 3
             ]
 
-        # ── 4. PDF 조립 (원본 파일 순서대로 PII 제거 후 병합) ────────
         merged = fitz.open()
 
-        # ── 5. 원본 파일 보존 + PII 직접 제거 ───────────────────────
         for ftype in ["cover", "resume", "rec"]:
             p = self._files.get(ftype)
             if not p or not p.exists():
@@ -1630,33 +1506,25 @@ class BridgeConverterApp:
                 is_resume = (ftype == "resume")
                 src_doc = fitz.open(str(p))
                 for page_idx, page in enumerate(src_doc):
-                    # ① 섹션 전체 삭제 (contact / references / 상단 헤더)
                     _redact_pii_sections_pdf(page, is_first_page=(page_idx == 0))
-                    # ② 개별 PII 값 삭제 (이메일·전화 등 잔류 텍스트)
                     page_text = page.get_text()
                     local_pii = _regex_pii(page_text)
                     all_pii = list(dict.fromkeys(api_pii + local_pii))
                     _redact_pdf_page(page, all_pii)
-                    # ③ 이력서 첫 페이지: 강사 번호만 상단 삽입
                     if is_resume and page_idx == 0:
                         _overlay_id_on_resume_page(page, cid, self._photo_bytes)
                 merged.insert_pdf(src_doc)
                 src_doc.close()
 
             elif p.suffix.lower() in (".docx", ".doc"):
-                # DOCX: run-level inline PII 교체 (포맷 보존) → PDF 변환
                 try:
                     from docx import Document as DocxDoc
                     from .pdf_builder import text_to_pdf_bytes
                     doc = DocxDoc(str(p))
 
-                    # ① 섹션 전체 삭제 (contact / references / 상단 이름 헤더)
                     _clear_pii_sections_docx(doc)
 
-                    # ② 전체 문서 텍스트에서 개별 PII 목록 수집
-                    full_text = "\n".join(
-                        p2.text for p2 in doc.paragraphs
-                    )
+                    full_text = "\n".join(p2.text for p2 in doc.paragraphs)
                     for tbl in doc.tables:
                         for row in tbl.rows:
                             for cell in row.cells:
@@ -1669,13 +1537,11 @@ class BridgeConverterApp:
                             t = t.replace(pii, "")
                         return t
 
-                    # 1) 단락 run-level 교체
                     for para in doc.paragraphs:
                         for run in para.runs:
                             if run.text:
                                 run.text = _clean_run_text(run.text)
 
-                    # 2) 테이블 셀 run-level 교체 (기존 누락 부분)
                     for tbl in doc.tables:
                         for row in tbl.rows:
                             for cell in row.cells:
@@ -1684,7 +1550,6 @@ class BridgeConverterApp:
                                         if run.text:
                                             run.text = _clean_run_text(run.text)
 
-                    # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — docx2pdf/Word COM 사용)
                     import tempfile as _tf
                     import os as _os
                     _tmp = _tf.NamedTemporaryFile(suffix=".docx", delete=False)
@@ -1713,9 +1578,7 @@ class BridgeConverterApp:
                                     _cparas.append("  |  ".join(_rc))
                         docx_pdf_bytes = text_to_pdf_bytes("\n".join(_cparas), ftype.upper())
                     src_doc = fitz.open("pdf", docx_pdf_bytes)
-                    # 이력서 첫 페이지: 잔류 PII 삭제 + 강사 번호/사진 오버레이
-                    _is_docx_resume = (ftype == "resume")
-                    if _is_docx_resume and len(src_doc) > 0:
+                    if ftype == "resume" and len(src_doc) > 0:
                         _redact_pii_sections_pdf(src_doc[0], is_first_page=True)
                         _redact_pdf_page(src_doc[0], all_pii)
                         _overlay_id_on_resume_page(src_doc[0], cid, self._photo_bytes)
@@ -1724,9 +1587,7 @@ class BridgeConverterApp:
                 except Exception as e:
                     log.warning(f"DOCX 처리 실패: {e}")
 
-        # ── 6. 저장 ─────────────────────────────────────────────────
-        merged.save(str(out_path), deflate=True,
-                    garbage=4, clean=True)
+        merged.save(str(out_path), deflate=True, garbage=4, clean=True)
         size = out_path.stat().st_size
         merged.close()
 
@@ -1744,20 +1605,15 @@ class BridgeConverterApp:
             self._meta_info_labels["pages"].config(text=str(pg) if pg else "—"),
             self._fname_lbl.config(text=o.name),
         ))
-        # 생성된 PDF 첫 페이지 미리보기
         self._render_pdf_page_preview(out_path)
 
     def _run_save(self):
-        """저장 완료 상태: 진행바 꽉 채우기 + 블링크."""
-        # 진행바 꽉 채우기
         self._progress.config(maximum=len(STEPS))
         self._progress["value"] = len(STEPS)
-        # 블링크 시작
         self._save_done_blink_state = True
         self._do_save_done_blink()
 
     def _do_save_done_blink(self):
-        """저장 완료 라벨 초록 블링크."""
         if hasattr(self, "_save_done_blink_state") and self._save_done_blink_state:
             cur = self._save_done_lbl.cget("text")
             if "✓" in cur:
@@ -1780,25 +1636,22 @@ class BridgeConverterApp:
         self._update_step_ui()
 
     # ══════════════════════════════════════════════════════════════════
-    # PDF 페이지 미리보기 렌더링 (PyMuPDF)
+    # PDF 미리보기 (daemon thread 전용)
     # ══════════════════════════════════════════════════════════════════
 
     def _render_pdf_page_preview(self, pdf_path: Path):
-        """[Thread 안전] PyMuPDF로 PDF 첫 페이지 → 우측 패널 표시."""
+        """PyMuPDF로 PDF 첫 페이지 렌더 — update_idletasks 없음."""
         try:
-            import fitz  # PyMuPDF
+            import fitz
             doc = fitz.open(str(pdf_path))
             if len(doc) == 0:
                 doc.close()
                 return
             page = doc[0]
-            # A4 비율 (210:297 ≈ 0.707) 로 렌더
-            self._preview_lbl.update_idletasks()
             pw = self._preview_lbl.winfo_width()
             ph = self._preview_lbl.winfo_height()
             if pw < 80: pw = 300
             if ph < 80: ph = 420
-            # 패널 크기에 맞게 스케일 결정
             scale_x = pw / page.rect.width
             scale_y = ph / page.rect.height
             scale = min(scale_x, scale_y) * 0.95
@@ -1811,7 +1664,6 @@ class BridgeConverterApp:
             log.warning(f"PDF 미리보기 실패: {e}")
 
     def _show_doc_preview(self, data: bytes):
-        """A4 비율 문서 미리보기 표시."""
         try:
             img    = Image.open(io.BytesIO(data))
             tk_img = ImageTk.PhotoImage(img)
@@ -1825,22 +1677,18 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _load_output_config(self) -> Path:
-        """config.json에서 output_dir 읽기. 없으면 기본 output/ 폴더."""
         try:
             if CONFIG_PATH.exists():
                 import json
                 cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
                 d = cfg.get("output_dir")
                 if d:
-                    p = Path(d)
-                    if p.exists() or True:  # 없어도 일단 사용
-                        return p
+                    return Path(d)
         except Exception:
             pass
         return OUTPUT_DIR
 
     def _save_output_config(self):
-        """output_dir을 config.json에 저장."""
         try:
             import json
             cfg = {}
@@ -1856,7 +1704,6 @@ class BridgeConverterApp:
             log.warning(f"config 저장 실패: {e}")
 
     def _pick_output_dir(self):
-        """폴더 선택 다이얼로그."""
         d = filedialog.askdirectory(
             title="저장 폴더 선택",
             initialdir=str(self._output_dir))
@@ -1867,16 +1714,13 @@ class BridgeConverterApp:
             self._save_output_config()
 
     def _open_output_dir(self):
-        """저장 폴더를 탐색기에서 열기."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
         os.startfile(str(self._output_dir))
 
     def _open_last_output(self):
-        """최근 생성된 파일 열기."""
         if self._last_output_path and self._last_output_path.exists():
             os.startfile(str(self._last_output_path))
         else:
-            # 폴더의 가장 최근 PDF 열기
             pdfs = sorted(self._output_dir.glob("*.pdf"),
                           key=lambda p: p.stat().st_mtime, reverse=True)
             if pdfs:
@@ -1900,7 +1744,6 @@ class BridgeConverterApp:
                 dot.config(text="○", fg=C_BORDER)
                 lbl.config(fg=C_TEXT, font=(F, 11))
         self._progress["value"] = self._current_step
-        # 처음으로 돌아가면 블링크 중지 + 초기화
         if self._current_step == 0:
             self._stop_save_done_blink()
             self._save_done_lbl.config(text="", bg=C_SIDE)
@@ -1941,7 +1784,7 @@ class BridgeConverterApp:
         self._focus_btn.config(state=state)
 
     # ══════════════════════════════════════════════════════════════════
-    # 알림 카드 (외부 호출)
+    # 알림 카드
     # ══════════════════════════════════════════════════════════════════
 
     def show_duplicate_alert(self, candidate_id: str, old_path, new_path):
@@ -1989,59 +1832,35 @@ class BridgeConverterApp:
         self.root.mainloop()
 
 
-# ── 진입점 ─────────────────────────────────────────────────────────────────
-def _regex_pii(text: str) -> list[str]:
-    """PDF 페이지 텍스트에서 정규식으로 PII 직접 추출 (Claude API 불필요).
+# ── 모듈 수준 헬퍼 함수 ───────────────────────────────────────────────────
 
-    추출 대상:
-      - 이메일 주소
-      - 전화번호 (한국 010, 국제 +82, 일반 국제)
-      - 주소 (한국식)
-      - SNS/LinkedIn URL, 카카오 ID
-      - 한국 학원/학교명
-      - 영문 University/College + Korea 패턴
-    """
+def _regex_pii(text: str) -> list[str]:
     import re
     found: list[str] = []
 
-    # ── 이메일 ──────────────────────────────────────────────────────
     found += re.findall(
         r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', text)
-
-    # ── 전화번호 — 한국 (010-xxxx-xxxx, +82-10-xxxx-xxxx 등) ───────
     found += re.findall(
         r'(?:\+82|0082)[\s.\-]?1[0-9][\s.\-]?\d{3,4}[\s.\-]?\d{4}', text)
     found += re.findall(
-        r'\+\d{10,15}', text)           # +821029006080 같은 붙여쓰기
+        r'\+\d{10,15}', text)
     found += re.findall(
         r'0(?:10|11|16|17|18|19)[\s.\-]?\d{3,4}[\s.\-]?\d{4}', text)
-    # 국제 전화 (일반 형식)
     found += re.findall(
         r'\+\d{1,3}[\s.\-]\(?\d{1,4}\)?[\s.\-]\d{3,4}[\s.\-]\d{3,4}', text)
-
-    # ── 한국 주소 ────────────────────────────────────────────────────
     found += re.findall(
         r'(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)'
         r'[가-힣\s\d,.\-]{2,40}'
         r'(?:시|구|동|로|길|번길|번지|읍|면|리)(?:\s*\d+)?', text)
-
-    # ── SNS / 링크드인 ────────────────────────────────────────────────
     found += re.findall(
         r'(?:instagram\.com|linkedin\.com/in|facebook\.com|twitter\.com|t\.me)'
         r'[/\s]?\S{2,50}', text, re.IGNORECASE)
-    # 카카오: 한글(카카오/카톡) + 영문(kakao/kakaotalk) + ID 접미사 포함
     found += re.findall(
         r'(?:카카오|카톡|kakao(?:talk)?(?:\s*(?:id|아이디))?)[:\s]+\S{2,30}',
         text, re.IGNORECASE)
-
-    # ── 한국 학원/학교명 (한글 접미사) ──────────────────────────────
     found += re.findall(
         r'[A-Za-z가-힣]{2,30}'
         r'(?:어학원|학원|학교|유치원|교육원|교습소|영어학원|어린이집)', text)
-
-    # ── 영문 교육기관 + 한국 도시/국가 패턴 (줄바꿈 금지) ──────────
-    # 예: "FiE Korea University | Jeonju | South Korea"
-    # 예: "Avalon Langcon Education | Cheonan | South Korea"
     found += re.findall(
         r'[A-Z][A-Za-z \t&]{2,35}'
         r'(?:University|College|Institute|Academy|School|Education|Langcon|Learning)'
@@ -2049,7 +1868,6 @@ def _regex_pii(text: str) -> list[str]:
         r'(?:[ \t]*\|[ \t]*[A-Za-z][A-Za-z \t]{2,25})?)?',
         text)
 
-    # ── 정리: 공백 트림, 짧은 것 제거, 중복 제거 ────────────────────
     cleaned = []
     seen: set[str] = set()
     for item in found:
@@ -2061,26 +1879,17 @@ def _regex_pii(text: str) -> list[str]:
 
 
 def _pii_search_variants(text: str) -> list[str]:
-    """PII 검색용 변형 목록 생성.
-
-    전화번호가 PDF에 "+82 10 2900 6080" 또는 "+821029006080" 등으로
-    저장될 수 있으므로 여러 형식을 시도.
-    파이프(|) 구분자 포함 시 각 파트도 검색.
-    """
     import re
     variants: set[str] = {text}
 
-    # 구두점 제거 버전
     stripped = re.sub(r'[\s\-\.\(\)]', '', text)
     if stripped and stripped != text and len(stripped) >= 5:
         variants.add(stripped)
 
-    # 대시→공백 정규화 버전
     spaced = re.sub(r'[\-\.]', ' ', text).strip()
     if spaced != text and len(spaced) >= 5:
         variants.add(spaced)
 
-    # 파이프 구분자: 각 파트 별도 검색 (학교명 | 도시 | 국가 형식)
     if '|' in text:
         for part in text.split('|'):
             p = part.strip()
@@ -2091,12 +1900,6 @@ def _pii_search_variants(text: str) -> list[str]:
 
 
 def _redact_pdf_page(page, pii_list: list[str]) -> None:
-    """PDF 페이지에서 PII 텍스트를 완전 삭제.
-
-    PyMuPDF add_redact_annot + apply_redactions():
-      - 텍스트 내용을 PDF 콘텐츠 스트림에서 실제 제거 (단순 오버레이 아님)
-      - fill=None = 투명 (흰색 박스 없음, 빈 공간으로 대체)
-    """
     if not pii_list:
         return
     annotated = False
@@ -2115,8 +1918,6 @@ def _redact_pdf_page(page, pii_list: list[str]) -> None:
         page.apply_redactions()
 
 
-# ── PII 섹션 헤더 패턴 ────────────────────────────────────────────────────────
-# 삭제 대상 섹션: contact / references / personal details 등
 _RE_PII_SECTION = re.compile(
     r'^\s*(?:'
     r'contact(?:\s+(?:information|details?|info|us|me|number|numbers?))?'
@@ -2131,7 +1932,6 @@ _RE_PII_SECTION = re.compile(
     re.IGNORECASE,
 )
 
-# 콘텐츠 섹션 (이 섹션이 시작되면 삭제 종료)
 _RE_CONTENT_SECTION = re.compile(
     r'^\s*(?:'
     r'education(?:al)?(?:\s+background)?|academic(?:\s+background)?'
@@ -2152,28 +1952,16 @@ _RE_CONTENT_SECTION = re.compile(
 
 
 def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
-    """PDF 페이지에서 PII 섹션 전체를 완전 삭제.
-
-    A) contact / references / personal details 섹션 헤더 탐지
-       → 다음 콘텐츠 섹션 직전까지 삭제
-       → 사이드바 레이아웃 자동 감지 (x < 40%): 사이드바 열만 삭제,
-         메인 열 콘텐츠(Experience 등) 보호
-    B) 첫 페이지 최상단 이름+연락처 헤더
-       → 첫 콘텐츠 섹션 직전까지 전체 너비 삭제 (최대 50%)
-    """
     import fitz
 
     raw_blocks = page.get_text("blocks")
     if not raw_blocks:
         return
-    blocks = sorted(raw_blocks, key=lambda b: b[1])  # y0 오름차순
+    blocks = sorted(raw_blocks, key=lambda b: b[1])
     page_h = page.rect.height
     page_w = page.rect.width
-
-    # 사이드바 임계값: 블록 x1 < 40% = 사이드바 열
     SIDEBAR_X = page_w * 0.40
 
-    # ── 블록 분류: (x0, y0, x1, y1, cls, in_sidebar) ─────────────────────
     classified: list[tuple[float, float, float, float, str, bool]] = []
     for b in blocks:
         x0, y0, x1, y1, text, *_ = b
@@ -2188,32 +1976,30 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
         else:
             classified.append((x0, y0, x1, y1, 'body', in_sidebar))
 
-    regions: list[tuple[float, float, float, float]] = []  # (rx0, ry0, rx1, ry1)
-
-    # ── A: PII 섹션 → 같은 열의 다음 콘텐츠 섹션까지 ────────────────────
+    regions: list[tuple[float, float, float, float]] = []
     n = len(classified)
+
     for i, (x0, y0, x1, y1, cls, in_sidebar) in enumerate(classified):
         if cls != 'pii':
             continue
-
         r_top = max(0.0, y0 - 8)
-        r_bot = min(page_h, y1 + page_h * 0.6)  # 기본 fallback
+        r_bot = min(page_h, y1 + page_h * 0.6)
 
         if in_sidebar:
-            # 사이드바 PII: 사이드바 열(x=0~SIDEBAR_X)만 삭제
             rx0, rx1 = 0.0, SIDEBAR_X
             for j in range(i + 1, n):
-                ny0, ny1, ncls, nside = classified[j][1], classified[j][3], classified[j][4], classified[j][5]
+                ny0, ny1, ncls, nside = (classified[j][1], classified[j][3],
+                                          classified[j][4], classified[j][5])
                 if nside and ncls == 'content':
                     r_bot = ny0 - 4
                     break
                 elif nside and ncls == 'pii':
-                    r_bot = ny1  # 연속 PII 섹션 → 아래로 확장
+                    r_bot = ny1
         else:
-            # 메인 열 PII (Reference 등): 전체 너비 삭제
             rx0, rx1 = 0.0, page_w
             for j in range(i + 1, n):
-                ny0, ny1, ncls, nside = classified[j][1], classified[j][3], classified[j][4], classified[j][5]
+                ny0, ny1, ncls, nside = (classified[j][1], classified[j][3],
+                                          classified[j][4], classified[j][5])
                 if (not nside) and ncls == 'content':
                     r_bot = ny0 - 4
                     break
@@ -2222,7 +2008,6 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
 
         regions.append((rx0, r_top, rx1, r_bot))
 
-    # ── B: 첫 페이지 최상단 이름+연락처 헤더 ────────────────────────────
     if is_first_page:
         first_content_y: float | None = None
         for x0, y0, x1, y1, cls, in_sidebar in classified:
@@ -2234,7 +2019,6 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
             if cap > 10:
                 regions.append((0.0, 0.0, page_w, cap))
 
-    # ── 적용 (fill=None = 스트림 완전 삭제) ─────────────────────────────
     for rx0, r_top, rx1, r_bot in regions:
         if r_bot > r_top:
             rect = fitz.Rect(rx0, r_top, rx1, r_bot)
@@ -2246,18 +2030,8 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
 def _overlay_id_on_resume_page(
     page, candidate_id: str, photo_bytes: bytes | None = None
 ) -> None:
-    """이력서 첫 페이지 상단에 강사 번호(좌) + 증명사진(우) 삽입.
-
-    _redact_pii_sections_pdf(is_first_page=True)가 이미 상단 이름 헤더를
-    스트림에서 완전 삭제한 뒤, 그 자리에 번호와 사진을 삽입.
-
-    배치:
-      좌상단: 번호 (72pt Helvetica-Bold, 검정)
-      우상단: 증명사진 (130×165pt)
-    """
     import fitz
     page_w = page.rect.width
-    # 강사 번호 — 좌상단 72pt
     try:
         page.insert_text(
             (20, 85),
@@ -2269,7 +2043,6 @@ def _overlay_id_on_resume_page(
         )
     except Exception as e:
         log.warning(f"ID 오버레이 실패: {e}")
-    # 증명사진 — 우상단
     if photo_bytes:
         try:
             photo_rect = fitz.Rect(page_w - 150, 10, page_w - 20, 175)
@@ -2279,17 +2052,11 @@ def _overlay_id_on_resume_page(
 
 
 def _clear_pii_sections_docx(doc) -> None:
-    """DOCX 문서에서 PII 섹션 전체를 run-level로 삭제.
-
-    A) contact / references / personal details 섹션 → 다음 콘텐츠 섹션까지
-    B) 첫 콘텐츠 섹션 이전의 최상단 이름+연락처 헤더 전체
-    """
     paras = list(doc.paragraphs)
     n = len(paras)
     if n == 0:
         return
 
-    # 단락 분류
     flags: list[str] = []
     for para in paras:
         t = para.text.strip()
@@ -2302,10 +2069,8 @@ def _clear_pii_sections_docx(doc) -> None:
         else:
             flags.append('body')
 
-    # 삭제할 인덱스 수집
     kill: set[int] = set()
 
-    # ── A: PII 섹션 → 다음 콘텐츠 섹션까지 ─────────────────────────────
     in_pii = False
     for i, f in enumerate(flags):
         if f == 'pii':
@@ -2315,26 +2080,20 @@ def _clear_pii_sections_docx(doc) -> None:
         if in_pii:
             kill.add(i)
 
-    # ── B: 첫 콘텐츠 섹션 이전 최상단 헤더 전체 ─────────────────────────
     first_content = next((i for i, f in enumerate(flags) if f == 'content'), None)
     if first_content is not None and first_content > 0:
         for i in range(first_content):
             kill.add(i)
 
-    # ── run 텍스트 제거 ───────────────────────────────────────────────────
     for i in kill:
         for run in paras[i].runs:
             run.text = ''
 
-    # ── 테이블도 동일 처리: 테이블 전체가 최상단 헤더 영역에 있으면 제거 ──
-    # (간단 처리: 첫 콘텐츠 단락 인덱스 기준으로 테이블은 별도 판별 불가
-    #  → 테이블 내 PII 섹션 헤더 셀 탐지로 처리)
     for tbl in doc.tables:
         for row in tbl.rows:
             for cell in row.cells:
                 cell_text = cell.text.strip()
                 if _RE_PII_SECTION.match(cell_text):
-                    # 이 셀이 속한 테이블의 모든 셀 제거
                     for r2 in tbl.rows:
                         for c2 in r2.cells:
                             for para in c2.paragraphs:
@@ -2349,47 +2108,26 @@ def _build_id_only_cover_page(
     page_w: float,
     page_h: float,
 ) -> None:
-    """
-    사진이 이력서 본문에 이미 있을 때 사용하는 커버 페이지.
-
-    레이아웃:
-      - 상단 가로선 아래 강사 ID를 좌상단 + 우상단 양쪽에 크게 표시
-      - 중앙 BRIDGE 로고 텍스트 + 안내 문구
-      - 하단 회색 가로선 + 처리일자
-
-    Args:
-        buf:          출력 BytesIO
-        candidate_id: 강사 번호 (예: "3060")
-        page_w, page_h: reportlab A4 기준 (pt)
-    """
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.units import mm
     from reportlab.lib import colors
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
     import datetime
 
     c = rl_canvas.Canvas(buf, pagesize=(page_w, page_h))
 
-    # ── 배경 ──────────────────────────────────────────────────────────
     c.setFillColor(colors.HexColor("#FFFFFF"))
     c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
 
-    # ── 상단 진한 헤더 바 ─────────────────────────────────────────────
     bar_h = 60
     c.setFillColor(colors.HexColor("#1D1D2E"))
     c.rect(0, page_h - bar_h, page_w, bar_h, fill=1, stroke=0)
 
-    # BRIDGE 로고 (헤더 바 안, 가운데)
     c.setFillColor(colors.HexColor("#1D9E75"))
     c.setFont("Helvetica-Bold", 18)
     c.drawCentredString(page_w / 2, page_h - bar_h + 20, "BRIDGE")
 
-    # ── 강사 ID — 좌상단 ──────────────────────────────────────────────
-    # 헤더 바 바로 아래부터 시작
     top_y = page_h - bar_h - 70
 
-    # 좌상단 ID 박스
     c.setFillColor(colors.HexColor("#F0FBF6"))
     c.roundRect(18*mm, top_y, 60*mm, 42, radius=6, fill=1, stroke=0)
     c.setFillColor(colors.HexColor("#1D9E75"))
@@ -2399,7 +2137,6 @@ def _build_id_only_cover_page(
     c.setFont("Helvetica-Bold", 26)
     c.drawString(20*mm, top_y + 8, str(candidate_id))
 
-    # 우상단 ID 박스 (미러)
     rx = page_w - 18*mm - 60*mm
     c.setFillColor(colors.HexColor("#F0FBF6"))
     c.roundRect(rx, top_y, 60*mm, 42, radius=6, fill=1, stroke=0)
@@ -2410,7 +2147,6 @@ def _build_id_only_cover_page(
     c.setFont("Helvetica-Bold", 26)
     c.drawString(rx + 4, top_y + 8, str(candidate_id))
 
-    # ── 중앙 안내 텍스트 ──────────────────────────────────────────────
     mid_y = page_h / 2
     c.setFillColor(colors.HexColor("#5F6368"))
     c.setFont("Helvetica", 11)
@@ -2423,7 +2159,6 @@ def _build_id_only_cover_page(
     c.drawCentredString(page_w / 2, mid_y - 20,
                         "Photo is retained in the original resume pages below.")
 
-    # ── 하단 처리일자 ─────────────────────────────────────────────────
     c.setStrokeColor(colors.HexColor("#E8EAED"))
     c.line(18*mm, 50, page_w - 18*mm, 50)
     today = datetime.date.today().strftime("%Y-%m-%d")
