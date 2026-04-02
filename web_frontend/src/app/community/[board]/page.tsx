@@ -1637,8 +1637,8 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
 // PHOTO-CARDS — Korea (섹션별: 한국 생활 & 문화 / 도시 가이드)
 // ══════════════════════════════════════════════════════════════════════════════
 const KOREA_SECTIONS = [
-  { key: 'living',      label: 'Korea',       labelKr: '한국', emoji: '🇰🇷' },
-  { key: 'city_guides', label: 'City Guides', labelKr: '도시 가이드', emoji: '🗺️' },
+  { key: 'living',      label: 'Korean Culture', labelKr: '한국 문화', emoji: '🇰🇷' },
+  { key: 'city_guides', label: 'City Guides',     labelKr: '도시 가이드', emoji: '🗺️' },
 ] as const
 
 function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
