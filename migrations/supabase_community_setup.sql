@@ -77,3 +77,12 @@ CREATE POLICY "service_full" ON file_uploads
 
 CREATE INDEX IF NOT EXISTS idx_uploads_entity
   ON file_uploads (entity_type, entity_id, is_deleted);
+
+-- ── _seed_log (중복 시딩 방지) ────────────────────────────────────
+-- migrate_community_to_supabase.py 실행 후 자동 기록됨.
+-- 이미 실행된 시드 ID가 있으면 스크립트가 재실행을 거부함.
+CREATE TABLE IF NOT EXISTS _seed_log (
+  id         TEXT PRIMARY KEY,          -- 예: 'community_v1'
+  seeded_at  TIMESTAMPTZ DEFAULT NOW(),
+  note       TEXT
+);

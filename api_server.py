@@ -1331,16 +1331,39 @@ _FORM_CONFIG_READ_KEY   = os.getenv("FORM_CONFIG_READ_KEY", "")  # 서버-to-서
 # ── Supabase (community_posts 영구 저장) ─────────────────────────────────────
 # SUPABASE_URL + SUPABASE_SERVICE_KEY 환경변수 설정 시 커뮤니티 데이터를 Supabase에 저장.
 # 미설정 시 기존 SQLite 폴백 사용 (개발/오프라인 환경 호환).
+# ⚠️ 반드시 service_role 키를 사용할 것 — anon 키는 RLS로 쓰기 차단됨.
 _SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 _SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 _supa = None
-if _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
+
+def _validate_supabase_service_key(key: str) -> bool:
+    """JWT payload에서 role=service_role 여부를 검증한다."""
     try:
-        from supabase import create_client as _create_supabase_client
-        _supa = _create_supabase_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
-        logging.getLogger("bridge.api").info("[Supabase] 커뮤니티 DB 연결됨")
-    except Exception as _supa_exc:
-        logging.getLogger("bridge.api").warning("[Supabase] 연결 실패 → SQLite 폴백: %s", _supa_exc)
+        import base64 as _b64, json as _j
+        parts = key.split('.')
+        if len(parts) < 2:
+            return False
+        # Base64 패딩 보정
+        padded = parts[1] + '=' * (4 - len(parts[1]) % 4)
+        payload = _j.loads(_b64.b64decode(padded).decode('utf-8'))
+        return payload.get('role') == 'service_role'
+    except Exception:
+        return False  # 파싱 실패 시 보수적으로 false
+
+if _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
+    # service_role 키인지 먼저 검증 — anon 키 실수 사용 즉시 차단
+    if not _validate_supabase_service_key(_SUPABASE_SERVICE_KEY):
+        logging.getLogger("bridge.api").error(
+            "[Supabase] 🚨 SECURITY HALT: SUPABASE_SERVICE_KEY가 service_role 키가 아닙니다. "
+            "anon 키는 RLS로 쓰기가 차단됩니다. Supabase 비활성화 → SQLite 폴백."
+        )
+    else:
+        try:
+            from supabase import create_client as _create_supabase_client
+            _supa = _create_supabase_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
+            logging.getLogger("bridge.api").info("[Supabase] 커뮤니티 DB 연결됨 (service_role 검증 완료)")
+        except Exception as _supa_exc:
+            logging.getLogger("bridge.api").warning("[Supabase] 연결 실패 → SQLite 폴백: %s", _supa_exc)
 
 # ── 상위 보안: IP 화이트리스트 ──────────────────────────────────────────────
 # ADMIN_ALLOWED_IPS=1.2.3.4,5.6.7.0/24 (콤마 구분, CIDR 지원, 비어있으면 제한 없음)
