@@ -774,6 +774,11 @@ def build_driver(headless: bool = True) -> webdriver.Chrome:
     else:
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
 
+    # 계정별 Chrome 프로필 — 세션 쿠키 유지 (Further verification 재발 방지)
+    profile_dir = str(CHROME_PROFILE_DIR / _ACCOUNT)
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    print(f"  [DRIVER] 프로필: {profile_dir}")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
         # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
@@ -893,13 +898,39 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
             if _email_btn_clicked:
                 print(f"  ✉️  로그인 링크 이메일 발송됨 → {CL_EMAIL}")
-                print(f"  → {CL_EMAIL} 받은편지함에서 Craigslist 링크 클릭 후 run.bat 재실행")
                 _log_event("warn", "—", "login",
-                           f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
+                           f"One-time login link sent to {CL_EMAIL} — waiting for manual verification")
             else:
-                print(f"  [LOGIN] 이메일 발송 버튼 미발견 — {CL_EMAIL} 수동 확인 필요")
+                print(f"  [LOGIN] 이메일 발송 버튼 미발견 — 수동 로그인 필요")
                 _log_event("warn", "—", "login",
                            "Further verification required — email button not found")
+
+            # ── 비헤드리스 모드: Chrome 창 열어두고 최대 5분 대기 ──────────────
+            _headless_mode = "--headless" in " ".join(sys.argv)
+            if not _headless_mode:
+                print("=" * 60)
+                print("  ⚠️  수동 로그인 필요 — Chrome 창을 닫지 마세요!")
+                print(f"  1. 이 Chrome 창에서 새 탭 열기 (Ctrl+T)")
+                print(f"  2. gmail.com 접속 → {CL_EMAIL} 받은편지함")
+                print(f"  3. Craigslist 로그인 링크 클릭")
+                print(f"  4. 로그인 완료 → 자동으로 계속됩니다 (최대 5분)")
+                print("=" * 60)
+                for _ in range(100):  # 3초 × 100 = 300초(5분)
+                    time.sleep(3)
+                    try:
+                        if _is_logged_in(driver):
+                            print("  [LOGIN] ✅ 수동 인증 완료 — 자동 게시 재개")
+                            _log_event("info", "—", "login",
+                                       "Manual verification succeeded — resuming auto-post")
+                            return True
+                    except Exception:
+                        pass
+                print("  [LOGIN] ❌ 5분 초과 — 로그인 미완료")
+                _log_event("error", "—", "login", "Manual verification timeout (5min)")
+            else:
+                print("  → Headless 모드: run_login_setup.bat 으로 수동 인증 필요")
+                _log_event("error", "—", "login",
+                           "Further verification in headless mode — run run_login_setup.bat")
             return False
 
         # CAPTCHA 감지
