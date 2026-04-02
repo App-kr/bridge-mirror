@@ -326,7 +326,7 @@ if "--account" in sys.argv:
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
 # 초기 로드 (--account 지정 시 재로드)
 # dry-run/generate/--help 모드에서는 자격증명 불필요 — lazy load
-_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
+_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv or "--login-setup" in sys.argv
 CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
@@ -760,17 +760,15 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     print(f"  [DRIVER] 프로필: {profile_dir}")
 
     if headless:
-        # --headless=new + --user-data-dir = Chrome 크래시 (Chrome 버그)
-        # 대안: 창을 화면 밖으로 → 보이지 않으면서 프로필 유지
-        opts.add_argument("--window-position=-32000,-32000")
+        # Chrome 120+ 에서 --headless=new + --user-data-dir 크래시 해결됨
+        opts.add_argument("--headless=new")
         opts.add_argument("--window-size=1920,1080")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
-        opts.add_argument("--silent-launch")
         opts.add_argument("--no-first-run")
         opts.add_argument("--no-default-browser-check")
-        print("  [DRIVER] 백그라운드 모드 (offscreen)")
+        print("  [DRIVER] headless 모드")
     else:
         opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
@@ -1588,6 +1586,8 @@ def main():
                         help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
     parser.add_argument("--all",       action="store_true",
                         help="4계정 순차 실행 (gray→green→brown→purple)")
+    parser.add_argument("--login-setup", action="store_true",
+                        help="수동 로그인 셋업 — Chrome 창을 열어 수동 로그인 후 쿠키 저장")
     parser.add_argument("--job-code",  default=None)
     parser.add_argument("--limit",     type=int, default=10)
     args = parser.parse_args()
@@ -1649,6 +1649,47 @@ def main():
     # ── 파일 무결성 체크 ──
     if not integrity_check():
         sys.exit(99)
+
+    # ── --login-setup 모드: 수동 로그인으로 쿠키 저장 ──
+    if args.login_setup:
+        _SETUP_ACCOUNTS = ["gray", "green", "brown", "purple"]
+        if args.account:
+            _SETUP_ACCOUNTS = [args.account]
+        for acct_name in _SETUP_ACCOUNTS:
+            print(f"\n{'='*55}")
+            print(f"  [{acct_name}] 수동 로그인 셋업")
+            print(f"{'='*55}")
+            try:
+                email, password = _load_craigslist_credentials(acct_name)
+            except SystemExit:
+                print(f"  [SKIP] {acct_name} 자격증명 없음")
+                continue
+            print(f"  이메일: {email}")
+            print(f"  Chrome 창이 열립니다. 로그인하세요.")
+            print(f"  (이메일 인증 링크가 필요하면 메일에서 클릭)")
+            driver = build_driver(headless=False, account=acct_name)
+            driver.get("https://accounts.craigslist.org/login/home")
+            try:
+                # 자동 입력
+                _delay(2, 3)
+                email_el = driver.find_element(By.ID, "inputEmailHandle")
+                _type_slow(email_el, email)
+                pw_el = driver.find_element(By.ID, "inputPassword")
+                _type_slow(pw_el, password)
+                pw_el.send_keys(Keys.RETURN)
+            except Exception:
+                pass
+            print(f"  로그인 완료 후 Enter를 누르세요...")
+            input()
+            # 로그인 확인
+            src = driver.page_source.lower()
+            if "log out" in src or "logout" in src:
+                print(f"  [{acct_name}] 로그인 성공 — 쿠키 저장됨 ✅")
+            else:
+                print(f"  [{acct_name}] 로그인 미확인 — 쿠키가 저장되지 않았을 수 있음")
+            driver.quit()
+        print(f"\n셋업 완료. 이제 run.bat 또는 --all 로 실행하세요.")
+        return
 
     # ── --all 모드: 4계정 순차 실행 (단일 프로세스, 오버레이 유지) ──
     if args.all:
