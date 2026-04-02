@@ -36,7 +36,7 @@ import {
   Check, Plus,
 } from 'lucide-react'
 
-const API = ''  // reads from Vercel JSON API routes (board-*.json), mutations use API_URL directly
+const API = API_URL  // primary: Render DB (has updated content/images); fallback to JSON handled per-fetch
 
 interface Post {
   id: number
@@ -453,25 +453,29 @@ export default function BoardPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
+  // Render(primary) → Vercel JSON(fallback when empty)
+  const fetchBoardPosts = useCallback((url: string, fallbackUrl: string) =>
+    fetch(url).then((r) => r.json()).then((j) => {
+      if (j.success && j.data.posts.length > 0) return j
+      return fetch(fallbackUrl).then((r) => r.json())
+    }), [])
+
   const refreshPosts = useCallback(() => {
     if (!config) return
-    fetch(`${API}/api/community/${board}?limit=50`)
-      .then((r) => r.json())
+    fetchBoardPosts(`${API}/api/community/${board}?limit=50`, `/api/community/${board}?limit=50`)
       .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
-  }, [board, config])
+  }, [board, config, fetchBoardPosts])
 
   useEffect(() => {
     if (!config) return
-    fetch(`${API}/api/community/${board}?limit=50`)
-      .then((r) => r.json())
+    fetchBoardPosts(`${API}/api/community/${board}?limit=50`, `/api/community/${board}?limit=50`)
       .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
       .finally(() => setLoading(false))
 
     const faqCat = board === 'support' ? 'faq-teacher' : board === 'support_kr' ? 'faq-employer' : null
     const defaultFaq = board === 'support' ? TEACHER_FAQ : board === 'support_kr' ? EMPLOYER_FAQ : []
     if (faqCat) {
-      fetch(`${API}/api/community/${board}?category=${faqCat}`)
-        .then((r) => r.json())
+      fetchBoardPosts(`${API}/api/community/${board}?category=${faqCat}`, `/api/community/${board}?category=${faqCat}`)
         .then((j) => {
           if (j.success && j.data.posts.length > 0) {
             const post = j.data.posts[0]
