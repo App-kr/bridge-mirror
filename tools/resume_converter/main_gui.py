@@ -1687,23 +1687,47 @@ class BridgeConverterApp:
                     # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — docx2pdf/Word COM 사용)
                     import tempfile as _tf
                     import os as _os
+                    import threading as _th
                     _tmp = _tf.NamedTemporaryFile(suffix=".docx", delete=False)
                     doc.save(_tmp.name)
                     _tmp.close()
                     _tmp_pdf = _tmp.name[:-5] + ".pdf"
                     docx_pdf_bytes = None
-                    try:
-                        from docx2pdf import convert as _d2p
-                        _d2p(_tmp.name, _tmp_pdf)
-                        with open(_tmp_pdf, "rb") as _f:
-                            docx_pdf_bytes = _f.read()
-                        try: _os.unlink(_tmp_pdf)
-                        except: pass
-                    except Exception as _conv_e:
-                        log.warning(f"docx2pdf 실패, 평문 폴백 사용: {_conv_e}")
-                    finally:
-                        try: _os.unlink(_tmp.name)
-                        except: pass
+                    # 상태 업데이트: Word 변환 중 안내
+                    self.root.after(0, lambda: self._status_var.set(
+                        "⏳ DOCX → PDF 변환 중 (Word 실행, 최대 45초)..."))
+                    # docx2pdf를 별도 스레드 + 타임아웃 45초로 실행
+                    _conv_result: list = [None, None]  # [bytes, error_str]
+                    _conv_event = _th.Event()
+                    _tmp_name_cap = _tmp.name
+                    _tmp_pdf_cap  = _tmp_pdf
+                    def _do_d2p():
+                        try:
+                            import pythoncom
+                            pythoncom.CoInitialize()
+                            try:
+                                from docx2pdf import convert as _d2p
+                                _d2p(_tmp_name_cap, _tmp_pdf_cap)
+                                with open(_tmp_pdf_cap, "rb") as _f:
+                                    _conv_result[0] = _f.read()
+                                try: _os.unlink(_tmp_pdf_cap)
+                                except: pass
+                            finally:
+                                pythoncom.CoUninitialize()
+                        except Exception as _e:
+                            _conv_result[1] = str(_e)
+                        finally:
+                            _conv_event.set()
+                    _th.Thread(target=_do_d2p, daemon=True).start()
+                    _finished = _conv_event.wait(timeout=45)
+                    try: _os.unlink(_tmp.name)
+                    except: pass
+                    if not _finished:
+                        log.warning("docx2pdf 타임아웃(45s) — 평문 폴백 사용")
+                    elif _conv_result[1]:
+                        log.warning(f"docx2pdf 실패 — 평문 폴백 사용: {_conv_result[1]}")
+                    else:
+                        docx_pdf_bytes = _conv_result[0]
                     if not docx_pdf_bytes:
                         _cparas = [_p2.text for _p2 in doc.paragraphs]
                         for _t in doc.tables:

@@ -192,3 +192,5 @@ gc_sa.enc
 # RPA Chrome profile (credentials)
 .chrome_rpa_profile/
 tools/.chrome_rpa_profile/
+*.bak_*
+test_output.pdf
