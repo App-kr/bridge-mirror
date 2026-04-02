@@ -2,7 +2,7 @@
 chcp 65001 >nul 2>&1
 title BRIDGE Doc Processor
 
-set PYTHON="D:\Phtyon 3\python.exe"
+set PYTHON="Q:\Phtyon 3\python.exe"
 set SCRIPT="Q:\Claudework\bridge base\tools\doc_processor.py"
 
 if "%1"=="" (

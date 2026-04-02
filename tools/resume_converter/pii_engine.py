@@ -2,8 +2,16 @@
 pii_engine.py — BRIDGE Resume Converter
 PII 탐지 + 삭제 (2레이어 + 집중점검)
 
-Layer 1: regex (전화/이메일/주소/SNS)
+Layer 1: regex (전화/이메일/주소/SNS/학교명/근무처/PII라벨)
 Layer 2: Claude API (이름/업체명/추천서 서명)
+
+v2.7 동기화 (2026-04-02):
+- 아파트/빌라/오피스텔 등 한국 거주지 삭제
+- 학교명 패턴 (RE_SCHOOL_NAMED / RE_UNIV_OF)
+- 미국 도시+주 / 외국 도시+국가 삭제
+- 전화번호 연도 False Positive 차단
+- KR_WORKPLACE_KEYWORDS 확장
+- PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등)
 """
 
 from __future__ import annotations
@@ -57,32 +65,171 @@ _PATTERNS = {
     ),
 }
 
-# 한국 학원/교육기관 키워드 (업체명 탐지용 보조)
-_KR_WORKPLACE = re.compile(
-    r"[A-Za-z가-힣]{2,20}(?:어학원|학원|학교|유치원|학습원|교육원|교습소|유아원|영어학원)",
+# 한국 거주지 (아파트/빌라/오피스텔 등) — v2.7
+RE_KR_RESIDENTIAL = re.compile(
+    r"[가-힣A-Za-z0-9]+\s*"
+    r"(?:\d+\s*(?:단지|차|블록|동|호)?[가-힣]?\s*)?"
+    r"(?:아파트|빌라|오피스텔|주공|자이|푸르지오|래미안|힐스테이트|더샵|sk뷰|sk view|e편한세상|"
+    r"이편한세상|롯데캐슬|브라운스톤|경남아너스빌|포스코더샵|두산위브|대림|현대|삼성|"
+    r"lh|sh|한신|부영|우미|중흥|반도|효성|동원|태영|제일|신동아|진흥|극동|청솔|"
+    r"트리지움|위브|어울림|센트럴|파크|팰리스|아이파크|더리버|하늘채|금호|한라|"
+    r"apartment|apt|villa|officetel)",
+    re.IGNORECASE,
 )
+
+# 학교명 패턴 — v2.7
+RE_SCHOOL_NAMED = re.compile(
+    r"\b[A-Z][A-Za-z'\-\s]{2,40}"
+    r"(?:Primary|Secondary|High|Middle|Junior|Grammar|Prep|Preparatory|"
+    r"Independent|International|National|Christian|Catholic|Islamic|"
+    r"Montessori|Waldorf|Academy|College|Institute|Seminary)"
+    r"(?:\s+School|\s+College|\s+Academy)?\b",
+)
+RE_UNIV_OF = re.compile(
+    r"\b(?:University|Université|Universidad|Universität|Università)\s+of\s+[A-Z][A-Za-z\s\-]{2,40}\b",
+)
+
+# 미국 도시+주 — v2.7
+RE_US_CITY_STATE = re.compile(
+    r"\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Philadelphia|"
+    r"San Antonio|San Diego|Dallas|San Jose|Austin|Jacksonville|"
+    r"Fort Worth|Columbus|Charlotte|Indianapolis|San Francisco|Seattle|"
+    r"Denver|Nashville|Oklahoma City|El Paso|Washington|Boston|"
+    r"Las Vegas|Memphis|Louisville|Baltimore|Milwaukee|Albuquerque|"
+    r"Tucson|Fresno|Sacramento|Mesa|Kansas City|Atlanta|Omaha|"
+    r"Colorado Springs|Raleigh|Long Beach|Virginia Beach|Minneapolis|"
+    r"Tampa|New Orleans|Arlington|Wichita|Bakersfield|Aurora|"
+    r"Anaheim|Santa Ana|Corpus Christi|Riverside|St\. Louis|Lexington|"
+    r"Stockton|Pittsburgh|Anchorage|Greensboro|Lincoln|Orlando|"
+    r"Newark|Plano|Henderson|Durham|Fort Wayne|Jersey City|Laredo|"
+    r"Chandler|Madison|Lubbock|Norfolk|Cleveland|Garland|Scottsdale|"
+    r"Irving|Baton Rouge|Reno|Hialeah|Chesapeake|Gilbert|Portland)"
+    r"(?:,\s*[A-Z]{2})?\b",
+)
+
+# 외국 도시+국가 — v2.7
+RE_FOREIGN_CITY = re.compile(
+    r"\b(?:London|Manchester|Birmingham|Liverpool|Sheffield|Leeds|Bristol|"
+    r"Glasgow|Edinburgh|Cardiff|Belfast|Oxford|Cambridge|Sydney|Melbourne|"
+    r"Brisbane|Perth|Adelaide|Auckland|Wellington|Christchurch|Toronto|"
+    r"Vancouver|Montreal|Calgary|Ottawa|Singapore|Kuala Lumpur|Hong Kong|"
+    r"Beijing|Shanghai|Guangzhou|Shenzhen|Tokyo|Osaka|Bangkok|Manila|"
+    r"Jakarta|Dhaka|Mumbai|Delhi|Dubai|Johannesburg|Cape Town|Nairobi|"
+    r"Lagos|Accra|Harare|Lusaka|Dar es Salaam|Kampala|Kigali)"
+    r"(?:,?\s*(?:UK|England|Scotland|Wales|Australia|New Zealand|Canada|"
+    r"Singapore|Malaysia|China|Japan|Thailand|Philippines|Indonesia|"
+    r"Bangladesh|India|UAE|South Africa|Kenya|Nigeria|Ghana|Zimbabwe|"
+    r"Zambia|Tanzania|Uganda|Rwanda))?\b",
+    re.IGNORECASE,
+)
+
+# 한국 학원/교육기관 키워드 (업체명 탐지용) — v2.7 확장
+_KR_WORKPLACE = re.compile(
+    r"[A-Za-z가-힣]{2,30}"
+    r"(?:어학원|학원|학교|유치원|학습원|교육원|교습소|유아원|영어학원|"
+    r"english\s*school|language\s*school|primary\s*school|secondary\s*school|"
+    r"independent\s*school|grammar\s*school|boarding\s*school|prep\s*school|"
+    r"kindergarten|nursery|tutoring|hagwon|institute|academy|center|centre)",
+    re.IGNORECASE,
+)
+
+# PII 라벨 줄 삭제 — v2.7
+_PII_LABEL_RE = re.compile(
+    r"^[^\n]*\b(?:nationality|citizenship|race|ethnicity|religion|"
+    r"date\s+of\s+birth|birth\s+date|dob|gender|sex)\b[^\n]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+def _is_year_range(matched: str) -> bool:
+    """전화번호처럼 보이는 연도 범위(2017-2021 등) 여부 판별."""
+    digits = re.findall(r"\d+", matched)
+    return bool(digits) and all(1900 <= int(d) <= 2099 for d in digits)
+
 
 def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     """regex 패턴으로 PII 감지 + 마스킹."""
     found:   list[PIIMatch] = []
     cleaned: str = text
-    offset = 0  # 마스킹 후 오프셋 보정
 
+    # ── 기본 패턴 (전화/이메일/주소/SNS) ──────────────────────────────────
     for ptype, pattern in _PATTERNS.items():
-        for m in pattern.finditer(text):
+        for m in pattern.finditer(cleaned):
+            # 전화번호 False Positive: 연도 범위(2017-2021 등) 차단
+            if ptype in ("phone_kr", "phone_intl") and _is_year_range(m.group(0)):
+                continue
             replacement = f"[{ptype.upper()}_REMOVED]"
             found.append(PIIMatch(
                 type=ptype,
                 original_value=m.group(0),
-                position=m.start() + offset,
+                position=m.start(),
                 confidence=0.95,
                 color="red",
             ))
             cleaned = cleaned.replace(m.group(0), replacement, 1)
-            offset += len(replacement) - len(m.group(0))
 
-    # 한국 학원명
-    for m in _KR_WORKPLACE.finditer(text):
+    # ── 한국 거주지 (아파트명 등) ─────────────────────────────────────────
+    for m in RE_KR_RESIDENTIAL.finditer(cleaned):
+        found.append(PIIMatch(
+            type="address",
+            original_value=m.group(0),
+            position=m.start(),
+            confidence=0.90,
+            color="red",
+        ))
+        cleaned = cleaned.replace(m.group(0), "South Korea", 1)
+
+    # ── 학교명 (줄 단위 스캔 — 줄 넘는 매칭 방지) ─────────────────────────
+    lines = cleaned.split("\n")
+    new_lines = []
+    for line in lines:
+        for m in RE_SCHOOL_NAMED.finditer(line):
+            orig = m.group(0)
+            repl = "School" if "school" in orig.lower() else "University"
+            found.append(PIIMatch(
+                type="company",
+                original_value=orig,
+                position=0,
+                confidence=0.85,
+                color="red",
+            ))
+            line = line.replace(orig, repl, 1)
+        for m in RE_UNIV_OF.finditer(line):
+            orig = m.group(0)
+            found.append(PIIMatch(
+                type="company",
+                original_value=orig,
+                position=0,
+                confidence=0.85,
+                color="red",
+            ))
+            line = line.replace(orig, "University", 1)
+        new_lines.append(line)
+    cleaned = "\n".join(new_lines)
+
+    # ── 미국 도시+주 ──────────────────────────────────────────────────────
+    for m in RE_US_CITY_STATE.finditer(cleaned):
+        found.append(PIIMatch(
+            type="address",
+            original_value=m.group(0),
+            position=m.start(),
+            confidence=0.88,
+            color="red",
+        ))
+        cleaned = cleaned.replace(m.group(0), "South Korea", 1)
+
+    # ── 외국 도시+국가 ────────────────────────────────────────────────────
+    for m in RE_FOREIGN_CITY.finditer(cleaned):
+        found.append(PIIMatch(
+            type="address",
+            original_value=m.group(0),
+            position=m.start(),
+            confidence=0.85,
+            color="red",
+        ))
+        cleaned = cleaned.replace(m.group(0), "South Korea", 1)
+
+    # ── 한국 학원/교육기관 ────────────────────────────────────────────────
+    for m in _KR_WORKPLACE.finditer(cleaned):
         replacement = "학원"
         found.append(PIIMatch(
             type="company",
@@ -93,11 +240,14 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         ))
         cleaned = cleaned.replace(m.group(0), replacement, 1)
 
+    # ── PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등) ─────────
+    cleaned = _PII_LABEL_RE.sub("", cleaned)
+
     return cleaned, found
 
 
 # ── Layer 2: Claude API ────────────────────────────────────────────────────
-_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+_CLAUDE_MODEL = "claude-sonnet-4-6"
 
 _SYSTEM_PROMPT = """You are a PII detector for Korean ESL teacher resumes.
 Analyze the text and find:

@@ -4,7 +4,7 @@ echo ============================================
 echo  BRIDGE Resume Converter — PyInstaller 빌드
 echo ============================================
 
-set PYTHON="D:/Phtyon 3/python.exe"
+set PYTHON="Q:/Phtyon 3/python.exe"
 if not exist %PYTHON% set PYTHON=python
 
 :: PyInstaller 설치 확인

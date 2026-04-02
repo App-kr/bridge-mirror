@@ -6,7 +6,7 @@ echo ============================================
 
 :: Python 확인
 for %%P in (
-  "D:\Phtyon 3\python.exe"
+  "Q:\Phtyon 3\python.exe"
   "C:\Python310\python.exe"
   "C:\Python311\python.exe"
   "C:\Python312\python.exe"
@@ -25,7 +25,7 @@ if %errorlevel% equ 0 (
 )
 
 echo [오류] Python을 찾을 수 없습니다.
-echo D:\Phtyon 3\python.exe 가 있는지 확인하세요.
+echo Q:\Phtyon 3\python.exe 가 있는지 확인하세요.
 pause
 exit /b 1
 

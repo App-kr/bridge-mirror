@@ -2,7 +2,7 @@
 chcp 65001 >nul
 :: BRIDGE Resume Converter 실행
 
-set PYTHON="D:/Phtyon 3/python.exe"
+set PYTHON="Q:/Phtyon 3/python.exe"
 if not exist %PYTHON% set PYTHON=python
 
 cd /d "%~dp0.."

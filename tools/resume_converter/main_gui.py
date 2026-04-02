@@ -234,6 +234,17 @@ class BridgeConverterApp:
         self._right_panel = self._build_right(paned)
         paned.add(self._right_panel, weight=1)
 
+        # ── 루트 창 전체 드래그드롭 (어디서나) ───────────────
+        if _DND_AVAILABLE:
+            self.root.drop_target_register(DND_FILES)
+            self.root.dnd_bind("<<Drop>>", self._on_drop)
+            main.drop_target_register(DND_FILES)
+            main.dnd_bind("<<Drop>>", self._on_drop)
+            self._left_panel.drop_target_register(DND_FILES)
+            self._left_panel.dnd_bind("<<Drop>>", self._on_drop)
+            self._right_panel.drop_target_register(DND_FILES)
+            self._right_panel.dnd_bind("<<Drop>>", self._on_drop)
+
     # ── 좌측 패널 ─────────────────────────────────────────────────────
     def _build_left(self, parent) -> tk.Frame:
         panel = tk.Frame(parent, bg=C_SIDE, width=270)
@@ -1628,7 +1639,7 @@ class BridgeConverterApp:
                     _redact_pdf_page(page, all_pii)
                     # ③ 이력서 첫 페이지: 강사 번호만 상단 삽입
                     if is_resume and page_idx == 0:
-                        _overlay_id_on_resume_page(page, cid)
+                        _overlay_id_on_resume_page(page, cid, self._photo_bytes)
                 merged.insert_pdf(src_doc)
                 src_doc.close()
 
@@ -1673,18 +1684,41 @@ class BridgeConverterApp:
                                         if run.text:
                                             run.text = _clean_run_text(run.text)
 
-                    # 3) 수정된 DOCX → 평문 추출 → PDF (포맷 보존 변환기 없는 환경 대응)
-                    cleaned_paras = [
-                        para.text for para in doc.paragraphs
-                    ]
-                    for tbl in doc.tables:
-                        for row in tbl.rows:
-                            row_cells = [c.text.strip() for c in row.cells if c.text.strip()]
-                            if row_cells:
-                                cleaned_paras.append("  |  ".join(row_cells))
-                    cleaned = "\n".join(cleaned_paras)
-                    docx_pdf = text_to_pdf_bytes(cleaned, ftype.upper())
-                    src_doc  = fitz.open("pdf", docx_pdf)
+                    # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — docx2pdf/Word COM 사용)
+                    import tempfile as _tf
+                    import os as _os
+                    _tmp = _tf.NamedTemporaryFile(suffix=".docx", delete=False)
+                    doc.save(_tmp.name)
+                    _tmp.close()
+                    _tmp_pdf = _tmp.name[:-5] + ".pdf"
+                    docx_pdf_bytes = None
+                    try:
+                        from docx2pdf import convert as _d2p
+                        _d2p(_tmp.name, _tmp_pdf)
+                        with open(_tmp_pdf, "rb") as _f:
+                            docx_pdf_bytes = _f.read()
+                        try: _os.unlink(_tmp_pdf)
+                        except: pass
+                    except Exception as _conv_e:
+                        log.warning(f"docx2pdf 실패, 평문 폴백 사용: {_conv_e}")
+                    finally:
+                        try: _os.unlink(_tmp.name)
+                        except: pass
+                    if not docx_pdf_bytes:
+                        _cparas = [_p2.text for _p2 in doc.paragraphs]
+                        for _t in doc.tables:
+                            for _r in _t.rows:
+                                _rc = [_c.text.strip() for _c in _r.cells if _c.text.strip()]
+                                if _rc:
+                                    _cparas.append("  |  ".join(_rc))
+                        docx_pdf_bytes = text_to_pdf_bytes("\n".join(_cparas), ftype.upper())
+                    src_doc = fitz.open("pdf", docx_pdf_bytes)
+                    # 이력서 첫 페이지: 잔류 PII 삭제 + 강사 번호/사진 오버레이
+                    _is_docx_resume = (ftype == "resume")
+                    if _is_docx_resume and len(src_doc) > 0:
+                        _redact_pii_sections_pdf(src_doc[0], is_first_page=True)
+                        _redact_pdf_page(src_doc[0], all_pii)
+                        _overlay_id_on_resume_page(src_doc[0], cid, self._photo_bytes)
                     merged.insert_pdf(src_doc)
                     src_doc.close()
                 except Exception as e:
@@ -2209,27 +2243,39 @@ def _redact_pii_sections_pdf(page, is_first_page: bool = False) -> None:
         page.apply_redactions()
 
 
-def _overlay_id_on_resume_page(page, candidate_id: str) -> None:
-    """이력서 첫 페이지 상단에 강사 번호만 삽입.
+def _overlay_id_on_resume_page(
+    page, candidate_id: str, photo_bytes: bytes | None = None
+) -> None:
+    """이력서 첫 페이지 상단에 강사 번호(좌) + 증명사진(우) 삽입.
 
     _redact_pii_sections_pdf(is_first_page=True)가 이미 상단 이름 헤더를
-    스트림에서 완전 삭제한 뒤, 그 자리에 candidate_id 숫자만 삽입.
+    스트림에서 완전 삭제한 뒤, 그 자리에 번호와 사진을 삽입.
 
-    배치: (20pt, 72pt) — 상단 여백 안, 자연스러운 위치 (약 25mm)
-    글자: 28pt Helvetica-Bold, 검정
+    배치:
+      좌상단: 번호 (72pt Helvetica-Bold, 검정)
+      우상단: 증명사진 (130×165pt)
     """
     import fitz
+    page_w = page.rect.width
+    # 강사 번호 — 좌상단 72pt
     try:
         page.insert_text(
-            (20, 72),
+            (20, 85),
             candidate_id,
-            fontsize=28,
+            fontsize=72,
             fontname="helv",
             color=(0, 0, 0),
             render_mode=0,
         )
     except Exception as e:
         log.warning(f"ID 오버레이 실패: {e}")
+    # 증명사진 — 우상단
+    if photo_bytes:
+        try:
+            photo_rect = fitz.Rect(page_w - 150, 10, page_w - 20, 175)
+            page.insert_image(photo_rect, stream=photo_bytes)
+        except Exception as e:
+            log.warning(f"사진 오버레이 실패: {e}")
 
 
 def _clear_pii_sections_docx(doc) -> None:

@@ -1207,8 +1207,32 @@
       "git": "072d8ee2",
       "files": 2164,
       "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260402_090022__final_backup_20260402_090002",
+      "task": "final_backup_20260402_090002",
+      "ts": "2026.04.02 09:00:40",
+      "git": "ef6a76fa",
+      "files": 2163,
+      "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260402_102203__resume_converter_pdf_format_fix",
+      "task": "resume_converter_pdf_format_fix",
+      "ts": "2026.04.02 10:22:37",
+      "git": "73d77994",
+      "files": 2163,
+      "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260402_102259__resume_converter_pdf_format_fix",
+      "task": "resume_converter_pdf_format_fix",
+      "ts": "2026.04.02 10:23:05",
+      "git": "73d77994",
+      "files": 2163,
+      "db_hash": "80878a0f977c"
     }
   ],
-  "last_backup": "2026.04.01 19:13:36",
-  "total_count": 151
+  "last_backup": "2026.04.02 10:23:05",
+  "total_count": 154
 }

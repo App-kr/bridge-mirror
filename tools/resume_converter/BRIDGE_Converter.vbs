@@ -7,13 +7,13 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 
 toolDir = "Q:\Claudework\bridge base\tools"
 
-' Python313 (공백없는 경로 — 최우선)
+' Q드라이브 Python 3.10 (bridge base 전용)
 Dim pyw, pyc
-pyw = "C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\pythonw.exe"
-pyc = "C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe"
+pyw = "Q:\Phtyon 3\pythonw.exe"
+pyc = "Q:\Phtyon 3\python.exe"
 
-If Not fso.FileExists(pyw) Then pyw = "D:\Phtyon 3\pythonw.exe"
-If Not fso.FileExists(pyc) Then pyc = "D:\Phtyon 3\python.exe"
+If Not fso.FileExists(pyw) Then pyw = "Q:\Phtyon 3\python.exe"
+If Not fso.FileExists(pyc) Then pyc = "Q:\Phtyon 3\python.exe"
 
 If fso.FileExists(pyw) Then
     py = pyw

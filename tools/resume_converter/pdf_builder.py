@@ -88,7 +88,7 @@ def build_filename(
     nat = _NAT_MAP.get(nationality.lower(), nationality) or "미상"
     gen = _GENDER_MAP.get(gender.lower(), gender) or "미상"
     yr  = str(birth_year)[-2:] if birth_year else "00"
-    return f"{candidate_id}_{nat}_{gen}({yr}born).pdf"
+    return f"{candidate_id}{nat}_{gen}({yr}born).pdf"
 
 
 # ── 1페이지: 커버 생성 ─────────────────────────────────────────────────────
