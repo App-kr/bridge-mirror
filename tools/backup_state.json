@@ -1175,8 +1175,40 @@
       "git": "a79e3be5",
       "files": 2164,
       "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260401_180927__env-production-fix_api.bridgejob_DNS",
+      "task": "env-production-fix api.bridgejob DNS",
+      "ts": "2026.04.01 18:09:33",
+      "git": "c3c7f3e3",
+      "files": 2163,
+      "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260401_181934__Chrome세션유지_로그인실패수정",
+      "task": "Chrome세션유지_로그인실패수정",
+      "ts": "2026.04.01 18:19:38",
+      "git": "072d8ee2",
+      "files": 2164,
+      "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260401_181952__login-fix",
+      "task": "login-fix",
+      "ts": "2026.04.01 18:19:56",
+      "git": "072d8ee2",
+      "files": 2164,
+      "db_hash": "80878a0f977c"
+    },
+    {
+      "dir": "20260401_191332__craigslist_stuck_area_fix",
+      "task": "craigslist_stuck_area_fix",
+      "ts": "2026.04.01 19:13:36",
+      "git": "072d8ee2",
+      "files": 2164,
+      "db_hash": "80878a0f977c"
     }
   ],
-  "last_backup": "2026.04.01 17:28:06",
-  "total_count": 147
+  "last_backup": "2026.04.01 19:13:36",
+  "total_count": 151
 }
