@@ -162,10 +162,10 @@ class BridgeConverterApp:
         self._birth_year  = ""
         self._id_load_timer: Optional[str] = None
 
+        self._configure_styles()
         self._build_ui()
         # 강사번호 변경 시 자동 시트 조회
         self._candidate_id.trace_add("write", self._on_id_change)
-        self._configure_styles()
         self._check_sheet_connection()
 
     # ══════════════════════════════════════════════════════════════════
@@ -1332,22 +1332,32 @@ class BridgeConverterApp:
         cid = self._candidate_id.get().strip()
         if not cid:
             return
-        try:
-            from .sheets_connector import get_candidate_info
-            info = get_candidate_info(cid)
-            if info:
-                self._nationality = info.get("nationality", "")
-                self._gender      = info.get("gender", "")
-                self._birth_year  = info.get("birth_year", "")
-                self._meta_label.config(
-                    text=(f"국적: {self._nationality or '?'}  "
-                          f"성별: {self._gender or '?'}  "
-                          f"생년: {self._birth_year or '?'}"))
-                self._update_fname_preview(info)
-            else:
-                self._meta_label.config(text="시트 미등록")
-        except Exception as e:
-            self._meta_label.config(text=f"조회 실패: {e}")
+
+        def _fetch():
+            try:
+                from .sheets_connector import get_candidate_info
+                info = get_candidate_info(cid)
+                if info:
+                    nat = info.get("nationality", "")
+                    gen = info.get("gender", "")
+                    yr  = info.get("birth_year", "")
+                    def _apply(i=info, n=nat, g=gen, y=yr):
+                        self._nationality = n
+                        self._gender      = g
+                        self._birth_year  = y
+                        self._meta_label.config(
+                            text=(f"국적: {n or '?'}  "
+                                  f"성별: {g or '?'}  "
+                                  f"생년: {y or '?'}"))
+                        self._update_fname_preview(i)
+                    self.root.after(0, _apply)
+                else:
+                    self.root.after(0, lambda: self._meta_label.config(text="시트 미등록"))
+            except Exception as e:
+                _e = str(e)
+                self.root.after(0, lambda: self._meta_label.config(text=f"조회 실패: {_e}"))
+
+        threading.Thread(target=_fetch, daemon=True).start()
 
     def _on_id_change(self, *args):
         """강사번호 입력 시 0.8초 후 시트 자동 조회."""
