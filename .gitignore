@@ -51,6 +51,7 @@ tools/resume_converter/.api_key
 *.csv
 *.dump
 *.sql
+!migrations/*.sql
 legacy_posts.*
 original_candidates/
 original_jobs/

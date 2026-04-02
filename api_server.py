@@ -1328,6 +1328,20 @@ _ADMIN_KEY              = os.getenv("ADMIN_API_KEY", "")
 _ADMIN_PW               = os.getenv("ADMIN_PASSWORD", "")
 _FORM_CONFIG_READ_KEY   = os.getenv("FORM_CONFIG_READ_KEY", "")  # 서버-to-서버 전용 (브라우저 미노출)
 
+# ── Supabase (community_posts 영구 저장) ─────────────────────────────────────
+# SUPABASE_URL + SUPABASE_SERVICE_KEY 환경변수 설정 시 커뮤니티 데이터를 Supabase에 저장.
+# 미설정 시 기존 SQLite 폴백 사용 (개발/오프라인 환경 호환).
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+_supa = None
+if _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
+    try:
+        from supabase import create_client as _create_supabase_client
+        _supa = _create_supabase_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
+        logging.getLogger("bridge.api").info("[Supabase] 커뮤니티 DB 연결됨")
+    except Exception as _supa_exc:
+        logging.getLogger("bridge.api").warning("[Supabase] 연결 실패 → SQLite 폴백: %s", _supa_exc)
+
 # ── 상위 보안: IP 화이트리스트 ──────────────────────────────────────────────
 # ADMIN_ALLOWED_IPS=1.2.3.4,5.6.7.0/24 (콤마 구분, CIDR 지원, 비어있으면 제한 없음)
 _ADMIN_ALLOWED_IPS_RAW = os.getenv("ADMIN_ALLOWED_IPS", "").strip()
@@ -3996,6 +4010,24 @@ async def community_list(
         return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            q = _supa.table('community_posts').select(
+                'id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body',
+                count='exact'
+            ).eq('board', board).eq('is_deleted', 0)
+            if category:
+                q = q.eq('category', category)
+            q = q.order('pinned', desc=True).order('sort_order', desc=True).order('created_at', desc=True)
+            q = q.range(offset, offset + limit - 1)
+            res = q.execute()
+            total = res.count or 0
+            posts = [dict(r, preview=(r.get('body') or '')[:200]) for r in (res.data or [])]
+            return ok(data={"total": total, "posts": posts})
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] community_list 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
@@ -4027,6 +4059,24 @@ async def community_get(board: str, post_id: int, request: Request):
         return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').select(
+                'id,board,title,body,pinned,views,created_at,content_type'
+            ).eq('id', post_id).eq('board', board).eq('is_deleted', 0).execute()
+            if not res.data:
+                raise HTTPException(404, "Post not found")
+            d = res.data[0]
+            new_views = (d.get('views') or 0) + 1
+            _supa.table('community_posts').update({'views': new_views}).eq('id', post_id).execute()
+            d['views'] = new_views
+            return ok(data=d)
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] community_get 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
@@ -4076,6 +4126,27 @@ async def community_create(board: str, post: CommunityPost, request: Request):
     if _pii_check.search(pii_check_body) or _pii_check.search(clean_title):
         raise HTTPException(400, "Phone numbers and email addresses are not allowed in posts.")
 
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').insert({
+                'board': board,
+                'title': clean_title,
+                'body': clean_body,
+                'author_hash': ip_hash,
+                'content_type': post.content_type,
+                'category': post.category,
+                'pinned': 0,
+                'views': 0,
+                'is_deleted': 0,
+                'sort_order': 0,
+                'image_paths': '[]',
+            }).execute()
+            new_id = res.data[0]['id'] if res.data else None
+            return ok(data={"id": new_id}, message="Post created")
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] community_create 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     try:
         cur = conn.execute(
@@ -4096,6 +4167,22 @@ async def community_delete(board: str, post_id: int, request: Request):
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
     ip_hash  = _ip_hash(request)
+    is_admin = _ADMIN_KEY and request.headers.get("x-admin-key", "") == _ADMIN_KEY
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').select('author_hash').eq('id', post_id).eq('board', board).eq('is_deleted', 0).execute()
+            if not res.data:
+                raise HTTPException(404, "Post not found")
+            if res.data[0].get('author_hash') != ip_hash and not is_admin:
+                raise HTTPException(403, "Forbidden")
+            _supa.table('community_posts').update({'is_deleted': 1}).eq('id', post_id).execute()
+            return ok(message="Deleted")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] community_delete 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -4105,7 +4192,6 @@ async def community_delete(board: str, post_id: int, request: Request):
         ).fetchone()
         if not row:
             raise HTTPException(404, "Post not found")
-        is_admin = _ADMIN_KEY and request.headers.get("x-admin-key", "") == _ADMIN_KEY
         if row[0] != ip_hash and not is_admin:
             raise HTTPException(403, "Forbidden")
         conn.execute("UPDATE community_posts SET is_deleted = 1 WHERE id = ?", (post_id,))
@@ -4125,6 +4211,19 @@ class PinUpdate(BaseModel):
 async def admin_pin_post(post_id: int, body: PinUpdate, request: Request):
     """게시글 고정/해제 (관리자 전용)."""
     _check_admin(request)
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').select('id').eq('id', post_id).eq('is_deleted', 0).execute()
+            if not res.data:
+                raise HTTPException(404, "Post not found")
+            _supa.table('community_posts').update({'pinned': body.pinned}).eq('id', post_id).execute()
+            return ok(message=f"Post #{post_id} pinned={body.pinned}")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_pin_post 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -4162,6 +4261,16 @@ async def admin_reorder_posts(board: str, body: ReorderRequest, request: Request
     _check_admin(request)
     if board not in _BOARDS:
         raise HTTPException(404, "Board not found")
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            for item in body.items:
+                _supa.table('community_posts').update({'sort_order': item.sort_order}).eq('id', item.id).eq('board', board).eq('is_deleted', 0).execute()
+            _maybe_auto_backup()
+            return ok(message=f"Reordered {len(body.items)} posts")
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_reorder_posts 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -4198,6 +4307,20 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
 
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').select('id').eq('id', post_id).eq('board', board).eq('is_deleted', 0).execute()
+            if not res.data:
+                raise HTTPException(404, "Post not found")
+            _supa.table('community_posts').update(updates).eq('id', post_id).eq('board', board).execute()
+            _maybe_auto_backup()
+            return ok(message=f"Post #{post_id} updated")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_edit_post 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -4229,6 +4352,19 @@ async def admin_move_post(board: str, post_id: int, request: Request):
         raise HTTPException(400, f"유효하지 않은 대상 게시판: {target}")
     if target == board:
         raise HTTPException(400, "현재 게시판과 동일합니다.")
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            res = _supa.table('community_posts').select('id').eq('id', post_id).eq('board', board).eq('is_deleted', 0).execute()
+            if not res.data:
+                raise HTTPException(404, "Post not found")
+            _supa.table('community_posts').update({'board': target}).eq('id', post_id).eq('board', board).execute()
+            return ok(message=f"Post #{post_id} moved to {target}")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_move_post 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -4257,6 +4393,28 @@ async def admin_search_posts(
 ):
     """관리자 게시글 검색 (전체 보드 대상)."""
     _check_admin(request)
+    # ── Supabase 경로 ──
+    if _supa:
+        try:
+            q = _supa.table('community_posts').select(
+                'id,board,title,author_hash,pinned,views,created_at,content_type,sort_order,body'
+            ).eq('is_deleted', 0)
+            if board and board != "all":
+                if board not in _BOARDS:
+                    raise HTTPException(404, "Board not found")
+                q = q.eq('board', board)
+            if search:
+                term = search.strip()
+                q = q.or_(f"title.ilike.%{term}%,body.ilike.%{term}%")
+            q = q.order('pinned', desc=True).order('sort_order', desc=True).order('created_at', desc=True).limit(limit)
+            res = q.execute()
+            posts = [dict(r, preview=(r.get('body', '') or '')[:200]) for r in (res.data or [])]
+            return ok(data={"posts": posts})
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_search_posts 실패 → SQLite 폴백: %s", _e)
+    # ── SQLite 폴백 ──
     sql = "SELECT id, board, title, author_hash, pinned, views, created_at, content_type, sort_order, body FROM community_posts WHERE is_deleted = 0"
     params: list = []
     if board and board != "all":
@@ -4572,8 +4730,46 @@ except Exception as _e:
 
 
 def _ensure_community_schema():
-    """community_posts 테이블 생성 + 컬럼 추가 + 자동 시드."""
+    """community_posts 테이블 생성 + 컬럼 추가 + 자동 시드 (Supabase 우선, SQLite 폴백)."""
     import json as _json
+    # ── Supabase 시드 (Supabase 연결됐고 테이블이 비어있으면) ─────────────────
+    if _supa:
+        try:
+            count_res = _supa.table('community_posts').select('id', count='exact').execute()
+            if (count_res.count or 0) == 0:
+                seed_path = Path(__file__).parent / "migrations" / "community_seed.json"
+                if seed_path.exists():
+                    data = _json.loads(seed_path.read_text(encoding="utf-8"))
+                    # boards 시드
+                    for b in data.get("boards", []):
+                        try:
+                            _supa.table('boards').upsert({
+                                'id': b["id"], 'label': b["label"],
+                                'label_kr': b.get("label_kr"),
+                                'display_mode': b.get("display_mode", "list"),
+                                'sort_order': b.get("sort_order", 0),
+                                'is_hidden': b.get("is_hidden", 0),
+                            }, on_conflict='id').execute()
+                        except Exception:
+                            pass
+                    # posts 시드
+                    batch = [{
+                        'board': p["board"], 'title': p["title"], 'body': p["body"],
+                        'author_hash': p.get("author_hash", "bridge_admin"),
+                        'image_paths': p.get("image_paths", "[]"),
+                        'pinned': p.get("pinned", 0),
+                        'content_type': p.get("content_type", "markdown"),
+                        'sort_order': p.get("sort_order", 0),
+                        'category': p.get("category"),
+                    } for p in data.get("posts", [])]
+                    if batch:
+                        _supa.table('community_posts').insert(batch).execute()
+                    logging.getLogger("bridge.api").info(
+                        "[Supabase] community 시드 완료: %d posts", len(batch))
+            return  # Supabase 성공 시 SQLite 스키마 생성 스킵
+        except Exception as _se:
+            logging.getLogger("bridge.api").warning("[Supabase] community 시드 실패 → SQLite 진행: %s", _se)
+    # ── SQLite 스키마 + 시드 ──────────────────────────────────────────────────
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     # ── 1. CREATE TABLE (처음 배포 또는 DB 초기화 후 자동 복구)
@@ -7000,6 +7196,12 @@ class BoardUpdate(BaseModel):
 async def admin_list_boards(request: Request):
     """게시판 목록 (관리자)."""
     _check_admin(request)
+    if _supa:
+        try:
+            res = _supa.table('boards').select('*').order('sort_order').order('id').execute()
+            return ok(data={"boards": res.data or []})
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_list_boards 실패 → SQLite 폴백: %s", _e)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -7015,6 +7217,20 @@ async def admin_list_boards(request: Request):
 async def admin_create_board(body: BoardCreate, request: Request):
     """게시판 추가 (관리자)."""
     _check_admin(request)
+    if _supa:
+        try:
+            chk = _supa.table('boards').select('id').eq('id', body.id).execute()
+            if chk.data:
+                raise HTTPException(409, f"Board '{body.id}' already exists")
+            _supa.table('boards').insert({
+                'id': body.id, 'label': body.label,
+                'label_kr': body.label_kr, 'display_mode': body.display_mode,
+            }).execute()
+            return ok(data={"id": body.id}, message="Board created")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_create_board 실패 → SQLite 폴백: %s", _e)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -7043,6 +7259,17 @@ async def admin_update_board(board_id: str, body: BoardUpdate, request: Request)
     if body.is_hidden    is not None: updates['is_hidden']    = body.is_hidden
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
+    if _supa:
+        try:
+            chk = _supa.table('boards').select('id').eq('id', board_id).execute()
+            if not chk.data:
+                raise HTTPException(404, "Board not found")
+            _supa.table('boards').update(updates).eq('id', board_id).execute()
+            return ok(message=f"Board '{board_id}' updated")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_update_board 실패 → SQLite 폴백: %s", _e)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -7061,6 +7288,17 @@ async def admin_update_board(board_id: str, body: BoardUpdate, request: Request)
 async def admin_delete_board(board_id: str, request: Request):
     """게시판 숨김 (soft delete: is_hidden=1)."""
     _check_admin(request)
+    if _supa:
+        try:
+            chk = _supa.table('boards').select('id').eq('id', board_id).execute()
+            if not chk.data:
+                raise HTTPException(404, "Board not found")
+            _supa.table('boards').update({'is_hidden': 1}).eq('id', board_id).execute()
+            return ok(message=f"Board '{board_id}' hidden")
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("[Supabase] admin_delete_board 실패 → SQLite 폴백: %s", _e)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:

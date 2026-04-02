@@ -88,6 +88,7 @@ for r in rows:
         'title':        r['title'] or '',
         'body':         r['body'] or '',
         'author_hash':  r['author_hash'] or '',
+        'image_paths':  r['image_paths'] if 'image_paths' in r.keys() else '[]',
         'pinned':       int(r['pinned'] or 0),
         'views':        int(r['views'] or 0),
         'is_deleted':   0,
@@ -107,4 +108,27 @@ for i in range(0, len(posts), batch_size):
     total_inserted += inserted
     print(f"  배치 {i // batch_size + 1}: {inserted}건 삽입")
 
-print(f"\n✅ 마이그레이션 완료 — {total_inserted}/{len(posts)}건 Supabase 이전")
+print(f"\n✅ community_posts 마이그레이션 완료 — {total_inserted}/{len(posts)}건 Supabase 이전")
+
+# ── boards 마이그레이션 ──────────────────────────────────────────────────────
+print("\n[boards 마이그레이션]")
+conn2 = sqlite3.connect(DB_PATH)
+conn2.row_factory = sqlite3.Row
+board_rows = conn2.execute("SELECT * FROM boards").fetchall()
+conn2.close()
+if board_rows:
+    boards_existing = svc.table('boards').select('id', count='exact').execute()
+    if (boards_existing.count or 0) == 0:
+        boards_data = [{
+            'id': b['id'], 'label': b['label'],
+            'label_kr': b['label_kr'],
+            'display_mode': b['display_mode'] or 'list',
+            'sort_order': int(b['sort_order'] or 0),
+            'is_hidden': int(b['is_hidden'] or 0),
+        } for b in board_rows]
+        svc.table('boards').insert(boards_data).execute()
+        print(f"  boards {len(boards_data)}개 이전 완료")
+    else:
+        print(f"  boards 이미 존재 ({boards_existing.count}개) — 스킵")
+else:
+    print("  boards 데이터 없음 — 스킵")
