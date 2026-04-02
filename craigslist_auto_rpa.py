@@ -774,6 +774,12 @@ def build_driver(headless: bool = True) -> webdriver.Chrome:
     else:
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
 
+    # 계정별 Chrome 프로필 — 세션 쿠키 영속화 (Further verification 재발 방지)
+    profile_dir = str(CHROME_PROFILE_DIR / _ACCOUNT)
+    Path(profile_dir).mkdir(parents=True, exist_ok=True)
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    print(f"  [DRIVER] 프로필: {profile_dir}")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
         # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
