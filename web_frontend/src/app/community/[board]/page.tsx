@@ -36,7 +36,7 @@ import {
   Check, Plus,
 } from 'lucide-react'
 
-const API = API_URL
+const API = ''  // reads from Vercel JSON API routes (board-*.json), mutations use API_URL directly
 
 interface Post {
   id: number
