@@ -32,6 +32,7 @@ from PIL import Image, ImageTk
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
+
 INBOX_DIR  = BASE_DIR / "inbox"
 OUTPUT_DIR = BASE_DIR / "output"
 LOGS_DIR   = BASE_DIR / "logs"
@@ -162,11 +163,15 @@ class BridgeConverterApp:
         self._birth_year  = ""
         self._id_load_timer: Optional[str] = None
 
-        self._build_ui()
-        # 강사번호 변경 시 자동 시트 조회
-        self._candidate_id.trace_add("write", self._on_id_change)
+        # UI 빌드를 mainloop 진입 후로 지연 (WM_PAINT blocking 방지)
+        self.root.after(0, self._deferred_init)
+
+    def _deferred_init(self):
+        """mainloop 진입 후 실행 — 위젯 빌드 + 창 표시."""
         self._configure_styles()
-        self._check_sheet_connection()
+        self._build_ui()
+        self.root.deiconify()
+        self.root.after(500, self._check_sheet_connection)
 
     # ══════════════════════════════════════════════════════════════════
     # UI 빌드
@@ -524,13 +529,13 @@ class BridgeConverterApp:
             flf.drop_target_register(DND_FILES)
             flf.dnd_bind("<<Drop>>", self._on_drop)
 
-        # 5개 그룹 헤더 생성 (항상 펼침)
+        # 5개 그룹 헤더 생성 (항상 펼침) — 이모지 제거 (GDI hang 방지)
         _groups = [
-            ("photo",   "📷 사진"),
-            ("resume",  "📄 이력서"),
-            ("cover",   "📝 커버레터"),
-            ("rec",     "📋 추천서"),
-            ("unknown", "📎 기타"),
+            ("photo",   "[사진]"),
+            ("resume",  "[이력서]"),
+            ("cover",   "[커버레터]"),
+            ("rec",     "[추천서]"),
+            ("unknown", "[기타]"),
         ]
         for ftype, label in _groups:
             iid = self._file_tv.insert("", "end",
@@ -694,6 +699,10 @@ class BridgeConverterApp:
 
     def _configure_styles(self):
         style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
         style.configure("Treeview",
                         font=(F, 12),
                         rowheight=28)
@@ -1986,6 +1995,7 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def run(self):
+        self.root.withdraw()
         self.root.mainloop()
 
 

@@ -744,7 +744,9 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
         print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
 
     # 계정별 Chrome 프로필 → 쿠키/세션 유지
-    profile_dir = Path(__file__).resolve().parent / ".chrome_rpa_profile" / account
+    # Q: 드라이브에서 --user-data-dir 사용 시 Chrome 크래시 → 로컬 TEMP 사용
+    import tempfile
+    profile_dir = Path(tempfile.gettempdir()) / "bridge_rpa_chrome" / account
     profile_dir.mkdir(parents=True, exist_ok=True)
     # 프로필 잠금 파일 정리 (이전 크래시 잔류물)
     for _lock in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
@@ -758,13 +760,14 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     print(f"  [DRIVER] 프로필: {profile_dir}")
 
     if headless:
-        # Headless 모드: 화면 미러링 잠금 상태에서 작동
-        # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
-        opts.add_argument("--headless=new")
+        # --headless=new + --user-data-dir = Chrome 크래시 (Chrome 버그)
+        # 대안: 창을 화면 밖으로 → 보이지 않으면서 프로필 유지
+        opts.add_argument("--window-position=-32000,-32000")
+        opts.add_argument("--window-size=1920,1080")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--window-size=1920,1080")
-        print("  [DRIVER] Headless 모드로 Chrome 시작")
+        opts.add_argument("--disable-gpu")
+        print("  [DRIVER] 백그라운드 모드 (offscreen)")
     else:
         opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
@@ -847,6 +850,51 @@ def cl_login(driver: webdriver.Chrome) -> bool:
             return True
         except Exception:
             pass
+
+        # "Further verification required" → 이메일 로그인 링크 자동 요청
+        src_after = driver.page_source.lower()
+        if "further verification" in src_after or "one-time login" in src_after:
+            print("  [LOGIN] ⚠️ 추가 인증 필요 — 이메일 로그인 링크 전송 시도...")
+            try:
+                # "E-mail a login link" 버튼 클릭
+                link_btn = None
+                for sel in ["input[value*='login link']", "button[value*='login link']",
+                            "input[type='submit'][value*='mail']"]:
+                    try:
+                        link_btn = driver.find_element(By.CSS_SELECTOR, sel)
+                        break
+                    except Exception:
+                        pass
+                if not link_btn:
+                    # 텍스트로 찾기
+                    for btn in driver.find_elements(By.TAG_NAME, "input"):
+                        if "login link" in (btn.get_attribute("value") or "").lower():
+                            link_btn = btn
+                            break
+                if link_btn:
+                    link_btn.click()
+                    print(f"  [LOGIN] 📧 로그인 링크가 {CL_EMAIL}로 전송됨!")
+                    print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
+                    _log_event("warning", "—", "login",
+                               f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
+                    # 3분간 10초 간격으로 로그인 확인
+                    for wait_i in range(18):
+                        _delay(9, 11)
+                        try:
+                            driver.refresh()
+                            _delay(2, 3)
+                            if _is_logged_in(driver):
+                                print("  [LOGIN] 이메일 링크 인증 성공 ✅")
+                                return True
+                        except Exception:
+                            pass
+                        remaining = (18 - wait_i - 1) * 10
+                        if remaining > 0:
+                            print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
+                else:
+                    print("  [LOGIN] 이메일 링크 버튼 미발견")
+            except Exception as vex:
+                print(f"  [LOGIN] 인증 처리 오류: {vex}")
 
         # CAPTCHA 감지
         if _has_captcha(driver):
