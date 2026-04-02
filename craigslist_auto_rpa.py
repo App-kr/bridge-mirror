@@ -225,6 +225,12 @@ if not _SKIP_SELENIUM:
         from selenium.webdriver.support.ui import WebDriverWait, Select
         from selenium.webdriver.support import expected_conditions as EC
         from webdriver_manager.chrome import ChromeDriverManager
+        # 봇 탐지 우회용 undetected-chromedriver
+        try:
+            import undetected_chromedriver as uc
+            _HAS_UC = True
+        except ImportError:
+            _HAS_UC = False
     except ImportError as e:
         print(f"[ERROR] Selenium이 설치되지 않았습니다.")
         print(f"설치 명령: pip install selenium webdriver-manager")
@@ -733,18 +739,7 @@ def _find_chrome_binary() -> str | None:
 
 
 def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
-    opts = Options()
-
-    # Chrome 바이너리 경로 자동 설정 (비표준 설치 경로 대응)
-    chrome_bin = _find_chrome_binary()
-    if chrome_bin:
-        opts.binary_location = chrome_bin
-        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-    else:
-        print("  [DRIVER] WARNING: Chrome 바이너리 미발견 — 기본 경로로 시도")
-
     # 계정별 Chrome 프로필 → 쿠키/세션 유지
-    # Q: 드라이브에서 --user-data-dir 사용 시 Chrome 크래시 → 로컬 TEMP 사용
     import tempfile
     profile_dir = Path(tempfile.gettempdir()) / "bridge_rpa_chrome" / account
     profile_dir.mkdir(parents=True, exist_ok=True)
@@ -756,23 +751,64 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
                 _lf.unlink()
             except Exception:
                 pass
-    opts.add_argument(f"--user-data-dir={profile_dir}")
     print(f"  [DRIVER] 프로필: {profile_dir}")
 
+    chrome_bin = _find_chrome_binary()
+
+    # ── undetected-chromedriver 사용 (봇 탐지 우회) ──
+    if _HAS_UC:
+        uc_opts = uc.ChromeOptions()
+        if chrome_bin:
+            uc_opts.binary_location = chrome_bin
+            print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+        uc_opts.add_argument(f"--user-data-dir={profile_dir}")
+        if headless:
+            # offscreen (headless 아닌 실제 브라우저를 화면 밖에 배치)
+            uc_opts.add_argument("--window-position=-32000,-32000")
+            uc_opts.add_argument("--window-size=1920,1080")
+            print("  [DRIVER] undetected + offscreen 모드")
+        else:
+            uc_opts.add_argument("--start-maximized")
+            print("  [DRIVER] undetected + visible 모드")
+        uc_opts.add_argument("--no-first-run")
+        uc_opts.add_argument("--no-default-browser-check")
+        uc_opts.add_argument("--remote-debugging-port=0")
+        # Chrome 버전 자동 감지 (version mismatch 방지)
+        _chrome_ver = None
+        if chrome_bin:
+            try:
+                import subprocess as _sp
+                _ver_out = _sp.check_output(
+                    f'powershell.exe -NoProfile -Command "(Get-Item \'{chrome_bin}\').VersionInfo.FileVersion"',
+                    shell=True, text=True).strip()
+                _chrome_ver = int(_ver_out.split(".")[0])
+                print(f"  [DRIVER] Chrome 버전: {_chrome_ver}")
+            except Exception:
+                pass
+        driver = uc.Chrome(options=uc_opts, use_subprocess=True,
+                           version_main=_chrome_ver)
+        return driver
+
+    # ── 폴백: 일반 Selenium ──
+    print("  [DRIVER] WARNING: undetected-chromedriver 미설치 — 일반 Selenium 사용")
+    opts = Options()
+    if chrome_bin:
+        opts.binary_location = chrome_bin
+        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+    opts.add_argument(f"--user-data-dir={profile_dir}")
     if headless:
-        # Chrome 120+ 에서 --headless=new + --user-data-dir 크래시 해결됨
-        opts.add_argument("--headless=new")
+        opts.add_argument("--window-position=-32000,-32000")
         opts.add_argument("--window-size=1920,1080")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
-        opts.add_argument("--no-first-run")
-        opts.add_argument("--no-default-browser-check")
-        print("  [DRIVER] headless 모드")
+        print("  [DRIVER] offscreen 모드 (폴백)")
     else:
         opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_argument("--remote-debugging-port=0")  # 사용자 Chrome과 포트 충돌 방지
+    opts.add_argument("--remote-debugging-port=0")
+    opts.add_argument("--no-first-run")
+    opts.add_argument("--no-default-browser-check")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
     svc    = Service(ChromeDriverManager().install())
