@@ -746,6 +746,14 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     # 계정별 Chrome 프로필 → 쿠키/세션 유지
     profile_dir = Path(__file__).resolve().parent / ".chrome_rpa_profile" / account
     profile_dir.mkdir(parents=True, exist_ok=True)
+    # 프로필 잠금 파일 정리 (이전 크래시 잔류물)
+    for _lock in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
+        _lf = profile_dir / _lock
+        if _lf.exists():
+            try:
+                _lf.unlink()
+            except Exception:
+                pass
     opts.add_argument(f"--user-data-dir={profile_dir}")
     print(f"  [DRIVER] 프로필: {profile_dir}")
 
@@ -760,6 +768,7 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     else:
         opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--remote-debugging-port=0")  # 사용자 Chrome과 포트 충돌 방지
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
     svc    = Service(ChromeDriverManager().install())
@@ -1480,6 +1489,7 @@ def security_check(body: str, job_code: str) -> bool:
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
+    global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
     parser = argparse.ArgumentParser(description="BRIDGE Craigslist Auto RPA")
     parser.add_argument("--dry-run",   action="store_true", help="텍스트 출력만 (게시 없음)")
     parser.add_argument("--generate",  action="store_true", help="draft DB 저장만 (브라우저 없음)")
@@ -1506,7 +1516,7 @@ def main():
         return
 
     # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
-    if not args.account and not args.dry_run and not args.generate and not args.diagnose:
+    if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
         try:
             from rpa_overlay import ask_account_selection
             account_id, selected_limit = ask_account_selection()
@@ -1520,7 +1530,7 @@ def main():
         args.limit   = selected_limit
 
     # ── 중복 실행 방지 (per-account 잠금 파일 체크) ──────────────────────────
-    if not args.dry_run and not args.generate and not args.diagnose:
+    if not args.all and not args.dry_run and not args.generate and not args.diagnose:
         acct_key  = args.account or "default"
         acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
         if acct_lock.exists():
@@ -1545,7 +1555,6 @@ def main():
     # ── Credential Vault 재로딩 (--account 지정 시) ──
     # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
     if args.account:
-        global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
         CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(args.account)
         CL_CITY     = "seoul"  # 기본값 유지
         CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
@@ -1573,12 +1582,12 @@ def main():
             pass
 
         for acct_idx, acct_name in enumerate(_ALL_ACCOUNTS):
+          try:
             print(f"\n{'='*55}")
             print(f"  [{acct_idx+1}/4] 계정: {acct_name}")
             print(f"{'='*55}")
 
             # 계정 전환
-            global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
             try:
                 CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(acct_name)
             except SystemExit:
@@ -1615,7 +1624,13 @@ def main():
                 update_status("로그인중")
 
             hl_flag = args.headless
-            driver = build_driver(headless=hl_flag, account=acct_name)
+            driver = None
+            try:
+                driver = build_driver(headless=hl_flag, account=acct_name)
+            except Exception as drv_exc:
+                print(f"  [ERROR] Chrome 시작 실패: {drv_exc}")
+                _log_event("error", "—", "driver", f"{acct_name}: {drv_exc}")
+                continue
             posted = 0
             try:
                 if not cl_login(driver):
@@ -1660,7 +1675,11 @@ def main():
                 _log_event("error", "—", "session", f"{acct_name}: {sess_exc}")
                 print(f"  [SESSION ERROR] {sess_exc}")
             finally:
-                driver.quit()
+                if driver:
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
 
             grand_total += posted
             print(f"  [{acct_name}] {posted}건 게시 완료")
@@ -1668,6 +1687,11 @@ def main():
             # 계정 간 쿨다운
             if acct_idx < len(_ALL_ACCOUNTS) - 1 and posted > 0:
                 countdown(30, "다음 계정 대기")
+
+          except Exception as acct_exc:
+            print(f"  [FATAL] {acct_name} 계정 처리 중 예외 — 다음 계정으로: {acct_exc}")
+            _log_event("error", "—", "account_fatal", f"{acct_name}: {acct_exc}")
+            continue
 
         print(f"\n{'='*60}")
         print(f"  전체 완료: {grand_total}건 게시 (4계정)")
