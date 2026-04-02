@@ -605,7 +605,7 @@ SECURITY_HEADERS = {
     ),
     "Content-Security-Policy": (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://trusted.cdn.com; "
+        "script-src 'self' 'unsafe-inline'; "  # TODO: nonce 기반으로 교체 시 'unsafe-inline' 제거
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "

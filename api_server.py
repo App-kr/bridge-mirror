@@ -23,6 +23,7 @@ bridgejob.co.kr 웹사이트용 백엔드 API
 import io
 import os
 import re
+import zipfile
 import sys
 print(f"[STARTUP] Python {sys.version} | platform={sys.platform} | pid={os.getpid()}")
 import json
@@ -185,13 +186,19 @@ if not _JWT_SECRET:
     print("[WARN] JWT_SECRET 미설정 — 임시 랜덤 키 사용 (서버 재시작 시 기존 토큰 무효화됨)")
     print("[WARN] .env에 JWT_SECRET 를 별도로 설정하세요.")
 _JWT_ALG     = "HS256"
-_JWT_TTL     = timedelta(days=30)
+_JWT_TTL     = timedelta(hours=1)
 
 
 def _make_candidate_token(candidate_id: str) -> str:
-    """지원자 ID를 담은 30일짜리 JWT 생성."""
+    """지원자 ID를 담은 1시간짜리 JWT 생성."""
     exp = datetime.now(timezone.utc) + _JWT_TTL
-    payload = {"sub": str(candidate_id), "exp": exp, "iss": "bridge-apply"}
+    payload = {
+        "sub": str(candidate_id),
+        "exp": exp,
+        "iss": "bridge-apply",
+        "jti": str(uuid.uuid4()),
+        "type": "access",
+    }
     return _jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALG)
 
 
@@ -432,7 +439,7 @@ async def _structured_error_handler(request: Request, exc: HTTPException):
             "isError": True,
             "errorCategory": _STATUS_TO_CATEGORY.get(exc.status_code, "UNKNOWN"),
             "isRetryable": exc.status_code in _RETRYABLE_STATUSES,
-            "context": str(exc.detail) if exc.detail else "Unknown error",
+            "context": str(exc.detail) if (exc.detail and os.getenv("ENVIRONMENT", "production") == "development") else "",
         },
     )
 
@@ -5587,6 +5594,18 @@ def _validate_file(data: bytes, filename: str, file_type: str) -> str:
 
     if magic_prefixes and not any(data[:8].startswith(m) for m in magic_prefixes):
         raise HTTPException(400, "File content does not match its extension.")
+
+    # ZIP bomb 방어: 압축 해제 후 크기 및 파일 수 제한
+    if ext == ".zip":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                total_uncompressed = sum(i.file_size for i in zf.infolist())
+                if total_uncompressed > 200 * 1024 * 1024:
+                    raise HTTPException(413, "ZIP content exceeds 200MB uncompressed limit.")
+                if len(zf.infolist()) > 200:
+                    raise HTTPException(400, "ZIP contains too many files (max 200).")
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "Invalid or corrupted ZIP file.")
 
     return ext
 
