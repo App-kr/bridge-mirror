@@ -3238,6 +3238,82 @@ except Exception:
     pass
 
 
+def _ensure_jobs_cols():
+    """jobs 테이블에 누락 컬럼 추가 (Render DB 마이그레이션)."""
+    _cols = [
+        ("is_deleted", "INTEGER", "0"),
+        ("brj_id", "TEXT", "NULL"),
+        ("legacy_id", "TEXT", "NULL"),
+        ("region", "TEXT", "NULL"),
+        ("region_name", "TEXT", "NULL"),
+        ("enc_employer_name", "TEXT", "NULL"),
+        ("enc_contact_name", "TEXT", "NULL"),
+        ("enc_contact_phone", "TEXT", "NULL"),
+        ("enc_contact_email", "TEXT", "NULL"),
+        ("enc_contact_kakao", "TEXT", "NULL"),
+        ("employer_display_name", "TEXT", "NULL"),
+        ("salary_krw", "INTEGER", "NULL"),
+        ("salary_negotiable", "INTEGER", "NULL"),
+        ("housing_type", "TEXT", "NULL"),
+        ("housing_detail", "TEXT", "NULL"),
+        ("vacation_days", "INTEGER", "NULL"),
+        ("visa_sponsorship", "INTEGER", "NULL"),
+        ("f_visa_welcome", "INTEGER", "NULL"),
+        ("kyopo_welcome", "INTEGER", "NULL"),
+        ("degree_requirement", "TEXT", "NULL"),
+        ("korea_resident_only", "INTEGER", "NULL"),
+        ("raw_text", "TEXT", "NULL"),
+        ("raw_source", "TEXT", "NULL"),
+        ("teaching_hours_weekly", "TEXT", "NULL"),
+        ("parse_confidence", "REAL", "NULL"),
+        ("parse_warnings", "TEXT", "NULL"),
+    ]
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        for col_name, col_type, default in _cols:
+            try:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type} DEFAULT {default}")
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _ensure_candidates_all_cols():
+    """candidates 테이블에 최신 컬럼 추가 (Render DB 마이그레이션)."""
+    _cols = [
+        ("employment", "TEXT", "NULL"),
+        ("contract_offered", "TEXT", "NULL"),
+        ("personal_consideration", "TEXT", "NULL"),
+        ("is_deleted", "INTEGER", "0"),
+        ("read_at", "TEXT", "NULL"),
+    ]
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        for col_name, col_type, default in _cols:
+            try:
+                conn.execute(f"ALTER TABLE candidates ADD COLUMN {col_name} {col_type} DEFAULT {default}")
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+try:
+    _ensure_jobs_cols()
+except Exception:
+    pass
+
+try:
+    _ensure_candidates_all_cols()
+except Exception:
+    pass
+
+
 def _build_profile_card_v2(c: dict) -> str:
     """실사례(02.JPG, 03.JPG) 기준 프로필 카드. 기존 _build_profile_card() 건드리지 않음."""
     num = c.get("sheet_number") or c.get("candidate_id", "")
