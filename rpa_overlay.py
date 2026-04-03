@@ -1104,11 +1104,11 @@ class RPAOverlay:
         except Exception:
             pass
         root.overrideredirect(True)
-        root.attributes("-topmost", False)   # 현재 창 뒤에서 열림
+        root.attributes("-topmost", False)
         root.attributes("-alpha", 0.0)
         root.configure(bg=self.BG)
 
-        w, h = 320, 260
+        w, h = 360, 330
         mx, my, mw, mh = 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
@@ -1124,15 +1124,19 @@ class RPAOverlay:
         card = tk.Frame(border, bg=self.BG)
         card.pack(fill="both", expand=True)
 
+        _countdown = [10]
+
         def _set_result(res: str):
             _complete_result_val[0] = res
+            if res == "MORE":
+                _post_more_event.set()
             _complete_done_event.set()
             try:
                 root.destroy()
             except Exception:
                 pass
 
-        # 페이드 인 (포커스 탈취 없음)
+        # fade in
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
@@ -1143,7 +1147,7 @@ class RPAOverlay:
                 root.attributes("-alpha", 1.0)
         root.after(10, _fade)
 
-        # 상단 바 (X → EXIT)
+        # top bar (X)
         bar = tk.Frame(card, bg=self.BG, height=28)
         bar.pack(fill="x")
         bar.pack_propagate(False)
@@ -1154,52 +1158,135 @@ class RPAOverlay:
         xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
         xb.bind("<Button-1>", lambda e: _set_result("EXIT"))
 
+        # check animation
         chk = tk.Canvas(card, width=54, height=46,
                         bg=self.BG, highlightthickness=0)
         chk.pack(pady=(2, 4))
         self._draw_check_animated(chk, root)
 
-        title = tk.Label(card, text=f"✓  {count}건 완료!",
-                         font=self._fn(16, "bold"),
-                         bg=self.BG, fg=self.TEXT1)
-        title.pack()
+        # title
+        title_lbl = tk.Label(card, text="작업완료!",
+                             font=self._fn(16, "bold"),
+                             bg=self.BG, fg=self.TEXT1)
+        title_lbl.pack()
 
-        sub = tk.Label(card, text="작업이 완료되었습니다",
-                       font=self._fn(10), bg=self.BG, fg=self.TEXT2)
-        sub.pack(pady=(3, 10))
+        # subtitle
+        sub_lbl = tk.Label(card, text=f"{count}건 게시 완료",
+                           font=self._fn(10), bg=self.BG, fg=self.TEXT2)
+        sub_lbl.pack(pady=(3, 10))
 
         self._sep(card)
 
-        # 3개 선택 버튼 행
-        btn_row = tk.Frame(card, bg=self.BG)
-        btn_row.pack(fill="x")
-        _BTNS = [
-            ("추가 작업", "MORE",   self.GREEN),
-            ("아이디 변경", "CHANGE", self.BLUE),
-            ("종료",     "EXIT",   "#ff3b30"),
-        ]
-        for i, (label, res, color) in enumerate(_BTNS):
-            def _click(r=res):
-                _set_result(r)
-            btn = tk.Label(btn_row, text=label,
-                           font=self._fn(13),
-                           bg=self.BG, fg=color, cursor="hand2", pady=10)
-            btn.pack(side="left", expand=True, fill="both")
-            btn.bind("<Button-1>", lambda e, f=_click: f())
-            btn.bind("<Enter>",    lambda e, b=btn: b.configure(bg=self.HOVER))
-            btn.bind("<Leave>",    lambda e, b=btn: b.configure(bg=self.BG))
-            if i < len(_BTNS) - 1:
-                tk.Frame(btn_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+        # ── switchable content area ──
+        content = tk.Frame(card, bg=self.BG)
+        content.pack(fill="both", expand=True)
 
-        self._drag(root, bar, chk, title, sub, btn_row)
-        # 60초 후 자동 종료 (기본: EXIT)
-        root.after(60000, lambda: _set_result("EXIT") if root.winfo_exists() else None)
+        # -- Main view: more buttons + account change --
+        main_view = tk.Frame(content, bg=self.BG)
+        main_view.pack(fill="both", expand=True)
+
+        more_row = tk.Frame(main_view, bg=self.BG)
+        more_row.pack(fill="x")
+
+        for i, (label, cnt) in enumerate([("5개 더", 5), ("10개 더", 10), ("20개 더", 20)]):
+            def _click_more(n=cnt):
+                _post_more_count[0] = n
+                _set_result("MORE")
+            btn = tk.Label(more_row, text=label,
+                           font=self._fn(13),
+                           bg=self.BG, fg=self.GREEN, cursor="hand2", pady=10)
+            btn.pack(side="left", expand=True, fill="both")
+            btn.bind("<Button-1>", lambda e, f=_click_more: f())
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=self.HOVER))
+            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=self.BG))
+            if i < 2:
+                tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+
+        self._sep(main_view)
+
+        def _show_accounts():
+            main_view.pack_forget()
+            acct_view.pack(fill="both", expand=True)
+            _countdown[0] = 30  # extend timeout for account browsing
+
+        chg_btn = tk.Label(main_view, text="계정변경",
+                           font=self._fn(13),
+                           bg=self.BG, fg=self.BLUE, cursor="hand2", pady=10)
+        chg_btn.pack(fill="x")
+        chg_btn.bind("<Button-1>", lambda e: _show_accounts())
+        chg_btn.bind("<Enter>", lambda e: chg_btn.configure(bg=self.HOVER))
+        chg_btn.bind("<Leave>", lambda e: chg_btn.configure(bg=self.BG))
+
+        # -- Account picker view (hidden initially) --
+        acct_view = tk.Frame(content, bg=self.BG)
+
+        def _darken(hc, factor=0.85):
+            r = int(int(hc[1:3], 16) * factor)
+            g = int(int(hc[3:5], 16) * factor)
+            b = int(int(hc[5:7], 16) * factor)
+            return "#{:02x}{:02x}{:02x}".format(
+                min(r, 255), min(g, 255), min(b, 255))
+
+        current_email = (self._email or "").lower()
+        for acct_id, email, color in _ACCOUNT_LIST:
+            if email.lower() == current_email:
+                continue
+            name = email.split("@")[0]
+            hov_c = _darken(color)
+
+            wrap = tk.Frame(acct_view, bg=self.SEP, padx=1, pady=1)
+            wrap.pack(fill="x", padx=12, pady=2)
+            inner = tk.Label(wrap, text=f"  {name}",
+                             font=self._fn(12),
+                             bg=color, fg="#1d1d1f", cursor="hand2",
+                             pady=8, padx=8, anchor="w")
+            inner.pack(fill="both")
+
+            def _click_acct(aid=acct_id):
+                _set_result(f"CHANGE_{aid}")
+            inner.bind("<Button-1>", lambda e, f=_click_acct: f())
+            inner.bind("<Enter>", lambda e, b=inner, h=hov_c: b.configure(bg=h))
+            inner.bind("<Leave>", lambda e, b=inner, c=color: b.configure(bg=c))
+
+        def _back_to_main():
+            acct_view.pack_forget()
+            main_view.pack(fill="both", expand=True)
+            _countdown[0] = 10
+
+        back_lbl = tk.Label(acct_view, text="돌아가기",
+                            font=self._fn(10),
+                            bg=self.BG, fg=self.X_GRAY, cursor="hand2", pady=6)
+        back_lbl.pack()
+        back_lbl.bind("<Button-1>", lambda e: _back_to_main())
+        back_lbl.bind("<Enter>", lambda e: back_lbl.configure(fg=self.TEXT1))
+        back_lbl.bind("<Leave>", lambda e: back_lbl.configure(fg=self.X_GRAY))
+
+        # ── Bottom: countdown ──
+        self._sep(card)
+        countdown_lbl = tk.Label(card, text="10초 후 자동 종료",
+                                 font=self._fn(9),
+                                 bg=self.BG, fg=self.X_GRAY, pady=6)
+        countdown_lbl.pack()
+
+        def _tick():
+            if not root.winfo_exists():
+                return
+            _countdown[0] -= 1
+            if _countdown[0] <= 0:
+                _set_result("EXIT")
+                return
+            countdown_lbl.configure(text=f"{_countdown[0]}초 후 자동 종료")
+            root.after(1000, _tick)
+
+        root.after(1000, _tick)
+
+        self._drag(root, bar, chk, title_lbl, sub_lbl, content)
         self._ready.set()
         try:
             root.mainloop()
         except Exception:
             pass
-        _complete_done_event.set()   # 창이 다른 방법으로 닫힌 경우 보장
+        _complete_done_event.set()   # fallback if window closed externally
 
     # ── Progress helpers ──────────────────────
     @staticmethod

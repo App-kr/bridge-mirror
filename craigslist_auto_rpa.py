@@ -281,43 +281,32 @@ else:
 
 # ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
 def _load_craigslist_credentials(account_name: str = "gray"):
-    """Craigslist 자격증명을 .rpa_vault.json에서 로드 (간단한 JSON)
+    """Craigslist 자격증명을 암호화 vault에서 복호화 로드.
 
-    ENV 절대 사용 금지 — vault JSON에서만 로드
+    ENV/평문 절대 사용 금지 — 3중 AES-256-GCM vault에서만 로드
+    DPAPI 캐시로 마스터 키 자동 로드 (재입력 불필요)
 
     계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
     """
     try:
-        vault_path = Path(__file__).resolve().parent / ".rpa_vault.json"
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "tools"))
+        from rpa_credential_vault import CredentialVault
+        vault = CredentialVault()
 
-        if not vault_path.exists():
-            print(f"[ERROR] Vault 파일을 찾을 수 없습니다: {vault_path}")
-            print("\n먼저 비밀번호를 설정하세요:")
-            print("  python auto_vault_setup.py")
-            sys.exit(1)
-
-        # JSON에서 로드
-        with open(vault_path, "r", encoding="utf-8") as f:
-            vault_data = json.load(f)
-
-        # 계정별 키 생성
         email_key = f"{account_name}_email"
         password_key = f"{account_name}_password"
 
-        email = vault_data.get(email_key)
-        password = vault_data.get(password_key)
+        email = vault.get_decrypted(email_key)
+        password = vault.get_decrypted(password_key)
 
         if not email or not password:
             print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
-            print("사용 가능한 계정: gray(회색), green(초록), brown(갈색), purple(보라)")
-            print("실행 예시: python craigslist_auto_rpa.py --account gray --limit 1")
+            print("먼저 vault 설정을 실행하세요:")
+            print("  vault_setup.bat 더블클릭")
             sys.exit(1)
 
         print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
         return email, password
-    except json.JSONDecodeError:
-        print(f"[ERROR] Vault 파일이 손상되었습니다: {vault_path}")
-        sys.exit(1)
     except Exception as e:
         print(f"[ERROR] 자격증명 로드 실패: {e}")
         sys.exit(1)
@@ -739,52 +728,60 @@ def _find_chrome_binary() -> str | None:
 
 
 def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
-    # 계정별 Chrome 프로필 → 쿠키/세션 유지
-    import tempfile
-    profile_dir = Path(tempfile.gettempdir()) / "bridge_rpa_chrome" / account
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    # 프로필 잠금 파일 정리 (이전 크래시 잔류물)
-    for _lock in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
-        _lf = profile_dir / _lock
-        if _lf.exists():
-            try:
-                _lf.unlink()
-            except Exception:
-                pass
-    print(f"  [DRIVER] 프로필: {profile_dir}")
+    """Chrome 드라이버 생성.
 
+    headless=True 시에도 visible 모드로 실행 (Craigslist BFP3 감지 우회).
+    Craigslist는 headless/offscreen 브라우저를 감지하여 추가 인증을 요구하므로
+    실제 Chrome 창을 띄우되, 로그인 후 cl_login()에서 minimize 처리.
+    """
     chrome_bin = _find_chrome_binary()
 
-    # ── undetected-chromedriver 사용 (봇 탐지 우회) ──
+    # ── undetected-chromedriver 우선 (봇 탐지 우회) ──
     if _HAS_UC:
         uc_opts = uc.ChromeOptions()
         if chrome_bin:
             uc_opts.binary_location = chrome_bin
             print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-        uc_opts.add_argument(f"--user-data-dir={profile_dir}")
+        # Craigslist BFP3가 headless/offscreen 감지 → visible 모드 필수
+        # headless 시 화면 밖에서 시작 (사용자에게 안 보임)
         if headless:
-            # offscreen (headless 아닌 실제 브라우저를 화면 밖에 배치)
-            uc_opts.add_argument("--window-position=-32000,-32000")
+            uc_opts.add_argument("--window-position=-10000,-10000")
             uc_opts.add_argument("--window-size=1920,1080")
-            print("  [DRIVER] undetected + offscreen 모드")
         else:
             uc_opts.add_argument("--start-maximized")
-            print("  [DRIVER] undetected + visible 모드")
         uc_opts.add_argument("--no-first-run")
         uc_opts.add_argument("--no-default-browser-check")
         uc_opts.add_argument("--remote-debugging-port=0")
+        if headless:
+            print("  [DRIVER] undetected + off-screen 모드")
+        else:
+            print("  [DRIVER] undetected + visible 모드")
         # Chrome 버전 자동 감지 (version mismatch 방지)
         _chrome_ver = None
         if chrome_bin:
             try:
                 import subprocess as _sp
                 _ver_out = _sp.check_output(
-                    f'powershell.exe -NoProfile -Command "(Get-Item \'{chrome_bin}\').VersionInfo.FileVersion"',
-                    shell=True, text=True).strip()
+                    ['powershell.exe', '-NoProfile', '-Command',
+                     f"(Get-Item '{chrome_bin}').VersionInfo.FileVersion"],
+                    text=True, timeout=10).strip()
                 _chrome_ver = int(_ver_out.split(".")[0])
                 print(f"  [DRIVER] Chrome 버전: {_chrome_ver}")
-            except Exception:
-                pass
+            except Exception as _ve:
+                print(f"  [DRIVER] 버전 감지 실패: {_ve}")
+            # 레지스트리 폴백
+            if _chrome_ver is None:
+                try:
+                    _reg_out = _sp.check_output(
+                        'reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
+                        shell=True, text=True, timeout=10).strip()
+                    for _rl in _reg_out.splitlines():
+                        if "version" in _rl.lower():
+                            _chrome_ver = int(_rl.split()[-1].split(".")[0])
+                            print(f"  [DRIVER] Chrome 버전 (reg): {_chrome_ver}")
+                            break
+                except Exception:
+                    pass
         driver = uc.Chrome(options=uc_opts, use_subprocess=True,
                            version_main=_chrome_ver)
         return driver
@@ -795,16 +792,7 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     if chrome_bin:
         opts.binary_location = chrome_bin
         print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-    opts.add_argument(f"--user-data-dir={profile_dir}")
-    if headless:
-        opts.add_argument("--window-position=-32000,-32000")
-        opts.add_argument("--window-size=1920,1080")
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--disable-gpu")
-        print("  [DRIVER] offscreen 모드 (폴백)")
-    else:
-        opts.add_argument("--start-maximized")
+    opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--remote-debugging-port=0")
     opts.add_argument("--no-first-run")
@@ -855,12 +843,25 @@ def _has_captcha(driver) -> bool:
 def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
 
+    def _is_logged_in(d):
+        src = d.page_source.lower()
+        return "log out" in src or "logout" in src or "make new post" in src
+
+    def _minimize_if_needed(d):
+        """로그인 성공 후 창을 화면 밖으로 이동 (minimize는 클릭 무효화)"""
+        try:
+            d.set_window_position(-10000, -10000)
+            print("  [LOGIN] 창 최소화 완료")
+        except Exception:
+            pass
+
     # ── 쿠키 세션 체크: 이미 로그인 상태면 스킵 ──
     driver.get("https://accounts.craigslist.org/login/home")
     _delay(2, 3)
     src_check = driver.page_source.lower()
     if "log out" in src_check or "logout" in src_check:
         print("  [LOGIN] 기존 쿠키로 이미 로그인 상태 — 스킵 ✅")
+        _minimize_if_needed(driver)
         return True
 
     try:
@@ -877,13 +878,10 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
         # Craigslist 는 로그인 후에도 URL 이 accounts.craigslist.org/login/home 유지
         # → URL 대신 페이지 콘텐츠로 로그인 성공 여부 판단
-        def _is_logged_in(d):
-            src = d.page_source.lower()
-            return "log out" in src or "logout" in src or "make new post" in src
-
         try:
             WebDriverWait(driver, 12).until(_is_logged_in)
             print(f"  [LOGIN] 성공 ✅")
+            _minimize_if_needed(driver)
             return True
         except Exception:
             pass
@@ -939,6 +937,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                             _delay(2, 3)
                             if _is_logged_in(driver):
                                 print("  [LOGIN] 이메일 링크 인증 성공 ✅")
+                                _minimize_if_needed(driver)
                                 return True
                         except Exception:
                             pass
@@ -978,6 +977,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         countdown(30, "로그인 대기")
         if _is_logged_in(driver):
             print("  [LOGIN] 성공 ✅")
+            _minimize_if_needed(driver)
             return True
 
         ss_path = SS_DIR / "login_fail.png"
@@ -1070,9 +1070,41 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         print(f"  [?s={step}] ", end="", flush=True)
 
         if step == "copyfromanother":
-            # "copy from another posting?" → 그냥 continue (skip)
+            # "copy from another posting?" → skip
             print("이전 게시물 복사 스킵")
-            _advance(driver, step)
+            skip_el = None
+            for sel in ["input[value='skip']", "button"]:
+                for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                    txt = (el.get_attribute("value") or el.text or "").lower().strip()
+                    if txt == "skip":
+                        skip_el = el
+                        break
+                if skip_el:
+                    break
+
+            if skip_el:
+                # 1) native click
+                try:
+                    skip_el.click()
+                except Exception:
+                    _js_click(driver, skip_el)
+                _delay(0.5, 1.0)
+                # 2) still stuck? force form submit
+                if _step(driver.current_url) == step:
+                    try:
+                        driver.execute_script(
+                            "var f=arguments[0].closest('form');"
+                            "if(f) f.submit();", skip_el)
+                    except Exception:
+                        pass
+                    _delay(0.5, 1.0)
+
+            # 3) fallback: _advance (continue/submit 버튼)
+            if _step(driver.current_url) == step:
+                _advance(driver, step)
+            else:
+                _delay(1.0, 2.0)
+                print(f"    → ?s={_step(driver.current_url)}")
 
         elif step == "area":
             # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
@@ -2045,10 +2077,13 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested, set_background_mode
         _HAS_OVERLAY = True
         # 전역 _update_status 함수 설정 (cl_post()에서 사용)
         globals()['_update_status'] = update_status
+        # headless 모드에서는 오버레이가 포커스를 뺏지 않도록
+        if args.headless:
+            set_background_mode(True)
     except ImportError:
         _HAS_OVERLAY = False
 
@@ -2146,22 +2181,18 @@ def main():
     print("=" * 60)
 
     if _HAS_OVERLAY:
-        show_complete(posted_count=total_posted)
+        result = show_complete(posted_count=total_posted)
 
-        # "5개 더 올리기" 대기 (최대 60초)
-        import time as _time
-        for _ in range(60):
-            _time.sleep(1)
-            if wants_more():
-                print("\n[OVERLAY] 유저 요청: 5개 더 올리기!")
-                overlay_close()
+        if result == "MORE" or wants_more():
+            more_count = wants_more_count()
+            print(f"\n[OVERLAY] 유저 요청: {more_count}개 더 올리기!")
+            overlay_close()
 
-                extra_jobs = fetch_jobs(None, 5)
-                if not extra_jobs:
-                    print("추가 게시할 포지션 없음")
-                    show_complete(posted_count=total_posted)
-                    break
-
+            extra_jobs = fetch_jobs(None, more_count)
+            if not extra_jobs:
+                print("추가 게시할 포지션 없음")
+                show_complete(posted_count=total_posted)
+            else:
                 extra_ads = []
                 for job in extra_jobs:
                     title, body = generate_ad(job)
@@ -2177,7 +2208,19 @@ def main():
                 total_posted += extra_posted
                 print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
                 show_complete(posted_count=total_posted)
-                break
+
+        elif result and result.startswith("CHANGE_"):
+            new_acct = result.split("_", 1)[1]
+            print(f"\n[OVERLAY] 계정 변경: {new_acct}")
+            overlay_close()
+            import subprocess
+            _script = str(Path(__file__).resolve())
+            _cmd = [sys.executable, "-X", "utf8", _script,
+                    "--account", new_acct, "--limit", str(args.limit)]
+            if args.headless:
+                _cmd.append("--headless")
+            print(f"  새 프로세스 시작: {new_acct}")
+            subprocess.Popen(_cmd)
 
 
 
