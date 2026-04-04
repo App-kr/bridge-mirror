@@ -658,7 +658,6 @@ class CandidateApply(BaseModel):
 
     # ── 수업 대상 & 서류 ─────────────────────────────────────────────────────
     target:                  Optional[str] = None   # Target (Kindy, Elem 등)
-    target_age:              Optional[str] = None   # Preferred age group
     korean_criminal_record:  Optional[str] = None   # 한국 내 범죄기록
     documents:               Optional[str] = None   # 서류 준비 상태
 
@@ -672,6 +671,7 @@ class CandidateApply(BaseModel):
     # ── 2차 폼 / 병렬 운영 ────────────────────────────────────────────────
     apply_token:             Optional[str] = None   # JWT magic link
     source:                  Optional[str] = None   # 'web_form' | 'google_form'
+    captcha_token:           Optional[str] = None   # PuzzleCaptcha 토큰
 
 
 class ClientInquiry(BaseModel):
