@@ -99,9 +99,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       if (res.status === 429) return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'
       if (!res.ok) return '서버 오류가 발생했습니다.'
 
+      // C2 패치: 로그인 응답에서 api_key 제거됨 → session_token으로 /api/admin/key 별도 요청
       const json = await res.json()
-      const key = json?.data?.api_key
-      if (!key) return '서버 응답이 올바르지 않습니다.'
+      const sessionToken = json?.data?.session_token
+      if (!sessionToken) return '서버 응답이 올바르지 않습니다.'
+
+      const keyRes = await fetch(`${API_URL}/api/admin/key`, {
+        headers: { 'x-admin-token': sessionToken },
+      })
+      if (!keyRes.ok) return 'API 키 로드 실패. 다시 로그인해주세요.'
+      const keyJson = await keyRes.json()
+      const key = keyJson?.data?.api_key
+      if (!key) return 'API 키 응답이 올바르지 않습니다.'
 
       setToken(key)
       setIsLoggedIn(true)

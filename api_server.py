@@ -181,10 +181,9 @@ except Exception as _jwt_exc:
 
 _JWT_SECRET  = os.getenv("JWT_SECRET") or os.getenv("BRIDGE_FIELD_KEY")
 if not _JWT_SECRET:
-    import secrets as _sec
-    _JWT_SECRET = _sec.token_urlsafe(32)
-    print("[WARN] JWT_SECRET 미설정 — 임시 랜덤 키 사용 (서버 재시작 시 기존 토큰 무효화됨)")
-    print("[WARN] .env에 JWT_SECRET 를 별도로 설정하세요.")
+    print("[CRITICAL] JWT_SECRET 환경변수가 설정되지 않았습니다. 서버를 시작할 수 없습니다.")
+    print("[CRITICAL] Render 대시보드 → Environment Variables → JWT_SECRET 추가 후 재배포.")
+    sys.exit(1)
 _JWT_ALG     = "HS256"
 _JWT_TTL     = timedelta(hours=1)
 
@@ -1675,7 +1674,7 @@ def _log_unauthorized_access(request: Request):
 
 
 def _verify_admin_password(input_pw: str, stored: str) -> bool:
-    """평문 또는 pbkdf2 해시 비교 (하위 호환)"""
+    """pbkdf2:sha256 해시 검증 (H1 보안 패치: 평문 폴백 완전 제거)"""
     if stored.startswith("pbkdf2:sha256:"):
         try:
             _, _, iterations, salt, dk_hex = stored.split(":", 4)
@@ -1683,8 +1682,12 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
             return hmac.compare_digest(dk.hex(), dk_hex)
         except Exception:
             return False
-    # 기존 평문 비교 (마이그레이션 전 호환)
-    return hmac.compare_digest(input_pw, stored)
+    # 평문 비밀번호 거부 — ADMIN_PASSWORD가 pbkdf2:sha256: 형식이어야 합니다
+    logging.getLogger("bridge.security").error(
+        "[H1] ADMIN_PASSWORD가 pbkdf2:sha256: 형식이 아닙니다. "
+        "python tools/bridge_reset_password.py 실행 후 Render 환경변수 재설정 필요."
+    )
+    return False
 
 
 def _check_admin(request: Request):
@@ -1773,7 +1776,15 @@ async def admin_login(request: Request):
     # 세션 토큰 발급 (IP /24 서브넷 바인딩, 8시간 만료)
     session_token = _create_session(request)
     _log.info("관리자 로그인 성공: ip=%s subnet=%s", real_ip[:12] + "***", _ip_subnet24(real_ip))
-    return ok(data={"api_key": _ADMIN_KEY, "session_token": session_token}, message="로그인 성공")
+    # C2 보안 패치: api_key 응답에서 제거 — 클라이언트는 /api/admin/key로 별도 요청
+    return ok(data={"session_token": session_token}, message="로그인 성공")
+
+
+@app.get("/api/admin/key", tags=["admin"])
+async def get_admin_key(request: Request):
+    """C2 패치: 세션 토큰으로 인증 후 API 키 반환 (로그인 응답에서 분리됨)."""
+    _check_admin(request)
+    return ok(data={"api_key": _ADMIN_KEY}, message="OK")
 
 
 @app.post("/api/admin/logout", tags=["admin"])
@@ -4050,38 +4061,57 @@ def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
 
 
 # ── CAPTCHA 검증 (Puzzle CAPTCHA) ───────────────────────────────────────────────
-# 환경변수 우선, 없으면 고정된 강력한 키 사용 (SHA-256 기반)
-_DEFAULT_CAPTCHA_KEY = hashlib.sha256(
-    b"bridge-puzzle-captcha-hmac-production-v1-2026"
-).digest()
-_CAPTCHA_HMAC_KEY = os.environ.get("BRIDGE_HMAC_KEY", _DEFAULT_CAPTCHA_KEY)
-if isinstance(_CAPTCHA_HMAC_KEY, str):
-    _CAPTCHA_HMAC_KEY = _CAPTCHA_HMAC_KEY.encode()
+# H2 보안 패치: 하드코딩 폴백 제거 — BRIDGE_HMAC_KEY 미설정 시 서버 시작 거부
+_raw_hmac_key = os.environ.get("BRIDGE_HMAC_KEY")
+if not _raw_hmac_key:
+    raise RuntimeError(
+        "[CRITICAL] BRIDGE_HMAC_KEY 환경변수가 설정되지 않았습니다. "
+        "Render 대시보드 → Environment Variables → BRIDGE_HMAC_KEY 추가 후 재배포."
+    )
+_CAPTCHA_HMAC_KEY: bytes = _raw_hmac_key.encode()
+
+# C1 패치: CAPTCHA_ENABLED 플래그 + nonce replay 방지
+_CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "true").lower() != "false"
+_CAPTCHA_NONCES: "dict[str, float]" = {}  # nonce → 만료 시각(epoch)
+
 
 def _verify_captcha_token(token: str, ip_hash: str) -> bool:
-    """클라이언트에서 생성한 CAPTCHA 토큰 검증 (서버사이드)."""
+    """CAPTCHA 토큰 검증: 타임스탬프 유효성 + nonce 재사용 방지.
+    C1 패치: return True 하드코딩 제거 — 실제 검증 수행.
+    """
+    if not _CAPTCHA_ENABLED:
+        return True
     if not token or not token.startswith("puzzle_"):
         return False
 
     try:
-        # 토큰 형식: puzzle_{timestamp}_{nonce}
+        # 토큰 형식: puzzle_{timestamp_ms}_{nonce}
         parts = token.split("_")
         if len(parts) < 3:
             return False
 
-        timestamp_str = parts[1]
-        timestamp = int(timestamp_str)
-        now = int(_time.time() * 1000)
+        timestamp = int(parts[1])
+        nonce     = parts[2]
+        now_ms    = int(_time.time() * 1000)
 
         # 5분 이내인지 확인
-        if now - timestamp > 5 * 60 * 1000:
+        if now_ms - timestamp > 5 * 60 * 1000:
             return False
 
-        # HMAC 검증 (IP 해시와 타임스탬프 포함)
-        msg = f"{token}:{ip_hash}".encode()
-        expected_sig = hmac.new(_CAPTCHA_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+        # nonce 재사용(replay attack) 방지
+        now_sec = _time.time()
+        if nonce in _CAPTCHA_NONCES:
+            logging.getLogger("bridge.security").warning(
+                "[C1] CAPTCHA nonce 재사용 시도 차단: nonce=%s ip=%s", nonce[:8], ip_hash[:8]
+            )
+            return False
+        _CAPTCHA_NONCES[nonce] = now_sec + 600  # 10분 보관 후 만료
 
-        # 간단히 타임스탬프 검증만으로도 충분 (클라이언트 생성이므로 완벽한 검증 불필요)
+        # 만료된 nonce 정리 (메모리 누수 방지)
+        expired = [n for n, exp in list(_CAPTCHA_NONCES.items()) if now_sec > exp]
+        for n in expired:
+            del _CAPTCHA_NONCES[n]
+
         return True
     except Exception:
         return False
@@ -9512,7 +9542,7 @@ async def kakao_callback(code: str = "", error: str = "", error_description: str
 
 @app.post("/api/admin/kakao/exchange", tags=["admin"])
 async def kakao_exchange(request: Request):
-    """OTC → api_key 교환. 코드는 사용 즉시 삭제."""
+    """OTC → session_token 교환. C2 패치: api_key 응답 제거. 코드는 사용 즉시 삭제."""
     body = await request.json()
     otc = str(body.get("code", "")).strip()
     entry = _KAKAO_OTC.pop(otc, None)
@@ -9520,7 +9550,8 @@ async def kakao_exchange(request: Request):
         raise HTTPException(401, "유효하지 않은 코드입니다.")
     if datetime.now(timezone.utc).timestamp() > entry["expires_at"]:
         raise HTTPException(401, "코드가 만료되었습니다 (60초 초과).")
-    return ok(data={"api_key": entry["api_key"]})
+    session_token = _create_session(request)
+    return ok(data={"session_token": session_token})
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────

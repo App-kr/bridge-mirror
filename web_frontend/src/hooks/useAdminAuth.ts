@@ -98,22 +98,31 @@ export function useAdminAuth() {
 
     if (!otc) return
 
-    // OTC → api_key 교환
+    // C2 패치: OTC → session_token 교환 후 /api/admin/key로 api_key 별도 요청
     fetch(`${API_URL}/api/admin/kakao/exchange`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: otc }),
     })
       .then(r => r.json())
-      .then(json => {
-        const key = json?.data?.api_key
+      .then(async json => {
         const sessionToken = json?.data?.session_token
+        if (!sessionToken) {
+          setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
+          return
+        }
+        localStorage.setItem(SESSION_KEY, sessionToken)
+        // session_token으로 api_key 별도 요청
+        const keyRes = await fetch(`${API_URL}/api/admin/key`, {
+          headers: { 'x-admin-token': sessionToken },
+        })
+        const keyJson = await keyRes.json()
+        const key = keyJson?.data?.api_key
         if (key) {
           setAdminKey(key)
           setAuthed(true)
           localStorage.setItem(STORAGE_KEY, key)
           localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-          if (sessionToken) localStorage.setItem(SESSION_KEY, sessionToken)
           const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
           document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
         } else {
@@ -143,16 +152,26 @@ export function useAdminAuth() {
       if (res.status === 429) return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'
       if (!res.ok) return '서버 오류가 발생했습니다.'
 
+      // C2 패치: 로그인 응답에서 api_key 제거됨 → session_token만 수신
       const json = await res.json()
-      const key = json?.data?.api_key
       const sessionToken = json?.data?.session_token
-      if (!key) return '서버 응답이 올바르지 않습니다.'
+      if (!sessionToken) return '서버 응답이 올바르지 않습니다.'
+
+      localStorage.setItem(SESSION_KEY, sessionToken)
+
+      // session_token으로 /api/admin/key에서 api_key 별도 요청
+      const keyRes = await fetch(`${API_URL}/api/admin/key`, {
+        headers: { 'x-admin-token': sessionToken },
+      })
+      if (!keyRes.ok) return 'API 키 로드 실패. 다시 로그인해주세요.'
+      const keyJson = await keyRes.json()
+      const key = keyJson?.data?.api_key
+      if (!key) return 'API 키 응답이 올바르지 않습니다.'
 
       setAdminKey(key)
       setAuthed(true)
       localStorage.setItem(STORAGE_KEY, key)
       localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
-      if (sessionToken) localStorage.setItem(SESSION_KEY, sessionToken)
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
 
