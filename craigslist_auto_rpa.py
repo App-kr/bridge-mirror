@@ -1780,11 +1780,10 @@ def main():
         print("  BRIDGE Craigslist Auto RPA — 4계정 순차 모드")
         print("=" * 60)
 
-        # 오버레이 1회 초기화 (백그라운드 모드 — 사용자 작업 방해 금지)
+        # 오버레이 1회 초기화 (Chrome은 headless라 창 없음 — 오버레이는 사용자에게 보여야 함)
         _has_ov = False
         try:
-            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested, set_background_mode
-            set_background_mode(True)  # 모든 팝업이 뒤에서 작동
+            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
             _has_ov = True
             globals()['_update_status'] = update_status
         except ImportError:
@@ -2090,13 +2089,10 @@ def main():
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested, set_background_mode
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested
         _HAS_OVERLAY = True
         # 전역 _update_status 함수 설정 (cl_post()에서 사용)
         globals()['_update_status'] = update_status
-        # headless 모드에서는 오버레이가 포커스를 뺏지 않도록
-        if args.headless:
-            set_background_mode(True)
     except ImportError:
         _HAS_OVERLAY = False
 
