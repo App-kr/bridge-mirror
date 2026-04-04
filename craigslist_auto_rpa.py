@@ -743,10 +743,11 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
             uc_opts.binary_location = chrome_bin
             print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
         # Craigslist BFP3가 headless/offscreen 감지 → visible 모드 필수
-        # headless 시 화면 밖에서 시작 (사용자에게 안 보임)
+        # BFP3는 window.screenX/Y를 검사하므로 음수 좌표 사용 금지
+        # headless: 화면 우하단 구석에 최소 크기로 시작 → 로그인 후 off-screen 이동
         if headless:
-            uc_opts.add_argument("--window-position=-10000,-10000")
-            uc_opts.add_argument("--window-size=1920,1080")
+            uc_opts.add_argument("--window-position=1920,1040")
+            uc_opts.add_argument("--window-size=100,100")
         else:
             uc_opts.add_argument("--start-maximized")
         uc_opts.add_argument("--no-first-run")

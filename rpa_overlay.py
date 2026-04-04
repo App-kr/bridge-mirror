@@ -1104,7 +1104,7 @@ class RPAOverlay:
         except Exception:
             pass
         root.overrideredirect(True)
-        root.attributes("-topmost", False)
+        root.attributes("-topmost", True)   # 완료 알림은 항상 사용자에게 보여야 함
         root.attributes("-alpha", 0.0)
         root.configure(bg=self.BG)
 
@@ -1136,7 +1136,7 @@ class RPAOverlay:
             except Exception:
                 pass
 
-        # fade in
+        # fade in → 완료 후 topmost 해제 (잠깐 앞에 보이고, 이후 뒤로 갈 수 있음)
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
@@ -1145,6 +1145,8 @@ class RPAOverlay:
                 root.after(16, lambda: _fade(a + 0.07))
             else:
                 root.attributes("-alpha", 1.0)
+                root.after(1500, lambda: root.attributes("-topmost", False)
+                           if root.winfo_exists() else None)
         root.after(10, _fade)
 
         # top bar (X)
