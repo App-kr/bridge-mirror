@@ -1,39 +1,38 @@
 'use client'
 
 /**
- * /admin/resume-converter — 이력서 변환기 v4
- * 다중 지원자 지원: 지원자별 파일 묶음 + 일괄 처리
+ * /admin/resume-converter — 이력서 변환기 v5
+ * 통합 드롭존: 파일을 한번에 드롭 → 자동분류 → 한 사람당 하나의 파일 목록
  */
 
 import { useRef, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
-import { FileText, Upload, Trash2, CheckCircle2, AlertCircle, Loader2, Download, Plus, X, User } from 'lucide-react'
+import { FileText, Upload, CheckCircle2, AlertCircle, Loader2, Download, Plus, X, Image as ImageIcon, File } from 'lucide-react'
 
 const C_PRIMARY = '#1D9E75'
-const C_DANGER  = '#E24B4A'
 
-const SECTION_DEFS = [
-  { id: 'resume',    label: '이력서',    desc: 'PDF/DOCX' },
-  { id: 'cover',     label: '커버레터',  desc: 'PDF/DOCX' },
-  { id: 'photo',     label: '사진',      desc: 'JPG/PNG'  },
-  { id: 'reference', label: '추천서',    desc: 'PDF/DOCX' },
-  { id: 'other',     label: '기타',      desc: '기타 서류' },
+const CATEGORIES = [
+  { id: 'resume',    label: '이력서',   color: '#1D9E75', bg: '#f0fdf4' },
+  { id: 'cover',     label: '커버레터', color: '#3B82F6', bg: '#eff6ff' },
+  { id: 'photo',     label: '사진',     color: '#F59E0B', bg: '#fffbeb' },
+  { id: 'reference', label: '추천서',   color: '#8B5CF6', bg: '#f5f3ff' },
+  { id: 'other',     label: '기타',     color: '#6B7280', bg: '#f9fafb' },
 ] as const
 
-type SectionId = typeof SECTION_DEFS[number]['id']
+type CategoryId = typeof CATEGORIES[number]['id']
 
-interface FileSlot {
-  id: SectionId
-  files: File[]
-  isDragging: boolean
+interface FileEntry {
+  file: File
+  category: CategoryId
 }
 
 interface Candidate {
   uid: string
   candidateId: string
-  sections: FileSlot[]
+  files: FileEntry[]
+  isDragging: boolean
   status: 'idle' | 'processing' | 'done' | 'error'
   message: string
   processedFiles: ProcessedFile[]
@@ -47,15 +46,34 @@ interface ProcessedFile {
   section: string
 }
 
-function makeSections(): FileSlot[] {
-  return SECTION_DEFS.map(d => ({ id: d.id, files: [], isDragging: false }))
+function autoCategory(file: File): CategoryId {
+  const name = file.name.toLowerCase()
+  const ext = name.split('.').pop() || ''
+
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(ext)) return 'photo'
+  if (/cover|커버|자기\s?소개/.test(name)) return 'cover'
+  if (/ref|recom|추천/.test(name)) return 'reference'
+  if (/resume|cv|이력서/.test(name)) return 'resume'
+  if (['pdf', 'docx', 'doc'].includes(ext)) return 'resume'
+  return 'other'
+}
+
+function getCat(id: CategoryId) {
+  return CATEGORIES.find(c => c.id === id) ?? CATEGORIES[4]
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
 function makeCandidate(): Candidate {
   return {
     uid: crypto.randomUUID(),
     candidateId: '',
-    sections: makeSections(),
+    files: [],
+    isDragging: false,
     status: 'idle',
     message: '',
     processedFiles: [],
@@ -63,7 +81,7 @@ function makeCandidate(): Candidate {
 }
 
 // ────────────────────────────────────────────────────────────
-// 지원자 1명 카드
+// 지원자 1명 카드 — 통합 드롭존 + 파일 목록
 // ────────────────────────────────────────────────────────────
 function CandidateCard({
   candidate,
@@ -76,57 +94,56 @@ function CandidateCard({
   onUpdate: (uid: string, updater: (c: Candidate) => Candidate) => void
   onRemove: (uid: string) => void
 }) {
-  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const updateSection = (sectionId: SectionId, patch: Partial<FileSlot>) => {
+  const addFiles = (newFiles: File[]) => {
+    const entries: FileEntry[] = newFiles.map(f => ({ file: f, category: autoCategory(f) }))
+    onUpdate(candidate.uid, c => ({ ...c, files: [...c.files, ...entries] }))
+  }
+
+  const removeFile = (idx: number) => {
     onUpdate(candidate.uid, c => ({
       ...c,
-      sections: c.sections.map(s => s.id === sectionId ? { ...s, ...patch } : s),
+      files: c.files.filter((_, i) => i !== idx),
     }))
   }
 
-  const addFiles = (sectionId: SectionId, files: File[]) => {
+  const changeCategory = (idx: number, cat: CategoryId) => {
     onUpdate(candidate.uid, c => ({
       ...c,
-      sections: c.sections.map(s =>
-        s.id === sectionId ? { ...s, files: [...s.files, ...files] } : s
-      ),
+      files: c.files.map((f, i) => i === idx ? { ...f, category: cat } : f),
     }))
   }
 
-  const removeFile = (sectionId: SectionId, idx: number) => {
-    onUpdate(candidate.uid, c => ({
-      ...c,
-      sections: c.sections.map(s =>
-        s.id === sectionId ? { ...s, files: s.files.filter((_, i) => i !== idx) } : s
-      ),
-    }))
-  }
-
-  const handleDragOver = (sectionId: SectionId, e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    updateSection(sectionId, { isDragging: true })
+    onUpdate(candidate.uid, c => ({ ...c, isDragging: true }))
   }
 
-  const handleDragLeave = (sectionId: SectionId, e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     if (e.relatedTarget && (e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return
-    updateSection(sectionId, { isDragging: false })
+    onUpdate(candidate.uid, c => ({ ...c, isDragging: false }))
   }
 
-  const handleDrop = (sectionId: SectionId, e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    updateSection(sectionId, { isDragging: false })
+    onUpdate(candidate.uid, c => ({ ...c, isDragging: false }))
     const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0) addFiles(sectionId, files)
+    if (files.length > 0) addFiles(files)
   }
-
-  const totalFiles = candidate.sections.reduce((sum, s) => sum + s.files.length, 0)
 
   const statusColor =
     candidate.status === 'done'  ? '#1D9E75' :
     candidate.status === 'error' ? '#E24B4A' : '#5F6368'
+
+  const fileIcon = (entry: FileEntry) => {
+    const ext = entry.file.name.split('.').pop()?.toLowerCase() || ''
+    if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(ext))
+      return <ImageIcon size={14} className="shrink-0" style={{ color: getCat(entry.category).color }} />
+    return <File size={14} className="shrink-0" style={{ color: getCat(entry.category).color }} />
+  }
 
   return (
     <div className={`bg-white rounded-2xl border-2 transition-colors ${
@@ -142,11 +159,10 @@ function CandidateCard({
           </div>
           <div>
             <span className="text-sm font-semibold text-[#202124]">지원자 {index + 1}</span>
-            {totalFiles > 0 && (
-              <span className="ml-2 text-xs text-[#5F6368]">파일 {totalFiles}개</span>
+            {candidate.files.length > 0 && (
+              <span className="ml-2 text-xs text-[#5F6368]">파일 {candidate.files.length}개</span>
             )}
           </div>
-          {/* 상태 표시 */}
           {candidate.status !== 'idle' && (
             <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                   style={{ color: statusColor, backgroundColor: `${statusColor}15` }}>
@@ -172,75 +188,82 @@ function CandidateCard({
         </div>
       </div>
 
-      {/* 5개 섹션 */}
-      <div className="grid grid-cols-5 gap-3 p-4">
-        {candidate.sections.map(section => {
-          const def = SECTION_DEFS.find(d => d.id === section.id)!
-          return (
-            <div key={section.id} className="flex flex-col">
-              {/* 섹션 레이블 */}
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-[#202124]">{def.label}</span>
-                {section.files.length > 0 && (
-                  <button
-                    onClick={() => onUpdate(candidate.uid, c => ({
-                      ...c,
-                      sections: c.sections.map(s => s.id === section.id ? { ...s, files: [] } : s),
-                    }))}
-                    className="text-[#E24B4A] hover:text-[#c12020]"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
+      {/* 통합 드롭존 */}
+      <div className="p-4">
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all select-none ${
+            candidate.isDragging
+              ? 'border-[#1D9E75] bg-[#f0fdf4]'
+              : 'border-[#e8eaed] hover:border-[#1D9E75] hover:bg-[#f8fefc]'
+          }`}
+        >
+          <Upload size={24} className="mx-auto mb-2 pointer-events-none" style={{ color: C_PRIMARY }} />
+          <p className="text-sm font-medium text-[#202124] pointer-events-none">
+            파일을 여기에 드래그하거나 클릭하여 선택
+          </p>
+          <p className="text-xs text-[#9AA0A6] mt-1 pointer-events-none">
+            이력서, 커버레터, 사진, 추천서 등 모든 파일을 한번에 넣으세요
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            onChange={e => { if (e.target.files) { addFiles(Array.from(e.target.files)); e.target.value = '' } }}
+            className="hidden"
+            accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp"
+          />
+        </div>
 
-              {/* 드롭 영역 */}
-              <div
-                onDragOver={e => handleDragOver(section.id, e)}
-                onDragLeave={e => handleDragLeave(section.id, e)}
-                onDrop={e => handleDrop(section.id, e)}
-                onClick={() => fileInputRefs.current[section.id]?.click()}
-                className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all select-none ${
-                  section.isDragging
-                    ? 'border-[#1D9E75] bg-[#f0fdf4]'
-                    : 'border-[#e8eaed] hover:border-[#1D9E75] hover:bg-[#f8fefc]'
-                }`}
+        {/* 파일 목록 (통합) */}
+        {candidate.files.length > 0 && (
+          <div className="mt-3 border border-[#e8eaed] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-[#f8f9fa] border-b border-[#e8eaed]">
+              <span className="text-xs font-semibold text-[#202124]">
+                첨부 파일 ({candidate.files.length})
+              </span>
+              <button
+                onClick={() => onUpdate(candidate.uid, c => ({ ...c, files: [] }))}
+                className="text-xs text-[#E24B4A] hover:text-[#c12020] font-medium"
               >
-                <Upload size={16} className="mx-auto mb-1 pointer-events-none" style={{ color: C_PRIMARY }} />
-                <p className="text-xs text-[#5F6368] pointer-events-none">{def.desc}</p>
-                <input
-                  ref={el => { if (el) fileInputRefs.current[section.id] = el }}
-                  type="file"
-                  multiple
-                  onChange={e => { if (e.target.files) addFiles(section.id, Array.from(e.target.files)) }}
-                  className="hidden"
-                  accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp"
-                />
-              </div>
-
-              {/* 파일 목록 */}
-              {section.files.length > 0 && (
-                <div className="mt-1.5 space-y-1">
-                  {section.files.map((file, idx) => (
-                    <div key={idx}
-                         className="flex items-center gap-1 px-2 py-1 bg-[#f8f9fa] rounded-lg border border-[#e8eaed] group">
-                      <span className="text-xs font-mono text-[#9AA0A6] w-4 shrink-0">{idx + 1}</span>
-                      <span className="text-xs text-[#202124] truncate flex-1 min-w-0" title={file.name}>
-                        {file.name}
-                      </span>
-                      <button
-                        onClick={e => { e.stopPropagation(); removeFile(section.id, idx) }}
-                        className="text-[#9AA0A6] hover:text-[#E24B4A] opacity-0 group-hover:opacity-100 shrink-0"
-                      >
-                        <X size={10} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                전체 삭제
+              </button>
             </div>
-          )
-        })}
+            <div className="divide-y divide-[#f0f0f2]">
+              {candidate.files.map((entry, idx) => {
+                const cat = getCat(entry.category)
+                return (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2 group hover:bg-[#fafafa]">
+                    {fileIcon(entry)}
+                    <span className="text-xs text-[#202124] truncate flex-1 min-w-0" title={entry.file.name}>
+                      {entry.file.name}
+                    </span>
+                    <span className="text-xs text-[#9AA0A6] shrink-0">{formatSize(entry.file.size)}</span>
+                    <select
+                      value={entry.category}
+                      onChange={e => changeCategory(idx, e.target.value as CategoryId)}
+                      className="text-xs font-medium px-1.5 py-0.5 rounded-md border-0 outline-none cursor-pointer shrink-0"
+                      style={{ color: cat.color, backgroundColor: cat.bg }}
+                    >
+                      {CATEGORIES.map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => removeFile(idx)}
+                      className="text-[#9AA0A6] hover:text-[#E24B4A] opacity-0 group-hover:opacity-100 shrink-0 p-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 처리 결과 메시지 */}
@@ -257,27 +280,15 @@ function CandidateCard({
         </div>
       )}
 
-      {/* 다운로드 */}
+      {/* 처리된 파일 다운로드 */}
       {candidate.processedFiles.length > 0 && (
         <div className="mx-4 mb-4 border border-[#e8eaed] rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-[#f8f9fa] border-b border-[#e8eaed]">
             <span className="text-xs font-semibold text-[#202124]">처리된 파일</span>
           </div>
-          {/* 섹션별 구분 */}
-          {SECTION_DEFS.map(def => {
-            const sectionFiles = candidate.processedFiles.filter(pf => pf.section === def.id)
-            if (sectionFiles.length === 0) return null
-            return (
-              <div key={def.id} className="border-b border-[#e8eaed] last:border-b-0">
-                <div className="px-3 py-1.5 bg-[#f8fefc]">
-                  <span className="text-xs font-medium text-[#1D9E75]">{def.label}</span>
-                </div>
-                {sectionFiles.map((pf, i) => (
-                  <DownloadRow key={i} pf={pf} />
-                ))}
-              </div>
-            )
-          })}
+          {candidate.processedFiles.map((pf, i) => (
+            <DownloadRow key={i} pf={pf} />
+          ))}
         </div>
       )}
     </div>
@@ -285,6 +296,8 @@ function CandidateCard({
 }
 
 function DownloadRow({ pf }: { pf: ProcessedFile }) {
+  const cat = getCat((pf.section as CategoryId) || 'resume')
+
   const download = () => {
     try {
       const byteChars = atob(pf.data)
@@ -306,10 +319,13 @@ function DownloadRow({ pf }: { pf: ProcessedFile }) {
   return (
     <div className="flex items-center justify-between px-3 py-2 hover:bg-[#f8f9fa]">
       <div className="flex items-center gap-2 min-w-0">
-        <FileText size={14} style={{ color: C_PRIMARY }} className="shrink-0" />
+        <FileText size={14} style={{ color: cat.color }} className="shrink-0" />
         <div className="min-w-0">
           <p className="text-xs font-medium text-[#202124] truncate">{pf.fileName}</p>
-          <p className="text-xs text-[#9AA0A6]">PII {pf.piiCount}개 제거 · {pf.fileType.toUpperCase()}</p>
+          <p className="text-xs text-[#9AA0A6]">
+            PII {pf.piiCount}개 제거
+            <span className="ml-1.5 font-medium" style={{ color: cat.color }}>{cat.label}</span>
+          </p>
         </div>
       </div>
       <button
@@ -353,15 +369,14 @@ function ResumeConverterInner() {
     if (!candidate.candidateId.trim()) {
       return { status: 'error', message: '지원자 번호를 입력하세요' }
     }
-    const totalFiles = candidate.sections.reduce((sum, s) => sum + s.files.length, 0)
-    if (totalFiles === 0) {
+    if (candidate.files.length === 0) {
       return { status: 'error', message: '파일을 1개 이상 추가하세요' }
     }
 
     const formData = new FormData()
     formData.append('candidate_id', candidate.candidateId.trim())
-    candidate.sections.forEach(section => {
-      section.files.forEach(file => formData.append(`files_${section.id}`, file))
+    candidate.files.forEach(entry => {
+      formData.append(`files_${entry.category}`, entry.file)
     })
 
     const res = await fetch(`${API_URL}/api/resume/process`, {
@@ -415,15 +430,13 @@ function ResumeConverterInner() {
     setIsProcessingAll(false)
   }
 
-  const totalFiles = candidates.reduce(
-    (sum, c) => sum + c.sections.reduce((s2, s) => s2 + s.files.length, 0), 0
-  )
+  const totalFiles = candidates.reduce((sum, c) => sum + c.files.length, 0)
   const doneCount  = candidates.filter(c => c.status === 'done').length
   const errorCount = candidates.filter(c => c.status === 'error').length
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-5xl mx-auto">
 
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
@@ -433,9 +446,9 @@ function ResumeConverterInner() {
               <FileText size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[#202124]">이력서 변환기 v4</h1>
+              <h1 className="text-2xl font-bold text-[#202124]">BRIDGE Converter v5</h1>
               <p className="text-sm text-[#5F6368]">
-                다중 지원자 · 지원자별 PII 제거
+                파일을 드롭하면 자동 분류 + PII 제거
                 {candidates.length > 1 && (
                   <span className="ml-2 font-medium" style={{ color: C_PRIMARY }}>
                     {candidates.length}명
@@ -452,7 +465,7 @@ function ResumeConverterInner() {
           </button>
         </div>
 
-        {/* 진행 상황 (처리 중이거나 완료된 경우) */}
+        {/* 진행 상황 */}
         {(doneCount > 0 || errorCount > 0) && (
           <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-2xl border border-[#e8eaed]">
             <div className="flex items-center gap-2 text-sm">
