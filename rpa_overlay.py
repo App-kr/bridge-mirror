@@ -344,16 +344,12 @@ class RPAOverlay:
             pass
 
     def _dismiss_and_remind(self):
-        """닫기/X 버튼 — destroy 없이 withdraw(숨기기). tkinter 인터프리터 유지.
-        _check_restore()가 400ms마다 flag 감시 → deiconify()로 즉시 복원 가능."""
-        _log_overlay("_dismiss_and_remind: withdraw 호출")
+        """닫기/X 버튼 — iconify(작업표시줄 최소화). 사용자가 클릭해 언제든 복원 가능."""
+        _log_overlay("_dismiss_and_remind: iconify 호출")
         try:
             if self._root and self._root.winfo_exists():
-                self._root.withdraw()          # 숨기기 (destroy 아님)
-                _log_overlay(f"_dismiss_and_remind: withdraw 완료 state={self._root.state()}")
-                if self._is_working:
-                    # 30초 후 tkinter 이벤트 루프에서 자동 복원 (크로스스레드 없음)
-                    self._root.after(30000, self._deiconify_working)
+                self._root.iconify()           # 작업표시줄로 최소화 (완전 숨김 아님)
+                _log_overlay(f"_dismiss_and_remind: iconify 완료 state={self._root.state()}")
         except Exception as _e:
             _log_overlay(f"_dismiss_and_remind ERROR: {_e}")
         self._ready.clear()
@@ -1113,7 +1109,7 @@ class RPAOverlay:
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m    = mons[1] if len(mons) >= 2 else mons[0]
+                m    = mons[0]   # 항상 주 모니터
                 mx, my, mw, mh = m.x, m.y, m.width, m.height
             except Exception:
                 pass
@@ -1387,11 +1383,12 @@ class RPAOverlay:
         root.attributes("-alpha", 0.0)
         root.configure(bg=self.BG)
 
+        # 항상 주 모니터(mons[0]) 사용 — 2번 모니터에 창이 생기는 버그 방지
         mx, my, mw, mh = 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m    = mons[1] if len(mons) >= 2 else mons[0]
+                m    = mons[0]   # 항상 주 모니터
                 mx, my, mw, mh = m.x, m.y, m.width, m.height
             except Exception:
                 pass
@@ -1401,6 +1398,23 @@ class RPAOverlay:
         border.pack(fill="both", expand=True)
         card = tk.Frame(border, bg=self.BG)
         card.pack(fill="both", expand=True)
+
+        def _add_taskbar_button():
+            """overrideredirect 창을 작업표시줄에 표시 (WS_EX_APPWINDOW)."""
+            try:
+                import ctypes as _ct
+                GWL_EXSTYLE      = -20
+                WS_EX_APPWINDOW  = 0x00040000
+                WS_EX_TOOLWINDOW = 0x00000080
+                hwnd = root.winfo_id()
+                style = _ct.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                style = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+                _ct.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+                # 스타일 변경을 작업표시줄이 인식하도록 잠깐 숨겼다 복원
+                root.withdraw()
+                root.after(50, root.deiconify)
+            except Exception:
+                pass
 
         def _fade(a=0.0):
             if not root.winfo_exists():
@@ -1415,6 +1429,7 @@ class RPAOverlay:
                            if root.winfo_exists() else None)
 
         root.after(10, _fade)
+        root.after(200, _add_taskbar_button)   # 창 렌더 후 작업표시줄 등록
         return root, card
 
     def _fn(self, size, weight="normal"):
@@ -1605,7 +1620,7 @@ def ask_account_selection():
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m    = mons[1] if len(mons) >= 2 else mons[0]
+                m    = mons[0]   # 항상 주 모니터
                 sw, sh = m.width, m.height
                 ox, oy = m.x, m.y
             except Exception:
@@ -2025,7 +2040,7 @@ def ask_already_running(acct_key: str = ""):
     if _HAS_SCREENINFO:
         try:
             mons = get_monitors()
-            m = mons[1] if len(mons) >= 2 else mons[0]
+            m = mons[0]   # 항상 주 모니터
             sw, sh = m.width, m.height
             ox, oy = m.x, m.y
         except Exception:
