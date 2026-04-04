@@ -730,11 +730,14 @@ def _find_chrome_binary() -> str | None:
 def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
     """Chrome 드라이버 생성.
 
-    headless=True 시에도 visible 모드로 실행 (Craigslist BFP3 감지 우회).
-    Craigslist는 headless/offscreen 브라우저를 감지하여 추가 인증을 요구하므로
-    실제 Chrome 창을 띄우되, 로그인 후 cl_login()에서 minimize 처리.
+    headless=True: --headless=new + undetected-chromedriver (봇 탐지 우회)
+    계정별 Chrome 프로필 유지 → 쿠키/세션 재사용으로 로그인 반복 방지.
     """
     chrome_bin = _find_chrome_binary()
+
+    # 계정별 Chrome 프로필 (세션 쿠키 영속화)
+    profile_dir = str(BASE_DIR / ".chrome_rpa_profile" / account)
+    Path(profile_dir).mkdir(parents=True, exist_ok=True)
 
     # ── undetected-chromedriver 우선 (봇 탐지 우회) ──
     if _HAS_UC:
@@ -742,19 +745,21 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
         if chrome_bin:
             uc_opts.binary_location = chrome_bin
             print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-        # Craigslist BFP3가 headless/offscreen 감지 → visible 모드 필수
-        # BFP3는 window.screenX/Y를 검사하므로 음수 좌표 사용 금지
-        # headless: 화면 우하단 구석에 최소 크기로 시작 → 로그인 후 off-screen 이동
+        # 계정별 프로필 → 쿠키 재사용, Further verification 반복 방지
+        uc_opts.add_argument(f"--user-data-dir={profile_dir}")
+        print(f"  [DRIVER] 프로필: {profile_dir}")
         if headless:
-            uc_opts.add_argument("--window-position=1920,1040")
-            uc_opts.add_argument("--window-size=100,100")
+            uc_opts.add_argument("--headless=new")
+            uc_opts.add_argument("--no-sandbox")
+            uc_opts.add_argument("--disable-dev-shm-usage")
+            uc_opts.add_argument("--window-size=1920,1080")
         else:
             uc_opts.add_argument("--start-maximized")
         uc_opts.add_argument("--no-first-run")
         uc_opts.add_argument("--no-default-browser-check")
         uc_opts.add_argument("--remote-debugging-port=0")
         if headless:
-            print("  [DRIVER] undetected + off-screen 모드")
+            print("  [DRIVER] undetected + headless 모드")
         else:
             print("  [DRIVER] undetected + visible 모드")
         # Chrome 버전 자동 감지 (version mismatch 방지)
@@ -793,7 +798,14 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
     if chrome_bin:
         opts.binary_location = chrome_bin
         print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-    opts.add_argument("--start-maximized")
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    if headless:
+        opts.add_argument("--headless=new")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--window-size=1920,1080")
+    else:
+        opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--remote-debugging-port=0")
     opts.add_argument("--no-first-run")
