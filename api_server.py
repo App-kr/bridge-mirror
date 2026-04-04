@@ -6730,9 +6730,15 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             inq = conn.execute("SELECT * FROM client_inquiries WHERE id = ?", (inquiry_id,)).fetchone()
             if not inq:
                 return
+            # inquiry_id 기반 중복 체크 (primary) + notes 폴백
+            existing = conn.execute(
+                "SELECT id FROM jobs WHERE inquiry_id = ?", (inquiry_id,)
+            ).fetchone()
+            if existing:
+                return  # 이미 등록됨
             notes = inq["notes"] or ""
             if "JOB_REGISTERED" in notes:
-                return  # 이미 등록됨
+                return  # notes 기반 폴백 체크
 
             # 급여 파싱
             salary_raw = inq["salary_raw"] or ""
@@ -6781,21 +6787,24 @@ def _auto_create_job_from_inquiry(inquiry_id: int, school_name: str) -> None:
             if inq["benefits"]:    raw_parts.append(f"Benefits : {inq['benefits']}")
             raw_text = "\n".join(raw_parts)
 
-            # job_code 생성: MAX(id) 기반으로 INSERT 시 바로 포함 (NOT NULL 제약)
-            max_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM jobs").fetchone()[0]
-            job_code = f"Job.{max_id + 1001}"
+            # job_code: WEB-{inquiry_id} (일관성 + inquiry 추적)
+            job_code = f"WEB-{inquiry_id}"
             cur = conn.execute(
-                """INSERT INTO jobs (seq, job_code, location, city, start_date, teaching_age,
-                   working_hours, daily_hours, salary_min, salary_max, salary_raw,
-                   vacation, housing, benefits, status, is_hot, is_deleted, created_at,
-                   internal_notes, raw_text, employer_display_name)
-                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 1, 0, ?, ?, ?, ?)""",
+                """INSERT OR IGNORE INTO jobs
+                   (seq, job_code, location, city, start_date, teaching_age,
+                    working_hours, daily_hours, salary_min, salary_max, salary_raw,
+                    vacation, housing, housing_type, housing_detail,
+                    benefits, status, is_hot, is_deleted, created_at,
+                    internal_notes, raw_text, employer_display_name,
+                    source_file, inquiry_id)
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           ?, 'pending_review', 0, 0, ?, ?, ?, ?, 'web_form', ?)""",
                 (
                     job_code, loc, city, inq["start_date"], inq["teaching_age"],
                     wh, daily_hours, salary_min, salary_max, salary_raw,
-                    inq["vacation"], housing_val,
+                    inq["vacation"], housing_val, inq["housing_type"], inq["housing_detail"],
                     inq["benefits"], datetime.now(timezone.utc).isoformat(),
-                    internal_notes, raw_text, school_name,
+                    internal_notes, raw_text, school_name, inquiry_id,
                 ),
             )
             new_row_id = cur.lastrowid
