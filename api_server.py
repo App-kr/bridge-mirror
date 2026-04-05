@@ -2323,6 +2323,89 @@ async def admin_candidates(
         err("지원자 목록을 불러올 수 없습니다.", 500)
 
 
+@app.get("/api/admin/candidates/export", tags=["admin"])
+async def admin_export_candidates(request: Request, format: str = "csv"):
+    """후보자 전체 내보내기 (CSV / XLSX). PII 복호화 포함."""
+    _check_admin(request)
+    import csv as _csv_mod
+    import io as _io_mod
+
+    fmt = format.lower()
+    if fmt not in ("csv", "xlsx"):
+        raise HTTPException(400, "format은 csv 또는 xlsx만 가능합니다.")
+
+    _EXPORT_COLS = (
+        "candidate_id, sheet_number, email, full_name, nationality, ancestry, dob, gender, "
+        "current_location, start_date, target, area_prefs, experience, "
+        "current_salary, desired_salary, certification, e_visa, mobile_phone, "
+        "kakaotalk, criminal_record, housing, arc_holders, job_prefs, "
+        "reference, documents, status, created_at, source, notes, "
+        "placed_company, placed_salary, start_month, housing_detail, "
+        "referral_fee, process_date, past_placement, preferences, "
+        "housing_type, education_level, major, interview_time, health_info, "
+        "piercings, dependents, married, religion, korean_criminal_record, "
+        "consent, fact_check, photo_url, criminal_record_check, doc_status, "
+        "how_to, tattoo, visa_type, stage, mail_tags, korea_experience, "
+        "employment, contract_offered, personal_consideration, "
+        "recruiter_memo, passport_status"
+    )
+    col_names = [c.strip() for c in _EXPORT_COLS.split(",")]
+
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            rows = conn.execute(
+                f"SELECT {_EXPORT_COLS} FROM candidates WHERE is_deleted = 0 ORDER BY created_at DESC"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        data = []
+        for r in rows:
+            d = _decrypt_row(dict(r))
+            data.append(d)
+
+        today = datetime.now().strftime("%Y%m%d")
+
+        if fmt == "csv":
+            buf = _io_mod.StringIO()
+            writer = _csv_mod.writer(buf)
+            writer.writerow(col_names)
+            for d in data:
+                writer.writerow([str(d.get(c, "") or "") for c in col_names])
+            content = buf.getvalue().encode("utf-8-sig")  # BOM for Excel 한글 호환
+            from starlette.responses import Response as _RawResponse
+            return _RawResponse(
+                content=content,
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="bridge_candidates_{today}.csv"'},
+            )
+        else:  # xlsx
+            from openpyxl import Workbook as _Workbook
+            wb = _Workbook()
+            ws = wb.active
+            ws.title = "Candidates"
+            ws.append(col_names)
+            for d in data:
+                ws.append([str(d.get(c, "") or "") for c in col_names])
+            xlsx_buf = _io_mod.BytesIO()
+            wb.save(xlsx_buf)
+            xlsx_buf.seek(0)
+            from starlette.responses import Response as _RawResponse
+            return _RawResponse(
+                content=xlsx_buf.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="bridge_candidates_{today}.xlsx"'},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.getLogger("bridge.api").error("export 실패: %s", e, exc_info=True)
+        err("내보내기에 실패했습니다.", 500)
+
+
 @app.post("/api/admin/candidates", tags=["admin"])
 async def admin_create_candidate(request: Request, body: dict):
     """새 후보자 추가 (관리자 전용)."""

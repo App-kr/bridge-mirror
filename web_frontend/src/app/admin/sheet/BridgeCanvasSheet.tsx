@@ -1108,14 +1108,24 @@ export default function BridgeCanvasSheet() {
   }, [pushHistory, tab])
 
   /* ── CSV Export ── */
-  const exportCsv = useCallback(() => {
-    const vc = cols.filter(c => c.v !== false)
-    const header = vc.map(c => c.label).join(',')
-    const body = displayRows.map(r => vc.map(c => `"${String(r[c.key] ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
-    a.download = `bridge_${tab}_${new Date().toISOString().slice(0, 10)}.csv`; a.click()
-  }, [cols, displayRows, tab])
+  const exportFile = useCallback(async (format: 'csv' | 'xlsx') => {
+    try {
+      const res = await fetch(`${API}/api/admin/candidates/export?format=${format}`, {
+        headers: hdrsRef.current(),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `bridge_candidates_${new Date().toISOString().slice(0, 10)}.${format}`
+      a.click()
+    } catch (e) {
+      console.error('Export failed:', e)
+      alert('내보내기에 실패했습니다.')
+    }
+  }, [])
+  const exportCsv = useCallback(() => exportFile('csv'), [exportFile])
+  const exportXlsx = useCallback(() => exportFile('xlsx'), [exportFile])
 
   /* ── Delete rows ── */
   const deleteRows = useCallback(async (rowIndices: Set<number>) => {
@@ -1511,6 +1521,7 @@ export default function BridgeCanvasSheet() {
         <button onClick={() => setFrozenCols(p => p === 0 ? 3 : 0)} style={tbBtn}>{frozenCols > 0 ? '🔒 고정' : '🔓 해제'}</button>
         <button onClick={fullReload} style={tbBtn}>↻ DB동기화</button>
         <button onClick={exportCsv} style={tbBtn}>↓CSV</button>
+        <button onClick={exportXlsx} style={tbBtn}>↓Excel</button>
         <button onClick={addNewRow} style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}>+새후보자</button>
         {hiddenCount > 0 && (
           <button onClick={showAllCols} style={{ ...tbBtn, borderColor: '#06b6d4', color: '#0e7490' }}>숨긴{hiddenCount}열</button>
