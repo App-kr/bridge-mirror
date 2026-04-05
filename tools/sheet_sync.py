@@ -20,6 +20,14 @@ from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+# ── PII 복호화 (security_vault 임포트) ─────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from security_vault import auto_decrypt_value, is_encrypted
+    _DECRYPT_OK = True
+except ImportError:
+    _DECRYPT_OK = False
+
 # ── 경로 ─────────────────────────────────────────────────────────────────────
 BASE = Path(__file__).resolve().parent.parent          # bridge base
 DB_PATH = BASE / "master.db"
@@ -110,6 +118,29 @@ SHEET_COLUMNS = [
 HEADERS = [h for h, _ in SHEET_COLUMNS]
 DB_COLS = [c for _, c in SHEET_COLUMNS]
 
+# PII 필드 — Sheet 기록 전 복호화 대상
+_PII_FIELDS = {
+    "full_name", "email", "mobile_phone", "kakaotalk",
+    "passport", "criminal_record", "criminal_record_check",
+    "korean_criminal_record", "religion", "health_info",
+    "dob", "nationality", "current_location", "reference",
+}
+
+
+def _decrypt_row(row: dict) -> dict:
+    """PII 필드를 복호화하여 평문으로 반환. security_vault 미사용 시 그대로 반환."""
+    if not _DECRYPT_OK:
+        return row
+    result = dict(row)
+    for key in _PII_FIELDS:
+        val = result.get(key)
+        if val and isinstance(val, str) and is_encrypted(val):
+            try:
+                result[key] = auto_decrypt_value(val, key)
+            except Exception:
+                pass  # 복호화 실패 시 암호화 값 유지
+    return result
+
 
 class SheetSync:
     """DB → Google Sheet 일방향 동기화."""
@@ -178,7 +209,7 @@ class SheetSync:
                     f"ORDER BY created_at DESC",
                     (cutoff,),
                 ).fetchall()
-            return [dict(r) for r in rows]
+            return [_decrypt_row(dict(r)) for r in rows]
         finally:
             conn.close()
 
