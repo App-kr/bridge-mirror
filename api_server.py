@@ -6679,7 +6679,8 @@ _db_change_count = 0
 _DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
 
 # 제출 백업 디렉터리 (Render: /data/backups/auto, 로컬: ./backups/auto)
-_BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR", str(Path(__file__).resolve().parent / "backups" / "auto")))
+_BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR",
+    "/data/backups/auto" if os.getenv("RENDER_EXTERNAL_URL") else str(Path(__file__).resolve().parent / "backups" / "auto")))
 try:
     _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
@@ -8481,7 +8482,8 @@ async def testimonials_reorder(request: Request):
 
 # ── Secure Download Links System ──────────────────────────────────────────────
 
-_DOWNLOAD_DIR = Path(os.getenv("BRIDGE_DOWNLOAD_DIR", str(Path(__file__).resolve().parent / "secure_downloads")))
+_DOWNLOAD_DIR = Path(os.getenv("BRIDGE_DOWNLOAD_DIR",
+    "/data/secure_downloads" if os.getenv("RENDER_EXTERNAL_URL") else str(Path(__file__).resolve().parent / "secure_downloads")))
 try:
     _DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
