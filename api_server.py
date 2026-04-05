@@ -2425,6 +2425,10 @@ async def admin_update_candidate(
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
         raise HTTPException(400, "수정 가능한 필드 없음")
+    # PII 필드 재암호화 — 평문 저장 방지
+    for field in _CANDIDATE_ENCRYPT:
+        if field in update and update[field]:
+            update[field] = _encrypt_if_needed(str(update[field]))
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -2501,6 +2505,10 @@ async def admin_full_update_candidate(candidate_id: str, request: Request, body:
     body = {k: v for k, v in body.items() if k in _CANDIDATES_MUTABLE_COLS}
     if not body:
         raise HTTPException(400, "수정할 데이터 없음")
+    # PII 필드 재암호화 — 평문 저장 방지
+    for field in _CANDIDATE_ENCRYPT:
+        if field in body and body[field]:
+            body[field] = _encrypt_if_needed(str(body[field]))
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
