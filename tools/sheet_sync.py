@@ -113,6 +113,16 @@ SHEET_COLUMNS = [
     ("Process Date", "process_date"),
     ("Past Placement", "past_placement"),
     ("Candidate ID", "candidate_id"),
+    # ── 갭 #3: 누락 필드 추가 (2026-04-06) ──
+    ("Photo URL", "photo_url"),
+    ("Mail Tags", "mail_tags"),
+    ("Korea Exp", "korea_experience"),
+    ("Documents", "documents"),
+    ("Notes", "notes"),
+    ("Visa Type", "visa_type"),
+    ("Passport Status", "passport_status"),
+    ("Piercings", "piercings"),
+    ("Housing Type", "housing_type"),
 ]
 
 HEADERS = [h for h, _ in SHEET_COLUMNS]
