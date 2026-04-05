@@ -2246,7 +2246,8 @@ async def admin_candidates(
                 "piercings, dependents, married, religion, korean_criminal_record, "
                 "consent, fact_check, photo_url, criminal_record_check, doc_status, "
                 "how_to, tattoo, visa_type, stage, mail_tags, korea_experience, "
-                "employment, contract_offered, personal_consideration"
+                "employment, contract_offered, personal_consideration, "
+                "recruiter_memo, passport_status"
             )
 
             if cursor > 0:
@@ -2403,7 +2404,7 @@ async def admin_update_candidate(
         "health_info", "personal_consideration", "criminal_record_check", "korean_criminal_record",
         "kakaotalk", "mobile_phone", "arc_holders", "married", "religion",
         "dependents", "consent", "fact_check", "housing", "e_visa",
-        "how_to",
+        "how_to", "passport_status",
     }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
@@ -2468,7 +2469,7 @@ _CANDIDATES_MUTABLE_COLS: frozenset = frozenset({
     "photo_url", "thumb_url", "target_age", "criminal_record_check",
     "doc_status", "how_to", "tattoo", "visa_type", "working_hours", "invoice",
     "stage", "mail_tags", "korea_experience",
-    "updated_at",
+    "passport_status", "updated_at",
 })
 
 
