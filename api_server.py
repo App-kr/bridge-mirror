@@ -983,6 +983,19 @@ _APPLY_FIELD_MAP = {
     "target_age":               "target",
 }
 
+# ── Google Sheet 동기화 (비동기 헬퍼) ─────────────────────────────────────────
+def _sync_to_sheet(candidate_id: str):
+    """Background: DB → Google Sheet Source 시트에 1건 추가. 실패해도 무시."""
+    try:
+        from tools.sheet_sync import SheetSync
+        syncer = SheetSync(
+            credentials_file=os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "gcp_service_account.json"),
+            spreadsheet_id=os.getenv("GOOGLE_SHEETS_CANDIDATES_ID"),
+        )
+        syncer.sync_single(candidate_id)
+    except Exception as e:
+        logging.getLogger("bridge.api").warning("Sheet sync failed for %s: %s", candidate_id, e)
+
 # payload에서 제거할 키 (DB 컬럼으로 직접 INSERT 불가)
 _APPLY_SKIP_FIELDS = {"file_urls", "apply_token"}
 
@@ -1133,6 +1146,9 @@ async def apply(request: Request, body: CandidateApply):
                 args=("New Application", f"New candidate applied: #{new_id}", "/admin/m/candidates"),
                 daemon=True,
             ).start()
+
+            # Google Sheet 동기화 (비동기, 실패해도 접수 완료)
+            threading.Thread(target=_sync_to_sheet, args=(str(new_id),), daemon=True).start()
 
             return ok(
                 data={"id": new_id, "apply_token": token_out, "mode": "created"},

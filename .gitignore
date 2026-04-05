@@ -16,6 +16,7 @@ account*.env
 *.pfx
 .secrets.enc.json
 google_service_account*.json
+gcp_service_account*.json
 CREDENTIALS_REFERENCE.md
 vapid_keys.json
 vapid_*.txt
