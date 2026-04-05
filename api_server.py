@@ -7065,6 +7065,8 @@ async def admin_sync_incoming(request: Request):
         data["source"] = "google_form_webhook"
         data.setdefault("created_at", datetime.now(timezone.utc).isoformat())
 
+        import uuid as _uuid_sync
+        cand_id = f"cnd_{_uuid_sync.uuid4().hex[:12]}"
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
@@ -7075,17 +7077,36 @@ async def admin_sync_incoming(request: Request):
             clean = {k: v for k, v in data.items() if k in allowed and v is not None}
             if not clean:
                 raise HTTPException(400, "유효한 후보자 데이터가 없습니다.")
-            cols = ", ".join(clean.keys())
-            placeholders = ", ".join("?" * len(clean))
-            cur = conn.execute(
-                f"INSERT INTO candidates ({cols}) VALUES ({placeholders})",
-                list(clean.values()),
+            clean["candidate_id"] = cand_id
+            clean["status"] = "Active"
+            clean["updated_at"] = datetime.now(timezone.utc).isoformat()
+            # sheet_number 원자적 할당 (최소 10000)
+            clean["sheet_number"] = None  # placeholder
+            cols = list(clean.keys())
+            vals = list(clean.values())
+            sn_idx = cols.index("sheet_number")
+            ph = []
+            final_vals = []
+            for i, c in enumerate(cols):
+                if i == sn_idx:
+                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
+                else:
+                    ph.append("?")
+                    final_vals.append(vals[i])
+            conn.execute(
+                f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
+                final_vals,
             )
             conn.commit()
-            new_id = cur.lastrowid
+            sn_row = conn.execute(
+                "SELECT sheet_number FROM candidates WHERE candidate_id = ?", (cand_id,)
+            ).fetchone()
+            new_sn = sn_row[0] if sn_row else 0
         finally:
             conn.close()
-        return ok(data={"id": new_id, "type": "candidate"}, message="후보자 접수 완료")
+        # Google Sheet 동기화 (비동기)
+        threading.Thread(target=_sync_to_sheet, args=(cand_id,), daemon=True).start()
+        return ok(data={"id": cand_id, "sheet_number": new_sn, "type": "candidate"}, message="후보자 접수 완료")
 
     else:
         raise HTTPException(400, f"알 수 없는 type: {data_type!r}")
