@@ -2222,8 +2222,8 @@ async def admin_candidates(
             where = ["status != 'Deleted'"]
             params: list = []
             if search:
-                where.append("(full_name LIKE ? OR email LIKE ?)")
-                params.extend([f"%{search}%", f"%{search}%"])
+                where.append("(full_name LIKE ? OR email LIKE ? OR CAST(sheet_number AS TEXT) LIKE ?)")
+                params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
             if nationality:
                 where.append("nationality = ?")
                 params.append(nationality)
