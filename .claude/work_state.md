@@ -430,5 +430,5 @@ output = base64(T3v1 + n1 + n2 + n3 + ct3)
 - python3 경로 broken → 항상 절대경로 사용
 - 서버 Hot Reload 중 → 시작/종료 금지
 - DB 87컬럼 (stage, mail_tags, korea_experience 추가됨)
-- bridge_backup.py 실행 불가 (encodings 모듈 에러) → git commit/push로 대체
+- bridge_backup.py 정상 동작 (2026-04-05 수리 확인, Q:\Phtyon 3\python.exe 사용)
 - 구조화 백업: Q:\Claudework\bridge backup\ (memory/config/db/env)

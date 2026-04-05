@@ -1247,8 +1247,16 @@
       "git": "971c4e80",
       "files": 2181,
       "db_hash": "042c5137ccd0"
+    },
+    {
+      "dir": "20260405_183929__repair-test",
+      "task": "repair-test",
+      "ts": "2026.04.05 18:40:10",
+      "git": "6308692e",
+      "files": 2180,
+      "db_hash": "042c5137ccd0"
     }
   ],
-  "last_backup": "2026.04.05 09:00:14",
-  "total_count": 156
+  "last_backup": "2026.04.05 18:40:10",
+  "total_count": 157
 }
