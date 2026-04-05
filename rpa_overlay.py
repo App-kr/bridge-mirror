@@ -1085,6 +1085,20 @@ class RPAOverlay:
 
     # ── COMPLETE window ───────────────────────
     def _build_complete(self, count: int):
+        # ── Apple Light 팔레트 (apply 페이지 동일 스타일) — self.* 색상 미사용 ──
+        _BG    = "#f5f5f7"   # Apple 밝은 배경
+        _CARD  = "#ffffff"   # 카드 흰색
+        _T1    = "#1d1d1f"   # 기본 텍스트 (거의 검정)
+        _T2    = "#6e6e73"   # 보조 텍스트 (회색)
+        _SEP   = "#d2d2d7"   # 구분선 (밝은 회색)
+        _GREEN = "#1d9e75"   # BRIDGE 브랜드 초록
+        _BLUE  = "#0071e3"   # Apple 파랑
+        _RED   = "#ff3b30"   # Apple 빨강 (종료)
+        _HOV_G = "#e8f8f3"   # 초록 버튼 호버
+        _HOV_B = "#e8f1fd"   # 파랑 버튼 호버
+        _HOV_R = "#fff0ef"   # 빨강 버튼 호버
+        _XGRAY = "#c7c7cc"   # X 버튼 색상
+
         root = tk.Tk()
         self._root = root
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
@@ -1100,27 +1114,28 @@ class RPAOverlay:
         except Exception:
             pass
         root.overrideredirect(True)
-        root.attributes("-topmost", True)   # 완료 알림은 항상 사용자에게 보여야 함
+        root.attributes("-topmost", True)
         root.attributes("-alpha", 0.0)
-        root.configure(bg=self.BG)
+        root.configure(bg=_SEP)
 
-        w, h = 360, 330
+        w, h = 380, 360
         mx, my, mw, mh = 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
         if _HAS_SCREENINFO:
             try:
                 mons = get_monitors()
-                m    = mons[0]   # 항상 주 모니터
+                m    = mons[0]
                 mx, my, mw, mh = m.x, m.y, m.width, m.height
             except Exception:
                 pass
         root.geometry(f"{w}x{h}+{mx + (mw - w) // 2}+{my + (mh - h) // 2}")
 
-        border = tk.Frame(root, bg=self.SEP, padx=1, pady=0)
+        # 외곽 테두리 (1px, 밝은 회색)
+        border = tk.Frame(root, bg=_SEP, padx=1, pady=1)
         border.pack(fill="both", expand=True)
-        card = tk.Frame(border, bg=self.BG)
+        card = tk.Frame(border, bg=_CARD)
         card.pack(fill="both", expand=True)
 
-        _countdown = [10]
+        _countdown = [12]
 
         def _set_result(res: str):
             _complete_result_val[0] = res
@@ -1132,58 +1147,53 @@ class RPAOverlay:
             except Exception:
                 pass
 
-        # fade in → 완료 후 topmost 해제 (잠깐 앞에 보이고, 이후 뒤로 갈 수 있음)
+        # fade-in 애니메이션
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
             if a < 1.0:
                 root.attributes("-alpha", a)
-                root.after(16, lambda: _fade(a + 0.07))
+                root.after(16, lambda: _fade(round(a + 0.08, 2)))
             else:
                 root.attributes("-alpha", 1.0)
-                root.after(1500, lambda: root.attributes("-topmost", False)
+                root.after(2000, lambda: root.attributes("-topmost", False)
                            if root.winfo_exists() else None)
         root.after(10, _fade)
 
-        # top bar (X)
-        bar = tk.Frame(card, bg=self.BG, height=28)
+        # ── 상단 바 (X 버튼) ──────────────────────────────────
+        bar = tk.Frame(card, bg=_CARD, height=32)
         bar.pack(fill="x")
         bar.pack_propagate(False)
-        xb = tk.Label(bar, text="\u2715", font=self._fn(10),
-                      bg=self.BG, fg=self.X_GRAY, cursor="hand2")
-        xb.pack(side="right", padx=(0, 6), pady=(4, 0))
-        xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
-        xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
+        xb = tk.Label(bar, text="\u2715", font=self._fn(11),
+                      bg=_CARD, fg=_XGRAY, cursor="hand2")
+        xb.pack(side="right", padx=10, pady=6)
+        xb.bind("<Enter>", lambda e: xb.configure(fg=_T1))
+        xb.bind("<Leave>", lambda e: xb.configure(fg=_XGRAY))
         xb.bind("<Button-1>", lambda e: _set_result("EXIT"))
 
-        # check animation
-        chk = tk.Canvas(card, width=54, height=46,
-                        bg=self.BG, highlightthickness=0)
-        chk.pack(pady=(2, 4))
+        # ── 체크 애니메이션 ────────────────────────────────────
+        chk = tk.Canvas(card, width=56, height=48,
+                        bg=_CARD, highlightthickness=0)
+        chk.pack(pady=(0, 4))
+        # 체크 배경 원 (초록)
+        chk.create_oval(4, 4, 52, 48, fill="#e8f8f3", outline=_GREEN, width=2)
         self._draw_check_animated(chk, root)
 
-        # title
+        # ── 타이틀 ────────────────────────────────────────────
         title_lbl = tk.Label(card, text="작업완료!",
-                             font=self._fn(16, "bold"),
-                             bg=self.BG, fg=self.TEXT1)
+                             font=self._fn(17, "bold"),
+                             bg=_CARD, fg=_T1)
         title_lbl.pack()
 
-        # subtitle
         sub_lbl = tk.Label(card, text=f"{count}건 게시 완료",
-                           font=self._fn(10), bg=self.BG, fg=self.TEXT2)
-        sub_lbl.pack(pady=(3, 10))
+                           font=self._fn(10), bg=_CARD, fg=_T2)
+        sub_lbl.pack(pady=(3, 12))
 
-        self._sep(card)
+        # ── 구분선 ─────────────────────────────────────────────
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
 
-        # ── switchable content area ──
-        content = tk.Frame(card, bg=self.BG)
-        content.pack(fill="both", expand=True)
-
-        # -- Main view: more buttons + account change --
-        main_view = tk.Frame(content, bg=self.BG)
-        main_view.pack(fill="both", expand=True)
-
-        more_row = tk.Frame(main_view, bg=self.BG)
+        # ── 추가 게시 버튼 행: 5개 더 | 10개 더 | 20개 더 ──────
+        more_row = tk.Frame(card, bg=_CARD)
         more_row.pack(fill="x")
 
         for i, (label, cnt) in enumerate([("5개 더", 5), ("10개 더", 10), ("20개 더", 20)]):
@@ -1192,38 +1202,45 @@ class RPAOverlay:
                 _set_result("MORE")
             btn = tk.Label(more_row, text=label,
                            font=self._fn(13),
-                           bg=self.BG, fg=self.GREEN, cursor="hand2", pady=10)
+                           bg=_CARD, fg=_GREEN, cursor="hand2", pady=12)
             btn.pack(side="left", expand=True, fill="both")
             btn.bind("<Button-1>", lambda e, f=_click_more: f())
-            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=self.HOVER))
-            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=self.BG))
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=_HOV_G))
+            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=_CARD))
             if i < 2:
-                tk.Frame(more_row, bg=self.SEP, width=1).pack(side="left", fill="y")
+                tk.Frame(more_row, bg=_SEP, width=1).pack(side="left", fill="y")
 
-        self._sep(main_view)
+        # ── 구분선 ─────────────────────────────────────────────
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
+
+        # ── 계정변경 버튼 ──────────────────────────────────────
+        acct_content = tk.Frame(card, bg=_CARD)
+        acct_content.pack(fill="x")
+
+        main_acct_row = tk.Frame(acct_content, bg=_CARD)
+        main_acct_row.pack(fill="x")
 
         def _show_accounts():
-            main_view.pack_forget()
-            acct_view.pack(fill="both", expand=True)
-            _countdown[0] = 30  # extend timeout for account browsing
+            main_acct_row.pack_forget()
+            acct_picker.pack(fill="x")
+            _countdown[0] = 30
 
-        chg_btn = tk.Label(main_view, text="계정변경",
-                           font=self._fn(13),
-                           bg=self.BG, fg=self.BLUE, cursor="hand2", pady=10)
+        chg_btn = tk.Label(main_acct_row, text="계정변경",
+                           font=self._fn(11),
+                           bg=_CARD, fg=_BLUE, cursor="hand2", pady=9)
         chg_btn.pack(fill="x")
         chg_btn.bind("<Button-1>", lambda e: _show_accounts())
-        chg_btn.bind("<Enter>", lambda e: chg_btn.configure(bg=self.HOVER))
-        chg_btn.bind("<Leave>", lambda e: chg_btn.configure(bg=self.BG))
+        chg_btn.bind("<Enter>", lambda e: chg_btn.configure(bg=_HOV_B))
+        chg_btn.bind("<Leave>", lambda e: chg_btn.configure(bg=_CARD))
 
-        # -- Account picker view (hidden initially) --
-        acct_view = tk.Frame(content, bg=self.BG)
+        # 계정 선택 패널 (숨겨진 상태)
+        acct_picker = tk.Frame(acct_content, bg=_CARD)
 
-        def _darken(hc, factor=0.85):
+        def _darken(hc, factor=0.88):
             r = int(int(hc[1:3], 16) * factor)
             g = int(int(hc[3:5], 16) * factor)
             b = int(int(hc[5:7], 16) * factor)
-            return "#{:02x}{:02x}{:02x}".format(
-                min(r, 255), min(g, 255), min(b, 255))
+            return "#{:02x}{:02x}{:02x}".format(min(r, 255), min(g, 255), min(b, 255))
 
         current_email = (self._email or "").lower()
         for acct_id, email, color in _ACCOUNT_LIST:
@@ -1231,15 +1248,13 @@ class RPAOverlay:
                 continue
             name = email.split("@")[0]
             hov_c = _darken(color)
-
-            wrap = tk.Frame(acct_view, bg=self.SEP, padx=1, pady=1)
-            wrap.pack(fill="x", padx=12, pady=2)
+            wrap = tk.Frame(acct_picker, bg=_SEP, padx=1, pady=1)
+            wrap.pack(fill="x", padx=10, pady=2)
             inner = tk.Label(wrap, text=f"  {name}",
-                             font=self._fn(12),
+                             font=self._fn(11),
                              bg=color, fg="#1d1d1f", cursor="hand2",
-                             pady=8, padx=8, anchor="w")
+                             pady=7, padx=6, anchor="w")
             inner.pack(fill="both")
-
             def _click_acct(aid=acct_id):
                 _set_result(f"CHANGE_{aid}")
             inner.bind("<Button-1>", lambda e, f=_click_acct: f())
@@ -1247,24 +1262,36 @@ class RPAOverlay:
             inner.bind("<Leave>", lambda e, b=inner, c=color: b.configure(bg=c))
 
         def _back_to_main():
-            acct_view.pack_forget()
-            main_view.pack(fill="both", expand=True)
-            _countdown[0] = 10
+            acct_picker.pack_forget()
+            main_acct_row.pack(fill="x")
+            _countdown[0] = 12
 
-        back_lbl = tk.Label(acct_view, text="돌아가기",
+        back_lbl = tk.Label(acct_picker, text="< 돌아가기",
                             font=self._fn(10),
-                            bg=self.BG, fg=self.X_GRAY, cursor="hand2", pady=6)
+                            bg=_CARD, fg=_XGRAY, cursor="hand2", pady=5)
         back_lbl.pack()
         back_lbl.bind("<Button-1>", lambda e: _back_to_main())
-        back_lbl.bind("<Enter>", lambda e: back_lbl.configure(fg=self.TEXT1))
-        back_lbl.bind("<Leave>", lambda e: back_lbl.configure(fg=self.X_GRAY))
+        back_lbl.bind("<Enter>", lambda e: back_lbl.configure(fg=_T1))
+        back_lbl.bind("<Leave>", lambda e: back_lbl.configure(fg=_XGRAY))
 
-        # ── Bottom: countdown ──
-        self._sep(card)
-        countdown_lbl = tk.Label(card, text="10초 후 자동 종료",
+        # ── 구분선 ─────────────────────────────────────────────
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
+
+        # ── 종료하기 버튼 ──────────────────────────────────────
+        exit_btn = tk.Label(card, text="종료하기",
+                            font=self._fn(13, "bold"),
+                            bg=_CARD, fg=_RED, cursor="hand2", pady=11)
+        exit_btn.pack(fill="x")
+        exit_btn.bind("<Button-1>", lambda e: _set_result("EXIT"))
+        exit_btn.bind("<Enter>", lambda e: exit_btn.configure(bg=_HOV_R))
+        exit_btn.bind("<Leave>", lambda e: exit_btn.configure(bg=_CARD))
+
+        # ── 구분선 + 카운트다운 ────────────────────────────────
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
+        countdown_lbl = tk.Label(card, text=f"{_countdown[0]}초 후 자동 종료",
                                  font=self._fn(9),
-                                 bg=self.BG, fg=self.X_GRAY, pady=6)
-        countdown_lbl.pack()
+                                 bg=_BG, fg=_T2, pady=7)
+        countdown_lbl.pack(fill="x")
 
         def _tick():
             if not root.winfo_exists():
@@ -1278,7 +1305,7 @@ class RPAOverlay:
 
         root.after(1000, _tick)
 
-        self._drag(root, bar, chk, title_lbl, sub_lbl, content)
+        self._drag(root, bar, chk, title_lbl, sub_lbl)
         self._ready.set()
         try:
             root.mainloop()
