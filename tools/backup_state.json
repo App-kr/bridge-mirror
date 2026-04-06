@@ -1287,8 +1287,16 @@
       "git": "61afd509",
       "files": 2183,
       "db_hash": "05ea0477bbdf"
+    },
+    {
+      "dir": "20260406_090011__final_backup_20260406_090002",
+      "task": "final_backup_20260406_090002",
+      "ts": "2026.04.06 09:00:16",
+      "git": "49e691e2",
+      "files": 2183,
+      "db_hash": "05ea0477bbdf"
     }
   ],
-  "last_backup": "2026.04.06 08:51:08",
-  "total_count": 161
+  "last_backup": "2026.04.06 09:00:16",
+  "total_count": 162
 }
