@@ -774,7 +774,7 @@ def _should_skip_line(stripped_lower: str) -> bool:
     return False
 
 
-def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
+def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = False) -> tuple[str, list[str]]:
     """
     텍스트에서 PII 삭제.
     Returns: (cleaned_text, list[삭제 로그])
@@ -873,29 +873,16 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
             log.append(f"KR_WORKPLACE→{generic}: {workplace}")
             result = pat.sub(generic, result)
 
-    # ── Pass 2.7: 학교/기관명 일반화 (EDUCATION 섹션 제외) ──
+    # ── Pass 2.7: 학교/기관명 일반화 ──
+    # skip_school_names=True이면 건너뜀 (EDUCATION 섹션 보호용)
     # "Sheffield University" → "University", "Lincoln High School" → "School"
-    # EDUCATION 섹션(본인 학력)은 대학명 삭제 금지 — 줄 단위 섹션 추적
     def school_replacer(m):
         generic = _school_to_generic(m.group())
         log.append(f"SCHOOL→{generic}: {m.group()[:60]}")
         return generic
-    _p27_lines = result.split("\n")
-    _p27_out = []
-    _in_edu = False
-    for _line in _p27_lines:
-        _sl = _line.strip().lower()
-        if _sl and _EDU_SECTION_RE.match(_sl):
-            _in_edu = True
-        elif _in_edu and _sl and _OTHER_SECTION_RE.match(_sl):
-            _in_edu = False
-        if _in_edu:
-            _p27_out.append(_line)  # EDUCATION 섹션: 학교명 보호
-        else:
-            _line = RE_SCHOOL_NAMED.sub(school_replacer, _line)
-            _line = RE_UNIV_OF.sub(school_replacer, _line)
-            _p27_out.append(_line)
-    result = "\n".join(_p27_out)
+    if not skip_school_names:
+        result = RE_SCHOOL_NAMED.sub(school_replacer, result)
+        result = RE_UNIV_OF.sub(school_replacer, result)
 
     # ── Pass 2.8: 외국 도시/주 + 나이 + 비자 삭제 ──
     _sub(RE_US_CITY_STATE, "", "US_CITY_STATE")
@@ -1141,12 +1128,20 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
     _ref_active = [False]  # mutable flag (closure 공유)
 
     def _process_paragraphs(paragraphs, section_name="body"):
+        _in_edu = [False]  # EDUCATION 섹션 플래그 (클로저용 리스트)
+
         for para in paragraphs:
             original = para.text
             if not original.strip():
                 continue
 
             stripped_lower = original.strip().lower()
+
+            # EDUCATION 섹션 추적 — 본인 학력은 학교명 보호
+            if _EDU_SECTION_RE.match(stripped_lower):
+                _in_edu[0] = True
+            elif _in_edu[0] and _OTHER_SECTION_RE.match(stripped_lower):
+                _in_edu[0] = False
 
             # Reference 섹션 헤더 감지 → 이후 전체 삭제
             if stripped_lower in _REF_HEADERS:
@@ -1169,7 +1164,7 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
                         run.text = ""
                 continue
 
-            cleaned, log = remove_pii(original, candidate)
+            cleaned, log = remove_pii(original, candidate, skip_school_names=_in_edu[0])
             # 파일명에서 추출한 이름도 삭제
             for fn_name in filename_names:
                 pat = re.compile(re.escape(fn_name), re.I)
@@ -1494,22 +1489,48 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         page_has_korea = any(kw in page_lower for kw in KR_KEYWORDS)
 
         keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
-        # KR_WORKPLACE_KEYWORDS: page_has_korea 게이트 제거 → 항상 적용
-        # (YBM·SLP 등 한국 브랜드는 페이지 맥락 없어도 식별 가능)
-        for line in text.split("\n"):
+
+        # ── 사전 계산: EDUCATION 섹션 줄 인덱스 ──
+        # EDUCATION 섹션 줄에는 RE_SCHOOL_NAMED/KR_WORKPLACE 미적용 (본인 학력 보호)
+        _page_lines = text.split("\n")
+        _edu_lines: set = set()
+        _edu_flag = False
+        for _idx, _ll in enumerate(_page_lines):
+            _ll_s = _ll.strip().lower()
+            if _ll_s and _EDU_SECTION_RE.match(_ll_s):
+                _edu_flag = True
+            elif _edu_flag and _ll_s and _OTHER_SECTION_RE.match(_ll_s):
+                _edu_flag = False
+            if _edu_flag:
+                _edu_lines.add(_idx)
+
+        # ── 한국 학원명/도시명 redact ──
+        # KR_WORKPLACE_KEYWORDS: EDUCATION 섹션 제외, 유형명(_GENERIC_TYPES_SET) 건너뜀
+        for _idx, line in enumerate(_page_lines):
             stripped = line.strip()
-            if not stripped:
+            if not stripped or _idx in _edu_lines:
                 continue
             s_lower = stripped.lower()
             has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
-            has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS)
+            has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS
+                              if kw not in _GENERIC_TYPES_SET)
+
+            # 브랜드 접두사 + 일반 유형명 → 유형명 보존 (replacement redact)
+            # "Broad Language School" → "Language School"
+            for m in _RE_KR_SCHOOL_PREFIX.finditer(stripped):
+                canonical = " ".join(w.capitalize() for w in m.group(1).split())
+                replacement_redacts.append((m.group(), canonical))
+                all_logs.append(f"[page{page_num}] KR_SCHOOL_PREFIX→{canonical}: {m.group()[:60]}")
 
             # 학원명 redact: 같은 줄에 한국 키워드 있거나, 짧은 줄(<50자)
+            # 유형명(language school 등)은 건너뜀 — 위에서 처리
             if has_kr_work and (has_kr or len(stripped) < 50):
                 if len(stripped) < 50 and not has_kr:
                     redact_texts.add(stripped)
                     all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
                 for kw in KR_WORKPLACE_KEYWORDS:
+                    if kw in _GENERIC_TYPES_SET:
+                        continue  # 유형명 유지
                     kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
                     for m in kw_pat.finditer(stripped):
                         redact_texts.add(m.group())
@@ -1526,22 +1547,21 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
 
         # ── 학교/기관명 일반화 + 외국 도시/나이/비자 — 줄 단위 스캔 ──
-        # 주의: RE_SCHOOL_NAMED 등은 \s+ 포함 → 전체 page text에서 찾으면
-        #       "\n"을 건너 매칭 → page.search_for()가 부분 매칭 → "ndent School" 잔류
-        #       → 반드시 줄(line) 단위로 스캔하여 단일 줄 텍스트만 redact에 추가
-        for _line in text.split("\n"):
+        # EDUCATION 섹션 줄은 RE_SCHOOL_NAMED/RE_UNIV_OF 미적용 (본인 학력 보호)
+        for _idx, _line in enumerate(_page_lines):
             _ls = _line.strip()
             if not _ls:
                 continue
-            # 학교/기관명 → replacement redact (generic 이름 삽입)
-            for m in RE_SCHOOL_NAMED.finditer(_ls):
-                _g = _school_to_generic(m.group())
-                replacement_redacts.append((m.group(), _g))
-                all_logs.append(f"[page{page_num}] SCHOOL→{_g}: {m.group()[:50]}")
-            for m in RE_UNIV_OF.finditer(_ls):
-                _g = _school_to_generic(m.group())
-                replacement_redacts.append((m.group(), _g))
-                all_logs.append(f"[page{page_num}] UNIVOF→{_g}: {m.group()[:50]}")
+            # 학교/기관명 → replacement redact (EDUCATION 섹션 제외)
+            if _idx not in _edu_lines:
+                for m in RE_SCHOOL_NAMED.finditer(_ls):
+                    _g = _school_to_generic(m.group())
+                    replacement_redacts.append((m.group(), _g))
+                    all_logs.append(f"[page{page_num}] SCHOOL→{_g}: {m.group()[:50]}")
+                for m in RE_UNIV_OF.finditer(_ls):
+                    _g = _school_to_generic(m.group())
+                    replacement_redacts.append((m.group(), _g))
+                    all_logs.append(f"[page{page_num}] UNIVOF→{_g}: {m.group()[:50]}")
             # 외국 도시/주 → blank redact
             for m in RE_US_CITY_STATE.finditer(_ls):
                 redact_texts.add(m.group())
