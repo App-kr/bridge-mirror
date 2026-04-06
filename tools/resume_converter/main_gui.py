@@ -866,6 +866,8 @@ class BridgeConverterApp:
             return
 
         def _on_windnd_drop(files):
+            # windnd calls this from the Windows message thread → NOT Tkinter main thread.
+            # Schedule all UI work on the main thread via after(0, ...) to prevent crash.
             paths = []
             for f in files:
                 if isinstance(f, bytes):
@@ -874,10 +876,14 @@ class BridgeConverterApp:
                     except UnicodeDecodeError:
                         f = f.decode("mbcs", errors="replace")
                 paths.append(Path(f))
-            idx = ci_fn()
-            if idx >= 0:
-                self._activate_bundle_card(idx)
-            self._add_files(paths)
+
+            def _on_main_thread():
+                idx = ci_fn()
+                if idx >= 0:
+                    self._activate_bundle_card(idx)
+                self._add_files(paths)
+
+            self.root.after(0, _on_main_thread)
 
         for w in (card.file_tv, card.frame, card.header_bar):
             try:
