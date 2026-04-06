@@ -562,6 +562,46 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "private academy", "teaching academy", "english academy",
 ])
 
+# 이미 일반 유형명인 KR_WORKPLACE_KEYWORDS 항목
+# → 앞의 브랜드명만 제거하고 유형명 그대로 보존
+# "Broad Language School" → "Language School" (not "English")
+_GENERIC_SCHOOL_TYPES: dict = {
+    "language school": "Language School",
+    "language academy": "Language Academy",
+    "language institute": "Language Institute",
+    "language center": "Language Center",
+    "language centre": "Language Centre",
+    "english village": "English Village",
+    "english academy": "English Academy",
+    "teaching academy": "Teaching Academy",
+    "private academy": "Private Academy",
+    "international school": "International School",
+    "elementary school": "Elementary School",
+    "primary school": "Primary School",
+    "secondary school": "Secondary School",
+    "middle school": "Middle School",
+    "high school": "High School",
+    "kindergarten": "Kindergarten",
+    "preschool": "Preschool",
+    "after school": "After School",
+    "after-school": "After-School",
+    "afterschool": "Afterschool",
+}
+_GENERIC_TYPES_SET = frozenset(_GENERIC_SCHOOL_TYPES.keys())
+
+# 브랜드 접두사 + 일반 유형명 → 유형명만 보존 (capture group 1 = generic type)
+# "Broad Language School" → "Language School"
+# !! 줄 경계 넘어 매칭 방지: [ \t]+ 사용 (not \s+) !!
+_RE_KR_SCHOOL_PREFIX = re.compile(
+    r'\b[A-Z][a-zA-Z\'\-\.]+(?:[ \t]+[A-Z][a-zA-Z\'\-\.]+){0,2}[ \t]+'
+    r'(Language[ \t]+School|Language[ \t]+Academy|Language[ \t]+Institute|'
+    r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy)|'
+    r'Teaching[ \t]+Academy|Private[ \t]+Academy|International[ \t]+School|'
+    r'(?:Elementary|Primary|Secondary|Middle|High)[ \t]+School|'
+    r'Kindergarten|Preschool)\b',
+    re.IGNORECASE,
+)
+
 # 이력서 섹션 헤더 (PDF 이름 추출 시 오탐 방지)
 _RESUME_SECTION_HEADERS = frozenset({
     "professional summary", "work experience", "education", "references",
@@ -578,6 +618,23 @@ _RESUME_SECTION_HEADERS = frozenset({
     "summary of qualifications", "professional skills",
     "cover letter", "letter of introduction", "summary",
 })
+
+# ── EDUCATION 섹션 보호용 헤더 감지 정규식 ──
+# Pass 2.7(학교명 일반화)은 EDUCATION 섹션에서 실행 금지
+_EDU_SECTION_RE = re.compile(
+    r'^(?:education|academic\s+(?:qualifications?|background|history)|'
+    r'educational\s+(?:background|history)|qualifications?|schooling)',
+    re.IGNORECASE,
+)
+# 다른 섹션 헤더 감지 → EDUCATION 섹션 종료 신호
+_OTHER_SECTION_RE = re.compile(
+    r'^(?:experience|work(?:\s+(?:experience|history))?|employment(?:\s+history)?|'
+    r'teaching(?:\s+experience)?|professional(?:\s+experience)?|'
+    r'career(?:\s+(?:summary|objective))?|volunteer|internship|reference|'
+    r'skills?|languages?|interests?|awards?|certifications?|'
+    r'summary|objective|profile|about\s+me|personal)',
+    re.IGNORECASE,
+)
 
 # 경력줄에서 한국 근무 상세 축약 패턴
 # "YBM ECC, Uijeongbu, South Korea, March 2021 - Sept 2022" → "South Korea, March 2021 - Sept 2022"
@@ -791,26 +848,54 @@ def remove_pii(text: str, candidate: dict = None) -> tuple[str, list[str]]:
                 result = re.sub(r",\s*,", ",", result)
                 result = re.sub(r"^\s*,\s*", "", result, flags=re.MULTILINE)
                 result = re.sub(r"\s*,\s*$", "", result, flags=re.MULTILINE)
+    # 도시 제거 후 남은 "— , Text" 패턴 정리: "— , South Korea" → "— South Korea"
+    result = re.sub(r'([—–])\s*,+\s*', r'\1 ', result)
+    result = re.sub(r',+\s*([—–])', r' \1', result)
 
     # ── Pass 2.6: 한국 업체명 처리 ──
-    # "YBM ECC" → "English"
-    # "POLY" → "English"
-    # "Academy" → "Academy"
+    # Step 1: 브랜드 접두사 제거, 유형명 보존
+    # "Broad Language School" → "Language School"
+    def _school_prefix_replacer(m):
+        canonical = " ".join(w.capitalize() for w in m.group(1).split())
+        log.append(f"KR_SCHOOL_PREFIX→{canonical}: {m.group()[:60]}")
+        return canonical
+    result = _RE_KR_SCHOOL_PREFIX.sub(_school_prefix_replacer, result)
+
+    # Step 2: 나머지 브랜드/업체명 → 일반명 대체
+    # "YBM ECC" → "English", "POLY" → "English"
+    # 이미 유형명인 항목(language school 등)은 Step 1에서 처리됐으므로 건너뜀
     for workplace in KR_WORKPLACE_KEYWORDS:
+        if workplace in _GENERIC_TYPES_SET:
+            continue  # 유형명 그대로 보존
         pat = re.compile(r"\b" + re.escape(workplace) + r"\b", re.IGNORECASE)
         if pat.search(result):
             generic = _replace_workplace_generic(workplace)
             log.append(f"KR_WORKPLACE→{generic}: {workplace}")
             result = pat.sub(generic, result)
 
-    # ── Pass 2.7: 학교/기관명 일반화 (전 세계 공통) ──
+    # ── Pass 2.7: 학교/기관명 일반화 (EDUCATION 섹션 제외) ──
     # "Sheffield University" → "University", "Lincoln High School" → "School"
+    # EDUCATION 섹션(본인 학력)은 대학명 삭제 금지 — 줄 단위 섹션 추적
     def school_replacer(m):
         generic = _school_to_generic(m.group())
         log.append(f"SCHOOL→{generic}: {m.group()[:60]}")
         return generic
-    result = RE_SCHOOL_NAMED.sub(school_replacer, result)
-    result = RE_UNIV_OF.sub(school_replacer, result)
+    _p27_lines = result.split("\n")
+    _p27_out = []
+    _in_edu = False
+    for _line in _p27_lines:
+        _sl = _line.strip().lower()
+        if _sl and _EDU_SECTION_RE.match(_sl):
+            _in_edu = True
+        elif _in_edu and _sl and _OTHER_SECTION_RE.match(_sl):
+            _in_edu = False
+        if _in_edu:
+            _p27_out.append(_line)  # EDUCATION 섹션: 학교명 보호
+        else:
+            _line = RE_SCHOOL_NAMED.sub(school_replacer, _line)
+            _line = RE_UNIV_OF.sub(school_replacer, _line)
+            _p27_out.append(_line)
+    result = "\n".join(_p27_out)
 
     # ── Pass 2.8: 외국 도시/주 + 나이 + 비자 삭제 ──
     _sub(RE_US_CITY_STATE, "", "US_CITY_STATE")
