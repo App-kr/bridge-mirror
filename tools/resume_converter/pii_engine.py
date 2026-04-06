@@ -138,6 +138,93 @@ _KR_WORKPLACE = re.compile(
     re.IGNORECASE,
 )
 
+# ── 수정 1: 대학/칼리지 이름 보존 키워드 ─────────────────────────────────────
+PRESERVE_INSTITUTION = [
+    "University", "College", "Institute of Technology",
+    "Graduate School", "Seminary", "Polytechnic",
+]
+
+# ── 수정 3: 직함/스킬 내 보호 패턴 ──────────────────────────────────────────
+_TITLE_SAFE_RE = re.compile(
+    r"(?:Middle\s+School|High\s+School|Elementary\s+School|Language\s+School|"
+    r"English\s+Language|English\s+Teacher|English\s+Education|English\s+Development|"
+    r"School\s+Teacher|Pre-?School|Preschool)",
+    re.IGNORECASE,
+)
+
+# ── 수정 2: 교육 섹션 헤더 감지 ──────────────────────────────────────────────
+_EDU_HDR_RE = re.compile(
+    r"^\s*(?:EDUCATION|ACADEMIC\s+BACKGROUND|QUALIFICATIONS?|CERTIFICATIONS?|DEGREES?)\s*:?\s*$",
+    re.IGNORECASE,
+)
+_NON_EDU_HDR_RE = re.compile(
+    r"^\s*(?:EXPERIENCE|WORK\s*HISTORY|EMPLOYMENT|SKILLS?|REFERENCES?|LANGUAGES?|"
+    r"PERSONAL|PROFILE|SUMMARY|CAREER|PROFESSIONAL)\s*:?\s*$",
+    re.IGNORECASE,
+)
+
+# ── 수정 4: 한국 도시명 (영문) ────────────────────────────────────────────────
+_KR_CITIES_LIST = [
+    "Seoul", "Busan", "Daegu", "Incheon", "Gwangju", "Daejeon",
+    "Ulsan", "Sejong", "Suwon", "Seongnam", "Yongin", "Goyang",
+    "Changwon", "Cheongju", "Jeonju", "Cheonan", "Ansan", "Anyang",
+    "Gimhae", "Pohang", "Uijeongbu", "Paju", "Gimpo", "Jeju",
+    "Chuncheon", "Mokpo", "Gunsan", "Wonju", "Iksan", "Gyeongju",
+    "Yangsan", "Asan", "Gumi", "Tongyeong", "Sacheon", "Geoje",
+    "Hanam", "Osan", "Icheon", "Gwangmyeong", "Siheung",
+    "Pyeongtaek", "Gwacheon", "Dongducheon", "Pocheon",
+    "Gangneung", "Sokcho", "Samcheok", "Taebaek", "Yeongju",
+    "Andong", "Gimcheon", "Mungyeong", "Sangju", "Yeongcheon",
+    "Gyeongsan", "Chilgok", "Dalseong", "Yongsan", "Gangnam",
+    "Songpa", "Mapo", "Seodaemun", "Dongjak", "Gwanak",
+    "Nowon", "Dobong", "Gangbuk", "Seongbuk", "Jungnang",
+    "Gwangjin", "Dongdaemun", "Jongno", "Yeongdeungpo",
+    "Guro", "Geumcheon", "Gangseo", "Yangcheon", "Eunpyeong",
+    "Songdo", "Bundang", "Ilsan", "Pangyo", "Suji",
+    "Haeundae", "Sasang", "Saha", "Yeonje", "Suyeong",
+    "Geumjeong", "Dongnae", "Busanjin", "Yeongdo",
+]
+_KR_CITY_RE = re.compile(
+    r"\b(" + "|".join(re.escape(c) for c in sorted(_KR_CITIES_LIST, key=len, reverse=True)) + r")"
+    r"(?:,?\s*(?:South\s+Korea|Korea))?\b",
+    re.IGNORECASE,
+)
+
+# ── 수정 5/6: 한국 학원 고유명사 목록 (긴 이름 우선) ─────────────────────────
+_KR_ACADEMY_LIST = sorted(list(set([
+    "April English", "Wall Street English", "Ivy League English",
+    "King's Academy", "GEM Academy", "Stanford Academy", "Berkeley Academy",
+    "Pinetree Academy", "Cedar Academy", "Oxford Academy", "Cambridge Institute",
+    "KIS Academy", "Princeton Review",
+    "Mount Pisgah", "Morning Calm", "Pine Division", "Blue Mountain",
+    "Maple Bear", "Little Fox", "Reading Town", "English Village",
+    "Global Village", "Brown Bears", "Smart Tree", "English Eye",
+    "MBC English", "Broad Language", "Chuncheon Elementary",
+    "English Born", "English Vine", "English City", "English Egg",
+    "Toss English", "3030 English", "GGE English", "Willson English",
+    "MuM English", "York English", "James Cook",
+    "Talking Club", "Reading Gate", "Wonder Island", "Apple Tree",
+    "King's Speech", "Brown Bags", "Kids College",
+    "Kids Town", "Kids Club", "Ivy Kids",
+    "Helen Doron", "GrapeSEED", "Creverse", "Langcon",
+    "Brighton Junior", "Union English", "Elite Prep", "Fast One",
+    "Wiz Island", "Haba League", "Prime Unyang", "Francis Parker",
+    "Herald School", "E-Public", "Berlitz",
+    "Chungdahm", "Altiora", "Pagoda", "Avalon",
+    "To-Be", "i-Garten", "Twinklers", "K-First",
+    "S-KIDS", "Toppia", "Plato", "Lexis",
+    "Saint Paul", "Hillside", "Worwick",
+    "Yoon's English",
+    "Poly", "Rise", "YBM", "ECC", "CDI", "GnB", "DYB", "SLP",
+    "JLS", "PSA", "LCI", "OHC", "BIE", "IEB", "GEA", "SIE", "DIS",
+    "GCIS", "Sei", "Kaplan",
+])), key=len, reverse=True)
+_KR_ACADEMY_RE = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in _KR_ACADEMY_LIST) + r")"
+    r"(?:\s+(?:English|Language|Academy|School|Institute|Center|Centre|학원))?\b",
+    re.IGNORECASE,
+)
+
 # Reference 섹션 헤더 패턴 — v2.8
 _REF_HEADER_RE = re.compile(
     r"(?im)^[ \t]*(?:references?|referees?|references?\s+available(?:\s+on\s+request)?)\s*$"
@@ -196,12 +283,40 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         ))
         cleaned = cleaned.replace(m.group(0), "South Korea", 1)
 
-    # ── 학교명 (줄 단위 스캔 — 줄 넘는 매칭 방지) ─────────────────────────
+    # ── 학교명 (줄 단위 스캔) — 수정 1/2/3/7 적용 ───────────────────────────
     lines = cleaned.split("\n")
     new_lines = []
-    for line in lines:
+    in_edu_section = False
+    for i, line in enumerate(lines):
+        # 수정 2: 섹션 헤더 추적
+        if _EDU_HDR_RE.match(line):
+            in_edu_section = True
+        elif _NON_EDU_HDR_RE.match(line):
+            in_edu_section = False
+
+        # 수정 7: 인접 줄(±2) 한국 컨텍스트 확인
+        window = " ".join(lines[max(0, i - 2):i + 3])
+        has_kr_ctx = bool(
+            re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window, re.IGNORECASE)
+            or _KR_CITY_RE.search(window)
+            or re.search(r"[가-힣]", window)
+        )
+
+        # RE_SCHOOL_NAMED 처리 (수정 1/2/3/7)
         for m in RE_SCHOOL_NAMED.finditer(line):
             orig = m.group(0)
+            # 수정 1: 대학/칼리지 이름 보존
+            if any(kw.lower() in orig.lower() for kw in PRESERVE_INSTITUTION):
+                continue
+            # 수정 3: 직함/스킬 내 보호 패턴
+            if _TITLE_SAFE_RE.search(orig):
+                continue
+            # 수정 2: 교육 섹션 내 학위/전공명 삭제 금지
+            if in_edu_section:
+                continue
+            # 수정 7: 해외 기관 보존 (한국 컨텍스트 없으면 스킵)
+            if not has_kr_ctx:
+                continue
             repl = "School" if "school" in orig.lower() else "University"
             found.append(PIIMatch(
                 type="company",
@@ -211,16 +326,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
                 color="red",
             ))
             line = line.replace(orig, repl, 1)
-        for m in RE_UNIV_OF.finditer(line):
-            orig = m.group(0)
-            found.append(PIIMatch(
-                type="company",
-                original_value=orig,
-                position=0,
-                confidence=0.85,
-                color="red",
-            ))
-            line = line.replace(orig, "University", 1)
+
+        # RE_UNIV_OF: 수정 1 — University of X 형태는 항상 보존
+        # (삭제하지 않음)
+
         new_lines.append(line)
     cleaned = "\n".join(new_lines)
 
@@ -246,17 +355,68 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         ))
         cleaned = cleaned.replace(m.group(0), "South Korea", 1)
 
-    # ── 한국 학원/교육기관 ────────────────────────────────────────────────
-    for m in _KR_WORKPLACE.finditer(cleaned):
-        replacement = "학원"
+    # ── 수정 4: 한국 도시명 → "South Korea" ──────────────────────────────────
+    for m in _KR_CITY_RE.finditer(cleaned):
+        orig = m.group(0)
         found.append(PIIMatch(
-            type="company",
-            original_value=m.group(0),
+            type="address",
+            original_value=orig,
             position=m.start(),
-            confidence=0.90,
+            confidence=0.88,
             color="red",
         ))
-        cleaned = cleaned.replace(m.group(0), replacement, 1)
+        cleaned = cleaned.replace(orig, "South Korea", 1)
+
+    # ── 수정 5/6/7: 한국 학원/교육기관 (컨텍스트 확인 + 전체 토큰 교체) ──────
+    lines3 = cleaned.split("\n")
+    new_lines3 = []
+    for i, line in enumerate(lines3):
+        window3 = " ".join(lines3[max(0, i - 2):i + 3])
+        has_kr3 = bool(
+            re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window3, re.IGNORECASE)
+            or _KR_CITY_RE.search(window3)
+            or re.search(r"[가-힣]", window3)
+        )
+        has_foreign3 = bool(
+            RE_FOREIGN_CITY.search(window3) or RE_US_CITY_STATE.search(window3)
+        )
+
+        # KR_ACADEMY_RE: 고유명사 (수정 5/6/7)
+        for m in _KR_ACADEMY_RE.finditer(line):
+            orig = m.group(0)
+            # 수정 7: 해외 컨텍스트가 명확하고 한국 컨텍스트 없으면 보존
+            if has_foreign3 and not has_kr3:
+                continue
+            # 수정 3: 직함/스킬 내 TITLE_SAFE 보호 (한국 컨텍스트도 없을 때만)
+            if _TITLE_SAFE_RE.search(line) and not has_kr3:
+                continue
+            found.append(PIIMatch(
+                type="company",
+                original_value=orig,
+                position=0,
+                confidence=0.90,
+                color="red",
+            ))
+            line = line.replace(orig, "English Academy", 1)
+
+        # 일반 KR_WORKPLACE: 한국 컨텍스트 필수 (수정 6/7)
+        if has_kr3:
+            for m in _KR_WORKPLACE.finditer(line):
+                orig = m.group(0)
+                # 수정 6: TITLE_SAFE 패턴이면 스킵
+                if _TITLE_SAFE_RE.search(orig):
+                    continue
+                found.append(PIIMatch(
+                    type="company",
+                    original_value=orig,
+                    position=0,
+                    confidence=0.90,
+                    color="red",
+                ))
+                line = line.replace(orig, "English Academy", 1)
+
+        new_lines3.append(line)
+    cleaned = "\n".join(new_lines3)
 
     # ── PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등) ─────────
     cleaned = _PII_LABEL_RE.sub("", cleaned)

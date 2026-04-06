@@ -102,27 +102,27 @@ def _build_cover_page(
     """reportlab으로 커버 페이지 생성."""
     c = rl_canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-    # 강사 ID (좌상단)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(1.5 * cm, page_h - 2 * cm, f"ID: {candidate_id}")
+    # 강사 ID (좌상단) — 48~60pt bold
+    c.setFont("Helvetica-Bold", 54)
+    c.drawString(1.5 * cm, page_h - 2.5 * cm, str(candidate_id))
 
     c.setFont("Helvetica", 10)
-    c.drawString(1.5 * cm, page_h - 3 * cm, "BRIDGE ESL Teacher Application")
-    c.line(1.5 * cm, page_h - 3.3 * cm, page_w - 1.5 * cm, page_h - 3.3 * cm)
+    c.drawString(1.5 * cm, page_h - 3.3 * cm, "BRIDGE ESL Teacher Application")
+    c.line(1.5 * cm, page_h - 3.6 * cm, page_w - 1.5 * cm, page_h - 3.6 * cm)
 
-    # 증명사진 (우상단)
+    # 증명사진 (우상단) — 약 100~120px (35mm 기준)
     if photo_bytes:
         try:
             img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-            img = img.resize((150, 200), Image.LANCZOS)
+            img = img.resize((110, 147), Image.LANCZOS)
 
             tmp_img = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
             img.save(tmp_img.name, format="JPEG", quality=85, dpi=(150, 150))
             tmp_img.close()
 
-            img_x = page_w - 1.5 * cm - 5 * cm
-            img_y = page_h - 2 * cm - 7 * cm
-            c.drawImage(tmp_img.name, img_x, img_y, width=5 * cm, height=7 * cm,
+            img_x = page_w - 1.5 * cm - 3.5 * cm
+            img_y = page_h - 2.5 * cm - 4.7 * cm
+            c.drawImage(tmp_img.name, img_x, img_y, width=3.5 * cm, height=4.7 * cm,
                         preserveAspectRatio=True, mask="auto")
 
             import os; os.unlink(tmp_img.name)
