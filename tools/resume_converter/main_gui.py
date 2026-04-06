@@ -28,6 +28,12 @@ except ImportError:
     _DND_AVAILABLE = False
     TkinterDnD = tk.Tk
 
+try:
+    import windnd as _windnd_mod
+    _WINDND_AVAILABLE = True
+except ImportError:
+    _WINDND_AVAILABLE = False
+
 from PIL import Image, ImageTk
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────
@@ -849,6 +855,37 @@ class BridgeConverterApp:
         for child in widget.winfo_children():
             self._register_mousewheel_recursive(child)
 
+    def _hook_card_windnd(self, card: "_BundleFileCard", ci_fn):
+        """Hook windnd WM_DROPFILES on card widgets.
+
+        windnd uses DragAcceptFiles + WndProc replacement — works inside
+        Canvas create_window where TkinterDnD2 OLE targets often fail.
+        ci_fn() returns the current card index (dynamic, survives removals).
+        """
+        if not _WINDND_AVAILABLE:
+            return
+
+        def _on_windnd_drop(files):
+            paths = []
+            for f in files:
+                if isinstance(f, bytes):
+                    try:
+                        f = f.decode("utf-8")
+                    except UnicodeDecodeError:
+                        f = f.decode("mbcs", errors="replace")
+                paths.append(Path(f))
+            idx = ci_fn()
+            if idx >= 0:
+                self._activate_bundle_card(idx)
+            self._add_files(paths)
+
+        for w in (card.file_tv, card.frame, card.header_bar):
+            try:
+                _windnd_mod.hook_dropfiles(w, func=_on_windnd_drop,
+                                           force_unicode=True)
+            except Exception:
+                pass
+
     def _create_bundle_card(
         self, queue_idx: int, candidate_id: str = ""
     ) -> _BundleFileCard:
@@ -868,10 +905,12 @@ class BridgeConverterApp:
             except ValueError:
                 return -1
 
-        # DnD — register ALL descendants recursively so no widget blocks the drop
+        # DnD — TkinterDnD2 (OLE) + windnd (WM_DROPFILES) 이중 등록
+        # windnd가 Canvas create_window 안에서도 HWND 레벨로 동작
         if _DND_AVAILABLE:
             _handler = lambda e, ci=_ci: self._on_drop_to_card(e, ci())
             self._register_dnd_recursive(card.frame, _handler)
+        self._hook_card_windnd(card, _ci)   # windnd: Canvas 내부에서도 작동
 
         # Click on header bar → activate
         for click_w in (card.header_bar, card.num_lbl,
@@ -1022,6 +1061,21 @@ class BridgeConverterApp:
         if self._bundle_cards:
             self._active_card_idx = -1   # force re-activate
             self._activate_bundle_card(0)
+        # Re-hook windnd after widgets are fully rendered
+        # (Canvas create_window items need the event loop to run once first)
+        self.root.after(150, self._rehook_all_windnd)
+
+    def _rehook_all_windnd(self):
+        """Re-register windnd hooks after widgets are fully visible."""
+        for card in self._bundle_cards:
+            def _make_ci(c):
+                def _ci():
+                    try:
+                        return self._bundle_cards.index(c)
+                    except ValueError:
+                        return -1
+                return _ci
+            self._hook_card_windnd(card, _make_ci(card))
 
     def _on_card_drop(self, event, card_idx: int):
         """DnD on a specific card: activate, then add files."""
