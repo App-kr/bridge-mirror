@@ -4529,9 +4529,10 @@ _REGION_MAP: dict[str, list[str]] = {
 }
 
 # 대상 연령 매핑: target/target_age → teaching_age 매칭
+# 실제 DB 값(Kindy/Elem 약어) 포함
 _TARGET_MAP: dict[str, list[str]] = {
-    "유치": ["Kindergarten", "킨디", "유치원", "유아", "Kinder", "Pre-K", "PreK"],
-    "초등": ["Elementary", "초등학교", "Primary", "초등"],
+    "유치": ["Kindergarten", "킨디", "유치원", "유아", "Kinder", "Pre-K", "PreK", "Kindy"],
+    "초등": ["Elementary", "초등학교", "Primary", "초등", "Elem"],
     "중등": ["Middle", "중학교", "중등", "Junior"],
     "고등": ["High", "고등학교", "고등", "Senior"],
     "성인": ["Adult", "성인", "University", "대학", "Corporate", "기업"],
