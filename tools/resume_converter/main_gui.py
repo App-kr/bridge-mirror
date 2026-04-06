@@ -113,9 +113,9 @@ class _BundleFileCard:
         self.header_bar.pack(fill="x")
 
         self.num_lbl = tk.Label(
-            self.header_bar, text=f" #{card_idx + 1} ",
+            self.header_bar, text=f" 묶음 {card_idx + 1} ",
             bg=C_PRI, fg="white",
-            font=(F, 13, "bold"), padx=8, pady=5)
+            font=(F, 12, "bold"), padx=8, pady=4)
         self.num_lbl.pack(side="left")
 
         tk.Label(self.header_bar, text="  강사번호:", bg=C_SIDE, fg=C_SUB,
@@ -133,12 +133,12 @@ class _BundleFileCard:
             bg=C_SIDE, fg=C_SUB, font=(F, 9))
         self.count_label.pack(side="left", padx=8)
 
-        # [X] remove button
+        # [초기화] clear-files button (card itself stays)
         self.remove_btn = tk.Button(
-            self.header_bar, text="[X]",
+            self.header_bar, text="[초기화]",
             bg=C_SIDE, fg=C_DANGER,
-            font=(F, 11, "bold"), relief="flat", cursor="hand2")
-        self.remove_btn.pack(side="right", padx=4)
+            font=(F, 9, "bold"), relief="flat", cursor="hand2", padx=4)
+        self.remove_btn.pack(side="right", padx=2)
 
         # [+ 파일] browse button
         self.browse_btn = tk.Button(
@@ -158,7 +158,7 @@ class _BundleFileCard:
         self.file_tv = ttk.Treeview(
             tv_frame, columns=f_cols,
             show="tree headings", selectmode="browse",
-            height=7)
+            height=5)
         self.file_tv.heading("#0",    text="구분")
         self.file_tv.heading("파일명", text="파일명")
         self.file_tv.heading("크기",   text="크기")
@@ -361,6 +361,9 @@ class BridgeConverterApp:
             self._left_panel.dnd_bind("<<Drop>>", self._on_drop)
             self._right_panel.drop_target_register(DND_FILES)
             self._right_panel.dnd_bind("<<Drop>>", self._on_drop)
+
+        # 시작 시 카드 5개 자동 생성 (이벤트 루프 시작 후 실행)
+        self.root.after(50, self._init_startup_cards)
 
     # ── 좌측 패널 ─────────────────────────────────────────────────────
     def _build_left(self, parent) -> tk.Frame:
@@ -625,6 +628,14 @@ class BridgeConverterApp:
             self._cards_inner.drop_target_register(DND_FILES)
             self._cards_inner.dnd_bind("<<Drop>>", self._on_drop)
 
+        # [+ 묶음 추가] button — packed last, always below all cards
+        self._add_card_btn = tk.Button(
+            self._cards_inner, text="[+ 묶음 추가]",
+            command=self._add_bundle_from_center,
+            bg=C_HOVER, fg=C_PRI, font=(F, 10, "bold"),
+            relief="flat", padx=14, pady=6, cursor="hand2")
+        self._add_card_btn.pack(fill="x", padx=8, pady=6)
+
         # ── Hidden dummy Treeview (fallback when no cards) ──
         self._dummy_file_tv = ttk.Treeview(
             top_pane, columns=("파일명", "크기", "상태"),
@@ -826,7 +837,10 @@ class BridgeConverterApp:
         card = _BundleFileCard(
             self._cards_inner, len(self._bundle_cards), candidate_id)
 
+        # Pack card BEFORE the [+ 묶음 추가] button
+        self._add_card_btn.pack_forget()
         card.frame.pack(fill="x", padx=4, pady=4)
+        self._add_card_btn.pack(fill="x", padx=8, pady=6)
 
         # Dynamic index lookup (survives card removals)
         def _ci():
@@ -855,9 +869,9 @@ class BridgeConverterApp:
         card.file_tv.bind("<Delete>", self._delete_selected_file)
         card.file_tv.bind("<Button-3>", self._file_context_menu)
 
-        # [X] remove
+        # [초기화] — clear files only (card stays)
         card.remove_btn.config(
-            command=lambda: self._remove_bundle_by_card(_ci()))
+            command=lambda: self._clear_bundle_card(_ci()))
 
         # [+ 파일 선택] browse
         def _browse_for_card():
@@ -962,6 +976,37 @@ class BridgeConverterApp:
             self._active_card_idx -= 1
 
         self._update_card_scrollregion()
+
+    def _clear_bundle_card(self, card_idx: int):
+        """Clear all files from a card (card stays, only files removed)."""
+        if card_idx < 0 or card_idx >= len(self._bundle_cards):
+            return
+        # Activate card first so pointer swap is in effect
+        self._activate_bundle_card(card_idx)
+        card = self._bundle_cards[card_idx]
+
+        # Clear Treeview — delete children of each group, leave group headers
+        for ftype, gid in card.group_iids.items():
+            for child in card.file_tv.get_children(gid):
+                card.file_tv.delete(child)
+
+        # Clear internal state
+        self._files.clear()
+        self._files_multi.clear()
+        if card_idx < len(self._queue):
+            self._queue[card_idx].files = {}
+            self._queue[card_idx].files_multi = {}
+        card.update_file_count({})
+        self._refresh_queue_tv()
+
+    def _init_startup_cards(self):
+        """Create 5 pre-built bundle cards on startup."""
+        for _ in range(5):
+            self._queue_add()
+        # Return focus to first card
+        if self._bundle_cards:
+            self._active_card_idx = -1   # force re-activate
+            self._activate_bundle_card(0)
 
     def _on_card_drop(self, event, card_idx: int):
         """DnD on a specific card: activate, then add files."""
