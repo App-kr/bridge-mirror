@@ -503,14 +503,34 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
     setSending(true);setSendResult(null);
     const activeRef=activeEditor===1?editorRef:editorRef2;
     const html=activeRef.current?.innerHTML||"";
+    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
     let ok=0,fail=0;
     for(const r of allRecipientEmails.slice(0,99)){
       try{
+        // 발송 전 중복 체크 (candidateId 있을 때만)
+        if(candidateId){
+          try{
+            const dupRes=await fetch(`${API_BASE}/api/admin/profile-sends/check-duplicate?candidate_id=${encodeURIComponent(candidateId)}&employer_email=${encodeURIComponent(r.email)}`,{headers:hdrs});
+            const dupData=await dupRes.json();
+            if(dupData?.data?.duplicate){
+              if(!window.confirm(`⚠️ 이 업체에 24시간 내 이미 발송한 이력이 있습니다.\n(${r.name||r.email})\n정말 다시 발송하시겠습니까?`)){fail++;continue;}
+            }
+          }catch(e){console.warn("중복체크 실패(계속 진행):",e);}
+        }
         const body=html.replace(/\{\{name\}\}/g,r.name||"").replace(/\{\{region\}\}/g,"").replace(/\{\{city\}\}/g,"").replace(/\{\{teachingAge\}\}/g,"");
         const payload={from:sender,to:r.email,subject,html:body};
         if(candidateId&&r.dbId){payload.candidate_id=candidateId;payload.employer_job_id=r.dbId;payload.employer_name=r.name||"";}
         const res=await fetch(`${API_BASE}/api/send-mail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-        res.ok?ok++:fail++;
+        if(res.ok){
+          ok++;
+          // 발송 성공 후 이력 기록 (이력 실패해도 발송은 성공)
+          if(candidateId){
+            try{
+              await fetch(`${API_BASE}/api/admin/profile-sends`,{method:"POST",headers:hdrs,body:JSON.stringify({candidate_id:candidateId,to_email:r.email,employer_name:r.name||"",employer_job_id:r.dbId||null,subject,sender_email:sender,status:"sent"})});
+            }catch(e){console.error("발송 이력 기록 실패:",e);}
+          }
+        }else{fail++;}
       }catch{fail++;}
     }
     setSending(false);setSendResult({ok,fail});
