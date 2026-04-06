@@ -1,0 +1,21 @@
+{
+  "version": "T3v1",
+  "entries": {
+    "NAVER_SMTP_USER": {
+      "enc": "VDN2MQd78MGY6lYwJ+ahm/yMyHdpuMRziAP7pXjwLCUrZ9L5sQ6E+08IaTLaeVmFtWfuHyZKPeiFgw3q9aEgIiajY6VVJDtnUeGjRy2fqfLiiGrgburtpZt/OsXVZFpbHdLwLiGGJ0jSK1KoBQ==",
+      "col": "smtp_naver_user"
+    },
+    "NAVER_SMTP_PASS": {
+      "enc": "VDN2MSxSo5P918fGhnI2H3VHBWIooNVohhX67Vuuc7UDOycfsqlRAiQSSyFrBU5uKEO9AFVCrxTr89G4R1j+9i/QhtttIjWQ0AiOf3oG7TBsIjAJuC46uT8fW3WjswPNZwKrAAc=",
+      "col": "smtp_naver_pass"
+    },
+    "GMAIL_SMTP_USER": {
+      "enc": "VDN2MQzFijdijzGlq3GwH+vk0Nd+3rLfefgzNx+wGN9Nflqle9IORmf6Ksem5+chO0iFgNEK8wnBfZN4Qd0dg+wnkz73cV7CGSHbPkgLREMm2d6kWOMfAGopn+DB1TmaqGzPP/bCOGAAulL8wg==",
+      "col": "smtp_gmail_user"
+    },
+    "GMAIL_SMTP_PASS": {
+      "enc": "VDN2MYgK6FDlUaRAHUoQ2ybVgTbCoeAzK5877E0Ibb+3diNJ5URR9R7aDX3gVd2r2fa/SmhIkVFr6McvMKdQLDZL35REUxSOgQxKut+QQfDROzsP9nxBqpcG+qaZVjWWBrES/OlNmsqH",
+      "col": "smtp_gmail_pass"
+    }
+  }
+}

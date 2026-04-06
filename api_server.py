@@ -4785,12 +4785,16 @@ def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
 
 
 # ── CAPTCHA 검증 (Puzzle CAPTCHA) ───────────────────────────────────────────────
-# H2 보안 패치: 하드코딩 폴백 제거 — BRIDGE_HMAC_KEY 미설정 시 서버 시작 거부
+# H2 보안 패치 (완화): BRIDGE_HMAC_KEY 미설정 시 랜덤 키로 대체 (서버 기동 허용)
+# CAPTCHA는 단일 인스턴스 내에서만 검증하므로 랜덤 키도 기능상 문제없음.
+# 보안 강화 목적으로 Render 환경변수에 BRIDGE_HMAC_KEY를 설정하는 것을 강권.
 _raw_hmac_key = os.environ.get("BRIDGE_HMAC_KEY")
 if not _raw_hmac_key:
-    raise RuntimeError(
-        "[CRITICAL] BRIDGE_HMAC_KEY 환경변수가 설정되지 않았습니다. "
-        "Render 대시보드 → Environment Variables → BRIDGE_HMAC_KEY 추가 후 재배포."
+    import secrets as _sec_hmac
+    _raw_hmac_key = _sec_hmac.token_hex(32)
+    logging.getLogger("bridge.api").warning(
+        "[WARNING] BRIDGE_HMAC_KEY 미설정 — 임시 랜덤 키 사용 중. "
+        "Render 대시보드 → Environment Variables → BRIDGE_HMAC_KEY 추가 권장."
     )
 _CAPTCHA_HMAC_KEY: bytes = _raw_hmac_key.encode()
 
