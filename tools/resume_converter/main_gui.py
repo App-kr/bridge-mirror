@@ -154,19 +154,15 @@ class _BundleFileCard:
         tv_frame = tk.Frame(self.frame, bg=C_BG)
         tv_frame.pack(fill="both", expand=True)
 
-        f_cols = ("파일명", "크기", "상태")
+        f_cols = ("파일명",)
         self.file_tv = ttk.Treeview(
             tv_frame, columns=f_cols,
             show="tree headings", selectmode="browse",
             height=5)
         self.file_tv.heading("#0",    text="구분")
         self.file_tv.heading("파일명", text="파일명")
-        self.file_tv.heading("크기",   text="크기")
-        self.file_tv.heading("상태",   text="상태")
-        self.file_tv.column("#0",    width=80, minwidth=60, stretch=False)
-        self.file_tv.column("파일명", width=240, minwidth=120)
-        self.file_tv.column("크기",   width=62,  minwidth=46, anchor="center")
-        self.file_tv.column("상태",   width=64,  minwidth=50, anchor="center")
+        self.file_tv.column("#0",    width=72, minwidth=60, stretch=False)
+        self.file_tv.column("파일명", minwidth=100, stretch=True)
 
         self.file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 10, "bold"))
         self.file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 10, "bold"))
@@ -830,6 +826,29 @@ class BridgeConverterApp:
             self._cards_canvas.configure(
                 scrollregion=self._cards_canvas.bbox("all"))
 
+    def _register_dnd_recursive(self, widget, handler):
+        """Register widget + every descendant as DnD drop target.
+
+        Canvas-embedded widgets need ALL sub-widgets registered so Windows
+        OLE DnD sees a valid drop target regardless of cursor position.
+        """
+        try:
+            widget.drop_target_register(DND_FILES)
+            widget.dnd_bind("<<Drop>>", handler)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._register_dnd_recursive(child, handler)
+
+    def _register_mousewheel_recursive(self, widget):
+        """Bind mousewheel scroll to widget + every descendant."""
+        try:
+            widget.bind("<MouseWheel>", self._on_cards_mousewheel)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._register_mousewheel_recursive(child)
+
     def _create_bundle_card(
         self, queue_idx: int, candidate_id: str = ""
     ) -> _BundleFileCard:
@@ -849,20 +868,17 @@ class BridgeConverterApp:
             except ValueError:
                 return -1
 
-        # DnD registration — root window handles all drops via _on_drop
-        # Per-card targets registered for redundancy
+        # DnD — register ALL descendants recursively so no widget blocks the drop
         if _DND_AVAILABLE:
-            for dnd_w in (card.frame, card.header_bar, card.file_tv):
-                dnd_w.drop_target_register(DND_FILES)
-                dnd_w.dnd_bind(
-                    "<<Drop>>", lambda e, ci=_ci: self._on_drop_to_card(e, ci()))
+            _handler = lambda e, ci=_ci: self._on_drop_to_card(e, ci())
+            self._register_dnd_recursive(card.frame, _handler)
 
         # Click on header bar → activate
         for click_w in (card.header_bar, card.num_lbl,
                         card.id_label, card.count_label):
             click_w.bind("<Button-1>",
                          lambda e: self._activate_bundle_card(_ci()))
-        # Focus on treeview → activate (doesn't block treeview selection)
+        # Focus on treeview → activate
         card.file_tv.bind(
             "<FocusIn>",
             lambda e: self._activate_bundle_card(_ci()))
@@ -879,9 +895,8 @@ class BridgeConverterApp:
             self._browse_files()
         card.browse_btn.config(command=_browse_for_card)
 
-        # Mousewheel propagation to canvas
-        for w in (card.frame, card.header_bar, card.file_tv):
-            w.bind("<MouseWheel>", self._on_cards_mousewheel)
+        # Mousewheel propagation to canvas — all descendants
+        self._register_mousewheel_recursive(card.frame)
 
         self._bundle_cards.append(card)
         self._update_card_scrollregion()
@@ -1169,14 +1184,14 @@ class BridgeConverterApp:
                 cv = self._file_tv.item(child, "values")
                 if cv and cv[0] == p.name:
                     self._file_tv.item(child,
-                                       values=(p.name, size_str, "대기"),
+                                       values=(p.name,),
                                        tags=(ftype,))
                     updated = True
                     break
             if not updated:
                 self._file_tv.insert(gid, "end",
                                      text="",
-                                     values=(p.name, size_str, "대기"),
+                                     values=(p.name,),
                                      tags=(ftype,))
             # 그룹 펼치기
             self._file_tv.item(gid, open=True)
@@ -1488,7 +1503,7 @@ class BridgeConverterApp:
                             f"{size_b // (1024*1024):.1f}MB")
                 self._file_tv.insert(gid, "end",
                                      text="",
-                                     values=(p.name, size_str, "대기"),
+                                     values=(p.name,),
                                      tags=(ftype,))
             self._file_tv.item(gid, open=True)
 
