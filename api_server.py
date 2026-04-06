@@ -11210,6 +11210,311 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
             conn.close()
 
 
+# ── Sprint B — 이력서 자동첨부 + 지역/연령 매칭 + Excel 다운로드 ───────────────
+# B-1: 이력서 자동첨부 (processed CV presigned URL)
+# B-2: jobs 기반 양방향 매칭 API
+# B-3: jobs Excel 다운로드
+
+
+@app.get("/api/admin/resume/find/{candidate_number}", tags=["admin"])
+async def find_resume_by_candidate_number(candidate_number: int, request: Request):
+    """
+    Sprint B B-1 — sheet_number(=candidate_number)로 PII 제거 이력서 presigned URL 반환.
+    MailComposer 자동첨부용. 없으면 404.
+    """
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT candidate_id, cv_processed_s3_key, full_name "
+            "FROM candidates WHERE sheet_number = ? AND COALESCE(is_deleted,0) != 1 LIMIT 1",
+            (candidate_number,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(404, f"candidate_number={candidate_number} 후보자 없음")
+
+    candidate_id, s3_key, full_name = row
+    if not s3_key:
+        raise HTTPException(404, "처리된 이력서 없음 — resume_converter로 처리 필요")
+
+    try:
+        presigned = s3_presigned_url(s3_key, expires=3600)
+    except Exception as _e_s3:
+        logging.getLogger("bridge.resume").error("[find_resume] presigned 실패: %s", _e_s3)
+        raise HTTPException(500, "이력서 URL 생성 실패")
+
+    return ok(data={
+        "candidate_id": candidate_id,
+        "candidate_number": candidate_number,
+        "full_name": full_name,
+        "s3_key": s3_key,
+        "presigned_url": presigned,
+        "expires_in": 3600,
+    })
+
+
+# B-2: 지역/연령 양방향 매칭 (기존 _match_region / _match_target 재활용)
+
+@app.get("/api/admin/matching/jobs-for-candidate", tags=["admin"])
+async def matching_jobs_for_candidate(
+    request: Request,
+    candidate_id: str,
+    limit: int = 30,
+):
+    """
+    Sprint B B-2a — 후보자 area_prefs/target_age 기반 jobs 매칭 목록.
+    match_score: 지역(2) + 연령(1) = 최대 3.
+    """
+    _check_admin(request)
+    if limit > 200:
+        limit = 200
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        cand = conn.execute(
+            "SELECT candidate_id, area_prefs, target, target_age, status "
+            "FROM candidates WHERE candidate_id = ? AND COALESCE(is_deleted,0) != 1",
+            (candidate_id,),
+        ).fetchone()
+        if not cand:
+            raise HTTPException(404, "후보자 없음")
+        c = dict(cand)
+
+        jobs_rows = conn.execute(
+            "SELECT brj_id, id, job_code, region, region_name, location, city, "
+            "employer_display_name, teaching_age, salary_raw, status, is_hot, created_at "
+            "FROM jobs WHERE is_deleted = 0"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    matched = []
+    for jr in jobs_rows:
+        j = dict(jr)
+        loc_str = " ".join(filter(None, [j.get("region"), j.get("region_name"),
+                                         j.get("location"), j.get("city")]))
+        region_ok = _match_region(c.get("area_prefs", ""), loc_str)
+        age_ok = _match_target(c.get("target", ""), c.get("target_age", ""),
+                               j.get("teaching_age", ""))
+        if region_ok or age_ok:
+            j["match_region"] = region_ok
+            j["match_age"] = age_ok
+            j["match_score"] = (2 if region_ok else 0) + (1 if age_ok else 0)
+            matched.append(j)
+
+    matched.sort(key=lambda x: x["match_score"], reverse=True)
+    return ok(data={
+        "candidate_id": candidate_id,
+        "area_prefs": c.get("area_prefs"),
+        "target_age": c.get("target_age"),
+        "matched_jobs": matched[:limit],
+        "total": len(matched),
+    })
+
+
+@app.get("/api/admin/matching/candidates-for-job", tags=["admin"])
+async def matching_candidates_for_job(
+    request: Request,
+    brj_id: Optional[str] = None,
+    job_id: Optional[int] = None,
+    limit: int = 30,
+):
+    """
+    Sprint B B-2b — jobs 지역/교습연령 기반 Active 후보자 매칭 목록.
+    brj_id(BRJ-xxx) 또는 job_id(정수 PK) 중 하나 필수.
+    """
+    _check_admin(request)
+    if not brj_id and not job_id:
+        raise HTTPException(400, "brj_id 또는 job_id 필수")
+    if limit > 200:
+        limit = 200
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        if brj_id:
+            job = conn.execute(
+                "SELECT id, brj_id, region, region_name, location, city, "
+                "teaching_age, employer_display_name "
+                "FROM jobs WHERE brj_id = ? AND is_deleted = 0",
+                (brj_id,),
+            ).fetchone()
+        else:
+            job = conn.execute(
+                "SELECT id, brj_id, region, region_name, location, city, "
+                "teaching_age, employer_display_name "
+                "FROM jobs WHERE id = ? AND is_deleted = 0",
+                (job_id,),
+            ).fetchone()
+
+        if not job:
+            raise HTTPException(404, "공고 없음")
+        j = dict(job)
+
+        cands = conn.execute(
+            "SELECT candidate_id, sheet_number, area_prefs, target, target_age, "
+            "nationality, gender, start_date, status "
+            "FROM candidates WHERE COALESCE(is_deleted,0) != 1 AND status = 'Active'"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    loc_str = " ".join(filter(None, [j.get("region"), j.get("region_name"),
+                                     j.get("location"), j.get("city")]))
+    matched = []
+    for cr in cands:
+        c = dict(cr)
+        region_ok = _match_region(c.get("area_prefs", ""), loc_str)
+        age_ok = _match_target(c.get("target", ""), c.get("target_age", ""),
+                               j.get("teaching_age", ""))
+        if region_ok or age_ok:
+            c["match_region"] = region_ok
+            c["match_age"] = age_ok
+            c["match_score"] = (2 if region_ok else 0) + (1 if age_ok else 0)
+            matched.append(c)
+
+    matched.sort(key=lambda x: x["match_score"], reverse=True)
+    return ok(data={
+        "job": {
+            "brj_id": j.get("brj_id"),
+            "employer": j.get("employer_display_name"),
+            "teaching_age": j.get("teaching_age"),
+            "location": loc_str,
+        },
+        "matched_candidates": matched[:limit],
+        "total": len(matched),
+    })
+
+
+# B-3: Jobs Excel 다운로드
+
+@app.get("/api/admin/jobs/download-xlsx", tags=["admin"])
+async def download_jobs_xlsx(
+    request: Request,
+    status: Optional[str] = None,
+    region: Optional[str] = None,
+    include_pii: bool = False,
+):
+    """
+    Sprint B B-3 — jobs 테이블 Excel(.xlsx) 다운로드.
+    include_pii=true 시 enc_contact_* 복호화 컬럼 포함 (관리자 전용).
+    """
+    _check_admin(request)
+    import io as _io_xlsx
+    from openpyxl import Workbook as _WBx
+    from openpyxl.styles import Font as _Fx, Alignment as _Ax, PatternFill as _Px
+    from openpyxl.utils import get_column_letter as _gcx
+    from datetime import date as _dx
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        where_parts = ["is_deleted = 0"]
+        params_xl: list = []
+        if status:
+            where_parts.append("status = ?")
+            params_xl.append(status)
+        if region:
+            s_xl = f"%{region.strip()[:30]}%"
+            where_parts.append("(region LIKE ? OR region_name LIKE ? OR city LIKE ?)")
+            params_xl.extend([s_xl, s_xl, s_xl])
+        w_xl = " AND ".join(where_parts)
+
+        _pii_sql = (", enc_employer_name, enc_contact_name, enc_contact_phone, "
+                    "enc_contact_email, enc_contact_kakao") if include_pii else ""
+        rows_xl = conn.execute(
+            f"SELECT brj_id, job_code, region, region_name, city, location, "
+            f"employer_display_name, teaching_age, salary_raw, working_hours, "
+            f"housing, visa_sponsorship, is_hot, status, created_at{_pii_sql} "
+            f"FROM jobs WHERE {w_xl} ORDER BY created_at DESC",
+            params_xl,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    _BASE_COLS = [
+        "brj_id", "job_code", "region", "region_name", "city", "location",
+        "employer_display_name", "teaching_age", "salary_raw", "working_hours",
+        "housing", "visa_sponsorship", "is_hot", "status", "created_at",
+    ]
+    _PII_COLS = ["enc_employer_name", "enc_contact_name", "enc_contact_phone",
+                 "enc_contact_email", "enc_contact_kakao"]
+    _ALL_COLS = _BASE_COLS + (_PII_COLS if include_pii else [])
+
+    _COL_KR = {
+        "brj_id": "BRJ ID", "job_code": "공고코드", "region": "지역코드",
+        "region_name": "지역명", "city": "도시", "location": "상세위치",
+        "employer_display_name": "업체명(공개)", "teaching_age": "교습연령",
+        "salary_raw": "급여", "working_hours": "근무시간", "housing": "숙소",
+        "visa_sponsorship": "비자스폰서", "is_hot": "급구", "status": "상태",
+        "created_at": "등록일", "enc_employer_name": "업체명(실제)",
+        "enc_contact_name": "담당자", "enc_contact_phone": "연락처",
+        "enc_contact_email": "이메일", "enc_contact_kakao": "카카오",
+    }
+    _COL_W = {
+        "brj_id": 14, "job_code": 14, "region": 10, "region_name": 14, "city": 12,
+        "location": 22, "employer_display_name": 24, "teaching_age": 20,
+        "salary_raw": 20, "working_hours": 16, "housing": 10,
+        "visa_sponsorship": 10, "is_hot": 6, "status": 10, "created_at": 20,
+        "enc_employer_name": 24, "enc_contact_name": 14, "enc_contact_phone": 18,
+        "enc_contact_email": 28, "enc_contact_kakao": 18,
+    }
+
+    wb = _WBx()
+    ws = wb.active
+    ws.title = "Jobs"
+
+    _hdr_fill = _Px(fill_type="solid", fgColor="1F4E79")
+    _hdr_font = _Fx(bold=True, color="FFFFFF", name="맑은 고딕", size=10)
+    _even_fill = _Px(fill_type="solid", fgColor="EBF3FB")
+
+    for ci, col in enumerate(_ALL_COLS, start=1):
+        cell = ws.cell(row=1, column=ci, value=_COL_KR.get(col, col))
+        cell.fill = _hdr_fill
+        cell.font = _hdr_font
+        cell.alignment = _Ax(horizontal="center", vertical="center", wrap_text=False)
+        ws.column_dimensions[_gcx(ci)].width = _COL_W.get(col, 14)
+    ws.row_dimensions[1].height = 22
+
+    for ri, row_xl in enumerate(rows_xl, start=2):
+        d = dict(row_xl)
+        if include_pii:
+            for ec in _PII_COLS:
+                raw = d.get(ec) or ""
+                col_name = ec.replace("enc_", "")
+                d[ec] = decrypt_field(raw, col_name) if raw else ""
+        d["visa_sponsorship"] = "O" if d.get("visa_sponsorship") else ""
+        d["is_hot"] = "★" if d.get("is_hot") else ""
+        for ci, col in enumerate(_ALL_COLS, start=1):
+            cell = ws.cell(row=ri, column=ci, value=str(d.get(col) or ""))
+            cell.font = _Fx(name="맑은 고딕", size=9)
+            if ri % 2 == 0:
+                cell.fill = _even_fill
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    buf_xl = _io_xlsx.BytesIO()
+    wb.save(buf_xl)
+    buf_xl.seek(0)
+
+    today_str = _dx.today().strftime("%Y%m%d")
+    fname_xl = f"bridge_jobs_{today_str}{'_pii' if include_pii else ''}.xlsx"
+    from starlette.responses import Response as _StRx
+    return _StRx(
+        content=buf_xl.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname_xl}"'},
+    )
+
+
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
