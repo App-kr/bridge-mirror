@@ -97,95 +97,61 @@ class QueueItem:
 
 
 class _BundleFileCard:
-    """Center panel card — one per queue item."""
+    """Center panel card — one per queue item (no separate drop zone)."""
 
     def __init__(self, parent_frame: tk.Frame, card_idx: int, candidate_id: str = ""):
         self.card_idx = card_idx
         self.group_iids: dict[str, str] = {}
 
-        # ── Outer container (colored border) ─────────────────────────
+        # ── Outer container ──────────────────────────────────────────
         self.frame = tk.Frame(
             parent_frame, bg=C_BG,
             highlightbackground=C_BORDER, highlightthickness=3)
 
-        # ── Header bar (colored band) ─────────────────────────────────
-        self.header_bar = tk.Frame(self.frame, bg=C_SIDE, height=44)
+        # ── Header bar ───────────────────────────────────────────────
+        self.header_bar = tk.Frame(self.frame, bg=C_SIDE)
         self.header_bar.pack(fill="x")
-        self.header_bar.pack_propagate(False)
 
-        # Number badge (green pill)
         self.num_lbl = tk.Label(
             self.header_bar, text=f" #{card_idx + 1} ",
             bg=C_PRI, fg="white",
-            font=(F, 13, "bold"), padx=6)
-        self.num_lbl.pack(side="left", padx=(6, 0), pady=6)
+            font=(F, 13, "bold"), padx=8, pady=5)
+        self.num_lbl.pack(side="left")
 
-        # Candidate ID
         tk.Label(self.header_bar, text="  강사번호:", bg=C_SIDE, fg=C_SUB,
                  font=(F, 10)).pack(side="left")
         self.id_var = tk.StringVar(value=candidate_id)
         self.id_label = tk.Label(
             self.header_bar, textvariable=self.id_var,
             bg=C_SIDE, fg=C_TEXT,
-            font=(F, 12, "bold"), width=7, anchor="w")
+            font=(F, 12, "bold"), width=8, anchor="w")
         self.id_label.pack(side="left", padx=(2, 0))
 
-        # File count badge
         self.count_var = tk.StringVar(value="파일 없음")
-        tk.Label(self.header_bar, textvariable=self.count_var,
-                 bg=C_SIDE, fg=C_SUB, font=(F, 9)).pack(side="left", padx=6)
+        self.count_label = tk.Label(
+            self.header_bar, textvariable=self.count_var,
+            bg=C_SIDE, fg=C_SUB, font=(F, 9))
+        self.count_label.pack(side="left", padx=8)
 
-        # [X] remove
+        # [X] remove button
         self.remove_btn = tk.Button(
-            self.header_bar, text="  [X]  ",
+            self.header_bar, text="[X]",
             bg=C_SIDE, fg=C_DANGER,
             font=(F, 11, "bold"), relief="flat", cursor="hand2")
         self.remove_btn.pack(side="right", padx=4)
 
-        # ── Separator line under header ──────────────────────────────
+        # [+ 파일] browse button
+        self.browse_btn = tk.Button(
+            self.header_bar, text="[+ 파일]",
+            bg=C_SIDE, fg=C_PRI,
+            font=(F, 10, "bold"), relief="flat", cursor="hand2", padx=6)
+        self.browse_btn.pack(side="right", padx=2)
+
+        # Separator
         tk.Frame(self.frame, bg=C_BORDER, height=1).pack(fill="x")
 
-        # ── Body ─────────────────────────────────────────────────────
-        body = tk.Frame(self.frame, bg=C_BG, padx=6, pady=4)
-        body.pack(fill="both", expand=True)
-
-        # ── Drop zone ────────────────────────────────────────────────
-        self.drop_zone = tk.Frame(
-            body, bg="#EBF5FB", height=40,
-            highlightbackground=C_PRI, highlightthickness=1,
-            cursor="hand2")
-        self.drop_zone.pack(fill="x", pady=(0, 6))
-        self.drop_zone.pack_propagate(False)
-
-        dz_inner = tk.Frame(self.drop_zone, bg="#EBF5FB")
-        dz_inner.pack(expand=True)
-        self.dz_label = tk.Label(
-            dz_inner,
-            text="파일을 드래그하거나  --  ",
-            bg="#EBF5FB", fg="#1976D2", font=(F, 10))
-        self.dz_label.pack(side="left")
-        self.browse_btn = tk.Button(
-            dz_inner, text="[+ 파일 선택]",
-            bg=C_PRI, fg="white",
-            font=(F, 10, "bold"), relief="flat", cursor="hand2",
-            padx=6, pady=2)
-        self.browse_btn.pack(side="left")
-
-        # ── File list section header ──────────────────────────────────
-        fl_hdr = tk.Frame(body, bg=C_BG)
-        fl_hdr.pack(fill="x", pady=(0, 2))
-        tk.Label(fl_hdr,
-                 text=f"── 파일 목록 (묶음 #{card_idx + 1}) ──────────────────",
-                 bg=C_BG, fg=C_SUB, font=(F, 9)).pack(side="left")
-        self.del_btn = tk.Button(
-            fl_hdr, text="[선택 삭제]",
-            bg=C_BG, fg=C_SUB, font=(F, 9),
-            relief="flat", cursor="hand2")
-        self.del_btn.pack(side="right")
-
-        # ── Treeview ─────────────────────────────────────────────────
-        tv_frame = tk.Frame(body, bg=C_BG,
-                            highlightbackground=C_BORDER, highlightthickness=1)
+        # ── Treeview — direct drag-and-drop target ───────────────────
+        tv_frame = tk.Frame(self.frame, bg=C_BG)
         tv_frame.pack(fill="both", expand=True)
 
         f_cols = ("파일명", "크기", "상태")
@@ -198,11 +164,10 @@ class _BundleFileCard:
         self.file_tv.heading("크기",   text="크기")
         self.file_tv.heading("상태",   text="상태")
         self.file_tv.column("#0",    width=80, minwidth=60, stretch=False)
-        self.file_tv.column("파일명", width=230, minwidth=120)
-        self.file_tv.column("크기",   width=60,  minwidth=46, anchor="center")
+        self.file_tv.column("파일명", width=240, minwidth=120)
+        self.file_tv.column("크기",   width=62,  minwidth=46, anchor="center")
         self.file_tv.column("상태",   width=64,  minwidth=50, anchor="center")
 
-        # Tag config
         self.file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 10, "bold"))
         self.file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 10, "bold"))
         self.file_tv.tag_configure("grp_cover",   background="#CCE5FF", font=(F, 10, "bold"))
@@ -220,22 +185,15 @@ class _BundleFileCard:
         self.file_tv.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        # ── 5 group headers ──────────────────────────────────────────
-        _groups = [
-            ("photo",   "[사진]"),
-            ("resume",  "[이력서]"),
-            ("cover",   "[커버레터]"),
-            ("rec",     "[추천서]"),
-            ("unknown", "[기타]"),
-        ]
-        for ftype, label in _groups:
+        for ftype, label in [("photo","[사진]"),("resume","[이력서]"),
+                               ("cover","[커버레터]"),("rec","[추천서]"),
+                               ("unknown","[기타]")]:
             iid = self.file_tv.insert(
                 "", "end", text=label, values=("", "", ""),
                 tags=(f"grp_{ftype}",), open=True)
             self.group_iids[ftype] = iid
 
     def update_file_count(self, files_multi: dict):
-        """Header badge: total file count."""
         total = sum(len(v) for v in files_multi.values())
         self.count_var.set(f"{total}개 파일" if total else "파일 없음")
 
@@ -667,14 +625,6 @@ class BridgeConverterApp:
             self._cards_inner.drop_target_register(DND_FILES)
             self._cards_inner.dnd_bind("<<Drop>>", self._on_drop)
 
-        # [+ 새 묶음 추가] button at bottom
-        self._add_card_btn = tk.Button(
-            self._cards_inner, text="[+ 새 묶음 추가]",
-            command=self._add_bundle_from_center,
-            bg=C_HOVER, fg=C_PRI, font=(F, 11, "bold"),
-            relief="flat", padx=14, pady=8, cursor="hand2")
-        self._add_card_btn.pack(fill="x", padx=8, pady=8)
-
         # ── Hidden dummy Treeview (fallback when no cards) ──
         self._dummy_file_tv = ttk.Treeview(
             top_pane, columns=("파일명", "크기", "상태"),
@@ -876,10 +826,7 @@ class BridgeConverterApp:
         card = _BundleFileCard(
             self._cards_inner, len(self._bundle_cards), candidate_id)
 
-        # Pack card BEFORE the [+ 새 묶음 추가] button
-        self._add_card_btn.pack_forget()
         card.frame.pack(fill="x", padx=4, pady=4)
-        self._add_card_btn.pack(fill="x", padx=8, pady=8)
 
         # Dynamic index lookup (survives card removals)
         def _ci():
@@ -888,13 +835,13 @@ class BridgeConverterApp:
             except ValueError:
                 return -1
 
-        # DnD registration — all surfaces the user might drop onto
+        # DnD registration — root window handles all drops via _on_drop
+        # Per-card targets registered for redundancy
         if _DND_AVAILABLE:
-            for dnd_w in (card.frame, card.header_bar,
-                          card.drop_zone, card.file_tv):
+            for dnd_w in (card.frame, card.header_bar, card.file_tv):
                 dnd_w.drop_target_register(DND_FILES)
                 dnd_w.dnd_bind(
-                    "<<Drop>>", lambda e: self._on_card_drop(e, _ci()))
+                    "<<Drop>>", lambda e, ci=_ci: self._on_drop_to_card(e, ci()))
 
         # Click on header bar → activate
         for click_w in (card.header_bar, card.num_lbl,
@@ -918,15 +865,8 @@ class BridgeConverterApp:
             self._browse_files()
         card.browse_btn.config(command=_browse_for_card)
 
-        # [선택 삭제] button
-        card.del_btn.config(command=self._delete_selected_file)
-
-        # Drop zone click → browse (separate from DnD)
-        card.dz_label.bind("<Button-1>", lambda e: _browse_for_card())
-
         # Mousewheel propagation to canvas
-        for w in (card.frame, card.header_bar,
-                  card.file_tv, card.drop_zone):
+        for w in (card.frame, card.header_bar, card.file_tv):
             w.bind("<MouseWheel>", self._on_cards_mousewheel)
 
         self._bundle_cards.append(card)
@@ -1106,12 +1046,44 @@ class BridgeConverterApp:
         if paths:
             self._add_files([Path(p) for p in paths])
 
+    def _find_card_at_cursor(self, x_root: int, y_root: int) -> int:
+        """Walk up the widget parent chain from drop coords to find target card."""
+        try:
+            w = self.root.winfo_containing(x_root, y_root)
+        except Exception:
+            return self._active_card_idx
+        while w is not None:
+            for i, card in enumerate(self._bundle_cards):
+                if w is card.frame or w is card.file_tv or w is card.header_bar:
+                    return i
+            try:
+                parent_name = w.winfo_parent()
+                if not parent_name:
+                    break
+                w = w.nametowidget(parent_name)
+            except Exception:
+                break
+        return self._active_card_idx  # fallback: current active card
+
+    def _on_drop_to_card(self, event, card_idx: int):
+        """DnD drop explicitly targeting a specific card."""
+        if not _DND_AVAILABLE:
+            return
+        if 0 <= card_idx < len(self._bundle_cards):
+            self._activate_bundle_card(card_idx)
+        self._add_files([Path(p) for p in self.root.tk.splitlist(event.data)])
+
     def _on_drop(self, event):
-        if _DND_AVAILABLE:
-            # Auto-create card if none active
-            if self._active_card_idx < 0 or not self._bundle_cards:
-                self._queue_add()
-            self._add_files([Path(p) for p in self.root.tk.splitlist(event.data)])
+        if not _DND_AVAILABLE:
+            return
+        # Auto-create card if queue is empty
+        if not self._bundle_cards:
+            self._queue_add()
+        # Identify target card by cursor position
+        target_idx = self._find_card_at_cursor(event.x_root, event.y_root)
+        if target_idx >= 0:
+            self._activate_bundle_card(target_idx)
+        self._add_files([Path(p) for p in self.root.tk.splitlist(event.data)])
 
     def _add_files(self, paths: list):
         from .file_classifier import detect_file_type, extract_number
