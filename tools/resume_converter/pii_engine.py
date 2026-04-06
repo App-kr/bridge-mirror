@@ -123,13 +123,18 @@ RE_FOREIGN_CITY = re.compile(
     re.IGNORECASE,
 )
 
-# 한국 학원/교육기관 키워드 (업체명 탐지용) — v2.7 확장
+# 한국 학원/교육기관 키워드 (업체명 탐지용) — v2.7 확장 + v2.8 학원명 추가
 _KR_WORKPLACE = re.compile(
-    r"[A-Za-z가-힣]{2,30}"
+    r"(?:[A-Za-z가-힣]{2,30}"
     r"(?:어학원|학원|학교|유치원|학습원|교육원|교습소|유아원|영어학원|"
     r"english\s*school|language\s*school|primary\s*school|secondary\s*school|"
     r"independent\s*school|grammar\s*school|boarding\s*school|prep\s*school|"
-    r"kindergarten|nursery|tutoring|hagwon|institute|academy|center|centre)",
+    r"kindergarten|nursery|tutoring|hagwon|institute|academy|center|centre)"
+    r"|Wonderland|King'?s\s*Speech|English\s*Village|Global\s*Village|Brown\s*Bears"
+    r"|Smart\s*Tree|English\s*Eye|MBC\s*English|GEM\s*Academy"
+    r"|Saint\s*Paul\s*American\s*Scholars|GCIS|Kids\s*Club|Worwick|BIE|IEB|GEA|SIE|DIS"
+    r"|KIS\s*Academy|CDI|Willson\s*English|GGE\s*English|3030\s*English"
+    r"|Kids\s*Town|English\s*City)",
     re.IGNORECASE,
 )
 

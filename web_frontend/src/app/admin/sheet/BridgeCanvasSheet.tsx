@@ -116,6 +116,7 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     applied: (ov.applied as string) ?? String(c.job_prefs ?? ''),
     contractOffer: (ov.contractOffer as string) ?? String(c.contract_offered ?? ''),
     proposal: (ov.proposal as string) ?? String(c.recruiter_memo ?? ''), mailAction: '',
+    resumeStatus: String(c.resume_status ?? 'pending'),
     curSalary: (ov.curSalary as string) ?? String(c.current_salary ?? ''),
     hopeSalary: (ov.hopeSalary as string) ?? String(c.desired_salary ?? ''),
     interviewCol: (ov.interviewCol as string) ?? String(c.interview_time ?? ''),
@@ -822,7 +823,11 @@ export default function BridgeCanvasSheet() {
         if (dbField) saveToServer(cid, dbField, value)
       }
     },
-    onCellClick: () => {},
+    onCellClick: (_rowIdx: number, colKey: string, row: DataRow) => {
+      if (colKey === 'resumeStatus' && row.resumeStatus === 'done' && row._cid) {
+        window.open(`${API}/api/admin/candidates/${row._cid}/processed-cv`, '_blank')
+      }
+    },
     onSelectionChange: (rows: Set<number>) => {
       setSelectedRows(new Set(rows))
     },

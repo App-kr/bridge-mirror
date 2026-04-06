@@ -3339,6 +3339,7 @@ def _ensure_auto_process_cols():
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         for sql in [
             "ALTER TABLE candidates ADD COLUMN cv_processed_s3_key TEXT DEFAULT NULL",
+            "ALTER TABLE candidates ADD COLUMN resume_status TEXT DEFAULT 'pending'",
             "ALTER TABLE file_uploads ADD COLUMN s3_key TEXT DEFAULT NULL",
         ]:
             try:
@@ -6084,14 +6085,29 @@ def _make_thumbnail(src_path: Path, thumb_path: Path, size: int = 150) -> bool:
         return False
 
 
+def _set_resume_status(entity_id: str, status: str):
+    """resume_status 업데이트 헬퍼 (pending/processing/done/error)."""
+    try:
+        c = sqlite3.connect(str(_ADMIN_DB_PATH))
+        c.execute("PRAGMA busy_timeout = 5000")
+        c.execute("UPDATE candidates SET resume_status = ? WHERE candidate_id = ?",
+                  (status, entity_id))
+        c.commit()
+        c.close()
+    except Exception:
+        pass
+
+
 def _auto_process_resume(entity_id: str, cv_s3_key: str):
     """
-    CV 업로드 후 백그라운드 자동 처리 — PII 제거 + 번호/사진 삽입.
+    CV 업로드 후 백그라운드 자동 처리.
+    1차: resume_converter/pipeline.py (PII + 얼굴 + PDF 병합 전체)
+    2차 폴백: doc_processor (PII만)
     threading.Thread 에서 호출 (동기).
-    원본은 S3에 그대로 유지, processed 버전을 별도 S3 키로 저장.
     """
     import tempfile
     conn = None
+    _set_resume_status(entity_id, "processing")
     try:
         # 1. 후보자 정보 조회
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6106,25 +6122,26 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
         ).fetchone()
         if not row:
             _log_upload.warning("[AutoProcess] candidate %s not found", entity_id)
+            _set_resume_status(entity_id, "error")
             return
 
         candidate = dict(row)
         brj_number = candidate.get("sheet_number") or 0
-        # sheet_number 없으면 candidate_id 끝 4자리 숫자로 임시 번호 생성
         if not brj_number:
             _digits = re.sub(r"[^0-9]", "", entity_id)[-4:]
             brj_number = int(_digits) if _digits else 0
             if not brj_number:
                 _log_upload.info("[AutoProcess] %s — 번호 생성 불가, 스킵", entity_id)
+                _set_resume_status(entity_id, "error")
                 return
 
         # 복호화 시도 (암호화된 필드)
-        for field in ("full_name", "email", "mobile_phone", "kakaotalk",
-                       "nationality", "current_location", "dob", "gender"):
-            raw = candidate.get(field)
+        for fld in ("full_name", "email", "mobile_phone", "kakaotalk",
+                     "nationality", "current_location", "dob", "gender"):
+            raw = candidate.get(fld)
             if raw:
                 try:
-                    candidate[field] = _safe_decrypt(raw)
+                    candidate[fld] = _safe_decrypt(raw)
                 except Exception:
                     pass
 
@@ -6132,6 +6149,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
         cv_data = s3_download_bytes(cv_s3_key)
         if not cv_data:
             _log_upload.warning("[AutoProcess] CV 다운로드 실패: %s", cv_s3_key)
+            _set_resume_status(entity_id, "error")
             return
 
         # 3. 사진 다운로드 (있으면)
@@ -6142,10 +6160,18 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
             (entity_id,),
         ).fetchone()
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # 4. 커버레터 다운로드 (있으면)
+        cover_row = conn.execute(
+            "SELECT s3_key FROM file_uploads "
+            "WHERE entity_id = ? AND file_type = 'cover_letter' AND s3_key IS NOT NULL "
+            "ORDER BY rowid DESC LIMIT 1",
+            (entity_id,),
+        ).fetchone()
+
+        with tempfile.TemporaryDirectory(prefix=f"resume_{entity_id}_") as tmpdir:
             tmpdir_path = Path(tmpdir)
             cv_ext = Path(cv_s3_key).suffix.lower() or ".pdf"
-            cv_path = tmpdir_path / f"cv{cv_ext}"
+            cv_path = tmpdir_path / f"resume{cv_ext}"
             cv_path.write_bytes(cv_data)
 
             photo_path = None
@@ -6159,36 +6185,101 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                 except Exception as e:
                     _log_upload.warning("[AutoProcess] 사진 다운로드 실패: %s", e)
 
-            # 4. PDF만 자동 처리 (DOCX는 서버에서 변환 불가)
-            if cv_ext != ".pdf":
-                _log_upload.info("[AutoProcess] %s — PDF 아님(%s), 스킵", entity_id, cv_ext)
-                return
+            cover_path = None
+            if cover_row and cover_row[0]:
+                try:
+                    cover_data = s3_download_bytes(cover_row[0])
+                    if cover_data:
+                        cover_ext = Path(cover_row[0]).suffix.lower() or ".pdf"
+                        cover_path = tmpdir_path / f"cover{cover_ext}"
+                        cover_path.write_bytes(cover_data)
+                except Exception as e:
+                    _log_upload.warning("[AutoProcess] 커버레터 다운로드 실패: %s", e)
 
-            # doc_processor.process_pdf import
+            processed_bytes = None
+            pii_count = 0
+
+            # ── 1차 시도: resume_converter/pipeline.py (전체 파이프라인) ──
             try:
-                import importlib
-                _dp_spec = importlib.util.find_spec("tools.doc_processor")
-                if _dp_spec is None:
-                    _tools_dir = Path(__file__).resolve().parent / "tools"
-                    if str(_tools_dir.parent) not in sys.path:
-                        sys.path.insert(0, str(_tools_dir.parent))
-                from tools.doc_processor import process_pdf as _dp_process_pdf
-            except ImportError as ie:
-                _log_upload.error("[AutoProcess] doc_processor import 실패: %s", ie)
+                _tools_dir = Path(__file__).resolve().parent / "tools"
+                if str(_tools_dir.parent) not in sys.path:
+                    sys.path.insert(0, str(_tools_dir.parent))
+                from tools.resume_converter.pipeline import Pipeline
+                from tools.resume_converter.file_classifier import detect_file_type as _rc_detect
+
+                # pipeline 입력 폴더 준비 (파일명으로 자동 분류)
+                pipe_folder = tmpdir_path / "pipe_input"
+                pipe_folder.mkdir()
+                # 파일을 타입명으로 복사 → pipeline _step_classify가 detect_file_type 사용
+                import shutil
+                shutil.copy2(str(cv_path), str(pipe_folder / cv_path.name))
+                if photo_path:
+                    shutil.copy2(str(photo_path), str(pipe_folder / photo_path.name))
+                if cover_path:
+                    shutil.copy2(str(cover_path), str(pipe_folder / cover_path.name))
+
+                pipe = Pipeline(
+                    auto_mode=True,
+                    on_progress=lambda msg: _log_upload.info("[Pipeline] %s", msg),
+                )
+                # pipeline에 후보자 메타 주입 (구글시트 조회 대신 DB에서 가져옴)
+                job = pipe.run(str(brj_number), pipe_folder)
+
+                if job.output_path and job.output_path.exists():
+                    processed_bytes = job.output_path.read_bytes()
+                    pii_count = sum([
+                        len(job.cover_pii.pii_found) if job.cover_pii else 0,
+                        len(job.resume_pii.pii_found) if job.resume_pii else 0,
+                        len(job.rec_pii.pii_found) if job.rec_pii else 0,
+                    ])
+                    _log_upload.info(
+                        "[AutoProcess] Pipeline OK: %s (#%s) → %d PII, %d bytes",
+                        entity_id, brj_number, pii_count, len(processed_bytes),
+                    )
+                else:
+                    _log_upload.warning(
+                        "[AutoProcess] Pipeline 출력 없음: %s, errors=%s",
+                        entity_id, job.errors,
+                    )
+            except Exception as pipe_err:
+                _log_upload.warning(
+                    "[AutoProcess] Pipeline 실패 → doc_processor 폴백: %s — %s",
+                    entity_id, pipe_err,
+                )
+
+            # ── 2차 폴백: doc_processor (PII만) ──
+            if processed_bytes is None and cv_ext == ".pdf":
+                try:
+                    import importlib
+                    _dp_spec = importlib.util.find_spec("tools.doc_processor")
+                    if _dp_spec is None:
+                        _tools_dir = Path(__file__).resolve().parent / "tools"
+                        if str(_tools_dir.parent) not in sys.path:
+                            sys.path.insert(0, str(_tools_dir.parent))
+                    from tools.doc_processor import process_pdf as _dp_process_pdf
+
+                    processed_doc, logs = _dp_process_pdf(
+                        cv_path, brj_number, candidate,
+                        dry=False, photo_path=photo_path,
+                    )
+                    out_path = tmpdir_path / "processed.pdf"
+                    processed_doc.save(str(out_path), garbage=4, deflate=True)
+                    processed_doc.close()
+                    processed_bytes = out_path.read_bytes()
+                    pii_count = len(logs)
+                    _log_upload.info(
+                        "[AutoProcess] Fallback OK: %s (#%s) → %d PII, %d bytes",
+                        entity_id, brj_number, pii_count, len(processed_bytes),
+                    )
+                except Exception as dp_err:
+                    _log_upload.error("[AutoProcess] doc_processor 폴백도 실패: %s — %s",
+                                     entity_id, dp_err, exc_info=True)
+
+            if not processed_bytes:
+                _set_resume_status(entity_id, "error")
                 return
 
-            processed_doc, logs = _dp_process_pdf(
-                cv_path, brj_number, candidate,
-                dry=False, photo_path=photo_path,
-            )
-
-            # 5. 결과 저장
-            out_path = tmpdir_path / "processed.pdf"
-            processed_doc.save(str(out_path), garbage=4, deflate=True)
-            processed_doc.close()
-            processed_bytes = out_path.read_bytes()
-
-            # 6. S3 업로드 (동기)
+            # 5. S3 업로드 (동기)
             result = s3_upload_bytes_sync(
                 data=processed_bytes,
                 folder=f"candidates/{entity_id}",
@@ -6196,7 +6287,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                 allowed_category="resume",
             )
 
-            # 7. 이전 processed 파일 정리 (S3 orphan 방지)
+            # 6. 이전 processed 파일 정리 (S3 orphan 방지)
             old_key_row = conn.execute(
                 "SELECT cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
                 (entity_id,),
@@ -6208,16 +6299,16 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                     _log_upload.info("[AutoProcess] 이전 processed 삭제: %s", old_s3_key)
                 except Exception:
                     pass
-            # 이전 file_uploads 레코드 soft-delete
             conn.execute(
                 "UPDATE file_uploads SET is_deleted = 1 "
                 "WHERE entity_id = ? AND file_type = 'cv_processed' AND is_deleted = 0",
                 (entity_id,),
             )
 
-            # 8. DB 업데이트
+            # 7. DB 업데이트
             conn.execute(
-                "UPDATE candidates SET cv_processed_s3_key = ? WHERE candidate_id = ?",
+                "UPDATE candidates SET cv_processed_s3_key = ?, resume_status = 'done' "
+                "WHERE candidate_id = ?",
                 (result["s3_key"], entity_id),
             )
             conn.execute(
@@ -6230,12 +6321,13 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
             conn.commit()
 
             _log_upload.info(
-                "[AutoProcess] OK: %s (#%s) → %d PII removals, %d bytes",
-                entity_id, brj_number, len(logs), len(processed_bytes),
+                "[AutoProcess] DONE: %s (#%s) → %d PII, %d bytes, status=done",
+                entity_id, brj_number, pii_count, len(processed_bytes),
             )
 
     except Exception as e:
         _log_upload.error("[AutoProcess] FAIL %s: %s", entity_id, e, exc_info=True)
+        _set_resume_status(entity_id, "error")
     finally:
         if conn:
             try:
@@ -6463,6 +6555,75 @@ async def reprocess_cv(candidate_id: str, request: Request):
         daemon=True,
     ).start()
     return ok(message="Reprocessing started.")
+
+
+@app.get("/api/admin/resume/status/{candidate_id}", tags=["admin"])
+async def get_resume_status(candidate_id: str, request: Request):
+    """변환 상태 조회 (pending/processing/done/error)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT resume_status, cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
+            (candidate_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(404, "Candidate not found")
+    return ok(data={
+        "status": row[0] or "pending",
+        "has_processed": bool(row[1]),
+    })
+
+
+@app.get("/api/admin/resume/preview/{candidate_id}", tags=["admin"])
+async def get_resume_preview(candidate_id: str, request: Request):
+    """변환 완료된 PDF presigned URL 반환."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT cv_processed_s3_key FROM candidates WHERE candidate_id = ?",
+            (candidate_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        raise HTTPException(404, "Processed CV not found")
+    url = s3_presigned_url(row[0], expires=3600)
+    if not url:
+        raise HTTPException(500, "Presigned URL 생성 실패")
+    return ok(data={"url": url, "s3_key": row[0]})
+
+
+@app.post("/api/admin/resume/reprocess/{candidate_id}", tags=["admin"])
+async def reprocess_resume_full(candidate_id: str, request: Request):
+    """전체 파이프라인 재변환 (PII + 얼굴 + PDF 병합)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        row = conn.execute(
+            "SELECT s3_key FROM file_uploads "
+            "WHERE entity_id = ? AND file_type IN ('cv', 'cover_letter') "
+            "AND s3_key IS NOT NULL AND is_deleted = 0 "
+            "ORDER BY rowid DESC LIMIT 1",
+            (candidate_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        raise HTTPException(404, "Original CV not found")
+    _set_resume_status(candidate_id, "pending")
+    threading.Thread(
+        target=_auto_process_resume,
+        args=(candidate_id, row[0]),
+        daemon=True,
+    ).start()
+    return ok(message="Full pipeline reprocessing started.")
 
 
 @app.delete("/api/admin/files/{file_id}", tags=["admin"])

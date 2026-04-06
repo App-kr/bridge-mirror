@@ -188,6 +188,7 @@ export function defaultCols(): ColDef[] {
     { key: 'proposal', label: '포지션제안', w: 175, type: 'long', v: true },
     { key: 'mailAction', label: '메일발송', w: 85, type: 'mail', v: true },
     { key: 'stage', label: '진행단계', w: 140, type: 'stage', v: true },
+    { key: 'resumeStatus', label: '변환', w: 60, type: 't', v: true },
     { key: 'curSalary', label: '현급여', w: 62, type: 't', v: true },
     { key: 'hopeSalary', label: '희망', w: 62, type: 't', v: true },
     { key: 'interviewCol', label: '인터뷰', w: 78, type: 't', v: true },
