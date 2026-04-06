@@ -397,6 +397,7 @@ function ResumeConverterInner() {
     let totalPii = 0
 
     for (const slotId of ['resume', 'cover', 'reference', 'other'] as const) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fileResults: any[] = data.files_processed?.[slotId] ?? []
       for (const fr of fileResults) {
         if (fr.processed && fr.processed_data && updatedSlots[slotId]) {
