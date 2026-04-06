@@ -3575,6 +3575,49 @@ def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bri
         return False
 
 
+def _send_one_email(provider_key: str, to_email: str, subject: str,
+                    html_body: str, attachments: "list[str] | None" = None) -> dict:
+    """
+    단일 메일 발송 (SMTP_CONFIG 기반). 성공 시 {"ok": True}, 실패 시 {"ok": False, "error": "..."}.
+    attachments: 로컬 파일 경로 리스트.
+    """
+    cfg = SMTP_CONFIG.get(provider_key)
+    if not cfg:
+        return {"ok": False, "error": f"알 수 없는 발신자: {provider_key}"}
+    if not cfg["user"] or not cfg["password"]:
+        return {"ok": False, "error": f"{provider_key} SMTP 자격증명 미설정"}
+    try:
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = f"BRIDGE Recruitment <{cfg['user']}>"
+        msg["To"] = to_email
+        msg["Reply-To"] = "bridgejobkr@gmail.com"
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+        if attachments:
+            from email.mime.base import MIMEBase as _MIMEBase
+            from email import encoders as _enc
+            for fpath in attachments:
+                if not os.path.isfile(fpath):
+                    continue
+                with open(fpath, "rb") as f:
+                    part = _MIMEBase("application", "octet-stream")
+                    part.set_payload(f.read())
+                _enc.encode_base64(part)
+                part.add_header("Content-Disposition", "attachment", filename=os.path.basename(fpath))
+                msg.attach(part)
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as server:
+            server.starttls()
+            server.login(cfg["user"], cfg["password"])
+            server.sendmail(cfg["user"], to_email, msg.as_string())
+        return {"ok": True}
+    except smtplib.SMTPAuthenticationError:
+        return {"ok": False, "error": "SMTP 인증 실패 — 앱 비밀번호 확인"}
+    except smtplib.SMTPRecipientsRefused:
+        return {"ok": False, "error": f"수신 거부: {to_email}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
 # ── 이메일 블랙리스트 시스템 ─────────────────────────────────────────────────
 # 블랙리스트 이메일로는 후보자 정보를 절대 발송하지 않음
 # 이메일은 해싱(SHA-256)으로 저장하여 DB 유출 시에도 원문 노출 차단
@@ -9776,6 +9819,121 @@ async def check_duplicate_send(request: Request):
               AND status = 'sent'
         """, (candidate_id, employer_email)).fetchone()[0]
         return ok(data={"duplicate": exists > 0, "count": exists})
+    finally:
+        conn.close()
+
+
+# ─── 소개발송 통합 엔드포인트 ────────────────────────────────────────────────
+
+@app.post("/api/admin/mail/send-profile", tags=["admin"])
+async def send_profile_mail(request: Request):
+    """
+    소개발송 전용 — 1:1 개별 발송 + profile_sends 자동 기록.
+    body: {sender, candidate_id, candidate_number, recipients:[{email,name,job_id}],
+           subject, html_body, attachment_paths}
+    """
+    _check_admin(request)
+    import json as _json2
+    data = await request.json()
+
+    sender          = data.get("sender", "naver")
+    recipients      = data.get("recipients", [])
+    subject         = data.get("subject", "")
+    html_body       = data.get("html_body", "")
+    candidate_id    = data.get("candidate_id", "")
+    candidate_number = data.get("candidate_number")
+    att_paths       = data.get("attachment_paths", [])
+
+    if not recipients:
+        raise HTTPException(400, "수신자 없음")
+    if len(recipients) > 99:
+        raise HTTPException(400, "1회 최대 99명")
+    if not subject:
+        raise HTTPException(400, "제목 필수")
+
+    cfg = SMTP_CONFIG.get(sender)
+    if not cfg:
+        raise HTTPException(400, f"알 수 없는 발신자: {sender}")
+
+    # 일일 한도 체크
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        today_sent = conn.execute("""
+            SELECT COUNT(*) FROM profile_sends
+            WHERE DATE(sent_at) = DATE('now','localtime')
+              AND sender_email LIKE ?
+              AND status = 'sent'
+        """, (f"%{sender}%",)).fetchone()[0]
+
+        daily_limit = cfg.get("limit", 500)
+        if today_sent + len(recipients) > daily_limit:
+            raise HTTPException(429, f"일일 한도 초과: 오늘 {today_sent}건 발송, 한도 {daily_limit}건")
+
+        results = {"sent": 0, "failed": 0, "errors": []}
+
+        for rcpt in recipients:
+            email = (rcpt.get("email") or "").strip()
+            if not email:
+                continue
+
+            # 블랙리스트 체크
+            if _is_email_blacklisted(email):
+                results["failed"] += 1
+                results["errors"].append({"email": email, "error": "블랙리스트"})
+                continue
+
+            # 중복 체크 (24시간)
+            dup = conn.execute("""
+                SELECT COUNT(*) FROM profile_sends
+                WHERE candidate_id = ? AND to_email = ?
+                  AND sent_at >= datetime('now','localtime','-24 hours')
+                  AND status = 'sent'
+            """, (candidate_id, email)).fetchone()[0]
+
+            status_val = "sent"
+            error_msg  = ""
+
+            if dup > 0:
+                status_val = "skipped"
+                error_msg  = "24시간 내 중복"
+                results["failed"] += 1
+                results["errors"].append({"email": email, "error": error_msg})
+            else:
+                result = _send_one_email(sender, email, subject, html_body, att_paths)
+                if result["ok"]:
+                    results["sent"] += 1
+                else:
+                    status_val = "failed"
+                    error_msg  = result.get("error", "")
+                    results["failed"] += 1
+                    results["errors"].append({"email": email, "error": error_msg})
+
+            # profile_sends 기록 (성공/실패/스킵 모두)
+            conn.execute("""
+                INSERT INTO profile_sends
+                (candidate_id, candidate_number, employer_id, school_name,
+                 to_email, subject, template_used, sender_email,
+                 attachments, status, error_msg, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (
+                candidate_id,
+                candidate_number,
+                rcpt.get("job_id"),
+                rcpt.get("name", ""),
+                email,
+                subject,
+                "profile_broadcast",
+                sender,
+                ",".join(att_paths) if att_paths else "",
+                status_val,
+                error_msg,
+            ))
+
+        conn.commit()
+        results["today_total"] = today_sent + results["sent"]
+        results["daily_limit"] = daily_limit
+        return ok(data=results)
     finally:
         conn.close()
 
