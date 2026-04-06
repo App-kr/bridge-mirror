@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBoardPosts } from '@/lib/db'
+import { fetchPostFromRender } from '@/lib/db'
 
 const VALID_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr', 'tips', 'testimonials']
 
@@ -18,14 +18,12 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Invalid post ID' }, { status: 400 })
     }
 
-    const posts = getBoardPosts(board)
-    const post = posts.find(p => Number(p.id) === postId)
-
-    if (!post) {
-      return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 })
+    // Primary: Render DB, Fallback: static JSON
+    const result = await fetchPostFromRender(board, postId)
+    if (!result.success) {
+      return NextResponse.json(result, { status: 404 })
     }
-
-    return NextResponse.json({ success: true, message: 'ok', data: post })
+    return NextResponse.json(result)
   } catch {
     return NextResponse.json({ success: false, message: 'Failed to load post' }, { status: 500 })
   }

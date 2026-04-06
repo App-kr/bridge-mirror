@@ -157,20 +157,23 @@ export async function GET(request: NextRequest) {
     const offset = Number(searchParams.get('offset') ?? 0)
     const includeAll = searchParams.get('include_all') === 'true'
 
-    let rows = getJobs()
-
-    // 로컬 JSON 없으면 Render API 프록시 (Vercel 배포 환경)
-    if (rows.length === 0) {
-      try {
-        const proxyUrl = `${RENDER_API}/api/jobs?${searchParams.toString()}`
-        const resp = await fetch(proxyUrl, { next: { revalidate: 1800 } })
-        if (resp.ok) {
-          const json = await resp.json()
+    // PRIMARY: Render API (live DB data)
+    try {
+      const proxyUrl = `${RENDER_API}/api/jobs?${searchParams.toString()}`
+      const resp = await fetch(proxyUrl, { next: { revalidate: 1800 } })
+      if (resp.ok) {
+        const json = await resp.json()
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           return NextResponse.json(json)
         }
-      } catch {
-        // Render API 실패 시 빈 배열 반환
       }
+    } catch {
+      // Render unreachable — fall through to static JSON
+    }
+
+    // FALLBACK: static JSON (stale but available offline)
+    let rows = getJobs()
+    if (rows.length === 0) {
       return NextResponse.json({ success: true, message: '0건 조회', data: [] })
     }
 
@@ -191,7 +194,7 @@ export async function GET(request: NextRequest) {
     const paged = rows.slice(offset, offset + limit)
     const data = paged.map(rowToPublic)
 
-    return NextResponse.json({ success: true, message: `${data.length}건 조회`, data })
+    return NextResponse.json({ success: true, message: `${data.length}건 조회 (fallback)`, data })
   } catch {
     return NextResponse.json({ success: false, message: 'Failed to load jobs' }, { status: 500 })
   }
