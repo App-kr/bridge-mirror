@@ -7,9 +7,11 @@ Tkinter + TkinterDnD2
 
 from __future__ import annotations
 
+import ctypes
 import io
 import logging
 import os
+import queue as _queue_mod
 import re
 import threading
 import time
@@ -259,6 +261,8 @@ class BridgeConverterApp:
         self._cards_inner: tk.Frame | None = None
         self._dummy_file_tv: ttk.Treeview | None = None
         self._dummy_group_iids: dict[str, str] = {}
+        self._windnd_hooked_ids: set = set()   # 더블훅 방지
+        self._drop_queue: _queue_mod.Queue = _queue_mod.Queue()  # windnd→Tk 안전 전달
 
         # 인박스 감시 상태
         self._watcher_active = False
@@ -285,6 +289,17 @@ class BridgeConverterApp:
         self._configure_styles()
         self._build_ui()
         self.root.deiconify()
+        # windnd: 루트 창(top-level HWND)에만 단일 훅
+        # Canvas create_window child HWND에 훅하면 WndProc 크래시 발생
+        if _WINDND_AVAILABLE:
+            try:
+                _windnd_mod.hook_dropfiles(
+                    self.root, func=self._on_root_windnd_drop, force_unicode=True)
+                log.info("windnd root 훅 등록 완료")
+            except Exception as e:
+                log.warning(f"windnd root 훅 실패 (무시): {e}")
+        # drop queue 폴링 시작 (WndProc→Tk 안전 전달용)
+        self.root.after(80, self._poll_drop_queue)
         self.root.after(500, self._check_sheet_connection)
 
     # ══════════════════════════════════════════════════════════════════
@@ -855,42 +870,61 @@ class BridgeConverterApp:
         for child in widget.winfo_children():
             self._register_mousewheel_recursive(child)
 
-    def _hook_card_windnd(self, card: "_BundleFileCard", ci_fn):
-        """Hook windnd WM_DROPFILES on card widgets.
+    def _on_root_windnd_drop(self, files):
+        """windnd WM_DROPFILES 콜백 — Windows WndProc에서 직접 호출됨.
 
-        windnd uses DragAcceptFiles + WndProc replacement — works inside
-        Canvas create_window where TkinterDnD2 OLE targets often fail.
-        ci_fn() returns the current card index (dynamic, survives removals).
+        !! 이 함수에서 Tcl/Tk 호출(after, winfo 등) 절대 금지 !!
+        Tcl 재진입(re-entrancy)으로 프로세스 하드 크래시 발생.
+        파일 경로만 queue에 넣고 즉시 반환. UI 작업은 _poll_drop_queue에서.
         """
-        if not _WINDND_AVAILABLE:
-            return
-
-        def _on_windnd_drop(files):
-            # windnd calls this from the Windows message thread → NOT Tkinter main thread.
-            # Schedule all UI work on the main thread via after(0, ...) to prevent crash.
+        try:
             paths = []
             for f in files:
-                if isinstance(f, bytes):
-                    try:
-                        f = f.decode("utf-8")
-                    except UnicodeDecodeError:
-                        f = f.decode("mbcs", errors="replace")
-                paths.append(Path(f))
+                try:
+                    if isinstance(f, bytes):
+                        try:
+                            f = f.decode("utf-8")
+                        except UnicodeDecodeError:
+                            f = f.decode("mbcs", errors="replace")
+                    paths.append(Path(str(f)))
+                except Exception:
+                    pass
+            if paths:
+                # 커서 위치: ctypes로 직접 획득 (Tcl 호출 없이)
+                class _PT(ctypes.Structure):
+                    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+                pt = _PT()
+                ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                self._drop_queue.put_nowait((paths, pt.x, pt.y))
+        except Exception as _e:
+            log.error(f"windnd drop: {_e}", exc_info=True)
 
-            def _on_main_thread():
-                idx = ci_fn()
-                if idx >= 0:
-                    self._activate_bundle_card(idx)
+    def _poll_drop_queue(self):
+        """drop queue 폴러 — Tkinter 메인 루프에서 80ms마다 실행.
+        windnd 콜백이 queue에 넣은 파일 경로를 안전하게 처리.
+        """
+        try:
+            while True:
+                paths, x, y = self._drop_queue.get_nowait()
+                if not self._bundle_cards:
+                    self._queue_add()
+                target_idx = self._find_card_at_cursor(x, y)
+                if target_idx >= 0:
+                    self._activate_bundle_card(target_idx)
                 self._add_files(paths)
-
-            self.root.after(0, _on_main_thread)
-
-        for w in (card.file_tv, card.frame, card.header_bar):
+        except _queue_mod.Empty:
+            pass
+        except Exception as _e:
+            log.error(f"drop queue 처리 오류: {_e}", exc_info=True)
+        finally:
             try:
-                _windnd_mod.hook_dropfiles(w, func=_on_windnd_drop,
-                                           force_unicode=True)
+                self.root.after(80, self._poll_drop_queue)
             except Exception:
                 pass
+
+    def _hook_card_windnd(self, card: "_BundleFileCard", ci_fn):
+        """카드별 windnd 훅 — 루트 레벨로 통합됨 (no-op)."""
+        return  # _on_root_windnd_drop으로 대체
 
     def _create_bundle_card(
         self, queue_idx: int, candidate_id: str = ""
@@ -911,12 +945,11 @@ class BridgeConverterApp:
             except ValueError:
                 return -1
 
-        # DnD — TkinterDnD2 (OLE) + windnd (WM_DROPFILES) 이중 등록
-        # windnd가 Canvas create_window 안에서도 HWND 레벨로 동작
+        # DnD — TkinterDnD2 (OLE): 사용 가능한 경우만 등록
+        # windnd는 루트 창 레벨(_on_root_windnd_drop)에서 처리 — 카드별 훅 없음
         if _DND_AVAILABLE:
             _handler = lambda e, ci=_ci: self._on_drop_to_card(e, ci())
             self._register_dnd_recursive(card.frame, _handler)
-        self._hook_card_windnd(card, _ci)   # windnd: Canvas 내부에서도 작동
 
         # Click on header bar → activate
         for click_w in (card.header_bar, card.num_lbl,
@@ -1006,6 +1039,7 @@ class BridgeConverterApp:
         if card_idx < 0 or card_idx >= len(self._bundle_cards):
             return
         card = self._bundle_cards[card_idx]
+        self._windnd_hooked_ids.discard(id(card))   # 훅 추적 정리
         card.frame.destroy()
         del self._bundle_cards[card_idx]
 
