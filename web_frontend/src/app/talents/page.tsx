@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/api'
 
 /* ── 타입 ── */
@@ -338,6 +339,7 @@ function Tag({ icon, text }: { icon: string; text: string }) {
 
 /* ── 메인 페이지 ── */
 export default function TalentsPage() {
+  const router = useRouter()
   const [cards, setCards] = useState<TalentCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -348,6 +350,14 @@ export default function TalentsPage() {
   const [filterArea, setFilterArea] = useState('')
   const [filterTarget, setFilterTarget] = useState('')
   const [filterNum, setFilterNum] = useState('')
+
+  // 세션 만료 검증 (미들웨어 통과 후 실제 서버 검증)
+  useEffect(() => {
+    fetch('/api/talent-auth/check', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => { if (!d?.valid) router.replace('/talents/login') })
+      .catch(() => {}) // 네트워크 오류는 무시 (중단하지 않음)
+  }, [router])
 
   useEffect(() => {
     const params = new URLSearchParams()

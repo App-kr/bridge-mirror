@@ -30,6 +30,7 @@ import {
   LayoutList,
   FilePen,
   ListChecks,
+  ShieldCheck,
 } from 'lucide-react'
 
 interface NavItem {
@@ -62,6 +63,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/applications', label: '업체 관리', icon: <Layers size={ICON_SIZE} /> },
       { href: '/admin/interview-setup', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
       { href: '/admin/resume-converter', label: '이력서 편집기', icon: <FilePen size={ICON_SIZE} /> },
+      { href: '/admin/talent-auth', label: '게시판 접근 관리', icon: <ShieldCheck size={ICON_SIZE} /> },
     ],
   },
   {
