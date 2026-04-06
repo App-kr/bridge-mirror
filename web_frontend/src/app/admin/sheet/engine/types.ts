@@ -219,5 +219,10 @@ export function defaultCols(): ColDef[] {
     { key: 'introFee', label: '소개료', w: 100, type: 'dropdown', opts: FEE_OPTS, v: true },
     { key: 'process', label: '처리여부', w: 100, type: 'dropdown', opts: PROC_OPTS, v: true },
     { key: 'history', label: '과거기록', w: 150, type: 'long', v: true },
+    // 인재 게시판 관리 컬럼 (Phase 3.8)
+    { key: 'talent_visible', label: '공개', w: 45, type: 't', v: false },
+    { key: 'talent_badge', label: '배지', w: 60, type: 't', v: false },
+    { key: 'talent_reference_star', label: '별점', w: 45, type: 't', v: false },
+    { key: 'talent_summary', label: '강사소개', w: 120, type: 'long', v: false },
   ]
 }

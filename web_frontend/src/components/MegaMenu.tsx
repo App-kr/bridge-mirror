@@ -50,6 +50,10 @@ const DROPDOWNS: Record<string, SubItem[]> = {
     { href: '/community/testimonials', label: 'Testimonials', labelKr: '후기' },
     { href: '/community/tips', label: 'Tips', labelKr: '교사 팁' },
   ],
+  '/talents': [
+    { href: '/talents', label: 'Teacher Board', labelKr: '강사 게시판' },
+    { href: '/inquiry', label: 'Hire a Teacher', labelKr: '강사 채용 의뢰' },
+  ],
 }
 
 interface NavItem { href: string; label: string }
@@ -60,6 +64,7 @@ const DEFAULT_MOBILE_LINKS: NavItem[] = [
   { href: '/employers', label: 'For Teachers' },
   { href: '/job-seekers', label: 'For Employers' },
   { href: '/jobs', label: 'Job Board' },
+  { href: '/talents', label: 'Teachers' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
   { href: '/community/support', label: 'Support' },

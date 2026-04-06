@@ -41,6 +41,7 @@ const navLinks = [
   { href: '/community/korea',      label: 'Korea' },
   { href: '/community/visa',       label: 'Visa' },
   { href: '/jobs',                  label: 'Job Board' },
+  { href: '/talents',              label: 'Teachers' },
   { href: '/community/support',    label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
   { href: '/community',            label: 'Community' },

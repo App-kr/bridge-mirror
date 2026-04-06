@@ -502,7 +502,7 @@ _ALLOWED_ORIGINS_SET = set(ALLOWED_ORIGINS)
 
 class CSRFOriginMiddleware(BaseHTTPMiddleware):
     """POST/PUT/PATCH/DELETE 요청에 Origin 헤더 검증 (CSRF 방어)."""
-    _EXEMPT = {"/api/apply", "/api/inquiry", "/api/track"}  # 공개 폼 제외
+    _EXEMPT = {"/api/apply", "/api/inquiry", "/api/track", "/api/public/talent-inquiry"}  # 공개 폼 제외
     _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
 
     async def dispatch(self, request: Request, call_next):
@@ -1294,6 +1294,124 @@ async def inquiry(request: Request, body: ClientInquiry):
     except Exception as e:
         import logging as _log_inq
         _log_inq.getLogger("bridge.api").error("inquiry 접수 실패: %s", e, exc_info=True)
+        err("문의 접수에 실패했습니다. 잠시 후 다시 시도해주세요.", 500)
+
+
+# ── 인재 게시판 공개 API ───────────────────────────────────────────────────────
+
+_TALENT_PUBLIC_COLS = (
+    "sheet_number", "nationality", "area_prefs", "target",
+    "certification", "education_level", "experience", "desired_salary",
+    "thumb_url", "talent_badge", "talent_reference_star", "talent_summary",
+)
+
+@app.get("/api/public/talents", tags=["public"])
+async def public_talents(
+    nationality: str | None = None,
+    area: str | None = None,
+    target: str | None = None,
+    q: str | None = None,
+):
+    """
+    공개 강사 목록 — talent_visible=1 인 Active 강사만, PII 절대 없음.
+    nationality/area/target/q(sheet_number) 필터 지원.
+    """
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            f"""SELECT {', '.join(_TALENT_PUBLIC_COLS)}
+                FROM candidates
+                WHERE status = 'Active'
+                  AND COALESCE(talent_visible, 0) = 1""",
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result = []
+    for row in rows:
+        r = dict(row)
+        # T3v1 복호화: nationality (국가명만 공개 — 이름·주소 아님)
+        nat_raw = r.get("nationality") or ""
+        r["nationality"] = decrypt_field(nat_raw, "nationality") if nat_raw else ""
+
+        # 서버사이드 필터 적용
+        if nationality and nationality.lower() not in (r["nationality"] or "").lower():
+            continue
+        if area and area.lower() not in (r.get("area_prefs") or "").lower():
+            continue
+        if target and target.lower() not in (r.get("target") or "").lower():
+            continue
+        if q:
+            try:
+                if int(q) != (r.get("sheet_number") or -1):
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+        result.append(r)
+
+    return ok(data=result)
+
+
+class _TalentInquiry(BaseModel):
+    school_name: str
+    email: str
+    message: str
+    contact_name: str | None = None
+    phone: str | None = None
+    candidate_ref: int | None = None  # sheet_number
+
+
+@app.post("/api/public/talent-inquiry", status_code=201, tags=["public"])
+async def public_talent_inquiry(request: Request, body: _TalentInquiry):
+    """강사 게시판 문의 접수 — IP당 5회/시간, PII 암호화 저장."""
+    if not _rate_ok(_ip_hash(request), window=3600, max_posts=5):
+        raise HTTPException(429, "Too many requests. Please try again later.")
+
+    _TALENT_INQ_ENCRYPT = {"email", "phone", "contact_name"}
+    payload = body.model_dump(exclude_none=True)
+
+    for field in _TALENT_INQ_ENCRYPT:
+        if field in payload and payload[field]:
+            payload[field] = _encrypt_if_needed(str(payload[field]))
+
+    payload["source"] = "talent_board"
+    payload["inbox_status"] = "new"
+    payload["submitted_at"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            db_cols = {r[1] for r in conn.execute("PRAGMA table_info(client_inquiries)").fetchall()}
+            insert_payload: dict = {}
+            extra_fields: dict = {}
+            for k, v in payload.items():
+                if k in db_cols:
+                    insert_payload[k] = v
+                else:
+                    extra_fields[k] = v
+            if extra_fields:
+                import json as _jt_inq
+                insert_payload["parsed_data"] = _jt_inq.dumps(extra_fields, ensure_ascii=False)
+            cols = ", ".join(insert_payload.keys())
+            placeholders = ", ".join("?" * len(insert_payload))
+            cur = conn.execute(
+                f"INSERT INTO client_inquiries ({cols}) VALUES ({placeholders})",
+                list(insert_payload.values()),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+            return ok(data={"id": new_id}, message="문의가 접수되었습니다.")
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging as _log_ti
+        _log_ti.getLogger("bridge.api").error("talent_inquiry 접수 실패: %s", e, exc_info=True)
         err("문의 접수에 실패했습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
@@ -2530,6 +2648,8 @@ async def admin_update_candidate(
         "kakaotalk", "mobile_phone", "arc_holders", "married", "religion",
         "dependents", "consent", "fact_check", "housing", "e_visa",
         "how_to", "passport_status",
+        # 인재 게시판 관리 필드
+        "talent_visible", "talent_badge", "talent_reference_star", "talent_summary",
     }
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
@@ -3380,6 +3500,32 @@ def _ensure_auto_process_cols():
 
 try:
     _ensure_auto_process_cols()
+except Exception:
+    pass
+
+
+def _ensure_talent_cols():
+    """candidates 테이블에 인재게시판 컬럼 4개 추가 (없으면 무시)."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        for sql in [
+            "ALTER TABLE candidates ADD COLUMN talent_visible INTEGER DEFAULT 0",
+            "ALTER TABLE candidates ADD COLUMN talent_badge TEXT DEFAULT NULL",
+            "ALTER TABLE candidates ADD COLUMN talent_reference_star INTEGER DEFAULT 0",
+            "ALTER TABLE candidates ADD COLUMN talent_summary TEXT DEFAULT NULL",
+        ]:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # 이미 존재하는 컬럼
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+try:
+    _ensure_talent_cols()
 except Exception:
     pass
 
