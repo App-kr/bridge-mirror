@@ -96,6 +96,105 @@ class QueueItem:
     info:        dict = field(default_factory=dict)
 
 
+class _BundleFileCard:
+    """Center panel card — one per queue item."""
+
+    def __init__(self, parent_frame: tk.Frame, card_idx: int, candidate_id: str = ""):
+        self.card_idx = card_idx
+        self.group_iids: dict[str, str] = {}
+
+        # ── Card frame (LabelFrame) ──────────────────────────────────
+        self.frame = tk.LabelFrame(
+            parent_frame, text=f"  묶음 #{card_idx + 1}  ",
+            font=(F, 11, "bold"), bg=C_BG, fg=C_TEXT,
+            padx=6, pady=4, relief="flat",
+            highlightbackground=C_BORDER, highlightthickness=2)
+
+        # ── Header row ───────────────────────────────────────────────
+        hdr = tk.Frame(self.frame, bg=C_BG)
+        hdr.pack(fill="x", pady=(0, 4))
+
+        self.id_var = tk.StringVar(value=candidate_id)
+        tk.Label(hdr, text="강사번호:", bg=C_BG, fg=C_SUB,
+                 font=(F, 10)).pack(side="left")
+        self.id_label = tk.Label(hdr, textvariable=self.id_var,
+                                 bg=C_BG, fg=C_TEXT,
+                                 font=(F, 11, "bold"))
+        self.id_label.pack(side="left", padx=4)
+
+        self.remove_btn = tk.Button(
+            hdr, text="[X]", bg=C_BG, fg=C_DANGER,
+            font=(F, 10), relief="flat", cursor="hand2")
+        self.remove_btn.pack(side="right")
+
+        # ── Drop zone (compact) ──────────────────────────────────────
+        self.drop_zone = tk.Frame(
+            self.frame, bg=C_HOVER, height=32,
+            highlightbackground=C_PRI, highlightthickness=1,
+            cursor="hand2")
+        self.drop_zone.pack(fill="x", pady=(0, 4))
+        self.drop_zone.pack_propagate(False)
+
+        dz_row = tk.Frame(self.drop_zone, bg=C_HOVER)
+        dz_row.pack(expand=True)
+        tk.Label(dz_row, text="파일 드래그/추가",
+                 bg=C_HOVER, fg=C_PRI, font=(F, 10)).pack(side="left")
+        self.browse_btn = tk.Button(
+            dz_row, text="[+ 파일]", bg=C_HOVER, fg=C_PRI,
+            font=(F, 10, "bold"), relief="flat", cursor="hand2")
+        self.browse_btn.pack(side="left", padx=4)
+
+        # ── Treeview (compact) ───────────────────────────────────────
+        tv_frame = tk.Frame(self.frame, bg=C_BG)
+        tv_frame.pack(fill="both", expand=True)
+
+        f_cols = ("파일명", "크기", "상태")
+        self.file_tv = ttk.Treeview(
+            tv_frame, columns=f_cols,
+            show="tree headings", selectmode="browse",
+            height=8)
+        self.file_tv.heading("#0",    text="구분")
+        self.file_tv.heading("파일명", text="파일명")
+        self.file_tv.heading("크기",   text="크기")
+        self.file_tv.heading("상태",   text="상태")
+        self.file_tv.column("#0",    width=90, minwidth=70, stretch=False)
+        self.file_tv.column("파일명", width=200, minwidth=100)
+        self.file_tv.column("크기",   width=56,  minwidth=46, anchor="center")
+        self.file_tv.column("상태",   width=70,  minwidth=50, anchor="center")
+
+        # Tag config (same palette as main)
+        self.file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 10, "bold"))
+        self.file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 10, "bold"))
+        self.file_tv.tag_configure("grp_cover",   background="#CCE5FF", font=(F, 10, "bold"))
+        self.file_tv.tag_configure("grp_rec",     background="#F8D7DA", font=(F, 10, "bold"))
+        self.file_tv.tag_configure("grp_unknown", background="#E2E3E5", font=(F, 10, "bold"))
+        self.file_tv.tag_configure("photo",   background="#FFFDE7")
+        self.file_tv.tag_configure("resume",  background="#F1F8F1")
+        self.file_tv.tag_configure("cover",   background="#EDF5FF")
+        self.file_tv.tag_configure("rec",     background="#FFF0F3")
+        self.file_tv.tag_configure("unknown", background="#FAFAFA")
+
+        sb = ttk.Scrollbar(tv_frame, orient="vertical",
+                           command=self.file_tv.yview)
+        self.file_tv.configure(yscrollcommand=sb.set)
+        self.file_tv.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        # ── 5 group headers ──────────────────────────────────────────
+        _groups = [
+            ("photo",   "[사진]"),
+            ("resume",  "[이력서]"),
+            ("cover",   "[커버레터]"),
+            ("rec",     "[추천서]"),
+            ("unknown", "[기타]"),
+        ]
+        for ftype, label in _groups:
+            iid = self.file_tv.insert(
+                "", "end", text=label, values=("", "", ""),
+                tags=(f"grp_{ftype}",), open=True)
+            self.group_iids[ftype] = iid
+
+
 class BridgeConverterApp:
     """메인 GUI 앱 v2.0."""
 
@@ -147,6 +246,14 @@ class BridgeConverterApp:
 
         # 파일목록 그룹 헤더 (ftype → Treeview group iid)
         self._group_iids: dict[str, str] = {}
+
+        # ── 번들 카드 (per-bundle file cards) ─────────────────────
+        self._bundle_cards: list[_BundleFileCard] = []
+        self._active_card_idx: int = -1
+        self._cards_canvas: tk.Canvas | None = None
+        self._cards_inner: tk.Frame | None = None
+        self._dummy_file_tv: ttk.Treeview | None = None
+        self._dummy_group_iids: dict[str, str] = {}
 
         # 인박스 감시 상태
         self._watcher_active = False
@@ -429,22 +536,6 @@ class BridgeConverterApp:
     def _build_center(self, parent) -> tk.Frame:
         panel = tk.Frame(parent, bg=C_BG)
 
-        # 드롭 영역 (고정 높이 — 드래그 대상 아님)
-        dz = tk.Frame(panel, bg=C_HOVER, height=100,
-                       highlightbackground=C_PRI, highlightthickness=2,
-                       cursor="hand2")
-        dz.pack(fill="x", padx=14, pady=(14, 6))
-        dz.pack_propagate(False)
-        dl = tk.Label(dz,
-                      text="파일을 드래그하거나 클릭하여 추가  ·  사진 / 이력서 / 커버레터 / 추천서",
-                      bg=C_HOVER, fg=C_PRI, font=(F, 12), justify="center")
-        dl.pack(expand=True)
-        dz.bind("<Button-1>", self._browse_files)
-        dl.bind("<Button-1>", self._browse_files)
-        if _DND_AVAILABLE:
-            dz.drop_target_register(DND_FILES)
-            dz.dnd_bind("<<Drop>>", self._on_drop)
-
         # 하단 버튼 (항상 고정)
         btf = tk.Frame(panel, bg=C_BG,
                         highlightbackground=C_BORDER, highlightthickness=1)
@@ -489,58 +580,54 @@ class BridgeConverterApp:
         vpaned = ttk.PanedWindow(panel, orient="vertical")
         vpaned.pack(fill="both", expand=True, padx=14, pady=(0, 4))
 
-        # 상단: 파일 목록 (드래그로 크기 조절)
+        # 상단: 카드 목록 (스크롤 가능)
         top_pane = tk.Frame(vpaned, bg=C_BG)
         vpaned.add(top_pane, weight=3)
 
-        flf = tk.LabelFrame(top_pane, text="파일 목록", font=(F, 11, "bold"),
-                             bg=C_BG, fg=C_TEXT, padx=6, pady=4,
-                             relief="flat",
-                             highlightbackground=C_BORDER, highlightthickness=1)
-        flf.pack(fill="both", expand=True)
+        cards_frame = tk.Frame(top_pane, bg=C_BG)
+        cards_frame.pack(fill="both", expand=True)
 
-        # ── 그룹형 파일 목록 (5그룹, 각 그룹 여러 파일 가능) ──
-        f_cols = ("파일명", "크기", "상태")
-        self._file_tv = ttk.Treeview(flf, columns=f_cols,
-                                      show="tree headings",
-                                      selectmode="browse",
-                                      height=20)  # 확장: 9 → 20 (여러 파일 표시)
-        self._file_tv.heading("#0",    text="구분")
-        self._file_tv.heading("파일명", text="파일명")
-        self._file_tv.heading("크기",   text="크기")
-        self._file_tv.heading("상태",   text="상태")
-        self._file_tv.column("#0",    width=110, minwidth=90,  stretch=False)
-        self._file_tv.column("파일명", width=240, minwidth=120)
-        self._file_tv.column("크기",   width=68,  minwidth=56,  anchor="center")
-        self._file_tv.column("상태",   width=86,  minwidth=64,  anchor="center")
-        # 그룹 헤더 배경색
-        self._file_tv.tag_configure("grp_photo",   background="#FFF3CD", font=(F, 11, "bold"))
-        self._file_tv.tag_configure("grp_resume",  background="#D4EDDA", font=(F, 11, "bold"))
-        self._file_tv.tag_configure("grp_cover",   background="#CCE5FF", font=(F, 11, "bold"))
-        self._file_tv.tag_configure("grp_rec",     background="#F8D7DA", font=(F, 11, "bold"))
-        self._file_tv.tag_configure("grp_unknown", background="#E2E3E5", font=(F, 11, "bold"))
-        # 파일 행 배경색
-        self._file_tv.tag_configure("photo",   background="#FFFDE7")
-        self._file_tv.tag_configure("resume",  background="#F1F8F1")
-        self._file_tv.tag_configure("cover",   background="#EDF5FF")
-        self._file_tv.tag_configure("rec",     background="#FFF0F3")
-        self._file_tv.tag_configure("unknown", background="#FAFAFA")
-        self._file_tv.bind("<Delete>", self._delete_selected_file)
-        self._file_tv.bind("<Button-3>", self._file_context_menu)
+        self._cards_canvas = tk.Canvas(
+            cards_frame, bg=C_BG, highlightthickness=0)
+        cards_scroll = ttk.Scrollbar(
+            cards_frame, orient="vertical",
+            command=self._cards_canvas.yview)
+        self._cards_canvas.configure(yscrollcommand=cards_scroll.set)
+        self._cards_canvas.pack(side="left", fill="both", expand=True)
+        cards_scroll.pack(side="right", fill="y")
 
-        sb = ttk.Scrollbar(flf, orient="vertical", command=self._file_tv.yview)
-        self._file_tv.configure(yscrollcommand=sb.set)
-        self._file_tv.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        self._cards_inner = tk.Frame(self._cards_canvas, bg=C_BG)
+        self._cards_win_id = self._cards_canvas.create_window(
+            (0, 0), window=self._cards_inner, anchor="nw")
+        self._cards_inner.bind(
+            "<Configure>", lambda e: self._update_card_scrollregion())
+        self._cards_canvas.bind(
+            "<Configure>",
+            lambda e: self._cards_canvas.itemconfigure(
+                self._cards_win_id, width=e.width))
 
-        # ── 파일 목록 전체에 드래그드롭 등록 ──────────────────────────────────
-        if _DND_AVAILABLE:
-            self._file_tv.drop_target_register(DND_FILES)
-            self._file_tv.dnd_bind("<<Drop>>", self._on_drop)
-            flf.drop_target_register(DND_FILES)
-            flf.dnd_bind("<<Drop>>", self._on_drop)
+        # Mousewheel — only when mouse is over canvas
+        def _mw_enter(e):
+            self._cards_canvas.bind_all(
+                "<MouseWheel>", self._on_cards_mousewheel)
+        def _mw_leave(e):
+            self._cards_canvas.unbind_all("<MouseWheel>")
+        self._cards_canvas.bind("<Enter>", _mw_enter)
+        self._cards_canvas.bind("<Leave>", _mw_leave)
 
-        # 5개 그룹 헤더 생성 (항상 펼침) — 이모지 제거 (GDI hang 방지)
+        # [+ 새 묶음 추가] button at bottom
+        self._add_card_btn = tk.Button(
+            self._cards_inner, text="[+ 새 묶음 추가]",
+            command=self._add_bundle_from_center,
+            bg=C_HOVER, fg=C_PRI, font=(F, 11, "bold"),
+            relief="flat", padx=14, pady=8, cursor="hand2")
+        self._add_card_btn.pack(fill="x", padx=8, pady=8)
+
+        # ── Hidden dummy Treeview (fallback when no cards) ──
+        self._dummy_file_tv = ttk.Treeview(
+            top_pane, columns=("파일명", "크기", "상태"),
+            show="tree headings", height=0)
+        # Don't pack — always hidden
         _groups = [
             ("photo",   "[사진]"),
             ("resume",  "[이력서]"),
@@ -549,18 +636,13 @@ class BridgeConverterApp:
             ("unknown", "[기타]"),
         ]
         for ftype, label in _groups:
-            iid = self._file_tv.insert("", "end",
-                                        text=label,
-                                        values=("", "", ""),
-                                        tags=(f"grp_{ftype}",),
-                                        open=True)
-            self._group_iids[ftype] = iid
+            iid = self._dummy_file_tv.insert(
+                "", "end", text=label, values=("", "", ""),
+                tags=(f"grp_{ftype}",), open=True)
+            self._dummy_group_iids[ftype] = iid
             self._files_multi[ftype] = []
-
-        tk.Button(flf, text="선택 파일 제거 (Del)",
-                  command=self._delete_selected_file,
-                  bg=C_BG, fg=C_SUB, font=(F, 11),
-                  relief="flat", cursor="hand2").pack(anchor="e", pady=(2, 0))
+        self._file_tv = self._dummy_file_tv
+        self._group_iids = self._dummy_group_iids
 
         # 하단: PII 탐지 결과 (드래그로 크기 조절)
         bot_pane = tk.Frame(vpaned, bg=C_BG)
@@ -721,6 +803,185 @@ class BridgeConverterApp:
                         font=(F, 12, "bold"))
 
     # ══════════════════════════════════════════════════════════════════
+    # 번들 카드 관리
+    # ══════════════════════════════════════════════════════════════════
+
+    def _on_cards_mousewheel(self, event):
+        if self._cards_canvas:
+            self._cards_canvas.yview_scroll(
+                int(-1 * (event.delta / 120)), "units")
+
+    def _update_card_scrollregion(self):
+        if self._cards_canvas:
+            self._cards_inner.update_idletasks()
+            self._cards_canvas.configure(
+                scrollregion=self._cards_canvas.bbox("all"))
+
+    def _create_bundle_card(
+        self, queue_idx: int, candidate_id: str = ""
+    ) -> _BundleFileCard:
+        """Create a new card widget inside the cards canvas."""
+        card = _BundleFileCard(
+            self._cards_inner, len(self._bundle_cards), candidate_id)
+
+        # Pack card BEFORE the [+ 새 묶음 추가] button
+        self._add_card_btn.pack_forget()
+        card.frame.pack(fill="x", padx=4, pady=4)
+        self._add_card_btn.pack(fill="x", padx=8, pady=8)
+
+        # Dynamic index lookup (survives card removals)
+        def _ci():
+            try:
+                return self._bundle_cards.index(card)
+            except ValueError:
+                return -1
+
+        # DnD registration
+        if _DND_AVAILABLE:
+            card.drop_zone.drop_target_register(DND_FILES)
+            card.drop_zone.dnd_bind(
+                "<<Drop>>", lambda e: self._on_card_drop(e, _ci()))
+            card.file_tv.drop_target_register(DND_FILES)
+            card.file_tv.dnd_bind(
+                "<<Drop>>", lambda e: self._on_card_drop(e, _ci()))
+
+        # Click on frame → activate
+        card.frame.bind(
+            "<Button-1>",
+            lambda e: self._activate_bundle_card(_ci()))
+        # Focus on treeview → activate (doesn't block selection)
+        card.file_tv.bind(
+            "<FocusIn>",
+            lambda e: self._activate_bundle_card(_ci()))
+        card.file_tv.bind("<Delete>", self._delete_selected_file)
+        card.file_tv.bind("<Button-3>", self._file_context_menu)
+
+        # [X] remove
+        card.remove_btn.config(
+            command=lambda: self._remove_bundle_by_card(_ci()))
+
+        # [+ 파일] browse
+        def _browse_for_card():
+            self._activate_bundle_card(_ci())
+            self._browse_files()
+        card.browse_btn.config(command=_browse_for_card)
+        card.drop_zone.bind(
+            "<Button-1>", lambda e: _browse_for_card())
+
+        # Mousewheel propagation
+        for w in (card.frame, card.file_tv, card.drop_zone):
+            w.bind("<MouseWheel>", self._on_cards_mousewheel)
+
+        self._bundle_cards.append(card)
+        self._update_card_scrollregion()
+        return card
+
+    def _activate_bundle_card(self, card_idx: int):
+        """Activate card: pointer-swap + data sync."""
+        if card_idx < 0 or card_idx >= len(self._bundle_cards):
+            return
+        if card_idx == self._active_card_idx:
+            return  # already active
+
+        # Save current state before switching
+        self._save_current_to_queue()
+
+        # Deactivate previous card
+        if 0 <= self._active_card_idx < len(self._bundle_cards):
+            prev = self._bundle_cards[self._active_card_idx]
+            prev.frame.config(highlightbackground=C_BORDER)
+
+        self._active_card_idx = card_idx
+        card = self._bundle_cards[card_idx]
+        card.frame.config(highlightbackground=C_PRI)
+
+        # ── Pointer swap ─────────────────────────────────────────
+        self._file_tv = card.file_tv
+        self._group_iids = card.group_iids
+
+        # ── Sync data from queue item ────────────────────────────
+        self._active_queue_idx = card_idx
+        if card_idx < len(self._queue):
+            item = self._queue[card_idx]
+            self._candidate_id.set(item.candidate_id)
+            self._files = dict(item.files)
+            self._files_multi = {
+                k: list(v) for k, v in item.files_multi.items()}
+            card.id_var.set(item.candidate_id)
+            # Meta info
+            nat = item.info.get("nationality", "")
+            gen = item.info.get("gender", "")
+            yr  = item.info.get("birth_year", "")
+            if nat or gen or yr:
+                self._meta_label.config(
+                    text=f"국적: {nat or '?'}  성별: {gen or '?'}  "
+                         f"생년: {yr or '?'}")
+            else:
+                self._meta_label.config(text="")
+
+        # Sync left panel queue selection
+        self._select_queue_row(card_idx)
+
+    def _remove_bundle_by_card(self, card_idx: int):
+        """Remove card + corresponding queue item."""
+        if card_idx < 0 or card_idx >= len(self._bundle_cards):
+            return
+        card = self._bundle_cards[card_idx]
+        card.frame.destroy()
+        del self._bundle_cards[card_idx]
+
+        # Update card_idx stored in each card
+        for i, c in enumerate(self._bundle_cards):
+            c.card_idx = i
+
+        # Remove queue item
+        if card_idx < len(self._queue):
+            del self._queue[card_idx]
+            self._refresh_queue_tv()
+
+        # Adjust active index
+        if self._active_card_idx == card_idx:
+            self._active_card_idx = -1
+            if self._bundle_cards:
+                new_idx = min(card_idx, len(self._bundle_cards) - 1)
+                self._activate_bundle_card(new_idx)
+            else:
+                # No cards left → dummy
+                self._file_tv = self._dummy_file_tv
+                self._group_iids = self._dummy_group_iids
+                self._files.clear()
+                self._files_multi.clear()
+                self._candidate_id.set("")
+                self._active_queue_idx = -1
+        elif self._active_card_idx > card_idx:
+            self._active_card_idx -= 1
+
+        self._update_card_scrollregion()
+
+    def _on_card_drop(self, event, card_idx: int):
+        """DnD on a specific card: activate, then add files."""
+        self._activate_bundle_card(card_idx)
+        self._on_drop(event)
+
+    def _add_bundle_from_center(self):
+        """[+ 새 묶음 추가] button handler."""
+        self._queue_add()
+
+    def _update_card_visual(self, card_idx: int, state: str):
+        """Visual feedback: active/done/error/idle border color."""
+        if card_idx < 0 or card_idx >= len(self._bundle_cards):
+            return
+        card = self._bundle_cards[card_idx]
+        colors = {
+            "active":  "#1976D2",
+            "done":    C_PRI,
+            "error":   C_DANGER,
+            "idle":    C_BORDER,
+        }
+        card.frame.config(
+            highlightbackground=colors.get(state, C_BORDER))
+
+    # ══════════════════════════════════════════════════════════════════
     # 파일 상태 헬퍼
     # ══════════════════════════════════════════════════════════════════
 
@@ -774,6 +1035,9 @@ class BridgeConverterApp:
 
     def _on_drop(self, event):
         if _DND_AVAILABLE:
+            # Auto-create card if none active
+            if self._active_card_idx < 0 or not self._bundle_cards:
+                self._queue_add()
             self._add_files([Path(p) for p in self.root.tk.splitlist(event.data)])
 
     def _add_files(self, paths: list):
@@ -944,54 +1208,33 @@ class BridgeConverterApp:
     # ══════════════════════════════════════════════════════════════════
 
     def _queue_add(self):
+        # Save current active card
+        self._save_current_to_queue()
+
         cid = self._candidate_id.get().strip()
-        # 현재 파일이 있으면 파일과 함께 추가, 없으면 빈 슬롯 생성
-        if cid and self._files:
-            # 기존 방식: 강사번호 + 파일이 있으면 즉시 추가
-            self._queue_counter += 1
-            item = QueueItem(
-                queue_id=f"Q{self._queue_counter:02d}",
-                candidate_id=cid,
-                files=dict(self._files),
-                files_multi={k: list(v) for k, v in self._files_multi.items() if v},
-                status="대기",
-            )
-            self._queue.append(item)
-            self._refresh_queue_tv()
-            # 입력 초기화
-            self._candidate_id.set("")
-            self._files.clear()
-            self._photo_bytes = None
-            for ft, gid in self._group_iids.items():
-                for child in self._file_tv.get_children(gid):
-                    self._file_tv.delete(child)
-                self._files_multi[ft] = []
-            self._meta_label.config(text="")
-            self._active_queue_idx = len(self._queue) - 1
-        else:
-            # 빈 슬롯 생성 (번호만 있거나 번호도 없으면)
-            self._queue_counter += 1
-            item = QueueItem(
-                queue_id=f"Q{self._queue_counter:02d}",
-                candidate_id=cid or "",
-                files={},
-                files_multi={},
-                status="대기",
-            )
-            self._queue.append(item)
-            self._active_queue_idx = len(self._queue) - 1
-            # 화면 초기화 → 새 슬롯 파일 추가 대기
-            self._candidate_id.set(cid or "")
-            self._files.clear()
-            self._photo_bytes = None
-            for ft, gid in self._group_iids.items():
-                for child in self._file_tv.get_children(gid):
-                    self._file_tv.delete(child)
-                self._files_multi[ft] = []
-            self._meta_label.config(text="")
-            self._refresh_queue_tv()
-            # 새 슬롯 자동 선택
-            self._select_queue_row(self._active_queue_idx)
+
+        self._queue_counter += 1
+        item = QueueItem(
+            queue_id=f"Q{self._queue_counter:02d}",
+            candidate_id=cid or "",
+            files={},
+            files_multi={},
+            status="대기",
+        )
+        self._queue.append(item)
+        self._refresh_queue_tv()
+
+        # Create card in center panel
+        self._create_bundle_card(len(self._queue) - 1, cid)
+
+        # Activate new card (pointer swap + data sync)
+        self._active_card_idx = -1  # force re-activation
+        self._activate_bundle_card(len(self._bundle_cards) - 1)
+
+        # Reset for next entry
+        self._candidate_id.set(cid or "")
+        self._photo_bytes = None
+        self._meta_label.config(text="")
 
     def _queue_remove(self):
         sel = self._queue_tv.selection()
@@ -1000,13 +1243,10 @@ class BridgeConverterApp:
         all_rows = list(self._queue_tv.get_children(""))
         idx = all_rows.index(sel[0]) if sel[0] in all_rows else -1
         if 0 <= idx < len(self._queue):
-            del self._queue[idx]
-            # 활성 인덱스 조정
-            if self._active_queue_idx == idx:
-                self._active_queue_idx = -1
-            elif self._active_queue_idx > idx:
-                self._active_queue_idx -= 1
-        self._refresh_queue_tv()
+            # Remove card (which also removes queue item)
+            self._remove_bundle_by_card(idx)
+        else:
+            self._refresh_queue_tv()
 
     def _queue_start(self):
         # 현재 화면 내용 저장
@@ -1036,21 +1276,26 @@ class BridgeConverterApp:
         self._pipeline_thread.start()
 
     def _run_queue_pipeline(self):
-        for item in self._queue:
+        for qi, item in enumerate(self._queue):
             if self._stopped:
                 break
             if item.status != "대기":
                 continue
             item.status = "처리중"
             self._active_queue_id = item.queue_id
+            # Activate card + visual feedback (blue = processing)
+            self.root.after(0, lambda i=qi: self._activate_bundle_card(i))
+            self.root.after(0, lambda i=qi: self._update_card_visual(i, "active"))
             self.root.after(0, self._refresh_queue_tv)
             try:
                 self._process_item(item)
                 item.status = "완료"
+                self.root.after(0, lambda i=qi: self._update_card_visual(i, "done"))
             except Exception as e:
                 item.status = "오류"
                 item.error  = str(e)
                 log.error(f"Queue [{item.candidate_id}]: {e}")
+                self.root.after(0, lambda i=qi: self._update_card_visual(i, "error"))
             self.root.after(0, self._refresh_queue_tv)
         self._active_queue_id = None
         self.root.after(0, lambda: self._status_var.set("모든 항목 처리 완료"))
@@ -1104,7 +1349,7 @@ class BridgeConverterApp:
                                    tags=(tag,))
 
     def _on_queue_select(self, event=None):
-        """대기열에서 사람 선택 시 → 해당 사람의 파일로 중앙 패널 전환."""
+        """대기열에서 사람 선택 시 → 해당 카드 활성화."""
         sel = self._queue_tv.selection()
         if not sel:
             return
@@ -1113,29 +1358,8 @@ class BridgeConverterApp:
         if idx < 0 or idx >= len(self._queue):
             return
 
-        # 현재 편집 중인 슬롯의 파일/ID를 저장
-        self._save_current_to_queue()
-
-        self._active_queue_idx = idx
-        item = self._queue[idx]
-
-        # 해당 사람의 파일로 전환
-        self._candidate_id.set(item.candidate_id)
-        self._files = dict(item.files)
-        self._files_multi = {k: list(v) for k, v in item.files_multi.items()}
-
-        # 중앙 파일 목록 갱신
-        self._rebuild_file_tv_from_multi()
-
-        # 메타 정보 표시
-        nat = item.info.get("nationality", "")
-        gen = item.info.get("gender", "")
-        yr  = item.info.get("birth_year", "")
-        if nat or gen or yr:
-            self._meta_label.config(
-                text=f"국적: {nat or '?'}  성별: {gen or '?'}  생년: {yr or '?'}")
-        else:
-            self._meta_label.config(text="")
+        # Activate the corresponding card (handles pointer swap + data sync)
+        self._activate_bundle_card(idx)
 
     def _save_current_to_queue(self):
         """현재 화면 상태를 활성 대기열 슬롯에 저장."""
@@ -1146,6 +1370,9 @@ class BridgeConverterApp:
         item.candidate_id = self._candidate_id.get().strip()
         item.files = dict(self._files)
         item.files_multi = {k: list(v) for k, v in self._files_multi.items() if v}
+        # Sync card label
+        if 0 <= idx < len(self._bundle_cards):
+            self._bundle_cards[idx].id_var.set(item.candidate_id)
         self._refresh_queue_tv()
 
     def _rebuild_file_tv_from_multi(self):
