@@ -1363,46 +1363,6 @@ _MAGIC_TTL = 900           # 15분 (magic link 유효시간)
 _SESSION_TTL = 86400 * 30  # 30일 (세션 쿠키)
 
 
-def _ensure_talent_auth_tables():
-    """talent auth 테이블 마이그레이션."""
-    try:
-        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS talent_auth_requests (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                email        TEXT NOT NULL,
-                company_name TEXT DEFAULT '',
-                requested_at TEXT NOT NULL,
-                status       TEXT DEFAULT 'pending',
-                sent_at      TEXT,
-                ip_hash      TEXT DEFAULT '',
-                notes        TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS talent_auth_tokens (
-                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                email               TEXT NOT NULL,
-                magic_token         TEXT UNIQUE NOT NULL,
-                session_token       TEXT UNIQUE,
-                created_at          TEXT NOT NULL,
-                magic_expires_at    TEXT NOT NULL,
-                session_expires_at  TEXT,
-                magic_used_at       TEXT,
-                request_id          INTEGER
-            );
-            CREATE INDEX IF NOT EXISTS idx_tat_magic   ON talent_auth_tokens(magic_token);
-            CREATE INDEX IF NOT EXISTS idx_tat_session ON talent_auth_tokens(session_token);
-        """)
-        conn.commit()
-        conn.close()
-    except Exception as _e:
-        logging.getLogger("bridge.api").warning("_ensure_talent_auth_tables 실패: %s", _e)
-
-
-try:
-    _ensure_talent_auth_tables()
-except Exception:
-    pass
-
 
 class _TalentAuthRequest(BaseModel):
     email: str
@@ -3443,6 +3403,47 @@ _SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMA
 _SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
 _log_email = logging.getLogger("bridge.email_send")
 
+
+# ── SMTP 자격증명 Vault 로더 ──────────────────────────────────────────────────
+def _load_smtp_from_vault() -> None:
+    """
+    tools/smtp_creds.enc.json 에서 T3v1 암호화된 SMTP 자격증명을 로드하여
+    os.environ에 주입 → 아래 SMTP_CONFIG가 평문으로 읽음.
+    파일 없음 또는 복호화 실패 시 조용히 스킵 (기존 환경변수 유지).
+    """
+    _log_smtp = logging.getLogger("bridge.smtp_vault")
+    vault_file = Path(__file__).parent / "tools" / "smtp_creds.enc.json"
+    if not vault_file.exists():
+        return
+    try:
+        import json as _json_sv
+        data = _json_sv.loads(vault_file.read_text(encoding="utf-8"))
+        if data.get("version") != "T3v1":
+            _log_smtp.warning("[SMTP Vault] 버전 불일치 — 스킵")
+            return
+        entries = data.get("entries", {})
+        injected = []
+        for env_key, entry in entries.items():
+            enc = entry.get("enc", "")
+            col = entry.get("col", "")
+            if not enc:
+                continue
+            # decrypt_field: T3v1 자동 감지 → t3_decrypt → 실패 시 원값 반환
+            decrypted = decrypt_field(enc, col)
+            if decrypted and decrypted != enc:
+                os.environ[env_key] = decrypted
+                injected.append(env_key)
+        if injected:
+            _log_smtp.info("[SMTP Vault] 로드 완료: %s", injected)
+        else:
+            _log_smtp.warning("[SMTP Vault] 복호화 실패 (BRIDGE_FIELD_KEY 확인 필요)")
+    except Exception as _sv_exc:
+        logging.getLogger("bridge.smtp_vault").warning("[SMTP Vault] 로드 실패: %s", _sv_exc)
+
+
+# SMTP_CONFIG 초기화 전에 Vault에서 자격증명 주입
+_load_smtp_from_vault()
+
 SMTP_CONFIG = {
     "naver": {
         "host": "smtp.naver.com",
@@ -3925,6 +3926,49 @@ def _ensure_talent_cols():
 
 try:
     _ensure_talent_cols()
+except Exception:
+    pass
+
+
+def _ensure_talent_auth_tables():
+    """talent_auth_requests / talent_auth_tokens 테이블 마이그레이션.
+    _ADMIN_DB_PATH 정의 이후에 호출됨.
+    """
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS talent_auth_requests (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                email        TEXT NOT NULL,
+                company_name TEXT DEFAULT '',
+                requested_at TEXT NOT NULL,
+                status       TEXT DEFAULT 'pending',
+                sent_at      TEXT,
+                ip_hash      TEXT DEFAULT '',
+                notes        TEXT DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS talent_auth_tokens (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                email               TEXT NOT NULL,
+                magic_token         TEXT UNIQUE NOT NULL,
+                session_token       TEXT UNIQUE,
+                created_at          TEXT NOT NULL,
+                magic_expires_at    TEXT NOT NULL,
+                session_expires_at  TEXT,
+                magic_used_at       TEXT,
+                request_id          INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_tat_magic   ON talent_auth_tokens(magic_token);
+            CREATE INDEX IF NOT EXISTS idx_tat_session ON talent_auth_tokens(session_token);
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as _e:
+        logging.getLogger("bridge.api").warning("_ensure_talent_auth_tables 실패: %s", _e)
+
+
+try:
+    _ensure_talent_auth_tables()
 except Exception:
     pass
 
