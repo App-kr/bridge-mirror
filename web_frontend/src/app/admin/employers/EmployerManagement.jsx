@@ -250,6 +250,7 @@ function mapJobsV2(r) {
   const status = _STATUS_MAP[statusRaw] || statusRaw;
   return {
     brjId:       r.brj_id || "",
+    dbId:        r.id || 0,
     jNumber:     jnum,
     region:      regionKo,
     city:        cityKo,
@@ -286,6 +287,7 @@ function mapApiItem(it) {
   const emails = Array.isArray(it.emails) ? it.emails : [it.email].filter(Boolean);
   const tags = Array.isArray(it.tags) ? it.tags : [];
   return {
+    dbId: it.dbId || it.id || 0,
     brjId: it.brjId || it.brj_id || "",
     jNumber: it.jNumber || "",
     region: it.region || "",
@@ -433,7 +435,7 @@ const ColorPalette=({onSelect,onClose,colors})=>(
 );
 
 // ─── 메일 팝업 ───────────────────────────────────────────
-const MailComposer=({recipients:initRecipients,onClose})=>{
+const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName})=>{
   const[tplId,setTplId]=useState("intro");
   const[sender,setSender]=useState(SENDERS[0]);
   const[subject,setSubject]=useState(TEMPLATES[0].subject);
@@ -473,8 +475,8 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
   const BG=["#ffffff","#f8f8f8","#fff3cd","#d1ecf1","#d4edda","#f8d7da","#e2e3e5","#cce5ff","#fef3c7","#dbeafe","#ede9fe","#fce7f3"];
 
   const allRecipientEmails=useMemo(()=>{
-    const fromList=localRecipients.flatMap(r=>r.emails.filter(e=>e.trim()).map(em=>({name:r.name,email:em})));
-    const extras=extraEmails.filter(e=>e.trim()).map(e=>({name:e.split("@")[0],email:e}));
+    const fromList=localRecipients.flatMap(r=>r.emails.filter(e=>e.trim()).map(em=>({name:r.name,email:em,dbId:r.dbId||0})));
+    const extras=extraEmails.filter(e=>e.trim()).map(e=>({name:e.split("@")[0],email:e,dbId:0}));
     return [...fromList,...extras];
   },[localRecipients,extraEmails]);
   const totalEmails=allRecipientEmails.length;
@@ -505,7 +507,9 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
     for(const r of allRecipientEmails.slice(0,99)){
       try{
         const body=html.replace(/\{\{name\}\}/g,r.name||"").replace(/\{\{region\}\}/g,"").replace(/\{\{city\}\}/g,"").replace(/\{\{teachingAge\}\}/g,"");
-        const res=await fetch(`${API_BASE}/api/send-mail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({from:sender,to:r.email,subject,html:body})});
+        const payload={from:sender,to:r.email,subject,html:body};
+        if(candidateId&&r.dbId){payload.candidate_id=candidateId;payload.employer_job_id=r.dbId;payload.employer_name=r.name||"";}
+        const res=await fetch(`${API_BASE}/api/send-mail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         res.ok?ok++:fail++;
       }catch{fail++;}
     }
@@ -530,6 +534,7 @@ const MailComposer=({recipients:initRecipients,onClose})=>{
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:"1.05rem",fontWeight:800}}>✉ 메일쓰기</span>
             <span style={{fontSize:"0.8rem",color:"#888"}}>{totalEmails}건 개별발송</span>
+            {candidateId&&<span style={{fontSize:"0.72rem",color:"#f59e0b",fontWeight:700,background:"#fffbeb",padding:"2px 8px",borderRadius:6,border:"1px solid #fde68a"}}>후보자: {candidateName||candidateId}</span>}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
@@ -719,7 +724,7 @@ const SmallBtn=({onClick,color,children})=>(
   <button onClick={onClick} style={{padding:"2px 9px",borderRadius:4,border:`1px solid ${color||"#ccc"}`,background:"#fff",fontSize:"0.72rem",cursor:"pointer",color:color||"#555",fontWeight:600,whiteSpace:"nowrap"}}>{children}</button>
 );
 
-const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBody,onMailTo})=>{
+const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBody,onMailTo,matchInfo})=>{
   const[editRaw,setEditRaw]=useState(false);
   const[tmpRaw,setTmpRaw]=useState(item.rawText);
   const[editMemo,setEditMemo]=useState(false);
@@ -759,8 +764,9 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
   };
 
   return(
-    <div style={{marginBottom:0,padding:"20px 24px 22px",background:isHighlighted?"#fffde7":"#fff",borderRadius:0,boxShadow:"none",borderBottom:"none",boxShadow:"none",position:"relative",borderLeft:item.blacklist?"4px solid #dc2626":isNewBlink?"4px solid #fecaca":"4px solid #e5e5e5",outline:isHighlighted?"2px solid #fbbf24":"none",outlineOffset:0,animation:isNewBlink?"newBarBlink 1s ease-in-out infinite":undefined}}>
+    <div style={{marginBottom:0,padding:"20px 24px 22px",background:isHighlighted?"#fffde7":matchInfo?.score===2?"#f0fdf4":matchInfo?.score===1?"#fffbeb":"#fff",borderRadius:0,boxShadow:"none",borderBottom:"none",position:"relative",borderLeft:item.blacklist?"4px solid #dc2626":matchInfo?.score===2?"4px solid #16a34a":matchInfo?.score===1?"4px solid #f59e0b":isNewBlink?"4px solid #fecaca":"4px solid #e5e5e5",outline:isHighlighted?"2px solid #fbbf24":"none",outlineOffset:0,animation:isNewBlink?"newBarBlink 1s ease-in-out infinite":undefined}}>
       {item.blacklist&&<div style={{position:"absolute",inset:0,background:"rgba(220,38,38,0.05)",pointerEvents:"none"}}/>}
+      {matchInfo?.sent&&<span style={{position:"absolute",top:10,left:10,background:"#dbeafe",color:"#1d4ed8",fontSize:"0.65rem",fontWeight:700,padding:"2px 8px",borderRadius:8,zIndex:2}}>발송완료</span>}
       {isNewBlink&&<button onClick={()=>onConfirm(item.jNumber)} style={{position:"absolute",top:10,right:10,background:"#fee2e2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:6,padding:"6px 16px",fontSize:"0.82rem",fontWeight:700,cursor:"pointer",animation:"blink 1s step-end infinite",zIndex:2}}>★ NEW — 확인</button>}
 
       {/* 헤더: 태그 + 컨트롤 버튼 (번호·업체명은 INFO에서 표시) */}
@@ -971,7 +977,7 @@ const XCell=({value,onChange,multiline,style:st,selected,onSelect})=>{
   );
 };
 
-const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,searchQ,filtered,confirm:confirmNew,onMailTo,exFl,setExFl})=>{
+const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,searchQ,filtered,confirm:confirmNew,onMailTo,exFl,setExFl,matchScores})=>{
   const[cols,setCols]=useState(EXCEL_COLS_DEF.map(c=>({...c})));
   const[sortKey,setSortKey]=useState(null);
   const[sortDir,setSortDir]=useState("asc");
@@ -1234,9 +1240,10 @@ const ExcelView=({data,onUpdate,onAddRow,onDelRows,onMoveRow,checked,setChecked,
               const isChk=checked.has(item.jNumber);
               const isHl=searchQ&&(item.rawText?.toLowerCase().includes(searchQ.toLowerCase())||item.name?.toLowerCase().includes(searchQ.toLowerCase())||item.jNumber?.toLowerCase().includes(searchQ.toLowerCase()));
               const isSelRow=selRow===ri;
-              const rowBg=isBL?"rgba(220,38,38,0.05)":isSelRow?"#dbeafe":isChk?"#fef9c3":isHl?"#fffde7":"#fff";
+              const mInfo=matchScores&&item.dbId?matchScores[item.dbId]:null;
+              const rowBg=isBL?"rgba(220,38,38,0.05)":isSelRow?"#dbeafe":isChk?"#fef9c3":isHl?"#fffde7":mInfo?.score===2?"#f0fdf4":mInfo?.score===1?"#fffbeb":"#fff";
               return(
-                <tr key={item.jNumber} style={{background:rowBg,height:rowHeights[ri]||32,maxHeight:rowHeights[ri]||32,overflow:"hidden"}}>
+                <tr key={item.jNumber} style={{background:rowBg,height:rowHeights[ri]||32,maxHeight:rowHeights[ri]||32,overflow:"hidden",borderLeft:mInfo?.score===2?"3px solid #16a34a":mInfo?.score===1?"3px solid #f59e0b":undefined}}>
                   {/* 행 번호 + 높이 조절 핸들 */}
                   <td onClick={()=>{setSelRow(isSelRow?null:ri);setSelCol(null);setSelCell(null);}}
                     style={{width:44,padding:"2px 4px",textAlign:"center",fontWeight:600,fontSize:"0.72rem",
@@ -1439,6 +1446,10 @@ export default function EmployerManagement(){
   const[mailTarget,setMailTarget]=useState(null);
   const[exFl,setExFl]=useState({});
   const[checked,setChecked]=useState(new Set());
+  const[selectedCandidate,setSelectedCandidate]=useState(null);
+  const[candidateList,setCandidateList]=useState([]);
+  const[matchScores,setMatchScores]=useState({});
+  const[loadingMatch,setLoadingMatch]=useState(false);
   const[sortKey,setSortKey]=useState("");
   const[sortDir,setSortDir]=useState("asc");
   const[boardTitle,setBoardTitle]=useState("BRIDGE — 구인자 채용공고");
@@ -1460,6 +1471,34 @@ export default function EmployerManagement(){
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
+  },[]);
+
+  // 후보자 목록 로드 (마운트 시)
+  useEffect(()=>{
+    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    if(!adminKey)return;
+    fetch(`${API_BASE}/api/admin/candidates/brief`,{headers:{"Content-Type":"application/json","x-admin-key":adminKey}})
+      .then(r=>r.json()).then(b=>{if(Array.isArray(b?.data))setCandidateList(b.data);}).catch(()=>{});
+  },[]);
+
+  // 후보자 선택 시 매칭 점수 로드
+  const selectCandidate=useCallback(async(candId)=>{
+    if(!candId){setSelectedCandidate(null);setMatchScores({});return;}
+    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    if(!adminKey)return;
+    setLoadingMatch(true);
+    try{
+      const res=await fetch(`${API_BASE}/api/admin/matching/employers?candidate_id=${encodeURIComponent(candId)}`,{headers:{"Content-Type":"application/json","x-admin-key":adminKey}});
+      if(!res.ok)throw new Error(`HTTP ${res.status}`);
+      const body=await res.json();
+      const d=body?.data||{};
+      setSelectedCandidate({id:candId,...(d.candidate||{})});
+      const map={};
+      for(const emp of(d.matched||[])){map[emp.id]={score:emp._match_score,region:emp._region_match,target:emp._target_match,sent:emp._already_sent};}
+      for(const emp of(d.unmatched||[])){map[emp.id]={score:0,region:false,target:false,sent:emp._already_sent};}
+      setMatchScores(map);
+    }catch(e){console.error("[matching] load failed:",e);}
+    finally{setLoadingMatch(false);}
   },[]);
 
   // 검색어 디바운스 (300ms)
@@ -1650,6 +1689,22 @@ export default function EmployerManagement(){
           <button onClick={saveData} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#7c3aed",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>💾 저장</button>
           <button onClick={addNew} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>+ 새접수</button>
 
+          <div style={{width:1,height:20,background:"#e5e7eb"}}/>
+
+          {/* 후보자 매칭 드롭다운 */}
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <select
+              value={selectedCandidate?.id||""}
+              onChange={e=>selectCandidate(e.target.value||null)}
+              style={{padding:"4px 8px",border:"1px solid",borderColor:selectedCandidate?"#f59e0b":"#d1d5db",borderRadius:5,fontSize:"0.76rem",background:selectedCandidate?"#fffbeb":"#fff",cursor:"pointer",maxWidth:200}}
+            >
+              <option value="">후보자 매칭...</option>
+              {candidateList.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.full_name} ({c.nationality||""})</option>)}
+            </select>
+            {selectedCandidate&&<button onClick={()=>{setSelectedCandidate(null);setMatchScores({});}} style={{padding:"2px 6px",borderRadius:4,border:"1px solid #d1d5db",background:"#fff",fontSize:"0.68rem",cursor:"pointer",color:"#888"}}>X</button>}
+            {loadingMatch&&<span style={{fontSize:"0.68rem",color:"#f59e0b",fontWeight:600}}>매칭중...</span>}
+          </div>
+
           {/* 필터바 — 워드뷰에서만 */}
           {mode==="doc"&&<>
             <div style={{width:1,height:20,background:"#e5e7eb"}}/>
@@ -1682,7 +1737,7 @@ export default function EmployerManagement(){
 
                 {filtered.slice(0,displayLimit).map((item,i)=>(
                   <div key={item.jNumber||i} style={{padding:"0 24px"}}>
-                    <DocBlock item={item} onConfirm={confirm} onUpdate={updateItem} onMove={moveItem} searchQ={searchQ} fontInfo={fontInfo} fontMemo={fontMemo} fontBody={fontBody} onMailTo={it=>{setMailTarget(it);setMailPopup(true);}}/>
+                    <DocBlock item={item} onConfirm={confirm} onUpdate={updateItem} onMove={moveItem} searchQ={searchQ} fontInfo={fontInfo} fontMemo={fontMemo} fontBody={fontBody} onMailTo={it=>{setMailTarget(it);setMailPopup(true);}} matchInfo={selectedCandidate&&item.dbId?matchScores[item.dbId]:null}/>
                     {i<Math.min(filtered.length,displayLimit)-1&&(
                       <div style={{margin:"0 -24px",height:8,background:"linear-gradient(to bottom,#6b7280,#d1d5db)",boxShadow:"0 2px 4px rgba(0,0,0,0.10)"}}/>
                     )}
@@ -1712,14 +1767,17 @@ export default function EmployerManagement(){
               onMailTo={it=>{setMailTarget(it);setMailPopup(true);}}
               exFl={exFl}
               setExFl={setExFl}
+              matchScores={selectedCandidate?matchScores:null}
             />
           )}
         </div>
 
       {showColMgr&&<ColMgr cols={cols} setCols={setCols} onClose={()=>setShowColMgr(false)}/>}
       {mailPopup&&<MailComposer
-        recipients={mailTarget?[{name:mailTarget.name,email:mailTarget.email,emails:mailTarget.emails||[mailTarget.email],region:mailTarget.region,city:mailTarget.city,teachingAge:mailTarget.teachingAge}]:checkedRecipients}
+        recipients={mailTarget?[{name:mailTarget.name,email:mailTarget.email,emails:mailTarget.emails||[mailTarget.email],region:mailTarget.region,city:mailTarget.city,teachingAge:mailTarget.teachingAge,dbId:mailTarget.dbId}]:checkedRecipients}
         onClose={()=>{setMailPopup(false);setMailTarget(null);}}
+        candidateId={selectedCandidate?.id||null}
+        candidateName={selectedCandidate?.full_name||""}
       />}
     </div>
   );

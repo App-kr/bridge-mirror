@@ -1295,8 +1295,48 @@
       "git": "49e691e2",
       "files": 2183,
       "db_hash": "05ea0477bbdf"
+    },
+    {
+      "dir": "20260406_112625__per-bundle-file-cards",
+      "task": "per-bundle-file-cards",
+      "ts": "2026.04.06 11:27:07",
+      "git": "fb9a0d0e",
+      "files": 2187,
+      "db_hash": "fc67afaa9467"
+    },
+    {
+      "dir": "20260406_112724__per-bundle-file-cards",
+      "task": "per-bundle-file-cards",
+      "ts": "2026.04.06 11:27:32",
+      "git": "fb9a0d0e",
+      "files": 2187,
+      "db_hash": "fc67afaa9467"
+    },
+    {
+      "dir": "20260406_121540__card-dnd-visual-fix",
+      "task": "card-dnd-visual-fix",
+      "ts": "2026.04.06 12:15:47",
+      "git": "7ed6959f",
+      "files": 2186,
+      "db_hash": "fc67afaa9467"
+    },
+    {
+      "dir": "20260406_122317__profile_sends연동+매칭필터",
+      "task": "profile_sends연동+매칭필터",
+      "ts": "2026.04.06 12:23:34",
+      "git": "1ca7367e",
+      "files": 2186,
+      "db_hash": "fc67afaa9467"
+    },
+    {
+      "dir": "20260406_122530__profile_sends_matching",
+      "task": "profile_sends_matching",
+      "ts": "2026.04.06 12:25:39",
+      "git": "1ca7367e",
+      "files": 2187,
+      "db_hash": "fc67afaa9467"
     }
   ],
-  "last_backup": "2026.04.06 09:00:16",
-  "total_count": 162
+  "last_backup": "2026.04.06 12:25:39",
+  "total_count": 167
 }

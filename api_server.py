@@ -2323,6 +2323,32 @@ async def admin_candidates(
         err("지원자 목록을 불러올 수 없습니다.", 500)
 
 
+@app.get("/api/admin/candidates/brief", tags=["admin"])
+async def admin_candidates_brief(request: Request):
+    """후보자 경량 목록 — 드롭다운용 (4필드만)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT candidate_id, full_name, nationality, status FROM candidates WHERE status != 'Deleted' ORDER BY candidate_id DESC"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d = _decrypt_row(d)
+            result.append({
+                "candidate_id": d.get("candidate_id", ""),
+                "full_name": d.get("full_name", ""),
+                "nationality": d.get("nationality", ""),
+                "status": d.get("status", ""),
+            })
+        return ok(data=result)
+    finally:
+        conn.close()
+
+
 @app.get("/api/admin/candidates/export", tags=["admin"])
 async def admin_export_candidates(request: Request, format: str = "csv"):
     """후보자 전체 내보내기 (CSV / XLSX). PII 복호화 포함."""
@@ -3958,7 +3984,7 @@ def _match_target(target: str, target_age: str, teaching_age: str) -> bool:
 
 @app.get("/api/admin/matching/employers", tags=["admin"])
 async def admin_matching_employers(request: Request, candidate_id: str):
-    """후보자 지역/대상 기반 employer 매칭 목록."""
+    """후보자 지역/대상 기반 employer 매칭 목록 (jobs 테이블 기반)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -3976,9 +4002,11 @@ async def admin_matching_employers(request: Request, candidate_id: str):
         target = cand.get("target", "") or ""
         target_age = cand.get("target_age", "") or ""
 
-        # 모든 employer (client_inquiries) 조회 — email 있는 것만
+        # jobs 테이블 조회 — 삭제 안 된 것만
         employers = conn.execute(
-            "SELECT * FROM client_inquiries WHERE email IS NOT NULL AND email != '' ORDER BY id DESC"
+            "SELECT id, brj_id, job_code, region, location, city, "
+            "employer_display_name, teaching_age, salary_raw, status, created_at "
+            "FROM jobs WHERE is_deleted = 0 ORDER BY id DESC"
         ).fetchall()
 
         # 이미 발송된 기록 조회
@@ -4001,7 +4029,6 @@ async def admin_matching_employers(request: Request, candidate_id: str):
             emp_d["_target_match"] = target_ok
             emp_d["_already_sent"] = emp_d["id"] in sent_ids
 
-            # 매칭 점수: region+target=2, region만=1, target만=1, 없음=0
             score = int(region_ok) + int(target_ok)
             emp_d["_match_score"] = score
 
@@ -4010,8 +4037,7 @@ async def admin_matching_employers(request: Request, candidate_id: str):
             else:
                 unmatched.append(emp_d)
 
-        # 점수순 정렬 (높은 것 먼저)
-        matched.sort(key=lambda x: (-x["_match_score"], x.get("school_name", "") or ""))
+        matched.sort(key=lambda x: (-x["_match_score"], x.get("employer_display_name", "") or ""))
 
         return ok(data={
             "candidate": {
@@ -9624,6 +9650,23 @@ async def send_mail_single(request: Request):
         server.login(cfg["user"], cfg["password"])
         server.sendmail(cfg["user"], [to_email], msg.as_string())
         server.quit()
+
+        # profile_sends 선택적 기록 (candidate_id + employer_job_id 둘 다 있을 때만)
+        ps_candidate = data.get("candidate_id", "")
+        ps_job_id = data.get("employer_job_id")
+        ps_employer_name = data.get("employer_name", "")
+        if ps_candidate and ps_job_id:
+            try:
+                ps_conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+                ps_conn.execute("PRAGMA busy_timeout = 5000")
+                ps_conn.execute(
+                    "INSERT INTO profile_sends (candidate_id, employer_id, school_name, to_email, status) VALUES (?, ?, ?, ?, ?)",
+                    (str(ps_candidate), int(ps_job_id), ps_employer_name, to_email, "sent"),
+                )
+                ps_conn.commit()
+                ps_conn.close()
+            except Exception as ps_exc:
+                logging.getLogger("bridge.api").warning("send-mail profile_sends 기록 실패: %s", ps_exc)
 
         return {"ok": True, "to": to_email}
     except smtplib.SMTPAuthenticationError:

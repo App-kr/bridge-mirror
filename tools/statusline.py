@@ -1,80 +1,160 @@
 #!/usr/bin/env python3
 """
-BRIDGE Global StatusLine v1.1
+BRIDGE Global StatusLine v2.1
 Q:\Claudework\bridge base\tools\statusline.py
+
+ccusage statusline에 올바른 JSON stdin을 구성하여 파이프하는 방식.
+Claude Code settings.json → statusLine.command 로 호출됨.
 """
-import subprocess, json, re, sys
+import subprocess, json, re, sys, os, time
 from pathlib import Path
 
-def get_ccusage():
+PROJECTS_DIR = Path(os.environ.get("USERPROFILE", r"C:\Users\Scarlett")) / ".claude" / "projects"
+NPX = r"Q:\Code\Node\npx.cmd"
+# 최근 1시간 이내 수정된 파일만 대상 (오래된 세션 제외)
+MAX_AGE_SEC = 3600
+
+
+def find_session():
+    """최근 수정된 JSONL 세션 파일 중 50KB 이상(메인 대화)을 찾는다."""
+    if not PROJECTS_DIR.exists():
+        return None, None
+
+    now = time.time()
+    best_file, best_dir, best_mtime = None, None, 0
+
+    for pdir in PROJECTS_DIR.iterdir():
+        if not pdir.is_dir():
+            continue
+        for jf in pdir.glob("*.jsonl"):
+            try:
+                st = jf.stat()
+            except OSError:
+                continue
+            # 50KB 미만은 서브에이전트 → 스킵
+            if st.st_size < 50_000:
+                continue
+            # 최근 1시간 이내만
+            if (now - st.st_mtime) > MAX_AGE_SEC:
+                continue
+            if st.st_mtime > best_mtime:
+                best_mtime = st.st_mtime
+                best_file = jf
+                best_dir = pdir
+
+    # 폴백: 시간 제한 없이 가장 최근 파일
+    if not best_file:
+        for pdir in PROJECTS_DIR.iterdir():
+            if not pdir.is_dir():
+                continue
+            for jf in pdir.glob("*.jsonl"):
+                try:
+                    st = jf.stat()
+                except OSError:
+                    continue
+                if st.st_size < 50_000:
+                    continue
+                if st.st_mtime > best_mtime:
+                    best_mtime = st.st_mtime
+                    best_file = jf
+                    best_dir = pdir
+
+    return best_file, best_dir
+
+
+def read_model_from_jsonl(jsonl_path: Path) -> str:
+    """JSONL 마지막 부분에서 모델 ID를 읽는다."""
+    try:
+        with open(jsonl_path, "r", encoding="utf-8") as f:
+            f.seek(0, 2)
+            fsize = f.tell()
+            f.seek(max(0, fsize - 50_000))
+            chunk = f.read()
+        for line in reversed(chunk.strip().split("\n")[-10:]):
+            try:
+                entry = json.loads(line)
+                model = entry.get("message", {}).get("model", "")
+                if model:
+                    return model
+            except (json.JSONDecodeError, AttributeError):
+                continue
+    except Exception:
+        pass
+    return "claude-opus-4-6"
+
+
+def model_display_name(model_id: str) -> str:
+    if "opus" in model_id:
+        return "Opus 4.6"
+    if "sonnet" in model_id:
+        return "Sonnet 4.6"
+    if "haiku" in model_id:
+        return "Haiku 4.5"
+    return model_id
+
+
+def call_ccusage(jsonl_path: Path, project_dir: Path, model_id: str) -> str:
+    """ccusage statusline 호출. cwd=JSONL디렉토리, encoding=utf-8."""
+    display = model_display_name(model_id)
+    input_json = json.dumps({
+        "session_id": jsonl_path.stem,
+        "transcript_path": jsonl_path.name,
+        "cwd": "Q:\\",
+        "model": {"id": model_id, "display_name": display},
+        "workspace": {"path": "Q:\\", "current_dir": "Q:\\", "project_dir": "Q:\\"},
+    })
     try:
         r = subprocess.run(
-            ["npx", "ccusage", "statusline", "--offline"],
-            capture_output=True, text=True, timeout=4
+            [NPX, "ccusage", "statusline", "--no-color"],
+            input=input_json,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            cwd=str(project_dir),
         )
         return r.stdout.strip()
     except Exception:
         return ""
 
-def parse_ccusage(line: str):
-    model, ctx_pct, ctx_num = "", "", ""
-    for part in line.split("|"):
-        p = part.strip()
-        if any(x in p for x in ["Opus","Sonnet","Haiku"]):
-            model = re.sub(r'[🤖💰🔥🧠]','', p).strip()
-        if "%" in p and ("🧠" in p or "," in p):
-            ctx_pct = p
-            m = re.search(r'\((\d+)%\)', p)
-            if m:
-                ctx_num = int(m.group(1))
-    return model, ctx_pct, ctx_num
 
-def recommend(pct, model: str) -> str:
-    if not isinstance(pct, int):
+def parse_context_pct(line: str):
+    """ccusage 출력에서 컨텍스트 사용률(%) 추출."""
+    m = re.search(r"\((\d+)%\)", line)
+    return int(m.group(1)) if m else None
+
+
+def recommend(pct, display: str) -> str:
+    if pct is None:
         return ""
-    # Opus 쓰는데 40% 미만 → Sonnet으로 비용 절감 가능
-    if pct < 40 and "Opus" in model:
+    if pct < 40 and "Opus" in display:
         return "💡Sonnet추천"
-    # 40~70%: 정상
     if pct < 70:
         return ""
-    # 70~85%: compact 권고
     if pct < 85:
         return "⚠️/compact"
-    # 85%+: 새 세션
     return "🚨새세션"
 
-def get_task() -> str:
-    ws = Path(r"Q:\Claudework\bridge base\.claude\WORKSTATE.json")
-    if not ws.exists():
-        return ""
-    try:
-        data = json.loads(ws.read_text(encoding="utf-8"))
-        data.pop("_sig", None)
-        wip = [t for t in data.get("tasks", []) if t.get("status") == "in_progress"]
-        if wip:
-            t = wip[0]
-            return f"{t['id']} {t.get('title','')[:20]}"
-    except Exception:
-        pass
-    return ""
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    raw     = get_ccusage()
-    model, ctx_pct, ctx_num = parse_ccusage(raw)
-    rec     = recommend(ctx_num, model)
-    task    = get_task()
 
-    parts = []
-    parts.append(f"🤖 {model or 'Opus 4.6'}")
-    if ctx_pct:
-        parts.append(f"🧠 {ctx_pct}")
-    if rec:
-        parts.append(rec)
-    parts.append(f"📋 {task}" if task else "📋 대기중")
+    jsonl_path, project_dir = find_session()
+    if not jsonl_path:
+        print("🤖 ? | 세션없음")
+        return
 
-    print(" | ".join(parts))
+    model_id = read_model_from_jsonl(jsonl_path)
+    display = model_display_name(model_id)
+    raw = call_ccusage(jsonl_path, project_dir, model_id)
+
+    if raw:
+        pct = parse_context_pct(raw)
+        rec = recommend(pct, display)
+        print(f"{raw} | {rec}" if rec else raw)
+    else:
+        print(f"🤖 {display} | 🧠 데이터없음")
+
 
 if __name__ == "__main__":
     main()
