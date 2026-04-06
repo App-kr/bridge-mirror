@@ -1355,6 +1355,362 @@ async def public_talents(
     return ok(data=result)
 
 
+# ── 인재 게시판 인증 API ─────────────────────────────────────────────────────────
+
+import secrets as _secrets
+
+_MAGIC_TTL = 900           # 15분 (magic link 유효시간)
+_SESSION_TTL = 86400 * 30  # 30일 (세션 쿠키)
+
+
+def _ensure_talent_auth_tables():
+    """talent auth 테이블 마이그레이션."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS talent_auth_requests (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                email        TEXT NOT NULL,
+                company_name TEXT DEFAULT '',
+                requested_at TEXT NOT NULL,
+                status       TEXT DEFAULT 'pending',
+                sent_at      TEXT,
+                ip_hash      TEXT DEFAULT '',
+                notes        TEXT DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS talent_auth_tokens (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                email               TEXT NOT NULL,
+                magic_token         TEXT UNIQUE NOT NULL,
+                session_token       TEXT UNIQUE,
+                created_at          TEXT NOT NULL,
+                magic_expires_at    TEXT NOT NULL,
+                session_expires_at  TEXT,
+                magic_used_at       TEXT,
+                request_id          INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_tat_magic   ON talent_auth_tokens(magic_token);
+            CREATE INDEX IF NOT EXISTS idx_tat_session ON talent_auth_tokens(session_token);
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as _e:
+        logging.getLogger("bridge.api").warning("_ensure_talent_auth_tables 실패: %s", _e)
+
+
+try:
+    _ensure_talent_auth_tables()
+except Exception:
+    pass
+
+
+class _TalentAuthRequest(BaseModel):
+    email: str
+    company_name: str = ""
+
+
+@app.post("/api/public/talent-auth/request", status_code=200, tags=["talent-auth"])
+async def talent_auth_request(request: Request, body: _TalentAuthRequest):
+    """
+    인재 게시판 접근 요청 접수.
+    즉시 발송하지 않고 BRIDGE 담당자 검토 후 발송.
+    """
+    import re as _re
+    if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', body.email.strip()):
+        raise HTTPException(400, "올바른 이메일 주소를 입력해주세요.")
+
+    ip_h = _ip_hash(request)
+    now_str = datetime.utcnow().isoformat()
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        existing = conn.execute(
+            "SELECT id, status FROM talent_auth_requests WHERE email=? ORDER BY id DESC LIMIT 1",
+            (body.email.strip(),)
+        ).fetchone()
+        if existing and existing[1] == 'pending':
+            return ok(message="이미 접수된 요청이 있습니다. 담당자 확인 후 이메일로 링크를 보내드립니다.")
+
+        conn.execute(
+            """INSERT INTO talent_auth_requests (email, company_name, requested_at, status, ip_hash)
+               VALUES (?,?,?,?,?)""",
+            (body.email.strip(), body.company_name.strip(), now_str, 'pending', ip_h)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    try:
+        import threading
+        _email_hint = body.email.split("@")[0][:3] + "***@" + body.email.split("@")[-1]
+
+        def _notify():
+            try:
+                from tg_notify import send_telegram
+                send_telegram(
+                    f"[인재게시판] 새 접근 요청\n"
+                    f"이메일: {_email_hint}\n"
+                    f"업체: {body.company_name or '미입력'}\n"
+                    f"→ /admin/talent-auth 에서 링크 발송"
+                )
+            except Exception:
+                pass
+        threading.Thread(target=_notify, daemon=True).start()
+    except Exception:
+        pass
+
+    return ok(message="요청이 접수되었습니다. 담당자 확인 후 이메일로 링크를 보내드립니다.")
+
+
+@app.post("/api/public/talent-auth/verify-token", tags=["talent-auth"])
+async def talent_auth_verify_token(request: Request):
+    """매직 링크 토큰 검증 → 30일 세션 토큰 반환. Next.js route handler가 호출."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    magic_token = (body.get("token") or "").strip()
+    if not magic_token:
+        raise HTTPException(400, "토큰이 없습니다.")
+
+    now = datetime.utcnow()
+    now_str = now.isoformat()
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM talent_auth_tokens WHERE magic_token=?",
+            (magic_token,)
+        ).fetchone()
+
+        if not row:
+            logging.getLogger("bridge.api").warning("talent_auth: 존재하지 않는 토큰 시도")
+            raise HTTPException(404, "유효하지 않은 링크입니다.")
+
+        if row["magic_used_at"]:
+            raise HTTPException(410, "이미 사용된 링크입니다. 새 링크를 요청해주세요.")
+
+        expires_at = datetime.fromisoformat(row["magic_expires_at"])
+        if now > expires_at:
+            raise HTTPException(410, "링크가 만료되었습니다 (15분). 새 링크를 요청해주세요.")
+
+        session_token = _secrets.token_urlsafe(32)
+        session_expires = (now + timedelta(seconds=_SESSION_TTL)).isoformat()
+
+        conn.execute(
+            """UPDATE talent_auth_tokens
+               SET magic_used_at=?, session_token=?, session_expires_at=?
+               WHERE id=?""",
+            (now_str, session_token, session_expires, row["id"])
+        )
+        if row["request_id"]:
+            conn.execute(
+                "UPDATE talent_auth_requests SET status='approved' WHERE id=?",
+                (row["request_id"],)
+            )
+        conn.commit()
+
+        return ok(data={
+            "session_token": session_token,
+            "email": row["email"],
+            "expires_at": session_expires,
+        })
+    finally:
+        conn.close()
+
+
+@app.post("/api/public/talent-auth/check-session", tags=["talent-auth"])
+async def talent_auth_check_session(request: Request):
+    """세션 토큰 유효성 확인. Next.js route handler가 호출."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    session_token = (body.get("session_token") or "").strip()
+    if not session_token:
+        return ok(data={"valid": False})
+
+    now = datetime.utcnow()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT email, session_expires_at FROM talent_auth_tokens WHERE session_token=?",
+            (session_token,)
+        ).fetchone()
+
+        if not row or not row["session_expires_at"]:
+            return ok(data={"valid": False})
+
+        expires_at = datetime.fromisoformat(row["session_expires_at"])
+        if now > expires_at:
+            return ok(data={"valid": False})
+
+        return ok(data={"valid": True, "email": row["email"]})
+    finally:
+        conn.close()
+
+
+# ── 어드민: 인재게시판 접근 요청 관리 ──────────────────────────────────────────
+
+@app.get("/api/admin/talent-auth/requests", tags=["talent-auth-admin"])
+async def admin_talent_auth_requests(request: Request):
+    """인재게시판 접근 요청 목록 (담당자용)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """SELECT id, email, company_name, requested_at, status, sent_at, notes
+               FROM talent_auth_requests ORDER BY id DESC LIMIT 200"""
+        ).fetchall()
+        return ok(data=[dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+def _talent_send_magic_link(email: str, request_id=None) -> str:
+    """매직 토큰 생성 + 이메일 발송. 발송된 링크 URL 반환."""
+    now = datetime.utcnow()
+    magic_token = _secrets.token_urlsafe(32)
+    magic_expires = (now + timedelta(seconds=_MAGIC_TTL)).isoformat()
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            """INSERT INTO talent_auth_tokens
+               (email, magic_token, created_at, magic_expires_at, request_id)
+               VALUES (?,?,?,?,?)""",
+            (email, magic_token, now.isoformat(), magic_expires, request_id)
+        )
+        if request_id:
+            conn.execute(
+                "UPDATE talent_auth_requests SET status='sent', sent_at=? WHERE id=?",
+                (now.isoformat(), request_id)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    frontend_url = os.getenv("FRONTEND_URL", "https://bridgejob.co.kr")
+    link = f"{frontend_url}/talents/auth?token={magic_token}"
+
+    html = f"""
+<div style="font-family:-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff">
+  <div style="text-align:center;margin-bottom:28px">
+    <span style="font-size:26px;font-weight:800;letter-spacing:-0.5px">BRIDGE</span>
+    <span style="display:block;color:#6B7280;font-size:13px;margin-top:4px">Teacher Board</span>
+  </div>
+  <p style="color:#374151;font-size:15px;line-height:1.7;margin-bottom:28px">
+    BRIDGE 강사 게시판 접속 링크입니다.<br>
+    아래 버튼을 클릭하면 강사 프로필을 확인하실 수 있습니다.<br>
+    <strong>링크는 15분 동안 유효합니다.</strong>
+  </p>
+  <div style="text-align:center;margin-bottom:28px">
+    <a href="{link}"
+       style="display:inline-block;padding:14px 40px;background:#111;color:#fff;
+              border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">
+      강사 게시판 접속하기
+    </a>
+  </div>
+  <p style="font-size:12px;color:#9CA3AF;word-break:break-all">
+    버튼이 작동하지 않으면 아래 URL을 복사하세요:<br>
+    <a href="{link}" style="color:#6366F1">{link}</a>
+  </p>
+  <hr style="margin:24px 0;border:none;border-top:1px solid #F3F4F6">
+  <p style="font-size:11px;color:#D1D5DB;text-align:center">
+    본 메일은 BRIDGE 담당자가 발송했습니다 · bridgejob.co.kr
+  </p>
+</div>
+"""
+    sent = _smtp_send(email, "[BRIDGE] 강사 게시판 접속 링크", html)
+    if not sent:
+        raise RuntimeError("SMTP 발송 실패")
+    return link
+
+
+class _SendLinkByIdBody(BaseModel):
+    request_id: int
+
+
+@app.post("/api/admin/talent-auth/send-link", tags=["talent-auth-admin"])
+async def admin_talent_auth_send_link(request: Request, body: _SendLinkByIdBody):
+    """요청 ID로 매직 링크 생성 및 이메일 발송."""
+    _check_admin(request)
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        req_row = conn.execute(
+            "SELECT id, email FROM talent_auth_requests WHERE id=?",
+            (body.request_id,)
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(404, "요청을 찾을 수 없습니다.")
+        email = req_row["email"]
+    finally:
+        conn.close()
+
+    try:
+        _talent_send_magic_link(email, request_id=body.request_id)
+    except RuntimeError as _e:
+        raise HTTPException(500, f"이메일 발송 실패: {_e}")
+
+    return ok(message=f"{email}로 링크를 발송했습니다.")
+
+
+@app.post("/api/admin/talent-auth/send-link-direct", tags=["talent-auth-admin"])
+async def admin_talent_auth_send_direct(request: Request):
+    """이메일 직접 입력으로 매직 링크 발송 (요청 없이도 가능)."""
+    _check_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+
+    email = (body.get("email") or "").strip()
+    import re as _re
+    if not email or not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        raise HTTPException(400, "올바른 이메일 주소를 입력해주세요.")
+
+    try:
+        _talent_send_magic_link(email, request_id=None)
+    except RuntimeError as _e:
+        raise HTTPException(500, f"이메일 발송 실패: {_e}")
+
+    return ok(message=f"{email}로 링크를 발송했습니다.")
+
+
+@app.delete("/api/admin/talent-auth/sessions/{email_enc}", tags=["talent-auth-admin"])
+async def admin_talent_auth_revoke(request: Request, email_enc: str):
+    """이메일로 세션 토큰 전체 취소."""
+    _check_admin(request)
+    from urllib.parse import unquote
+    email = unquote(email_enc)
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute(
+            "UPDATE talent_auth_tokens SET session_token=NULL, session_expires_at=NULL WHERE email=?",
+            (email,)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return ok(message=f"{email} 세션 취소 완료")
+
+
 class _TalentInquiry(BaseModel):
     school_name: str
     email: str
@@ -5492,20 +5848,38 @@ def _ensure_interview_templates():
 
 
 def _ensure_profile_sends_schema():
-    """profile_sends 테이블 생성 (없으면)."""
+    """profile_sends 테이블 생성 + 누락 컬럼 ALTER (없으면)."""
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS profile_sends (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             candidate_id TEXT NOT NULL,
-            employer_id INTEGER NOT NULL,
+            employer_id INTEGER,
             school_name TEXT,
             to_email TEXT,
             status TEXT DEFAULT 'sent',
-            sent_at TEXT DEFAULT (datetime('now'))
+            sent_at TEXT DEFAULT (datetime('now','localtime')),
+            error_msg TEXT
         )
     """)
+    # 스프린트 A: 누락 컬럼 추가 (이미 있으면 무시)
+    _ps_new_cols = [
+        ("candidate_number",  "INTEGER"),
+        ("subject",           "TEXT"),
+        ("template_used",     "TEXT DEFAULT 'profile_broadcast'"),
+        ("sender_email",      "TEXT"),
+        ("attachments",       "TEXT"),
+        ("created_at",        "TEXT"),
+    ]
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(profile_sends)").fetchall()}
+    for col_name, col_def in _ps_new_cols:
+        if col_name not in existing_cols:
+            conn.execute(f"ALTER TABLE profile_sends ADD COLUMN {col_name} {col_def}")
+    # 인덱스
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_candidate ON profile_sends(candidate_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_employer  ON profile_sends(employer_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_sent_at   ON profile_sends(sent_at)")
     conn.commit()
     conn.close()
 
@@ -9324,6 +9698,86 @@ async def send_mail(request: Request):
 @app.post("/api/admin/mail/send-bulk", tags=["admin"])
 async def send_mail_bulk(request: Request):
     return await _handle_mail_send(request)
+
+
+# ─── 발송 이력 (profile_sends) API ───────────────────────────────────────────
+
+@app.post("/api/admin/profile-sends", tags=["admin"])
+async def record_profile_send(request: Request):
+    """메일 발송 성공 시 프론트에서 호출하여 이력 기록."""
+    _check_admin(request)
+    data = await request.json()
+    required = ["candidate_id", "to_email", "subject"]
+    for field in required:
+        if not data.get(field):
+            raise HTTPException(400, f"필수 필드 누락: {field}")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("""
+            INSERT INTO profile_sends
+            (candidate_id, candidate_number, employer_id, school_name,
+             to_email, subject, template_used, sender_email, attachments, status, error_msg)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data["candidate_id"],
+            data.get("candidate_number"),
+            data.get("employer_job_id"),
+            data.get("employer_name", ""),
+            data["to_email"],
+            data["subject"],
+            data.get("template_used", "profile_broadcast"),
+            data.get("sender_email", "bridgejobkr@naver.com"),
+            data.get("attachments", ""),
+            data.get("status", "sent"),
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(message="발송 이력 기록 완료")
+
+
+@app.get("/api/admin/profile-sends", tags=["admin"])
+async def get_profile_sends(request: Request):
+    """발송 이력 목록 — 최근 100건."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT id, candidate_id, candidate_number, school_name AS employer_name,
+                   to_email AS employer_email, subject, template_used, sender_email,
+                   status, sent_at
+            FROM profile_sends
+            ORDER BY sent_at DESC
+            LIMIT 100
+        """).fetchall()
+        return ok(data={"sends": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/profile-sends/check-duplicate", tags=["admin"])
+async def check_duplicate_send(request: Request):
+    """동일 candidate+to_email 조합 24시간 내 발송 여부 확인."""
+    _check_admin(request)
+    candidate_id = request.query_params.get("candidate_id")
+    employer_email = request.query_params.get("employer_email")
+    if not candidate_id or not employer_email:
+        raise HTTPException(400, "candidate_id, employer_email 필수")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        exists = conn.execute("""
+            SELECT COUNT(*) FROM profile_sends
+            WHERE candidate_id = ? AND to_email = ?
+              AND sent_at >= datetime('now','localtime','-24 hours')
+              AND status = 'sent'
+        """, (candidate_id, employer_email)).fetchone()[0]
+        return ok(data={"duplicate": exists > 0, "count": exists})
+    finally:
+        conn.close()
 
 
 # ─── 이메일 블랙리스트 관리 API ──────────────────────────────────────────────
