@@ -1,5 +1,5 @@
 @echo off
-title BRIDGE Resume Converter v3.0
+title BRIDGE Resume Converter v2.1
 chcp 65001 >nul 2>&1
 
 set "PYTHON_EXE=Q:\Phtyon 3\python.exe"
@@ -14,7 +14,7 @@ if not exist "%PYTHON_EXE%" (
 cd /d "%~dp0"
 
 echo ==========================================
-echo   BRIDGE Resume Converter v3.0
+echo   BRIDGE Resume Converter v2.1
 echo ==========================================
 echo.
 
