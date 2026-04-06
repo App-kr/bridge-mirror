@@ -71,7 +71,7 @@ RE_KR_RESIDENTIAL = re.compile(
     r"(?:\d+\s*(?:단지|차|블록|동|호)?[가-힣]?\s*)?"
     r"(?:아파트|빌라|오피스텔|주공|자이|푸르지오|래미안|힐스테이트|더샵|sk뷰|sk view|e편한세상|"
     r"이편한세상|롯데캐슬|브라운스톤|경남아너스빌|포스코더샵|두산위브|대림|현대|삼성|"
-    r"lh|sh|한신|부영|우미|중흥|반도|효성|동원|태영|제일|신동아|진흥|극동|청솔|"
+    r"한신|부영|우미|중흥|반도|효성|동원|태영|제일|신동아|진흥|극동|청솔|"
     r"트리지움|위브|어울림|센트럴|파크|팰리스|아이파크|더리버|하늘채|금호|한라|"
     r"apartment|apt|villa|officetel)",
     re.IGNORECASE,
@@ -333,27 +333,11 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         new_lines.append(line)
     cleaned = "\n".join(new_lines)
 
-    # ── 미국 도시+주 ──────────────────────────────────────────────────────
-    for m in RE_US_CITY_STATE.finditer(cleaned):
-        found.append(PIIMatch(
-            type="address",
-            original_value=m.group(0),
-            position=m.start(),
-            confidence=0.88,
-            color="red",
-        ))
-        cleaned = cleaned.replace(m.group(0), "South Korea", 1)
-
-    # ── 외국 도시+국가 ────────────────────────────────────────────────────
-    for m in RE_FOREIGN_CITY.finditer(cleaned):
-        found.append(PIIMatch(
-            type="address",
-            original_value=m.group(0),
-            position=m.start(),
-            confidence=0.85,
-            color="red",
-        ))
-        cleaned = cleaned.replace(m.group(0), "South Korea", 1)
+    # ── 미국 도시+주 / 외국 도시 — 수정 7: 해외 도시 보존 (비활성화) ───────────
+    # RE_US_CITY_STATE, RE_FOREIGN_CITY 비활성화:
+    #   - 해외 근무지 도시명(Houston, Calgary, Prague 등)은 보존 대상
+    #   - 한국 도시만 수정 4(_KR_CITY_RE)에서 처리
+    # (Houston → South Korea, Calgary → South Korea 오작동 방지)
 
     # ── 수정 4: 한국 도시명 → "South Korea" ──────────────────────────────────
     for m in _KR_CITY_RE.finditer(cleaned):
