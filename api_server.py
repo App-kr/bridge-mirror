@@ -1321,11 +1321,26 @@ async def public_talents(
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            f"""SELECT {', '.join(_TALENT_PUBLIC_COLS)}
-                FROM candidates
-                WHERE status = 'Active'
-                  AND COALESCE(talent_visible, 0) = 1""",
+            """SELECT
+                sheet_number,
+                COALESCE(nationality, '')          AS nationality,
+                COALESCE(area_prefs, '')           AS area_prefs,
+                COALESCE(target, '')               AS target,
+                COALESCE(certification, '')        AS certification,
+                COALESCE(education_level, '')      AS education_level,
+                COALESCE(experience, '')           AS experience,
+                COALESCE(desired_salary, '')       AS desired_salary,
+                COALESCE(thumb_url, '')            AS thumb_url,
+                COALESCE(talent_badge, '')         AS talent_badge,
+                COALESCE(talent_reference_star, 0) AS talent_reference_star,
+                COALESCE(talent_summary, '')       AS talent_summary
+              FROM candidates
+              WHERE status = 'Active'
+                AND COALESCE(talent_visible, 0) = 1""",
         ).fetchall()
+    except Exception as _qe:
+        logging.getLogger("bridge.api").error("public_talents 쿼리 오류: %s", _qe, exc_info=True)
+        return ok(data=[])
     finally:
         conn.close()
 
@@ -10435,6 +10450,8 @@ async def send_mail_single(request: Request):
     html_body: str = data.get("html", data.get("body", ""))
     sender: str = data.get("from", data.get("from_", "bridgejobkr@naver.com"))
 
+    resume_s3_key: str = data.get("resume_s3_key", "").strip()
+
     if not to_email or not subject:
         raise HTTPException(status_code=400, detail="to, subject 필수")
 
@@ -10444,12 +10461,32 @@ async def send_mail_single(request: Request):
         raise HTTPException(status_code=503, detail=f"{smtp_key.upper()} SMTP 미설정")
 
     try:
-        msg = MIMEMultipart("alternative")
+        # resume_s3_key 있으면 "mixed"(첨부), 없으면 "alternative"
+        if resume_s3_key:
+            msg = MIMEMultipart("mixed")
+        else:
+            msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = f"BRIDGE Recruitment <{cfg['user']}>"
         msg["To"] = to_email
         msg["Reply-To"] = "bridgejobkr@gmail.com"
         msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        # S3 이력서 첨부 (sprint B B-1)
+        if resume_s3_key:
+            try:
+                _pdf_bytes = s3_download_bytes(resume_s3_key)
+                if _pdf_bytes:
+                    from email.mime.base import MIMEBase as _MB
+                    from email import encoders as _enc
+                    _part = _MB("application", "pdf")
+                    _part.set_payload(_pdf_bytes)
+                    _enc.encode_base64(_part)
+                    _fname = resume_s3_key.split("/")[-1] or "resume.pdf"
+                    _part.add_header("Content-Disposition", f'attachment; filename="{_fname}"')
+                    msg.attach(_part)
+            except Exception as _att_e:
+                logging.getLogger("bridge.api").warning("이력서 첨부 실패(계속): %s", _att_e)
 
         server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
         server.starttls()

@@ -435,11 +435,14 @@ const ColorPalette=({onSelect,onClose,colors})=>(
 );
 
 // ─── 메일 팝업 ───────────────────────────────────────────
-const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName})=>{
+const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName,candidateNumber})=>{
   const[tplId,setTplId]=useState("intro");
   const[sender,setSender]=useState(SENDERS[0]);
   const[subject,setSubject]=useState(TEMPLATES[0].subject);
   const[attachments,setAttachments]=useState([]);
+  const[autoAttachResume,setAutoAttachResume]=useState(false);
+  const[resumeInfo,setResumeInfo]=useState(null); // {s3_key,full_name} | null
+  const[resumeLoading,setResumeLoading]=useState(false);
   const[sending,setSending]=useState(false);
   const[sent,setSent]=useState(false);
   const[previewHtml,setPreviewHtml]=useState("");
@@ -487,6 +490,27 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
   const updatePreview=useCallback(()=>{const ref=activeEditor===1?editorRef:editorRef2;const raw=ref.current?.innerHTML||"";if(!initRecipients.length){setPreviewHtml(raw);return;}const r=initRecipients[0];setPreviewHtml(raw.replace(/\{\{name\}\}/g,r.name).replace(/\{\{region\}\}/g,r.region).replace(/\{\{city\}\}/g,r.city).replace(/\{\{teachingAge\}\}/g,r.teachingAge));},[initRecipients,activeEditor]);
   useEffect(()=>{const t=setInterval(updatePreview,500);return()=>clearInterval(t);},[updatePreview]);
 
+  // 이력서 자동첨부 토글
+  const toggleAutoAttach=useCallback(async()=>{
+    if(autoAttachResume){setAutoAttachResume(false);setResumeInfo(null);return;}
+    if(!candidateNumber){alert("후보자 시트번호가 없습니다.");return;}
+    setResumeLoading(true);
+    try{
+      const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+      const res=await fetch(`${API_BASE}/api/admin/resume/find/${candidateNumber}`,{headers:{"x-admin-key":adminKey}});
+      if(res.ok){
+        const d=await res.json();
+        setResumeInfo(d?.data||null);
+        setAutoAttachResume(true);
+      }else{
+        const err=await res.json().catch(()=>({}));
+        alert(err?.detail||"처리된 이력서를 찾을 수 없습니다.\nresume_converter로 먼저 처리해주세요.");
+        setAutoAttachResume(false);setResumeInfo(null);
+      }
+    }catch(e){console.error("이력서 조회 오류:",e);setAutoAttachResume(false);setResumeInfo(null);}
+    setResumeLoading(false);
+  },[autoAttachResume,candidateNumber]);
+
   const parseEmails=(raw)=>raw.split(/[,;\s\n]+/).map(e=>e.trim()).filter(e=>e.includes("@")&&e.length>3);
   const addEmail=()=>{
     const parsed=parseEmails(newEmail);
@@ -521,6 +545,7 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
         const body=html.replace(/\{\{name\}\}/g,r.name||"").replace(/\{\{region\}\}/g,"").replace(/\{\{city\}\}/g,"").replace(/\{\{teachingAge\}\}/g,"");
         const payload={from:sender,to:r.email,subject,html:body};
         if(candidateId&&r.dbId){payload.candidate_id=candidateId;payload.employer_job_id=r.dbId;payload.employer_name=r.name||"";}
+        if(autoAttachResume&&resumeInfo?.s3_key){payload.resume_s3_key=resumeInfo.s3_key;}
         const res=await fetch(`${API_BASE}/api/send-mail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         if(res.ok){
           ok++;
@@ -655,9 +680,11 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,paddingBottom:8,borderBottom:"1px solid #f0f0f0"}}>
                 <span style={{fontSize:"0.82rem",color:"#111",fontWeight:700,minWidth:65}}>파일첨부</span>
                 <button onClick={()=>fileInputRef.current?.click()} style={{padding:"3px 10px",border:"1px solid #ddd",borderRadius:4,background:"#fff",fontSize:"0.78rem",cursor:"pointer"}}>내 PC</button>
+                {candidateNumber&&<button onClick={toggleAutoAttach} disabled={resumeLoading} style={{padding:"3px 10px",border:`1px solid ${autoAttachResume?"#16a34a":"#93c5fd"}`,borderRadius:4,background:autoAttachResume?"#f0fdf4":"#fff",fontSize:"0.78rem",cursor:"pointer",color:autoAttachResume?"#16a34a":"#2563eb",fontWeight:autoAttachResume?700:400}}>{resumeLoading?"조회중...":(autoAttachResume?"이력서 첨부됨":"이력서 자동첨부")}</button>}
                 <input ref={fileInputRef} type="file" multiple style={{display:"none"}} onChange={e=>{if(e.target.files)handleFiles(e.target.files);e.target.value="";}}/>
                 <div onDrop={e=>{e.preventDefault();handleFiles(e.dataTransfer.files);}} onDragOver={e=>e.preventDefault()} onClick={()=>fileInputRef.current?.click()} style={{flex:1,border:"1px dashed #93c5fd",borderRadius:4,padding:"6px 10px",fontSize:"0.78rem",color:"#aaa",minHeight:28,display:"flex",alignItems:"center",flexWrap:"wrap",gap:4,cursor:"pointer"}}>
-                  {attachments.length===0&&<span style={{display:"flex",alignItems:"center",gap:5,color:"#bbb"}}><span style={{fontSize:"1rem"}}>📎</span><span>파일 첨부 (클릭 또는 드래그)</span></span>}
+                  {attachments.length===0&&!autoAttachResume&&<span style={{display:"flex",alignItems:"center",gap:5,color:"#bbb"}}><span style={{fontSize:"1rem"}}>📎</span><span>파일 첨부 (클릭 또는 드래그)</span></span>}
+                  {autoAttachResume&&resumeInfo&&<span style={{background:"#dcfce7",padding:"2px 8px",borderRadius:4,fontSize:"0.75rem",color:"#16a34a",display:"inline-flex",alignItems:"center",gap:3,fontWeight:600}}><span>이력서</span>{resumeInfo.full_name||""}<button onClick={e=>{e.stopPropagation();setAutoAttachResume(false);setResumeInfo(null);}} style={{background:"none",border:"none",color:"#999",cursor:"pointer",padding:0,fontSize:"0.7rem"}}>✕</button></span>}
                   {attachments.map((a,i)=><span key={i} style={{background:a.big?"#fef3c7":"#f0f4ff",padding:"2px 8px",borderRadius:4,fontSize:"0.75rem",color:a.big?"#92400e":"#2563eb",display:"inline-flex",alignItems:"center",gap:3}}>{a.big&&<span style={{fontSize:"0.65rem",background:"#f59e0b",color:"#fff",padding:"0 4px",borderRadius:2}}>대용량</span>}{a.name} ({a.size})<button onClick={()=>setAttachments(p=>p.filter((_,idx)=>idx!==i))} style={{background:"none",border:"none",color:"#999",cursor:"pointer",padding:0,fontSize:"0.7rem"}}>✕</button></span>)}
                 </div>
               </div>
@@ -1798,6 +1825,7 @@ export default function EmployerManagement(){
         onClose={()=>{setMailPopup(false);setMailTarget(null);}}
         candidateId={selectedCandidate?.id||null}
         candidateName={selectedCandidate?.full_name||""}
+        candidateNumber={selectedCandidate?.sheet_number||null}
       />}
     </div>
   );
