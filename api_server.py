@@ -1330,7 +1330,7 @@ async def public_talents(
                 COALESCE(education_level, '')      AS education_level,
                 COALESCE(experience, '')           AS experience,
                 COALESCE(desired_salary, '')       AS desired_salary,
-                COALESCE(thumb_url, '')            AS thumb_url,
+                COALESCE(photo_s3_key, '')         AS photo_s3_key,
                 COALESCE(talent_badge, '')         AS talent_badge,
                 COALESCE(talent_reference_star, 0) AS talent_reference_star,
                 COALESCE(talent_summary, '')       AS talent_summary
@@ -1350,6 +1350,10 @@ async def public_talents(
         # T3v1 복호화: nationality (국가명만 공개 — 이름·주소 아님)
         nat_raw = r.get("nationality") or ""
         r["nationality"] = decrypt_field(nat_raw, "nationality") if nat_raw else ""
+
+        # 사진: photo_s3_key → presigned URL 실시간 생성 (만료 문제 해결)
+        s3k = r.pop("photo_s3_key", "") or ""
+        r["thumb_url"] = s3_presigned_url(s3k, expires=3600) if s3k else ""
 
         # 서버사이드 필터 적용
         if nationality and nationality.lower() not in (r["nationality"] or "").lower():
@@ -1395,6 +1399,10 @@ async def talent_auth_request(request: Request, body: _TalentAuthRequest):
         raise HTTPException(400, "올바른 이메일 주소를 입력해주세요.")
 
     ip_h = _ip_hash(request)
+    # Rate limit: IP당 시간당 5건 (DB flooding 방지)
+    if not _rate_ok(ip_h, window=3600, max_posts=5):
+        raise HTTPException(429, "Too many requests. Please try again later.")
+
     now_str = datetime.utcnow().isoformat()
 
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -4039,6 +4047,7 @@ def _ensure_candidates_all_cols():
         ("personal_consideration", "TEXT", "NULL"),
         ("is_deleted", "INTEGER", "0"),
         ("read_at", "TEXT", "NULL"),
+        ("photo_s3_key", "TEXT", "NULL"),
     ]
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -7102,13 +7111,13 @@ async def upload_file(
             if entity_type == "candidate" and file_type == "photo":
                 if thumb_url:
                     conn.execute(
-                        "UPDATE candidates SET photo_url = ?, thumb_url = ? WHERE candidate_id = ?",
-                        (file_url, thumb_url, entity_id),
+                        "UPDATE candidates SET photo_url = ?, thumb_url = ?, photo_s3_key = ? WHERE candidate_id = ?",
+                        (file_url, thumb_url, s3_key, entity_id),
                     )
                 else:
                     conn.execute(
-                        "UPDATE candidates SET photo_url = ? WHERE candidate_id = ?",
-                        (file_url, entity_id),
+                        "UPDATE candidates SET photo_url = ?, photo_s3_key = ? WHERE candidate_id = ?",
+                        (file_url, s3_key, entity_id),
                     )
             conn.commit()
         finally:
@@ -10732,8 +10741,8 @@ async def kakao_callback(code: str = "", error: str = "", error_description: str
 
     import secrets as _sec_mod
     otc = _sec_mod.token_urlsafe(24)
+    # C2 패치: api_key를 OTC dict에 저장하지 않음 (exchange 응답에서도 불필요)
     _KAKAO_OTC[otc] = {
-        "api_key": _ADMIN_KEY,
         "expires_at": datetime.now(timezone.utc).timestamp() + 60,
     }
     return RedirectResponse(f"{front_url}/admin?kakao_otc={otc}")
