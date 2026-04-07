@@ -1479,8 +1479,32 @@
       "git": "19260c7c",
       "files": 2204,
       "db_hash": "4cf18abf67e4"
+    },
+    {
+      "dir": "20260407_090034__final_backup_20260407_090002",
+      "task": "final_backup_20260407_090002",
+      "ts": "2026.04.07 09:01:03",
+      "git": "08f27be3",
+      "files": 2205,
+      "db_hash": "4cf18abf67e4"
+    },
+    {
+      "dir": "20260407_100450__PII_암호화_마이그레이션",
+      "task": "PII 암호화 마이그레이션",
+      "ts": "2026.04.07 10:05:04",
+      "git": "08f27be3",
+      "files": 2205,
+      "db_hash": "4cf18abf67e4"
+    },
+    {
+      "dir": "20260407_104710__sprint-b-ui-연결",
+      "task": "sprint-b-ui-연결",
+      "ts": "2026.04.07 10:47:21",
+      "git": "08f27be3",
+      "files": 2205,
+      "db_hash": "4cf18abf67e4"
     }
   ],
-  "last_backup": "2026.04.06 20:42:52",
-  "total_count": 185
+  "last_backup": "2026.04.07 10:47:21",
+  "total_count": 188
 }

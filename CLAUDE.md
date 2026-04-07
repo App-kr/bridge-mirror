@@ -117,11 +117,12 @@ ENCRYPTION
 
 ## KNOWN ISSUES — 현재 패치 대기
 
-  C1: CAPTCHA verify_captcha() return True 하드코딩 — api_server.py:4084
-  C2: 로그인 응답 api_key 평문 노출 — api_server.py:1776
-  H1: 비밀번호 평문 폴백 — api_server.py:1687
-  H2: BRIDGE_HMAC_KEY 하드코딩 폴백 — api_server.py:4054
-  H3: JWT_SECRET 랜덤 폴백 — api_server.py:182
+  (2026-04-07 기준 C1~H3 모두 패치 완료)
+
+  W1: nationality 컬럼 T3v1 암호화 → admin_candidates 필터 검색 불가
+      (WHERE nationality = ? 에 암호화된 값 비교 불가 — 필터 미사용 시 무방)
+  W2: Render BRIDGE_FIELD_KEY ≠ 로컬 BX 키 가능성
+      (복호화 실패 시 T3v1 문자열 그대로 표시됨 — Render 대시보드 키 확인 필요)
 
 ---
 
