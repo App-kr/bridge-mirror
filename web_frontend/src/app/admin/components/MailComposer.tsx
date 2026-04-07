@@ -182,6 +182,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
   const [templateIdx, setTemplateIdx] = useState(0)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
   const [attachments, setAttachments] = useState<File[]>([])
+  const [autoResumes, setAutoResumes] = useState<{ num: string; url: string | null; loading: boolean }[]>([])
   const [previewHtml, setPreviewHtml] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -426,6 +427,25 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     editorRef.current.style.lineHeight = value
   }
 
+  /* 본문 ■번호 이력서 자동 스캔 */
+  const scanAutoResumes = useCallback(async () => {
+    const html = editorRef.current?.innerHTML || ''
+    const matches = [...html.matchAll(/■(\d{4,5})/g)]
+    const nums = [...new Set(matches.map(m => m[1]))]
+    if (nums.length === 0) { setAutoResumes([]); return }
+    setAutoResumes(nums.map(num => ({ num, url: null, loading: true })))
+    const adminKey = typeof window !== 'undefined' ? (localStorage.getItem('bridge_admin_key') || '') : ''
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+    const results = await Promise.all(nums.map(async (num) => {
+      try {
+        const r = await fetch(`${apiUrl}/api/admin/resume/find/${num}`, { headers: { 'x-admin-key': adminKey } })
+        const j = await r.json()
+        return { num, url: (j.success && j.data?.presigned_url) ? j.data.presigned_url as string : null, loading: false }
+      } catch { return { num, url: null, loading: false } }
+    }))
+    setAutoResumes(results)
+  }, [])
+
   /* 수신자 텍스트 파싱 */
   const parseRecipientInput = () => {
     if (!recipientInput.trim()) return
@@ -468,11 +488,13 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
         city: '',
         teachingAge: '',
       }))
+      const autoAttachPaths = autoResumes.filter(a => a.url).map(a => a.url!)
       const payload = {
         sender,
         subject,
         body_html: bodyHtml,
         recipients: [...employerRecips, ...manualRecips],
+        ...(autoAttachPaths.length > 0 ? { attachment_paths: autoAttachPaths } : {}),
       }
       const adminKey = typeof window !== 'undefined' ? localStorage.getItem('bridge_admin_key') || '' : ''
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
@@ -660,6 +682,29 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                       {fileIcon(f)} {f.name}
                       <span className="text-gray-400 ml-0.5">({fmtSize(f.size)})</span>
                       <button type="button" onClick={() => removeAttachment(i)} className="text-red-400 hover:text-red-600 ml-0.5">&#10005;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* 본문 ■번호 자동 이력서 스캔 */}
+              <button
+                type="button"
+                onClick={scanAutoResumes}
+                className="mt-2 text-[11px] text-blue-500 hover:text-blue-700 flex items-center gap-1 underline-offset-2 hover:underline"
+              >
+                [자동] 본문 ■번호 이력서 스캔
+              </button>
+              {autoResumes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {autoResumes.map(a => (
+                    <span key={a.num} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-[11px] text-blue-600 rounded border border-blue-200">
+                      [자동] ■{a.num}
+                      {a.loading
+                        ? <span className="text-gray-400 animate-pulse">로딩…</span>
+                        : a.url
+                          ? <span className="text-green-600 font-bold">✓</span>
+                          : <span className="text-red-400">미발견</span>
+                      }
                     </span>
                   ))}
                 </div>

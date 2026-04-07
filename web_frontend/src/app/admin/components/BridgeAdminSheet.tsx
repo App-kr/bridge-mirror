@@ -6,6 +6,7 @@ import { API_URL } from '@/lib/api'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AllCandidatesGrid from './AllCandidatesGrid'
 import SecureAdminImage from '@/components/SecureAdminImage'
+import LinkPanel from './LinkPanel'
 
 /* ─── Types ─── */
 type CategoryKey = 'active' | 'past' | 'blacklist'
@@ -266,6 +267,7 @@ export default function BridgeAdminSheet() {
   const [esV, setEsV] = useState('')
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
+  const [linkPanelRow, setLinkPanelRow] = useState<DataRow | null>(null)
   const [sk, setSk] = useState<string | null>(null)
   const [sd, setSd] = useState<'asc' | 'desc'>('asc')
   const [ready, setReady] = useState(false)
@@ -916,6 +918,7 @@ export default function BridgeAdminSheet() {
         <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: ctx.y, left: ctx.x, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, zIndex: 1000, minWidth: 200, fontSize: 15, boxShadow: '0 6px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
           <div style={{ padding: '8px 16px', fontSize: 12, color: '#94a3b8', borderBottom: '1px solid #f1f5f9' }}>#{ctx.row.id} {String(ctx.row.name)}</div>
           <Hov bg="#eff6ff" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => { openMM([ctx.row]); setCtx(null) }}>✉ 메일</Hov>
+          <Hov bg="#f0fdf4" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => { setLinkPanelRow(ctx.row); setCtx(null) }}>매칭 연동</Hov>
           <Hov bg="#f0f0f0" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => { addRow(ctx.row.id); setCtx(null) }}>+ 행 추가</Hov>
           {ctx.row.category !== 'active' && <Hov bg="#dbeafe" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => mv(ctx.row, 'active')}>👤 구직활동중</Hov>}
           {ctx.row.category !== 'past' && <Hov bg="#dcfce7" style={{ padding: '10px 16px', cursor: 'pointer' }} onClick={() => mv(ctx.row, 'past')}>✅ 체결완료</Hov>}
@@ -970,6 +973,17 @@ export default function BridgeAdminSheet() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── 후보자 연동 패널 ── */}
+      {linkPanelRow && (
+        <LinkPanel
+          mode="candidate"
+          candidateId={typeof linkPanelRow.id === 'number' ? linkPanelRow.id : Number(linkPanelRow.id)}
+          candidateName={String(linkPanelRow.name || '')}
+          candidateNumber={linkPanelRow.sheet_number ? String(linkPanelRow.sheet_number) : undefined}
+          onClose={() => setLinkPanelRow(null)}
+        />
       )}
     </div>
   )

@@ -12,6 +12,7 @@ import ExcelFilter from './ExcelFilter'
 import ColumnManager, { type ColumnDef } from './ColumnManager'
 import DocBlock, { type EmployerApp, maskEmail, maskPhone, maskName, v } from './DocBlock'
 import MailComposer from './MailComposer'
+import LinkPanel from './LinkPanel'
 
 const API = API_URL
 
@@ -235,6 +236,11 @@ export default function EmployerManagement() {
   // 메일
   const [showMailComposer, setShowMailComposer] = useState(false)
   const [mailRecipients, setMailRecipients] = useState<EmployerApp[]>([])
+
+  // 연동 패널
+  const [linkPanel, setLinkPanel] = useState<{
+    jobNumber: string; jobTitle: string; region: string; teachingAge: string
+  } | null>(null)
 
   // 열 관리
   const [columns, setColumns] = useState<ColumnDef[]>(DEFAULT_COLUMNS)
@@ -720,6 +726,7 @@ export default function EmployerManagement() {
                   isLast={visIdx === filtered.length - 1}
                   showDivider={(visIdx + 1) % PAGE_BREAK_EVERY === 0 && visIdx < visibleFiltered.length - 1}
                   onOpenMail={() => openMailComposer([app])}
+                  onLinkPanel={() => setLinkPanel({ jobNumber: jobNo(app), jobTitle: app.school_name || app.name || '', region: extractProvince(app.location), teachingAge: app.teaching_age || '' })}
                   onEditJobCode={(id, code) => setEmployers(prev => prev.map(e => e.id === id ? { ...e, job_code: code } : e))}
                   onEditName={(id, name) => setEmployers(prev => prev.map(e => e.id === id ? { ...e, school_name: name } : e))}
                 />
@@ -745,11 +752,11 @@ export default function EmployerManagement() {
           {viewMode === 'excel' && (
             <div className="bg-white border border-[#e5e5e7] rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + 116}px` }}>
+                <table className="w-full" style={{ tableLayout: 'fixed', minWidth: `${visibleCols.reduce((a, c) => a + c.width, 0) + 156}px` }}>
                   <colgroup>
                     <col style={{ width: '36px' }} />
                     {visibleCols.map(c => <col key={c.key} style={{ width: `${c.width}px` }} />)}
-                    <col style={{ width: '80px' }} />
+                    <col style={{ width: '120px' }} />
                   </colgroup>
                   <thead>
                     {/* 열 문자 행 A, B, C... */}
@@ -772,7 +779,7 @@ export default function EmployerManagement() {
                           />
                         </th>
                       ))}
-                      <th className="px-2 py-3 text-center font-semibold">메일</th>
+                      <th className="px-2 py-3 text-center font-semibold">액션</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0f0f2]">
@@ -821,15 +828,25 @@ export default function EmployerManagement() {
                               )}
                             </td>
                           ))}
-                          {/* 메일 버튼 — 항상 표시 */}
+                          {/* 액션 버튼 — 항상 표시 */}
                           <td className="px-2 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => openMailComposer([app])}
-                              className="px-2 py-1 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-lg hover:bg-blue-100 transition-colors"
-                            >
-                              메일
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openMailComposer([app])}
+                                className="px-2 py-1 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-lg hover:bg-blue-100 transition-colors"
+                              >
+                                메일
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setLinkPanel({ jobNumber: jobNo(app), jobTitle: app.school_name || app.name || '', region: extractProvince(app.location), teachingAge: app.teaching_age || '' })}
+                                className="px-2 py-1 bg-green-50 text-green-700 text-[11px] font-semibold rounded-lg hover:bg-green-100 transition-colors"
+                                title="매칭 연동 패널"
+                              >
+                                연동
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -865,6 +882,18 @@ export default function EmployerManagement() {
           extractProvince={extractProvince}
           extractCity={extractCity}
           onClose={() => setShowMailComposer(false)}
+        />
+      )}
+
+      {/* ── 연동 패널 ── */}
+      {linkPanel && (
+        <LinkPanel
+          mode="employer"
+          jobNumber={linkPanel.jobNumber}
+          jobTitle={linkPanel.jobTitle}
+          region={linkPanel.region}
+          teachingAge={linkPanel.teachingAge}
+          onClose={() => setLinkPanel(null)}
         />
       )}
     </div>

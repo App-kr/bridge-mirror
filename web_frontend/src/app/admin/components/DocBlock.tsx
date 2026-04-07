@@ -82,6 +82,7 @@ interface DocBlockProps {
   isLast: boolean
   showDivider: boolean
   onOpenMail?: () => void
+  onLinkPanel?: () => void
   onEditJobCode?: (id: string, code: string) => void
   onEditName?: (id: string, name: string) => void
 }
@@ -144,7 +145,7 @@ export default function DocBlock({
   province, city, jobNo, searchQuery,
   onConfirm, onStatusChange, onEditMemo, onEditNotes,
   onMoveTop, onMoveUp, onMoveDown, isFirst, isLast,
-  showDivider, onOpenMail, onEditJobCode, onEditName,
+  showDivider, onOpenMail, onLinkPanel, onEditJobCode, onEditName,
 }: DocBlockProps) {
   const rawText = buildRawText(employer, province, city, jobNo)
   const lines = rawText ? rawText.split('\n') : []
@@ -343,6 +344,12 @@ export default function DocBlock({
             {!isFirst && <button type="button" onClick={onMoveTop} style={btnBase}>⤒ 맨위로</button>}
             {!isFirst && <button type="button" onClick={onMoveUp} style={btnBase}>↑ 위로</button>}
             {!isLast && <button type="button" onClick={onMoveDown} style={btnBase}>↓ 아래로</button>}
+            {onLinkPanel && (
+              <button type="button" onClick={onLinkPanel}
+                style={{ ...btnBase, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d' }}>
+                매칭 연동
+              </button>
+            )}
             {!editingRaw ? (
               <button type="button" onClick={() => setEditingRaw(true)}
                 style={{ ...btnBase, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c' }}>
