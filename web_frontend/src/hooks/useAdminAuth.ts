@@ -7,7 +7,7 @@ const STORAGE_KEY = 'bridge_admin_key'
 const EXPIRY_KEY = 'bridge_admin_key_expiry'
 const SESSION_KEY = 'bridge_session_token'
 const KEY_TTL = 86400000 // 24시간 (ms)
-const MAX_WAKE_RETRIES = 3
+const MAX_WAKE_RETRIES = 20   // 20 × 3s = 60초 (Render cold start 대응)
 const WAKE_DELAY = 3000
 
 /** localStorage에서 admin key 동기 로드 (만료 체크 포함) */

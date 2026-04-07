@@ -20,6 +20,14 @@ export default function AdminAuth({ onLogin, waking }: AdminAuthProps) {
   const [pw, setPw] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [wakeSecs, setWakeSecs] = useState(0)
+
+  // waking 중 경과 초 카운터
+  useEffect(() => {
+    if (!loading || !waking) { setWakeSecs(0); return }
+    const t = setInterval(() => setWakeSecs(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [loading, waking])
 
   // URL의 kakao_error 파라미터 자동 처리
   useEffect(() => {
@@ -94,7 +102,17 @@ export default function AdminAuth({ onLogin, waking }: AdminAuthProps) {
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
         {waking && (
-          <p className="text-amber-500 text-sm animate-pulse">Render 서버를 깨우고 있습니다. 잠시만 기다려주세요...</p>
+          <div className="space-y-1.5">
+            <p className="text-amber-500 text-sm">
+              서버 기동 중... ({wakeSecs}초 / 최대 60초)
+            </p>
+            <div className="w-full h-1.5 bg-amber-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-400 rounded-full transition-all duration-1000"
+                style={{ width: `${Math.min((wakeSecs / 60) * 100, 98)}%` }}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
