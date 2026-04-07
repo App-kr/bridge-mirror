@@ -1100,7 +1100,7 @@ class RPAOverlay:
         _XGRAY = "#c7c7cc"   # X 버튼 색상
 
         root = tk.Tk()
-        root.withdraw()  # tk. 흰 창 즉시 숨김
+        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화 (flash 방지)
         self._root = root
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
@@ -1116,7 +1116,6 @@ class RPAOverlay:
             pass
         root.overrideredirect(True)
         root.attributes("-topmost", True)
-        root.attributes("-alpha", 0.0)
         root.configure(bg=_SEP)
 
         w, h = 380, 360
@@ -1159,7 +1158,6 @@ class RPAOverlay:
                 root.attributes("-alpha", 1.0)
                 root.after(2000, lambda: root.attributes("-topmost", False)
                            if root.winfo_exists() else None)
-        root.deiconify()  # withdraw 후 복원 (alpha=0.0이라 흰 창 없음)
         root.after(10, _fade)
 
         # ── 상단 바 (X 버튼) ──────────────────────────────────
@@ -1487,7 +1485,7 @@ def ask_integrity_password() -> bool:
     result = [False]
 
     root = tk.Tk()
-    root.withdraw()  # tk. 흰 창 즉시 숨김
+    root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
     _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
     if _ico.exists():
         try:
@@ -1566,7 +1564,6 @@ def ask_integrity_password() -> bool:
         w.bind("<ButtonPress-1>", _press)
         w.bind("<B1-Motion>", _move)
 
-    root.deiconify()  # withdraw 후 복원
     root.mainloop()
     return result[0]
 
@@ -1636,7 +1633,7 @@ def ask_account_selection():
         _HOV  = "#e8e8ed"
 
         root = tk.Tk()
-        root.withdraw()  # tk. 흰 창 즉시 숨김
+        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
             try:
@@ -1940,7 +1937,6 @@ def ask_account_selection():
             dw.bind("<ButtonPress-1>", _press)
             dw.bind("<B1-Motion>", _move)
 
-        root.deiconify()  # withdraw 후 복원
         root.mainloop()
 
     import threading as _threading
@@ -2058,8 +2054,7 @@ def ask_already_running(acct_key: str = ""):
             break
 
     root = tk.Tk()
-    root.withdraw()  # tk. 흰 창 즉시 숨김
-    root.attributes("-alpha", 0.0)   # flash 방지
+    root.attributes("-alpha", 0.0)   # tk. 흰 창 즉시 투명화 (flash 방지)
     _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
     if _ico.exists():
         try:
@@ -2091,7 +2086,6 @@ def ask_already_running(acct_key: str = ""):
                 root.after(16, lambda: _fade(a + 0.1))
             else:
                 root.attributes("-alpha", 1.0)
-    root.deiconify()  # withdraw 후 복원 (alpha=0.0이라 흰 창 없음)
     root.after(10, _fade)
 
     _bc = "#{:02x}{:02x}{:02x}".format(
@@ -2247,7 +2241,7 @@ def ask_vault_setup() -> bool:
 
     def _build():
         root = tk.Tk()
-        root.withdraw()  # tk. 흰 창 즉시 숨김
+        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
             try: root.iconbitmap(str(_ico))
@@ -2351,7 +2345,6 @@ def ask_vault_setup() -> bool:
             dw.bind("<ButtonPress-1>", _press)
             dw.bind("<B1-Motion>", _move)
 
-        root.deiconify()  # withdraw 후 복원
         root.mainloop()
 
     import threading as _threading
@@ -2373,7 +2366,7 @@ def ask_master_key_gui() -> str:
 
     def _build():
         root = tk.Tk()
-        root.withdraw()  # tk. 흰 창 즉시 숨김
+        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         root.title("Craig RPA — 마스터 키 입력")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
@@ -2549,7 +2542,6 @@ def ask_master_key_gui() -> str:
             dw.bind("<ButtonPress-1>", _press)
             dw.bind("<B1-Motion>", _move)
 
-        root.deiconify()  # withdraw 후 복원
         root.mainloop()
 
     import threading as _threading
