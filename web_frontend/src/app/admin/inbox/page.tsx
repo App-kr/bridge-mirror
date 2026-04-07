@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 import { API_URL } from '@/lib/api'
@@ -64,7 +63,7 @@ const STATUS_BADGES: Record<string, string> = {
 }
 
 export default function AdminInboxPage() {
-  const { authed, login, headers, waking } = useAdminAuth()
+  const { authed, headers } = useAdminAuth()
 
   const [items, setItems] = useState<InboxItem[]>([])
   const [total, setTotal] = useState(0)
@@ -192,7 +191,6 @@ export default function AdminInboxPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="space-y-6">

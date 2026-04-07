@@ -8,7 +8,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
 import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Paperclip, ChevronDown, Trash2, Plus, X, Code, Type } from 'lucide-react'
@@ -99,7 +98,7 @@ This email is intended for the designated recipient only. If you are not the int
 
 
 export default function MailSendPage() {
-  const { adminKey, authed, login, signedFetch, waking } = useAdminAuth()
+  const { adminKey, authed, signedFetch } = useAdminAuth()
 
   const [activeTab, setActiveTab] = useState<'mail' | 'builder'>('mail')
   const [templates, setTemplates] = useState<Template[]>([])
@@ -312,7 +311,6 @@ export default function MailSendPage() {
     }
   }
 
-  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   const recipients = parseRecipients()
 

@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
 import { MailCheck, Search, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
@@ -61,7 +60,7 @@ function parseDetails(raw: string | null): ParsedDetails {
 }
 
 export default function MailLogsPage() {
-  const { adminKey, authed, login, waking } = useAdminAuth()
+  const { adminKey, authed } = useAdminAuth()
 
   const [logs, setLogs] = useState<MailLog[]>([])
   const [total, setTotal] = useState(0)
@@ -133,7 +132,6 @@ export default function MailLogsPage() {
 
   const totalPages = Math.ceil(total / PER_PAGE)
 
-  if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   // Stats
   const totalSent = logs.reduce((s, l) => s + (l.sent_count || 0), 0)
