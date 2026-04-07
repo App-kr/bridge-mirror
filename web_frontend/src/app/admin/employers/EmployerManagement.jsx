@@ -787,6 +787,24 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
   const PRESET_TAGS=["방학","짧은","급여","분위기","비추천"];
   const tags=item.tags||[];
   const[collapsed,setCollapsed]=useState(false);
+  const[showRvMatch,setShowRvMatch]=useState(false);
+  const[rvMatchData,setRvMatchData]=useState(null);
+  const[rvLoading,setRvLoading]=useState(false);
+  const loadRvMatch=useCallback(async()=>{
+    if(showRvMatch){setShowRvMatch(false);return;}
+    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const brjId=item.brjId||item.jNumber;
+    if(!brjId||!adminKey)return;
+    setRvLoading(true);
+    try{
+      const res=await fetch(`${API_BASE}/api/admin/matching/candidates-for-job?brj_id=${encodeURIComponent(brjId)}`,{headers:{"Content-Type":"application/json","x-admin-key":adminKey}});
+      if(!res.ok)throw new Error(`HTTP ${res.status}`);
+      const body=await res.json();
+      setRvMatchData(body?.data||null);
+      setShowRvMatch(true);
+    }catch(e){console.error("[rv-match] failed:",e);}
+    finally{setRvLoading(false);}
+  },[showRvMatch,item.brjId,item.jNumber]);
   const btn={padding:"4px 10px",borderRadius:5,border:"1px solid #ccc",background:"#fff",fontSize:"0.78rem",cursor:"pointer",color:"#555"};
   const isHighlighted=searchQ&&(
     item.rawText.toLowerCase().includes(searchQ.toLowerCase())||
@@ -850,7 +868,29 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
         }
         {/* 비추천 태그 있으면 블랙리스트 이동 버튼 노출 */}
         {tags.includes("비추천")&&<button onClick={()=>onUpdate(item.jNumber,{blacklist:true,active:false,status:"blacklist"})} style={{marginLeft:"auto",padding:"3px 12px",borderRadius:5,border:"1px solid #dc2626",background:"#fee2e2",color:"#dc2626",fontSize:"0.75rem",fontWeight:700,cursor:"pointer"}}>🚫 블랙리스트 이동</button>}
+        {/* 역매칭: 이 공고에 맞는 후보자 조회 */}
+        {item.brjId&&<button onClick={loadRvMatch} disabled={rvLoading} style={{...btn,marginLeft:tags.includes("비추천")?0:"auto",border:showRvMatch?"1px solid #16a34a":"1px solid #ccc",color:showRvMatch?"#16a34a":"#555",background:showRvMatch?"#f0fdf4":"#fff",fontWeight:showRvMatch?700:400}}>{rvLoading?"조회중...":showRvMatch?`▲ 후보자 (${rvMatchData?.total||0})`:"👤 매칭후보자"}</button>}
       </div>}
+
+      {/* 역매칭 패널 */}
+      {showRvMatch&&rvMatchData&&(
+        <div style={{margin:"6px 0 8px",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"8px 12px"}}>
+          <div style={{fontSize:"0.72rem",fontWeight:700,color:"#15803d",marginBottom:6}}>
+            매칭 후보자 {rvMatchData.total}명 — {rvMatchData.job?.teaching_age||""} / {rvMatchData.job?.location||""}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {(rvMatchData.matched_candidates||[]).slice(0,15).map(c=>(
+              <span key={c.candidate_id} style={{background:"#fff",border:"1px solid #86efac",borderRadius:4,padding:"2px 10px",fontSize:"0.69rem",color:"#166534",display:"inline-flex",gap:4,alignItems:"center"}}>
+                <span style={{fontWeight:700}}>#{c.sheet_number}</span>
+                <span>{c.nationality}</span>
+                <span style={{color:"#9ca3af"}}>{c.gender}</span>
+                <span style={{color:c.match_score===3?"#15803d":c.match_score===2?"#16a34a":"#d97706",fontWeight:600}}>{"★".repeat(c.match_score)}{"☆".repeat(3-c.match_score)}</span>
+              </span>
+            ))}
+            {rvMatchData.total>15&&<span style={{fontSize:"0.69rem",color:"#9ca3af",alignSelf:"center"}}>...외 {rvMatchData.total-15}명</span>}
+          </div>
+        </div>
+      )}
 
       {!collapsed&&<>
         {/* ① INFO 박스 — MEMO 위 */}
@@ -1602,6 +1642,21 @@ export default function EmployerManagement(){
     a.click();
     URL.revokeObjectURL(url);
   },[data]);
+  const downloadXlsx=useCallback(async()=>{
+    const adminKey=localStorage.getItem("bridge_admin_key")||"";
+    const hdrs={};if(adminKey)hdrs["x-admin-key"]=adminKey;
+    try{
+      const res=await fetch(`${API_BASE}/api/admin/jobs/download-xlsx?include_pii=true`,{headers:hdrs});
+      if(!res.ok)throw new Error(`HTTP ${res.status}`);
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=`BRIDGE_구인자_${new Date().toISOString().slice(0,10).replace(/-/g,"")}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }catch(e){console.error("[employers] xlsx failed:",e);alert("엑셀 다운로드 실패: "+e.message);}
+  },[]);
   const addNew=useCallback(async()=>{
     const adminKey=localStorage.getItem("bridge_admin_key")||"";
     const hdrs={"Content-Type":"application/json"};
@@ -1734,6 +1789,7 @@ export default function EmployerManagement(){
           <button onClick={()=>{setMailTarget(null);setMailPopup(true);}} style={{padding:"4px 14px",borderRadius:5,border:"none",background:checked.size>0?"#03c75a":"#d1fae5",color:checked.size>0?"#fff":"#16a34a",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>✉ 메일{checked.size>0?` (${checked.size})`:""}</button>
           <button onClick={()=>window.location.reload()} title="새로고침" style={{padding:"4px 10px",borderRadius:5,border:"1px solid #d1d5db",background:"#fff",fontSize:"0.9rem",cursor:"pointer",lineHeight:1}}>⟳</button>
           <button onClick={saveData} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#7c3aed",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>💾 저장</button>
+          <button onClick={downloadXlsx} title="DB에서 엑셀 다운로드" style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#059669",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>📊 xlsx</button>
           <button onClick={addNew} style={{padding:"4px 14px",borderRadius:5,border:"none",background:"#2563eb",color:"#fff",fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>+ 새접수</button>
 
           <div style={{width:1,height:20,background:"#e5e7eb"}}/>
