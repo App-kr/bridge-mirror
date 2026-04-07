@@ -1485,7 +1485,6 @@ def ask_integrity_password() -> bool:
     result = [False]
 
     root = tk.Tk()
-    root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
     _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
     if _ico.exists():
         try:
@@ -1633,7 +1632,6 @@ def ask_account_selection():
         _HOV  = "#e8e8ed"
 
         root = tk.Tk()
-        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
             try:
@@ -2241,7 +2239,6 @@ def ask_vault_setup() -> bool:
 
     def _build():
         root = tk.Tk()
-        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
             try: root.iconbitmap(str(_ico))
@@ -2366,7 +2363,6 @@ def ask_master_key_gui() -> str:
 
     def _build():
         root = tk.Tk()
-        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화
         root.title("Craig RPA — 마스터 키 입력")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
