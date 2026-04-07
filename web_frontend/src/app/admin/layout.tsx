@@ -14,7 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
   const isFullWidth = pathname === '/admin/sheet' || pathname === '/admin/employers'
-  const isMobilePath = pathname?.startsWith('/admin/m')
+  const isMobilePath = pathname === '/admin/m' || pathname?.startsWith('/admin/m/')
 
   useEffect(() => {
     document.body.style.filter = ""
