@@ -2541,8 +2541,8 @@ _ADMIN_DECRYPT_FIELDS = {
 }
 
 
-def _safe_decrypt(val):
-    """단일 값 안전 복호화. 패딩 자동 보정 포함. 실패 시 원본 반환"""
+def _safe_decrypt(val, column_name: str = ""):
+    """단일 값 안전 복호화. 컬럼명 포함 L1 키 정확도 보장. 실패 시 원본 반환"""
     if val is None:
         return val
     try:
@@ -2556,21 +2556,21 @@ def _safe_decrypt(val):
         # padded 버전으로 암호화 여부 체크
         for candidate in [padded, cleaned]:
             if is_encrypted(candidate):
-                result = decrypt_field(candidate)
+                result = decrypt_field(candidate, column_name)
                 return result if result is not None else val
         return val
     except Exception as exc:
         _log = logging.getLogger("bridge.decrypt")
-        _log.debug("_safe_decrypt 실패 (len=%d): %s", len(str(val)), type(exc).__name__)
+        _log.debug("_safe_decrypt 실패 col=%s (len=%d): %s", column_name, len(str(val)), type(exc).__name__)
         return val
 
 
 def _decrypt_row(row: dict) -> dict:
-    """candidates 행 전체 복호화 — 모든 문자열 필드 자동 감지"""
+    """candidates 행 전체 복호화 — 컬럼명 포함 L1 키 정확 복호화"""
     result = dict(row)
     for key, val in result.items():
         if val is not None and isinstance(val, str):
-            result[key] = _safe_decrypt(val)
+            result[key] = _safe_decrypt(val, key)
     return result
 
 
@@ -5352,9 +5352,9 @@ async def admin_list_applications(
                 for c in cands:
                     apps.append({
                         "id": c["candidate_id"], "type": "candidate",
-                        "name": _safe_decrypt(c["full_name"]) or "", "email": _safe_decrypt(c["email"]) or "",
+                        "name": _safe_decrypt(c["full_name"], "full_name") or "", "email": _safe_decrypt(c["email"], "email") or "",
                         "nationality": c["nationality"],
-                        "phone": _safe_decrypt(c["mobile_phone"]),
+                        "phone": _safe_decrypt(c["mobile_phone"], "mobile_phone"),
                         "location": c["current_location"],
                         "target": c["target"],
                         "target_age": c["target_age"],
@@ -5378,11 +5378,11 @@ async def admin_list_applications(
             ).fetchall()
             for j in job_rows:
                 # 암호화된 PII 필드 복호화
-                dec_employer = _safe_decrypt(j["enc_employer_name"])
-                dec_contact  = _safe_decrypt(j["enc_contact_name"])
-                dec_phone    = _safe_decrypt(j["enc_contact_phone"])
-                dec_email    = _safe_decrypt(j["enc_contact_email"])
-                dec_kakao    = _safe_decrypt(j["enc_contact_kakao"])
+                dec_employer = _safe_decrypt(j["enc_employer_name"], "enc_employer_name")
+                dec_contact  = _safe_decrypt(j["enc_contact_name"], "enc_contact_name")
+                dec_phone    = _safe_decrypt(j["enc_contact_phone"], "enc_contact_phone")
+                dec_email    = _safe_decrypt(j["enc_contact_email"], "enc_contact_email")
+                dec_kakao    = _safe_decrypt(j["enc_contact_kakao"], "enc_contact_kakao")
                 display_name = j["employer_display_name"] or ""
                 # school_name: display_name 우선 → 복호화된 employer_name fallback
                 school = display_name or dec_employer or ""
@@ -5409,7 +5409,7 @@ async def admin_list_applications(
                     "housing_detail": j["housing_detail"],
                     "native_count": j["native_count"],
                     "benefits": j["benefits"],
-                    "memo": _safe_decrypt(j["internal_notes"]),   # AES-256-GCM 복호화
+                    "memo": _safe_decrypt(j["internal_notes"], "internal_notes"),   # T3v1 복호화
                     "notes": None,
                     "raw_text": j["raw_text"] or None,            # 원본 텍스트 (어드민: PII 미제거)
                     "status": j["status"] or "open",
@@ -5420,16 +5420,17 @@ async def admin_list_applications(
             inq_rows = conn.execute(
                 "SELECT id, school_name, email, contact_name, phone, location, "
                 "start_date, vacancies, teaching_age, schedule, working_hours, "
-                "salary_raw, housing_type, housing_detail, benefits, vacation, "
-                "memo, notes, assigned_to, submitted_at, raw_email_body "
+                "salary_raw, housing_type, housing_detail, travel_support, benefits, vacation, "
+                "sick_leave, meal, memo, notes, assigned_to, submitted_at, raw_email_body, "
+                "COALESCE(inbox_status, 'new') as status "
                 "FROM client_inquiries WHERE is_deleted = 0 ORDER BY submitted_at DESC"
             ).fetchall()
             for inq in inq_rows:
-                # PII 필드 복호화 (AES-256-GCM 저장된 값)
-                dec_email   = _safe_decrypt(inq["email"])
-                dec_phone   = _safe_decrypt(inq["phone"])
-                dec_contact = _safe_decrypt(inq["contact_name"])
-                dec_memo    = _safe_decrypt(inq["memo"])
+                # PII 필드 복호화
+                dec_email   = _safe_decrypt(inq["email"], "email")
+                dec_phone   = _safe_decrypt(inq["phone"], "phone")
+                dec_contact = _safe_decrypt(inq["contact_name"], "contact_name")
+                dec_memo    = _safe_decrypt(inq["memo"], "memo")
                 apps.append({
                     "id": f"inq_{inq['id']}", "type": "employer",
                     "name": inq["school_name"] or "",
@@ -5446,14 +5447,17 @@ async def admin_list_applications(
                     "salary_raw": inq["salary_raw"],
                     "housing_type": inq["housing_type"],
                     "housing_detail": inq["housing_detail"],
+                    "travel_support": inq["travel_support"],
                     "benefits": inq["benefits"],
                     "vacation": inq["vacation"],
+                    "sick_leave": inq["sick_leave"],
+                    "meal": inq["meal"],
                     "memo": dec_memo,
                     "notes": inq["notes"],
                     "assigned_to": inq["assigned_to"],
                     "raw_email_body": inq["raw_email_body"] or None,
                     "raw_text": None,
-                    "status": "open",
+                    "status": inq["status"],
                     "created_at": inq["submitted_at"] or "",
                 })
 
@@ -5500,8 +5504,15 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
                     "UPDATE candidates SET status = ?, updated_at = ? WHERE candidate_id = ?",
                     (body.status, now_iso, app_id),
                 )
+            elif app_id.startswith("inq_"):
+                # client_inquiries → inbox_status 업데이트
+                inq_id = int(app_id[4:])
+                conn.execute(
+                    "UPDATE client_inquiries SET inbox_status = ? WHERE id = ?",
+                    (body.status, inq_id),
+                )
             else:
-                # employer → jobs 테이블 업데이트
+                # jobs 테이블 업데이트
                 conn.execute(
                     "UPDATE jobs SET status = ? WHERE id = ?",
                     (body.status, int(app_id)),
@@ -10308,10 +10319,10 @@ async def get_employers(request: Request):
             jnum = jcode.replace("Job.", "").replace("Job", "").strip() or r["brj_id"] or str(r["id"])
 
             # 암호화 필드 복호화
-            name    = _safe_decrypt(r["enc_employer_name"]) or r["employer_display_name"] or ""
-            contact = _safe_decrypt(r["enc_contact_name"]) or ""
-            phone   = _safe_decrypt(r["enc_contact_phone"]) or ""
-            email   = _safe_decrypt(r["enc_contact_email"]) or ""
+            name    = _safe_decrypt(r["enc_employer_name"], "enc_employer_name") or r["employer_display_name"] or ""
+            contact = _safe_decrypt(r["enc_contact_name"], "enc_contact_name") or ""
+            phone   = _safe_decrypt(r["enc_contact_phone"], "enc_contact_phone") or ""
+            email   = _safe_decrypt(r["enc_contact_email"], "enc_contact_email") or ""
 
             # 암호화 필드가 비어있으면 메모에서 PII 추출 (fallback)
             if not name or not phone or not email:

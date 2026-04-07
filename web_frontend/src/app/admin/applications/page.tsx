@@ -26,7 +26,9 @@ interface EmployerApp {
   job_code?: string | null
   source_file?: string | null
   phone?: string | null
+  kakao?: string | null
   location?: string | null
+  city?: string | null
   start_date?: string | null
   vacancies?: string | null
   teaching_age?: string | null
@@ -43,6 +45,8 @@ interface EmployerApp {
   memo?: string | null
   notes?: string | null
   assigned_to?: string | null
+  raw_text?: string | null
+  raw_email_body?: string | null
 }
 
 const statusColors: Record<string, string> = {
@@ -539,11 +543,16 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
                 <DL label="Teaching Age" value={v(app.teaching_age)} />
                 <DL label="Working Hours" value={v(app.working_hours)} />
                 <DL label="Monthly Salary" value={v(app.salary_raw)} />
-                <DL label="Housing" value={v(app.housing_type)} />
+                <DL label="Housing" value={[v(app.housing_type), v(app.housing_detail)].filter(Boolean).join(' / ')} />
                 <DL label="Vacation" value={v(app.vacation)} />
+                <DL label="Sick Leave" value={v(app.sick_leave)} />
+                <DL label="Meal" value={v(app.meal)} />
+                <DL label="Travel Support" value={v(app.travel_support)} />
                 <DL label="Benefits" value={v(app.benefits)} />
+                <DL label="Vacancies" value={v(app.vacancies)} />
+                <DL label="Schedule" value={v(app.schedule)} />
                 <DL label="Contact" value={
-                  [v(app.contact_name) || v(app.name), v(app.phone), v(app.email)]
+                  [v(app.contact_name) || v(app.name), v(app.phone), v(app.kakao), v(app.email)]
                     .filter(Boolean).join(' / ')
                 } />
               </div>
@@ -551,6 +560,12 @@ function DefaultRow({ app, expanded, onToggle, onStatusChange }: {
                 <div className="mt-4 pt-3 border-t border-[#e0e4ef]">
                   <span className="text-[12px] font-semibold text-[#86868b]">Memo</span>
                   <p className="text-[13px] text-[#1d1d1f] mt-1 whitespace-pre-wrap leading-relaxed">{v(app.memo)}</p>
+                </div>
+              )}
+              {v(app.raw_text) && !v(app.contact_name) && !v(app.phone) && !v(app.email) && (
+                <div className="mt-4 pt-3 border-t border-[#e0e4ef]">
+                  <span className="text-[12px] font-semibold text-[#86868b]">원본 공고</span>
+                  <pre className="text-[12px] text-[#424245] mt-1 whitespace-pre-wrap leading-relaxed font-mono bg-[#f8f9ff] p-3 rounded-lg overflow-auto max-h-64">{v(app.raw_text)}</pre>
                 </div>
               )}
             </div>
