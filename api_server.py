@@ -5622,6 +5622,32 @@ except Exception as _e:
     logging.getLogger("bridge.api").warning("_ensure_interviews_schema 스킵: %s", _e)
 
 
+def _ensure_interview_status_log():
+    """interview_status_log 테이블 생성 (상태 변경 이력 추적)."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS interview_status_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            interview_id INTEGER NOT NULL,
+            old_status   TEXT,
+            new_status   TEXT NOT NULL,
+            changed_by   TEXT DEFAULT 'admin',
+            note         TEXT DEFAULT '',
+            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_isl_interview ON interview_status_log(interview_id)")
+    conn.commit()
+    conn.close()
+
+
+try:
+    _ensure_interview_status_log()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_interview_status_log 스킵: %s", _e)
+
+
 def _ensure_community_schema():
     """community_posts 테이블 생성 + 컬럼 추가 + 자동 시드 (Supabase 우선, SQLite 폴백)."""
     import json as _json
@@ -6249,10 +6275,11 @@ async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate,
         raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
-    r = conn.execute("SELECT id FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
+    r = conn.execute("SELECT id, status FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
     if not r:
         conn.close()
         raise HTTPException(404, "Interview not found")
+    old_status = r[1] if r else None
 
     updates = []
     params = []
@@ -6270,6 +6297,16 @@ async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate,
     params.append(interview_id)
     conn.execute(f"UPDATE interviews SET {', '.join(updates)} WHERE id=?", params)
     conn.commit()
+    # 상태 변경 시 interview_status_log 기록
+    if body.status and body.status != old_status:
+        try:
+            conn.execute(
+                "INSERT INTO interview_status_log (interview_id, old_status, new_status, changed_by) VALUES (?,?,?,'admin')",
+                (interview_id, old_status, body.status),
+            )
+            conn.commit()
+        except Exception as _log_e:
+            logging.getLogger("bridge.api").warning("status_log insert 실패 #%d: %s", interview_id, _log_e)
     conn.close()
     changed = [f for f in ("status", "interview_date", "interview_time") if getattr(body, f, None)]
     return ok(message=f"Interview #{interview_id} updated ({', '.join(changed) or 'fields'})")
@@ -6289,6 +6326,78 @@ async def admin_delete_interview(interview_id: int, request: Request):
     conn.commit()
     conn.close()
     return ok(message=f"Interview #{interview_id} deleted")
+
+
+@app.get("/api/admin/interviews/pipeline", tags=["admin"])
+async def admin_interviews_pipeline(request: Request):
+    """인터뷰 파이프라인 — 상태별 그룹화 (Kanban 뷰용)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM interviews WHERE is_deleted=0 ORDER BY interview_date ASC, interview_time ASC"
+    ).fetchall()
+    conn.close()
+    pipeline: dict = {"scheduled": [], "completed": [], "cancelled": [], "no_show": []}
+    for r in rows:
+        d = dict(r)
+        st = d.get("status", "scheduled")
+        if st not in pipeline:
+            pipeline[st] = []
+        pipeline[st].append(d)
+    counts = {k: len(v) for k, v in pipeline.items()}
+    return ok(data={"pipeline": pipeline, "counts": counts})
+
+
+class InterviewRetry(BaseModel):
+    target: str = Field(..., pattern=r"^(candidate|employer|both)$")
+
+
+@app.post("/api/admin/interviews/{interview_id}/retry", tags=["admin"])
+async def admin_retry_interview_email(interview_id: int, body: InterviewRetry, request: Request):
+    """실패/누락 인터뷰 이메일 재발송. target: candidate|employer|both"""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    iv = conn.execute("SELECT * FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
+    conn.close()
+    if not iv:
+        raise HTTPException(404, "Interview not found")
+    targets = ["candidate", "employer"] if body.target == "both" else [body.target]
+    results: dict = {}
+    for t in targets:
+        try:
+            subject, html, to_email = _render_interview_email(dict(iv), t)
+            if not to_email:
+                results[t] = {"status": "skipped", "reason": "no_email"}
+                continue
+            sent = _smtp_send(to_email, subject, html)
+            if sent:
+                conn2 = sqlite3.connect(str(_ADMIN_DB_PATH))
+                conn2.execute("PRAGMA busy_timeout = 5000")
+                if t == "candidate":
+                    conn2.execute(
+                        "UPDATE interviews SET email_sent_candidate=1, candidate_email_sent=1, candidate_email_sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (interview_id,),
+                    )
+                else:
+                    conn2.execute(
+                        "UPDATE interviews SET email_sent_employer=1, school_email_sent=1, school_email_sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (interview_id,),
+                    )
+                conn2.commit()
+                conn2.close()
+                results[t] = {"status": "sent", "to": _mask_email(to_email)}
+            else:
+                results[t] = {"status": "smtp_failed"}
+        except Exception as _re:
+            logging.getLogger("bridge.api").warning(
+                "interview #%d retry %s 실패: %s", interview_id, t, _re
+            )
+            results[t] = {"status": "error", "detail": type(_re).__name__}
+    return ok(data=results, message=f"Interview #{interview_id} retry: {body.target}")
 
 
 # ── Google Calendar 자동 확정 ──────────────────────────────────────────────────
@@ -6435,6 +6544,29 @@ async def admin_confirm_interview(body: InterviewConfirm, request: Request):
         interview_id, _mask_email(candidate_email), _mask_email(employer_email),
         (meet_link[:30] + "...") if len(meet_link) > 30 else meet_link,
     )
+
+    # 3-b. candidates.recruiter_memo 자동 업데이트 (인터뷰 확정 기록)
+    try:
+        memo_line = (
+            f"[인터뷰확정] {body.interview_date} {body.interview_time} "
+            f"× {employer_name} (#{interview_id})"
+        )
+        conn3 = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn3.execute("PRAGMA busy_timeout = 5000")
+        existing = conn3.execute(
+            "SELECT recruiter_memo FROM candidates WHERE candidate_id=?",
+            (body.candidate_id,),
+        ).fetchone()
+        prev_memo = (existing[0] or "") if existing else ""
+        new_memo = (prev_memo + "\n" + memo_line).strip()
+        conn3.execute(
+            "UPDATE candidates SET recruiter_memo=?, updated_at=CURRENT_TIMESTAMP WHERE candidate_id=?",
+            (new_memo, body.candidate_id),
+        )
+        conn3.commit()
+        conn3.close()
+    except Exception as _memo_e:
+        _log_iv.warning("recruiter_memo 업데이트 실패 candidate=%s: %s", body.candidate_id, _memo_e)
 
     # 4. 이메일 자동 발송 (실패해도 DB 삽입은 유지)
     iv_dict = {
