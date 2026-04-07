@@ -1,828 +1,482 @@
 'use client'
 
 /**
- * /admin/interviews — Interview Management (Card Layout)
- * 예정/지난 인터뷰 분리 · 날짜/시간 변경 · 취소 · Meet 참가 · 이메일 상태
- * 한국 날짜/시간 표시 · 강사번호 표시
+ * /admin/interviews — 인터뷰 파이프라인 칸반 + 테이블 뷰 (Sprint C-FINAL)
+ * API: GET/POST /api/admin/interviews, GET /api/admin/interviews/pipeline
+ *      PATCH /api/admin/interviews/{id}/status, POST /api/admin/interviews/{id}/retry
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { API_URL } from '@/lib/api'
 
-const API = API_URL
+const API = `${API_URL}/api/admin`
 
-/* ── Google Meet Room Pool (실제 열린방만) ── */
-const DEFAULT_MEET_POOL = [
-  'https://meet.google.com/kmt-ydhj-fmf',
+// ─── 파이프라인 단계 ─────────────────────────────────────────
+const PIPELINE_STAGES = [
+  { key: 'pending',           label: '대기',    color: '#94a3b8' },
+  { key: 'scheduled',         label: '예정',    color: '#3b82f6' },
+  { key: 'completed',         label: '완료',    color: '#22c55e' },
+  { key: 'contract_offered',  label: '계약제안', color: '#f59e0b' },
+  { key: 'under_review',      label: '검토중',  color: '#f97316' },
+  { key: 'contract_signed',   label: '계약수락', color: '#10b981' },
+  { key: 'placement_pending', label: '배치대기', color: '#8b5cf6' },
+  { key: 'placed',            label: '배치완료', color: '#059669' },
 ]
-const MEET_POOL_KEY = 'bridge_meet_pool'
 
-function loadMeetPool(): string[] {
-  try {
-    const s = localStorage.getItem(MEET_POOL_KEY)
-    if (s) { const arr = JSON.parse(s); if (Array.isArray(arr) && arr.length) return arr }
-  } catch { /* ignore */ }
-  return DEFAULT_MEET_POOL
-}
+const NEGATIVE_STAGES = [
+  { key: 'no_show_teacher',  label: '구직자노쇼', color: '#ef4444' },
+  { key: 'no_show_employer', label: '구인자노쇼',  color: '#ef4444' },
+  { key: 'no_show',          label: '노쇼',       color: '#ef4444' },
+  { key: 'cancelled',        label: '취소',       color: '#6b7280' },
+  { key: 'rejected',         label: '불합격',     color: '#dc2626' },
+  { key: 'fallen_through',   label: '파기',       color: '#991b1b' },
+]
 
-function saveMeetPool(pool: string[]) {
-  localStorage.setItem(MEET_POOL_KEY, JSON.stringify(pool))
-}
-
-/** 예정된 인터뷰와 겹치지 않는 Meet 링크를 랜덤 배정 */
-function pickAvailableMeet(pool: string[], interviews: Interview[], date: string): string {
-  // 같은 날 scheduled 인터뷰에서 사용 중인 링크 수집
-  const usedOnDate = new Set(
-    interviews
-      .filter(iv => iv.status === 'scheduled' && iv.interview_date === date)
-      .map(iv => iv.meet_link)
-  )
-  // 사용 안 된 링크 우선
-  const available = pool.filter(link => !usedOnDate.has(link))
-  if (available.length > 0) return available[Math.floor(Math.random() * available.length)]
-  // 모두 사용 중이면 랜덤 재사용
-  return pool[Math.floor(Math.random() * pool.length)]
-}
+const ALL_STATUSES = [...PIPELINE_STAGES, ...NEGATIVE_STAGES]
 
 interface Interview {
   id: number
-  candidate_name: string
-  candidate_email: string
-  candidate_id: string
-  employer_name: string
-  employer_email: string
+  candidate_number?: number
+  candidate_name?: string
+  candidate_email?: string
+  candidate_id?: string
+  job_number?: number
+  employer_name?: string
   interview_date: string
   interview_time: string
-  meet_link: string
+  meet_link?: string
   status: string
-  notes: string
-  duration_minutes: number
-  email_sent_candidate: number
-  email_sent_employer: number
-  candidate_email_sent_at: string | null
-  school_email_sent_at: string | null
-  created_at: string
+  notes?: string
+  result_notes?: string
 }
 
-interface EmailPreview {
-  subject: string
-  body_html: string
-  to_email: string
-}
-
-const STATUS_META: Record<string, { label: string; color: string; bg: string; border: string; icon: string }> = {
-  scheduled:  { label: '예정',   color: '#2563eb', bg: '#eff6ff',  border: '#bfdbfe', icon: '📅' },
-  completed:  { label: '완료',   color: '#16a34a', bg: '#f0fdf4',  border: '#bbf7d0', icon: '✅' },
-  cancelled:  { label: '취소',   color: '#6b7280', bg: '#f9fafb',  border: '#e5e7eb', icon: '❌' },
-  no_show:    { label: '불참',   color: '#dc2626', bg: '#fef2f2',  border: '#fecaca', icon: '🚫' },
-}
-
-/* ── Korean Date/Time Formatting ── */
-const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토']
-
-function formatKoreanDateTime(date: string, time: string): { dateStr: string; timeStr: string; weekday: string; relative: string } {
-  const d = new Date(`${date}T${time || '00:00'}`)
-  const now = new Date()
-  const diff = d.getTime() - now.getTime()
-  const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
-
-  const m = d.getMonth() + 1
-  const day = d.getDate()
-  const weekday = WEEKDAYS_KO[d.getDay()]
-
-  // time → 오전/오후 표시
-  const [h, min] = (time || '00:00').split(':').map(Number)
-  const ampm = h < 12 ? '오전' : '오후'
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  const timeStr = `${ampm} ${h12}:${String(min).padStart(2, '0')}`
-
-  let relative = ''
-  if (days === 0) relative = '오늘'
-  else if (days === 1) relative = '내일'
-  else if (days === 2) relative = '모레'
-  else if (days > 0 && days <= 7) relative = `${days}일 후`
-  else if (days > 7) relative = `${Math.ceil(days / 7)}주 후`
-  else if (days === -1) relative = '어제'
-  else if (days < -1) relative = `${Math.abs(days)}일 전`
-
-  return { dateStr: `${m}월 ${day}일 (${weekday})`, timeStr, weekday, relative }
-}
-
-/* ── Email Preview Modal ── */
-function EmailPreviewModal({
-  interviewId, target, hdrs, onClose, onSent,
-}: {
-  interviewId: number
-  target: 'candidate' | 'employer'
-  hdrs: () => Record<string, string>
-  onClose: () => void
-  onSent: () => void
-}) {
-  const [preview, setPreview] = useState<EmailPreview | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    fetch(`${API}/api/admin/interviews/${interviewId}/preview-email?target=${target}`, { headers: hdrs() })
-      .then(r => r.json())
-      .then(json => { if (json.success) setPreview(json.data); else setError(json.message || 'Failed') })
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed'))
-      .finally(() => setLoading(false))
-  }, [interviewId, target, hdrs])
-
-  const handleSend = async () => {
-    setSending(true); setError(null)
-    try {
-      const res = await fetch(`${API}/api/admin/interviews/${interviewId}/send-email`, {
-        method: 'POST', headers: hdrs(), body: JSON.stringify({ target }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? json.message ?? 'Failed')
-      onSent()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Send failed'); setSending(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-900">이메일 미리보기 — {target === 'candidate' ? '후보자' : '학교'}</h3>
-            {preview && <p className="text-xs text-gray-500 mt-1">To: {preview.to_email} · Subject: {preview.subject}</p>}
-          </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <div className="flex-1 overflow-auto p-1 bg-gray-50">
-          {loading ? <div className="text-center py-16 text-gray-400 animate-pulse">로딩 중...</div>
-            : error && !preview ? <div className="text-center py-16 text-red-500">{error}</div>
-            : preview ? <iframe srcDoc={preview.body_html} className="w-full border-0 bg-white rounded" style={{ minHeight: 400 }} title="Preview" sandbox="allow-same-origin" />
-            : null}
-        </div>
-        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-          {error && preview ? <p className="text-sm text-red-500">{error}</p> : <span />}
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-            <button type="button" onClick={handleSend} disabled={sending || !preview}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              {sending ? '발송 중...' : '📧 발송 확인'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── Reschedule Modal ── */
-function RescheduleModal({
-  interview, hdrs, onClose, onDone,
-}: {
-  interview: Interview
-  hdrs: () => Record<string, string>
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [date, setDate] = useState(interview.interview_date)
-  const [time, setTime] = useState(interview.interview_time)
-  const [duration, setDuration] = useState(interview.duration_minutes || 20)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSave = async () => {
-    setSaving(true); setError(null)
-    try {
-      const res = await fetch(`${API}/api/admin/interviews/${interview.id}`, {
-        method: 'PATCH', headers: hdrs(),
-        body: JSON.stringify({ interview_date: date, interview_time: time, duration_minutes: duration }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'Failed')
-      onDone()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); setSaving(false) }
-  }
-
-  const fmt = formatKoreanDateTime(date, time)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-bold text-gray-900">📅 일정 변경 — #{interview.id}</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <div className="p-5 space-y-4">
-          {/* Current → New preview */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm">
-            <span className="font-semibold text-amber-700">현재:</span>{' '}
-            {formatKoreanDateTime(interview.interview_date, interview.interview_time).dateStr}{' '}
-            {formatKoreanDateTime(interview.interview_date, interview.interview_time).timeStr}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">날짜</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-400 focus:border-violet-400 outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">시간 (KST)</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-400 focus:border-violet-400 outline-none" />
-            </div>
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-2">면접 시간</label>
-            <div className="flex gap-2">
-              {[15, 20, 30].map(d => (
-                <button key={d} type="button" onClick={() => setDuration(d)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                    duration === d ? 'bg-violet-100 text-violet-700 border-violet-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                  }`}>{d}분</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Preview */}
-          <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 text-sm">
-            <span className="font-semibold text-violet-700">변경 후:</span>{' '}
-            {fmt.dateStr} {fmt.timeStr}
-            {fmt.relative && <span className="ml-2 text-violet-500">({fmt.relative})</span>}
-          </div>
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-        <div className="p-4 border-t border-gray-200 flex gap-2 justify-end">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-          <button type="button" onClick={handleSave} disabled={saving}
-            className="px-4 py-2 text-sm font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
-            {saving ? '저장 중...' : '📅 일정 변경'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── Interview Card ── */
-function InterviewCard({
-  iv, onStatusChange, onDelete, onReschedule, onEmailPreview, isUpcoming,
-}: {
-  iv: Interview
-  onStatusChange: (id: number, status: string) => void
-  onDelete: (id: number) => void
-  onReschedule: (iv: Interview) => void
-  onEmailPreview: (id: number, target: 'candidate' | 'employer') => void
-  isUpcoming: boolean
-}) {
-  const meta = STATUS_META[iv.status] || STATUS_META.scheduled
-  const fmt = formatKoreanDateTime(iv.interview_date, iv.interview_time)
-  const meetLink = iv.meet_link || loadMeetPool()[0]
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-      style={{ borderLeft: `4px solid ${meta.color}` }}>
-      <div className="p-4">
-        {/* Top row: status + date + relative */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold" style={{ color: meta.color }}>
-              {meta.icon} {meta.label}
-            </span>
-            {iv.duration_minutes > 0 && (
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{iv.duration_minutes}분</span>
-            )}
-          </div>
-          {fmt.relative && (
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              isUpcoming ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-            }`}>{fmt.relative}</span>
-          )}
-        </div>
-
-        {/* Date/Time prominent */}
-        <div className="mb-3">
-          <div className="text-lg font-bold text-gray-900">{fmt.dateStr}</div>
-          <div className="text-sm font-semibold text-gray-600">{fmt.timeStr} KST</div>
-        </div>
-
-        {/* Candidate / Employer info */}
-        <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-          <div className="bg-gray-50 rounded-lg p-2.5">
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Candidate</div>
-            <div className="font-semibold text-gray-900">{iv.candidate_name || '-'}</div>
-            {iv.candidate_id && (
-              <div className="text-xs text-violet-600 font-semibold">#{iv.candidate_id}</div>
-            )}
-            {iv.candidate_email && <div className="text-xs text-gray-500 truncate">{iv.candidate_email}</div>}
-          </div>
-          <div className="bg-gray-50 rounded-lg p-2.5">
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">School</div>
-            <div className="font-semibold text-gray-900">{iv.employer_name || '-'}</div>
-            {iv.employer_email && <div className="text-xs text-gray-500 truncate">{iv.employer_email}</div>}
-          </div>
-        </div>
-
-        {/* Notes */}
-        {iv.notes && (
-          <div className="text-xs text-gray-500 bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2 mb-3">
-            💬 {iv.notes}
-          </div>
-        )}
-
-        {/* Meet link + Calendar edit */}
-        <div className="flex items-center gap-2 mb-3">
-          <a href={meetLink} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-800 group">
-            <span className="bg-blue-100 group-hover:bg-blue-200 rounded-lg px-3 py-1.5 transition-colors">
-              🔗 Meet 참가
-            </span>
-            <span className="text-gray-400 truncate">{meetLink.replace('https://meet.google.com/', '')}</span>
-          </a>
-          <a href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${iv.candidate_name}`)}&dates=${(() => { const d = iv.interview_date || ''; const t = iv.interview_time || '14:00'; const [y,mo,dd] = d.split('-').map(Number); const [h,mi] = t.split(':').map(Number); const s = new Date(y,mo-1,dd,h,mi); const e = new Date(s.getTime()+(iv.duration_minutes||20)*60000); const f = (dt: Date) => dt.toISOString().replace(/[-:]/g,'').replace(/\.\d+/,''); return `${f(s)}/${f(e)}` })()}&details=${encodeURIComponent('BRIDGE Recruitment Interview')}${iv.candidate_email ? `&add=${encodeURIComponent(iv.candidate_email)}` : ''}`}
-            target="_blank" rel="noopener noreferrer"
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
-            title="Google Calendar에서 Meet 편집">
-            📅 캘린더
-          </a>
-        </div>
-
-        {/* Email status + action buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => onEmailPreview(iv.id, 'candidate')}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-              iv.email_sent_candidate ? 'border-green-200 text-green-600 bg-green-50 hover:bg-green-100' : 'border-teal-200 text-teal-600 hover:bg-teal-50'
-            }`}>
-            {iv.email_sent_candidate ? '✓ 후보자 발송됨' : '📧 후보자'}
-          </button>
-          <button type="button" onClick={() => onEmailPreview(iv.id, 'employer')}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-              iv.email_sent_employer ? 'border-green-200 text-green-600 bg-green-50 hover:bg-green-100' : 'border-indigo-200 text-indigo-600 hover:bg-indigo-50'
-            }`}>
-            {iv.email_sent_employer ? '✓ 학교 발송됨' : '📧 학교'}
-          </button>
-
-          <div className="flex-1" />
-
-          {/* Actions */}
-          {iv.status === 'scheduled' && (
-            <>
-              <button type="button" onClick={() => onReschedule(iv)}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors"
-                title="날짜/시간 변경">
-                🔄 일정변경
-              </button>
-              <button type="button" onClick={() => onStatusChange(iv.id, 'completed')}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-green-200 text-green-600 hover:bg-green-50 transition-colors">
-                ✅ 완료
-              </button>
-              <button type="button" onClick={() => onStatusChange(iv.id, 'no_show')}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors">
-                🚫 불참
-              </button>
-              <button type="button" onClick={() => onStatusChange(iv.id, 'cancelled')}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
-                ❌ 취소
-              </button>
-            </>
-          )}
-          {iv.status !== 'scheduled' && (
-            <button type="button" onClick={() => onStatusChange(iv.id, 'scheduled')}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors">
-              📅 재예약
-            </button>
-          )}
-          <button type="button" onClick={() => onDelete(iv.id)}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-red-200 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-            🗑
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ══════════════════════════════════════════
-   Main Page
-   ══════════════════════════════════════════ */
-export default function AdminInterviewsPage() {
-  const { authed, login, headers, waking } = useAdminAuth()
-
+// ─── 메인 컴포넌트 ────────────────────────────────────────────
+export default function InterviewsPage() {
+  const { adminKey, authed, login, waking } = useAdminAuth()
   const [interviews, setInterviews] = useState<Interview[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
-  const [emailModal, setEmailModal] = useState<{ id: number; target: 'candidate' | 'employer' } | null>(null)
-  const [rescheduleTarget, setRescheduleTarget] = useState<Interview | null>(null)
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [meetPool, setMeetPool] = useState<string[]>(DEFAULT_MEET_POOL)
-  const [showMeetSettings, setShowMeetSettings] = useState(false)
+  const [view, setView] = useState<'pipeline' | 'table'>('pipeline')
+  const [showForm, setShowForm] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
+  const [toast, setToast] = useState('')
 
-  // Load meet pool from localStorage on mount
-  useEffect(() => { setMeetPool(loadMeetPool()) }, [])
-
-  // Quick create form
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({
-    candidate_name: '', candidate_email: '', candidate_id: '',
-    employer_name: '', employer_email: '',
-    interview_date: '', interview_time: '14:00',
-    meet_link: '', notes: '', duration_minutes: 20,
-    auto_send_email: false,
+  const [formData, setFormData] = useState({
+    candidate_number: '', job_number: '',
+    date: '', time: '10:00', duration: 30,
   })
-  const [creating, setCreating] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkItems, setBulkItems] = useState<typeof formData[]>([])
 
-  const fetchInterviews = useCallback(async () => {
-    setLoading(true); setError(null)
+  const hdrs = useCallback(() => ({
+    'Content-Type': 'application/json',
+    'x-admin-key': adminKey,
+  }), [adminKey])
+
+  const flash = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2800)
+  }
+
+  const fetchAll = useCallback(async () => {
+    if (!adminKey) return
     try {
-      const res = await fetch(`${API}/api/admin/interviews`, { headers: headers() })
-      if (res.status === 403) { setError('인증 오류'); return }
-      const json = await res.json()
-      if (json.success) setInterviews(json.data || [])
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed') }
+      const res = await fetch(`${API}/interviews`, { headers: { 'x-admin-key': adminKey } })
+      const data = await res.json()
+      setInterviews(data.interviews || data.data?.interviews || [])
+    } catch { /* silent */ }
     finally { setLoading(false) }
-  }, [headers])
+  }, [adminKey])
 
-  useEffect(() => { if (authed) fetchInterviews() }, [authed, fetchInterviews])
+  useEffect(() => { if (authed) fetchAll() }, [authed, fetchAll])
 
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t) }
-  }, [toast])
-
-  const handleCreate = async () => {
-    if (!form.interview_date || !form.interview_time) { setToast('날짜와 시간을 입력하세요'); return }
-    setCreating(true)
+  // ─── 상태 변경 ──────────────────────────────────────────────
+  const changeStatus = async (ivId: number, newStatus: string, memo = '') => {
     try {
-      const res = await fetch(`${API}/api/admin/interviews`, {
-        method: 'POST', headers: headers(), body: JSON.stringify(form),
+      const res = await fetch(`${API}/interviews/${ivId}/status`, {
+        method: 'PATCH',
+        headers: hdrs(),
+        body: JSON.stringify({ status: newStatus, memo }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'Failed')
-      setToast(`Interview #${json.data?.id} 생성됨${json.data?.email_result?.status === 'sent' ? ' + 이메일 발송' : ''}`)
-      setShowCreate(false)
-      setForm({ ...form, candidate_name: '', candidate_email: '', candidate_id: '', employer_name: '', employer_email: '', notes: '' })
-      fetchInterviews()
-    } catch (e) { setToast(`오류: ${e instanceof Error ? e.message : 'Failed'}`) }
-    finally { setCreating(false) }
+      if (!res.ok) { const d = await res.json(); flash(`오류: ${d.detail || res.status}`); return }
+      flash(`상태 → ${ALL_STATUSES.find(s => s.key === newStatus)?.label || newStatus}`)
+      fetchAll()
+    } catch { flash('상태 변경 실패') }
   }
 
-  const handleStatus = async (id: number, newStatus: string) => {
-    if (newStatus === 'cancelled' && !confirm('인터뷰를 취소하시겠습니까?')) return
+  // ─── 재시도 ─────────────────────────────────────────────────
+  const retryInterview = async (ivId: number) => {
     try {
-      const res = await fetch(`${API}/api/admin/interviews/${id}`, {
-        method: 'PATCH', headers: headers(), body: JSON.stringify({ status: newStatus }),
-      })
-      if (!res.ok) throw new Error('Failed')
-      setToast(`#${id} → ${STATUS_META[newStatus]?.label || newStatus}`)
-      fetchInterviews()
-    } catch (e) { setToast(`오류: ${e instanceof Error ? e.message : 'Failed'}`) }
+      await fetch(`${API}/interviews/${ivId}/retry`, { method: 'POST', headers: hdrs() })
+      flash('재처리 시작')
+      fetchAll()
+    } catch { flash('재시도 실패') }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm(`Interview #${id}를 삭제하시겠습니까?`)) return
-    try {
-      await fetch(`${API}/api/admin/interviews/${id}`, { method: 'DELETE', headers: headers() })
-      setToast(`#${id} 삭제됨`)
-      fetchInterviews()
-    } catch { /* ignore */ }
+  // ─── 인터뷰 생성 ─────────────────────────────────────────────
+  const createInterview = async () => {
+    const items = bulkMode ? bulkItems : [formData]
+    if (!items.length || !items[0].candidate_number) { flash('구직자 번호를 입력하세요'); return }
+    if (!items[0].date) { flash('날짜를 입력하세요'); return }
+
+    let created = 0
+    for (const item of items) {
+      if (!item.candidate_number || !item.date) continue
+      try {
+        const res = await fetch(`${API}/interviews`, {
+          method: 'POST',
+          headers: hdrs(),
+          body: JSON.stringify({
+            candidate_id: String(item.candidate_number),
+            candidate_name: `#${item.candidate_number}`,
+            candidate_email: '',
+            employer_name: item.job_number ? `Job#${item.job_number}` : '',
+            employer_email: '',
+            interview_date: item.date,
+            interview_time: item.time || '10:00',
+            duration_minutes: item.duration || 30,
+            notes: item.job_number ? `job_number:${item.job_number}` : '',
+          }),
+        })
+        if (res.ok) created++
+      } catch { /* collect errors */ }
+    }
+
+    flash(`${created}건 인터뷰 생성 완료`)
+    setShowForm(false)
+    setFormData({ candidate_number: '', job_number: '', date: '', time: '10:00', duration: 30 })
+    setBulkItems([])
+    fetchAll()
   }
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
-  // Split interviews
-  const now = new Date()
-  const filtered = filterStatus === 'all' ? interviews : interviews.filter(iv => iv.status === filterStatus)
-  const upcoming = filtered.filter(iv => {
-    const d = new Date(`${iv.interview_date}T${iv.interview_time || '23:59'}`)
-    return d >= now && iv.status === 'scheduled'
-  }).sort((a, b) => `${a.interview_date}${a.interview_time}`.localeCompare(`${b.interview_date}${b.interview_time}`))
-  const past = filtered.filter(iv => !upcoming.includes(iv))
-    .sort((a, b) => `${b.interview_date}${b.interview_time}`.localeCompare(`${a.interview_date}${a.interview_time}`))
-
-  // Stats
-  const stats = {
-    total: interviews.length,
-    scheduled: interviews.filter(iv => iv.status === 'scheduled').length,
-    completed: interviews.filter(iv => iv.status === 'completed').length,
-    cancelled: interviews.filter(iv => iv.status === 'cancelled').length,
-    no_show: interviews.filter(iv => iv.status === 'no_show').length,
-  }
+  const filtered = filter ? interviews.filter(iv => iv.status === filter) : interviews
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div style={{ padding: '20px 24px', fontFamily: '-apple-system,sans-serif', maxWidth: 1500, margin: '0 auto' }}>
+
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-2 animate-in slide-in-from-top">
-          <span>{toast}</span>
-          <button type="button" onClick={() => setToast(null)} className="text-gray-400 hover:text-white ml-2">&times;</button>
-        </div>
+        <div style={{
+          position: 'fixed', top: 20, right: 24, zIndex: 9999,
+          background: '#1d1d1f', color: '#fff', padding: '10px 18px',
+          borderRadius: 8, fontSize: 13, fontWeight: 500,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        }}>{toast}</div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Interview Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            전체 {stats.total}건 · 예정 <span className="text-blue-600 font-semibold">{stats.scheduled}</span> · 완료 <span className="text-green-600 font-semibold">{stats.completed}</span>
-            {stats.cancelled > 0 && <> · 취소 {stats.cancelled}</>}
-            {stats.no_show > 0 && <> · 불참 {stats.no_show}</>}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setShowMeetSettings(true)}
-            className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Meet 링크 설정">
-            🔗 Meet 설정
-          </button>
-          <button type="button" onClick={fetchInterviews}
-            className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            ↻ 새로고침
-          </button>
-          <button type="button" onClick={() => {
-            const tom = new Date(); tom.setDate(tom.getDate()+1)
-            const d = tom.toISOString().slice(0,10)
-            setForm(p => ({...p, interview_date: d, meet_link: pickAvailableMeet(meetPool, interviews, d)}))
-            setShowCreate(!showCreate)
-          }}
-            className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors">
+      {/* 헤더 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>인터뷰 관리</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['pipeline', 'table'] as const).map(v => (
+            <button key={v} type="button" onClick={() => setView(v)} style={{
+              padding: '6px 14px', borderRadius: 6, border: '1px solid #ddd',
+              background: view === v ? '#2563eb' : '#fff',
+              color: view === v ? '#fff' : '#333',
+              cursor: 'pointer', fontSize: 13,
+            }}>
+              {v === 'pipeline' ? '파이프라인' : '테이블'}
+            </button>
+          ))}
+          <button type="button" onClick={() => { setShowForm(!showForm); setBulkMode(false) }} style={{
+            padding: '6px 14px', borderRadius: 6, border: 'none',
+            background: '#22c55e', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+          }}>
             + 인터뷰 생성
           </button>
+          <button type="button" onClick={fetchAll} style={{
+            padding: '6px 12px', borderRadius: 6, border: '1px solid #ddd',
+            background: '#fff', cursor: 'pointer', fontSize: 13,
+          }}>
+            새로고침
+          </button>
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-        {[
-          { key: 'all', label: '전체' },
-          { key: 'scheduled', label: '📅 예정' },
-          { key: 'completed', label: '✅ 완료' },
-          { key: 'cancelled', label: '❌ 취소' },
-          { key: 'no_show', label: '🚫 불참' },
-        ].map(f => (
-          <button key={f.key} type="button" onClick={() => setFilterStatus(f.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              filterStatus === f.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>{f.label}</button>
-        ))}
-      </div>
-
-      {/* Quick Create Form */}
-      {showCreate && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="font-bold text-gray-900">📅 새 인터뷰</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">후보자 이름</label>
-              <input className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Sarah Johnson"
-                value={form.candidate_name} onChange={e => setForm({...form, candidate_name: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">후보자 이메일</label>
-              <input className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="sarah@email.com"
-                value={form.candidate_email} onChange={e => setForm({...form, candidate_email: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">강사번호</label>
-              <input className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="1234"
-                value={form.candidate_id} onChange={e => setForm({...form, candidate_id: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">학교명</label>
-              <input className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="ABC Academy"
-                value={form.employer_name} onChange={e => setForm({...form, employer_name: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">날짜</label>
-              <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                value={form.interview_date} onChange={e => {
-                  const d = e.target.value
-                  setForm(p => ({...p, interview_date: d, meet_link: pickAvailableMeet(meetPool, interviews, d)}))
-                }} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">시간 (KST)</label>
-              <input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                value={form.interview_time} onChange={e => setForm({...form, interview_time: e.target.value})} />
-            </div>
+      {/* 생성 폼 */}
+      {showForm && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              {bulkMode ? `일괄 생성 (${bulkItems.length}건)` : '인터뷰 생성'}
+            </h3>
+            <label style={{ fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={bulkMode} onChange={e => {
+                setBulkMode(e.target.checked)
+                if (e.target.checked && bulkItems.length === 0)
+                  setBulkItems([{ candidate_number: '', job_number: '', date: '', time: '10:00', duration: 30 }])
+              }} style={{ marginRight: 4 }} />
+              일괄 모드
+            </label>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-2">면접 시간</label>
-            <div className="flex gap-2">
-              {[15, 20, 30].map(d => (
-                <button key={d} type="button" onClick={() => setForm({...form, duration_minutes: d})}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                    form.duration_minutes === d ? 'bg-violet-100 text-violet-700 border-violet-300' : 'bg-white text-gray-500 border-gray-200'
-                  }`}>{d}분</button>
+          {!bulkMode ? (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              {[
+                { label: '구직자 번호', key: 'candidate_number', ph: '10001', w: 90, type: 'number' },
+                { label: 'Job#',       key: 'job_number',        ph: '1003',  w: 90, type: 'number' },
+                { label: '날짜',       key: 'date',              ph: '',      w: 130, type: 'date' },
+                { label: '시간',       key: 'time',              ph: '',      w: 100, type: 'time' },
+              ].map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>{f.label}</div>
+                  <input
+                    type={f.type} placeholder={f.ph}
+                    value={(formData as Record<string, string | number>)[f.key] as string}
+                    onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
+                    style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: 4, width: f.w }}
+                  />
+                </div>
               ))}
+              <button type="button" onClick={createInterview} style={{
+                padding: '6px 20px', background: '#2563eb', color: '#fff',
+                border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13,
+              }}>생성</button>
             </div>
-          </div>
-
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-green-700">
-                🔗 Meet: <code className="text-xs bg-green-100 px-1.5 py-0.5 rounded">{form.meet_link || '(미배정)'}</code>
-              </div>
-              <button type="button" onClick={() => setForm(p => ({...p, meet_link: pickAvailableMeet(meetPool, interviews, form.interview_date)}))}
-                className="text-xs font-semibold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg transition-colors">
-                🔄 다른 방
-              </button>
-            </div>
-            <div className="text-[11px] text-green-600 mt-1">풀 {meetPool.length}개 중 자동 배정 (같은 날 겹침 방지)</div>
-          </div>
-
-          <textarea className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="메모 (선택)"
-            value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.auto_send_email} onChange={e => setForm({...form, auto_send_email: e.target.checked})}
-              className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
-            <span className="text-sm font-semibold text-gray-700">후보자에게 이메일 자동 발송</span>
-          </label>
-
-          <div className="flex gap-2 justify-end">
-            <button type="button" onClick={() => setShowCreate(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-            <button type="button" onClick={handleCreate} disabled={creating}
-              className="px-5 py-2 text-sm font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
-              {creating ? '생성 중...' : '📅 생성'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      {loading ? (
-        <div className="text-center py-20 text-gray-400 animate-pulse text-sm">로딩 중...</div>
-      ) : error ? (
-        <div className="text-center py-20 text-red-500 text-sm">{error}</div>
-      ) : interviews.length === 0 ? (
-        <div className="text-center py-20">
-          <div className="text-5xl mb-4">📅</div>
-          <p className="text-gray-500 font-medium">예정된 인터뷰가 없습니다</p>
-          <p className="text-sm text-gray-400 mt-1">&quot;+ 인터뷰 생성&quot; 버튼을 클릭하세요</p>
-        </div>
-      ) : (
-        <>
-          {/* Upcoming */}
-          {upcoming.length > 0 && (
+          ) : (
             <div>
-              <h2 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                예정된 인터뷰 ({upcoming.length})
-              </h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                {upcoming.map(iv => (
-                  <InterviewCard key={iv.id} iv={iv} isUpcoming={true}
-                    onStatusChange={handleStatus} onDelete={handleDelete}
-                    onReschedule={setRescheduleTarget}
-                    onEmailPreview={(id, target) => setEmailModal({ id, target })} />
-                ))}
+              {bulkItems.map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: '#999', width: 20 }}>{i + 1}</span>
+                  {(['candidate_number', 'job_number'] as const).map(k => (
+                    <input key={k} type="number" placeholder={k === 'candidate_number' ? '구직자#' : 'Job#'}
+                      value={item[k] as string}
+                      onChange={e => {
+                        const n = [...bulkItems]; n[i] = { ...n[i], [k]: e.target.value }; setBulkItems(n)
+                      }}
+                      style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, width: 80 }} />
+                  ))}
+                  <input type="date" value={item.date}
+                    onChange={e => { const n = [...bulkItems]; n[i] = { ...n[i], date: e.target.value }; setBulkItems(n) }}
+                    style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4 }} />
+                  <input type="time" value={item.time}
+                    onChange={e => { const n = [...bulkItems]; n[i] = { ...n[i], time: e.target.value }; setBulkItems(n) }}
+                    style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, width: 90 }} />
+                  <button type="button" onClick={() => setBulkItems(bulkItems.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" onClick={() => setBulkItems([...bulkItems, { candidate_number: '', job_number: '', date: '', time: '10:00', duration: 30 }])}
+                  style={{ padding: '4px 12px', border: '1px dashed #aaa', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 12 }}>
+                  + 행 추가
+                </button>
+                <button type="button" onClick={createInterview} style={{
+                  padding: '4px 16px', background: '#2563eb', color: '#fff',
+                  border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13,
+                }}>
+                  {bulkItems.length}건 일괄 생성
+                </button>
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {/* Past / Other */}
-          {past.length > 0 && (
-            <div>
-              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-                지난 인터뷰 ({past.length})
-              </h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                {past.map(iv => (
-                  <InterviewCard key={iv.id} iv={iv} isUpcoming={false}
-                    onStatusChange={handleStatus} onDelete={handleDelete}
-                    onReschedule={setRescheduleTarget}
-                    onEmailPreview={(id, target) => setEmailModal({ id, target })} />
-                ))}
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>로딩 중...</div>}
+
+      {/* 파이프라인 뷰 */}
+      {!loading && view === 'pipeline' && (
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 20 }}>
+          {PIPELINE_STAGES.map(stage => {
+            const items = interviews.filter(iv => iv.status === stage.key)
+            return (
+              <div key={stage.key} style={{ minWidth: 175, maxWidth: 210, flex: '0 0 auto' }}>
+                <div style={{
+                  background: stage.color, color: '#fff', padding: '7px 10px',
+                  borderRadius: '7px 7px 0 0', fontSize: 12, fontWeight: 600,
+                  display: 'flex', justifyContent: 'space-between',
+                }}>
+                  <span>{stage.label}</span>
+                  <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 10, padding: '0 5px', fontSize: 11 }}>
+                    {items.length}
+                  </span>
+                </div>
+                <div style={{
+                  background: '#f1f5f9', borderRadius: '0 0 7px 7px',
+                  padding: 6, minHeight: 100, display: 'flex', flexDirection: 'column', gap: 5,
+                }}>
+                  {items.map(iv => (
+                    <InterviewCard key={iv.id} iv={iv} allStatuses={ALL_STATUSES}
+                      onChangeStatus={changeStatus} onRetry={retryInterview} />
+                  ))}
+                  {items.length === 0 && (
+                    <div style={{ color: '#bbb', fontSize: 11, textAlign: 'center', padding: 16 }}>없음</div>
+                  )}
+                </div>
               </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* 테이블 뷰 */}
+      {!loading && view === 'table' && (
+        <div>
+          <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select value={filter} onChange={e => setFilter(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13 }}>
+              <option value="">전체 ({interviews.length}건)</option>
+              {ALL_STATUSES.map(s => (
+                <option key={s.key} value={s.key}>
+                  {s.label} ({interviews.filter(iv => iv.status === s.key).length})
+                </option>
+              ))}
+            </select>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                {['ID', '구직자#', 'Job#', '날짜', '시간', '상태', 'Meet', '메모', '액션'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '2px solid #e2e8f0', fontSize: 12 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(iv => {
+                const st = ALL_STATUSES.find(s => s.key === iv.status)
+                return (
+                  <tr key={iv.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '6px 10px', color: '#888', fontSize: 11 }}>{iv.id}</td>
+                    <td style={{ padding: '6px 10px', fontWeight: 700 }}>
+                      {iv.candidate_number || iv.candidate_id || '-'}
+                    </td>
+                    <td style={{ padding: '6px 10px' }}>{iv.job_number || '-'}</td>
+                    <td style={{ padding: '6px 10px' }}>{iv.interview_date}</td>
+                    <td style={{ padding: '6px 10px' }}>{iv.interview_time}</td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <span style={{
+                        background: st?.color || '#999', color: '#fff',
+                        padding: '2px 8px', borderRadius: 4, fontSize: 11,
+                      }}>{st?.label || iv.status}</span>
+                    </td>
+                    <td style={{ padding: '6px 10px' }}>
+                      {iv.meet_link
+                        ? <a href={iv.meet_link} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontSize: 12 }}>참가</a>
+                        : '-'}
+                    </td>
+                    <td style={{
+                      padding: '6px 10px', maxWidth: 180, overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#666',
+                    }}>
+                      {iv.notes || iv.result_notes || '-'}
+                    </td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <StatusSelect iv={iv} allStatuses={ALL_STATUSES} onChangeStatus={changeStatus} />
+                      {(iv.status === 'pending' || iv.status === 'pending_retry') && (
+                        <button type="button" onClick={() => retryInterview(iv.id)} style={{
+                          marginLeft: 4, padding: '2px 6px', fontSize: 11,
+                          border: '1px solid #f59e0b', borderRadius: 4, background: '#fffbeb', cursor: 'pointer',
+                        }}>재시도</button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#aaa', padding: 40, fontSize: 13 }}>
+              {filter ? `'${ALL_STATUSES.find(s => s.key === filter)?.label}' 상태 없음` : '인터뷰 없음'}
             </div>
           )}
-        </>
-      )}
-
-      {/* Email Preview Modal */}
-      {emailModal && (
-        <EmailPreviewModal
-          interviewId={emailModal.id} target={emailModal.target} hdrs={headers}
-          onClose={() => setEmailModal(null)}
-          onSent={() => { setEmailModal(null); setToast(`${emailModal.target} 이메일 발송 완료`); fetchInterviews() }}
-        />
-      )}
-
-      {/* Reschedule Modal */}
-      {rescheduleTarget && (
-        <RescheduleModal
-          interview={rescheduleTarget} hdrs={headers}
-          onClose={() => setRescheduleTarget(null)}
-          onDone={() => { setRescheduleTarget(null); setToast('일정이 변경되었습니다'); fetchInterviews() }}
-        />
-      )}
-
-      {/* Meet Settings Modal */}
-      {showMeetSettings && (
-        <MeetSettingsModal
-          pool={meetPool}
-          onSave={(newPool) => { setMeetPool(newPool); saveMeetPool(newPool); setShowMeetSettings(false); setToast('Meet 링크 저장 완료') }}
-          onClose={() => setShowMeetSettings(false)}
-        />
+        </div>
       )}
     </div>
   )
 }
 
-/* ── Meet Settings Modal ── */
-function MeetSettingsModal({
-  pool, onSave, onClose,
-}: {
-  pool: string[]
-  onSave: (pool: string[]) => void
-  onClose: () => void
+
+// ─── 칸반 카드 ────────────────────────────────────────────────
+function InterviewCard({ iv, allStatuses, onChangeStatus, onRetry }: {
+  iv: Interview
+  allStatuses: typeof ALL_STATUSES
+  onChangeStatus: (id: number, status: string, memo: string) => void
+  onRetry: (id: number) => void
 }) {
-  const [links, setLinks] = useState<string[]>([...pool])
-  const [newLink, setNewLink] = useState('')
-
-  const addLink = () => {
-    const raw = newLink.trim()
-    if (!raw) return
-    const urls = raw.split(/[\n\r\s,]+/).map(s => s.trim()).filter(s => s.includes('meet.google.com/'))
-    const unique = urls.filter(u => !links.includes(u))
-    if (!unique.length) { setNewLink(''); return }
-    setLinks([...links, ...unique])
-    setNewLink('')
-  }
-
-  const removeLink = (idx: number) => {
-    if (links.length <= 1) return // 최소 1개 유지
-    setLinks(links.filter((_, i) => i !== idx))
-  }
-
-  const resetDefaults = () => setLinks([...DEFAULT_MEET_POOL])
+  const [expanded, setExpanded] = useState(false)
+  const [memo, setMemo] = useState('')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-900">🔗 Google Meet 링크 풀 설정</h3>
-            <p className="text-xs text-gray-500 mt-1">인터뷰 생성 시 같은 날 겹치지 않도록 랜덤 배정됩니다</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-
-        <div className="p-4 space-y-3 max-h-[60vh] overflow-auto">
-          {links.map((link, idx) => (
-            <div key={idx} className="flex items-center gap-2 group">
-              <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold shrink-0">
-                {idx + 1}
-              </span>
-              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 truncate">
-                {link}
-              </div>
-              <a href={link} target="_blank" rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-700 text-sm shrink-0" title="열기">
-                ↗
-              </a>
-              <button type="button" onClick={() => removeLink(idx)}
-                className="text-red-300 hover:text-red-500 text-lg shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="삭제">×</button>
-            </div>
-          ))}
-
-          {/* Add new */}
-          <div className="flex gap-2 mt-2">
-            <textarea className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" placeholder={"https://meet.google.com/xxx-xxxx-xxx\n여러 링크를 한번에 붙여넣기 가능"}
-              rows={newLink.includes('\n') ? 3 : 1}
-              value={newLink} onChange={e => setNewLink(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addLink() } }} />
-            <button type="button" onClick={addLink}
-              className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 shrink-0">
-              + 추가
-            </button>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 space-y-1">
-            <p>💡 <b>Google Meet에서 방 만들기:</b> <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" className="underline font-semibold">meet.google.com/new</a></p>
-            <p>방 생성 후 링크를 복사해서 위에 추가하세요. 액세스 유형을 &apos;열기&apos;로 설정하면 항상 열린 방이 됩니다.</p>
-          </div>
-        </div>
-
-        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-          <button type="button" onClick={resetDefaults} className="text-xs text-gray-400 hover:text-gray-600">기본값 복원</button>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-            <button type="button" onClick={() => onSave(links)} disabled={links.length === 0}
-              className="px-5 py-2 text-sm font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50">
-              💾 저장 ({links.length}개)
-            </button>
-          </div>
-        </div>
+    <div style={{
+      background: '#fff', borderRadius: 6, padding: '8px 10px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.07)', cursor: 'pointer', fontSize: 12,
+    }} onClick={() => setExpanded(!expanded)}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ fontWeight: 700 }}>#{iv.candidate_number || iv.candidate_id}</span>
+        <span style={{ fontSize: 11, color: '#888' }}>{iv.interview_date}</span>
       </div>
+      <div style={{ color: '#555', marginTop: 2 }}>
+        {iv.job_number ? `Job#${iv.job_number}` : (iv.employer_name || '—')} · {iv.interview_time}
+      </div>
+      {iv.meet_link && (
+        <a href={iv.meet_link} target="_blank" rel="noreferrer"
+          onClick={e => e.stopPropagation()}
+          style={{ color: '#2563eb', fontSize: 11 }}>Meet 참가</a>
+      )}
+      {(iv.status === 'pending' || iv.status === 'pending_retry') && (
+        <button type="button" onClick={e => { e.stopPropagation(); onRetry(iv.id) }} style={{
+          marginTop: 4, padding: '2px 8px', fontSize: 10,
+          border: '1px solid #f59e0b', borderRadius: 4, background: '#fffbeb', cursor: 'pointer', display: 'block',
+        }}>재시도</button>
+      )}
+      {expanded && (
+        <div style={{ marginTop: 8, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}
+          onClick={e => e.stopPropagation()}>
+          {iv.notes && <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>{iv.notes}</div>}
+          <input
+            type="text" placeholder="메모 (선택)" value={memo}
+            onChange={e => setMemo(e.target.value)}
+            style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11, marginBottom: 4, boxSizing: 'border-box' }}
+            onClick={e => e.stopPropagation()}
+          />
+          <select defaultValue="" onChange={e => {
+            if (e.target.value) { onChangeStatus(iv.id, e.target.value, memo); setMemo(''); e.target.value = '' }
+          }} style={{ width: '100%', padding: '4px', fontSize: 11, border: '1px solid #ddd', borderRadius: 4 }}>
+            <option value="">→ 상태 변경</option>
+            {allStatuses.filter(s => s.key !== iv.status).map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
+  )
+}
+
+
+// ─── 테이블용 상태 셀렉트 ─────────────────────────────────────
+function StatusSelect({ iv, allStatuses, onChangeStatus }: {
+  iv: Interview
+  allStatuses: typeof ALL_STATUSES
+  onChangeStatus: (id: number, status: string, memo: string) => void
+}) {
+  const [memo, setMemo] = useState('')
+  const [open, setOpen] = useState(false)
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <select defaultValue="" onChange={e => {
+        if (e.target.value) { onChangeStatus(iv.id, e.target.value, memo); e.target.value = '' }
+      }} style={{ padding: '2px 4px', fontSize: 11, border: '1px solid #ddd', borderRadius: 4 }}>
+        <option value="">변경</option>
+        {allStatuses.filter(s => s.key !== iv.status).map(s => (
+          <option key={s.key} value={s.key}>{s.label}</option>
+        ))}
+      </select>
+      {open
+        ? <input type="text" placeholder="메모" value={memo} autoFocus
+            onChange={e => setMemo(e.target.value)}
+            onBlur={() => setOpen(false)}
+            style={{ padding: '2px 4px', fontSize: 11, border: '1px solid #ddd', borderRadius: 4, width: 80 }} />
+        : <button type="button" onClick={() => setOpen(true)}
+            style={{ padding: '2px 5px', fontSize: 10, border: '1px solid #ddd', borderRadius: 4, background: '#f8fafc', cursor: 'pointer' }}>
+            메모
+          </button>
+      }
+    </span>
   )
 }

@@ -6270,9 +6270,17 @@ class InterviewStatusUpdate(BaseModel):
 async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate, request: Request):
     """인터뷰 수정 — 상태/날짜/시간/메모 등 부분 업데이트."""
     _check_admin(request)
-    valid_statuses = {"scheduled", "completed", "cancelled", "no_show"}
+    valid_statuses = {
+        # 파이프라인 단계
+        "pending", "scheduled", "completed",
+        "contract_offered", "under_review", "contract_signed",
+        "placement_pending", "placed",
+        # 네거티브
+        "no_show", "no_show_teacher", "no_show_employer",
+        "cancelled", "rejected", "fallen_through", "pending_retry",
+    }
     if body.status and body.status not in valid_statuses:
-        raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
+        raise HTTPException(400, f"Invalid status. Must be one of: {sorted(valid_statuses)}")
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     r = conn.execute("SELECT id, status FROM interviews WHERE id=? AND is_deleted=0", (interview_id,)).fetchone()
@@ -6310,6 +6318,22 @@ async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate,
     conn.close()
     changed = [f for f in ("status", "interview_date", "interview_time") if getattr(body, f, None)]
     return ok(message=f"Interview #{interview_id} updated ({', '.join(changed) or 'fields'})")
+
+
+class _InterviewStatusPatch(BaseModel):
+    status: str
+    memo: str = ""
+
+
+@app.patch("/api/admin/interviews/{interview_id}/status", tags=["admin"])
+async def admin_update_interview_status(interview_id: int, body: _InterviewStatusPatch, request: Request):
+    """인터뷰 상태 변경 전용 — Sprint C-FINAL 칸반 뷰용."""
+    _check_admin(request)
+    return await admin_update_interview(
+        interview_id,
+        InterviewStatusUpdate(status=body.status, notes=body.memo or None),
+        request,
+    )
 
 
 @app.delete("/api/admin/interviews/{interview_id}", tags=["admin"])
