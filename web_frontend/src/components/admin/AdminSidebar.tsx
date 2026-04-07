@@ -31,6 +31,7 @@ import {
   FilePen,
   ListChecks,
   ShieldCheck,
+  CalendarCheck,
 } from 'lucide-react'
 
 interface NavItem {
@@ -61,6 +62,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/sheet', label: '원어민 관리', icon: <Table2 size={ICON_SIZE} /> },
       { href: '/admin/employers', label: '구인자 관리', icon: <Building2 size={ICON_SIZE} /> },
       { href: '/admin/applications', label: '업체 관리', icon: <Layers size={ICON_SIZE} /> },
+      { href: '/admin/interviews', label: '인터뷰 관리', icon: <CalendarCheck size={ICON_SIZE} /> },
       { href: '/admin/interview-setup', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
       { href: '/admin/resume-converter', label: '이력서 편집기', icon: <FilePen size={ICON_SIZE} /> },
       { href: '/admin/talent-auth', label: '게시판 접근 관리', icon: <ShieldCheck size={ICON_SIZE} /> },
