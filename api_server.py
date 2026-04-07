@@ -2627,7 +2627,7 @@ async def decrypt_check(request: Request):
         for f in fields:
             raw = r[f]
             if raw and isinstance(raw, str):
-                dec = _safe_decrypt(raw)
+                dec = _safe_decrypt(raw, f)
                 row_info[f] = {
                     "raw_len": len(raw),
                     "raw_preview": raw[:20] + "..." if len(raw) > 20 else raw,
@@ -6805,7 +6805,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
             raw = candidate.get(fld)
             if raw:
                 try:
-                    candidate[fld] = _safe_decrypt(raw)
+                    candidate[fld] = _safe_decrypt(raw, fld)
                 except Exception:
                     pass
 
