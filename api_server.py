@@ -6773,15 +6773,8 @@ async def serve_protected_file(
     mime, _ = mimetypes.guess_type(str(file_path))
     media_type = mime or "application/octet-stream"
 
-    # [LOCAL-DISABLED] return _FR(
-    #     path=str(file_path),
-    #     media_type=media_type,
-    #     headers={
-    #         "Cache-Control": "no-store, no-cache, must-revalidate",
-    #         "X-Content-Type-Options": "nosniff",
-    #         "Content-Disposition": f'inline; filename="{file_path.name}"',
-    #     },
-    # )
+    # [비활성 — 로컬 파일 서빙] S3 전환 후 불필요. 아래 S3 redirect 사용.
+    # return _FR(path=str(file_path), media_type=media_type, headers={...})
     # ── S3 presigned URL 리다이렉트 ────────────────────────────────────────
     # DB에서 s3_key를 조회하는 것이 이상적이나,
     # 하위호환: entity_type/entity_id/filename 경로를 s3_key로 사용
@@ -7215,7 +7208,8 @@ async def upload_file(
         fname = f"{att_id}{ext}"
 
     file_path = entity_dir / fname
-    # [LOCAL-DISABLED] file_path.write_bytes(data)
+    # [비활성 — 로컬 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
+    # file_path.write_bytes(data)
 
     # ── S3 업로드 ──────────────────────────────────────────────────────────
     _s3_folder = f"{dir_name}/{entity_id}"
@@ -7244,14 +7238,15 @@ async def upload_file(
     # Thumbnail for photos
     thumb_url = None
     if file_type == "photo" and ext in (".jpg", ".jpeg", ".png", ".webp"):
-        # [LOCAL-DISABLED] thumb_path = entity_dir / "photo_thumb.jpg"
-        # [LOCAL-DISABLED] if _make_thumbnail(file_path, thumb_path):
-        # [LOCAL-DISABLED]     thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
-        pass  # S3 썸네일: 별도 서버사이드 Lambda 또는 Pillow → S3 업로드로 구현 예정
+        # [비활성 — 로컬 썸네일] S3 전환 후 미구현. TODO: Pillow → S3 업로드 방식으로 구현 예정.
+        # thumb_path = entity_dir / "photo_thumb.jpg"
+        # if _make_thumbnail(file_path, thumb_path):
+        #     thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
+        pass
 
     # Build URL (S3 presigned — 1시간 유효)
-    # [LOCAL-DISABLED] rel = file_path.relative_to(_UPLOAD_BASE)
-    # [LOCAL-DISABLED] file_url = f"/uploads/{rel.as_posix()}"
+    # [비활성 — 로컬 URL] S3 presigned URL 사용 (아래 코드 참조)
+    # rel = file_path.relative_to(_UPLOAD_BASE); file_url = f"/uploads/{rel.as_posix()}"
     file_url = s3_presigned_url(s3_key, expires=3600)
 
     # Record in SQLite file_uploads table
@@ -7506,12 +7501,10 @@ async def admin_upload_editor_image(
     if not data:
         raise HTTPException(400, "Empty file.")
     ext = _validate_file(data, file.filename or "image.png", "community_image")
-    # [LOCAL-DISABLED] img_dir = _UPLOAD_BASE / "editor"
-    # [LOCAL-DISABLED] img_dir.mkdir(parents=True, exist_ok=True)
-    # [LOCAL-DISABLED] fname = f"{uuid.uuid4().hex[:12]}{ext}"
-    # [LOCAL-DISABLED] file_path = img_dir / fname
-    # [LOCAL-DISABLED] file_path.write_bytes(data)
-    # [LOCAL-DISABLED] file_url = f"/uploads/editor/{fname}"
+    # [비활성 — 로컬 에디터 이미지 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
+    # img_dir = _UPLOAD_BASE / "editor"; img_dir.mkdir(parents=True, exist_ok=True)
+    # fname = f"{uuid.uuid4().hex[:12]}{ext}"; file_path = img_dir / fname
+    # file_path.write_bytes(data); file_url = f"/uploads/editor/{fname}"
     # ── S3 업로드 ──────────────────────────────────────────────────────────
     try:
         _editor_result = await s3_upload_bytes(
@@ -11726,6 +11719,27 @@ async def download_jobs_xlsx(
         content=buf_xl.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{fname_xl}"'},
+    )
+
+
+# ── Render DB 원격 덤프 (관리자 전용 백업) ──────────────────────────────────────
+@app.get("/api/admin/db/dump", tags=["admin"])
+async def admin_db_dump(request: Request):
+    """Render /data/master.db → SQL dump 반환. 관리자 인증 필수."""
+    _check_admin(request)
+    import io as _io
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    buf = _io.StringIO()
+    for line in conn.iterdump():
+        buf.write(line + "\n")
+    conn.close()
+    today = datetime.now().strftime("%Y%m%d_%H%M")
+    from starlette.responses import Response as _DumpResp
+    return _DumpResp(
+        content=buf.getvalue().encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="master_dump_{today}.sql"'},
     )
 
 

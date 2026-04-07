@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getJobs } from '@/lib/db'
+import { API_URL } from '@/lib/api'
 
 /* ── Month parsing helpers ── */
 const MONTHS = [
@@ -146,8 +147,6 @@ function rowToPublic(row: Record<string, unknown>) {
   }
 }
 
-const RENDER_API = process.env.NEXT_PUBLIC_API_URL || 'https://bridge-n7hk.onrender.com'
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
@@ -159,7 +158,7 @@ export async function GET(request: NextRequest) {
 
     // PRIMARY: Render API (live DB data)
     try {
-      const proxyUrl = `${RENDER_API}/api/jobs?${searchParams.toString()}`
+      const proxyUrl = `${API_URL}/api/jobs?${searchParams.toString()}`
       const resp = await fetch(proxyUrl, { next: { revalidate: 1800 } })
       if (resp.ok) {
         const json = await resp.json()

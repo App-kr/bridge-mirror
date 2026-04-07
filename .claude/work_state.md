@@ -424,10 +424,10 @@ output = base64(T3v1 + n1 + n2 + n3 + ct3)
 
 ---
 
-## 특이 사항 (현재 유효)
-- Render autoDeploy: false → 수동 배포만
-- deploy_skip.json: expire=9999999999 → 모든 push 자동 승인
-- python3 경로 broken → 항상 절대경로 사용
+## 특이 사항 (현재 유효) — 2026-04-07 갱신
+- Render autoDeploy: **false** (render.yaml 직접 확인, 2026-04-07 false로 변경 완료)
+- deploy_skip.json: expire=1234567890 (2009년 만료 → 배포 차단 없음, 정상 동작)
+- python3 경로: Q:\Phtyon 3\python.exe (정상, 세션 26에서 복구됨)
 - 서버 Hot Reload 중 → 시작/종료 금지
 - DB 87컬럼 (stage, mail_tags, korea_experience 추가됨)
 - bridge_backup.py 정상 동작 (2026-04-05 수리 확인, Q:\Phtyon 3\python.exe 사용)

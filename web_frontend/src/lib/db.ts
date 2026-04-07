@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { API_URL } from '@/lib/api'
 
 /**
  * Data access layer — Render API (primary) + static JSON fallback.
@@ -8,8 +9,6 @@ import path from 'path'
  * become stale as admins edit content via the Render backend.
  * This module ensures API routes always prefer live DB data.
  */
-
-const RENDER_API = process.env.NEXT_PUBLIC_API_URL || 'https://bridge-n7hk.onrender.com'
 const DATA_DIR = path.join(process.cwd(), 'data')
 
 /* ── Static JSON fallback (emergency only) ────────────────────────── */
@@ -53,7 +52,7 @@ export async function fetchBoardPostsFromRender(
   try {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (category) params.set('category', category)
-    const res = await fetch(`${RENDER_API}/api/community/${board}?${params}`, {
+    const res = await fetch(`${API_URL}/api/community/${board}?${params}`, {
       next: { revalidate: 300 },  // 5-minute cache
     })
     if (res.ok) {
@@ -91,7 +90,7 @@ export async function fetchPostFromRender(
   postId: number,
 ): Promise<{ success: boolean; data?: Record<string, unknown>; message?: string }> {
   try {
-    const res = await fetch(`${RENDER_API}/api/community/${board}/${postId}`, {
+    const res = await fetch(`${API_URL}/api/community/${board}/${postId}`, {
       next: { revalidate: 300 },
     })
     if (res.ok) {
@@ -115,7 +114,7 @@ export async function fetchJobsFromRender(
   searchParams: URLSearchParams,
 ): Promise<Response | null> {
   try {
-    const res = await fetch(`${RENDER_API}/api/jobs?${searchParams.toString()}`, {
+    const res = await fetch(`${API_URL}/api/jobs?${searchParams.toString()}`, {
       next: { revalidate: 1800 },  // 30-minute cache
     })
     if (res.ok) return res

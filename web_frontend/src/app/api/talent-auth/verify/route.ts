@@ -3,8 +3,7 @@
  * magic_token 검증 → session_token → HttpOnly cookie 설정
  */
 import { NextRequest, NextResponse } from 'next/server'
-
-const RENDER_API = process.env.NEXT_PUBLIC_API_URL || 'https://bridge-n7hk.onrender.com'
+import { API_URL } from '@/lib/api'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30 // 30일
 
 export async function POST(req: NextRequest) {
@@ -23,7 +22,7 @@ export async function POST(req: NextRequest) {
   // Render 백엔드로 토큰 검증
   let data: { status: string; data?: { session_token: string; email: string; expires_at: string } }
   try {
-    const res = await fetch(`${RENDER_API}/api/public/talent-auth/verify-token`, {
+    const res = await fetch(`${API_URL}/api/public/talent-auth/verify-token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),

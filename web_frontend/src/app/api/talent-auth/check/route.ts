@@ -4,8 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-
-const RENDER_API = process.env.NEXT_PUBLIC_API_URL || 'https://bridge-n7hk.onrender.com'
+import { API_URL } from '@/lib/api'
 
 export async function GET(req: NextRequest) {
   const cookieStore = await cookies()
@@ -16,7 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${RENDER_API}/api/public/talent-auth/check-session`, {
+    const res = await fetch(`${API_URL}/api/public/talent-auth/check-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_token }),
