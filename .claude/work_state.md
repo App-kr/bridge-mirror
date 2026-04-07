@@ -1,9 +1,41 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-01 (세션 27 — doc_processor v2.7 + 사진 S3 폴백 완료)
+최근 업데이트: 2026-04-07 (세션 28 — Sprint D LinkPanel + 안정성 패치 완료)
 
 ## 세션 재시작 방법
 1. `/clear`
 2. `@.claude/work_state.md`
+
+---
+
+## ✅ 2026-04-07 완료된 작업 (세션 28)
+
+### Sprint D: LinkPanel 양방향 연동 패널 (커밋 e3751b8d)
+- `web_frontend/src/app/admin/components/LinkPanel.tsx` **신규 생성**
+  - 420px 오른쪽 고정 오버레이 패널, employer/candidate 듀얼 모드
+  - employer 모드: `/api/admin/matching/candidates-for-job` + 이력서 iframe
+  - candidate 모드: `/api/admin/matching/jobs-for-candidate` + 인터뷰 목록
+- `DocBlock.tsx`: `onLinkPanel` prop → [매칭 연동] 버튼
+- `EmployerManagement.tsx`: linkPanel state + [연동] 버튼 + LinkPanel 렌더
+- `BridgeAdminSheet.tsx`: 우클릭 컨텍스트 메뉴 [매칭 연동] + LinkPanel 렌더
+- `MailComposer.tsx`: ■XXXX 자동 스캔 + 이력서 자동첨부
+
+### Render Cold Start 수정 (커밋 2d63a6d8)
+- `useAdminAuth.ts`: MAX_WAKE_RETRIES 3 → 20 (60초)
+- `AdminAuth.tsx`: 경과초 + 앰버 프로그레스 바
+
+### 긴급 안정성 패치 (커밋 6be067ba) — main push 완료
+- ① render.yaml autoDeploy true → **false**
+- ② api_server.py: `/api/admin/db/dump` 신규 엔드포인트
+- ② tools/render_db_backup.py 신규 (Render DB → 로컬 SQL, 30일 자동삭제)
+- ④ LOCAL-DISABLED 7개 주석 명시 (모두 S3 마이그레이션, 버그 아님)
+- ⑤ src/lib/api.ts 단일 진실 → db.ts / jobs/route.ts / talent-auth 2개 import 통일
+- ⑥ tsconfig.tsbuildinfo .gitignore 확인 완료
+
+### ⚠️ 다음 세션 첫 작업 (필수)
+1. **Render 수동 배포**: Render 대시보드 → bridge-api → Manual Deploy
+   (api_server.py DB dump 엔드포인트 반영 필요)
+2. 배포 후 `python "Q:\Claudework\bridge base\tools\render_db_backup.py"` 테스트
+3. 3순위 보고 항목: ③ BRIDGE_FIELD_KEY W1/W2 일치 여부, ⑧ CORS_ORIGINS 현황
 
 ---
 
