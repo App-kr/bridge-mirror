@@ -15,7 +15,7 @@
 --mono:'JetBrains Mono','Fira Code',monospace;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;overflow:hidden;height:100vh}
+body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;overflow:hidden;height:100vh}
 /* TOP */
 .top{display:flex;align-items:center;height:50px;background:var(--navy);color:#fff;padding:0 16px;gap:10px}
 .top .logo{font-size:17px;font-weight:800;letter-spacing:1.5px}.top .logo em{font-style:normal;color:var(--green)}
@@ -29,7 +29,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;ov
 .tcc:hover{color:#fff;background:rgba(255,255,255,.1)}
 .tcc.on{color:#fff;background:rgba(255,255,255,.18);font-weight:700}
 .tcc-sep{font-size:10px;color:rgba(255,255,255,.25);user-select:none}
-.btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:5px}
+.btn{padding:7px 15px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:5px}
 .btn svg{width:14px;height:14px;flex-shrink:0}
 .btn-y{background:#f59e0b;color:#78350f}.btn-y:hover{background:#fbbf24}
 .btn-g{background:var(--green);color:#fff}.btn-g:hover{background:#04a06d}
@@ -55,21 +55,21 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;ov
 /* CENTER */
 .cp{width:680px;min-width:540px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
 .tb{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--white);border-bottom:1px solid var(--g6);flex-wrap:wrap}
-.tb .btn{padding:5px 10px;border:1px solid var(--g5);background:var(--white);border-radius:var(--r);font-size:11px}
+.tb .btn{padding:6px 12px;border:1px solid var(--g5);background:var(--white);border-radius:var(--r);font-size:13px}
 .tb .btn:hover{border-color:var(--blue);color:var(--blue)}
 .tb .sep{width:1px;height:18px;background:var(--g5)}
 .us{display:flex;border:1px solid var(--g5);border-radius:var(--r);overflow:hidden}
-.us .uo{padding:4px 10px;font-size:11px;cursor:pointer;background:var(--white);transition:.15s;border:none}
+.us .uo{padding:5px 12px;font-size:12px;cursor:pointer;background:var(--white);transition:.15s;border:none}
 .us .uo.on{background:var(--blue);color:#fff}
 .obs{display:flex;border:1px solid var(--g5);border-radius:var(--r);overflow:hidden;margin-left:auto}
-.obs .ol{padding:4px 10px;font-size:11px;cursor:pointer;background:var(--white);transition:.15s;border:none}
+.obs .ol{padding:5px 12px;font-size:12px;cursor:pointer;background:var(--white);transition:.15s;border:none}
 .obs .ol.on{background:#7c3aed;color:#fff}
 .cb{flex:1;overflow-y:auto;padding:16px}
 /* EDIT FORM */
 .ef{background:var(--white);border-radius:var(--rl);padding:20px;box-shadow:var(--sh)}
-.ef h3{font-size:14px;margin-bottom:12px;color:var(--navy)}
-.ef label{display:block;font-size:11px;font-weight:600;color:var(--g3);margin:10px 0 4px}
-.ef input,.ef textarea,.ef select{width:100%;padding:7px 10px;border:1px solid var(--g5);border-radius:var(--r);font-size:12px;font-family:var(--f);outline:none}
+.ef h3{font-size:17px;margin-bottom:14px;color:var(--navy)}
+.ef label{display:block;font-size:13px;font-weight:600;color:var(--g3);margin:10px 0 4px}
+.ef input,.ef textarea,.ef select{width:100%;padding:8px 11px;border:1px solid var(--g5);border-radius:var(--r);font-size:14px;font-family:var(--f);outline:none}
 .ef input:focus,.ef textarea:focus{border-color:var(--blue)}
 .ef textarea{min-height:120px;resize:vertical;font-family:var(--mono);font-size:11px;line-height:1.5}
 .r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -77,8 +77,8 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;ov
 .chks{display:flex;gap:16px;margin-top:8px}
 .chks label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:var(--g1);font-weight:normal}
 .brow{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
-.bsv{padding:8px 20px;border:none;border-radius:var(--r);background:var(--blue);color:#fff;cursor:pointer;font-weight:600;font-size:12px}
-.bdl{padding:8px 16px;border:1px solid #ef4444;border-radius:var(--r);background:var(--white);color:#ef4444;cursor:pointer;font-size:12px}
+.bsv{padding:9px 22px;border:none;border-radius:var(--r);background:var(--blue);color:#fff;cursor:pointer;font-weight:600;font-size:14px}
+.bdl{padding:9px 18px;border:1px solid #ef4444;border-radius:var(--r);background:var(--white);color:#ef4444;cursor:pointer;font-size:14px}
 .bdl:hover{background:#fef2f2}
 /* PLACEHOLDER */
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--g4);gap:12px}
@@ -101,8 +101,8 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;ov
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--g5);border-radius:3px}
 /* THEME PICKER */
 .phwrap{display:flex;flex-direction:column;align-items:center;width:100%;padding:16px;overflow-y:auto;gap:14px}
-.phttl{font-size:14px;font-weight:700;color:var(--g1);margin:0}
-.phsub{font-size:11px;color:var(--g4);margin:0;text-align:center}
+.phttl{font-size:17px;font-weight:700;color:var(--g1);margin:0}
+.phsub{font-size:13px;color:var(--g4);margin:0;text-align:center}
 .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%}
 .tcard{border:2px solid var(--g5);border-radius:14px;cursor:pointer;overflow:hidden;transition:all .15s;background:var(--white)}
 .tcard:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:var(--sh2)}
@@ -114,20 +114,23 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:13px;ov
 .tchk{display:flex;align-items:center;gap:3px;margin-top:5px;font-size:10px;font-weight:700;color:var(--blue);opacity:0;transition:.15s}
 .tcard.sel .tchk{opacity:1}
 /* Settings panel */
-.tset{width:100%;background:var(--g7);border:1px solid var(--g6);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
-.tset-sec{display:flex;flex-direction:column;gap:6px}
+.tset{width:100%;background:var(--white);border:1px solid var(--g5);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--sh)}
+.tset-sec{display:flex;flex-direction:column;gap:7px}
 .tset-sec.grow{flex:1;min-width:180px}
-.tset-lbl{font-size:11px;font-weight:700;color:var(--g3);text-transform:uppercase;letter-spacing:.6px}
+.tset-row{display:grid;gap:14px;width:100%}
+.tset-row.col3{grid-template-columns:1fr 1fr 1fr}
+.tset-row.col2{grid-template-columns:1fr 1fr}
+.tset-lbl{font-size:12px;font-weight:700;color:var(--g3);text-transform:uppercase;letter-spacing:.5px}
 .tset-btns{display:flex;gap:5px}
-.tsb{padding:5px 14px;border:1px solid var(--g5);border-radius:6px;background:var(--white);font-size:13px;cursor:pointer;font-weight:600;color:var(--g2);transition:.12s}
+.tsb{padding:6px 16px;border:1px solid var(--g5);border-radius:7px;background:var(--white);font-size:14px;cursor:pointer;font-weight:600;color:var(--g2);transition:.12s}
 .tsb:hover{border-color:var(--blue);color:var(--blue)}
 .tsb.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 .tswatches{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 .tswatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.12s;flex-shrink:0}
 .tswatch:hover{transform:scale(1.18)}
-.tswatch.on{border-color:#fff;box-shadow:0 0 0 2px var(--blue)}
+.tswatch.on{border-color:#fff;box-shadow:0 0 0 2.5px var(--blue)}
 .tset-link{display:flex;gap:6px;align-items:center}
-.tset-link input{flex:1;padding:6px 11px;border:1px solid var(--g5);border-radius:6px;font-size:12px;font-family:var(--mono);outline:none;background:#fff}
+.tset-link input{flex:1;padding:7px 12px;border:1px solid var(--g5);border-radius:7px;font-size:13px;font-family:var(--mono);outline:none;background:#fff}
 .tset-link input:focus{border-color:var(--blue)}
 /* CENTER TABS */
 .ctabs{display:flex;align-items:center;background:var(--white);border-bottom:1px solid var(--g6);padding:0 10px;gap:4px}
@@ -586,20 +589,39 @@ function buildThemePicker(){
 function renderSettings(){
   var s=document.getElementById('tSet');if(!s)return;
   var ts=TS[curTheme]||{fs:14,accent:'#1a5ff8',link:'',presets:[]};
-  var fsBtns=['13:S','14:M','15:L','16:XL'].map(function(x){
-    var p=x.split(':');
-    return '<button class="tsb'+(ts.fs===parseInt(p[0])?' on':'')+'" onclick="setFs('+p[0]+')">'+p[1]+'</button>';
-  }).join('');
-  var swatches=(ts.presets||[]).map(function(c){
-    return '<div class="tswatch'+(ts.accent===c?' on':'')+'" style="background:'+c+'" title="'+c+'" onclick="setAccent(\''+c+'\')"></div>';
-  }).join('');
+  var def=ts.accent||'#1a5ff8';
+  var acH=ts.ac_hero||def, acC=ts.ac_card||def, acB=ts.ac_cta||def;
+  var fsUi=ts.fs||14, fsB=ts.fs_body||fsUi;
+  var prs=ts.presets||[];
+
+  function mkPal(cur,fn){
+    var sw=prs.slice(0,8).map(function(c){
+      return '<div class="tswatch'+(cur===c?' on':'')+'" style="background:'+c+'" title="'+c+'" onclick="'+fn+'(\''+c+'\')"></div>';
+    }).join('');
+    sw+='<input type="color" value="'+cur+'" oninput="'+fn+'(this.value)" style="width:24px;height:24px;padding:1px;border:1px solid var(--g5);border-radius:50%;cursor:pointer;flex-shrink:0">';
+    return '<div class="tswatches">'+sw+'</div>';
+  }
+  function mkFs(cur,fn){
+    return '<div class="tset-btns">'+['13:S','14:M','15:L','16:XL'].map(function(x){
+      var p=x.split(':');
+      return '<button class="tsb'+(cur===parseInt(p[0])?' on':'')+'" onclick="'+fn+'('+p[0]+')">'+p[1]+'</button>';
+    }).join('')+'</div>';
+  }
+
   s.innerHTML=
-    '<div class="tset-sec"><div class="tset-lbl">글자 크기</div><div class="tset-btns">'+fsBtns+'</div></div>'
-    +'<div class="tset-sec"><div class="tset-lbl">액센트 색상 (팔레트 or 직접 선택)</div>'
-    +'<div class="tswatches">'+swatches
-    +'<input type="color" value="'+(ts.accent||'#1a5ff8')+'" oninput="setAccent(this.value)" title="커스텀 색상 직접 선택" style="width:24px;height:24px;padding:1px 2px;border:2px solid var(--g5);border-radius:50%;cursor:pointer;flex-shrink:0;background:#fff">'
-    +'</div></div>'
-    +'<div class="tset-sec grow"><div class="tset-lbl">Apply Now 링크 (비우면 상단 URL 사용)</div>'
+    /* Row 1: 3 independent color sections */
+    '<div class="tset-row col3">'
+    +'<div class="tset-sec"><div class="tset-lbl">🎨 히어로 색</div>'+mkPal(acH,'setHeroAc')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">🃏 카드 색</div>'+mkPal(acC,'setCardAc')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">🔲 버튼 색</div>'+mkPal(acB,'setCtaAc')+'</div>'
+    +'</div>'
+    /* Row 2: 2 font size controls */
+    +'<div class="tset-row col2">'
+    +'<div class="tset-sec"><div class="tset-lbl">Aa UI 폰트</div>'+mkFs(fsUi,'setFs')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">Aa 본문 폰트</div>'+mkFs(fsB,'setBodyFs')+'</div>'
+    +'</div>'
+    /* Row 3: link */
+    +'<div class="tset-sec"><div class="tset-lbl">Apply Now 링크 (비우면 상단 URL 사용)</div>'
     +'<div class="tset-link"><input type="text" id="tLinkI" placeholder="https://..." value="'+(ts.link||'')+'" oninput="setTLink(this.value)"></div></div>';
 }
 
@@ -611,7 +633,16 @@ function setTheme(el,t){
   if(lastHtml)generateAd();
 }
 function setFs(v){TS[curTheme].fs=v;renderSettings();if(lastHtml)generateAd();}
-function setAccent(c){TS[curTheme].accent=c;renderSettings();if(lastHtml)generateAd();}
+function setBodyFs(v){TS[curTheme].fs_body=v;renderSettings();if(lastHtml)generateAd();}
+function setHeroAc(c){TS[curTheme].ac_hero=c;renderSettings();if(lastHtml)generateAd();}
+function setCardAc(c){TS[curTheme].ac_card=c;renderSettings();if(lastHtml)generateAd();}
+function setCtaAc(c){TS[curTheme].ac_cta=c;renderSettings();if(lastHtml)generateAd();}
+function setAccent(c){
+  /* Master accent — resets all section colors to this value */
+  var ts=TS[curTheme];
+  ts.accent=c;ts.ac_hero='';ts.ac_card='';ts.ac_cta='';
+  renderSettings();if(lastHtml)generateAd();
+}
 function setTLink(v){TS[curTheme].link=v;}
 
 /* Theme CSS — base + per-theme overrides */
@@ -891,23 +922,32 @@ var _OV={
 
 function getThemeCss(){
   var ts=TS[curTheme]||{fs:14,accent:'#1a5ff8'};
-  var ac=ts.accent||'';
-  var acOv=ac?(
-    '.ctop::before{background:'+ac+'!important}'
-    +'.ctop.prem::before{background:linear-gradient(90deg,'+ac+','+ac+')!important}'
-    +'.cjobid{color:'+ac+'!important}'
-    +'.iico{color:'+ac+'!important}'
-    +'.barbtn{background:'+ac+'!important}'
-    +'.pcta{background:'+ac+'!important}'
-    +'.wnote{border-left-color:'+ac+'!important}'
-    +'.wico{color:'+ac+'!important}'
-    +'.hcta{color:'+ac+'!important}'
-    +'.bar p{color:'+ac+'!important}'
+  var def=ts.accent||'';
+  /* 섹션별 독립 색상 — 비어있으면 마스터 accent 사용 */
+  var acH=ts.ac_hero||def;   // 히어로 섹션
+  var acC=ts.ac_card||def;   // 카드 섹션
+  var acB=ts.ac_cta||def;    // 버튼/CTA
+  var heroOv=acH?(
+    '.hcta{color:'+acH+'!important}'
+    +'.bar p{color:'+acH+'!important}'
   ):'';
-  /* mono: ctop::before is display:none, accent override is harmless */
-  /* cleanwhite: ctop::before is display:none, so accent only affects other elements */
-  var fsOv='html,body{font-size:'+ts.fs+'px}';
-  return'<style type="text/css">'+_B+(_OV[curTheme]||'')+acOv+fsOv+'</style>';
+  var cardOv=acC?(
+    '.ctop::before{background:'+acC+'!important}'
+    +'.ctop.prem::before{background:linear-gradient(90deg,'+acC+','+acC+')!important}'
+    +'.cjobid{color:'+acC+'!important}'
+    +'.iico{color:'+acC+'!important}'
+    +'.wnote{border-left-color:'+acC+'!important}'
+    +'.wico{color:'+acC+'!important}'
+  ):'';
+  var ctaOv=acB?(
+    '.barbtn{background:'+acB+'!important}'
+    +'.pcta{background:'+acB+'!important}'
+  ):'';
+  var fsUi=ts.fs||14;
+  var fsBod=ts.fs_body||fsUi;
+  var fsOv='html,body{font-size:'+fsUi+'px}';
+  var fsBodOv=fsBod!==fsUi?'.itxt{font-size:'+fsBod+'px!important}.psub{font-size:'+(fsBod-1)+'px!important}':'';
+  return'<style type="text/css">'+_B+(_OV[curTheme]||'')+heroOv+cardOv+ctaOv+fsOv+fsBodOv+'</style>';
 }
 
 /* ══════════════════════════
