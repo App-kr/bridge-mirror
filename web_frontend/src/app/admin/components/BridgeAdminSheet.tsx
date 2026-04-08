@@ -71,6 +71,24 @@ const SK_DATA  = 'bridge-v10-data'    // {active, past, blacklist} 수동 관리
 const PAGE_SIZE = 150
 const API = API_URL
 
+// 프론트엔드 필드명 → 백엔드 DB 컬럼명 매핑
+const FB_MAP: Record<string, string> = {
+  name: 'full_name', arc: 'arc_holders', background: 'ancestry',
+  age: 'dob', currentLoc: 'current_location', startDate: 'start_date',
+  university: 'target', prefRegion: 'area_prefs', totalExp: 'experience',
+  preference: 'preferences', applied: 'job_prefs', proposal: 'recruiter_memo',
+  curSalary: 'current_salary', hopeSalary: 'desired_salary',
+  interviewCol: 'interview_time', degree: 'education_level',
+  cert: 'certification', docs: 'doc_status', health: 'health_info',
+  family: 'dependents', e2visa: 'visa_type', kakao: 'kakaotalk',
+  phone: 'mobile_phone', crimCheck: 'criminal_record_check',
+  domesticCrim: 'korean_criminal_record', infoProvide: 'consent',
+  verified: 'fact_check', source: 'how_to',
+  hired: 'placed_company', wage: 'placed_salary', moveIn: 'start_month',
+  housingCost: 'housing_detail', introFee: 'referral_fee',
+  process: 'process_date', history: 'past_placement',
+}
+
 /* ─── Override localStorage helpers ─── */
 type EditOverride = Partial<Pick<DataRow, 'stage' | 'mailStatus' | 'proposal' | 'notice' | 'applied' | 'history' | 'reference' | 'photoUrl' | 'photoSize' | 'category'>>
 function loadEdits(): Record<string, EditOverride> {
@@ -123,7 +141,7 @@ function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Recor
     notice: ov.notice ?? '',
     preference: String(c.preferences ?? ''),
     applied: ov.applied ?? String(c.job_prefs ?? ''),
-    proposal: ov.proposal ?? '',
+    proposal: ov.proposal ?? String(c.recruiter_memo ?? ''),
     mailAction: '',
     curSalary: String(c.current_salary ?? ''),
     hopeSalary: String(c.desired_salary ?? ''),
@@ -529,12 +547,14 @@ export default function BridgeAdminSheet() {
   }
   const cE = () => {
     if (!ec) return; pushU()
-    const applyEdit = (x: DataRow) => {
-      if (x.id !== ec.id) return x
-      const cid = String(x._cid ?? '')
-      if (cid) { editedCids.current.add(cid); saveEdit(cid, { [ec.key]: ev } as EditOverride) }
-      return { ...x, [ec.key]: ev }
+    const row = [...data.active, ...data.past, ...data.blacklist, ...dbAll].find(r => r.id === ec.id)
+    const cid = String(row?._cid ?? '')
+    if (cid) {
+      editedCids.current.add(cid)
+      saveEdit(cid, { [ec.key]: ev } as EditOverride)
+      patchDB(cid, { [FB_MAP[ec.key] || ec.key]: ev })
     }
+    const applyEdit = (x: DataRow) => x.id === ec!.id ? { ...x, [ec!.key]: ev } : x
     setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(applyEdit); return u })
     setDbAll(p => p.map(applyEdit))
     setEc(null)
@@ -546,26 +566,35 @@ export default function BridgeAdminSheet() {
 
   /* Stage / Field / Tag */
   const upData = (fn: (x: DataRow) => DataRow) => { pushU(); setData(p => { const u: DataStore = { active: [], past: [], blacklist: [] }; for (const k of Object.keys(p) as CategoryKey[]) u[k] = p[k].map(fn); return u }); setDbAll(p => p.map(fn)) }
-  const setSt = (rid: number, s: string) => upData(x => {
-    if (x.id !== rid) return x
-    const cid = String(x._cid ?? '')
-    if (cid) { editedCids.current.add(cid); saveEdit(cid, { stage: s }) }
-    return { ...x, stage: s }
-  })
-  const setField = (rid: number, key: string, val: string) => upData(x => {
-    if (x.id !== rid) return x
-    const cid = String(x._cid ?? '')
-    if (cid) { editedCids.current.add(cid); saveEdit(cid, { [key]: val } as EditOverride) }
-    return { ...x, [key]: val }
-  })
-  const tMT = (rid: number, tk: string) => upData(x => {
-    if (x.id !== rid) return x
-    const c = String(x.mailStatus || '').split(',').filter(Boolean)
+  const patchDB = (cid: string, body: Record<string, unknown>) => {
+    if (!cid) return
+    fetch(`${API}/api/admin/candidates/${cid}`, {
+      method: 'PATCH',
+      headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }
+  const setSt = (rid: number, s: string) => {
+    const row = [...data.active, ...data.past, ...data.blacklist, ...dbAll].find(r => r.id === rid)
+    const cid = String(row?._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { stage: s }); patchDB(cid, { stage: s }) }
+    upData(x => x.id === rid ? { ...x, stage: s } : x)
+  }
+  const setField = (rid: number, key: string, val: string) => {
+    const row = [...data.active, ...data.past, ...data.blacklist, ...dbAll].find(r => r.id === rid)
+    const cid = String(row?._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { [key]: val } as EditOverride); patchDB(cid, { [FB_MAP[key] || key]: val }) }
+    upData(x => x.id === rid ? { ...x, [key]: val } : x)
+  }
+  const tMT = (rid: number, tk: string) => {
+    const row = [...data.active, ...data.past, ...data.blacklist, ...dbAll].find(r => r.id === rid)
+    if (!row) return
+    const c = String(row.mailStatus || '').split(',').filter(Boolean)
     const ms = (c.includes(tk) ? c.filter(i => i !== tk) : [...c, tk]).join(',')
-    const cid = String(x._cid ?? '')
-    if (cid) { editedCids.current.add(cid); saveEdit(cid, { mailStatus: ms }) }
-    return { ...x, mailStatus: ms }
-  })
+    const cid = String(row._cid ?? '')
+    if (cid) { editedCids.current.add(cid); saveEdit(cid, { mailStatus: ms }); patchDB(cid, { mail_tags: ms }) }
+    upData(x => x.id === rid ? { ...x, mailStatus: ms } : x)
+  }
 
   /* Context menu */
   const hC = (e: React.MouseEvent, row: DataRow) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, row }) }
