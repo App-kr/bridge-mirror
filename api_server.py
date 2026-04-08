@@ -1319,6 +1319,28 @@ async def inquiry(request: Request, body: ClientInquiry):
 
 # ── 인재 게시판 공개 API ───────────────────────────────────────────────────────
 
+# TTL 인메모리 캐시 (key → (data, expires_at))  — 대량 유입 대비
+_PUBLIC_CACHE: dict[str, tuple[list, float]] = {}
+_PUBLIC_CACHE_TTL = 60  # 60초
+
+
+def _public_cache_get(key: str):
+    """캐시 조회. 만료 시 None 반환."""
+    entry = _PUBLIC_CACHE.get(key)
+    if entry and time.time() < entry[1]:
+        return entry[0]
+    _PUBLIC_CACHE.pop(key, None)
+    return None
+
+
+def _public_cache_set(key: str, data: list) -> None:
+    """캐시 저장 (최대 100항목 — 초과 시 오래된 항목 제거)."""
+    if len(_PUBLIC_CACHE) >= 100:
+        oldest = min(_PUBLIC_CACHE, key=lambda k: _PUBLIC_CACHE[k][1])
+        _PUBLIC_CACHE.pop(oldest, None)
+    _PUBLIC_CACHE[key] = (data, time.time() + _PUBLIC_CACHE_TTL)
+
+
 _TALENT_PUBLIC_COLS = (
     "sheet_number", "nationality", "area_prefs", "target",
     "certification", "education_level", "experience", "desired_salary",
@@ -1335,7 +1357,14 @@ async def public_talents(
     """
     공개 강사 목록 — talent_visible=1 인 Active 강사만, PII 절대 없음.
     nationality/area/target/q(sheet_number) 필터 지원.
+    캐시: 필터 없는 기본 요청은 60초 TTL 캐시 적용.
     """
+    # 필터 없는 기본 요청은 캐시에서 반환 (대량 유입 시 DB 보호)
+    cache_key = f"pt:{nationality or ''}:{area or ''}:{target or ''}:{q or ''}"
+    cached = _public_cache_get(cache_key)
+    if cached is not None:
+        return ok(data=cached)
+
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
@@ -1391,6 +1420,7 @@ async def public_talents(
 
         result.append(r)
 
+    _public_cache_set(cache_key, result)
     return ok(data=result)
 
 
@@ -1974,11 +2004,14 @@ print(f"[STARTUP] ADMIN_API_KEY={'SET' if _ADMIN_KEY else 'EMPTY'} "
       f"ADMIN_PASSWORD={'SET(pbkdf2)' if _ADMIN_PW.startswith('pbkdf2:') else 'SET(plain)' if _ADMIN_PW else 'EMPTY'} "
       f"DB={_ADMIN_DB_PATH}")
 
-# SQLite WAL 모드 활성화 (다중 스레드 동시 읽기/쓰기 성능 향상)
+# SQLite WAL 모드 + 성능 튜닝 (대량 유입 대비)
 try:
     _wal_conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     _wal_conn.execute("PRAGMA journal_mode = WAL")
     _wal_conn.execute("PRAGMA synchronous = NORMAL")
+    _wal_conn.execute("PRAGMA cache_size = -65536")    # 64MB 페이지 캐시
+    _wal_conn.execute("PRAGMA mmap_size = 268435456")  # 256MB 메모리 맵 I/O
+    _wal_conn.execute("PRAGMA temp_store = MEMORY")    # 임시 테이블 메모리 사용
     _wal_conn.close()
 except Exception:
     pass

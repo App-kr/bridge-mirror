@@ -88,7 +88,9 @@ function saveEdit(cid: string, patch: EditOverride) {
 function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Record<string, EditOverride>): DataRow {
   const cid = String(c.candidate_id ?? c.id ?? '')
   const ov = edits[cid] || {}
-  const cat: CategoryKey = String(c.status) === 'Active' ? 'active' : 'past'
+  const dbStatus = String(c.status ?? '')
+  const cat: CategoryKey = dbStatus === 'Active' ? 'active' :
+    (dbStatus.toLowerCase() === 'blacklist' ? 'blacklist' : 'past')
   const tattoo = [c.tattoo, c.piercings].filter(Boolean).join('/')
   const ts = String(c.created_at ?? '').slice(0, 10).replace(/-/g, '.').slice(2)
   const isWebForm = String(c.source) === 'web_form'
@@ -96,8 +98,8 @@ function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Recor
     id: idx + 1,
     _cid: cid,
     category: ov.category ?? cat,
-    stage: ov.stage ?? 'none',
-    mailStatus: ov.mailStatus ?? '',
+    stage: ov.stage ?? String(c.stage ?? 'none'),
+    mailStatus: ov.mailStatus ?? String(c.mail_tags ?? ''),
     photoUrl: (() => {
       const raw = String(c.photo_url ?? ov.photoUrl ?? '')
       if (!raw) return ''
