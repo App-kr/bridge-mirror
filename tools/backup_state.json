@@ -1535,8 +1535,24 @@
       "git": "2d63a6d8",
       "files": 2207,
       "db_hash": "be826f32fafa"
+    },
+    {
+      "dir": "20260408_112936__FULL_STABILIZATION_시작",
+      "task": "FULL_STABILIZATION 시작",
+      "ts": "2026.04.08 11:30:51",
+      "git": "8a48414f",
+      "files": 2210,
+      "db_hash": "be826f32fafa"
+    },
+    {
+      "dir": "20260408_113114__FULL_STABILIZATION_시작",
+      "task": "FULL_STABILIZATION 시작",
+      "ts": "2026.04.08 11:31:30",
+      "git": "5a48591f",
+      "files": 2210,
+      "db_hash": "be826f32fafa"
     }
   ],
-  "last_backup": "2026.04.07 18:13:01",
-  "total_count": 192
+  "last_backup": "2026.04.08 11:31:30",
+  "total_count": 194
 }
