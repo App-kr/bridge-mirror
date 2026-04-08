@@ -55,6 +55,22 @@ def backup() -> bool:
             backup_file.write_text(content, encoding="utf-8")
             kb = len(content) // 1024
             print(f"  저장: {backup_file.name} ({kb} KB)")
+            # G: drive copy (optional -- silently skip if G: not mounted)
+            try:
+                import shutil as _shutil
+                _gdrive_db = Path("G:/BRIDGE_Backups/db")
+                if _gdrive_db.parent.parent.exists():
+                    _gdrive_db.mkdir(parents=True, exist_ok=True)
+                    _dest = _gdrive_db / f"render_{backup_file.name}"
+                    if not _dest.exists():
+                        _shutil.copy2(str(backup_file), str(_dest))
+                        print("  G: drive copy: done")
+                    else:
+                        print("  G: drive copy: skip (exists)")
+                else:
+                    print("  G: drive copy: skipped (G: not mounted)")
+            except Exception as _e:
+                print(f"  G: drive copy: skipped ({_e})")
     except urllib.error.HTTPError as e:
         print(f"  실패: HTTP {e.code} — {e.read().decode()[:200]}")
         return False

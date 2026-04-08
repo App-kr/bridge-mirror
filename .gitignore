@@ -199,3 +199,8 @@ test_output.pdf
 
 # SMTP Vault 저장 스크립트 (1회용 — 사용 후 삭제)
 tools/store_smtp_credentials.py
+
+# Backup state & temp
+tools/.gdrive_backup_state.json
+tools/.tmp_backup_*.db
+tools/gdrive_backup.log
