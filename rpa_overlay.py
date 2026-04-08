@@ -1879,13 +1879,13 @@ def ask_account_selection():
                         err_mk.configure(text="현재 키와 동일합니다"); return
                     v2 = CredentialVault()
                     if v2.rekey(cur, nw):
-                        err_mk.configure(text="✅ 마스터 키 변경 완료", fg=_BLUE)
+                        err_mk.configure(text="[완료] 마스터 키 변경 완료", fg=_BLUE)
                         top.after(1200, lambda: [top.grab_release(), top.destroy()])
                     else:
                         err_mk.configure(text="변경 실패 — 다시 시도하세요")
                 else:   # 새 키 없음 → 현재 키 저장만
                     _save_mk_cache(cur.encode("utf-8"))
-                    err_mk.configure(text="✅ 마스터 키 저장 완료", fg=_BLUE)
+                    err_mk.configure(text="[완료] 마스터 키 저장 완료", fg=_BLUE)
                     top.after(900, lambda: [top.grab_release(), top.destroy()])
 
             tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", pady=(6, 0))
@@ -2491,7 +2491,7 @@ def ask_master_key_gui() -> str:
                     # 성공: 메인 입력창에 새 키 자동 입력 + 성공 메시지
                     e.delete(0, "end")
                     e.insert(0, new_k)
-                    err_lbl.configure(text="✅ 마스터 키 변경 완료 — 확인을 누르세요", fg=_BLUE)
+                    err_lbl.configure(text="[완료] 마스터 키 변경 완료 — 확인을 누르세요", fg=_BLUE)
                     top.grab_release()
                     top.destroy()
                 else:

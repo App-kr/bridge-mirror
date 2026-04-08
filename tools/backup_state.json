@@ -1551,8 +1551,16 @@
       "git": "5a48591f",
       "files": 2210,
       "db_hash": "be826f32fafa"
+    },
+    {
+      "dir": "20260408_121218__nav-인재보기-introduce-mail",
+      "task": "nav-인재보기-introduce-mail",
+      "ts": "2026.04.08 12:12:28",
+      "git": "a502bbad",
+      "files": 2212,
+      "db_hash": "8df971289d12"
     }
   ],
-  "last_backup": "2026.04.08 11:31:30",
-  "total_count": 194
+  "last_backup": "2026.04.08 12:12:28",
+  "total_count": 195
 }
