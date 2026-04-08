@@ -74,6 +74,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/inbox', label: '통합 수신함', icon: <Inbox size={ICON_SIZE} /> },
       { href: '/admin/mail-logs', label: '메일 수발신 관리', icon: <MailCheck size={ICON_SIZE} /> },
       { href: '/admin/mail-send', label: '메일 발송', icon: <Mail size={ICON_SIZE} /> },
+      { href: '/admin/introduce-mail', label: '소개 메일 발송', icon: <Megaphone size={ICON_SIZE} /> },
     ],
   },
   {
