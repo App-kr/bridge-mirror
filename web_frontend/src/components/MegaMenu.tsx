@@ -52,6 +52,7 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
   '/talents': [
     { href: '/talents', label: 'Teacher Board', labelKr: '강사 게시판' },
+    { href: '/talents/login', label: '인재보기', labelKr: '강사 프로필 열람' },
     { href: '/inquiry', label: 'Hire a Teacher', labelKr: '강사 채용 의뢰' },
   ],
 }
@@ -65,6 +66,7 @@ const DEFAULT_MOBILE_LINKS: NavItem[] = [
   { href: '/job-seekers', label: 'For Employers' },
   { href: '/jobs', label: 'Job Board' },
   { href: '/talents', label: 'Teachers' },
+  { href: '/talents/login', label: '인재보기' },
   { href: '/community/korea', label: 'Korea' },
   { href: '/community/visa', label: 'Visa' },
   { href: '/community/support', label: 'Support' },

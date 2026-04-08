@@ -9566,6 +9566,21 @@ def _ensure_download_links_schema():
             details TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mail_introduce_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sent_at DATETIME DEFAULT (datetime('now','localtime')),
+            candidate_ids TEXT NOT NULL,
+            to_email TEXT NOT NULL,
+            school_name TEXT,
+            contact_name TEXT,
+            subject TEXT,
+            status TEXT DEFAULT 'sent',
+            error TEXT,
+            sender_email TEXT,
+            link_expiry_days INTEGER DEFAULT 10
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -10330,6 +10345,307 @@ async def get_mail_templates(request: Request):
         ]
 
     return ok(data={"templates": templates})
+
+
+# ── 소개 메일 시스템 ─────────────────────────────────────────────────────────
+
+@app.get("/api/admin/employers-for-mail", tags=["admin"])
+async def employers_for_mail(
+    request: Request,
+    location: str = "",
+    teaching_age: str = "",
+    page: int = 1,
+    per_page: int = 100,
+):
+    """
+    소개 메일 수신자 목록 — client_inquiries 테이블 기반.
+    필터: location(도시), teaching_age(대상 연령)
+    """
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        conditions = ["is_deleted = 0", "email IS NOT NULL", "email != ''"]
+        params: list = []
+        if location:
+            conditions.append("(location LIKE ? OR location LIKE ?)")
+            params += [f"%{location}%", f"{location}%"]
+        if teaching_age:
+            conditions.append("teaching_age LIKE ?")
+            params.append(f"%{teaching_age}%")
+
+        where = " AND ".join(conditions)
+        offset = (page - 1) * per_page
+
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM client_inquiries WHERE {where}", params
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            f"""SELECT id, school_name, location, contact_name, email, phone,
+                teaching_age, start_date, salary_raw, submitted_at
+                FROM client_inquiries WHERE {where}
+                ORDER BY submitted_at DESC LIMIT ? OFFSET ?""",
+            params + [per_page, offset],
+        ).fetchall()
+
+        result = []
+        for r in rows:
+            result.append({
+                "id":           r["id"],
+                "school_name":  r["school_name"] or "",
+                "location":     r["location"] or "",
+                "contact_name": r["contact_name"] or "",
+                "email":        r["email"] or "",
+                "teaching_age": r["teaching_age"] or "",
+                "start_date":   r["start_date"] or "",
+                "salary_raw":   r["salary_raw"] or "",
+            })
+
+        return ok(data={"employers": result, "total": total, "page": page, "per_page": per_page})
+    finally:
+        conn.close()
+
+
+def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
+    """강사 1명의 소개 HTML 블록 생성 (PII 없음 — 번호·국적·조건만)."""
+    snum    = cand.get("sheet_number") or ""
+    nat     = cand.get("nationality_plain") or cand.get("nationality") or ""
+    gender  = cand.get("gender") or ""
+    loc     = (cand.get("current_location") or "").strip()
+    # 국내/해외 이모지
+    emoji   = "😎" if loc and ("한국" in loc or "Korea" in loc.title() or "Seoul" in loc or "서울" in loc) else "✈️"
+    start   = cand.get("start_date") or ""
+    target  = cand.get("target_age") or cand.get("target") or ""
+    exp     = cand.get("experience") or cand.get("korea_experience") or ""
+    area    = cand.get("area_prefs") or ""
+    housing = cand.get("housing") or ""
+    summary = cand.get("talent_summary") or ""
+    star    = cand.get("talent_reference_star")
+    star_str = ("★" * int(star) + "☆" * (5 - int(star)) + f" ({star}점)") if star else ""
+
+    # presigned URL (cv_processed_s3_key)
+    cv_key  = cand.get("cv_processed_s3_key") or ""
+    cv_link = ""
+    if cv_key:
+        try:
+            cv_link = s3_presigned_url(cv_key, expires=expiry_days * 86400)
+        except Exception:
+            cv_link = ""
+
+    rows_html = ""
+    if start:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0;width:80px'>시작일</td><td>{start}</td></tr>"
+    if target:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0'>대상</td><td>{target}</td></tr>"
+    if exp:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0'>경력</td><td>{exp}</td></tr>"
+    if area:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0'>선호지역</td><td>{area}</td></tr>"
+    if housing:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0'>주거</td><td>{housing}</td></tr>"
+    if star_str:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0'>레퍼런스</td><td>{star_str}</td></tr>"
+    if summary:
+        rows_html += f"<tr><td style='color:#666;padding:2px 8px 2px 0;vertical-align:top'>메모</td><td style='font-style:italic'>{summary}</td></tr>"
+
+    cv_btn = ""
+    if cv_link:
+        cv_btn = (
+            f"<a href='{cv_link}' style='display:inline-block;margin-top:8px;"
+            "background:#1d1d1f;color:#fff;padding:5px 12px;border-radius:4px;"
+            "text-decoration:none;font-size:12px'>📄 이력서 보기</a>"
+        )
+
+    return (
+        f"<div style='border-left:4px solid #1d1d1f;padding:10px 14px;margin:12px 0;"
+        f"background:#f9f9f9;border-radius:0 4px 4px 0'>"
+        f"<p style='margin:0 0 6px;font-weight:bold;font-size:15px'>"
+        f"{emoji} ◼{snum}{nat} {gender}</p>"
+        f"<table style='border-collapse:collapse;font-size:13px'>{rows_html}</table>"
+        f"{cv_btn}</div>"
+    )
+
+
+@app.post("/api/admin/mail/introduce", tags=["admin"])
+async def mail_introduce(request: Request):
+    """
+    소개 메일 자동 발송.
+    candidate_ids: sheet_number 목록
+    employer_ids: client_inquiries.id 목록 (직접 선택)
+    employer_filter: {location, teaching_age} (필터로 자동 선택)
+    link_expiry_days: presigned URL 유효기간 (기본 10일)
+    sender: naver | gmail
+    custom_message: 상단 추가 메시지
+    """
+    _check_admin(request)
+    import json as _json_intro
+    data = await request.json()
+
+    candidate_ids   = data.get("candidate_ids", [])       # sheet_number 목록
+    employer_ids    = data.get("employer_ids", [])         # client_inquiries.id 목록
+    emp_filter      = data.get("employer_filter", {})
+    expiry_days     = int(data.get("link_expiry_days", 10))
+    sender_key      = data.get("sender", "naver")
+    custom_msg      = data.get("custom_message", "").strip()
+
+    if not candidate_ids:
+        raise HTTPException(400, "candidate_ids(강사 번호) 필수")
+    if not employer_ids and not emp_filter:
+        raise HTTPException(400, "employer_ids 또는 employer_filter 필수")
+
+    cfg = SMTP_CONFIG.get(sender_key)
+    if not cfg or not cfg.get("user") or not cfg.get("password"):
+        raise HTTPException(503, f"{sender_key} SMTP 미설정")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+
+    try:
+        # ── 1. 강사 조회 ──
+        placeholders = ",".join(["?"] * len(candidate_ids))
+        cand_rows = conn.execute(
+            f"""SELECT sheet_number, nationality_plain, nationality, gender,
+                current_location, start_date, target_age, target,
+                experience, korea_experience, area_prefs, housing,
+                talent_summary, talent_reference_star, cv_processed_s3_key
+                FROM candidates WHERE sheet_number IN ({placeholders}) AND is_deleted=0""",
+            [str(c) for c in candidate_ids],
+        ).fetchall()
+
+        if not cand_rows:
+            raise HTTPException(404, "조회된 강사 없음")
+
+        # ── 2. 구인자(수신자) 조회 ──
+        if employer_ids:
+            emp_ph = ",".join(["?"] * len(employer_ids))
+            emp_rows = conn.execute(
+                f"SELECT id, school_name, location, contact_name, email FROM client_inquiries"
+                f" WHERE id IN ({emp_ph}) AND is_deleted=0 AND email IS NOT NULL",
+                [int(e) for e in employer_ids],
+            ).fetchall()
+        else:
+            conditions = ["is_deleted = 0", "email IS NOT NULL", "email != ''"]
+            params: list = []
+            if emp_filter.get("location"):
+                conditions.append("location LIKE ?")
+                params.append(f"%{emp_filter['location']}%")
+            if emp_filter.get("teaching_age"):
+                conditions.append("teaching_age LIKE ?")
+                params.append(f"%{emp_filter['teaching_age']}%")
+            emp_rows = conn.execute(
+                "SELECT id, school_name, location, contact_name, email FROM client_inquiries"
+                f" WHERE {' AND '.join(conditions)}",
+                params,
+            ).fetchall()
+
+        if not emp_rows:
+            raise HTTPException(404, "수신 구인자 없음")
+
+        # ── 3. 메일 본문 생성 ──
+        teacher_blocks = ""
+        for cr in cand_rows:
+            teacher_blocks += _build_teacher_html_block(dict(cr), expiry_days)
+
+        template_subject = "📢 BRIDGE 원어민 강사 소식 — 국내/해외 프로필 확인하세요"
+        candidate_ids_str = _json_intro.dumps([str(c) for c in candidate_ids])
+
+        sent = 0
+        failed = 0
+        errors: list = []
+
+        for emp in emp_rows:
+            emp_email   = (emp["email"] or "").strip()
+            emp_name    = emp["school_name"] or emp["contact_name"] or ""
+            emp_contact = emp["contact_name"] or ""
+
+            if not emp_email or _is_email_blacklisted(emp_email):
+                failed += 1
+                errors.append({"email": emp_email, "error": "블랙리스트 또는 빈 이메일"})
+                continue
+
+            # 본문 조립 (수신자별 이름 치환)
+            greeting = f"<p>안녕하세요, <strong>{emp_name}</strong> 담당자님.</p>" if emp_name else "<p>안녕하세요.</p>"
+            custom_block = f"<p>{custom_msg}</p>" if custom_msg else ""
+            body_html = f"""
+<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto">
+{greeting}
+<p>BRIDGE 원어민 강사 프로필을 공유드립니다.<br/>
+Start date and preferences noted. Reference provided for review only.</p>
+{custom_block}
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
+{teacher_blocks}
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
+<p style="font-size:11px;color:#999">
+💡 If you are not the intended recipient or no longer in this role,
+please notify us and delete this email.
+Additionally, let us know if any contact should be removed due to a change in management.
+</p>
+<p style="font-size:11px;color:#bbb">BRIDGE Recruitment &nbsp;|&nbsp; bridgejob.co.kr</p>
+</div>"""
+
+            try:
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                msg = MIMEMultipart("alternative")
+                msg["From"]    = cfg["user"]
+                msg["To"]      = emp_email
+                msg["Subject"] = template_subject
+
+                msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+                with smtplib.SMTP(cfg["host"], cfg["port"]) as srv:
+                    srv.ehlo()
+                    srv.starttls()
+                    srv.login(cfg["user"], cfg["password"])
+                    srv.send_message(msg)
+
+                # 발송 로그
+                conn.execute(
+                    """INSERT INTO mail_introduce_log
+                       (candidate_ids, to_email, school_name, contact_name, subject, status, sender_email, link_expiry_days)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (candidate_ids_str, emp_email, emp_name, emp_contact,
+                     template_subject, "sent", cfg["user"], expiry_days),
+                )
+                conn.commit()
+                sent += 1
+
+            except Exception as _smtp_e:
+                failed += 1
+                errors.append({"email": emp_email, "error": str(_smtp_e)[:120]})
+                conn.execute(
+                    """INSERT INTO mail_introduce_log
+                       (candidate_ids, to_email, school_name, contact_name, subject, status, error, sender_email, link_expiry_days)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (candidate_ids_str, emp_email, emp_name, emp_contact,
+                     template_subject, "failed", str(_smtp_e)[:200], cfg["user"], expiry_days),
+                )
+                conn.commit()
+
+        return ok(data={"sent": sent, "failed": failed, "total_employers": len(emp_rows),
+                         "candidate_count": len(cand_rows), "errors": errors[:10]})
+    finally:
+        conn.close()
+
+
+@app.get("/api/admin/mail/introduce-log", tags=["admin"])
+async def get_introduce_log(request: Request, limit: int = 50):
+    """소개 메일 발송 이력 조회."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT * FROM mail_introduce_log ORDER BY sent_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return ok(data={"logs": [dict(r) for r in rows]})
+    finally:
+        conn.close()
 
 
 # ── 구인자 관리 (employers) CRUD — employers 테이블 기반 ──────────────────────
