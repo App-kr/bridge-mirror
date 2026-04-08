@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from "react";
+import { API_URL } from "@/lib/api";
 
 // DOMPurify: SSR에서 window 없으면 크래시 → lazy require + try/catch
 let _DOMPurify = null;
@@ -21,7 +22,7 @@ function sanitizeHtml(html) {
   }
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = API_URL;
 
 // ─── region code → 한글 매핑 ───────────────────────────
 const REGION_KO = {
