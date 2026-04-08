@@ -226,6 +226,7 @@ export default function EmployerManagement() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const wakeRetryRef = useRef(0)
 
   // NEW 확인
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(loadConfirmed)
@@ -278,8 +279,27 @@ export default function EmployerManagement() {
   const fetchEmployers = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const ctrl = new AbortController()
+    const ctrlTimer = setTimeout(() => ctrl.abort(), 5000)
+    let res: Response
     try {
-      const res = await fetch(`${API}/api/admin/applications?type=employer`, { headers: headers() })
+      res = await fetch(`${API}/api/admin/applications?type=employer`, { headers: headers(), signal: ctrl.signal })
+      clearTimeout(ctrlTimer)
+    } catch (e: unknown) {
+      clearTimeout(ctrlTimer)
+      setLoading(false)
+      const isAbort = e instanceof DOMException && e.name === 'AbortError'
+      wakeRetryRef.current += 1
+      if (isAbort && wakeRetryRef.current <= 20) {
+        setError(`서버 기동 중... (${wakeRetryRef.current}회 재시도)`)
+        setTimeout(() => fetchEmployers(), 3000)
+      } else {
+        setError('서버 연결 실패 — 새로고침 후 재시도하세요')
+      }
+      return
+    }
+    wakeRetryRef.current = 0
+    try {
       if (!res.ok) {
         if (res.status === 403) { setError('인증 오류. 다시 로그인해주세요.'); return }
         throw new Error('데이터 로딩 실패')

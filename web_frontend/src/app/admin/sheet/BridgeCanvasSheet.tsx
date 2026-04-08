@@ -328,6 +328,7 @@ export default function BridgeCanvasSheet() {
   const dbTotalRef       = useRef(0)
   const loadAllDataRef   = useRef<(() => Promise<void>) | null>(null)
   const lastPollTotalRef = useRef(0)
+  const wakeRetryRef     = useRef(0)
 
   const loadAllData = useCallback(async () => {
     setLoading(true)
@@ -338,13 +339,35 @@ export default function BridgeCanvasSheet() {
     const hdrs    = hdrsRef.current
     const allRows: DataRow[] = []
 
+    /* ① 첫 페이지 — 5초 timeout + 자동 재시도 (Render cold start 대응) */
+    const ctrl = new AbortController()
+    const ctrlTimer = setTimeout(() => ctrl.abort(), 5000)
+    let res0: Response
     try {
-      /* ① 첫 페이지 — 즉시 표시 + total 파악 */
-      const res0 = await fetch(
+      res0 = await fetch(
         `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=0`,
-        { headers: hdrs() },
+        { headers: hdrs(), signal: ctrl.signal },
       )
-      if (!res0.ok) {
+      clearTimeout(ctrlTimer)
+    } catch (e: unknown) {
+      clearTimeout(ctrlTimer)
+      const isAbort = e instanceof DOMException && e.name === 'AbortError'
+      wakeRetryRef.current += 1
+      if (isAbort && wakeRetryRef.current <= 20) {
+        setFetchError(`서버 기동 중... (${wakeRetryRef.current}회 재시도) — 잠시 기다려 주세요`)
+      } else {
+        setFetchError('서버 연결 실패 — 새로고침 후 재시도하세요')
+      }
+      setLoading(false)
+      isLoadingMoreRef.current = false
+      if (isAbort && wakeRetryRef.current <= 20) {
+        setTimeout(() => loadAllDataRef.current?.(), 3000)
+      }
+      return
+    }
+    wakeRetryRef.current = 0
+    try {
+    if (!res0.ok) {
         const msg = res0.status === 403
           ? `인증 오류 (403) — 재로그인 후 시도`
           : res0.status >= 500
@@ -416,7 +439,7 @@ export default function BridgeCanvasSheet() {
         if (results.some(r => r.rows.length < PAGE_SIZE)) break
       }
     } catch (e) {
-      setFetchError(e instanceof Error ? `네트워크 오류: ${e.message}` : '서버 연결 실패 — Render 서버가 응답하지 않습니다')
+      setFetchError(e instanceof Error ? `데이터 로딩 오류: ${e.message}` : '서버 연결 실패')
     }
 
     setLoading(false)

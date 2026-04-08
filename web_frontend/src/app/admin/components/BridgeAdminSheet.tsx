@@ -315,6 +315,7 @@ export default function BridgeAdminSheet() {
   const dbFetchingRef = useRef(false)
   const dbOffsetRef = useRef(0)        // 다음 로드 시작 offset
   const allLoadedRef = useRef(false)   // 모두 로드됐으면 true
+  const wakeRetryRef = useRef(0)
 
   const eR = useRef<HTMLTextAreaElement>(null)
   const cR = useRef<{ i: number; sx: number; sw: number } | null>(null)
@@ -380,11 +381,28 @@ export default function BridgeAdminSheet() {
     setLoading(true)
     const currentOffset = dbOffsetRef.current
     const edits = loadEdits()
+    const ctrl = new AbortController()
+    const ctrlTimer = setTimeout(() => ctrl.abort(), 5000)
+    let res: Response
     try {
-      const res = await fetch(
+      res = await fetch(
         `${API}/api/admin/candidates?limit=${PAGE_SIZE}&offset=${currentOffset}`,
-        { headers: headers() },
+        { headers: headers(), signal: ctrl.signal },
       )
+      clearTimeout(ctrlTimer)
+    } catch (e: unknown) {
+      clearTimeout(ctrlTimer)
+      dbFetchingRef.current = false
+      setLoading(false)
+      const isAbort = e instanceof DOMException && e.name === 'AbortError'
+      wakeRetryRef.current += 1
+      if (isAbort && wakeRetryRef.current <= 20) {
+        setTimeout(() => loadMore(), 3000)
+      }
+      return
+    }
+    wakeRetryRef.current = 0
+    try {
       if (!res.ok) return
       const json = await res.json()
       const rawRows: Record<string, unknown>[] = json.data?.candidates ?? []
