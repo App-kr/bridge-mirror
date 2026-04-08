@@ -213,11 +213,13 @@ function CandidateColumn({
   index,
   onUpdate,
   onRemove,
+  onDownloadAll,
 }: {
   col: CandidateCol
   index: number
   onUpdate: (uid: string, updater: (c: CandidateCol) => CandidateCol) => void
   onRemove: (uid: string) => void
+  onDownloadAll: () => void
 }) {
   const [isDraggingCol, setIsDraggingCol] = useState(false)
 
@@ -283,6 +285,16 @@ function CandidateColumn({
                 {col.status === 'processing' ? '처리중' :
                  col.status === 'done'  ? '완료' : '오류'}
               </span>
+            )}
+            {col.status === 'done' && (
+              <button
+                onClick={onDownloadAll}
+                title="이 목록 전체 다운로드"
+                className="p-0.5 rounded transition-colors"
+                style={{ color: C_PRIMARY }}
+              >
+                <Download size={13} />
+              </button>
             )}
             <button
               onClick={() => onRemove(col.uid)}
@@ -424,20 +436,34 @@ function ResumeConverterInner() {
 
   const processAll = async () => {
     setIsProcessingAll(true)
-    for (const col of cols) {
-      updateCol(col.uid, c => ({ ...c, status: 'processing', message: '' }))
-      try {
-        const result = await processOne(col)
-        updateCol(col.uid, c => ({ ...c, ...result }))
-      } catch (e) {
-        updateCol(col.uid, c => ({
+    // 모든 컬럼을 "처리중" 상태로 전환 후 병렬 실행
+    cols.forEach(col => updateCol(col.uid, c => ({ ...c, status: 'processing', message: '' })))
+    const results = await Promise.allSettled(
+      cols.map(col => processOne(col))
+    )
+    results.forEach((result, i) => {
+      const uid = cols[i].uid
+      if (result.status === 'fulfilled') {
+        updateCol(uid, c => ({ ...c, ...result.value }))
+      } else {
+        updateCol(uid, c => ({
           ...c,
           status: 'error',
-          message: `오류: ${e instanceof Error ? e.message : 'Unknown error'}`,
+          message: `오류: ${result.reason instanceof Error ? result.reason.message : 'Unknown error'}`,
         }))
       }
-    }
+    })
     setIsProcessingAll(false)
+  }
+
+  // 완료된 컬럼의 모든 processedFile 순차 다운로드
+  const downloadAllDone = () => {
+    for (const col of cols) {
+      if (col.status !== 'done') continue
+      for (const slotFile of Object.values(col.slots)) {
+        if (slotFile?.processedFile) downloadFile(slotFile.processedFile)
+      }
+    }
   }
 
   const doneCount  = cols.filter(c => c.status === 'done').length
@@ -496,6 +522,16 @@ function ResumeConverterInner() {
               전체 초기화
             </button>
 
+            {doneCount > 0 && (
+              <button
+                onClick={downloadAllDone}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm border"
+                style={{ color: C_PRIMARY, borderColor: C_PRIMARY, backgroundColor: '#f0fdf4' }}
+              >
+                <Download size={15} />완료 파일 전체 다운로드 ({doneCount}명)
+              </button>
+            )}
+
             <button
               onClick={processAll}
               disabled={isProcessingAll}
@@ -524,6 +560,11 @@ function ResumeConverterInner() {
             index={index}
             onUpdate={updateCol}
             onRemove={removeCol}
+            onDownloadAll={() => {
+              Object.values(col.slots).forEach(sf => {
+                if (sf?.processedFile) downloadFile(sf.processedFile)
+              })
+            }}
           />
         ))}
 

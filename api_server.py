@@ -561,9 +561,29 @@ app.add_middleware(AdminAuditMiddleware)
 def _ensure_candidate_indexes() -> None:
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        # 기존 인덱스
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_name ON candidates(full_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_created ON candidates(created_at)")
+        # 추가 인덱스 — 대량 유입 대비 (WHERE is_deleted 매 쿼리 공통)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_deleted ON candidates(is_deleted)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_sheet ON candidates(sheet_number)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_visible ON candidates(talent_visible)")
+        # candidates 복합 인덱스 (공개 게시판 공통 WHERE)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_candidates_pub "
+            "ON candidates(status, talent_visible, is_deleted)"
+        )
+        # jobs 인덱스
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_open "
+            "ON jobs(is_deleted, status)"
+        )
+        # client_inquiries 인덱스
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inquiries_active "
+            "ON client_inquiries(is_deleted, email)"
+        )
         conn.commit()
         conn.close()
     except Exception:
