@@ -1,5 +1,40 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-07 (세션 28 — Sprint D LinkPanel + 안정성 패치 완료)
+최근 업데이트: 2026-04-08 (세션 29 — 소개 메일 발송 시스템 완성)
+
+## ✅ 2026-04-08 완료된 작업 (세션 29 — 커밋 9e82e9f8)
+
+### 소개 메일 발송 시스템 (원어민 관리 확장)
+
+#### 백엔드 (api_server.py — 이전 세션 미커밋분 포함)
+- `mail_introduce_log` 테이블 신규 생성 (DB 스키마)
+- `GET /api/admin/employers-for-mail` — 구인자 목록 (위치/대상연령 필터)
+- `POST /api/admin/mail/introduce` — 소개 메일 자동 발송
+  - 강사 sheet_number 기반 프로필 조회
+  - CV presigned URL (S3, 유효기간 설정 가능)
+  - `_build_teacher_html_block()` — 강사 HTML 블록 생성
+  - 구인자별 개별 발송 + 발송 로그 기록
+- `GET /api/admin/mail/introduce-log` — 발송 이력 조회
+
+#### 프론트엔드
+- `web_frontend/src/app/admin/introduce-mail/page.tsx` **신규 생성**
+  - 강사 선택: sheet_number 자유 입력 (쉼표/줄바꿈)
+  - 구인자 선택: 목록 불러오기 + 위치/연령 필터 + 다중선택
+  - 발송 설정: 발신자, CV 링크 유효기간(3~30일), 추가 메시지
+  - 발송 결과 표시 + 발송 이력 테이블
+- `AdminSidebar.tsx`: 메일 관리 섹션에 "소개 메일 발송" 추가
+- `layout.tsx` + `MegaMenu.tsx`: /talents/login 인재보기 네비 추가
+
+#### 배포
+- push → Render 자동 배포 진행 중 (autoDeploy: true)
+- Vercel 자동 배포 (프론트엔드)
+
+### ⚠️ 다음 세션 확인 사항
+1. Render 배포 완료 확인 → /api/admin/employers-for-mail 응답 확인
+2. mail_introduce_log 테이블 자동 생성 확인 (api_server.py _ensure_* 함수에 포함됨)
+3. 소개 메일 실제 발송 테스트 (1건)
+4. SMTP 설정 확인 — naver/gmail SMTP_CONFIG 키 일치 여부
+
+---
 
 ## 세션 재시작 방법
 1. `/clear`
