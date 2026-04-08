@@ -310,20 +310,54 @@ function saveJob(){
 function delJob(){if(selIdx<0||!confirm('Delete?'))return;jobs.splice(selIdx,1);selIdx=-1;document.getElementById('eF').style.display='none';document.getElementById('ePh').style.display='flex';persist();renderList();toast('Deleted','ok');}
 function addJob(){jobs.push({id:String(Date.now()).slice(-4),l:'New Location',r:'seoul',p:false,h:false,a:true,sal:'2.50m',date:'TBD',hrs:'09:00~18:00',hsg:'TBD',txt:''});persist();selJob(jobs.length-1);toast('Added','ok');}
 
+/* ── Job Quality Parsers ── */
+function parseWorkHours(hrs){
+  /* "08:30~16:30" → 시간 수 (float) */
+  var m=(hrs||'').match(/(\d{1,2}):(\d{2})\s*[~\-]\s*(\d{1,2}):(\d{2})/);
+  if(!m)return 8;
+  var s=parseInt(m[1])*60+parseInt(m[2]),e=parseInt(m[3])*60+parseInt(m[4]);
+  if(e<=s)e+=24*60;
+  return(e-s)/60;
+}
+function parseVacDays(txt){
+  /* txt에서 Vacation 줄 파싱 → 일수 (최솟값 기준) */
+  var t=txt||'';
+  var mw=t.match(/vacation:\s*(\d+)\s*~\s*(\d+)\s*weeks?/i);if(mw)return parseInt(mw[1])*5;
+  var mw2=t.match(/vacation:\s*(\d+)\s*weeks?/i);if(mw2)return parseInt(mw2[1])*5;
+  var md=t.match(/vacation:\s*(\d+)\s*~\s*(\d+)\s*days?/i);if(md)return parseInt(md[1]);
+  var md2=t.match(/vacation:\s*(\d+)\s*days?/i);if(md2)return parseInt(md2[1]);
+  return 0;
+}
+function parseSalMin(sal){
+  /* "2.30m-2.80m" → 230 (만원 단위) */
+  var m=(sal||'').match(/([\d.]+)m/i);return m?Math.round(parseFloat(m[1])*100):999;
+}
+function isPopular(j){
+  /* 인기 직업: 근무시간 ≤7h 또는 휴가 ≥20일 */
+  return parseWorkHours(j.hrs)<=7||parseVacDays(j.txt)>=20;
+}
+function isExcluded(j){
+  /* 광고 제외: 풀근무(≥8h) + 저급여(≤230만) — Premium은 항상 포함 */
+  if(j.p)return false;
+  return parseWorkHours(j.hrs)>=8&&parseSalMin(j.sal)<=230;
+}
+
 /* ── Shuffle + buildOrder ── */
 function doShuffle(){buildOrder();renderList();toast('Shuffled!','ok');if(lastHtml)generateAd();}
 
 function buildOrder(){
   var act=jobs.filter(function(j){return j.a;}),inact=jobs.filter(function(j){return!j.a;});
-  var pm=act.filter(function(j){return j.p;}).slice(0,3);
-  var ov=act.filter(function(j){return j.p;}).slice(3);
+  var pm=act.filter(function(j){return j.p;});
   var rest=act.filter(function(j){return!j.p;});
+  /* Premium도 셔플 (매번 순서 바뀜) */
+  for(var i=pm.length-1;i>0;i--){var k=Math.floor(Math.random()*(i+1));var t=pm[i];pm[i]=pm[k];pm[k]=t;}
+  var pmN=Math.min(Math.floor(Math.random()*2)+5,pm.length),pm3=pm.slice(0,pmN),ov=pm.slice(pmN);
   var sh=[].concat(ov,rest);
   for(var i=sh.length-1;i>0;i--){var k=Math.floor(Math.random()*(i+1));var t=sh[i];sh[i]=sh[k];sh[k]=t;}
-  /* HOT: 프리미엄=항상, 나머지=4번째마다 */
-  pm.forEach(function(j){j.h=true;});
-  sh.forEach(function(j,idx){j.h=(idx%4===3);});
-  jobs=[].concat(pm,sh,inact);persist();
+  /* HOT: Premium=항상, 나머지=인기 조건(근무≤7h OR 휴가≥20일) */
+  pm3.forEach(function(j){j.h=true;});
+  sh.forEach(function(j){j.h=isPopular(j);});
+  jobs=[].concat(pm3,sh,inact);persist();
 }
 
 /* ── Anti-Copy Obfuscation ── */
@@ -339,7 +373,8 @@ function obfCls(base){
    ══════════════════════════ */
 function generateAd(){
   buildOrder();renderList();
-  var active=jobs.filter(function(j){return j.a;});
+  /* 광고 제외: 풀근무(≥8h) + 저급여(≤230만) */
+  var active=jobs.filter(function(j){return j.a&&!isExcluded(j);});
   var nowMonth=new Date().getMonth()+1;
   var link=urlMode==='bridge'?APPLY_BRIDGE:APPLY_GFORM;
 

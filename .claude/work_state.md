@@ -1,5 +1,30 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-08 (세션 29 — 소개 메일 발송 시스템 완성)
+최근 업데이트: 2026-04-08 (세션 30 — admin 값 안보임 버그 수정)
+
+## ✅ 2026-04-08 완료된 작업 (세션 30 — 커밋 9ebcf5c5)
+
+### admin/sheet + admin/employers 값 저장 버그 수정 (커밋 6fe51756, 9ebcf5c5)
+
+#### 문제
+1. `BridgeAdminSheet`: `stage`, `mailStatus` 변경이 localStorage에만 저장, DB 저장 없음
+2. `EmployerManagement`: `memo`, `notes`(본문수정) 변경이 로컬 state에만, DB 저장 없음
+
+#### 수정 내용
+- `BridgeAdminSheet.tsx`
+  - `FB_MAP` 상수 추가: 프론트 필드명 → 백엔드 DB 컬럼명 매핑 (28개 필드)
+  - `patchDB(cid, body)` 헬퍼: PATCH `/api/admin/candidates/{cid}` 호출
+  - `setSt`, `tMT`, `setField`, `cE` 모두 `patchDB` 연동 → 변경 즉시 DB 저장
+  - `proposal` 필드: `c.recruiter_memo` fallback 추가
+- `api_server.py`
+  - `StatusUpdate` 모델: `memo`, `notes` Optional 필드 추가
+  - PATCH `/api/admin/applications/{id}`: memo/notes 저장 지원
+    - `jobs`: `memo → internal_notes`(암호화), `notes → raw_text`
+    - `inq_`: `memo → client_inquiries.memo`(암호화), `notes → client_inquiries.notes`
+- `EmployerManagement.tsx`
+  - `editMemo`, `editNotes`: 로컬 state + DB PATCH 동시 저장
+
+⚠️ Render 배포 필요: api_server.py 변경됨
+- Render 대시보드 → bridge-api → Manual Deploy
 
 ## ✅ 2026-04-08 완료된 작업 (세션 29 — 커밋 9e82e9f8)
 
