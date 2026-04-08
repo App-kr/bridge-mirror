@@ -5601,13 +5601,15 @@ async def admin_list_applications(
 
 
 class StatusUpdate(BaseModel):
-    status: str = Field(..., min_length=1, max_length=50)
+    status: Optional[str] = Field(None, min_length=1, max_length=50)
     type: Optional[str] = None
+    memo: Optional[str] = None   # 내부 메모 (어드민 전용)
+    notes: Optional[str] = None  # 본문 편집 (raw_text 대체)
 
 
 @app.patch("/api/admin/applications/{app_id}", tags=["admin"])
 async def admin_update_application(app_id: str, body: StatusUpdate, request: Request):
-    """접수 상태 변경 — SQLite."""
+    """접수 상태/메모/본문 변경 — SQLite."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -5615,25 +5617,51 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
         try:
             now_iso = datetime.now(timezone.utc).isoformat()
             if body.type == "candidate":
-                conn.execute(
-                    "UPDATE candidates SET status = ?, updated_at = ? WHERE candidate_id = ?",
-                    (body.status, now_iso, app_id),
-                )
+                if body.status:
+                    conn.execute(
+                        "UPDATE candidates SET status = ?, updated_at = ? WHERE candidate_id = ?",
+                        (body.status, now_iso, app_id),
+                    )
             elif app_id.startswith("inq_"):
-                # client_inquiries → inbox_status 업데이트
+                # client_inquiries 업데이트
                 inq_id = int(app_id[4:])
-                conn.execute(
-                    "UPDATE client_inquiries SET inbox_status = ? WHERE id = ?",
-                    (body.status, inq_id),
-                )
+                if body.status:
+                    conn.execute(
+                        "UPDATE client_inquiries SET inbox_status = ? WHERE id = ?",
+                        (body.status, inq_id),
+                    )
+                if body.memo is not None:
+                    enc_memo = _encrypt_if_needed(body.memo) if body.memo else None
+                    conn.execute(
+                        "UPDATE client_inquiries SET memo = ? WHERE id = ?",
+                        (enc_memo, inq_id),
+                    )
+                if body.notes is not None:
+                    conn.execute(
+                        "UPDATE client_inquiries SET notes = ? WHERE id = ?",
+                        (body.notes, inq_id),
+                    )
             else:
                 # jobs 테이블 업데이트
-                conn.execute(
-                    "UPDATE jobs SET status = ? WHERE id = ?",
-                    (body.status, int(app_id)),
-                )
+                job_id = int(app_id)
+                if body.status:
+                    conn.execute(
+                        "UPDATE jobs SET status = ? WHERE id = ?",
+                        (body.status, job_id),
+                    )
+                if body.memo is not None:
+                    enc_memo = _encrypt_if_needed(body.memo) if body.memo else None
+                    conn.execute(
+                        "UPDATE jobs SET internal_notes = ? WHERE id = ?",
+                        (enc_memo, job_id),
+                    )
+                if body.notes is not None:
+                    conn.execute(
+                        "UPDATE jobs SET raw_text = ? WHERE id = ?",
+                        (body.notes, job_id),
+                    )
             conn.commit()
-            return ok(message=f"{app_id} → {body.status}")
+            return ok(message=f"{app_id} 업데이트 완료")
         finally:
             conn.close()
 

@@ -401,14 +401,22 @@ export default function EmployerManagement() {
     })
   }, [])
 
-  /* ── 메모/본문 인라인 편집 (로컬 상태) ── */
+  /* ── 메모/본문 인라인 편집 (로컬 + DB 저장) ── */
   const editMemo = useCallback((id: string, memo: string) => {
     setEmployers(prev => prev.map(e => e.id === id ? { ...e, memo } : e))
-  }, [])
+    fetch(`${API}/api/admin/applications/${id}`, {
+      method: 'PATCH', headers: headers(),
+      body: JSON.stringify({ memo, type: 'employer' }),
+    }).catch(() => {})
+  }, [headers])
 
   const editNotes = useCallback((id: string, notes: string) => {
     setEmployers(prev => prev.map(e => e.id === id ? { ...e, notes } : e))
-  }, [])
+    fetch(`${API}/api/admin/applications/${id}`, {
+      method: 'PATCH', headers: headers(),
+      body: JSON.stringify({ notes, type: 'employer' }),
+    }).catch(() => {})
+  }, [headers])
 
   /* ── 필터 옵션 계산 ── */
   const provinceOptions = useMemo(() => {
