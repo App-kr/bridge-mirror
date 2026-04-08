@@ -32,6 +32,7 @@ import {
   ListChecks,
   ShieldCheck,
   CalendarCheck,
+  Globe,
 } from 'lucide-react'
 
 interface NavItem {
@@ -91,6 +92,7 @@ const NAV_CATEGORIES: NavCategory[] = [
     items: [
       { href: '/admin/banners', label: '배너 관리', icon: <Image size={ICON_SIZE} /> },
       { href: '/admin/ad-posts', label: 'AD 광고 관리', icon: <Megaphone size={ICON_SIZE} /> },
+      { href: '/admin/eslcafe', label: 'ESLCafe 광고 작업기', icon: <Globe size={ICON_SIZE} /> },
       { href: '/admin/payments', label: '결제', icon: <CreditCard size={ICON_SIZE} /> },
     ],
   },
