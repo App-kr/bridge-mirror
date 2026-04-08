@@ -709,36 +709,35 @@ export default function BridgeAdminSheet() {
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display: 'none' }} />
 
       {/* 상단 바 */}
-      <div style={{ background: '#fff', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8, borderBottom: '3px solid #2563eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <b style={{ fontSize: 26, letterSpacing: 4 }}>BRIDGE</b>
-          <span style={{ fontSize: 18, fontWeight: 700 }}>원어민 관리</span>
-          <span style={{ fontSize: 14, color: '#dc2626', background: '#fee2e2', padding: '4px 14px', borderRadius: 6, fontWeight: 900, border: '2px solid #fca5a5' }}>ADMIN</span>
+      <div style={{ background: '#fff', padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 6, borderBottom: '2px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>원어민 관리</span>
+          <span style={{ fontSize: 11, color: '#dc2626', background: '#fee2e2', padding: '2px 7px', borderRadius: 4, fontWeight: 700, border: '1px solid #fca5a5', letterSpacing: 1 }}>ADMIN</span>
           {newCount > 0 && (
-            <span style={{ fontSize: 14, color: '#fff', background: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 900, animation: 'pulse 2s infinite' }}>
-              ★ NEW {newCount}명
+            <span style={{ fontSize: 12, color: '#fff', background: '#ef4444', padding: '2px 9px', borderRadius: 12, fontWeight: 700, animation: 'pulse 2s infinite' }}>
+              NEW {newCount}
             </span>
           )}
-          {loading && <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 700 }}>⟳ DB 로딩 중...</span>}
-          {lastSync && !loading && <span style={{ fontSize: 12, color: '#9ca3af' }}>{dbAll.length.toLocaleString()} / 전체 {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 로드됨 · {lastSync}</span>}
+          {loading && <span style={{ fontSize: 12, color: '#2563eb' }}>로딩 중...</span>}
+          {lastSync && !loading && <span style={{ fontSize: 11, color: '#9ca3af' }}>{dbAll.length.toLocaleString()} / {dbTotal > 0 ? dbTotal.toLocaleString() : '?'}건 · {lastSync}</span>}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={undo} disabled={!undoStack.length} style={{ padding: '8px 18px', fontSize: 15, border: undoStack.length ? '3px solid #ef4444' : '2px solid #ddd', borderRadius: 8, background: undoStack.length ? '#fef2f2' : '#f8f8f8', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 900 }}>↩({undoStack.length})</button>
-          {sel.size > 0 && <button onClick={() => { openMM(dbAll.filter(r => sel.has(r.id))) }} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>✉ {sel.size}명</button>}
-          <button onClick={() => { dbFetchingRef.current = false; allLoadedRef.current = false; dbOffsetRef.current = 0; setDbAll([]); setTimeout(loadMore, 0) }} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ DB동기화</button>
-          <button onClick={addSR} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>+상태행</button>
-          <button onClick={expCSV} style={{ padding: '6px 12px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }}>↓CSV</button>
-          <button onClick={addN} style={{ padding: '8px 18px', fontSize: 14, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 900 }}>+새후보자</button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={undo} disabled={!undoStack.length} style={{ padding: '4px 10px', fontSize: 12, border: undoStack.length ? '1px solid #fca5a5' : '1px solid #e2e8f0', borderRadius: 5, background: undoStack.length ? '#fef2f2' : '#f8fafc', color: undoStack.length ? '#dc2626' : '#aaa', cursor: undoStack.length ? 'pointer' : 'default', fontWeight: 600 }}>↩ {undoStack.length}</button>
+          {sel.size > 0 && <button onClick={() => { openMM(dbAll.filter(r => sel.has(r.id))) }} style={{ padding: '4px 10px', fontSize: 12, border: 'none', borderRadius: 5, background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>✉ {sel.size}명</button>}
+          <button onClick={() => { dbFetchingRef.current = false; allLoadedRef.current = false; dbOffsetRef.current = 0; setDbAll([]); setTimeout(loadMore, 0) }} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', color: '#2563eb', background: '#eff6ff' }}>⟳ 동기화</button>
+          <button onClick={addSR} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #e2e8f0', borderRadius: 5, cursor: 'pointer', color: '#475569' }}>+상태행</button>
+          <button onClick={expCSV} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #e2e8f0', borderRadius: 5, cursor: 'pointer', color: '#475569' }}>↓CSV</button>
+          <button onClick={addN} style={{ padding: '4px 12px', fontSize: 12, border: 'none', borderRadius: 5, background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>+ 새 후보자</button>
         </div>
       </div>
 
       {/* 탭 */}
-      <div style={{ background: '#fff', display: 'flex', borderBottom: '5px solid ' + (cti?.color || '#ccc'), flexShrink: 0 }}>
+      <div style={{ background: '#fff', display: 'flex', borderBottom: '2px solid ' + (cti?.color || '#e2e8f0'), flexShrink: 0 }}>
         {TABS.map(t => { const ia = tab === t.key; return (
           <button key={t.key} onClick={() => { setTab(t.key); setSel(new Set()); setFi({}) }}
-            style={{ flex: 1, padding: '18px 10px', fontSize: 20, fontWeight: ia ? 900 : 500, border: 'none', borderBottom: ia ? '7px solid ' + t.color : '7px solid transparent', background: ia ? t.bg : '#fff', color: ia ? t.accent : '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-            <span style={{ fontSize: 26 }}>{t.icon}</span>{t.label}
-            <span style={{ fontSize: 20, fontWeight: 900, background: ia ? t.color : '#e2e8f0', color: ia ? '#fff' : '#666', padding: '5px 16px', borderRadius: 16 }}>{cnt[t.key]}</span>
+            style={{ flex: 1, padding: '9px 8px', fontSize: 13, fontWeight: ia ? 700 : 400, border: 'none', borderBottom: ia ? '2px solid ' + t.color : '2px solid transparent', background: ia ? t.bg : '#fff', color: ia ? t.accent : '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}>
+            {t.label}
+            <span style={{ fontSize: 11, fontWeight: 600, background: ia ? t.color : '#f1f5f9', color: ia ? '#fff' : '#64748b', padding: '1px 7px', borderRadius: 10 }}>{cnt[t.key]}</span>
           </button>
         )})}
       </div>
