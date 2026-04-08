@@ -373,129 +373,165 @@ function obfCls(base){
    ══════════════════════════ */
 function generateAd(){
   buildOrder();renderList();
-  /* 광고 제외: 풀근무(≥8h) + 저급여(≤230만) */
   var active=jobs.filter(function(j){return j.a&&!isExcluded(j);});
   var nowMonth=new Date().getMonth()+1;
   var link=urlMode==='bridge'?APPLY_BRIDGE:APPLY_GFORM;
 
-  /* smartDate 적용 */
   active.forEach(function(j){
     j._dd=smartDate(j.date,nowMonth);
     j._dt=j.txt.replace(/(Starting Date:\s*)(.+)/,function(_,pre,ds){return pre+smartDate(ds,nowMonth);});
   });
 
-  var c={w:obfCls('w'),h:obfCls('h'),cd:obfCls('cd'),ht:obfCls('ht'),ap:obfCls('ap'),ft:obfCls('ft')};
+  /* ── CSS (참고.txt 스타일) ── */
+  var css='<style type="text/css">'
+  +':root{--navy:#003366;--blue:#1a5ff8;--blue2:#1248c8;--bg:#f0f2f5;--w:#fff;--g1:#1a1d25;--g2:#3d4150;--g3:#6b7280;--g4:#9ca3af;--g5:#d1d5db;--g6:#e5e7eb;--g7:#f3f4f6;--s1:0 1px 4px rgba(0,0,0,.07);--s2:0 4px 16px rgba(0,0,0,.09)}'
+  +'html,body{margin:0;padding:0;background:var(--bg);color:var(--g1);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}'
+  +'.wrap{max-width:900px;margin:0 auto;padding:20px 16px}'
+  +'.hero{position:relative;border-radius:20px;overflow:hidden;padding:56px 32px 48px;margin-bottom:20px}'
+  +'.hbg{position:absolute;inset:0;background:linear-gradient(150deg,#001f4d 0%,#003880 35%,#1a5ff8 70%,#4f46e5 100%)}'
+  +'.hbody{position:relative;z-index:2;text-align:center}'
+  +'.heyebrow{display:inline-block;background:rgba(255,255,255,.12);color:rgba(255,255,255,.8);font-size:11px;font-weight:700;letter-spacing:2px;padding:5px 16px;border-radius:20px;border:1px solid rgba(255,255,255,.2);margin-bottom:18px;text-transform:uppercase}'
+  +'.hh1{display:block;font-size:46px;font-weight:800;color:#fff;line-height:1.1;margin:0 0 14px;letter-spacing:-.8px}'
+  +'.hh2{display:block;font-size:17px;color:rgba(255,255,255,.88);margin:0 0 30px;font-weight:500}'
+  +'.hcta{display:block;width:fit-content;width:-moz-fit-content;margin:0 auto;background:#fff;color:#1a5ff8!important;text-decoration:none;font-weight:800;font-size:16px;padding:16px 52px;border-radius:50px;box-shadow:0 6px 24px rgba(0,0,0,.28)}'
+  +'.hdiv{width:32px;height:1.5px;background:rgba(255,255,255,.2);margin:28px auto 18px}'
+  +'.hql{font-size:10px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,.75);text-transform:uppercase;margin-bottom:12px}'
+  +'.hbadges{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:680px;margin:0 auto}'
+  +'.hbadge{display:flex;align-items:flex-start;gap:10px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:14px 18px;color:#fff;font-size:15px;font-weight:500;line-height:1.5;text-align:left}'
+  +'.hbadge.full{font-weight:700;justify-content:center;text-align:center;background:rgba(255,255,255,.15);grid-column:1/-1;font-size:15px;padding:14px 18px}'
+  +'.hbico{flex-shrink:0;display:flex;align-items:flex-start;padding-top:2px;color:rgba(255,255,255,.85)}'
+  +'.htags{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:22px}'
+  +'.htag{background:rgba(255,255,255,.1);color:rgba(255,255,255,.65);font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.15)}'
+  +'.card{background:var(--w);border:1px solid var(--g6);border-radius:14px;margin-bottom:16px;box-shadow:var(--s1);overflow:hidden}'
+  +'.ctop{display:flex;align-items:center;justify-content:space-between;padding:20px 26px 16px;border-bottom:1px solid var(--g7);position:relative}'
+  +'.ctop::before{content:"";position:absolute;top:0;left:0;right:0;height:5px;background:var(--blue)}'
+  +'.ctop.prem::before{background:linear-gradient(90deg,#7c3aed,#4f46e5)}'
+  +'.ctitle{font-size:22px;font-weight:600;color:#111;display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
+  +'.cjobid{font-size:22px;font-weight:600;color:var(--blue);white-space:nowrap}'
+  +'.hot{font-size:12px;font-weight:800;color:#92400e;background:#fef3c7;padding:4px 11px;border-radius:20px;border:1px solid #f59e0b}'
+  +'.items{padding:16px 26px 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px}'
+  +'.irow{display:flex;gap:9px;align-items:flex-start}'
+  +'.iico{width:18px;height:18px;flex-shrink:0;color:var(--blue);margin-top:2px;display:flex}'
+  +'.itxt{font-size:14px;color:var(--g2);line-height:1.55}'
+  +'.bar{text-align:center;margin:26px 0;padding:22px;background:var(--w);border-radius:12px;border:1px dashed var(--g5)}'
+  +'.bar p{font-size:16px;font-weight:700;color:var(--navy);margin:0 0 14px}'
+  +'.barbtn{display:block;background:var(--blue);color:#fff!important;text-decoration:none;font-weight:700;font-size:15px;padding:14px;border-radius:10px;max-width:360px;margin:0 auto;text-align:center}'
+  +'.process{background:var(--w);border:1px solid var(--g6);border-radius:16px;padding:32px 28px 26px;margin-bottom:20px;box-shadow:var(--s1)}'
+  +'.ptitle{font-size:22px;font-weight:800;color:var(--g1);margin-bottom:28px;text-align:center}'
+  +'.psteps{display:flex;align-items:flex-start;justify-content:center;gap:0;flex-wrap:wrap}'
+  +'.pstep{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:110px;max-width:140px;padding:0 8px}'
+  +'.picon{width:58px;height:58px;border-radius:16px;background:#eef3ff;display:flex;align-items:center;justify-content:center;color:var(--blue);margin-bottom:10px;border:1px solid rgba(26,95,248,.15)}'
+  +'.plbl{font-size:14px;font-weight:700;color:var(--g1);margin-bottom:4px}'
+  +'.psub{font-size:12px;color:var(--g4);line-height:1.5}'
+  +'.parrow{color:var(--g5);padding:0 2px;margin-top:20px;display:flex;align-items:center}'
+  +'.pfoot{text-align:center;margin-top:26px;padding-top:22px;border-top:1px solid var(--g6)}'
+  +'.pcta{display:inline-block;background:var(--blue);color:#fff!important;text-decoration:none;font-weight:700;font-size:15px;padding:13px 40px;border-radius:50px;margin-bottom:10px}'
+  +'.pcontact{font-size:13px;color:var(--g3);margin:0}'
+  +'.welfare{background:var(--w);border:1px solid var(--g6);border-radius:16px;padding:32px 28px 24px;margin:20px 0;box-shadow:var(--s1)}'
+  +'.wtitle{font-size:22px;font-weight:800;color:var(--g1);margin-bottom:6px;text-align:center}'
+  +'.wsub{font-size:14px;color:var(--g2);text-align:center;margin-bottom:24px}'
+  +'.wgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}'
+  +'.witem{display:flex;align-items:center;gap:12px;padding:15px 18px;background:var(--g7);border-radius:10px;border:1px solid var(--g6)}'
+  +'.wico{flex-shrink:0;color:var(--blue);display:flex}'
+  +'.wlbl{font-size:14px;font-weight:600;color:var(--g2)}'
+  +'.wnote{font-size:12px;color:var(--g2);margin-top:18px;padding:11px 16px;background:var(--g7);border-radius:8px;line-height:1.6;border-left:3px solid var(--blue)}'
+  +'.footer{text-align:center;margin-top:28px;padding:40px 24px;background:var(--navy);border-radius:16px}'
+  +'.ftitle{font-size:24px;font-weight:800;color:#fff;margin:0 0 12px;line-height:1.4}'
+  +'.ftitle em{color:#60a5fa;font-style:normal}'
+  +'.fsub{font-size:15px;color:rgba(255,255,255,.65);margin:0}'
+  +'@media(max-width:600px){.items{grid-template-columns:1fr}.wgrid{grid-template-columns:1fr}.hh1{font-size:32px}.ctitle,.cjobid{font-size:18px}}'
+  +'*{user-select:none!important;-webkit-user-select:none!important;-moz-user-select:none!important;-ms-user-select:none!important}::selection{background:transparent!important;}'
+  +'</style>';
 
-  /* Anti-Copy: inline style block injected into generated HTML */
-  var acStyle='<style>*{user-select:none!important;-webkit-user-select:none!important;-moz-user-select:none!important;-ms-user-select:none!important;-webkit-touch-callout:none!important;}::selection{background:transparent!important;color:inherit!important;}::-moz-selection{background:transparent!important;color:inherit!important;}a,a *{cursor:pointer!important;pointer-events:auto!important;}@media print{body{display:none!important;}}</style>';
-
-  /* Anti-Copy: inline event handlers on wrapper */
-  var acEvts='oncontextmenu="return false" oncopy="return false" oncut="return false" onselectstart="return false" ondragstart="return false" onmousedown="if(event.button===2)return false"';
-
-  /* L3: CSS를 base64 주입용으로 래핑 */
-  var cssBlock=acStyle;
-  if(obsLv===3){
-    var rawCss='.'+c.w+'{max-width:720px;margin:0 auto;font-family:-apple-system,"Segoe UI",sans-serif;color:#1a1d25}';
-    cssBlock+=('<scr'+'ipt>(function(){var s=document.createElement("style");s.textContent=atob("'+btoa(rawCss)+'");document.head.appendChild(s);})()</scr'+'ipt>');
+  /* ── SVG 헬퍼 ── */
+  function iSvg(d){return'<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">'+d+'</svg>';}
+  function pickI(ll){
+    if(ll.indexOf('date')>=0||ll.indexOf('start')>=0)return iSvg('<rect height="18" rx="2" width="18" x="3" y="4"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>');
+    if(ll.indexOf('salary')>=0||ll.indexOf('month')>=0)return iSvg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>');
+    if(ll.indexOf('hour')>=0||ll.indexOf('working')>=0||ll.indexOf('average')>=0)return iSvg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
+    if(ll.indexOf('housing')>=0)return iSvg('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>');
+    if(ll.indexOf('vacation')>=0||ll.indexOf('break')>=0)return iSvg('<circle cx="12" cy="12" r="5"/><line x1="12" x2="12" y1="1" y2="3"/><line x1="12" x2="12" y1="21" y2="23"/>');
+    if(ll.indexOf('benefit')>=0||ll.indexOf('employee')>=0)return iSvg('<circle cx="12" cy="12" r="5"/><line x1="12" x2="12" y1="1" y2="3"/><line x1="12" x2="12" y1="21" y2="23"/>');
+    if(ll.indexOf('age')>=0||ll.indexOf('teach')>=0||ll.indexOf('class')>=0)return iSvg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>');
+    if(ll.indexOf('visa')>=0)return iSvg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>');
+    return iSvg('<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/>');
   }
+  function hSvg(d){return'<svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="16">'+d+'</svg>';}
 
-  /* WHO CAN APPLY chips */
-  var who=[{i:I.globe,t:'Native English Speaker'},{i:I.academic,t:"Bachelor's Degree or Higher"},{i:I.doc,t:'Clean Background Check'},{i:I.video,t:'Video Interview Ready'},{i:I.id,t:'Valid Passport'}];
-  var whoH=who.map(function(w){return'<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);padding:6px 14px;border-radius:20px;font-size:12px;color:#fff;"><div style="width:16px;height:16px;">'+w.i+'</div>'+w.t+'</div>';}).join('');
+  /* ── HERO ── */
+  var heroH='<div class="hero"><div class="hbg"></div><div class="hbody">'
+  +'<div class="heyebrow">GOV&#39;T-CERTIFIED AGENCY &middot; BRIDGE</div>'
+  +'<span class="hh1">Teach English in Korea</span>'
+  +'<p class="hh2">The right school, the right support &mdash; your next chapter starts here</p>'
+  +'<a class="hcta" href="'+link+'" rel="noopener" target="_blank">APPLY NOW &rarr;</a>'
+  +'<div class="hdiv"></div><p class="hql">WHO CAN APPLY</p>'
+  +'<div class="hbadges">'
+  +'<div class="hbadge full"><span class="hbico">'+hSvg('<circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>')+'</span><span>US &nbsp;&middot;&nbsp; Canada &nbsp;&middot;&nbsp; UK &nbsp;&middot;&nbsp; Ireland &nbsp;&middot;&nbsp; Australia &nbsp;&middot;&nbsp; New Zealand &nbsp;&middot;&nbsp; South Africa</span></div>'
+  +'<div class="hbadge"><span class="hbico">'+hSvg('<path d="M12 14l9-5-9-5-9 5 9 5z"/><path d="M12 14l6.16-3.422A12.08 12.08 0 0 1 18.5 18H5.5a12.08 12.08 0 0 1 .34-7.422L12 14z"/><path d="M12 14v7"/>')+'</span><span>Bachelor\'s degree or higher<br>Official government-recognised academic qualification</span></div>'
+  +'<div class="hbadge"><span class="hbico">'+hSvg('<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414A1 1 0 0 1 20 9.414V19a2 2 0 0 1-2 2z"/>')+'</span><span>Valid Apostilled documents (within validity period)<br>Apostilled clean criminal record</span></div>'
+  +'<div class="hbadge"><span class="hbico">'+hSvg('<path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.623v6.754a1 1 0 0 1-1.447.894L15 14M3 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/>')+'</span><span>Self-intro video 1&ndash;3 min &middot; no download links</span></div>'
+  +'<div class="hbadge"><span class="hbico">'+hSvg('<path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2a6 6 0 0 1 6 6H4a6 6 0 0 1 6-6z"/>')+'</span><span>F-Visa holders with a valid degree and full documentation</span></div>'
+  +'</div>'
+  +'<div class="htags"><span class="htag">#ESLTeacher</span><span class="htag">#TeachInKorea</span><span class="htag">#Seoul</span><span class="htag">#Busan</span><span class="htag">#Jeju</span><span class="htag">#Nationwide</span></div>'
+  +'</div></div>';
 
-  /* CARDS */
+  /* ── CARDS ── */
   var cards='';
   active.forEach(function(j,idx){
-    var bar=j.p?'background:linear-gradient(135deg,#7c3aed,#a78bfa);':'background:linear-gradient(135deg,#1a5ff8,#60a5fa);';
-    var hot=j.h?'<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;">HOT</span>':'';
-
     var lines=(j._dt||j.txt).split('\n').filter(Boolean);
-    var grid='';
+    var rows='';
     lines.forEach(function(ln){
-      var parts=ln.split(':');var lab=parts[0];var val=parts.slice(1).join(':').trim();
+      var ci=ln.indexOf(':');if(ci<0)return;
+      var lab=ln.slice(0,ci).trim(),val=ln.slice(ci+1).trim();
       if(!val)return;
-      var ic=I.doc,ll=lab.trim().toLowerCase();
-      if(ll.indexOf('salary')>=0||ll.indexOf('month')>=0)ic=I.money;
-      else if(ll.indexOf('hour')>=0||ll.indexOf('working')>=0)ic=I.clock;
-      else if(ll.indexOf('housing')>=0)ic=I.home;
-      else if(ll.indexOf('vacation')>=0||ll.indexOf('break')>=0)ic=I.sun;
-      else if(ll.indexOf('date')>=0||ll.indexOf('start')>=0)ic=I.cal;
-      else if(ll.indexOf('age')>=0||ll.indexOf('teach')>=0)ic=I.academic;
-      else if(ll.indexOf('class')>=0)ic=I.users;
-      else if(ll.indexOf('benefit')>=0||ll.indexOf('employee')>=0)ic=I.star;
-      else if(ll.indexOf('visa')>=0)ic=I.shield;
-      grid+='<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;'+NOSEL+'" '+NODRAG+'><div style="width:18px;height:18px;flex-shrink:0;color:#6b7280;margin-top:1px;">'+ic+'</div><div><span style="font-size:12px;color:#6b7280;">'+pesc(lab.trim())+'</span><br><span style="font-size:14px;color:#1a1d25;font-weight:500;">'+pesc(val)+'</span></div></div>';
+      rows+='<div class="irow"><div class="iico">'+pickI(lab.toLowerCase())+'</div><span class="itxt">'+esc(lab+': '+val)+'</span></div>';
     });
-
-    cards+='<div class="'+c.cd+'" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px;'+NOSEL+'" '+NODRAG+'>'
-      +'<div style="height:4px;'+bar+'"></div>'
-      +'<div style="padding:16px 20px;">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
-      +'<div><span style="font-size:22px;font-weight:600;color:#111;">'+pesc(j.l)+'</span>'+hot+'</div>'
-      +'<span style="font-size:22px;font-weight:600;color:#1a5ff8;">Job #'+pesc(j.id)+'</span></div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">'+grid+'</div>'
-      +'<div style="margin-top:14px;text-align:center;">'
-      +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#1a5ff8;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;pointer-events:auto;cursor:pointer;user-select:none;">Apply for this position</a>'
-      +'</div></div></div>';
-
-    /* Apply bar every 5 cards */
+    var hot=j.h?'<span class="hot">HOT &#x1F525;</span>':'';
+    var topCls='ctop'+(j.p?' prem':'');
+    cards+='<div class="card"><div class="'+topCls+'"><div class="ctitle">'+esc(j.l)+''+hot+'</div><span class="cjobid">Job. '+esc(j.id)+'</span></div><div class="items">'+rows+'</div></div>';
     if((idx+1)%5===0&&idx<active.length-1){
-      cards+='<div class="'+c.ap+'" style="background:linear-gradient(135deg,#003366,#1a5ff8);border-radius:12px;padding:20px 24px;margin-bottom:16px;text-align:center;">'
-        +'<p style="color:#fff;font-size:16px;font-weight:600;margin:0 0 10px;">Ready to start your teaching career in Korea?</p>'
-        +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;pointer-events:auto;cursor:pointer;">APPLY NOW</a></div>';
+      cards+='<div class="bar"><p>&#127775; Great opportunities all over Korea &mdash; find your fit</p><a class="barbtn" href="'+link+'" target="_blank" rel="noopener">APPLY NOW &rarr;</a></div>';
     }
   });
 
-  /* STEPS */
-  var steps=[{i:I.form,t:'Submit Application',d:'Complete our simple online form'},{i:I.chat,t:'Video Call with BRIDGE',d:'Brief interview to understand your goals'},{i:I.handshake,t:'School Interview',d:'We arrange interviews with matched schools'},{i:I.badge,t:'Start Teaching!',d:'Begin your adventure in Korea'}];
-  var stH=steps.map(function(s,i){
-    return'<div style="flex:1;text-align:center;padding:16px;"><div style="width:48px;height:48px;margin:0 auto 10px;background:rgba(26,95,248,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#1a5ff8;">'+s.i+'</div><div style="font-size:14px;font-weight:600;color:#111;margin-bottom:4px;">'+s.t+'</div><div style="font-size:12px;color:#6b7280;">'+s.d+'</div>'+(i<3?'<div style="margin-top:10px;color:#d1d5db;font-size:20px;">&#8594;</div>':'')+'</div>';
-  }).join('');
+  /* ── HOW TO APPLY ── */
+  function pSvg(d){return'<div class="picon"><svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="24">'+d+'</svg></div>';}
+  var pArr='<div class="parrow"><svg fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="14"><polyline points="9 18 15 12 9 6"/></svg></div>';
+  var processH='<div class="process"><div class="ptitle">How to Apply</div><div class="psteps">'
+  +'<div class="pstep">'+pSvg('<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect height="4" rx="2" width="6" x="9" y="3"/><line x1="9" x2="15" y1="12" y2="12"/><line x1="9" x2="13" y1="16" y2="16"/>')+'<div class="plbl">Application Form</div><div class="psub">Complete and submit the BRIDGE application form</div></div>'
+  +pArr
+  +'<div class="pstep">'+pSvg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')+'<div class="plbl">Interview with BRIDGE</div><div class="psub">One-on-one consultation with our recruitment team</div></div>'
+  +pArr
+  +'<div class="pstep">'+pSvg('<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>')+'<div class="plbl">Employer Interview</div><div class="psub">Interview directly with your prospective school or academy</div></div>'
+  +pArr
+  +'<div class="pstep">'+pSvg('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>')+'<div class="plbl">Training &amp; Start</div><div class="psub">Complete onboarding, training, and begin your role</div></div>'
+  +'</div><div class="pfoot"><a class="pcta" href="'+link+'" rel="noopener" target="_blank">APPLY NOW &rarr;</a><p class="pcontact">Questions? Email us at <strong>bridgejobkr@gmail.com</strong></p></div></div>';
 
-  /* BENEFITS */
-  var bens=[{i:I.plane,t:'Round-trip Airfare'},{i:I.home,t:'Housing Provided or Allowance'},{i:I.shield,t:'National Health Insurance'},{i:I.sun,t:'Paid Vacation'},{i:I.key,t:'Visa Sponsorship (E-2)'},{i:I.star,t:'Severance Pay (1 month)'},{i:I.grow,t:'Career Growth Opportunities'},{i:I.users,t:'Dedicated Support Team'},{i:I.badge,t:'National Pension'},{i:I.academic,t:'Professional Development'}];
-  var benH=bens.map(function(b){return'<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;"><div style="width:20px;height:20px;color:#1a5ff8;flex-shrink:0;">'+b.i+'</div><span style="font-size:13px;color:#1a1d25;">'+b.t+'</span></div>';}).join('');
+  /* ── WHAT YOU GET ── */
+  function wSvg(d){return'<div class="wico"><svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="24">'+d+'</svg></div>';}
+  var wItems=[
+    [wSvg('<path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>'),'Airfare Support'],
+    [wSvg('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),'Housing Provided'],
+    [wSvg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),'Severance + Pension'],
+    [wSvg('<circle cx="12" cy="12" r="5"/><line x1="12" x2="12" y1="1" y2="3"/><line x1="12" x2="12" y1="21" y2="23"/>'),'Health Insurance'],
+    [wSvg('<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>'),'Paid Vacation'],
+    [wSvg('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),'Visa Sponsorship'],
+    [wSvg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),'Salary Growth'],
+    [wSvg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'),'Teacher Community'],
+    [wSvg('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>'),'Contract Bonus'],
+    [wSvg('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'),'Professional Training']
+  ];
+  var welfareH='<div class="welfare"><div class="wtitle">What You Get</div><p class="wsub">Standard benefits at participating schools &mdash; details confirmed at contract stage</p><div class="wgrid">'
+  +wItems.map(function(w){return'<div class="witem">'+w[0]+'<div class="wlbl">'+w[1]+'</div></div>';}).join('')
+  +'</div><p class="wnote">* BRIDGE is a certified recruitment agency. Benefits vary by school and contract type. Always confirm all terms and conditions directly with your employer before signing any contract.</p></div>';
 
-  var tags='#TeachInKorea #ESLJobs #KoreaJobs #TeachAbroad #TEFL #ESL #BRIDGE #EnglishTeacher #KoreaTeaching #LivingInKorea';
+  /* ── FOOTER ── */
+  var footerH='<div class="footer"><p class="ftitle">We always welcome teachers who are <em>passionate about education</em></p><p class="fsub">With fake agencies and impersonators on the rise, protect yourself by applying only through verified, government-certified recruiters. BRIDGE is officially registered &mdash; your safety and career are our priority.</p></div>';
 
-  lastHtml='<div class="'+c.w+'" '+acEvts+' style="max-width:720px;margin:0 auto;font-family:-apple-system,\'Segoe UI\',sans-serif;color:#1a1d25;'+NOSEL+'">'
-  +cssBlock
-
-  /* HERO */
-  +'<div class="'+c.h+'" style="background:linear-gradient(135deg,#003366 0%,#1a5ff8 100%);border-radius:16px;padding:40px 32px;text-align:center;margin-bottom:20px;'+NOSEL+'" '+NODRAG+'>'
-  +'<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;margin-bottom:8px;">'+zw("GOV'T-CERTIFIED AGENCY")+'</div>'
-  +'<div style="font-size:32px;font-weight:800;color:#fff;letter-spacing:1px;margin-bottom:4px;">'+zw('BRIDGE')+'</div>'
-  +'<div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px;">'+zw('Teach English in Korea')+'</div>'
-  +'<div style="font-size:14px;color:rgba(255,255,255,.85);margin-bottom:20px;">'+zw('The right school, the right support')+' &mdash; '+zw('your next chapter starts here')+'</div>'
-  +'<div style="margin-bottom:20px;"><a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;pointer-events:auto;cursor:pointer;">APPLY NOW &rarr;</a></div>'
-  +'<div style="margin-bottom:16px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;">'+whoH+'</div>'
-  +'<div style="font-size:11px;color:rgba(255,255,255,.5);word-spacing:4px;">'+zw(tags)+'</div></div>'
-
-  /* CARDS */
-  +cards
-
-  /* HOW TO APPLY */
-  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);'+NOSEL+'">'
-  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 20px;color:#003366;">'+zw('HOW TO APPLY')+'</h3>'
-  +'<div style="display:flex;gap:8px;">'+stH+'</div></div>'
-
-  /* WHAT YOU GET */
-  +'<div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);'+NOSEL+'">'
-  +'<h3 style="font-size:18px;font-weight:700;text-align:center;margin:0 0 16px;color:#003366;">'+zw('WHAT YOU GET')+'</h3>'
-  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+benH+'</div></div>'
-
-  /* FOOTER */
-  +'<div class="'+c.ft+'" style="background:#003366;border-radius:12px;padding:24px;text-align:center;'+NOSEL+'">'
-  +'<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:6px;">'+zw('BRIDGE')+'</div>'
-  +'<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:12px;">'+zw('Government-Certified Employment Agency | Connecting Teachers with Korea')+'</div>'
-  +'<a href="'+link+'" target="_blank" style="display:block;width:fit-content;margin:0 auto;background:#05b97d;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;pointer-events:auto;cursor:pointer;">START YOUR APPLICATION</a>'
-  +'<div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.4);">&copy; '+zw('BRIDGE. All rights reserved.')+'</div></div>'
-
-  +'</div>';
-
+  lastHtml=css+'<div class="wrap" oncontextmenu="return false" oncopy="return false" oncut="return false" onselectstart="return false" ondragstart="return false">'+heroH+cards+processH+welfareH+footerH+'</div>';
   updPreview(lastHtml);
   document.getElementById('srcT').value=lastHtml;
-  toast(active.length+' jobs generated (L'+obsLv+')','ok');
+  toast(active.length+' jobs generated','ok');
 }
 
 /* ── Preview ── */
