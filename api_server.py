@@ -1341,6 +1341,31 @@ def _public_cache_set(key: str, data: list) -> None:
     _PUBLIC_CACHE[key] = (data, time.time() + _PUBLIC_CACHE_TTL)
 
 
+def _db_connect(row_factory: bool = False) -> sqlite3.Connection:
+    """최적화된 SQLite 연결 — 공개 API 대량 유입 대비.
+    busy_timeout / cache_size / mmap / temp_store 모두 설정.
+    """
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA cache_size = -32768")    # 32MB 페이지 캐시 (per-connection)
+    conn.execute("PRAGMA mmap_size = 134217728")  # 128MB 메모리 맵 I/O
+    conn.execute("PRAGMA temp_store = MEMORY")    # 임시 테이블 메모리 사용
+    if row_factory:
+        conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _ok_public(data, max_age: int = 300) -> JSONResponse:
+    """공개 API 전용 응답 — Cache-Control 헤더 포함.
+    Admin API에는 절대 사용 금지.
+    """
+    body = {"success": True, "message": "ok", "data": _sanitize_data(data)}
+    return JSONResponse(
+        content=body,
+        headers={"Cache-Control": f"public, max-age={max_age}, stale-while-revalidate=30"},
+    )
+
+
 _TALENT_PUBLIC_COLS = (
     "sheet_number", "nationality", "area_prefs", "target",
     "certification", "education_level", "experience", "desired_salary",
@@ -1363,11 +1388,9 @@ async def public_talents(
     cache_key = f"pt:{nationality or ''}:{area or ''}:{target or ''}:{q or ''}"
     cached = _public_cache_get(cache_key)
     if cached is not None:
-        return ok(data=cached)
+        return _ok_public(cached, max_age=_PUBLIC_CACHE_TTL)
 
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
+    conn = _db_connect(row_factory=True)
     try:
         rows = conn.execute(
             """SELECT
@@ -1421,7 +1444,7 @@ async def public_talents(
         result.append(r)
 
     _public_cache_set(cache_key, result)
-    return ok(data=result)
+    return _ok_public(result, max_age=_PUBLIC_CACHE_TTL)
 
 
 # ── 인재 게시판 인증 API ─────────────────────────────────────────────────────────
@@ -8984,8 +9007,7 @@ async def public_list_partners(request: Request):
     """공개 파트너 목록 (활성 파트너만)."""
     if not _rate_ok(_ip_hash(request), window=60, max_posts=15):
         return bridge_error("RATE_LIMIT", "Too many requests.", retryable=True, status=429)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
+    conn = _db_connect()
     try:
         cur = conn.execute(
             "SELECT id, name, category, logo_url, website, sort_order FROM site_partners WHERE is_active = 1 AND is_deleted = 0 ORDER BY sort_order, name"
@@ -8994,7 +9016,7 @@ async def public_list_partners(request: Request):
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     finally:
         conn.close()
-    return ok(data={"partners": rows})
+    return _ok_public({"partners": rows}, max_age=300)
 
 
 @app.get("/api/admin/partners", tags=["admin"])
@@ -9161,14 +9183,13 @@ async def public_get_settings(request: Request):
         "footer_text", "footer_links", "company_name", "company_email",
         "kakao_channel_url", "site_description",
     }
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
+    conn = _db_connect()
     try:
         rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
         settings = {r[0]: r[1] for r in rows if r[0] in _PUBLIC_SETTING_KEYS}
     finally:
         conn.close()
-    return ok(data={"settings": settings})
+    return _ok_public({"settings": settings}, max_age=300)
 
 
 @app.get("/api/admin/settings", tags=["admin"])
