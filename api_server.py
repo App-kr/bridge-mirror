@@ -1170,6 +1170,9 @@ async def apply(request: Request, body: CandidateApply):
             # Google Sheet 동기화 (비동기, 실패해도 접수 완료)
             threading.Thread(target=_sync_to_sheet, args=(str(new_id),), daemon=True).start()
 
+            # GDrive 즉시 백업 (신규 파일 있을 경우 대비)
+            threading.Thread(target=_trigger_gdrive_backup, daemon=True).start()
+
             return ok(
                 data={"id": new_id, "apply_token": token_out, "mode": "created"},
                 message="지원이 접수되었습니다. 담당자가 검토 후 연락드리겠습니다."
@@ -7873,6 +7876,21 @@ def _notify_push(title: str, body: str, url: str = "/admin/m") -> None:
         send_push_to_all(title=title, body=body, url=url)
     except Exception as e:
         logging.getLogger("bridge.push").debug("Push notify skipped: %s", e)
+
+
+def _trigger_gdrive_backup() -> None:
+    """파일 업로드/접수 시 즉시 GDrive 백업 트리거 (originals + resumes만)."""
+    import subprocess
+    try:
+        subprocess.Popen(
+            [r"Q:\Phtyon 3\python.exe", "-X", "utf8",
+             "tools/gdrive_backup.py", "--originals", "--resumes"],
+            cwd=r"Q:\Claudework\bridge base",
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logging.getLogger("bridge.backup").debug("GDrive backup trigger skipped: %s", e)
 
 
 def _backup_on_submit(source: str = "") -> None:
