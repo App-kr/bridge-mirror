@@ -3953,6 +3953,59 @@ except Exception:
     pass
 
 
+def _ensure_nationality_plain():
+    """candidates.nationality_plain 컬럼 추가 + 암호화된 nationality 복호화 마이그레이션.
+    nationality는 PII 아님(미국/캐나다 등 7개국) → 평문 검색 컬럼으로 분리.
+    서버 시작 시 1회 실행.
+    """
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        # 컬럼 없으면 추가
+        try:
+            conn.execute("ALTER TABLE candidates ADD COLUMN nationality_plain TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass  # 이미 존재
+
+        # 빈 값만 채우기 (이미 채워진 건 스킵)
+        total = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+        if total == 0:
+            conn.close()
+            return
+
+        rows = conn.execute(
+            "SELECT id, nationality FROM candidates "
+            "WHERE (nationality_plain IS NULL OR nationality_plain = '') AND nationality IS NOT NULL AND nationality != ''"
+        ).fetchall()
+
+        updated = 0
+        for row_id, nat_val in rows:
+            plain = nat_val
+            if nat_val and len(nat_val) > 30:
+                try:
+                    plain = decrypt_field(nat_val)
+                except Exception:
+                    plain = nat_val  # 복호화 실패 시 원본 유지
+            conn.execute(
+                "UPDATE candidates SET nationality_plain = ? WHERE id = ?",
+                (plain, row_id)
+            )
+            updated += 1
+
+        conn.commit()
+        conn.close()
+        if updated:
+            _logger.info(f"[MIGRATION] nationality_plain 채우기: {updated}건")
+    except Exception as e:
+        _logger.warning(f"[MIGRATION] nationality_plain 스킵: {e}")
+
+
+try:
+    _ensure_nationality_plain()
+except Exception:
+    pass
+
+
 def _ensure_talent_auth_tables():
     """talent_auth_requests / talent_auth_tokens 테이블 마이그레이션.
     _ADMIN_DB_PATH 정의 이후에 호출됨.
