@@ -18,6 +18,9 @@ interface AuthRequest {
   status: string
   sent_at: string | null
   notes: string
+  biz_number: string
+  doc_s3_key: string
+  doc_filename: string
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -108,6 +111,19 @@ function TalentAuthContent() {
       showToast('서버 오류', false)
     } finally {
       setSendingDirect(false)
+    }
+  }
+
+  async function handleViewDoc(req: AuthRequest) {
+    if (!req.doc_s3_key) { showToast('서류 파일 없음', false); return }
+    try {
+      const res = await adminFetch(`${API_URL}/api/admin/talent-auth/doc/${req.id}`)
+      const data = await res.json()
+      const url = data?.data?.url
+      if (url) window.open(url, '_blank')
+      else showToast('URL 생성 실패', false)
+    } catch {
+      showToast('서버 오류', false)
     }
   }
 
@@ -213,11 +229,16 @@ function TalentAuthContent() {
                   {st.label}
                 </span>
 
-                {/* 이메일 + 업체 */}
+                {/* 이메일 + 업체 + 사업자번호 */}
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{req.email}</div>
                   {req.company_name && (
                     <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>{req.company_name}</div>
+                  )}
+                  {req.biz_number && (
+                    <div style={{ color: '#6B7280', fontSize: 11, marginTop: 2 }}>
+                      사업자 {req.biz_number.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3')}
+                    </div>
                   )}
                 </div>
 
@@ -228,7 +249,19 @@ function TalentAuthContent() {
                 </div>
 
                 {/* 액션 버튼 */}
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+                  {req.doc_s3_key && (
+                    <button
+                      onClick={() => handleViewDoc(req)}
+                      style={{
+                        padding: '7px 12px', background: '#EFF6FF', color: '#1D4ED8',
+                        border: '1px solid #BFDBFE', borderRadius: 7, fontWeight: 600,
+                        fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      📄 서류
+                    </button>
+                  )}
                   <button
                     onClick={() => handleSendLink(req)}
                     disabled={sendingId === req.id}

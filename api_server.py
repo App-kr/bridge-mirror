@@ -60,7 +60,7 @@ if sys.platform == "win32":
 
 # ── FastAPI / Supabase 임포트 ────────────────────────────────────────────────
 try:
-    from fastapi import FastAPI, HTTPException, Request, Query, status, UploadFile, File as FastFile
+    from fastapi import FastAPI, HTTPException, Request, Query, status, UploadFile, File as FastFile, Form
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.middleware.gzip import GZipMiddleware
     from fastapi.staticfiles import StaticFiles
@@ -1461,42 +1461,71 @@ _SESSION_TTL = 86400 * 30  # 30일 (세션 쿠키)
 
 
 
-class _TalentAuthRequest(BaseModel):
-    email: str
-    company_name: str = ""
-
-
 @app.post("/api/public/talent-auth/request", status_code=200, tags=["talent-auth"])
-async def talent_auth_request(request: Request, body: _TalentAuthRequest):
+async def talent_auth_request(
+    request: Request,
+    email: str = Form(...),
+    company_name: str = Form(""),
+    biz_number: str = Form(""),
+    doc_file: UploadFile = FastFile(None),
+):
     """
-    인재 게시판 접근 요청 접수.
+    인재 게시판 접근 요청 접수 (multipart/form-data).
     즉시 발송하지 않고 BRIDGE 담당자 검토 후 발송.
     """
     import re as _re
-    if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', body.email.strip()):
+    email = email.strip()
+    if not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
         raise HTTPException(400, "올바른 이메일 주소를 입력해주세요.")
 
+    biz_num_clean = _re.sub(r'[^0-9]', '', biz_number.strip())
+    if biz_num_clean and len(biz_num_clean) != 10:
+        raise HTTPException(400, "사업자등록번호는 10자리 숫자입니다.")
+
     ip_h = _ip_hash(request)
-    # Rate limit: IP당 시간당 5건 (DB flooding 방지)
     if not _rate_ok(ip_h, window=3600, max_posts=5):
         raise HTTPException(429, "Too many requests. Please try again later.")
 
-    now_str = datetime.utcnow().isoformat()
+    # 서류 파일 S3 업로드
+    doc_s3_key = ""
+    doc_filename = ""
+    if doc_file and doc_file.filename:
+        allowed_exts = {".pdf", ".jpg", ".jpeg", ".png"}
+        import os as _os
+        ext = _os.path.splitext(doc_file.filename or "")[1].lower()
+        if ext not in allowed_exts:
+            raise HTTPException(400, "PDF, JPG, PNG 파일만 업로드 가능합니다.")
+        file_bytes = await doc_file.read()
+        if len(file_bytes) > 5 * 1024 * 1024:
+            raise HTTPException(400, "파일 크기는 5MB 이하여야 합니다.")
+        import uuid as _uuid
+        safe_name = _uuid.uuid4().hex + ext
+        doc_s3_key = f"biz_docs/{safe_name}"
+        doc_filename = doc_file.filename
+        try:
+            s3_upload_bytes_sync(file_bytes, doc_s3_key, content_type=doc_file.content_type or "application/octet-stream")
+        except Exception as _s3e:
+            logging.getLogger("bridge.api").warning("사업자서류 S3 업로드 실패: %s", _s3e)
+            doc_s3_key = ""  # S3 실패 시 빈 값으로 저장 (관리자에게 파일 없음 표시)
 
+    now_str = datetime.utcnow().isoformat()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
         existing = conn.execute(
             "SELECT id, status FROM talent_auth_requests WHERE email=? ORDER BY id DESC LIMIT 1",
-            (body.email.strip(),)
+            (email,)
         ).fetchone()
-        if existing and existing[1] == 'pending':
-            return ok(message="이미 접수된 요청이 있습니다. 담당자 확인 후 이메일로 링크를 보내드립니다.")
+        if existing and existing[1] in ('pending', 'sent'):
+            status_msg = "이미 검토 중인 요청이 있습니다." if existing[1] == 'pending' else "이미 링크가 발송되었습니다. 이메일을 확인해주세요."
+            return ok(message=status_msg, data={"status": existing[1]})
 
         conn.execute(
-            """INSERT INTO talent_auth_requests (email, company_name, requested_at, status, ip_hash)
-               VALUES (?,?,?,?,?)""",
-            (body.email.strip(), body.company_name.strip(), now_str, 'pending', ip_h)
+            """INSERT INTO talent_auth_requests
+               (email, company_name, requested_at, status, ip_hash, biz_number, doc_s3_key, doc_filename)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (email, company_name.strip(), now_str, 'pending', ip_h,
+             biz_num_clean, doc_s3_key, doc_filename)
         )
         conn.commit()
     finally:
@@ -1504,7 +1533,7 @@ async def talent_auth_request(request: Request, body: _TalentAuthRequest):
 
     try:
         import threading
-        _email_hint = body.email.split("@")[0][:3] + "***@" + body.email.split("@")[-1]
+        _email_hint = email.split("@")[0][:3] + "***@" + email.split("@")[-1]
 
         def _notify():
             try:
@@ -1512,7 +1541,9 @@ async def talent_auth_request(request: Request, body: _TalentAuthRequest):
                 send_telegram(
                     f"[인재게시판] 새 접근 요청\n"
                     f"이메일: {_email_hint}\n"
-                    f"업체: {body.company_name or '미입력'}\n"
+                    f"업체: {company_name or '미입력'}\n"
+                    f"사업자번호: {biz_num_clean or '미입력'}\n"
+                    f"서류: {'첨부됨' if doc_s3_key else '미첨부'}\n"
                     f"→ /admin/talent-auth 에서 링크 발송"
                 )
             except Exception:
@@ -1629,7 +1660,8 @@ async def admin_talent_auth_requests(request: Request):
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            """SELECT id, email, company_name, requested_at, status, sent_at, notes
+            """SELECT id, email, company_name, requested_at, status, sent_at, notes,
+                      biz_number, doc_s3_key, doc_filename
                FROM talent_auth_requests ORDER BY id DESC LIMIT 200"""
         ).fetchall()
         return ok(data=[dict(r) for r in rows])
@@ -1770,6 +1802,29 @@ async def admin_talent_auth_revoke(request: Request, email_enc: str):
         conn.close()
 
     return ok(message=f"{email} 세션 취소 완료")
+
+
+@app.get("/api/admin/talent-auth/doc/{request_id}", tags=["talent-auth-admin"])
+async def admin_talent_auth_doc(request: Request, request_id: int):
+    """사업자등록증명원 S3 presigned URL 반환 (1시간 유효)."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT doc_s3_key, doc_filename FROM talent_auth_requests WHERE id=?",
+            (request_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row["doc_s3_key"]:
+        raise HTTPException(404, "서류 파일 없음")
+    try:
+        url = s3_presigned_url(row["doc_s3_key"], expires=3600)
+        return ok(data={"url": url, "filename": row["doc_filename"]})
+    except Exception as _e:
+        raise HTTPException(500, f"서류 URL 생성 실패: {_e}")
 
 
 @app.post("/api/admin/talent-preview-session", tags=["talent-auth-admin"])
@@ -4192,7 +4247,10 @@ def _ensure_talent_auth_tables():
                 status       TEXT DEFAULT 'pending',
                 sent_at      TEXT,
                 ip_hash      TEXT DEFAULT '',
-                notes        TEXT DEFAULT ''
+                notes        TEXT DEFAULT '',
+                biz_number   TEXT DEFAULT '',
+                doc_s3_key   TEXT DEFAULT '',
+                doc_filename TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS talent_auth_tokens (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4209,6 +4267,17 @@ def _ensure_talent_auth_tables():
             CREATE INDEX IF NOT EXISTS idx_tat_session ON talent_auth_tokens(session_token);
         """)
         conn.commit()
+        # 기존 테이블 컬럼 마이그레이션 (ADD COLUMN IF NOT EXISTS 미지원 → try/except)
+        for _col_sql in [
+            "ALTER TABLE talent_auth_requests ADD COLUMN biz_number TEXT DEFAULT ''",
+            "ALTER TABLE talent_auth_requests ADD COLUMN doc_s3_key TEXT DEFAULT ''",
+            "ALTER TABLE talent_auth_requests ADD COLUMN doc_filename TEXT DEFAULT ''",
+        ]:
+            try:
+                conn.execute(_col_sql)
+                conn.commit()
+            except Exception:
+                pass  # 이미 컬럼 존재
         conn.close()
     except Exception as _e:
         logging.getLogger("bridge.api").warning("_ensure_talent_auth_tables 실패: %s", _e)
