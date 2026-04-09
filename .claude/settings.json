@@ -75,6 +75,16 @@
           "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\tools\\runtime_guard.py\""
         }
       ]
+    },
+    {
+      "matcher": "Bash|Write|Edit|WebFetch",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\.claude\\hooks\\bridge_guard.py\"",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "PostToolUse": [
