@@ -21,6 +21,7 @@ interface AuthRequest {
   biz_number: string
   doc_s3_key: string
   doc_filename: string
+  has_doc?: boolean
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -115,13 +116,26 @@ function TalentAuthContent() {
   }
 
   async function handleViewDoc(req: AuthRequest) {
-    if (!req.doc_s3_key) { showToast('서류 파일 없음', false); return }
     try {
       const res = await adminFetch(`${API_URL}/api/admin/talent-auth/doc/${req.id}`)
       const data = await res.json()
-      const url = data?.data?.url
-      if (url) window.open(url, '_blank')
-      else showToast('URL 생성 실패', false)
+      if (!res.ok) { showToast('서류 파일 없음', false); return }
+      const d = data?.data
+      if (d?.url) {
+        window.open(d.url, '_blank')
+      } else if (d?.data_uri) {
+        // DB BLOB → 새 탭에서 열기
+        const win = window.open('', '_blank')
+        if (win) {
+          if (d.data_uri.startsWith('data:application/pdf')) {
+            win.document.write(`<iframe src="${d.data_uri}" style="width:100%;height:100vh;border:none"></iframe>`)
+          } else {
+            win.document.write(`<img src="${d.data_uri}" style="max-width:100%" />`)
+          }
+        }
+      } else {
+        showToast('서류 파일 없음', false)
+      }
     } catch {
       showToast('서버 오류', false)
     }
@@ -250,7 +264,7 @@ function TalentAuthContent() {
 
                 {/* 액션 버튼 */}
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-                  {req.doc_s3_key && (
+                  {(req.doc_s3_key || req.doc_filename) && (
                     <button
                       onClick={() => handleViewDoc(req)}
                       style={{
