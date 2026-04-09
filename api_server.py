@@ -146,7 +146,7 @@ except ImportError:
 
 # ── security_vault (PII 필드 암호화) ─────────────────────────────────────────
 try:
-    from security_vault import encrypt_field, decrypt_field, is_encrypted
+    from security_vault import encrypt_field, decrypt_field, is_encrypted, t3_encrypt, auto_decrypt_value
     _VAULT_OK = True
 except Exception as _vault_exc:
     _VAULT_OK = False
@@ -156,6 +156,8 @@ except Exception as _vault_exc:
     def encrypt_field(v, *a, **k): return v
     def decrypt_field(v, *a, **k): return v
     def is_encrypted(v, *a, **k): return False
+    def t3_encrypt(v, *a, **k): return v
+    def auto_decrypt_value(v, *a, **k): return v
 
 # ── security 패키지 (PIIScanner + InputSanitizer만 사용) ─────────────────
 # 암호화: security_vault.py (위에서 import 완료)
@@ -2625,6 +2627,10 @@ _ADMIN_DECRYPT_FIELDS = {
     "religion", "health_info",
     "dob", "nationality", "current_location", "reference",
     "gender", "notes",
+    # T3v1 확장 필드 (encrypt_migrate.py v2/v3과 동기화)
+    "kakao_id", "passport_number", "home_country", "emergency_contact",
+    "contact_name", "business_registration", "school_location", "memo",
+    "phone",
 }
 
 
@@ -3259,7 +3265,7 @@ async def admin_list_inquiries(
                 f"SELECT * FROM client_inquiries{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
                 params + [limit, offset],
             ).fetchall()
-            return ok(data={"total": total, "inquiries": [dict(r) for r in rows]})
+            return ok(data={"total": total, "inquiries": [_decrypt_row(dict(r)) for r in rows]})
         finally:
             conn.close()
     except HTTPException:
@@ -3304,6 +3310,12 @@ async def admin_patch_inquiry(inquiry_id: int, request: Request, body: dict):
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
         raise HTTPException(400, f"수정 가능한 필드: {', '.join(sorted(EDITABLE))}")
+    # PII 필드 수정 시 T3v1 재암호화 (암호화되지 않은 값만)
+    _INQ_PII = {"email", "phone", "memo", "contact_name", "school_location", "business_registration"}
+    for pii_field in _INQ_PII:
+        if pii_field in update and update[pii_field] and isinstance(update[pii_field], str):
+            if not is_encrypted(update[pii_field]):
+                update[pii_field] = t3_encrypt(update[pii_field], pii_field)
     update["last_activity"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))

@@ -62,6 +62,9 @@ INQUIRY_FIELDS = [
     # 추가 (v2)
     "contact_name",
     "business_registration",
+    # 추가 (v3) — 직접 식별자 (api_server.py _PII_FIELDS와 동기화)
+    "email",
+    "phone",
 ]
 
 def p(msg=""):
