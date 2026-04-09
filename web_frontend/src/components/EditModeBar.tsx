@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Pencil, ArrowUpDown, LogOut } from 'lucide-react'
+import { Wrench, Pencil, ArrowUpDown, LogOut, Users } from 'lucide-react'
+import { API_URL } from '@/lib/api'
 
 export function useEditMode(): boolean {
   const [editMode, setEditMode] = useState(false)
@@ -19,6 +20,7 @@ export default function EditModeBar() {
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [mounted, setMounted] = useState(false)
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
+  const [talentMsg, setTalentMsg] = useState<string | null>(null)
   const dragging = useRef(false)
   const offset = useRef({ x: 0, y: 0 })
   const ref = useRef<HTMLDivElement>(null)
@@ -51,6 +53,28 @@ export default function EditModeBar() {
   }, [])
 
   if (!editMode || !mounted) return null
+
+  const openTalentView = async () => {
+    const adminKey = localStorage.getItem('bridge_admin_key') ?? ''
+    if (!adminKey) { setTalentMsg('로그인 필요'); setTimeout(() => setTalentMsg(null), 2000); return }
+    setTalentMsg('세션 생성 중...')
+    try {
+      const res = await fetch(`${API_URL}/api/admin/talent-preview-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+      })
+      if (!res.ok) { setTalentMsg('실패'); setTimeout(() => setTalentMsg(null), 2000); return }
+      const data = await res.json()
+      const token = data?.data?.session_token
+      if (!token) { setTalentMsg('실패'); setTimeout(() => setTalentMsg(null), 2000); return }
+      const secure = location.protocol === 'https:' ? '; Secure' : ''
+      document.cookie = `bridge_talent_session=${token}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`
+      setTalentMsg('완료!')
+      setTimeout(() => { setTalentMsg(null); window.open('/talents', '_blank') }, 300)
+    } catch {
+      setTalentMsg('오류'); setTimeout(() => setTalentMsg(null), 2000)
+    }
+  }
 
   const exit = () => {
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
@@ -123,6 +147,23 @@ export default function EditModeBar() {
 
       {/* 구분선 */}
       <div style={{ width: 1, height: 22, background: 'rgba(220,38,38,0.35)', flexShrink: 0 }} />
+
+      {/* 인재보기 버튼 */}
+      <button
+        onClick={openTalentView}
+        type="button"
+        style={{
+          ...btnBase,
+          background: talentMsg ? 'rgba(220,38,38,0.22)' : 'rgba(220,38,38,0.10)',
+          color: '#dc2626',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.22)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = talentMsg ? 'rgba(220,38,38,0.22)' : 'rgba(220,38,38,0.10)' }}
+        title="인재게시판 관리자 미리보기"
+      >
+        <Users size={12} />
+        {talentMsg ?? '인재보기'}
+      </button>
 
       {/* 순서 저장 버튼 */}
       <button

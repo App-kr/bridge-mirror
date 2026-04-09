@@ -1772,6 +1772,38 @@ async def admin_talent_auth_revoke(request: Request, email_enc: str):
     return ok(message=f"{email} 세션 취소 완료")
 
 
+@app.post("/api/admin/talent-preview-session", tags=["talent-auth-admin"])
+async def admin_talent_preview_session(request: Request):
+    """관리자 인재게시판 미리보기 — 30일 세션 즉시 생성."""
+    _check_admin(request)
+    import secrets as _sec
+    now = datetime.utcnow()
+    session_token = _sec.token_urlsafe(32)
+    expires = (now + timedelta(days=30)).isoformat()
+    preview_email = "admin-preview@bridge.internal"
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        existing = conn.execute(
+            "SELECT id FROM talent_auth_tokens WHERE email=?", (preview_email,)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE talent_auth_tokens SET session_token=?, session_expires_at=? WHERE email=?",
+                (session_token, expires, preview_email)
+            )
+        else:
+            conn.execute(
+                """INSERT INTO talent_auth_tokens (email, magic_token, created_at, session_token, session_expires_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (preview_email, _sec.token_urlsafe(16), now.isoformat(), session_token, expires)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(data={"session_token": session_token})
+
+
 class _TalentInquiry(BaseModel):
     school_name: str
     email: str
