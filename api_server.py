@@ -9701,7 +9701,7 @@ def _ensure_download_links_schema():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS mail_introduce_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sent_at DATETIME DEFAULT (datetime('now','localtime')),
+            sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             candidate_ids TEXT NOT NULL,
             to_email TEXT NOT NULL,
             school_name TEXT,
