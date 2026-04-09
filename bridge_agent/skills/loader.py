@@ -21,10 +21,24 @@ def _find_skills_dir() -> Path:
     return SKILLS_DIR
 
 
+_SKILL_ALLOWLIST = frozenset(s.replace(".md", "") for s in SKILL_FILES)
+
 def load_skill(name: str) -> str:
-    """Load a single skill by name (without .md extension)."""
-    skills_dir = _find_skills_dir()
-    path = skills_dir / f"{name}.md"
+    """Load a single skill by name (without .md extension).
+
+    Allowlist 검증: SKILL_FILES에 없는 이름은 거부.
+    경로 탈주 (../etc/passwd 등) 차단.
+    """
+    # 1. Allowlist 검증 — 등록된 스킬만 허용
+    if name not in _SKILL_ALLOWLIST:
+        return ""
+
+    # 2. 경로 구성 후 탈주 검증
+    skills_dir = _find_skills_dir().resolve()
+    path = (skills_dir / f"{name}.md").resolve()
+    if not str(path).startswith(str(skills_dir)):
+        return ""  # 경로 탈주 시도
+
     if path.exists():
         return path.read_text("utf-8", errors="replace")
     return ""
