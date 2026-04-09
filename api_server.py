@@ -2380,9 +2380,42 @@ async def admin_revoke_all_sessions(request: Request):
     return ok(data={"revoked": count}, message="모든 세션이 폐기되었습니다.")
 
 
+async def _render_update_env_var(key: str, value: str) -> tuple[bool, str]:
+    """Render API로 환경변수 1개를 업데이트한다.
+    성공 시 (True, ""), 실패 시 (False, 오류메시지) 반환."""
+    render_api_key = os.environ.get("RENDER_API_KEY", "")
+    render_service_id = os.environ.get("RENDER_SERVICE_ID", "")
+    if not render_api_key or not render_service_id:
+        return False, "RENDER_API_KEY 또는 RENDER_SERVICE_ID 환경변수 미설정"
+    headers = {
+        "Authorization": f"Bearer {render_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    base_url = f"https://api.render.com/v1/services/{render_service_id}/env-vars"
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # 기존 env vars 전체 조회
+            r = await client.get(base_url, headers=headers)
+            if r.status_code != 200:
+                return False, f"Render GET 실패 ({r.status_code})"
+            existing: list[dict] = r.json()  # [{"key": ..., "value": ...}, ...]
+            # 대상 키 업데이트 또는 신규 추가
+            updated = [ev for ev in existing if ev.get("key") != key]
+            updated.append({"key": key, "value": value})
+            # PUT으로 전체 교체
+            r2 = await client.put(base_url, headers=headers, json=updated)
+            if r2.status_code not in (200, 201):
+                return False, f"Render PUT 실패 ({r2.status_code})"
+            return True, ""
+    except Exception as _re_exc:
+        return False, str(_re_exc)
+
+
 @app.post("/api/admin/change-password", tags=["admin"])
 async def admin_change_password(request: Request):
-    """관리자 비밀번호 변경 — PBKDF2 해시로 .env 업데이트."""
+    """관리자 비밀번호 변경 — in-memory + .env + Render 환경변수 동시 업데이트."""
     _check_admin(request)
     try:
         body = await request.json()
@@ -2397,15 +2430,30 @@ async def admin_change_password(request: Request):
     iterations = 260000
     dk = hashlib.pbkdf2_hmac("sha256", new_pw.encode(), salt.encode(), iterations)
     new_hash = f"pbkdf2:sha256:{iterations}:{salt}:{dk.hex()}"
+    # 1) in-memory 즉시 적용
+    global _ADMIN_PW
+    _ADMIN_PW = new_hash
+    # 2) 로컬 .env 업데이트 (로컬 실행 시)
     env_path = Path(__file__).resolve().parent / ".env"
     if env_path.exists():
         content = env_path.read_text(encoding="utf-8")
-        updated = _re.sub(r"^ADMIN_PASSWORD=.*$", f"ADMIN_PASSWORD={new_hash}",
-                          content, flags=_re.MULTILINE)
-        env_path.write_text(updated, encoding="utf-8")
-    global _ADMIN_PW
-    _ADMIN_PW = new_hash
-    return ok(data={}, message="비밀번호 변경 완료. 서버 재시작 후 완전 적용됩니다.")
+        updated_env = _re.sub(r"^ADMIN_PASSWORD=.*$", f"ADMIN_PASSWORD={new_hash}",
+                               content, flags=_re.MULTILINE)
+        env_path.write_text(updated_env, encoding="utf-8")
+    # 3) Render 환경변수 자동 업데이트
+    render_ok, render_err = await _render_update_env_var("ADMIN_PASSWORD", new_hash)
+    if render_ok:
+        msg = "비밀번호 변경 완료. Render 환경변수도 자동 업데이트되었습니다."
+    else:
+        logging.getLogger("bridge.security").warning(
+            "[change-password] Render 환경변수 자동 업데이트 실패: %s", render_err
+        )
+        msg = (
+            "비밀번호 변경 완료 (현재 세션 즉시 적용). "
+            f"Render 환경변수 자동 업데이트 실패: {render_err} — "
+            "Render 대시보드에서 ADMIN_PASSWORD를 수동으로 업데이트하세요."
+        )
+    return ok(data={"render_synced": render_ok}, message=msg)
 
 
 @app.post("/api/admin/reset-blacklist", tags=["admin"])
@@ -10557,8 +10605,8 @@ def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
     star    = cand.get("talent_reference_star")
     star_str = ("★" * int(star) + "☆" * (5 - int(star)) + f" ({star}점)") if star else ""
 
-    # presigned URL (cv_processed_s3_key)
-    cv_key  = cand.get("cv_processed_s3_key") or ""
+    # presigned URL — cv_processed_s3_key 우선, 없으면 원본 file_uploads 폴백
+    cv_key  = cand.get("cv_processed_s3_key") or cand.get("fallback_cv_s3_key") or ""
     cv_link = ""
     if cv_key:
         try:
@@ -10639,11 +10687,17 @@ async def mail_introduce(request: Request):
         # ── 1. 강사 조회 ──
         placeholders = ",".join(["?"] * len(candidate_ids))
         cand_rows = conn.execute(
-            f"""SELECT sheet_number, nationality_plain, nationality, gender,
-                current_location, start_date, target_age, target,
-                experience, korea_experience, area_prefs, housing,
-                talent_summary, talent_reference_star, cv_processed_s3_key
-                FROM candidates WHERE sheet_number IN ({placeholders}) AND is_deleted=0""",
+            f"""SELECT c.sheet_number, c.nationality_plain, c.nationality, c.gender,
+                c.current_location, c.start_date, c.target_age, c.target,
+                c.experience, c.korea_experience, c.area_prefs, c.housing,
+                c.talent_summary, c.talent_reference_star, c.cv_processed_s3_key,
+                (SELECT fu.s3_key FROM file_uploads fu
+                 WHERE fu.entity_id = c.candidate_id
+                   AND fu.file_type IN ('cv','cover_letter','cv_processed')
+                   AND fu.is_deleted = 0
+                   AND fu.s3_key IS NOT NULL AND fu.s3_key != ''
+                 ORDER BY fu.id DESC LIMIT 1) AS fallback_cv_s3_key
+                FROM candidates c WHERE c.sheet_number IN ({placeholders}) AND c.is_deleted=0""",
             [str(c) for c in candidate_ids],
         ).fetchall()
 
