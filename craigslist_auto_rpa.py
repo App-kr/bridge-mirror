@@ -942,8 +942,8 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                     print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
                     _log_event("warning", "—", "login",
                                f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
-                    # 3분간 10초 간격으로 로그인 확인
-                    for wait_i in range(18):
+                    # 10분간 10초 간격으로 로그인 확인
+                    for wait_i in range(60):
                         _delay(9, 11)
                         try:
                             driver.refresh()
@@ -954,7 +954,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                                 return True
                         except Exception:
                             pass
-                        remaining = (18 - wait_i - 1) * 10
+                        remaining = (60 - wait_i - 1) * 10
                         if remaining > 0:
                             print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
                 else:
