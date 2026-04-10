@@ -616,14 +616,14 @@ function insertIntoWaitSheet(sourceData, targetSheet, currentNo) {
     27: 32, // AA: Health Information
     28: 30, // AB: Personal Considerations
     30: 28, // AD: Dependents Pets
-    31: 27, // AE: Marital Status
+    31: 28, // AE: Marital Status
     32: 29, // AF: Housing
     33: 31, // AG: Religion
     34: 13, // AH: E visa
     35: 35, // AI: KakaoTalk
     36: 36, // AJ: Mobile Phone
     37: 16, // AK: Criminal Record (해외)
-    38: 33, // AL: Criminal Record in Korea
+    38: 31, // AL: Criminal Record in Korea
     39: 37, // AM: Agreement
     40: 38, // AN: Facts
     41: 2,  // AO: How to
@@ -831,7 +831,7 @@ if (bachelorMatch && !v.includes('degree from') && !v.includes('degree (') && !v
     // ★ FIX: 학위 단계 - 소문자 통일 (v = toLowerCase() 기준)
     else if (v.includes("standard degree from one of the 7 eligible countries")) { translated = '학사'; }
     else if (v.includes("degree from korea"))               { translated = '한국학위'; }
-    else if (v.includes("graduated, but diploma not available")) { translated = '학위아직x'; }
+    else if (v.includes("graduated, but diploma not available") || v.includes("graduated but diploma not available")) { translated = '학위아직x'; }
     else if (v.includes("degree from other country"))       { translated = '타국가'; }
     else if (v === 'master')                                { translated = '석사'; }
     else if (v === 'doctor' || v.includes('ph.d'))          { translated = '박사'; }
@@ -935,6 +935,7 @@ if (bachelorMatch && !v.includes('degree from') && !v.includes('degree (') && !v
     else if (v.includes('over 8 year'))          { translated = '8년'; }
     else if (v.includes('over 9 year'))          { translated = '9년'; }
     else if (v.includes('over 10 year'))         { translated = '10년'; }
+    else if (v.includes('over 11~14 year') || v.includes('11~14 year')) { translated = '11~14년'; }
     else if (v.includes('over 11 year'))         { translated = '11년'; }
     else if (v.includes('over 12 year'))         { translated = '12년'; }
     else if (v.includes('over 13 year'))         { translated = '13년'; }
@@ -945,6 +946,7 @@ if (bachelorMatch && !v.includes('degree from') && !v.includes('degree (') && !v
 
 // 비자/건강/타투/범죄기록
     else if (v.includes("already have a valid visa") || v.includes("already have a residence visa")) { translated = '있음'; }
+    else if (v.includes("holding a visa and recently left")) { translated = '잠시출국'; }
     else if (v.includes("need a new e2 visa") || v.includes("need a new visa")) { translated = '필요'; }
     else if (v.includes("zero tattoos or piercings"))  { translated = '노타피'; }
     else if (v.includes("visible but can be covered")) { translated = '커버가능'; }
@@ -955,12 +957,14 @@ if (bachelorMatch && !v.includes('degree from') && !v.includes('degree (') && !v
     else if (v.includes("normal") || v.includes("healthy") || v.includes("i have not")) { translated = '건강'; }
     else if (v.includes("i have a condition"))         { translated = '질환'; }
     else if (v.includes("prefer not to say"))          { translated = '건강비공'; }
+    else if (v.includes("references cannot be verified")) { translated = '레퍼확인X'; }
     else if (v.includes("never applied for a new one") || v.includes("never applied")) { translated = '미신청'; }
     else if (v.includes("applied and waiting"))        { translated = '신청중'; }
     else if (v.includes("issued and apostille completed")) { translated = '체크완'; }
     else if (v.includes("clean record"))               { translated = '없음'; }
     else if (v.includes("i have a record"))            { translated = '범죄자'; }
     else if (v.includes("prefer not to answer"))       { translated = '범비밀'; }
+    else if (v.includes("no comment"))                 { translated = '코멘트X'; }
     else if (v === "recorded")                         { translated = 'E기록ㅇ'; }
 
 
@@ -996,6 +1000,7 @@ if (bachelorMatch && !v.includes('degree from') && !v.includes('degree (') && !v
     else if (v.includes("issued and apostille completed")){ translated = 'CRC완'; }
 
     // 가족/반려동물 (★ FIX: cat/dog 완전일치 - 이름 오매핑 방지)
+    else if (v.includes('planning to get married')) { translated = '결혼예정'; }
     else if (v.includes('single'))       { translated = '미혼'; }
     else if (v.includes('married'))      { translated = '기혼'; }
     else if (v.includes('dependents'))   { translated = '부양가족'; }
