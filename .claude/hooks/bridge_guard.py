@@ -28,6 +28,9 @@ from datetime import datetime
 ALLOWED_WRITE_ROOTS = [
     Path(r"Q:\Claudework"),
     Path(r"C:\Users\Scarlett\.claude"),
+    Path(r"Q:\openrun_api"),
+    Path(r"Q:\openrun_app"),
+    Path(r"Q:\openrun_admin"),
 ]
 
 LOG_PATH = Path(r"Q:\Claudework\bridge base\.claude\hooks\bridge_guard.log")

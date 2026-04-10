@@ -1607,8 +1607,48 @@
       "git": "82500d3b",
       "files": 2217,
       "db_hash": "8df971289d12"
+    },
+    {
+      "dir": "20260409_085954__security-encrypt-tasks-8-11",
+      "task": "security-encrypt-tasks-8-11",
+      "ts": "2026.04.09 09:00:28",
+      "git": "0696f53f",
+      "files": 2217,
+      "db_hash": "8df971289d12"
+    },
+    {
+      "dir": "20260409_090833__mail_introduce_log_fix",
+      "task": "mail_introduce_log_fix",
+      "ts": "2026.04.09 09:08:39",
+      "git": "8b8adb9e",
+      "files": 2217,
+      "db_hash": "33333f402460"
+    },
+    {
+      "dir": "20260409_104311__change-password_Render_API_연동",
+      "task": "change-password Render API 연동",
+      "ts": "2026.04.09 10:44:19",
+      "git": "6f9dc6e4",
+      "files": 2218,
+      "db_hash": "21e7e0d6c33e"
+    },
+    {
+      "dir": "20260409_132005__인재보기_사업자_인증_시스템",
+      "task": "인재보기 사업자 인증 시스템",
+      "ts": "2026.04.09 13:22:21",
+      "git": "e7446a6c",
+      "files": 2228,
+      "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260409_140423__ESLCafe_Admin_UI_리디자인",
+      "task": "ESLCafe Admin UI 리디자인",
+      "ts": "2026.04.09 14:04:52",
+      "git": "14337a3d",
+      "files": 2228,
+      "db_hash": "aacb16d7afef"
     }
   ],
-  "last_backup": "2026.04.08 19:25:26",
-  "total_count": 201
+  "last_backup": "2026.04.09 14:04:52",
+  "total_count": 206
 }

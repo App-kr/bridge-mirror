@@ -108,5 +108,21 @@ def main():
     print(f"\n✅ 백업 완료: {dest}")
     print(f"   14일치 보관 중")
 
+    # 7. Notion 일일 기록 (하루 마지막 백업에만)
+    notion_log = BASE / "tools" / "notion_daily_log.py"
+    if notion_log.exists():
+        print("\n📓 Notion 기록 중...")
+        r = subprocess.run(
+            [sys.executable, "-X", "utf8", str(notion_log), note],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(BASE)
+        )
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                if line.strip():
+                    print(" ", line.strip())
+        else:
+            print("  [Notion] 실패 (토큰 미설정이면 무시)")
+
 if __name__ == "__main__":
     main()

@@ -1,5 +1,44 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-08 (세션 30 — admin 값 안보임 버그 수정)
+최근 업데이트: 2026-04-10 (세션 32 — 보안 훅 + pytest 뼈대)
+
+## ⏭ 다음 세션 우선순위 (2026-04-10 기준)
+
+1. **pre_snapshot.py 실제 동작 확인**
+   - `C:\Users\Scarlett\.claude\settings.json` PreToolUse에 등록된 Write|Edit|MultiEdit 훅
+   - 스냅샷이 실제로 생성되는지 테스트
+
+2. **EMERGENCY_RESTORE.bat 테스트**
+   - 실제 복구 시나리오 1회 실행 확인
+
+3. **api_server.py L446 target_age 중복 제거**
+   - 오래된 pending 항목 — 중복 코드 정리
+
+## ✅ 2026-04-10 완료된 작업 (세션 32 — 커밋 a574bce1, 5f6ea40e)
+
+### 보안 훅 3종 + pytest 뼈대
+
+#### bridge_agent 패치 (커밋 a574bce1)
+- `base.py`: tool result 2차 인젝션 차단 (`<tool_output>` 구조적 격리)
+- `security_check.py`: `_guard_context()` — context 파일 sanitize + 길이 제한
+- `skills/loader.py`: allowlist + resolve() 경로탈주 차단
+
+#### bridge_guard.py 신규 (커밋 5f6ea40e)
+- 경로: `.claude/hooks/bridge_guard.py`
+- PreToolUse 훅: Bash/Write/Edit/WebFetch 위험 패턴 차단
+- Bash: `rm -rf` / force push / sqlite3 DROP TABLE / 프로덕션 curl POST
+- Write/Edit: 경로탈주 / .env / master.db / 시스템경로
+- WebFetch: 프로덕션 쓰기 메서드 (POST/PATCH/DELETE)
+- ALLOWED_WRITE_ROOTS에 Q:\openrun_api/app/admin 추가됨 (사용자 수동 수정)
+- 오탐 방지: heredoc 제거 + 명령 경계 regex 적용
+
+#### tests/ 신규 (커밋 5f6ea40e)
+- `conftest.py`: 인메모리 SQLite + TestClient (Production 미사용)
+- `test_auth.py`: 15개 케이스 — 403/429/세션토큰/공개API
+
+#### 글로벌 훅 추가 (`C:\Users\Scarlett\.claude\settings.json`)
+- PostToolUse Read: `read_guard.py` (경로탈주 + 인젝션 스캔)
+- PreToolUse Write|Edit|MultiEdit: `pre_snapshot.py` (사용자 설정)
+- PreToolUse Bash|Write|Edit|WebFetch: `bridge_guard.py`
 
 ## ✅ 2026-04-08 완료된 작업 (세션 30 — 커밋 9ebcf5c5)
 

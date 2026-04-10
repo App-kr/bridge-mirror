@@ -37,6 +37,8 @@ PRESETS = [
     ("PII Encryption Key",              "BRIDGE_FIELD_KEY",       False),
     ("Notion Integration Token",        "NOTION_TOKEN",           False),
     ("Notion Page ID",                  "NOTION_PAGE_ID",         False),
+    ("Supabase DB Password",            "SUPABASE_DB_PASSWORD",   False),
+    ("OpenRun Admin Secret",            "OPENRUN_ADMIN_SECRET",   False),
     ("\uc9c1\uc811 \uc785\ub825",       "",                       False),
 ]
 
