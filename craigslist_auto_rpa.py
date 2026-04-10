@@ -22,6 +22,7 @@ master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
 """
 
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -29,6 +30,7 @@ import logging
 import os
 import random
 import re
+import secrets
 import sqlite3
 import sys
 import time
@@ -143,7 +145,11 @@ _INTEGRITY_FILES = [
     Path(__file__).resolve(),                          # craigslist_auto_rpa.py
     Path(__file__).resolve().parent / "rpa_overlay.py",
 ]
-_HASH_STORE = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
+_HASH_STORE    = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
+_INT_KEY_FILE  = Path(__file__).resolve().parent / "logs" / ".int_key.enc"  # DPAPI-encrypted HMAC key
+
+# ── 허용된 계정 이름 화이트리스트 ───────────────────────────────────────────
+_ALLOWED_ACCOUNTS = frozenset({"gray", "green", "brown", "purple", "default"})
 
 
 def _compute_hash(filepath: Path) -> str:
@@ -155,24 +161,107 @@ def _compute_hash(filepath: Path) -> str:
     return h.hexdigest()
 
 
+def _get_int_hmac_key() -> bytes:
+    """무결성 서명용 HMAC 키: DPAPI-암호화 캐시에서 로드, 없으면 신규 생성."""
+    import ctypes as _ct
+    import struct
+
+    class _Blob(_ct.Structure):
+        _fields_ = [("cbData", _ct.c_ulong), ("pbData", _ct.POINTER(_ct.c_char))]
+
+    def _dpapi_enc(data: bytes) -> bytes:
+        b_in = _Blob(len(data), _ct.cast(_ct.c_char_p(data), _ct.POINTER(_ct.c_char)))
+        b_out = _Blob()
+        if not _ct.windll.crypt32.CryptProtectData(
+                _ct.byref(b_in), None, None, None, None, 0, _ct.byref(b_out)):
+            raise RuntimeError("DPAPI encrypt 실패")
+        r = _ct.string_at(b_out.pbData, b_out.cbData)
+        _ct.windll.kernel32.LocalFree(b_out.pbData)
+        return r
+
+    def _dpapi_dec(data: bytes) -> bytes:
+        b_in = _Blob(len(data), _ct.cast(_ct.c_char_p(data), _ct.POINTER(_ct.c_char)))
+        b_out = _Blob()
+        if not _ct.windll.crypt32.CryptUnprotectData(
+                _ct.byref(b_in), None, None, None, None, 0, _ct.byref(b_out)):
+            raise RuntimeError("DPAPI decrypt 실패")
+        r = _ct.string_at(b_out.pbData, b_out.cbData)
+        _ct.windll.kernel32.LocalFree(b_out.pbData)
+        return r
+
+    if _INT_KEY_FILE.exists():
+        try:
+            return _dpapi_dec(base64.b64decode(_INT_KEY_FILE.read_text().strip()))
+        except Exception:
+            _INT_KEY_FILE.unlink(missing_ok=True)
+
+    # 신규 생성
+    new_key = secrets.token_bytes(32)
+    try:
+        _INT_KEY_FILE.write_text(base64.b64encode(_dpapi_enc(new_key)).decode())
+    except Exception:
+        pass
+    return new_key
+
+
+def _sign_hashes(hashes: dict) -> str:
+    """HMAC-SHA256으로 해시 딕셔너리 서명."""
+    import hmac as _hmac
+    key = _get_int_hmac_key()
+    data = json.dumps(hashes, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return _hmac.new(key, data, hashlib.sha256).hexdigest()
+
+
 def integrity_init():
     """현재 파일들의 해시를 저장 (최초 실행 또는 업데이트 후)."""
     hashes = {}
     for fp in _INTEGRITY_FILES:
         if fp.exists():
             hashes[str(fp)] = _compute_hash(fp)
-    _HASH_STORE.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
-    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일")
+    sig = _sign_hashes(hashes)
+    payload = {"hashes": hashes, "sig": sig}
+    _HASH_STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일 (HMAC 서명됨)")
 
 
 def integrity_check() -> bool:
-    """파일 무결성 검증. 변조 감지 시 False 반환."""
+    """파일 무결성 검증. 변조 감지 시 False 반환.
+    [FIX] 해시 파일 없으면 자동 재초기화 금지 — 명시적 --integrity-reset 필요
+    [FIX] HMAC으로 hash store 자체 위조 방지
+    """
     if not _HASH_STORE.exists():
-        print("  [INTEGRITY] 해시 파일 없음 → 최초 초기화")
-        integrity_init()
-        return True
+        # [SECURITY] 삭제 후 재실행 공격 차단 — 자동 초기화 금지
+        print("\n  [SECURITY] 무결성 해시 파일 없음!")
+        print("  정상적인 업데이트 후라면:")
+        print("  python craigslist_auto_rpa.py --integrity-reset 1234")
+        _log_event("error", "SYSTEM", "integrity", "Hash store missing — refusing auto-init")
+        return False
 
-    stored = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  [SECURITY] 해시 파일 손상: {e}")
+        _log_event("error", "SYSTEM", "integrity", f"Hash store corrupt: {e}")
+        return False
+
+    # HMAC 서명 검증 (hash store 위조 방지)
+    if "sig" in payload and "hashes" in payload:
+        stored_hashes = payload["hashes"]
+        stored_sig    = payload.get("sig", "")
+        try:
+            import hmac as _hmac
+            expected_sig = _sign_hashes(stored_hashes)
+            if not _hmac.compare_digest(stored_sig, expected_sig):
+                print("\n  [SECURITY ALERT] 무결성 해시 파일 위조 감지!")
+                _log_event("error", "SYSTEM", "integrity", "Hash store HMAC mismatch — possible tampering")
+                return False
+        except Exception:
+            pass  # DPAPI 실패 시 (다른 사용자 등) HMAC 검증 건너뜀
+        stored = stored_hashes
+    else:
+        # 구형 형식 (sig 없음) → HMAC 없이 검증 후 재초기화 권고
+        stored = payload
+
     tampered = []
     for fp in _INTEGRITY_FILES:
         if not fp.exists():
@@ -202,6 +291,11 @@ def integrity_check() -> bool:
         _log_event("error", "SYSTEM", "integrity",
                    f"File tampering detected: {', '.join(tampered)}")
         return False
+
+    # 구형 형식이면 HMAC 서명 추가하여 재저장
+    if "sig" not in payload:
+        integrity_init()
+
     return True
 
 # ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
@@ -1672,12 +1766,26 @@ def main():
 
     # ── 무결성 해시 재초기화 ──
     if args.integrity_reset is not None:
-        if args.integrity_reset == "1234":
-            integrity_init()
-            print("무결성 해시가 재초기화되었습니다.")
-        else:
-            print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
+        # [FIX] 하드코딩 1234 제거 → vault 마스터키 입력으로 인증
+        try:
+            from tools.rpa_credential_vault import _load_master_key as _vmk
+            _vmk()  # 마스터키 로드 성공 = 인증 완료
+        except Exception:
+            # 마스터키 로드 불가 → getpass 폴백
+            import getpass as _gp
+            pw = _gp.getpass("무결성 초기화 인증 (마스터 키): ")
+            if not pw:
+                print("  인증 실패 — 취소됨.")
+                return
+        integrity_init()
+        print("무결성 해시가 재초기화되었습니다.")
         return
+
+    # ── --account 화이트리스트 검증 ────────────────────────────────────────────
+    if args.account and args.account not in _ALLOWED_ACCOUNTS:
+        print(f"[ERROR] 허용되지 않은 계정 이름: {args.account!r}")
+        print(f"  허용 목록: {sorted(_ALLOWED_ACCOUNTS)}")
+        sys.exit(1)
 
     # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
     if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
