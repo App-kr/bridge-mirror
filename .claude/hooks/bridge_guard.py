@@ -20,6 +20,7 @@ stdout: 차단 시 {"hookSpecificOutput": {"hookEventName": "PreToolUse",
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from datetime import datetime
 
@@ -172,10 +173,20 @@ def _strip_git_message(command: str) -> str:
     return command
 
 
+def _normalize_unicode(text: str) -> str:
+    """Unicode 전각/유사 문자를 ASCII로 정규화.
+
+    ｒm → rm, ／ → /, ０ → 0 등 전각 문자 우회 차단.
+    NFKC: 호환 분해 + 정규 합성 (전각→반각 포함).
+    """
+    return unicodedata.normalize("NFKC", text)
+
+
 def _preprocess_bash(command: str) -> str:
-    """스캔 전 텍스트성 콘텐츠 제거 — 오탐 방지."""
-    command = _strip_heredoc(command)
-    command = _strip_git_message(command)
+    """스캔 전 텍스트성 콘텐츠 제거 + Unicode 정규화 — 오탐/우회 방지."""
+    command = _normalize_unicode(command)   # ① 전각 문자 정규화
+    command = _strip_heredoc(command)       # ② heredoc 본문 제거
+    command = _strip_git_message(command)   # ③ 커밋 메시지 제거
     return command
 
 
