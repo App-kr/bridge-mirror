@@ -2062,16 +2062,36 @@ _SESSION_LOCK = threading.Lock()
 _MAX_SESSIONS = 50  # 최대 동시 세션 수
 
 def _get_client_ip(request: Request) -> str:
-    """프록시 헤더에서 실제 클라이언트 IP 추출."""
-    for hdr in ("X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"):
-        val = request.headers.get(hdr, "")
-        if val:
-            ip = val.split(",")[0].strip()
-            try:
-                _ipaddr.ip_address(ip)
-                return ip
-            except ValueError:
-                continue
+    """실제 클라이언트 IP 추출 — 스푸핑 방지 우선순위.
+
+    우선순위:
+      1. CF-Connecting-IP  : Cloudflare가 설정, 클라이언트 위조 불가
+      2. X-Real-IP         : 신뢰된 역방향 프록시(nginx)가 설정
+      3. request.client.host : TCP 연결 IP (최후 폴백)
+
+    X-Forwarded-For 는 클라이언트가 임의로 설정 가능 → 무시.
+    이 값은 rate_limit / session subnet / IP whitelist 에 사용되므로
+    위조 허용 시 브루트포스/화이트리스트 우회로 이어짐.
+    """
+    # 1순위: Cloudflare — 클라이언트 위조 불가
+    cf_ip = request.headers.get("CF-Connecting-IP", "").strip()
+    if cf_ip:
+        try:
+            _ipaddr.ip_address(cf_ip)
+            return cf_ip
+        except ValueError:
+            pass
+
+    # 2순위: nginx 등 신뢰 프록시의 X-Real-IP
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        try:
+            _ipaddr.ip_address(real_ip)
+            return real_ip
+        except ValueError:
+            pass
+
+    # 3순위: TCP 연결 IP (역방향 프록시 없을 때)
     return request.client.host if request.client else "unknown"
 
 def _create_session(request: Request) -> str:
