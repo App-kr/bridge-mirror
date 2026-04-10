@@ -1002,7 +1002,7 @@ _APPLY_FIELD_MAP = {
     "agreement":                "consent",
     "facts":                    "fact_check",
     "admin_notes":              "notes",
-    "target_age":               "target",
+    # target_age: target_age 컬럼이 별도 존재하므로 target 리다이렉트 제거 (L659 참조)
 }
 
 # ── Google Sheet 동기화 (비동기 헬퍼) ─────────────────────────────────────────
