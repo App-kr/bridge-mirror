@@ -2077,10 +2077,27 @@ def main():
         return
 
     # ── 잠금 파일 (중복 실행 방지, per-account) ──
-    import atexit
+    import atexit, ctypes as _ct
     acct_key  = args.account or "default"
     acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # 기존 잠금 파일이 있으면 PID 실제 생존 여부 확인
+    if acct_lock.exists():
+        try:
+            old_pid = int(acct_lock.read_text().strip())
+            h = _ct.windll.kernel32.OpenProcess(0x400, False, old_pid)
+            if h:
+                _ct.windll.kernel32.CloseHandle(h)
+                # 같은 PID면 자기 자신 (재시작 후 PID 재사용) → 무시
+                if old_pid != os.getpid():
+                    print(f"[WARN] 이미 실행 중인 RPA 감지 (PID={old_pid}) — 중복 실행 차단")
+                    sys.exit(0)
+            else:
+                acct_lock.unlink(missing_ok=True)  # stale lock 제거
+        except Exception:
+            acct_lock.unlink(missing_ok=True)
+
     acct_lock.write_text(str(os.getpid()), encoding="utf-8")
     atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
 
@@ -2093,13 +2110,51 @@ def main():
     except ImportError:
         _HAS_OVERLAY = False
 
+    def _is_driver_dead(drv) -> bool:
+        """ChromeDriver 연결이 끊어졌는지 빠르게 확인."""
+        try:
+            _ = drv.title  # 간단한 CDP 호출
+            return False
+        except Exception:
+            return True
+
+    def _rebuild_driver(old_drv) -> object:
+        """Chrome 크래시 시 드라이버 재시작 + 재로그인."""
+        try:
+            old_drv.quit()
+        except Exception:
+            pass
+        import time as _t
+        _t.sleep(3)
+        print("  [RECOVER] Chrome 재시작 중...")
+        new_drv = build_driver(headless=args.headless, account=acct_label)
+        if cl_login(new_drv):
+            print("  [RECOVER] 재로그인 성공 ✅")
+            return new_drv
+        else:
+            print("  [RECOVER] 재로그인 실패 ❌")
+            try:
+                new_drv.quit()
+            except Exception:
+                pass
+            return None
+
     def _run_post_session(ad_list):
-        """게시 세션 실행 (최초 + '더 올리기' 공통)."""
+        """게시 세션 실행 (최초 + '더 올리기' 공통).
+        Chrome 크래시 감지 시 자동 재시작 + 재로그인.
+        """
         hl_flag = args.headless
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag, account=acct_label)
+
+        try:
+            driver = build_driver(headless=hl_flag, account=acct_label)
+        except Exception as drv_exc:
+            print(f"[ABORT] Chrome 시작 실패: {drv_exc}")
+            _log_event("error", "—", "driver", f"Chrome start failed: {drv_exc}")
+            return 0
+
         posted = 0
 
         try:
@@ -2152,9 +2207,25 @@ def main():
 
                 except Exception as exc:
                     err_msg = str(exc)[:300]
-                    mark_error(ad_id, err_msg)
                     _log_event("error", jcode, "post_exception", err_msg)
-                    print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
+                    print(f"  ❌ 예외 발생: {exc}")
+
+                    # Chrome 크래시 감지 → 자동 재시작
+                    if _is_driver_dead(driver):
+                        print("  [RECOVER] Chrome 크래시 감지 — 재시작 시도...")
+                        _log_event("warn", jcode, "chrome_crash", "ChromeDriver dead — rebuilding")
+                        mark_error(ad_id, f"[chrome_crash] {err_msg}")
+                        new_drv = _rebuild_driver(driver)
+                        if new_drv:
+                            driver = new_drv
+                            print("  [RECOVER] Chrome 복구 완료 — 다음 건부터 재시도")
+                        else:
+                            _log_event("error", "—", "chrome_recover_fail", "Cannot rebuild Chrome — aborting")
+                            print("  [ABORT] Chrome 복구 실패 — 세션 종료")
+                            break
+                    else:
+                        mark_error(ad_id, err_msg)
+
                     continue
 
                 if i < len(ad_list):
@@ -2165,7 +2236,10 @@ def main():
             _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
             print(f"[SESSION ERROR] {session_exc}")
         finally:
-            driver.quit()
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
         return posted
 
