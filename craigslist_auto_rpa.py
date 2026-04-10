@@ -799,13 +799,10 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
         opts.binary_location = chrome_bin
         print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
     opts.add_argument(f"--user-data-dir={profile_dir}")
-    if headless:
-        opts.add_argument("--headless=new")
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--window-size=1920,1080")
-    else:
-        opts.add_argument("--start-maximized")
+    # undetected-chromedriver 미설치 → headless=new은 Craigslist 봇탐지됨
+    # 대신: 창을 화면 밖으로 이동 (사용자에게 보이지 않지만 headless 아님)
+    opts.add_argument("--window-size=1920,1080")
+    opts.add_argument("--window-position=-10000,0")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--remote-debugging-port=0")
     opts.add_argument("--no-first-run")
@@ -942,8 +939,8 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                     print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
                     _log_event("warning", "—", "login",
                                f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
-                    # 10분간 10초 간격으로 로그인 확인
-                    for wait_i in range(60):
+                    # 3분간 10초 간격으로 로그인 확인
+                    for wait_i in range(18):
                         _delay(9, 11)
                         try:
                             driver.refresh()
@@ -954,7 +951,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
                                 return True
                         except Exception:
                             pass
-                        remaining = (60 - wait_i - 1) * 10
+                        remaining = (18 - wait_i - 1) * 10
                         if remaining > 0:
                             print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
                 else:
