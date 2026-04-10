@@ -231,7 +231,11 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/status    — 서버 상태\n"
         "/build     — npm run build\n"
         "/git       — git status\n"
-        "\n텍스트나 사진을 보내면 에이전트가 처리합니다."
+        "\n텍스트나 사진을 보내면 에이전트가 처리합니다.\n\n"
+        "Claude Code CLI:\n"
+        "! <프롬프트>  — claude -p 직접 실행\n"
+        "!cd <경로>    — 작업 디렉토리 변경\n"
+        "!pwd          — 현재 디렉토리 확인"
     )
 
 
@@ -415,6 +419,78 @@ async def cmd_git(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Git error: {e}")
 
 
+# ── Claude Code CLI runner ────────────────────────────────────
+
+# Per-user Claude Code working directory: {chat_id: path}
+_cc_workdirs: dict[int, str] = {}
+_CC_DEFAULT_DIR = str(Path(__file__).resolve().parent.parent)  # bridge base/
+
+
+async def _run_claude_cli(prompt: str, workdir: str) -> str:
+    """claude -p 실행 후 결과 반환 (최대 5분)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "-p", prompt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=workdir,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+        out = stdout.decode("utf-8", errors="replace").strip()
+        if not out and stderr:
+            out = "[stderr]\n" + stderr.decode("utf-8", errors="replace").strip()
+        return out or "(응답 없음)"
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return "⏱ 타임아웃 (300초)"
+    except FileNotFoundError:
+        return "❌ claude CLI를 찾을 수 없습니다. PATH에 claude가 있는지 확인하세요."
+    except Exception as e:
+        return f"❌ 실행 오류: {e}"
+
+
+async def _handle_claude_cli(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """! 접두사 메시지 → Claude Code CLI 라우팅."""
+    chat_id = update.effective_chat.id
+    prompt = text[1:].strip()  # ! 제거
+
+    # !cd 경로변경
+    if prompt.lower().startswith("cd "):
+        new_dir = prompt[3:].strip()
+        if os.path.isdir(new_dir):
+            _cc_workdirs[chat_id] = new_dir
+            await update.message.reply_text(f"[CC] 작업 디렉토리: {new_dir}")
+        else:
+            await update.message.reply_text(f"[CC] 디렉토리 없음: {new_dir}")
+        return
+
+    # !pwd 현재경로 확인
+    if prompt.lower() == "pwd":
+        workdir = _cc_workdirs.get(chat_id, _CC_DEFAULT_DIR)
+        await update.message.reply_text(f"[CC] 현재 디렉토리: {workdir}")
+        return
+
+    if not prompt:
+        await update.message.reply_text(
+            "[CC] 사용법:\n"
+            "! <프롬프트>  — Claude Code 실행\n"
+            "!cd <경로>    — 작업 디렉토리 변경\n"
+            "!pwd          — 현재 디렉토리 확인"
+        )
+        return
+
+    workdir = _cc_workdirs.get(chat_id, _CC_DEFAULT_DIR)
+    await update.message.reply_text(f"[CC] 실행 중... ({workdir})")
+    await update.message.reply_chat_action(ChatAction.TYPING)
+
+    result = await _run_claude_cli(prompt, workdir)
+    for chunk in ([result[i:i+4000] for i in range(0, len(result), 4000)]):
+        await update.message.reply_text(chunk)
+
+
 # ── Message Handlers ──────────────────────────────────────────
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -424,6 +500,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text
     if not user_text:
+        return
+
+    # ── ! 접두사 → Claude Code CLI ──
+    if user_text.startswith("!"):
+        await _handle_claude_cli(update, context, user_text)
         return
 
     # ── Prompt injection defense ──

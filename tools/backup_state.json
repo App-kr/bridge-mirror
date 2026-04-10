@@ -1647,8 +1647,16 @@
       "git": "14337a3d",
       "files": 2228,
       "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260410_151004___get_client_ip_IP스푸핑_패치",
+      "task": "_get_client_ip IP스푸핑 패치",
+      "ts": "2026.04.10 15:10:14",
+      "git": "8c8ed24a",
+      "files": 2230,
+      "db_hash": "aacb16d7afef"
     }
   ],
-  "last_backup": "2026.04.09 14:04:52",
-  "total_count": 206
+  "last_backup": "2026.04.10 15:10:14",
+  "total_count": 207
 }

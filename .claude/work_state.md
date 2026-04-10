@@ -1,17 +1,36 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-10 (세션 32 — 보안 훅 + pytest 뼈대)
+최근 업데이트: 2026-04-11 (세션 33 — RPA 복구 완료)
 
-## ⏭ 다음 세션 우선순위 (2026-04-10 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-11 기준)
 
-1. **pre_snapshot.py 실제 동작 확인**
-   - `C:\Users\Scarlett\.claude\settings.json` PreToolUse에 등록된 Write|Edit|MultiEdit 훅
-   - 스냅샷이 실제로 생성되는지 테스트
+1. **bridge_jobs 광고매니저 CRUD** — POST/PATCH/DELETE API + 프론트 UI (미착수)
+2. **pre_snapshot.py 실제 동작 확인** — PreToolUse Write|Edit|MultiEdit 훅 테스트
+3. **EMERGENCY_RESTORE.bat 테스트** — 실제 복구 시나리오
+4. **api_server.py L446 target_age 중복 제거**
 
-2. **EMERGENCY_RESTORE.bat 테스트**
-   - 실제 복구 시나리오 1회 실행 확인
+## ✅ 2026-04-11 완료된 작업 (세션 33 — 커밋 9cf17a0e)
 
-3. **api_server.py L446 target_age 중복 제거**
-   - 오래된 pending 항목 — 중복 코드 정리
+### Craigslist RPA 복구 완료
+
+#### 원인
+- `--headless=new` → Craigslist 봇 감지 → category 단계 무한 로딩
+- rpa_relogin.py가 `account="default"` 프로필에 쿠키 저장 → 실제 RPA는 `account="gray"` 사용 → 쿠키 미적용
+- RPA.vbs에 `--account` 미지정 → 팝업에서 brown 계정 선택 → 이메일 인증 실패
+
+#### 수정 (커밋 9cf17a0e)
+- `craigslist_auto_rpa.py`: Selenium fallback에서 `--headless=new` 제거 → `--window-position=-10000,0` (사용자 안보이나 headless 아님)
+- `RPA.vbs`: `--account gray` 추가 → 팝업 없이 gray 계정 직접 실행
+- `rpa_relogin.py`: `account="default"` → `account="gray"` (gray 프로필에 쿠키)
+
+#### 검증
+- Job.1960 (Guri | Kindy - Elem) 실제 게시 완료 ✅
+- URL: https://post.craigslist.org/k/gooy13dL2cRnK8UmUMde4Z/rT74O
+- 스크린샷: screenshots/craigslist/Job.1960_20260411_011929.png
+
+#### RPA 실행 방법
+- 일반 실행: `RPA.vbs` 더블클릭 (gray 계정, headless, 10건)
+- 쿠키 갱신: `python rpa_relogin.py` (쿠키 만료 시)
+- 수동 테스트: `python craigslist_auto_rpa.py --account gray --headless --limit 1`
 
 ## ✅ 2026-04-10 완료된 작업 (세션 32 — 커밋 a574bce1, 5f6ea40e)
 
