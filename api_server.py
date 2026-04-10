@@ -326,6 +326,9 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
         # Permissions-Policy: 불필요 기능 비활성화
         "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+        # CSP: 순수 JSON API — 리소스 로드 완전 차단 + 삽입 공격 차단
+        # frame-ancestors: X-Frame-Options 대체 (모던 브라우저 우선)
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     }
 
     def _add_sec_headers(self, response):
@@ -394,8 +397,29 @@ _DEV_ORIGINS = [
     "http://localhost:8080",
 ]
 _cors_env = os.getenv("CORS_ORIGINS", "")
-_extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
 _IS_PROD = os.getenv("BRIDGE_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
+
+# CORS 환경변수 안전 검증 — 와일드카드(*) 또는 비HTTPS 도메인 차단
+_extra: list[str] = []
+for _o in (_cors_env.split(",") if _cors_env else []):
+    _o = _o.strip()
+    if not _o:
+        continue
+    if _o == "*":
+        import logging as _log_cors
+        _log_cors.getLogger("bridge").error(
+            "🚨 CORS_ORIGINS에 와일드카드(*) 감지 — 차단됨. "
+            "허용 도메인을 명시적으로 설정하세요."
+        )
+        continue  # 와일드카드 추가 거부
+    if _IS_PROD and _o.startswith("http://"):
+        import logging as _log_cors
+        _log_cors.getLogger("bridge").warning(
+            "⚠️ CORS_ORIGINS 비HTTPS 도메인 차단 (prod): %s", _o
+        )
+        continue  # 프로덕션에서 비HTTPS 차단
+    _extra.append(_o)
+
 ALLOWED_ORIGINS = list(dict.fromkeys(
     _CORE_ORIGINS + _extra + ([] if _IS_PROD else _DEV_ORIGINS)
 ))
@@ -540,7 +564,7 @@ class AdminAuditMiddleware(BaseHTTPMiddleware):
         if not has_key and not has_token:
             return await call_next(request)
 
-        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+        ip = _get_client_ip(request)  # 스푸핑 방지 IP 추출 (X-Forwarded-For 위조 불가)
         response = await call_next(request)
 
         # 감사 로그 기록 (파일)
@@ -2065,15 +2089,32 @@ def _get_client_ip(request: Request) -> str:
     """실제 클라이언트 IP 추출 — 스푸핑 방지 우선순위.
 
     우선순위:
-      1. CF-Connecting-IP  : Cloudflare가 설정, 클라이언트 위조 불가
-      2. X-Real-IP         : 신뢰된 역방향 프록시(nginx)가 설정
-      3. request.client.host : TCP 연결 IP (최후 폴백)
+      1. CF-Connecting-IP  : Cloudflare가 설정 (위조 불가)
+      2. X-Real-IP         : TCP 연결이 신뢰 프록시 대역일 때만 수용
+      3. X-Forwarded-For   : Render 인프라가 추가한 마지막 항목
+      4. request.client.host : TCP 연결 IP (최후 폴백)
 
-    X-Forwarded-For 는 클라이언트가 임의로 설정 가능 → 무시.
-    이 값은 rate_limit / session subnet / IP whitelist 에 사용되므로
-    위조 허용 시 브루트포스/화이트리스트 우회로 이어짐.
+    X-Real-IP는 신뢰 프록시(TRUSTED_PROXY_CIDRS) IP에서 온 연결일 때만 수용.
+    X-Forwarded-For는 공격자가 위조한 첫 항목을 무시하고 마지막(서버가 추가) 항목 사용.
+    이 값은 rate_limit / session subnet / IP whitelist 에 사용.
     """
-    # 1순위: Cloudflare — 클라이언트 위조 불가
+    # 신뢰 프록시 대역 (Render 내부 대역 + Cloudflare IP 블록)
+    _TRUSTED_PROXY_CIDRS = [
+        "10.0.0.0/8",       # Render 내부 네트워크
+        "172.16.0.0/12",    # Docker/Render 내부
+        "100.64.0.0/10",    # RFC 6598 공유 주소 (Render 로드밸런서)
+    ]
+
+    def _is_trusted_proxy(ip_str: str) -> bool:
+        try:
+            addr = _ipaddr.ip_address(ip_str)
+            return any(addr in _ipaddr.ip_network(cidr) for cidr in _TRUSTED_PROXY_CIDRS)
+        except ValueError:
+            return False
+
+    tcp_host = request.client.host if request.client else ""
+
+    # 1순위: Cloudflare CF-Connecting-IP (위조 불가)
     cf_ip = request.headers.get("CF-Connecting-IP", "").strip()
     if cf_ip:
         try:
@@ -2082,17 +2123,32 @@ def _get_client_ip(request: Request) -> str:
         except ValueError:
             pass
 
-    # 2순위: nginx 등 신뢰 프록시의 X-Real-IP
-    real_ip = request.headers.get("X-Real-IP", "").strip()
-    if real_ip:
-        try:
-            _ipaddr.ip_address(real_ip)
-            return real_ip
-        except ValueError:
-            pass
+    # 2순위: X-Real-IP — TCP 연결이 신뢰 프록시 대역인 경우에만 수용
+    if tcp_host and _is_trusted_proxy(tcp_host):
+        real_ip = request.headers.get("X-Real-IP", "").strip()
+        if real_ip:
+            try:
+                _ipaddr.ip_address(real_ip)
+                return real_ip
+            except ValueError:
+                pass
 
-    # 3순위: TCP 연결 IP (역방향 프록시 없을 때)
-    return request.client.host if request.client else "unknown"
+    # 3순위: X-Forwarded-For 마지막 항목 (Render/프록시가 추가한 실제 IP)
+    # 공격자가 위조한 첫 항목은 무시하고 rightmost(프록시 추가분) 사용
+    xff = request.headers.get("X-Forwarded-For", "").strip()
+    if xff:
+        parts = [p.strip() for p in xff.split(",")]
+        # 마지막부터 역방향으로 첫 번째 공인 IP 추출 (내부 대역 제외)
+        for candidate in reversed(parts):
+            try:
+                addr = _ipaddr.ip_address(candidate)
+                if not addr.is_private and not addr.is_loopback:
+                    return candidate
+            except ValueError:
+                continue
+
+    # 4순위: TCP 연결 IP
+    return tcp_host if tcp_host else "unknown"
 
 def _create_session(request: Request) -> str:
     """세션 토큰 생성 + 저장. 반환: 토큰 문자열."""
@@ -5120,9 +5176,9 @@ _AUTH_FAIL: dict[str, list] = {}   # ip_hash → [fail timestamps] (brute-force 
 import hashlib, time as _time
 
 def _ip_hash(request: Request) -> str:
-    # X-Forwarded-For 우선 (Render/Cloudflare 프록시 환경)
-    xff = request.headers.get("x-forwarded-for", "")
-    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    # _get_client_ip() 와 동일한 스푸핑 방지 로직 사용
+    # X-Forwarded-For 첫 항목은 공격자가 위조 가능하므로 절대 사용 금지
+    ip = _get_client_ip(request)
     return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
 def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
