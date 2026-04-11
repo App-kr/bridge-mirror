@@ -2842,6 +2842,91 @@ async def admin_ad_posts(
     )
 
 
+# ── Admin: ad_posts CRUD ─────────────────────────────────────────────────────
+
+class _AdPostCreate(BaseModel):
+    job_code: str
+    platform: str = "craigslist"
+    status:   str = "draft"
+    ad_title: Optional[str] = None
+    ad_body:  Optional[str] = None
+
+class _AdPostUpdate(BaseModel):
+    status:     Optional[str] = None
+    ad_title:   Optional[str] = None
+    ad_body:    Optional[str] = None
+    posted_url: Optional[str] = None
+    error_msg:  Optional[str] = None
+    posted_at:  Optional[str] = None
+
+
+@app.post("/api/admin/ad-posts", tags=["admin"])
+async def admin_ad_posts_create(request: Request, body: _AdPostCreate):
+    """ad_posts 신규 생성 — status 초기값 draft"""
+    _check_admin(request)
+    if not _ADMIN_DB_PATH.exists():
+        raise HTTPException(status_code=500, detail="master.db not found")
+    now = datetime.utcnow().isoformat()
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        cur = conn.execute(
+            """INSERT INTO ad_posts (job_code, platform, status, ad_title, ad_body, draft_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (body.job_code, body.platform, body.status, body.ad_title, body.ad_body, now),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        logging.getLogger("bridge.api").info("[AD_POST] created id=%s job_code=%s", new_id, body.job_code)
+    finally:
+        conn.close()
+    return ok(data={"id": new_id}, message="광고 생성 완료")
+
+
+@app.patch("/api/admin/ad-posts/{post_id}", tags=["admin"])
+async def admin_ad_posts_update(request: Request, post_id: int, body: _AdPostUpdate):
+    """ad_posts 수정 — 전달된 필드만 업데이트"""
+    _check_admin(request)
+    if not _ADMIN_DB_PATH.exists():
+        raise HTTPException(status_code=500, detail="master.db not found")
+    updates: dict = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=422, detail="변경할 필드가 없습니다")
+    set_clause = ", ".join(f"{col} = ?" for col in updates)
+    params = list(updates.values()) + [post_id]
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        cur = conn.execute(
+            f"UPDATE ad_posts SET {set_clause} WHERE id = ?", params  # noqa: S608
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="해당 id의 광고가 없습니다")
+        logging.getLogger("bridge.api").info("[AD_POST] updated id=%s fields=%s", post_id, list(updates.keys()))
+    finally:
+        conn.close()
+    return ok(message="광고 수정 완료")
+
+
+@app.delete("/api/admin/ad-posts/{post_id}", tags=["admin"])
+async def admin_ad_posts_delete(request: Request, post_id: int):
+    """ad_posts 삭제 — status='deleted' 논리 삭제"""
+    _check_admin(request)
+    if not _ADMIN_DB_PATH.exists():
+        raise HTTPException(status_code=500, detail="master.db not found")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        cur = conn.execute(
+            "UPDATE ad_posts SET status = 'deleted' WHERE id = ?", (post_id,)
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="해당 id의 광고가 없습니다")
+        logging.getLogger("bridge.api").info("[AD_POST] deleted(soft) id=%s", post_id)
+    finally:
+        conn.close()
+    return ok(message="광고 삭제 완료")
+
+
 # ── Admin: Candidates Grid ────────────────────────────────────────────────────
 _ADMIN_DECRYPT_FIELDS = {
     "full_name", "email",
