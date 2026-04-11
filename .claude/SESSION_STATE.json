@@ -1,0 +1,33 @@
+{
+  "last_updated": "2026-04-11 22:53:46",
+  "last_tool": "Bash",
+  "last_command": "cd \"Q:/openrun_app\" && git status --short 2>&1 && echo \"---\" && git log --oneline -3 2>&1",
+  "git_head": "cafaa84",
+  "modified_files": [
+    "Q:\\openrun_api\\main.py",
+    "C:\\Users\\Scarlett\\.claude\\hooks\\sound_alert.py",
+    "C:\\Users\\Scarlett\\.claude\\settings.json",
+    "Q:\\openrun_app\\lib\\features\\performances\\performance_detail_screen.dart",
+    "Q:\\Claudework\\matjokdo_safe\\api\\claude_handler.py",
+    "Q:\\openrun_api\\migrations\\001_ads_table.sql",
+    "Q:\\Claudework\\matjokdo_safe\\main.py",
+    "Q:\\Claudework\\matjokdo_safe\\rpa\\actions.py",
+    "Q:\\Claudework\\matjokdo_safe\\rpa\\browser.py",
+    "Q:\\openrun_app\\lib\\shared\\services\\api_service.dart",
+    "Q:\\openrun_app\\lib\\features\\performances\\widgets\\ad_banner_card.dart",
+    "Q:\\openrun_app\\lib\\features\\performances\\performance_list_screen.dart",
+    "Q:\\openrun_app\\lib\\features\\onboarding\\splash_screen.dart",
+    "Q:\\openrun_app\\lib\\shared\\widgets\\session_status_widget.dart",
+    "Q:\\openrun_app\\lib\\features\\settings\\settings_screen.dart",
+    "Q:\\openrun_app\\assets\\privacy_policy.html",
+    "Q:\\openrun_app\\pubspec.yaml",
+    "Q:\\Claudework\\matjokdo_safe\\save_session.py",
+    "Q:\\openrun_app\\android\\app\\build.gradle",
+    "Q:\\openrun_app\\android\\key.properties"
+  ],
+  "current_task": "⏭ 다음 세션 우선순위 (2026-04-11 기준)",
+  "git_changed": [
+    "FINAL_BACKUP_20260331_171844/bridge base_backup",
+    "bridge base_backup"
+  ]
+}
