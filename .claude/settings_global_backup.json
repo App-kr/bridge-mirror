@@ -1,0 +1,127 @@
+{
+  "model": "opus",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"C:\\Users\\Scarlett\\.claude\\model_advisor.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"C:\\Users\\Scarlett\\.claude\\hooks\\read_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"C:\\Users\\Scarlett\\.claude\\hooks\\mid_commit.py\"",
+            "timeout": 10000,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"C:\\Users\\Scarlett\\.claude\\hooks\\sound_alert.py\" post",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"C:\\Users\\Scarlett\\.claude\\hooks\\session_resume.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"C:\\Users\\Scarlett\\.claude\\hooks\\sound_alert.py\"",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"C:\\Users\\Scarlett\\.claude\\hooks\\pre_snapshot.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"Q:\\Claudework\\bridge base\\.claude\\hooks\\bridge_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" -X utf8 \"C:\\Users\\Scarlett\\.claude\\hooks\\auto_commit.py\"",
+            "timeout": 30,
+            "statusMessage": "변경사항 자동 커밋 중..."
+          },
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Scarlett\\AppData\\Local\\Programs\\Python\\Python313\\python.exe\" \"C:\\Users\\Scarlett\\.claude\\hooks\\sound_alert.py\" stop",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "\"Q:\\Phtyon 3\\python.exe\" \"Q:\\Claudework\\bridge base\\tools\\statusline.py\""
+  },
+  "enabledPlugins": {},
+  "autoUpdatesChannel": "latest",
+  "autoUpdate": true,
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": [
+        "n8n-mcp"
+      ],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true"
+      }
+    }
+  }
+}
