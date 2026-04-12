@@ -538,10 +538,19 @@ class CSRFOriginMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in self._EXEMPT):
             return await call_next(request)
         origin = request.headers.get("origin", "")
-        if origin and origin not in _ALLOWED_ORIGINS_SET:
+        is_admin = path.startswith("/api/admin/")
+        if is_admin:
+            # 관리자 경로: Origin 없거나 허용 목록 외 → 차단
+            if not origin or origin not in _ALLOWED_ORIGINS_SET:
+                return JSONResponse(status_code=403, content={
+                    "isError": True, "errorCategory": "CSRF_REJECTED",
+                    "isRetryable": False, "context": "Cross-origin request blocked.",
+                })
+        elif origin and origin not in _ALLOWED_ORIGINS_SET:
+            # 공개 경로: Origin 있으나 허용 목록 외 → 차단
             return JSONResponse(status_code=403, content={
                 "isError": True, "errorCategory": "CSRF_REJECTED",
-                "isRetryable": False, "context": "Cross-origin request blocked."
+                "isRetryable": False, "context": "Cross-origin request blocked.",
             })
         return await call_next(request)
 
@@ -2393,7 +2402,7 @@ except Exception as _e:
 def _log_unauthorized_access(request: Request):
     """비관리자 접근 시 IP + URL + 시간 기록"""
     try:
-        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+        ip = _get_client_ip(request)  # 첫 XFF 항목 위조 방지 — _get_client_ip 사용
         url = str(request.url.path)
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("INSERT INTO access_logs (ip, url) VALUES (?, ?)", (ip, url))
@@ -7282,7 +7291,7 @@ async def serve_protected_file(
         return RedirectResponse(url=_presigned, status_code=302)
     except (RuntimeError, StorageError) as _s3_err:
         _log_upload.error("presigned URL 생성 실패: %s", _s3_err)
-        raise HTTPException(503, "파일 접근 실패 — S3 환경변수를 확인하세요.")
+        raise HTTPException(503, "파일 서비스가 일시적으로 불가합니다.")
 
 
 @app.get("/api/admin/sign-url", tags=["admin"])
@@ -7295,7 +7304,7 @@ async def admin_sign_url(request: Request, path: str = ""):
     if not path or ".." in path or path.startswith("/"):
         raise HTTPException(400, "유효하지 않은 파일 경로입니다.")
     if not _UPLOAD_SIGN_KEY:
-        raise HTTPException(503, "UPLOAD_SIGN_KEY 미설정 — 서버 환경변수를 확인하세요.")
+        raise HTTPException(503, "파일 서명 서비스가 현재 불가합니다.")
     signed = generate_signed_url(path)
     expires_at = int(time.time()) + _SIGN_EXPIRY
     return ok(data={

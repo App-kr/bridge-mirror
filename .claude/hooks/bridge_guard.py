@@ -190,6 +190,49 @@ def _preprocess_bash(command: str) -> str:
     return command
 
 
+# ── Git 계정 매핑 ─────────────────────────────────────────────────────────────
+
+# (경로 키워드, 계정, 용도)
+GIT_ACCOUNT_MAP = [
+    ("openrun",        "App-kr",      "openrun-app / openrun-api"),
+    ("Game Discord",   "dobby-kr",    "DJ티모 Discord 봇"),
+    ("bridge-jobs",    "koreadobby",  "bridge-jobs 프론트"),
+    ("bridge base",    "koreadobby",  "BRIDGE 메인"),
+    ("bridge",         "koreadobby",  "BRIDGE"),
+    ("Dobby",          "dobby-kr",    "DJ티모"),
+]
+
+GIT_AUTH_CMDS = re.compile(
+    r"\b(git\s+(push|pull|fetch|clone)|gh\s+(auth|repo|pr|release))\b",
+    re.IGNORECASE,
+)
+
+
+def _detect_git_account(command: str) -> tuple[str, str] | None:
+    """명령어에서 어떤 계정이 필요한지 추론. (account, purpose) 반환."""
+    # 명령어 내 경로 또는 URL에서 힌트 추출
+    for keyword, account, purpose in GIT_ACCOUNT_MAP:
+        if keyword.lower() in command.lower():
+            return account, purpose
+    # 힌트 없으면 None (알 수 없음)
+    return None
+
+
+def check_git_account(tool_input: dict):
+    """git push/pull/fetch 등 네트워크 git 명령 전 계정 경고."""
+    command = tool_input.get("command", "")
+    if not GIT_AUTH_CMDS.search(command):
+        return
+    result = _detect_git_account(command)
+    if result:
+        account, purpose = result
+        warn(f"⚠️  Git 계정 필요 → **{account}** ({purpose})\n"
+             f"로그인 확인: gh auth status | 전환: gh auth login -h github.com --web")
+    else:
+        warn("⚠️  Git 네트워크 명령 감지 — 어떤 계정인지 확인하세요\n"
+             "계정 확인: gh auth status")
+
+
 # ── 도구별 검사 ──────────────────────────────────────────────────────────────
 
 def check_bash(tool_input: dict):
@@ -262,6 +305,7 @@ def main():
     tool_input = data.get("tool_input", {})
 
     if tool_name == "Bash":
+        check_git_account(tool_input)
         check_bash(tool_input)
     elif tool_name in ("Write", "Edit"):
         check_write_edit(tool_name, tool_input)

@@ -10,16 +10,16 @@ const KEY_TTL = 86400000 // 24시간 (ms)
 const MAX_WAKE_RETRIES = 20   // 20 × 3s = 60초 (Render cold start 대응)
 const WAKE_DELAY = 3000
 
-/** localStorage에서 admin key 동기 로드 (만료 체크 포함) */
+/** sessionStorage에서 admin key 동기 로드 (만료 체크 포함) */
 function getStoredKey(): string {
   if (typeof window === 'undefined') return ''
-  const key = localStorage.getItem(STORAGE_KEY)
-  const expiry = localStorage.getItem(EXPIRY_KEY)
+  const key = sessionStorage.getItem(STORAGE_KEY)
+  const expiry = sessionStorage.getItem(EXPIRY_KEY)
   if (!key) return ''
   if (expiry && Date.now() > parseInt(expiry, 10)) {
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(EXPIRY_KEY)
-    localStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(EXPIRY_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     return ''
   }
@@ -28,7 +28,7 @@ function getStoredKey(): string {
 
 function getSessionToken(): string {
   if (typeof window === 'undefined') return ''
-  return localStorage.getItem(SESSION_KEY) || ''
+  return sessionStorage.getItem(SESSION_KEY) || ''
 }
 
 async function createHmacSignature(key: string, body: string): Promise<string> {
@@ -66,7 +66,7 @@ async function fetchWithWake(
 }
 
 export function useAdminAuth() {
-  // 동기 초기화: localStorage에서 즉시 로드 (useEffect 지연 제거)
+  // 동기 초기화: sessionStorage에서 즉시 로드 (useEffect 지연 제거)
   const [adminKey, setAdminKey] = useState<string>(getStoredKey)
   const [authed, setAuthed] = useState<boolean>(() => !!getStoredKey())
   const [waking, setWaking] = useState(false)
@@ -111,7 +111,7 @@ export function useAdminAuth() {
           setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
           return
         }
-        localStorage.setItem(SESSION_KEY, sessionToken)
+        sessionStorage.setItem(SESSION_KEY, sessionToken)
         // session_token으로 api_key 별도 요청
         const keyRes = await fetch(`${API_URL}/api/admin/key`, {
           headers: { 'x-admin-token': sessionToken },
@@ -121,8 +121,8 @@ export function useAdminAuth() {
         if (key) {
           setAdminKey(key)
           setAuthed(true)
-          localStorage.setItem(STORAGE_KEY, key)
-          localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
+          sessionStorage.setItem(STORAGE_KEY, key)
+          sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
           const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
           document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
         } else {
@@ -157,7 +157,7 @@ export function useAdminAuth() {
       const sessionToken = json?.data?.session_token
       if (!sessionToken) return '서버 응답이 올바르지 않습니다.'
 
-      localStorage.setItem(SESSION_KEY, sessionToken)
+      sessionStorage.setItem(SESSION_KEY, sessionToken)
 
       // session_token으로 /api/admin/key에서 api_key 별도 요청
       const keyRes = await fetch(`${API_URL}/api/admin/key`, {
@@ -170,8 +170,8 @@ export function useAdminAuth() {
 
       setAdminKey(key)
       setAuthed(true)
-      localStorage.setItem(STORAGE_KEY, key)
-      localStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
+      sessionStorage.setItem(STORAGE_KEY, key)
+      sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + KEY_TTL))
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       document.cookie = `bridge_edit_mode=true; path=/; max-age=86400; SameSite=Strict${isLocal ? '' : '; Secure'}`
 
@@ -200,9 +200,9 @@ export function useAdminAuth() {
     }
     setAdminKey('')
     setAuthed(false)
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(EXPIRY_KEY)
-    localStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(EXPIRY_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
   }, [])
 

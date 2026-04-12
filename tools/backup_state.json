@@ -1655,8 +1655,24 @@
       "git": "8c8ed24a",
       "files": 2230,
       "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260412_083223__광고매니저_CRUD_구현",
+      "task": "광고매니저 CRUD 구현",
+      "ts": "2026.04.12 08:33:25",
+      "git": "712fef2a",
+      "files": 2230,
+      "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260412_091944__보안_강화_4종",
+      "task": "보안 강화 4종",
+      "ts": "2026.04.12 09:19:56",
+      "git": "587d8f8c",
+      "files": 2230,
+      "db_hash": "aacb16d7afef"
     }
   ],
-  "last_backup": "2026.04.10 15:10:14",
-  "total_count": 207
+  "last_backup": "2026.04.12 09:19:56",
+  "total_count": 209
 }
