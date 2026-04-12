@@ -149,7 +149,8 @@ function EditModal({ post, onClose, onSave, headers }: EditModalProps) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
-              <select className="input w-full" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select className="input w-full" value={status} onChange={(e) => setStatus(e.target.value as AdPost['status'])}>
+
                 <option value="draft">Draft</option>
                 <option value="posted">게시완료</option>
                 <option value="error">오류</option>
