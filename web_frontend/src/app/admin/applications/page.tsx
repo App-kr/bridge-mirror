@@ -236,13 +236,13 @@ export default function AdminApplicationsPage() {
         const errBody = await res.json().catch(() => ({}))
         if (errBody.error?.includes?.('Access denied')) {
           setError('Access denied. Retrying...')
-          const k = localStorage.getItem('bridge_admin_key') || ''
+          const k = sessionStorage.getItem('bridge_admin_key') || ''
           await fetch(`${API}/api/admin/reset-blacklist`, { method: 'POST', headers: { 'x-admin-key': k } }).catch(() => {})
           setTimeout(() => window.location.reload(), 3000)
           return
         }
         setError('Invalid admin key.')
-        localStorage.removeItem('bridge_admin_key')
+        sessionStorage.removeItem('bridge_admin_key')
         return
       }
       const json = await res.json()

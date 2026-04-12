@@ -5,7 +5,7 @@ import { X, RefreshCw, FileText, Calendar } from 'lucide-react'
 import { API_URL } from '@/lib/api'
 
 function _key() {
-  return typeof window !== 'undefined' ? (localStorage.getItem('bridge_admin_key') || '') : ''
+  return typeof window !== 'undefined' ? (sessionStorage.getItem('bridge_admin_key') || '') : ''
 }
 function _h(): Record<string, string> {
   return { 'x-admin-key': _key() }

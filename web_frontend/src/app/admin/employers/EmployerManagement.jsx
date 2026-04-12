@@ -497,7 +497,7 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
     if(!candidateNumber){alert("후보자 시트번호가 없습니다.");return;}
     setResumeLoading(true);
     try{
-      const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+      const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
       const res=await fetch(`${API_BASE}/api/admin/resume/find/${candidateNumber}`,{headers:{"x-admin-key":adminKey}});
       if(res.ok){
         const d=await res.json();
@@ -528,7 +528,7 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
     setSending(true);setSendResult(null);
     const activeRef=activeEditor===1?editorRef:editorRef2;
     const html=activeRef.current?.innerHTML||"";
-    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
     const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
     let ok=0,fail=0;
     for(const r of allRecipientEmails.slice(0,99)){
@@ -793,7 +793,7 @@ const DocBlock=({item,onConfirm,onUpdate,onMove,searchQ,fontInfo,fontMemo,fontBo
   const[rvLoading,setRvLoading]=useState(false);
   const loadRvMatch=useCallback(async()=>{
     if(showRvMatch){setShowRvMatch(false);return;}
-    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
     const brjId=item.brjId||item.jNumber;
     if(!brjId||!adminKey)return;
     setRvLoading(true);
@@ -1491,7 +1491,7 @@ export default function EmployerManagement(){
     let cancelled=false;
     (async()=>{
       try{
-        const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+        const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
         if(!adminKey){if(!cancelled)setLoading(false);return;}
         const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
         const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
@@ -1510,7 +1510,7 @@ export default function EmployerManagement(){
   useEffect(()=>{
     const iv=setInterval(async()=>{
       try{
-        const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+        const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
         if(!adminKey)return;
         const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
         const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
@@ -1563,7 +1563,7 @@ export default function EmployerManagement(){
 
   // 후보자 목록 로드 (마운트 시)
   useEffect(()=>{
-    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
     if(!adminKey)return;
     fetch(`${API_BASE}/api/admin/candidates/brief`,{headers:{"Content-Type":"application/json","x-admin-key":adminKey}})
       .then(r=>r.json()).then(b=>{if(Array.isArray(b?.data))setCandidateList(b.data);}).catch(()=>{});
@@ -1572,7 +1572,7 @@ export default function EmployerManagement(){
   // 후보자 선택 시 매칭 점수 로드
   const selectCandidate=useCallback(async(candId)=>{
     if(!candId){setSelectedCandidate(null);setMatchScores({});return;}
-    const adminKey=(typeof window!=='undefined'?localStorage.getItem("bridge_admin_key"):"")||"";
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
     if(!adminKey)return;
     setLoadingMatch(true);
     try{
@@ -1644,7 +1644,7 @@ export default function EmployerManagement(){
     URL.revokeObjectURL(url);
   },[data]);
   const downloadXlsx=useCallback(async()=>{
-    const adminKey=localStorage.getItem("bridge_admin_key")||"";
+    const adminKey=sessionStorage.getItem("bridge_admin_key")||"";
     const hdrs={};if(adminKey)hdrs["x-admin-key"]=adminKey;
     try{
       const res=await fetch(`${API_BASE}/api/admin/jobs/download-xlsx?include_pii=true`,{headers:hdrs});
@@ -1659,7 +1659,7 @@ export default function EmployerManagement(){
     }catch(e){console.error("[employers] xlsx failed:",e);alert("엑셀 다운로드 실패: "+e.message);}
   },[]);
   const addNew=useCallback(async()=>{
-    const adminKey=localStorage.getItem("bridge_admin_key")||"";
+    const adminKey=sessionStorage.getItem("bridge_admin_key")||"";
     const hdrs={"Content-Type":"application/json"};
     if(adminKey)hdrs["x-admin-key"]=adminKey;
     try{
@@ -1681,7 +1681,7 @@ export default function EmployerManagement(){
       if(u.jNumber&&u.jNumber!==jn)next.jNumber=u.jNumber;
       // PATCH → employers 테이블 저장 (jNumber 기준)
       if(d.jNumber){
-        const adminKey=localStorage.getItem("bridge_admin_key")||"";
+        const adminKey=sessionStorage.getItem("bridge_admin_key")||"";
         const hdrs={"Content-Type":"application/json"};
         if(adminKey)hdrs["x-admin-key"]=adminKey;
         const dbBody={};for(const[k,v]of Object.entries(u)){if(_PATCH_MAP[k])dbBody[_PATCH_MAP[k]]=v;else dbBody[k]=v;}

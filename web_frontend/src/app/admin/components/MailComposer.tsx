@@ -434,7 +434,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     const nums = [...new Set(matches.map(m => m[1]))]
     if (nums.length === 0) { setAutoResumes([]); return }
     setAutoResumes(nums.map(num => ({ num, url: null, loading: true })))
-    const adminKey = typeof window !== 'undefined' ? (localStorage.getItem('bridge_admin_key') || '') : ''
+    const adminKey = typeof window !== 'undefined' ? (sessionStorage.getItem('bridge_admin_key') || '') : ''
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
     const results = await Promise.all(nums.map(async (num) => {
       try {
@@ -496,7 +496,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
         recipients: [...employerRecips, ...manualRecips],
         ...(autoAttachPaths.length > 0 ? { attachment_paths: autoAttachPaths } : {}),
       }
-      const adminKey = typeof window !== 'undefined' ? localStorage.getItem('bridge_admin_key') || '' : ''
+      const adminKey = typeof window !== 'undefined' ? sessionStorage.getItem('bridge_admin_key') || '' : ''
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
       const res = await fetch(`${apiUrl}/api/admin/mail/send`, {
         method: 'POST',

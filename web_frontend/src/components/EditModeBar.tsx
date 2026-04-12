@@ -55,7 +55,7 @@ export default function EditModeBar() {
   if (!editMode || !mounted) return null
 
   const openTalentView = async () => {
-    const adminKey = localStorage.getItem('bridge_admin_key') ?? ''
+    const adminKey = sessionStorage.getItem('bridge_admin_key') ?? ''
     if (!adminKey) { setTalentMsg('로그인 필요'); setTimeout(() => setTalentMsg(null), 2000); return }
     setTalentMsg('세션 생성 중...')
     try {
