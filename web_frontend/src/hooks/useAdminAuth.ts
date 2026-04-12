@@ -3,32 +3,30 @@
 import { useState, useCallback, useEffect } from 'react'
 import { API_URL } from '@/lib/api'
 
+// api_key는 HMAC 서명에 필요 → sessionStorage (탭 닫으면 소멸)
+// session_token은 HttpOnly 쿠키로 관리 → JS 접근 불가 (XSS 안전)
 const STORAGE_KEY = 'bridge_admin_key'
-const EXPIRY_KEY = 'bridge_admin_key_expiry'
-const SESSION_KEY = 'bridge_session_token'
-const KEY_TTL = 86400000 // 24시간 (ms)
-const MAX_WAKE_RETRIES = 20   // 20 × 3s = 60초 (Render cold start 대응)
-const WAKE_DELAY = 3000
+const EXPIRY_KEY  = 'bridge_admin_key_expiry'
+const KEY_TTL     = 86400000 // 24시간 (ms)
+const MAX_WAKE_RETRIES = 20  // 20 × 3s = 60초 (Render cold start 대응)
+const WAKE_DELAY  = 3000
 
-/** sessionStorage에서 admin key 동기 로드 (만료 체크 포함) */
+// 모든 fetch에 credentials: 'include' 추가 — 쿠키 자동 전송 (cross-origin Vercel→Render)
+const CREDS: RequestCredentials = 'include'
+
+/** sessionStorage에서 api_key 동기 로드 (만료 체크 포함) */
 function getStoredKey(): string {
   if (typeof window === 'undefined') return ''
-  const key = sessionStorage.getItem(STORAGE_KEY)
+  const key    = sessionStorage.getItem(STORAGE_KEY)
   const expiry = sessionStorage.getItem(EXPIRY_KEY)
   if (!key) return ''
   if (expiry && Date.now() > parseInt(expiry, 10)) {
     sessionStorage.removeItem(STORAGE_KEY)
     sessionStorage.removeItem(EXPIRY_KEY)
-    sessionStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
     return ''
   }
   return key
-}
-
-function getSessionToken(): string {
-  if (typeof window === 'undefined') return ''
-  return sessionStorage.getItem(SESSION_KEY) || ''
 }
 
 async function createHmacSignature(key: string, body: string): Promise<string> {
@@ -49,9 +47,10 @@ async function fetchWithWake(
   options?: RequestInit,
   onWaking?: (attempt: number) => void,
 ): Promise<Response> {
+  const opts: RequestInit = { ...options, credentials: CREDS }
   for (let attempt = 1; attempt <= MAX_WAKE_RETRIES; attempt++) {
     try {
-      const res = await fetch(url, options)
+      const res = await fetch(url, opts)
       return res
     } catch {
       if (attempt < MAX_WAKE_RETRIES) {
@@ -66,20 +65,18 @@ async function fetchWithWake(
 }
 
 export function useAdminAuth() {
-  // 동기 초기화: sessionStorage에서 즉시 로드 (useEffect 지연 제거)
   const [adminKey, setAdminKey] = useState<string>(getStoredKey)
-  const [authed, setAuthed] = useState<boolean>(() => !!getStoredKey())
-  const [waking, setWaking] = useState(false)
+  const [authed,   setAuthed]   = useState<boolean>(() => !!getStoredKey())
+  const [waking,   setWaking]   = useState(false)
   const [kakaoError, setKakaoError] = useState<string | null>(null)
 
-  // 카카오 OAuth 콜백 처리: URL에 kakao_otc 또는 kakao_error 파라미터 확인
+  // 카카오 OAuth 콜백 처리
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const otc = params.get('kakao_otc')
     const err = params.get('kakao_error')
 
-    // URL 파라미터 즉시 제거 (히스토리에 남지 않도록)
     if (otc || err) {
       window.history.replaceState({}, '', window.location.pathname)
     }
@@ -98,23 +95,19 @@ export function useAdminAuth() {
 
     if (!otc) return
 
-    // C2 패치: OTC → session_token 교환 후 /api/admin/key로 api_key 별도 요청
+    // OTC → 서버가 HttpOnly 쿠키 발급 + JSON에 session_token 반환
     fetch(`${API_URL}/api/admin/kakao/exchange`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: otc }),
+      method:      'POST',
+      credentials: CREDS,
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ code: otc }),
     })
       .then(r => r.json())
       .then(async json => {
-        const sessionToken = json?.data?.session_token
-        if (!sessionToken) {
-          setKakaoError('카카오 로그인 처리 중 오류가 발생했습니다.')
-          return
-        }
-        sessionStorage.setItem(SESSION_KEY, sessionToken)
-        // session_token으로 api_key 별도 요청
+        // 쿠키는 브라우저가 자동 저장 — session_token JSON 무시
+        // api_key만 별도 요청 (HMAC 서명용)
         const keyRes = await fetch(`${API_URL}/api/admin/key`, {
-          headers: { 'x-admin-token': sessionToken },
+          credentials: CREDS,
         })
         const keyJson = await keyRes.json()
         const key = keyJson?.data?.api_key
@@ -133,16 +126,16 @@ export function useAdminAuth() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** 비밀번호로 서버 로그인 → API 키 + 세션 토큰 저장 */
+  /** 비밀번호 로그인 → 서버가 HttpOnly 쿠키 발급 + api_key sessionStorage 저장 */
   const login = useCallback(async (password: string): Promise<string | null> => {
     setWaking(false)
     try {
       const res = await fetchWithWake(
         `${API_URL}/api/admin/login`,
         {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
+          body:    JSON.stringify({ password }),
         },
         () => setWaking(true),
       )
@@ -152,17 +145,12 @@ export function useAdminAuth() {
       if (res.status === 429) return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'
       if (!res.ok) return '서버 오류가 발생했습니다.'
 
-      // C2 패치: 로그인 응답에서 api_key 제거됨 → session_token만 수신
+      // 쿠키는 브라우저가 자동 저장 (HttpOnly) — JSON session_token 무시
       const json = await res.json()
-      const sessionToken = json?.data?.session_token
-      if (!sessionToken) return '서버 응답이 올바르지 않습니다.'
+      if (!json?.success) return '서버 응답이 올바르지 않습니다.'
 
-      sessionStorage.setItem(SESSION_KEY, sessionToken)
-
-      // session_token으로 /api/admin/key에서 api_key 별도 요청
-      const keyRes = await fetch(`${API_URL}/api/admin/key`, {
-        headers: { 'x-admin-token': sessionToken },
-      })
+      // api_key 별도 요청 (HMAC 서명용) — 쿠키로 인증
+      const keyRes = await fetch(`${API_URL}/api/admin/key`, { credentials: CREDS })
       if (!keyRes.ok) return 'API 키 로드 실패. 다시 로그인해주세요.'
       const keyJson = await keyRes.json()
       const key = keyJson?.data?.api_key
@@ -177,11 +165,12 @@ export function useAdminAuth() {
 
       // 로그인 성공 시 IP 블랙리스트 자동 초기화
       fetch(`${API_URL}/api/admin/reset-blacklist`, {
-        method: 'POST',
-        headers: { 'x-admin-key': key },
+        method:      'POST',
+        credentials: CREDS,
+        headers:     { 'x-admin-key': key },
       }).catch(() => {})
 
-      return null // 성공
+      return null
     } catch (e) {
       setWaking(false)
       return e instanceof Error ? e.message : '로그인 실패'
@@ -189,32 +178,26 @@ export function useAdminAuth() {
   }, [])
 
   const logout = useCallback(() => {
-    // 서버 세션 폐기 (fire-and-forget)
-    const token = getSessionToken()
     const key = getStoredKey()
-    if (token || key) {
-      const h: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (key) h['x-admin-key'] = key
-      if (token) h['x-admin-token'] = token
-      fetch(`${API_URL}/api/admin/logout`, { method: 'POST', headers: h }).catch(() => {})
-    }
+    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (key) h['x-admin-key'] = key
+    // 서버 세션 폐기 (쿠키 포함 전송 → 서버가 cookie + header token 모두 폐기)
+    fetch(`${API_URL}/api/admin/logout`, { method: 'POST', credentials: CREDS, headers: h }).catch(() => {})
     setAdminKey('')
     setAuthed(false)
     sessionStorage.removeItem(STORAGE_KEY)
     sessionStorage.removeItem(EXPIRY_KEY)
-    sessionStorage.removeItem(SESSION_KEY)
     document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
   }, [])
 
+  /** 요청 헤더 생성 — api_key(HMAC용)만 포함. session은 쿠키로 자동 전송. */
   const headers = useCallback((): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
-    const st = getSessionToken()
-    if (st) h['x-admin-token'] = st
     return h
   }, [adminKey])
 
-  /** HMAC 서명 + 세션 토큰 포함 fetch — POST/PUT/PATCH/DELETE 시 자동 서명 + Render wake-up */
+  /** HMAC 서명 + 쿠키 인증 fetch */
   const signedFetch = useCallback(async (
     url: string,
     options?: RequestInit,
@@ -224,8 +207,6 @@ export function useAdminAuth() {
     const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
     const h: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
-    const st = getSessionToken()
-    if (st) h['x-admin-token'] = st
 
     if (method !== 'GET' && method !== 'HEAD' && adminKey) {
       const bodyStr = typeof options?.body === 'string' ? options.body : ''
@@ -248,8 +229,6 @@ export function useAdminAuth() {
   ): Promise<Response> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
     if (adminKey) h['x-admin-key'] = adminKey
-    const st = getSessionToken()
-    if (st) h['x-admin-token'] = st
     const res = await fetchWithWake(
       url,
       { ...options, headers: { ...h, ...(options?.headers as Record<string, string> ?? {}) } },
@@ -259,7 +238,7 @@ export function useAdminAuth() {
       const body = await res.clone().json().catch(() => ({}))
       if (body.error && (body.error.includes('Access denied') || body.error.includes('access denied'))) {
         await fetch(`${API_URL}/api/admin/reset-blacklist`, {
-          method: 'POST', headers: { 'x-admin-key': adminKey },
+          method: 'POST', credentials: CREDS, headers: { 'x-admin-key': adminKey },
         }).catch(() => {})
         return fetchWithWake(
           url,

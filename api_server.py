@@ -494,9 +494,9 @@ app.add_middleware(PIIMaskingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,
+    allow_credentials=True,   # HttpOnly 쿠키 cross-origin 전송 허용 (SameSite=None)
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature", "Cookie"],
 )
 
 # GZip 압축 — 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
@@ -2183,8 +2183,11 @@ def _create_session(request: Request) -> str:
     return token
 
 def _validate_session(request: Request) -> bool:
-    """X-Admin-Token 헤더의 세션 토큰 검증. 유효하면 True."""
-    token = request.headers.get("x-admin-token", "").strip()
+    """세션 토큰 검증 — HttpOnly 쿠키 우선, 헤더 폴백. 유효하면 True."""
+    token = (
+        request.cookies.get("bridge_session", "")          # HttpOnly 쿠키 (XSS 안전)
+        or request.headers.get("x-admin-token", "")        # 헤더 폴백 (하위 호환)
+    ).strip()
     if not token:
         return False
     now = time.time()
@@ -2515,8 +2518,14 @@ async def admin_login(request: Request):
     # 세션 토큰 발급 (IP /24 서브넷 바인딩, 8시간 만료)
     session_token = _create_session(request)
     _log.info("관리자 로그인 성공: ip=%s subnet=%s", real_ip[:12] + "***", _ip_subnet24(real_ip))
-    # C2 보안 패치: api_key 응답에서 제거 — 클라이언트는 /api/admin/key로 별도 요청
-    return ok(data={"session_token": session_token}, message="로그인 성공")
+    # HttpOnly 쿠키 설정 — XSS로 탈취 불가 (SameSite=None for cross-origin Vercel→Render)
+    cookie = (
+        f"bridge_session={session_token}; HttpOnly; Secure; "
+        f"SameSite=None; Path=/; Max-Age={_SESSION_TTL}"
+    )
+    response = JSONResponse(content=ok(data={"session_token": session_token}, message="로그인 성공"))
+    response.headers["Set-Cookie"] = cookie
+    return response
 
 
 @app.get("/api/admin/key", tags=["admin"])
@@ -2528,11 +2537,19 @@ async def get_admin_key(request: Request):
 
 @app.post("/api/admin/logout", tags=["admin"])
 async def admin_logout(request: Request):
-    """세션 토큰 폐기 (로그아웃)."""
-    token = request.headers.get("x-admin-token", "").strip()
-    if token:
-        _revoke_session(token)
-    return ok(message="로그아웃 완료")
+    """세션 토큰 폐기 (로그아웃) — 쿠키 + 헤더 토큰 모두 폐기."""
+    # 쿠키 토큰
+    cookie_token = request.cookies.get("bridge_session", "").strip()
+    if cookie_token:
+        _revoke_session(cookie_token)
+    # 헤더 토큰 (하위 호환)
+    header_token = request.headers.get("x-admin-token", "").strip()
+    if header_token and header_token != cookie_token:
+        _revoke_session(header_token)
+    # 쿠키 삭제
+    response = JSONResponse(content=ok(message="로그아웃 완료"))
+    response.headers["Set-Cookie"] = "bridge_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0"
+    return response
 
 
 @app.get("/api/admin/sessions", tags=["admin"])
@@ -11749,7 +11766,13 @@ async def kakao_exchange(request: Request):
     if datetime.now(timezone.utc).timestamp() > entry["expires_at"]:
         raise HTTPException(401, "코드가 만료되었습니다 (60초 초과).")
     session_token = _create_session(request)
-    return ok(data={"session_token": session_token})
+    cookie = (
+        f"bridge_session={session_token}; HttpOnly; Secure; "
+        f"SameSite=None; Path=/; Max-Age={_SESSION_TTL}"
+    )
+    response = JSONResponse(content=ok(data={"session_token": session_token}))
+    response.headers["Set-Cookie"] = cookie
+    return response
 
 
 # ── 통합 수신함 + Gmail 라우터 등록 ──────────────────────────────────────────
