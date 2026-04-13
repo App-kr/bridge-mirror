@@ -1,12 +1,9 @@
 {
-  "last_updated": "2026-04-13 21:31:33",
-  "last_tool": "Bash",
-  "last_command": "start chrome.exe --user-data-dir=\"%LOCALAPPDATA%\\Google\\Chrome\\User Data\\CraigslistAirelair\" \"https://accounts.craigslist.org/login/home\"",
+  "last_updated": "2026-04-13 21:58:31",
+  "last_tool": "Edit",
+  "last_command": "Edit: Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
   "git_head": "476c29b",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\api\\claude_handler.py",
-    "Q:\\Claudework\\bridge base\\CLAUDE.md",
-    "Q:\\Claudework\\bridge base\\rpa_overlay.py",
     "Q:\\Claudework\\hooks\\git_restore.ps1",
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
     "Q:\\Claudework\\EMERGENCY_RESTORE.bat",
@@ -23,7 +20,10 @@
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx"
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\next.config.ts",
+    "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.vbs",
+    "Q:\\Claudework\\matjokdo_safe\\setup_autostart.ps1"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
