@@ -39,32 +39,37 @@ from security_vault import t3_encrypt, is_t3_encrypted as is_encrypted
 DB_PATH = BASE / "master.db"
 
 # ── 암호화 대상 필드 ─────────────────────────────────────────────────────────
-# 검색/이메일 발송에 쓰이는 name/email/phone은 평문 유지
+# ⚠️ full_name / email / mobile_phone 은 검색·메일 발송에 사용 → 평문 유지
+# api_server.py _CANDIDATE_ENCRYPT 와 동기화 (v3, 2026-04-13)
 CANDIDATE_FIELDS = [
-    # 기존 (v1)
+    # ── 메신저/연락 (검색 불필요) ──
+    "kakaotalk",              # v2에서 kakao_id(오타) → 올바른 DB 컬럼명
+    # ── 신원/법적 ──
+    "passport",               # v2에서 passport_number(오타) → 올바른 DB 컬럼명
+    "criminal_record",        # v3 추가
+    "criminal_record_check",  # v3 추가
+    "korean_criminal_record",
+    # ── 민감 정보 ──
+    "religion",               # v3 추가
+    "health_info",            # v3 추가
+    "gender",
+    # ── 준식별자 (단독 무해, 조합 시 재식별) ──
     "dob",
     "nationality",
     "current_location",
     "reference",
-    "korean_criminal_record",
-    # 추가 (v2) — 검색 대상 아닌 민감 PII
-    "kakao_id",
-    "passport_number",
-    "home_country",
-    "emergency_contact",
-    "gender",
 ]
 
 INQUIRY_FIELDS = [
-    # 기존 (v1)
-    "school_location",
-    "memo",
-    # 추가 (v2)
+    # ── 식별자 ──
     "contact_name",
-    "business_registration",
-    # 추가 (v3) — 직접 식별자 (api_server.py _PII_FIELDS와 동기화)
     "email",
     "phone",
+    # ── 위치/기관 ──
+    "school_name",            # v2에서 school_location(오타) → 올바른 DB 컬럼명
+    "location",               # v3 추가
+    # ── 메모 ──
+    "memo",
 ]
 
 def p(msg=""):
@@ -77,12 +82,17 @@ def cv(v):
     return s if s and s not in ("None", "nan", "") else None
 
 
-def run_migration():
+def run_migration(dry_run=False):
+    mode_label = "[DRY-RUN] " if dry_run else ""
+
     # PRE 백업
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = str(DB_PATH) + f".backup_encrypt_migrate_{ts}"
-    shutil.copy2(str(DB_PATH), backup_path)
-    p(f"백업 생성: {backup_path}")
+    if not dry_run:
+        shutil.copy2(str(DB_PATH), backup_path)
+        p(f"백업 생성: {backup_path}")
+    else:
+        p(f"{mode_label}백업 스킵 (dry-run)")
 
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute("PRAGMA busy_timeout = 10000")
@@ -125,11 +135,12 @@ def run_migration():
             updates.append(f"{field} = ?")
             params.append(enc)
             cand_stats[field]["encrypted"] += 1
-        if updates:
+        if updates and not dry_run:
             params.append(cid)
             cur.execute(f"UPDATE candidates SET {', '.join(updates)} WHERE candidate_id = ?", params)
 
-    conn.commit()
+    if not dry_run:
+        conn.commit()
 
     p()
     p("  결과:")
@@ -172,11 +183,12 @@ def run_migration():
             updates.append(f"{field} = ?")
             params.append(enc)
             inq_stats[field]["encrypted"] += 1
-        if updates:
+        if updates and not dry_run:
             params.append(rid)
             cur.execute(f"UPDATE client_inquiries SET {', '.join(updates)} WHERE id = ?", params)
 
-    conn.commit()
+    if not dry_run:
+        conn.commit()
 
     p()
     p("  결과:")
@@ -201,13 +213,19 @@ def run_migration():
     assert ic == "ok", f"DB 손상! {ic}"
     assert c >= 3000, f"candidates 이상: {c}"
 
+    if dry_run:
+        p()
+        p(f"{mode_label}DB 변경 없음. 위 수치는 실행 시 암호화될 건수입니다.")
+        conn.close()
+        return
+
     # 체크섬 기록
     chk = hashlib.sha256(Path(DB_PATH).read_bytes()).hexdigest()
     with open(BASE / "tasks" / "db_checksum.log", "a") as f:
         f.write(f"{datetime.datetime.now().isoformat()} ENCRYPT-MIGRATE {chk}\n")
 
     p()
-    p(f"✅ 마이그레이션 완료. POST 체크섬: {chk[:16]}...")
+    p(f"마이그레이션 완료. POST 체크섬: {chk[:16]}...")
     p(f"   백업: {backup_path}")
 
 
@@ -215,4 +233,5 @@ if __name__ == "__main__":
     if not os.getenv("BRIDGE_FIELD_KEY"):
         print("[CRITICAL] BRIDGE_FIELD_KEY 환경변수 없음 — .env 확인 후 재실행")
         sys.exit(1)
-    run_migration()
+    is_dry = "--dry-run" in sys.argv or "--dry" in sys.argv
+    run_migration(dry_run=is_dry)
