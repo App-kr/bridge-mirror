@@ -4613,6 +4613,17 @@ def _ensure_candidates_all_cols():
         ("is_deleted", "INTEGER", "0"),
         ("read_at", "TEXT", "NULL"),
         ("photo_s3_key", "TEXT", "NULL"),
+        # v3 추가 — _COLS SELECT에 포함, 없으면 500
+        ("recruiter_memo", "TEXT", "NULL"),
+        ("passport_status", "TEXT", "NULL"),
+        ("criminal_record_check", "TEXT", "NULL"),
+        ("doc_status", "TEXT", "NULL"),
+        ("how_to", "TEXT", "NULL"),
+        ("tattoo", "TEXT", "NULL"),
+        ("visa_type", "TEXT", "NULL"),
+        ("gender", "TEXT", "NULL"),
+        ("religion", "TEXT", "NULL"),
+        ("health_info", "TEXT", "NULL"),
     ]
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
