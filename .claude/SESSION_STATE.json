@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-13 19:59:23",
+  "last_updated": "2026-04-13 20:00:26",
   "last_tool": "Bash",
-  "last_command": "sleep 30 && tail -15 \"Q:\\Claudework\\matjokdo_safe\\logs\\matjokdo.log\"",
+  "last_command": "sleep 60 && tail -15 \"Q:\\Claudework\\matjokdo_safe\\logs\\matjokdo.log\"",
   "git_head": "476c29b",
   "modified_files": [
     "Q:\\Claudework\\bridge base\\.claude\\hooks\\bridge_guard.py",
@@ -75,7 +75,6 @@
     "matjokdo_safe/.chrome_matjokdo_profile/Default/GCM Store/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/GPUCache/data_1",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/History",
-    "matjokdo_safe/.chrome_matjokdo_profile/Default/History-journal",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/LOG",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/MANIFEST-000001",
