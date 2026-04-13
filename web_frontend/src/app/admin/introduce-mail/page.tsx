@@ -9,7 +9,8 @@
  *   GET  /api/admin/mail/introduce-log   — 발송 이력
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { API_URL } from '@/lib/api'
@@ -51,15 +52,23 @@ interface SendResult {
 export default function IntroduceMailPage() {
   const { authed, login, waking } = useAdminAuth()
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
-  return <IntroduceMailContent />
+  return (
+    <Suspense fallback={null}>
+      <IntroduceMailContent />
+    </Suspense>
+  )
 }
 
 /* ── 메인 콘텐츠 ── */
 function IntroduceMailContent() {
   const { adminFetch } = useAdminAuth()
+  const searchParams = useSearchParams()
 
-  /* ── 강사 입력 ── */
-  const [candidateInput, setCandidateInput] = useState('')
+  /* ── 강사 입력 (URL query string 자동 주입) ── */
+  const [candidateInput, setCandidateInput] = useState(() => {
+    const c = searchParams.get('candidates')
+    return c ? c.replace(/,/g, '\n') : ''
+  })
 
   /* ── 구인자 ── */
   const [employers, setEmployers] = useState<Employer[]>([])
@@ -81,11 +90,44 @@ function IntroduceMailContent() {
   const [logs, setLogs] = useState<SendLog[]>([])
   const [loadingLog, setLoadingLog] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [loadingPreview, setLoadingPreview] = useState(false)
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3500)
   }
+
+  /* ── 강사 번호 파싱 (preview에서도 사용) ── */
+  function parseCandidateNums(raw: string): string[] {
+    return raw.split(/[\n,\s]+/).map(s => s.trim()).filter(s => s && /^\d+$/.test(s))
+  }
+
+  /* ── 메일 미리보기 ── */
+  const loadPreview = useCallback(async () => {
+    const ids = parseCandidateNums(candidateInput)
+    if (ids.length === 0) { showToast('강사 번호를 먼저 입력하세요.', false); return }
+    setLoadingPreview(true)
+    setShowPreview(true)
+    try {
+      const res = await adminFetch(`${API_URL}/api/admin/mail/introduce-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_ids: ids,
+          custom_message: customMsg.trim(),
+          link_expiry_days: expiryDays,
+        }),
+      })
+      const data = await res.json()
+      setPreviewHtml(data.data?.html || '<p style="color:#999">미리보기를 생성할 수 없습니다.</p>')
+    } catch {
+      setPreviewHtml('<p style="color:#dc2626">미리보기 로드 실패 — 강사 번호 확인 후 재시도</p>')
+    } finally {
+      setLoadingPreview(false)
+    }
+  }, [adminFetch, candidateInput, customMsg, expiryDays])
 
   /* ── 구인자 불러오기 ── */
   const loadEmployers = useCallback(async () => {
@@ -362,6 +404,22 @@ function IntroduceMailContent() {
             </div>
           </div>
 
+          {/* 미리보기 버튼 */}
+          <button
+            onClick={loadPreview}
+            disabled={loadingPreview || candidateIds.length === 0}
+            style={{
+              width: '100%', padding: '9px 0', marginBottom: 8,
+              background: '#fff', color: '#0ea5e9',
+              border: '1.5px solid #0ea5e9', borderRadius: 8,
+              fontWeight: 700, fontSize: 13, cursor: 'pointer',
+              opacity: (loadingPreview || candidateIds.length === 0) ? 0.45 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          >
+            {loadingPreview ? '미리보기 생성 중...' : '메일 미리보기'}
+          </button>
+
           {/* 발송 버튼 */}
           <button
             onClick={handleSend}
@@ -407,6 +465,35 @@ function IntroduceMailContent() {
           )}
         </div>
       </div>
+
+      {/* ── 메일 미리보기 패널 ── */}
+      {showPreview && (
+        <div style={{ ...CARD, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <PanelTitle>메일 미리보기</PanelTitle>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={loadPreview} disabled={loadingPreview} style={BTN_SM}>
+                {loadingPreview ? '생성 중...' : '새로고침'}
+              </button>
+              <button onClick={() => setShowPreview(false)} style={{ ...BTN_SM, color: '#9CA3AF' }}>닫기</button>
+            </div>
+          </div>
+          {loadingPreview ? (
+            <div style={{ padding: '40px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+              강사 프로필 블록 생성 중...
+            </div>
+          ) : (
+            <div
+              style={{
+                border: '1px solid #E5E7EB', borderRadius: 8,
+                padding: '20px 24px', background: '#FAFAFA',
+                maxHeight: 480, overflowY: 'auto',
+              }}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── 발송 이력 ── */}
       <div style={CARD}>

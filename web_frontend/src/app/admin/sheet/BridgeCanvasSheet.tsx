@@ -1581,6 +1581,19 @@ export default function BridgeCanvasSheet() {
               }}
               style={{ padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #cbd5e1', cursor: 'pointer', background: '#fff', color: '#1e293b' }}
             >학교 인터뷰</button>
+            <button
+              onClick={() => {
+                const nums = [...selectedRows]
+                  .map(i => displayRowsRef.current[i])
+                  .filter(Boolean)
+                  .map(r => r.sheet_number)
+                  .filter(n => n != null && String(n).trim() !== '')
+                  .map(n => String(n))
+                if (nums.length === 0) { alert('sheet_number가 있는 행을 선택하세요.'); return }
+                window.open(`/admin/introduce-mail?candidates=${encodeURIComponent(nums.join(','))}`, '_blank')
+              }}
+              style={{ padding: '5px 14px', fontSize: 13, fontWeight: 600, borderRadius: 6, border: '1px solid #0ea5e9', cursor: 'pointer', background: '#0ea5e9', color: '#fff' }}
+            >소개발송</button>
           </div>
         )}
 

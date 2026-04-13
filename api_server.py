@@ -10877,10 +10877,10 @@ async def employers_for_mail(
         for r in rows:
             result.append({
                 "id":           r["id"],
-                "school_name":  r["school_name"] or "",
-                "location":     r["location"] or "",
-                "contact_name": r["contact_name"] or "",
-                "email":        r["email"] or "",
+                "school_name":  decrypt_field(r["school_name"] or "", "school_name"),
+                "location":     decrypt_field(r["location"] or "", "location"),
+                "contact_name": decrypt_field(r["contact_name"] or "", "contact_name"),
+                "email":        decrypt_field(r["email"] or "", "email"),
                 "teaching_age": r["teaching_age"] or "",
                 "start_date":   r["start_date"] or "",
                 "salary_raw":   r["salary_raw"] or "",
@@ -11046,9 +11046,9 @@ async def mail_introduce(request: Request):
         errors: list = []
 
         for emp in emp_rows:
-            emp_email   = (emp["email"] or "").strip()
-            emp_name    = emp["school_name"] or emp["contact_name"] or ""
-            emp_contact = emp["contact_name"] or ""
+            emp_email   = decrypt_field((emp["email"] or "").strip(), "email")
+            emp_name    = decrypt_field(emp["school_name"] or emp["contact_name"] or "", "school_name")
+            emp_contact = decrypt_field(emp["contact_name"] or "", "contact_name")
 
             if not emp_email or _is_email_blacklisted(emp_email):
                 failed += 1
@@ -11119,6 +11119,56 @@ Additionally, let us know if any contact should be removed due to a change in ma
                          "candidate_count": len(cand_rows), "errors": errors[:10]})
     finally:
         conn.close()
+
+
+@app.post("/api/admin/mail/introduce-preview", tags=["admin"])
+async def mail_introduce_preview(request: Request):
+    """소개 메일 HTML 미리보기 (발송 없음)."""
+    _check_admin(request)
+    data = await request.json()
+    candidate_ids = data.get("candidate_ids", [])
+    custom_msg    = data.get("custom_message", "").strip()
+    expiry_days   = int(data.get("link_expiry_days", 10))
+
+    if not candidate_ids:
+        raise HTTPException(400, "candidate_ids 필수")
+
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.row_factory = sqlite3.Row
+    try:
+        placeholders = ",".join(["?"] * len(candidate_ids))
+        cand_rows = conn.execute(
+            f"""SELECT c.sheet_number, c.nationality_plain, c.nationality, c.gender,
+                c.current_location, c.start_date, c.target_age, c.target,
+                c.experience, c.korea_experience, c.area_prefs, c.housing,
+                c.talent_summary, c.talent_reference_star, c.cv_processed_s3_key,
+                (SELECT fu.s3_key FROM file_uploads fu
+                 WHERE fu.entity_id = c.candidate_id
+                   AND fu.file_type IN ('cv','cover_letter','cv_processed')
+                   AND fu.is_deleted = 0 AND fu.s3_key IS NOT NULL AND fu.s3_key != ''
+                 ORDER BY fu.id DESC LIMIT 1) AS fallback_cv_s3_key
+                FROM candidates c WHERE c.sheet_number IN ({placeholders}) AND c.is_deleted=0""",
+            [str(c) for c in candidate_ids],
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not cand_rows:
+        raise HTTPException(404, "조회된 강사 없음")
+
+    teacher_blocks = "".join(_build_teacher_html_block(dict(r), expiry_days) for r in cand_rows)
+    custom_block = f"<p>{custom_msg}</p>" if custom_msg else ""
+    html = f"""<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto">
+<p>안녕하세요, <strong>(구인자명)</strong> 담당자님.</p>
+<p>BRIDGE 원어민 강사 프로필을 공유드립니다.</p>
+{custom_block}
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
+{teacher_blocks}
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
+<p style="font-size:11px;color:#bbb">BRIDGE Recruitment&nbsp;|&nbsp;bridgejob.co.kr</p>
+</div>"""
+    return ok(data={"html": html, "candidate_count": len(cand_rows)})
 
 
 @app.get("/api/admin/mail/introduce-log", tags=["admin"])
