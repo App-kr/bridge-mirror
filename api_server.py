@@ -2698,10 +2698,13 @@ async def admin_dashboard(request: Request):
     conn.row_factory = sqlite3.Row
     try:
         # 게시글 수
-        r = conn.execute(
-            "SELECT COUNT(*) AS n FROM community_posts WHERE is_deleted=0"
-        ).fetchone()
-        stats["posts"] = r["n"] if r else 0
+        try:
+            r = conn.execute(
+                "SELECT COUNT(*) AS n FROM community_posts WHERE is_deleted=0"
+            ).fetchone()
+            stats["posts"] = r["n"] if r else 0
+        except Exception:
+            stats["posts"] = 0
 
         # 예정 인터뷰
         try:
@@ -2722,13 +2725,16 @@ async def admin_dashboard(request: Request):
             stats["ad_posts"] = 0
 
         # 최근 활동 피드: 게시글 최신 5건
-        recent_posts = conn.execute(
-            """SELECT id, board, title, created_at, 'post' AS type
-               FROM community_posts WHERE is_deleted=0
-               ORDER BY created_at DESC LIMIT 5"""
-        ).fetchall()
-        for rp in recent_posts:
-            recent_activity.append(dict(rp))
+        try:
+            recent_posts = conn.execute(
+                """SELECT id, board, title, created_at, 'post' AS type
+                   FROM community_posts WHERE is_deleted=0
+                   ORDER BY created_at DESC LIMIT 5"""
+            ).fetchall()
+            for rp in recent_posts:
+                recent_activity.append(dict(rp))
+        except Exception:
+            pass
 
         # 최근 활동 피드: 인터뷰 최신 5건
         try:
