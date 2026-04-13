@@ -1,10 +1,9 @@
 {
-  "last_updated": "2026-04-13 21:58:31",
-  "last_tool": "Edit",
-  "last_command": "Edit: Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
+  "last_updated": "2026-04-13 22:17:52",
+  "last_tool": "Bash",
+  "last_command": "\"Q:\\Phtyon 3\\python.exe\" -c \"\nimport ast, sys\nfor f in ['Q:/Claudework/matjokdo_safe/dashboard/app.py', 'Q:/Claudework/matjokdo_safe/main.py']:\n    try:\n        with open(f, encoding='utf-8') as fh:\n ",
   "git_head": "476c29b",
   "modified_files": [
-    "Q:\\Claudework\\hooks\\git_restore.ps1",
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
     "Q:\\Claudework\\EMERGENCY_RESTORE.bat",
     "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
@@ -23,7 +22,8 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\next.config.ts",
     "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.vbs",
-    "Q:\\Claudework\\matjokdo_safe\\setup_autostart.ps1"
+    "Q:\\Claudework\\matjokdo_safe\\setup_autostart.ps1",
+    "Q:\\Claudework\\matjokdo_safe\\main.py"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
