@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-13 23:34:10",
+  "last_updated": "2026-04-14 00:32:50",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:\\Claudework\\bridge base\" && git add api_server.py && git commit -m \"$(cat <<'EOF'\nfix: candidates 동적 SELECT + settings 방어 코딩\n\n- admin_candidates: PRAGMA table_info로 존재 컬럼만 SELECT (Render DB 컬럼 누",
+  "last_command": "sleep 90\ntail -25 \"Q:/Claudework/matjokdo_safe/logs/worker_stdout.log\"",
   "git_head": "476c29b",
   "modified_files": [
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
@@ -43,7 +43,6 @@
     "bridge base_backup",
     "craigslist_auto_rpa.py",
     "hooks/git_restore.ps1",
-    "matjokdo_safe/.chrome_matjokdo_profile/BrowserMetrics-spare.pma",
     "matjokdo_safe/.chrome_matjokdo_profile/BrowserMetrics/BrowserMetrics-69DAE312-490C.pma",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/LICENSE",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/_metadata/verified_contents.json",
@@ -76,6 +75,7 @@
     "matjokdo_safe/.chrome_matjokdo_profile/Default/GCM Store/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/GPUCache/data_1",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/History",
+    "matjokdo_safe/.chrome_matjokdo_profile/Default/History-journal",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/LOG",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Local Storage/leveldb/MANIFEST-000001",
@@ -118,6 +118,7 @@
     "matjokdo_safe/.chrome_matjokdo_profile/ShaderCache/data_1",
     "matjokdo_safe/.chrome_matjokdo_profile/ShaderCache/data_2",
     "matjokdo_safe/.chrome_matjokdo_profile/Variations",
+    "matjokdo_safe/.chrome_matjokdo_profile/component_crx_cache/343661ad8e5cc24d6778db0d0b048b929332b6df902b6ec6d465e8dd69da0eec",
     "matjokdo_safe/.chrome_matjokdo_profile/component_crx_cache/724c90aa8250f7c3f0fb53159a4eda356ab24255ca8de247251056bfde6995c9",
     "matjokdo_safe/.chrome_matjokdo_profile/component_crx_cache/metadata.json",
     "matjokdo_safe/.chrome_matjokdo_profile/segmentation_platform/ukm_db",
