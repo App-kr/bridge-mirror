@@ -21,6 +21,7 @@ import { HistoryManager } from './engine/HistoryManager'
 import MailModal from './MailModal'
 import type { ColDef, DataRow, TabKey, CategoryKey, GridCallbacks, CellStyle } from './engine/types'
 import { defaultCols, STAGES, TABS, MTAGS } from './engine/types'
+import * as XLSX from 'xlsx'
 
 /* ── Types ── */
 interface DataStore { active: DataRow[]; past: DataRow[]; blacklist: DataRow[] }
@@ -1138,25 +1139,47 @@ export default function BridgeCanvasSheet() {
     setDbAll(prev => [...prev, newRow])
   }, [pushHistory, tab])
 
-  /* ── CSV Export ── */
-  const exportFile = useCallback(async (format: 'csv' | 'xlsx') => {
+  /* ── Client-side Export (현재 보기 기준: 필터·정렬·컬럼순서 반영) ── */
+  const exportClientSide = useCallback((format: 'csv' | 'xlsx') => {
     try {
-      const res = await fetch(`${API}/api/admin/candidates/export?format=${format}`, {
-        headers: hdrsRef.current(),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const blob = await res.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `bridge_candidates_${new Date().toISOString().slice(0, 10)}.${format}`
-      a.click()
+      // photo/idx 컬럼 제외, 현재 표시 중인 컬럼만, 순서대로
+      const exportCols = cols.filter(c => c.v !== false && c.key !== 'idx' && c.key !== 'photo' && c.key !== 'mail')
+      const headers = exportCols.map(c => c.label)
+      const rowData = displayRowsRef.current.map(row =>
+        exportCols.map(c => {
+          const v = row[c.key]
+          return v == null ? '' : String(v)
+        })
+      )
+      const today = new Date().toISOString().slice(0, 10)
+      const filterCount = Object.keys(filters).length
+      const suffix = filterCount > 0 ? `_필터${filterCount}` : ''
+      const filename = `bridge_${today}${suffix}`
+
+      if (format === 'csv') {
+        const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
+        const lines = [headers, ...rowData].map(r => r.map(escape).join(','))
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `${filename}.csv`
+        a.click()
+        URL.revokeObjectURL(a.href)
+      } else {
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rowData])
+        // 컬럼 너비 자동 설정 (최대 40자)
+        ws['!cols'] = exportCols.map(c => ({ wch: Math.min(40, Math.max(10, c.label.length + 4)) }))
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Candidates')
+        XLSX.writeFile(wb, `${filename}.xlsx`)
+      }
     } catch (e) {
       console.error('Export failed:', e)
       alert('내보내기에 실패했습니다.')
     }
-  }, [])
-  const exportCsv = useCallback(() => exportFile('csv'), [exportFile])
-  const exportXlsx = useCallback(() => exportFile('xlsx'), [exportFile])
+  }, [cols, filters])
+  const exportCsv = useCallback(() => exportClientSide('csv'), [exportClientSide])
+  const exportXlsx = useCallback(() => exportClientSide('xlsx'), [exportClientSide])
 
   /* ── Delete rows ── */
   const deleteRows = useCallback(async (rowIndices: Set<number>) => {
@@ -1563,8 +1586,16 @@ export default function BridgeCanvasSheet() {
 
         <button onClick={() => setFrozenCols(p => p === 0 ? 3 : 0)} style={tbBtn}>{frozenCols > 0 ? '🔒 고정' : '🔓 해제'}</button>
         <button onClick={fullReload} style={tbBtn}>↻ DB동기화</button>
-        <button onClick={exportCsv} style={tbBtn}>↓CSV</button>
-        <button onClick={exportXlsx} style={tbBtn}>↓Excel</button>
+        <button
+          onClick={exportCsv}
+          style={tbBtn}
+          title={`현재 보기 ${displayRowsRef.current.length}건 CSV 내보내기`}
+        >↓CSV</button>
+        <button
+          onClick={exportXlsx}
+          style={tbBtn}
+          title={`현재 보기 ${displayRowsRef.current.length}건 Excel 내보내기`}
+        >↓Excel</button>
         <button onClick={addNewRow} style={{ ...tbBtn, background: '#2563eb', color: '#fff', borderColor: '#2563eb' }}>+새후보자</button>
         {hiddenCount > 0 && (
           <button onClick={showAllCols} style={{ ...tbBtn, borderColor: '#06b6d4', color: '#0e7490' }}>숨긴{hiddenCount}열</button>
