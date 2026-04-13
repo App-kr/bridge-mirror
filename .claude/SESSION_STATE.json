@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-13 22:48:38",
+  "last_updated": "2026-04-13 23:34:10",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:\\Claudework\\bridge base\" && git add api_server.py && git commit -m \"$(cat <<'EOF'\nfix: dashboard 완전 방어 — 모든 쿼리 try/except + _ensure_candidates_all_cols 직접 호출\n\n- conn1(community_posts/interviews/",
+  "last_command": "cd \"Q:\\Claudework\\bridge base\" && git add api_server.py && git commit -m \"$(cat <<'EOF'\nfix: candidates 동적 SELECT + settings 방어 코딩\n\n- admin_candidates: PRAGMA table_info로 존재 컬럼만 SELECT (Render DB 컬럼 누",
   "git_head": "476c29b",
   "modified_files": [
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
