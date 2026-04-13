@@ -224,6 +224,7 @@ export default function BridgeCanvasSheet() {
   // Filter popup
   const [filterPopup, setFilterPopup] = useState<FilterPopup | null>(null)
   const [filters, setFilters] = useState<Record<string, Set<string>>>({})
+  const [filterSearch, setFilterSearch] = useState('')
 
   // Header context menu
   const [headerMenu, setHeaderMenu] = useState<HeaderMenu | null>(null)
@@ -973,6 +974,7 @@ export default function BridgeCanvasSheet() {
       // Will be called from toolbar
     },
     onFilterClick: (colKey: string, x: number, y: number) => {
+      setFilterSearch('')
       setFilterPopup(prev => prev?.colKey === colKey ? null : { colKey, x, y })
     },
     onHeaderContextMenu: (e: MouseEvent, colKey: string) => {
@@ -1002,7 +1004,7 @@ export default function BridgeCanvasSheet() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
-  /* ── Sync data/cols/sort/rowHeight to engine ── */
+  /* ── Sync data/cols/sort/rowHeight/filters to engine ── */
   useEffect(() => {
     const e = engineRef.current
     if (!e) return
@@ -1012,7 +1014,8 @@ export default function BridgeCanvasSheet() {
     e.setSort(sortKey, sortDir)
     e.setRowHeight(rowHeight)
     e.setRowHeights(rowHeights)
-  }, [displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights])
+    e.setActiveFilters(filters)
+  }, [displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights, filters])
 
   /* ── Context menu ── */
   const ctxAction = useCallback((action: string) => {
@@ -1504,6 +1507,18 @@ export default function BridgeCanvasSheet() {
         {lastSync && !fetchError && <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}> · {lastSync}</span>}
         {newCount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}> · 신규 {newCount}</span>}
 
+        {/* 활성 필터 배지 */}
+        {Object.keys(filters).length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 6, fontSize: 12 }}>
+            <span style={{ color: '#2563eb', fontWeight: 700 }}>필터 {Object.keys(filters).length}개 적용</span>
+            <span
+              onClick={() => setFilters({})}
+              style={{ color: '#2563eb', cursor: 'pointer', fontWeight: 700, marginLeft: 2 }}
+              title="전체 필터 초기화"
+            >×</span>
+          </span>
+        )}
+
         <div style={{ flex: 1 }} />
 
         {selectedRows.size > 0 && (
@@ -1863,46 +1878,94 @@ export default function BridgeCanvasSheet() {
       )}
 
       {/* ── Filter Popup ── */}
-      {filterPopup && (
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'fixed', left: filterPopup.x, top: filterPopup.y, zIndex: 100,
-            background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', minWidth: 180, maxHeight: 280,
-            overflow: 'auto', padding: 6,
-          }}
-        >
-          <div style={{ padding: '6px 10px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
-            <b style={{ fontSize: 13 }}>{cols.find(c => c.key === filterPopup.colKey)?.label}</b>
-            {filters[filterPopup.colKey]?.size ? (
-              <span
-                onClick={() => setFilters(p => { const n = { ...p }; delete n[filterPopup.colKey]; return n })}
-                style={{ fontSize: 12, color: '#2563eb', cursor: 'pointer' }}
-              >초기화</span>
-            ) : null}
-          </div>
-          {getFilterOptions(filterPopup.colKey).map(opt => (
-            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 13 }}>
+      {filterPopup && (() => {
+        const allOpts = getFilterOptions(filterPopup.colKey)
+        const visOpts = filterSearch ? allOpts.filter(o => o.toLowerCase().includes(filterSearch.toLowerCase())) : allOpts
+        const activeSet = filters[filterPopup.colKey] ?? new Set<string>()
+        const allChecked = activeSet.size === 0  // 0 = no filter = "전체"
+        // Viewport clamp: popup 228px wide, 340px max height
+        const POPUP_W = 228, POPUP_H = 340
+        const clampedLeft = Math.min(filterPopup.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - POPUP_W - 8)
+        const clampedTop = Math.min(filterPopup.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - POPUP_H - 8)
+        return (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed', left: clampedLeft, top: clampedTop, zIndex: 200,
+              background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8,
+              boxShadow: '0 4px 24px rgba(0,0,0,0.14)', width: POPUP_W,
+              display: 'flex', flexDirection: 'column', maxHeight: POPUP_H,
+              fontFamily: '-apple-system,"Segoe UI",sans-serif',
+            }}
+          >
+            {/* 헤더 */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <b style={{ fontSize: 13, color: '#0f172a' }}>{cols.find(c => c.key === filterPopup.colKey)?.label}</b>
+              {activeSet.size > 0 && (
+                <span
+                  onClick={() => setFilters(p => { const n = { ...p }; delete n[filterPopup.colKey!]; return n })}
+                  style={{ fontSize: 12, color: '#2563eb', cursor: 'pointer', fontWeight: 600 }}
+                >초기화</span>
+              )}
+            </div>
+            {/* 검색창 (옵션 6개 초과 시) */}
+            {allOpts.length > 6 && (
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+                <input
+                  autoFocus
+                  value={filterSearch}
+                  onChange={e => setFilterSearch(e.target.value)}
+                  placeholder="검색..."
+                  style={{
+                    width: '100%', boxSizing: 'border-box', padding: '4px 8px',
+                    border: '1px solid #cbd5e1', borderRadius: 5, fontSize: 12,
+                    outline: 'none', color: '#334155',
+                  }}
+                />
+              </div>
+            )}
+            {/* 전체 선택/해제 */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9', flexShrink: 0, fontWeight: 600, color: '#334155' }}>
               <input
                 type="checkbox"
-                checked={!!filters[filterPopup.colKey]?.has(opt)}
+                checked={allChecked}
                 onChange={() => {
-                  setFilters(prev => {
-                    const s = prev[filterPopup.colKey] ? new Set(prev[filterPopup.colKey]) : new Set<string>()
-                    if (s.has(opt)) s.delete(opt); else s.add(opt)
-                    const n = { ...prev }
-                    if (s.size === 0) delete n[filterPopup.colKey]; else n[filterPopup.colKey] = s
-                    return n
-                  })
+                  if (!allChecked) {
+                    setFilters(p => { const n = { ...p }; delete n[filterPopup.colKey!]; return n })
+                  }
                 }}
                 style={{ width: 14, height: 14 }}
               />
-              {opt}
+              전체 ({allOpts.length})
             </label>
-          ))}
-        </div>
-      )}
+            {/* 옵션 목록 */}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {visOpts.length === 0 && (
+                <div style={{ padding: '10px 12px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>검색 결과 없음</div>
+              )}
+              {visOpts.map(opt => (
+                <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 13, color: '#334155' }}>
+                  <input
+                    type="checkbox"
+                    checked={activeSet.has(opt)}
+                    onChange={() => {
+                      setFilters(prev => {
+                        const s = prev[filterPopup.colKey!] ? new Set(prev[filterPopup.colKey!]) : new Set<string>()
+                        if (s.has(opt)) s.delete(opt); else s.add(opt)
+                        const n = { ...prev }
+                        if (s.size === 0) delete n[filterPopup.colKey!]; else n[filterPopup.colKey!] = s
+                        return n
+                      })
+                    }}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Header Context Menu ── */}
       {headerMenu && (

@@ -70,6 +70,9 @@ export class GridEngine {
   /* ── Column prefix sums (Phase 4 virtual rendering) ── */
   private colXs: number[] = []                     // prefix sum: colXs[i] = left X of visCols[i]
 
+  /* ── Active filters (column filter dropdown indicator) ── */
+  private filteredCols = new Set<string>()
+
   /* ── Interaction ── */
   private hoverRow = -1
   private sortKey = ''
@@ -177,6 +180,12 @@ export class GridEngine {
   }
 
   setHeaderGetter(fn: () => Record<string, string>): void { this.getHeaders = fn }
+
+  /** Sync active filter state for header indicator rendering */
+  setActiveFilters(f: Record<string, Set<string>>): void {
+    this.filteredCols = new Set(Object.entries(f).filter(([, v]) => v.size > 0).map(([k]) => k))
+    this.requestRender()
+  }
 
   getVisibleCols(): ColDef[] { return this.visCols }
 
@@ -1350,6 +1359,7 @@ export class GridEngine {
     const { ctx } = this
     const nameY = 38  // vertical center of the column-name row (20..56 → center ≈ 38)
     const isColSel = this.selection.isColSelected(colIndex)
+    const isFiltered = this.filteredCols.has(col.key)
 
     if (col.type === 'idx') {
       // Corner select-all button (Google Sheets style)
@@ -1386,8 +1396,16 @@ export class GridEngine {
     }
 
     if (col.type !== 'photo' && col.type !== 'mail') {
-      ctx.fillStyle = isColSel ? 'rgba(255,255,255,0.7)' : '#94a3b8'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right'
+      const filterColor = isColSel ? '#fff' : (isFiltered ? '#2563eb' : '#94a3b8')
+      ctx.fillStyle = filterColor; ctx.font = isFiltered ? 'bold 8px sans-serif' : '8px sans-serif'; ctx.textAlign = 'right'
       ctx.fillText('\u25BC', x + w - 5, nameY)
+      // Show a small dot indicator when filtered
+      if (isFiltered) {
+        ctx.beginPath()
+        ctx.arc(x + w - 5, nameY - 8, 3, 0, Math.PI * 2)
+        ctx.fillStyle = isColSel ? '#fff' : '#2563eb'
+        ctx.fill()
+      }
       ctx.font = HEADER_FONT; ctx.textAlign = 'left'
     }
 
