@@ -1,10 +1,10 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-13 (세션 34 — 안정성 점검 완료)
+최근 업데이트: 2026-04-13 (세션 35 — Phase 4 완료 + git 진단)
 
 ## ⏭ 다음 세션 우선순위 (2026-04-13 기준)
 
-1. **Canvas Sheet 가상 렌더링 (Phase 4)** — 3000행 성능 개선
-2. **master.db git tracking 제거** — git filter-repo + force push (사용자 확인 필요)
+1. ~~**Canvas Sheet 가상 렌더링 (Phase 4)**~~ ✅ 완료 (c1954c6a, 86ed207f, a9bc23bb)
+2. ~~**master.db git tracking 제거**~~ ✅ 불필요 — 한 번도 커밋된 적 없음 (.gitignore 정상 차단 확인)
 3. **security_vault.py 3중 AES-256-GCM** — T3v1 포맷 구현
 4. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
 
