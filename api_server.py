@@ -1301,6 +1301,12 @@ async def inquiry(request: Request, body: ClientInquiry):
                 import json as _json_inq
                 insert_payload["parsed_data"] = _json_inq.dumps(extra_fields, ensure_ascii=False)
 
+            # plain 검색용 컬럼 (location/school_name은 암호화 대상 아님 → 평문 그대로)
+            if "location_plain" in db_cols:
+                insert_payload["location_plain"] = str(payload.get("location", "") or "")
+            if "school_name_plain" in db_cols:
+                insert_payload["school_name_plain"] = str(payload.get("school_name", "") or "")
+
             cols = ", ".join(insert_payload.keys())
             placeholders = ", ".join("?" * len(insert_payload))
             cur = conn.execute(
@@ -1946,6 +1952,10 @@ async def public_talent_inquiry(request: Request, body: _TalentInquiry):
             if extra_fields:
                 import json as _jt_inq
                 insert_payload["parsed_data"] = _jt_inq.dumps(extra_fields, ensure_ascii=False)
+            if "location_plain" in db_cols:
+                insert_payload["location_plain"] = str(payload.get("location", "") or "")
+            if "school_name_plain" in db_cols:
+                insert_payload["school_name_plain"] = str(payload.get("school_name", "") or "")
             cols = ", ".join(insert_payload.keys())
             placeholders = ", ".join("?" * len(insert_payload))
             cur = conn.execute(
@@ -3587,7 +3597,7 @@ async def admin_list_inquiries(
             params: list = []
             if q:
                 where_clauses.append(
-                    "(school_name LIKE ? OR contact_name LIKE ? OR email LIKE ? OR phone LIKE ? OR memo LIKE ? OR location LIKE ?)"
+                    "(school_name_plain LIKE ? OR contact_name LIKE ? OR email LIKE ? OR phone LIKE ? OR memo LIKE ? OR location_plain LIKE ?)"
                 )
                 like = f"%{q}%"
                 params.extend([like] * 6)
@@ -4428,6 +4438,58 @@ def _ensure_nationality_plain():
 
 try:
     _ensure_nationality_plain()
+except Exception:
+    pass
+
+
+def _ensure_client_inquiries_plain_cols():
+    """client_inquiries.location_plain + school_name_plain 컬럼 추가 + 암호화 복호화 백필.
+    location / school_name 은 _INQUIRY_ENCRYPT 대상 아니지만 encrypt_migrate.py로
+    기존 데이터가 T3v1 암호화됨 → plain 컬럼으로 검색용 평문 분리.
+    서버 시작 시 1회 실행.
+    """
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        try:
+            for col in ("location_plain TEXT DEFAULT ''", "school_name_plain TEXT DEFAULT ''"):
+                try:
+                    conn.execute(f"ALTER TABLE client_inquiries ADD COLUMN {col}")
+                except Exception:
+                    pass  # 이미 존재
+            conn.commit()
+
+            # 빈 location_plain 백필
+            rows_loc = conn.execute(
+                "SELECT id, location FROM client_inquiries "
+                "WHERE (location_plain IS NULL OR location_plain = '') "
+                "AND location IS NOT NULL AND location != ''"
+            ).fetchall()
+            for row_id, val in rows_loc:
+                plain = decrypt_field(val, "location") if val else ""
+                conn.execute("UPDATE client_inquiries SET location_plain = ? WHERE id = ?", (plain, row_id))
+
+            # 빈 school_name_plain 백필
+            rows_sn = conn.execute(
+                "SELECT id, school_name FROM client_inquiries "
+                "WHERE (school_name_plain IS NULL OR school_name_plain = '') "
+                "AND school_name IS NOT NULL AND school_name != ''"
+            ).fetchall()
+            for row_id, val in rows_sn:
+                plain = decrypt_field(val, "school_name") if val else ""
+                conn.execute("UPDATE client_inquiries SET school_name_plain = ? WHERE id = ?", (plain, row_id))
+
+            conn.commit()
+            updated = len(rows_loc) + len(rows_sn)
+            if updated:
+                _logger.info(f"[MIGRATION] client_inquiries plain 컬럼 백필: location {len(rows_loc)}건, school_name {len(rows_sn)}건")
+        finally:
+            conn.close()
+    except Exception as e:
+        _logger.warning(f"[MIGRATION] client_inquiries plain 컬럼 스킵: {e}")
+
+
+try:
+    _ensure_client_inquiries_plain_cols()
 except Exception:
     pass
 
@@ -8557,8 +8619,12 @@ async def admin_sync_incoming(request: Request):
                 "start_date", "vacation", "housing_type", "benefits", "source",
                 "inbox_status", "submitted_at",
                 "phone", "email", "contact_name",  # 암호화됨
+                "location_plain", "school_name_plain",  # 검색용 평문
             }
             clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+            # location/school_name 은 webhook에서 평문 → plain 컬럼에 복사
+            clean["location_plain"] = str(data.get("location", "") or "")
+            clean["school_name_plain"] = str(data.get("school_name", "") or "")
             cols = ", ".join(clean.keys())
             placeholders = ", ".join("?" * len(clean))
             cur = conn.execute(
@@ -10852,7 +10918,7 @@ async def employers_for_mail(
         conditions = ["is_deleted = 0", "email IS NOT NULL", "email != ''"]
         params: list = []
         if location:
-            conditions.append("(location LIKE ? OR location LIKE ?)")
+            conditions.append("(location_plain LIKE ? OR location_plain LIKE ?)")
             params += [f"%{location}%", f"{location}%"]
         if teaching_age:
             conditions.append("teaching_age LIKE ?")
@@ -11019,7 +11085,7 @@ async def mail_introduce(request: Request):
             conditions = ["is_deleted = 0", "email IS NOT NULL", "email != ''"]
             params: list = []
             if emp_filter.get("location"):
-                conditions.append("location LIKE ?")
+                conditions.append("location_plain LIKE ?")
                 params.append(f"%{emp_filter['location']}%")
             if emp_filter.get("teaching_age"):
                 conditions.append("teaching_age LIKE ?")
