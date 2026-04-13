@@ -1,10 +1,9 @@
 {
-  "last_updated": "2026-04-13 18:32:07",
-  "last_tool": "Edit",
-  "last_command": "Edit: Q:\\Claudework\\matjokdo_safe\\api\\claude_handler.py",
+  "last_updated": "2026-04-13 18:39:34",
+  "last_tool": "Bash",
+  "last_command": "powershell.exe -NoProfile -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem 'Q:\\' | Select-Object -ExpandProperty Name | Out-String\" 2>&1",
   "git_head": "476c29b",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\ad-posts\\page.tsx",
     "Q:\\Claudework\\matjokdo_safe\\WORKFLOW.md",
     "C:\\Users\\Scarlett\\.claude\\hooks\\sound_alert.py",
     "C:\\Users\\Scarlett\\.claude\\hooks\\session_resume.py",
@@ -23,7 +22,8 @@
     "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\sheet\\engine\\GridEngine.ts",
     "Q:\\Claudework\\craigslist_auto_rpa.py",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\sheet\\BridgeCanvasSheet.tsx"
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\sheet\\BridgeCanvasSheet.tsx",
+    "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\MEMORY.md"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
