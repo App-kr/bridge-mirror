@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-13 22:17:52",
+  "last_updated": "2026-04-13 22:33:03",
   "last_tool": "Bash",
-  "last_command": "\"Q:\\Phtyon 3\\python.exe\" -c \"\nimport ast, sys\nfor f in ['Q:/Claudework/matjokdo_safe/dashboard/app.py', 'Q:/Claudework/matjokdo_safe/main.py']:\n    try:\n        with open(f, encoding='utf-8') as fh:\n ",
+  "last_command": "# 현재 실행중인 Flask PID 다시 확인\nnetstat -ano | grep \":5050 \" | head -2\n# app.py가 실제로 실행되는지 확인\ncurl -s \"http://localhost:5050/api/task/status\" -v 2>&1 | tail -10",
   "git_head": "476c29b",
   "modified_files": [
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
