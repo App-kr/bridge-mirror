@@ -3161,13 +3161,14 @@ async def admin_candidates(
 
             where_sql = " AND ".join(where)
 
-            total_row = conn.execute(
-                f"SELECT COUNT(*) FROM candidates WHERE {where_sql}", params
-            ).fetchone()
-            total = total_row[0] if total_row else 0
-
-            # 동적 컬럼 목록: Render DB에 실제 존재하는 컬럼만 선택 (no such column 방지)
+            # 동적 컬럼 목록: Render DB에 실제 존재하는 컬럼만 선택 (no such column → 500 방지)
             _db_cols = {r[1] for r in conn.execute("PRAGMA table_info(candidates)").fetchall()}
+            if not _db_cols:
+                # candidates 테이블 자체가 없음 → 빈 결과 반환
+                return SafeJSONResponse(content=ok(
+                    data={"total": 0, "candidates": [], "next_cursor": None},
+                    message="0명 조회",
+                ))
             _ALL_COLS = [
                 "candidate_id", "sheet_number", "email", "full_name", "nationality", "ancestry",
                 "dob", "gender", "current_location", "start_date", "target", "area_prefs",
@@ -3184,6 +3185,11 @@ async def admin_candidates(
                 "recruiter_memo", "passport_status",
             ]
             _COLS = ", ".join(c for c in _ALL_COLS if c in _db_cols)
+
+            total_row = conn.execute(
+                f"SELECT COUNT(*) FROM candidates WHERE {where_sql}", params
+            ).fetchone()
+            total = total_row[0] if total_row else 0
 
             if cursor > 0:
                 # 하위호환: cursor-based pagination
