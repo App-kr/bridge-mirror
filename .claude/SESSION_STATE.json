@@ -1,10 +1,9 @@
 {
-  "last_updated": "2026-04-14 00:32:50",
+  "last_updated": "2026-04-14 00:58:38",
   "last_tool": "Bash",
-  "last_command": "sleep 90\ntail -25 \"Q:/Claudework/matjokdo_safe/logs/worker_stdout.log\"",
+  "last_command": "sleep 30\ntail -20 \"Q:/Claudework/matjokdo_safe/logs/worker_stdout.log\"",
   "git_head": "476c29b",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
     "Q:\\Claudework\\EMERGENCY_RESTORE.bat",
     "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\sheet\\engine\\GridEngine.ts",
@@ -23,7 +22,8 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\next.config.ts",
     "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.vbs",
     "Q:\\Claudework\\matjokdo_safe\\setup_autostart.ps1",
-    "Q:\\Claudework\\matjokdo_safe\\main.py"
+    "Q:\\Claudework\\matjokdo_safe\\main.py",
+    "Q:\\Claudework\\matjokdo_safe\\rpa\\actions.py"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
@@ -48,6 +48,9 @@
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/_metadata/verified_contents.json",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/crl-set",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/manifest.json",
+    "matjokdo_safe/.chrome_matjokdo_profile/Crowd Deny/2026.4.9.61/Preload Data",
+    "matjokdo_safe/.chrome_matjokdo_profile/Crowd Deny/2026.4.9.61/_metadata/verified_contents.json",
+    "matjokdo_safe/.chrome_matjokdo_profile/Crowd Deny/2026.4.9.61/manifest.json",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/BrowsingTopicsState",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Cache/Cache_Data/data_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Cache/Cache_Data/data_1",
@@ -61,6 +64,7 @@
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/4578f0629a5b4f89_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/671e64992d552b14_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/68aa18cf82510007_0",
+    "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/7ab0fdf38765e6c1_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/8caff5be88e36650_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/fb5a1600fe4b5617_0",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Code Cache/js/index-dir/the-real-index",
