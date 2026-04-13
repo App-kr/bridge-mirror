@@ -3719,15 +3719,19 @@ async def admin_toggle_duplicate_flag(inquiry_id: int, request: Request):
 async def admin_inquiries_new_count(request: Request):
     """is_new=1 건수 반환 (사이드바 폴링용)."""
     _check_admin(request)
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        row = conn.execute(
-            "SELECT COUNT(*) FROM client_inquiries WHERE is_new=1 AND is_deleted=0"
-        ).fetchone()
-        return ok(data={"count": row[0] if row else 0})
-    finally:
-        conn.close()
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM client_inquiries WHERE is_new=1 AND is_deleted=0"
+            ).fetchone()
+            return ok(data={"count": row[0] if row else 0})
+        finally:
+            conn.close()
+    except Exception as e:
+        logging.getLogger("bridge.api").warning("/api/admin/inquiries/new-count 오류: %s", e)
+        return ok(data={"count": 0})
 
 
 @app.patch("/api/admin/inquiries/{inquiry_id}/confirm-new", tags=["admin"])
@@ -4450,6 +4454,7 @@ def _ensure_client_inquiries_plain_cols():
     """
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 10000")
         try:
             for col in ("location_plain TEXT DEFAULT ''", "school_name_plain TEXT DEFAULT ''"):
                 try:
@@ -8625,9 +8630,13 @@ async def admin_sync_incoming(request: Request):
                 "location_plain", "school_name_plain",  # 검색용 평문
             }
             clean = {k: v for k, v in data.items() if k in allowed and v is not None}
-            # location/school_name 은 webhook에서 평문 → plain 컬럼에 복사
-            clean["location_plain"] = str(data.get("location", "") or "")
-            clean["school_name_plain"] = str(data.get("school_name", "") or "")
+            # location/school_name 은 webhook에서 평문 → plain 컬럼에 복사 (컬럼 존재 시만)
+            _inq_cols_check = conn.execute("PRAGMA table_info(client_inquiries)").fetchall()
+            _inq_col_names = {r[1] for r in _inq_cols_check}
+            if "location_plain" in _inq_col_names:
+                clean["location_plain"] = str(data.get("location", "") or "")
+            if "school_name_plain" in _inq_col_names:
+                clean["school_name_plain"] = str(data.get("school_name", "") or "")
             cols = ", ".join(clean.keys())
             placeholders = ", ".join("?" * len(clean))
             cur = conn.execute(

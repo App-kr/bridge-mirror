@@ -21,7 +21,7 @@ const securityHeaders = [
       // supabase 제거됨 (f5bd33e) — AWS S3 + Render 전용
       "img-src 'self' data: blob: https://*.amazonaws.com https://*.gstatic.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
-      "connect-src 'self' https://bridgejob.co.kr https://www.bridgejob.co.kr https://*.vercel.app https://*.onrender.com https://*.amazonaws.com",
+      "connect-src 'self' https://bridgejob.co.kr https://www.bridgejob.co.kr https://*.vercel.app https://*.onrender.com https://*.amazonaws.com https://cdn.jsdelivr.net",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
