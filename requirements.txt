@@ -14,7 +14,7 @@ google-auth-oauthlib>=1.1.0,<2.0
 PyJWT>=2.0.0,<3.0
 gunicorn>=22.0.0,<24.0
 pywebpush>=2.0.0,<3.0
-supabase>=2.0.0,<3.0
+# supabase>=2.0.0,<3.0  # 제거: Render에서 DATABASE_URL 요구 (2026-04-14) — SQLite 전용 운영
 PyMuPDF>=1.24.0,<2.0
 argon2-cffi>=23.1.0
 pyotp==2.9.0
