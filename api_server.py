@@ -2689,115 +2689,133 @@ async def admin_dashboard(request: Request):
     """관리자 대시보드 — 전체 통계 + 최근 활동."""
     _check_admin(request)
 
+    # Render cold-start 방어: 컬럼 없으면 즉시 추가
+    try:
+        _ensure_candidates_all_cols()
+    except Exception:
+        pass
+
     stats: dict = {}
     recent_activity: list[dict] = []
 
     # ── SQLite 통계 (community_posts, interviews, ad_posts) ────────────────
-    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
     try:
-        # 게시글 수
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
         try:
-            r = conn.execute(
-                "SELECT COUNT(*) AS n FROM community_posts WHERE is_deleted=0"
-            ).fetchone()
-            stats["posts"] = r["n"] if r else 0
-        except Exception:
-            stats["posts"] = 0
+            # 게시글 수
+            try:
+                r = conn.execute(
+                    "SELECT COUNT(*) AS n FROM community_posts WHERE is_deleted=0"
+                ).fetchone()
+                stats["posts"] = r["n"] if r else 0
+            except Exception:
+                stats["posts"] = 0
 
-        # 예정 인터뷰
-        try:
-            r = conn.execute(
-                "SELECT COUNT(*) AS n FROM interviews WHERE is_deleted=0 AND status='scheduled'"
-            ).fetchone()
-            stats["interviews_scheduled"] = r["n"] if r else 0
-        except Exception:
-            stats["interviews_scheduled"] = 0
+            # 예정 인터뷰
+            try:
+                r = conn.execute(
+                    "SELECT COUNT(*) AS n FROM interviews WHERE is_deleted=0 AND status='scheduled'"
+                ).fetchone()
+                stats["interviews_scheduled"] = r["n"] if r else 0
+            except Exception:
+                stats["interviews_scheduled"] = 0
 
-        # Ad posts 통계
-        try:
-            r = conn.execute(
-                "SELECT COUNT(*) AS n FROM ad_posts"
-            ).fetchone()
-            stats["ad_posts"] = r["n"] if r else 0
-        except Exception:
-            stats["ad_posts"] = 0
+            # Ad posts 통계
+            try:
+                r = conn.execute(
+                    "SELECT COUNT(*) AS n FROM ad_posts"
+                ).fetchone()
+                stats["ad_posts"] = r["n"] if r else 0
+            except Exception:
+                stats["ad_posts"] = 0
 
-        # 최근 활동 피드: 게시글 최신 5건
-        try:
-            recent_posts = conn.execute(
-                """SELECT id, board, title, created_at, 'post' AS type
-                   FROM community_posts WHERE is_deleted=0
-                   ORDER BY created_at DESC LIMIT 5"""
-            ).fetchall()
-            for rp in recent_posts:
-                recent_activity.append(dict(rp))
-        except Exception:
-            pass
+            # 최근 활동 피드: 게시글 최신 5건
+            try:
+                recent_posts = conn.execute(
+                    """SELECT id, board, title, created_at, 'post' AS type
+                       FROM community_posts WHERE is_deleted=0
+                       ORDER BY created_at DESC LIMIT 5"""
+                ).fetchall()
+                for rp in recent_posts:
+                    recent_activity.append(dict(rp))
+            except Exception:
+                pass
 
-        # 최근 활동 피드: 인터뷰 최신 5건
-        try:
-            recent_ivs = conn.execute(
-                """SELECT id, candidate_name, interview_date, interview_time,
-                          status, created_at, 'interview' AS type
-                   FROM interviews WHERE is_deleted=0
-                   ORDER BY created_at DESC LIMIT 5"""
-            ).fetchall()
-            for ri in recent_ivs:
-                recent_activity.append(dict(ri))
-        except Exception:
-            pass
+            # 최근 활동 피드: 인터뷰 최신 5건
+            try:
+                recent_ivs = conn.execute(
+                    """SELECT id, candidate_name, interview_date, interview_time,
+                              status, created_at, 'interview' AS type
+                       FROM interviews WHERE is_deleted=0
+                       ORDER BY created_at DESC LIMIT 5"""
+                ).fetchall()
+                for ri in recent_ivs:
+                    recent_activity.append(dict(ri))
+            except Exception:
+                pass
 
-    finally:
-        conn.close()
+        finally:
+            conn.close()
+    except Exception as _e1:
+        logging.getLogger("bridge.api").warning("dashboard conn1 실패: %s", _e1)
 
     # ── SQLite 통계 (candidates, jobs, client_inquiries) ────────────────────
-    conn2 = sqlite3.connect(str(_ADMIN_DB_PATH))
-    conn2.execute("PRAGMA busy_timeout = 5000")
-    conn2.row_factory = sqlite3.Row
     try:
-        # 지원자 수
-        r = conn2.execute("SELECT COUNT(*) AS n FROM candidates").fetchone()
-        stats["candidates"] = r["n"] if r else 0
-
-        # Active 지원자
-        r = conn2.execute(
-            "SELECT COUNT(*) AS n FROM candidates WHERE status='Active'"
-        ).fetchone()
-        stats["candidates_active"] = r["n"] if r else 0
-
-        # Jobs 수
+        conn2 = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn2.execute("PRAGMA busy_timeout = 5000")
+        conn2.row_factory = sqlite3.Row
         try:
-            r = conn2.execute(
-                "SELECT COUNT(*) AS n FROM jobs WHERE status='open'"
-            ).fetchone()
-            stats["jobs_open"] = r["n"] if r else 0
-        except Exception:
-            stats["jobs_open"] = 0
+            # 지원자 수
+            try:
+                r = conn2.execute("SELECT COUNT(*) AS n FROM candidates").fetchone()
+                stats["candidates"] = r["n"] if r else 0
+            except Exception:
+                stats["candidates"] = 0
 
-        # 채용의뢰 수
-        try:
-            r = conn2.execute(
-                "SELECT COUNT(*) AS n FROM client_inquiries"
-            ).fetchone()
-            stats["inquiries"] = r["n"] if r else 0
-        except Exception:
-            stats["inquiries"] = 0
+            # Active 지원자
+            try:
+                r = conn2.execute(
+                    "SELECT COUNT(*) AS n FROM candidates WHERE status='Active'"
+                ).fetchone()
+                stats["candidates_active"] = r["n"] if r else 0
+            except Exception:
+                stats["candidates_active"] = 0
 
-        try:
-            r = conn2.execute("SELECT COUNT(*) AS n FROM payments").fetchone()
-            stats["payments_total"] = r["n"] if r else 0
-            r = conn2.execute("SELECT COUNT(*) AS n FROM payments WHERE status='confirmed'").fetchone()
-            stats["payments_confirmed"] = r["n"] if r else 0
-            r = conn2.execute("SELECT COALESCE(SUM(amount),0) AS n FROM payments WHERE status='confirmed'").fetchone()
-            stats["revenue"] = r["n"] if r else 0
-        except Exception:
-            stats["payments_total"] = 0
-            stats["payments_confirmed"] = 0
-            stats["revenue"] = 0
-    finally:
-        conn2.close()
+            # Jobs 수
+            try:
+                r = conn2.execute(
+                    "SELECT COUNT(*) AS n FROM jobs WHERE status='open'"
+                ).fetchone()
+                stats["jobs_open"] = r["n"] if r else 0
+            except Exception:
+                stats["jobs_open"] = 0
+
+            # 채용의뢰 수
+            try:
+                r = conn2.execute(
+                    "SELECT COUNT(*) AS n FROM client_inquiries"
+                ).fetchone()
+                stats["inquiries"] = r["n"] if r else 0
+            except Exception:
+                stats["inquiries"] = 0
+
+            try:
+                r = conn2.execute("SELECT COUNT(*) AS n FROM payments").fetchone()
+                stats["payments_total"] = r["n"] if r else 0
+                r = conn2.execute("SELECT COUNT(*) AS n FROM payments WHERE status='confirmed'").fetchone()
+                stats["payments_confirmed"] = r["n"] if r else 0
+                r = conn2.execute("SELECT COALESCE(SUM(amount),0) AS n FROM payments WHERE status='confirmed'").fetchone()
+                stats["revenue"] = r["n"] if r else 0
+            except Exception:
+                stats["payments_total"] = 0
+                stats["payments_confirmed"] = 0
+                stats["revenue"] = 0
+        finally:
+            conn2.close()
+    except Exception as _e2:
+        logging.getLogger("bridge.api").warning("dashboard conn2 실패: %s", _e2)
 
     # 최근 활동을 시간순 정렬
     recent_activity.sort(
