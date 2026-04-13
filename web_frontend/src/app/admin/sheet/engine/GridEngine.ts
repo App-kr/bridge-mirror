@@ -67,6 +67,9 @@ export class GridEngine {
   private rowYs: number[] = []                     // prefix sum: rowYs[i] = top Y of row i
   private totalContentH = 0
 
+  /* ── Column prefix sums (Phase 4 virtual rendering) ── */
+  private colXs: number[] = []                     // prefix sum: colXs[i] = left X of visCols[i]
+
   /* ── Interaction ── */
   private hoverRow = -1
   private sortKey = ''
@@ -143,6 +146,7 @@ export class GridEngine {
   setCols(cols: ColDef[]): void {
     this.cols = cols
     this.visCols = cols.filter(c => c.v !== false)
+    this.computeColXs()
     this.updateSizer()
     this.requestRender()
   }
@@ -238,6 +242,29 @@ export class GridEngine {
     return Math.min(lo, this.rows.length - 1)
   }
 
+  /** Recompute column X prefix sums after cols change */
+  private computeColXs(): void {
+    const n = this.visCols.length
+    this.colXs = new Array(n + 1)
+    this.colXs[0] = 0
+    for (let i = 0; i < n; i++) {
+      this.colXs[i + 1] = this.colXs[i] + this.visCols[i].w
+    }
+  }
+
+  /** Binary search: find column index at content X coordinate */
+  private colAtX(contentX: number): number {
+    if (this.visCols.length === 0) return -1
+    let lo = 0, hi = this.visCols.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (this.colXs[mid + 1] <= contentX) lo = mid + 1
+      else if (this.colXs[mid] > contentX) hi = mid - 1
+      else return mid
+    }
+    return Math.min(lo, this.visCols.length - 1)
+  }
+
   /* ══════════════════════════════════════════════
      LAYOUT
      ══════════════════════════════════════════════ */
@@ -269,9 +296,7 @@ export class GridEngine {
   }
 
   private colX(visIdx: number): number {
-    let x = 0
-    for (let i = 0; i < visIdx; i++) x += this.visCols[i].w
-    return x
+    return this.colXs[visIdx] ?? 0
   }
 
   /* ══════════════════════════════════════════════
@@ -318,14 +343,9 @@ export class GridEngine {
     const row = this.rowAtY(my)
     if (row < 0 || row >= this.rows.length) return null
     const rowTop = this.rowYs[row]
-    let cx = 0
-    for (let i = 0; i < this.visCols.length; i++) {
-      if (mx >= cx && mx < cx + this.visCols[i].w) {
-        return { row, visCol: i, localX: mx - cx, localY: my - rowTop }
-      }
-      cx += this.visCols[i].w
-    }
-    return null
+    const colIdx = this.colAtX(mx)
+    if (colIdx < 0 || colIdx >= this.visCols.length) return null
+    return { row, visCol: colIdx, localX: mx - this.colXs[colIdx], localY: my - rowTop }
   }
 
   /** Check if mouse is near the bottom border of a row (for row resize) */
@@ -644,6 +664,7 @@ export class GridEngine {
       const key = this.visCols[this.colResizeDrag.visIdx].key
       const src = this.cols.find(c => c.key === key)
       if (src) src.w = newW
+      this.computeColXs()
       this.updateSizer()
       this.requestRender()
       return
@@ -688,6 +709,7 @@ export class GridEngine {
           for (const vc of newVisCols) newCols.push(vc)
           for (const c of this.cols) { if (!usedKeys.has(c.key)) newCols.push(c) }
           this.cols = newCols
+          this.computeColXs()
           if (this.onColReorder) this.onColReorder([...newCols])
         }
       }
@@ -778,11 +800,17 @@ export class GridEngine {
     const frozenN = Math.min(this.frozenCols, this.visCols.length)
     const dataH = viewH - HEADER_H
 
-    // Find visible row range using binary search
+    // ── Virtual rendering: visible row range (binary search both ends) ──
     const startRow = Math.max(0, this.rowAtY(this.scrollTop))
-    let endRow = startRow
-    while (endRow < this.rows.length && this.rowYs[endRow] < this.scrollTop + dataH + 100) endRow++
-    endRow = Math.min(endRow + 1, this.rows.length)
+    const endRow = Math.min(this.rowAtY(this.scrollTop + dataH + 100) + 1, this.rows.length)
+
+    // ── Virtual rendering: visible scrollable column range ──
+    // scrollable columns (c >= frozenN) are visible when:
+    //   colXs[c+1] > scrollLeft + frozenW  (right edge past frozen boundary)
+    //   colXs[c]   < scrollLeft + viewW    (left edge before right viewport edge)
+    const startScrollCol = Math.max(frozenN, this.colAtX(this.scrollLeft + frozenW))
+    let endScrollCol = startScrollCol
+    while (endScrollCol < this.visCols.length && this.colXs[endScrollCol] < this.scrollLeft + viewW) endScrollCol++
 
     // ── PASS 1: Scrollable cell content (NO per-cell clip — eliminates anti-alias artifacts) ──
     ctx.save()
@@ -793,13 +821,10 @@ export class GridEngine {
       const rowH = this.getRowH(r)
       const y = Math.round(HEADER_H + this.rowYs[r] - this.scrollTop)
       this.drawRowBg(r, y, frozenW, viewW, rowH)
-      let cx = Math.round(-this.scrollLeft)
-      for (let c = 0; c < this.visCols.length; c++) {
+      for (let c = startScrollCol; c < endScrollCol; c++) {
         const col = this.visCols[c]
-        if (c < frozenN) { cx += col.w; continue }
-        if (cx >= viewW) break
+        const cx = Math.round(this.colXs[c] - this.scrollLeft)
         if (cx + col.w > frozenW) this.drawCell(this.rows[r], col, cx, y, col.w, rowH, r)
-        cx += col.w
       }
     }
     ctx.restore()
@@ -810,15 +835,11 @@ export class GridEngine {
     ctx.rect(frozenW, HEADER_H, viewW - frozenW, dataH)
     ctx.clip()
     ctx.strokeStyle = GRID_LINE; ctx.lineWidth = 1
-    { let lx = Math.round(-this.scrollLeft)
-      for (let c = 0; c < this.visCols.length; c++) {
-        if (c < frozenN) { lx += this.visCols[c].w; continue }
-        lx += this.visCols[c].w
-        if (lx < frozenW) continue
-        if (lx - this.visCols[c].w >= viewW) break
-        const sx = this.snap(lx)
-        ctx.beginPath(); ctx.moveTo(sx, HEADER_H); ctx.lineTo(sx, viewH); ctx.stroke()
-      }
+    for (let c = startScrollCol; c <= endScrollCol && c < this.visCols.length; c++) {
+      const lx = this.colXs[c + 1] - this.scrollLeft
+      if (lx <= frozenW || lx > viewW) continue
+      const sx = this.snap(lx)
+      ctx.beginPath(); ctx.moveTo(sx, HEADER_H); ctx.lineTo(sx, viewH); ctx.stroke()
     }
     for (let r = startRow; r < endRow; r++) {
       const sy = this.snap(HEADER_H + this.rowYs[r + 1] - this.scrollTop)
@@ -868,7 +889,7 @@ export class GridEngine {
       ctx.beginPath(); ctx.moveTo(frozenW, HEADER_H); ctx.lineTo(frozenW, viewH); ctx.stroke()
     }
 
-    this.drawHeader(frozenW, frozenN)
+    this.drawHeader(frozenW, frozenN, startScrollCol, endScrollCol)
 
     // ── 열 드래그 인디케이터 ──
     if (this.colDrag?.dragging) {
@@ -1293,7 +1314,7 @@ export class GridEngine {
   }
 
   /* ── Header (2-row: alphabet + column name) ── */
-  private drawHeader(frozenW: number, frozenN: number): void {
+  private drawHeader(frozenW: number, frozenN: number, startScrollCol: number, endScrollCol: number): void {
     const { ctx, viewW } = this
     // Header background
     ctx.fillStyle = HEADER_BG; ctx.fillRect(0, 0, viewW, HEADER_H)
@@ -1307,13 +1328,10 @@ export class GridEngine {
 
     ctx.save()
     ctx.beginPath(); ctx.rect(frozenW, 0, viewW - frozenW, HEADER_H); ctx.clip()
-    let cx = -this.scrollLeft
-    for (let i = 0; i < this.visCols.length; i++) {
+    for (let i = startScrollCol; i < endScrollCol; i++) {
       const col = this.visCols[i]
-      if (i < frozenN) { cx += col.w; continue }
-      if (cx >= viewW) break
+      const cx = this.colXs[i] - this.scrollLeft
       if (cx + col.w > frozenW) this.drawHeaderCell(col, cx, col.w, i)
-      cx += col.w
     }
     ctx.restore()
 
