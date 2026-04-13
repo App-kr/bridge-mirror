@@ -4431,9 +4431,9 @@ def _ensure_nationality_plain():
         conn.commit()
         conn.close()
         if updated:
-            _logger.info(f"[MIGRATION] nationality_plain 채우기: {updated}건")
+            logging.getLogger("bridge.api").info("[MIGRATION] nationality_plain 채우기: %d건", updated)
     except Exception as e:
-        _logger.warning(f"[MIGRATION] nationality_plain 스킵: {e}")
+        logging.getLogger("bridge.api").warning("[MIGRATION] nationality_plain 스킵: %s", e)
 
 
 try:
@@ -4481,11 +4481,14 @@ def _ensure_client_inquiries_plain_cols():
             conn.commit()
             updated = len(rows_loc) + len(rows_sn)
             if updated:
-                _logger.info(f"[MIGRATION] client_inquiries plain 컬럼 백필: location {len(rows_loc)}건, school_name {len(rows_sn)}건")
+                logging.getLogger("bridge.api").info(
+                    "[MIGRATION] client_inquiries plain 백필: location %d건, school_name %d건",
+                    len(rows_loc), len(rows_sn)
+                )
         finally:
             conn.close()
     except Exception as e:
-        _logger.warning(f"[MIGRATION] client_inquiries plain 컬럼 스킵: {e}")
+        logging.getLogger("bridge.api").warning("[MIGRATION] client_inquiries plain 스킵: %s", e)
 
 
 try:
