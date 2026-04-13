@@ -3125,6 +3125,11 @@ async def admin_candidates(
     보호: X-Admin-Key 필수
     """
     _check_admin(request)
+    # Render cold-start: 컬럼 없으면 즉시 추가
+    try:
+        _ensure_candidates_all_cols()
+    except Exception:
+        pass
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
@@ -3161,21 +3166,24 @@ async def admin_candidates(
             ).fetchone()
             total = total_row[0] if total_row else 0
 
-            _COLS = (
-                "candidate_id, sheet_number, email, full_name, nationality, ancestry, dob, gender, "
-                "current_location, start_date, target, area_prefs, experience, "
-                "current_salary, desired_salary, certification, e_visa, mobile_phone, "
-                "kakaotalk, criminal_record, housing, arc_holders, job_prefs, "
-                "reference, documents, status, created_at, source, notes, "
-                "placed_company, placed_salary, start_month, housing_detail, "
-                "referral_fee, process_date, past_placement, preferences, "
-                "housing_type, education_level, major, interview_time, health_info, "
-                "piercings, dependents, married, religion, korean_criminal_record, "
-                "consent, fact_check, photo_url, criminal_record_check, doc_status, "
-                "how_to, tattoo, visa_type, stage, mail_tags, korea_experience, "
-                "employment, contract_offered, personal_consideration, "
-                "recruiter_memo, passport_status"
-            )
+            # 동적 컬럼 목록: Render DB에 실제 존재하는 컬럼만 선택 (no such column 방지)
+            _db_cols = {r[1] for r in conn.execute("PRAGMA table_info(candidates)").fetchall()}
+            _ALL_COLS = [
+                "candidate_id", "sheet_number", "email", "full_name", "nationality", "ancestry",
+                "dob", "gender", "current_location", "start_date", "target", "area_prefs",
+                "experience", "current_salary", "desired_salary", "certification", "e_visa",
+                "mobile_phone", "kakaotalk", "criminal_record", "housing", "arc_holders",
+                "job_prefs", "reference", "documents", "status", "created_at", "source", "notes",
+                "placed_company", "placed_salary", "start_month", "housing_detail",
+                "referral_fee", "process_date", "past_placement", "preferences",
+                "housing_type", "education_level", "major", "interview_time", "health_info",
+                "piercings", "dependents", "married", "religion", "korean_criminal_record",
+                "consent", "fact_check", "photo_url", "criminal_record_check", "doc_status",
+                "how_to", "tattoo", "visa_type", "stage", "mail_tags", "korea_experience",
+                "employment", "contract_offered", "personal_consideration",
+                "recruiter_memo", "passport_status",
+            ]
+            _COLS = ", ".join(c for c in _ALL_COLS if c in _db_cols)
 
             if cursor > 0:
                 # 하위호환: cursor-based pagination
@@ -9677,12 +9685,21 @@ async def public_get_settings(request: Request):
         "footer_text", "footer_links", "company_name", "company_email",
         "kakao_channel_url", "site_description",
     }
-    conn = _db_connect()
     try:
-        rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
-        settings = {r[0]: r[1] for r in rows if r[0] in _PUBLIC_SETTING_KEYS}
-    finally:
-        conn.close()
+        # site_settings 테이블 없으면 생성 후 조회
+        try:
+            _ensure_site_settings_table()
+        except Exception:
+            pass
+        conn = _db_connect()
+        try:
+            rows = conn.execute("SELECT key, value FROM site_settings").fetchall()
+            settings = {r[0]: r[1] for r in rows if r[0] in _PUBLIC_SETTING_KEYS}
+        finally:
+            conn.close()
+    except Exception as _e:
+        logging.getLogger("bridge.api").warning("/api/settings 조회 실패: %s", _e)
+        settings = {}
     return _ok_public({"settings": settings}, max_age=300)
 
 
