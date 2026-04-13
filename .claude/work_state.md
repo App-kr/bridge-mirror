@@ -5,7 +5,7 @@
 
 1. ~~**Canvas Sheet 가상 렌더링 (Phase 4)**~~ ✅ 완료 (c1954c6a, 86ed207f, a9bc23bb)
 2. ~~**master.db git tracking 제거**~~ ✅ 불필요 — 한 번도 커밋된 적 없음 (.gitignore 정상 차단 확인)
-3. **security_vault.py 3중 AES-256-GCM** — T3v1 포맷 구현
+3. ~~**security_vault.py 3중 AES-256-GCM**~~ ✅ 완료 (4ea4b080) — encrypt_field stub → T3v1 실암호화, 11개 호출사이트 column_name 전달, 28/28 테스트 PASS
 4. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
 
 ## ✅ 2026-04-13 점검 완료 (세션 34)
