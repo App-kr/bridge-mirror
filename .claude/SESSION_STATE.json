@@ -1,11 +1,9 @@
 {
-  "last_updated": "2026-04-13 20:40:13",
-  "last_tool": "Write",
-  "last_command": "Write: Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
+  "last_updated": "2026-04-13 20:49:26",
+  "last_tool": "Edit",
+  "last_command": "Edit: Q:\\Claudework\\craigslist_auto_rpa.py",
   "git_head": "476c29b",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\rpa\\browser.py",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\hooks\\useAdminAuth.ts",
     "Q:\\Claudework\\matjokdo_safe\\api\\claude_handler.py",
     "Q:\\Claudework\\bridge base\\CLAUDE.md",
     "Q:\\Claudework\\bridge base\\rpa_overlay.py",
@@ -23,7 +21,9 @@
     "Q:\\Claudework\\matjokdo_safe\\debug_heart.py",
     "Q:\\Claudework\\bridge base\\tools\\encrypt_migrate.py",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
-    "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html"
+    "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
+    "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
