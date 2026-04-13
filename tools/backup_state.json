@@ -1671,8 +1671,16 @@
       "git": "587d8f8c",
       "files": 2230,
       "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260412_135024__HttpOnly_쿠키_인증",
+      "task": "HttpOnly 쿠키 인증",
+      "ts": "2026.04.12 13:51:03",
+      "git": "9d29088c",
+      "files": 2230,
+      "db_hash": "aacb16d7afef"
     }
   ],
-  "last_backup": "2026.04.12 09:19:56",
-  "total_count": 209
+  "last_backup": "2026.04.12 13:51:03",
+  "total_count": 210
 }

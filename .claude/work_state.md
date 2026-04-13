@@ -1,12 +1,22 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-11 (세션 33 — RPA 복구 완료)
+최근 업데이트: 2026-04-13 (세션 34 — 안정성 점검 완료)
 
-## ⏭ 다음 세션 우선순위 (2026-04-11 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-13 기준)
 
-1. **bridge_jobs 광고매니저 CRUD** — POST/PATCH/DELETE API + 프론트 UI (미착수)
-2. **pre_snapshot.py 실제 동작 확인** — PreToolUse Write|Edit|MultiEdit 훅 테스트
-3. **EMERGENCY_RESTORE.bat 테스트** — 실제 복구 시나리오
-4. **api_server.py L446 target_age 중복 제거**
+1. **Canvas Sheet 가상 렌더링 (Phase 4)** — 3000행 성능 개선
+2. **master.db git tracking 제거** — git filter-repo + force push (사용자 확인 필요)
+3. **security_vault.py 3중 AES-256-GCM** — T3v1 포맷 구현
+4. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
+
+## ✅ 2026-04-13 점검 완료 (세션 34)
+
+### 안정성 점검 결과
+- OPUS_MASTER_PROMPT.md → .bak 폐기 (9개 중 4개 이미 해결, 경로 오류 다수)
+- Render 배포: autoDeploy=true, HEAD=origin/main=6dc6a9de — 이미 최신 배포됨
+- bridge_jobs 광고매니저 CRUD: 커밋 587d8f8c에서 이미 완료 (API+UI 전부 존재)
+- pre_snapshot.py: Write/Edit/MultiEdit 훅 정상 동작 확인 (5건 테스트 전부 PASS)
+- EMERGENCY_RESTORE.bat: `head -10` 버그 수정 + `setlocal enabledelayedexpansion` 추가
+- target_age 중복: L692에 1건만 존재, 이미 해결됨
 
 ## ✅ 2026-04-11 완료된 작업 (세션 33 — 커밋 9cf17a0e)
 
