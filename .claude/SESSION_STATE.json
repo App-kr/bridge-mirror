@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-13 22:33:03",
+  "last_updated": "2026-04-13 22:48:38",
   "last_tool": "Bash",
-  "last_command": "# 현재 실행중인 Flask PID 다시 확인\nnetstat -ano | grep \":5050 \" | head -2\n# app.py가 실제로 실행되는지 확인\ncurl -s \"http://localhost:5050/api/task/status\" -v 2>&1 | tail -10",
+  "last_command": "cd \"Q:\\Claudework\\bridge base\" && git add api_server.py && git commit -m \"$(cat <<'EOF'\nfix: dashboard 완전 방어 — 모든 쿼리 try/except + _ensure_candidates_all_cols 직접 호출\n\n- conn1(community_posts/interviews/",
   "git_head": "476c29b",
   "modified_files": [
     "Q:\\Claudework\\matjokdo_safe\\run_matjokdo.py",
@@ -43,6 +43,7 @@
     "bridge base_backup",
     "craigslist_auto_rpa.py",
     "hooks/git_restore.ps1",
+    "matjokdo_safe/.chrome_matjokdo_profile/BrowserMetrics-spare.pma",
     "matjokdo_safe/.chrome_matjokdo_profile/BrowserMetrics/BrowserMetrics-69DAE312-490C.pma",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/LICENSE",
     "matjokdo_safe/.chrome_matjokdo_profile/CertificateRevocation/10458/_metadata/verified_contents.json",
@@ -95,7 +96,6 @@
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Session_13420426260994405",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Tabs_13420426010818633",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Tabs_13420426261214385",
-    "matjokdo_safe/.chrome_matjokdo_profile/Default/SharedStorage-wal",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Site Characteristics Database/LOG",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Site Characteristics Database/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sync Data/LevelDB/LOG",
