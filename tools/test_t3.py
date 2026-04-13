@@ -12,7 +12,7 @@ os.environ.setdefault("BRIDGE_FIELD_KEY", os.environ.get("BRIDGE_FIELD_KEY", "")
 
 from security_vault import (
     t3_encrypt, t3_decrypt, is_t3_encrypted,
-    auto_decrypt_value, decrypt_field, is_encrypted
+    auto_decrypt_value, decrypt_field, encrypt_field, is_encrypted
 )
 
 ok = 0
@@ -69,6 +69,23 @@ for s in ["홍길동", "test@example.com", "서울 강남구", "O+", "NONE"]:
     enc_s = t3_encrypt(s, "test")
     dec_s = t3_decrypt(enc_s, "test")
     check("unicode: " + s, dec_s == s)
+
+# 7) encrypt_field → T3v1 연동 검증
+print()
+print("=== encrypt_field T3v1 연동 ===")
+ef_enc = encrypt_field("John Doe", "full_name")
+check("encrypt_field → T3v1 암호화", is_t3_encrypted(ef_enc))
+check("encrypt_field 복호화 정상", t3_decrypt(ef_enc, "full_name") == "John Doe")
+check("encrypt_field(None) = None", encrypt_field(None) is None)
+check("encrypt_field('') = ''", encrypt_field("") == "")
+check("encrypt_field(이미암호화) = idempotent", encrypt_field(ef_enc) == ef_enc)
+check("encrypt_field(plain, no col)", decrypt_field(encrypt_field("test")) == "test")
+
+# 8) decrypt_field ↔ encrypt_field 라운드트립
+for col, val in [("email", "test@bridge.com"), ("memo", "메모 내용"), ("phone", "010-1234-5678")]:
+    e = encrypt_field(val, col)
+    d = decrypt_field(e, col)
+    check(f"roundtrip encrypt_field/decrypt_field col={col}", d == val)
 
 print()
 print("=== 결과: OK=" + str(ok) + " FAIL=" + str(fail) + " ===")

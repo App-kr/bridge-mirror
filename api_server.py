@@ -221,11 +221,11 @@ def _dedup_key(name: str, dob: Optional[str], nationality: Optional[str]) -> str
     return f"{n}_{yr}_{nat}"
 
 
-def _encrypt_if_needed(value: str) -> str:
-    """값이 있고 아직 암호화되지 않은 경우에만 암호화."""
+def _encrypt_if_needed(value: str, column_name: str = "") -> str:
+    """값이 있고 아직 암호화되지 않은 경우에만 T3v1 암호화."""
     if not value or not isinstance(value, str):
         return value
-    return value if is_encrypted(value) else encrypt_field(value)
+    return value if is_encrypted(value) else encrypt_field(value, column_name)
 
 # ── PII 마스킹 설정 ───────────────────────────────────────────────────────────
 # DB 컬럼 단위 차단 (응답 JSON에서 키 자체를 제거)
@@ -1103,7 +1103,7 @@ async def apply(request: Request, body: CandidateApply):
         # PII 암호화
         for field in _CANDIDATE_ENCRYPT:
             if field in payload and payload[field]:
-                payload[field] = _encrypt_if_needed(str(payload[field]))
+                payload[field] = _encrypt_if_needed(str(payload[field]), field)
 
         payload["updated_at"] = now_iso
 
@@ -1279,7 +1279,7 @@ async def inquiry(request: Request, body: ClientInquiry):
         # 연락처 PII 암호화 (storage 전 마지막 레이어)
         for field in _INQUIRY_ENCRYPT:
             if field in payload and payload[field]:
-                payload[field] = _encrypt_if_needed(str(payload[field]))
+                payload[field] = _encrypt_if_needed(str(payload[field]), field)
 
         payload["source"]       = "web_form"
         payload["inbox_status"] = "new"
@@ -1925,7 +1925,7 @@ async def public_talent_inquiry(request: Request, body: _TalentInquiry):
 
     for field in _TALENT_INQ_ENCRYPT:
         if field in payload and payload[field]:
-            payload[field] = _encrypt_if_needed(str(payload[field]))
+            payload[field] = _encrypt_if_needed(str(payload[field]), field)
 
     payload["source"] = "talent_board"
     payload["inbox_status"] = "new"
@@ -3416,7 +3416,7 @@ async def admin_update_candidate(
     # PII 필드 재암호화 — 평문 저장 방지
     for field in _CANDIDATE_ENCRYPT:
         if field in update and update[field]:
-            update[field] = _encrypt_if_needed(str(update[field]))
+            update[field] = _encrypt_if_needed(str(update[field]), field)
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -3496,7 +3496,7 @@ async def admin_full_update_candidate(candidate_id: str, request: Request, body:
     # PII 필드 재암호화 — 평문 저장 방지
     for field in _CANDIDATE_ENCRYPT:
         if field in body and body[field]:
-            body[field] = _encrypt_if_needed(str(body[field]))
+            body[field] = _encrypt_if_needed(str(body[field]), field)
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6020,7 +6020,7 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
                         (body.status, inq_id),
                     )
                 if body.memo is not None:
-                    enc_memo = _encrypt_if_needed(body.memo) if body.memo else None
+                    enc_memo = _encrypt_if_needed(body.memo, "memo") if body.memo else None
                     conn.execute(
                         "UPDATE client_inquiries SET memo = ? WHERE id = ?",
                         (enc_memo, inq_id),
@@ -6039,7 +6039,7 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
                         (body.status, job_id),
                     )
                 if body.memo is not None:
-                    enc_memo = _encrypt_if_needed(body.memo) if body.memo else None
+                    enc_memo = _encrypt_if_needed(body.memo, "internal_notes") if body.memo else None
                     conn.execute(
                         "UPDATE jobs SET internal_notes = ? WHERE id = ?",
                         (enc_memo, job_id),
@@ -8544,7 +8544,7 @@ async def admin_sync_incoming(request: Request):
         _PII_FIELDS = {"phone", "email", "contact_name", "business_registration", "school_location", "memo"}
         for field in _PII_FIELDS:
             if field in data and data[field]:
-                data[field] = _encrypt_if_needed(str(data[field]))
+                data[field] = _encrypt_if_needed(str(data[field]), field)
         data["source"] = "google_form_webhook"
         data["inbox_status"] = "new"
         data.setdefault("submitted_at", datetime.now(timezone.utc).isoformat())
@@ -8583,7 +8583,7 @@ async def admin_sync_incoming(request: Request):
         _CAND_PII = {"email", "phone", "full_name", "date_of_birth", "address", "passport_number"}
         for field in _CAND_PII:
             if field in data and data[field]:
-                data[field] = _encrypt_if_needed(str(data[field]))
+                data[field] = _encrypt_if_needed(str(data[field]), field)
         data["source"] = "google_form_webhook"
         data.setdefault("created_at", datetime.now(timezone.utc).isoformat())
 
@@ -11430,7 +11430,7 @@ async def update_employer(j_number: str, request: Request):
             col, do_encrypt = _EMPLOYERS_JOB_FIELD_MAP[k]
             if do_encrypt and v:
                 sets.append(f"{col} = ?")
-                vals.append(_encrypt_if_needed(str(v)))
+                vals.append(_encrypt_if_needed(str(v), col))
             else:
                 sets.append(f"{col} = ?")
                 vals.append(v)
@@ -11626,7 +11626,7 @@ async def set_secret(request: Request):
         raise HTTPException(400, "key와 value는 필수입니다.")
     if len(key) > 64 or len(value) > 4096:
         raise HTTPException(400, "key 또는 value가 너무 깁니다.")
-    enc_value = encrypt_field(value) if _VAULT_OK else value
+    enc_value = encrypt_field(value, "app_secret") if _VAULT_OK else value
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
     try:

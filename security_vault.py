@@ -36,10 +36,15 @@ logger = logging.getLogger("bridge.vault")
 
 def encrypt_field(value, *args, **kwargs):
     """
-    PII 필드 암호화 — 일반 호환용 stub (plaintext 반환).
-    민감 PII 암호화는 t3_encrypt() 사용.
+    PII 필드 T3v1 암호화. 이미 암호화된 값은 그대로 반환 (idempotent).
+    args[0] 또는 kwargs['column_name'] = 컬럼명 (L1 키 분리용).
     """
-    return value
+    if not value or not isinstance(value, str):
+        return value
+    if is_t3_encrypted(value):
+        return value
+    col = args[0] if args else kwargs.get("column_name", "")
+    return t3_encrypt(value, col)
 
 
 # ════════════════════════════════════════════════════════════════════════════
