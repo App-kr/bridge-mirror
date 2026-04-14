@@ -138,72 +138,6 @@ def _load_account_env(account_id: str | None = None):
 _load_account_env()
 
 
-# ── 파일 무결성 체크 (해킹 시도 차단) ────────────────────────────────────────
-_INTEGRITY_FILES = [
-    Path(__file__).resolve(),                          # craigslist_auto_rpa.py
-    Path(__file__).resolve().parent / "rpa_overlay.py",
-]
-_HASH_STORE = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
-
-
-def _compute_hash(filepath: Path) -> str:
-    """SHA-256 해시 계산."""
-    h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def integrity_init():
-    """현재 파일들의 해시를 저장 (최초 실행 또는 업데이트 후)."""
-    hashes = {}
-    for fp in _INTEGRITY_FILES:
-        if fp.exists():
-            hashes[str(fp)] = _compute_hash(fp)
-    _HASH_STORE.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
-    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일")
-
-
-def integrity_check() -> bool:
-    """파일 무결성 검증. 변조 감지 시 False 반환."""
-    if not _HASH_STORE.exists():
-        print("  [INTEGRITY] 해시 파일 없음 → 최초 초기화")
-        integrity_init()
-        return True
-
-    stored = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
-    tampered = []
-    for fp in _INTEGRITY_FILES:
-        if not fp.exists():
-            continue
-        key = str(fp)
-        if key not in stored:
-            continue
-        current = _compute_hash(fp)
-        if current != stored[key]:
-            tampered.append(fp.name)
-
-    if tampered:
-        print(f"\n  !!!!! [SECURITY ALERT] 파일 변조 감지 !!!!!")
-        for name in tampered:
-            print(f"    - {name}")
-        print(f"  비밀번호 입력 팝업을 확인하세요...")
-        try:
-            from rpa_overlay import ask_integrity_password
-            if ask_integrity_password():
-                integrity_init()
-                print("  무결성 해시가 재초기화되었습니다. 계속 실행합니다.")
-                return True
-        except Exception as exc:
-            print(f"  [팝업 오류] {exc}")
-            print(f"  CLI 리셋: python craigslist_auto_rpa.py --integrity-reset 1234")
-        print(f"  실행을 중단합니다.")
-        _log_event("error", "SYSTEM", "integrity",
-                   f"File tampering detected: {', '.join(tampered)}")
-        return False
-    return True
-
 # ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
 # cl_post() 함수에서 단계별 상태를 업데이트할 수 있도록 전역 함수 정의
 def _dummy_update_status(text: str):
@@ -1663,8 +1597,6 @@ def main():
                         help="카테고리 페이지까지만 진행 → education 실제 value 자동 탐색 후 종료")
     parser.add_argument("--account",   default=None,
                         help="계정 ID (account1/account2/account3) → 해당 .env 로딩")
-    parser.add_argument("--integrity-reset", nargs="?", const="", default=None,
-                        help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
     parser.add_argument("--all",       action="store_true",
                         help="4계정 순차 실행 (gray→green→brown→purple)")
     parser.add_argument("--login-setup", action="store_true",
@@ -1672,15 +1604,6 @@ def main():
     parser.add_argument("--job-code",  default=None)
     parser.add_argument("--limit",     type=int, default=10)
     args = parser.parse_args()
-
-    # ── 무결성 해시 재초기화 ──
-    if args.integrity_reset is not None:
-        if args.integrity_reset == "1234":
-            integrity_init()
-            print("무결성 해시가 재초기화되었습니다.")
-        else:
-            print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
-        return
 
     # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
     if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
@@ -1726,10 +1649,6 @@ def main():
         CL_CITY     = "seoul"  # 기본값 유지
         CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
         CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
-
-    # ── 파일 무결성 체크 ──
-    if not integrity_check():
-        sys.exit(99)
 
     # ── --login-setup 모드: 수동 로그인으로 쿠키 저장 ──
     if args.login_setup:
