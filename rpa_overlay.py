@@ -1639,7 +1639,6 @@ def ask_account_selection():
             except Exception:
                 pass
         root.title("Craig RPA — 계정 선택")
-        root.overrideredirect(True)
         root.attributes("-topmost", True)
         root.configure(bg=_BG)
 
