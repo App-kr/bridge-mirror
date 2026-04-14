@@ -22,7 +22,6 @@ master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
 """
 
 import argparse
-import base64
 import hashlib
 import io
 import json
@@ -30,7 +29,6 @@ import logging
 import os
 import random
 import re
-import secrets
 import sqlite3
 import sys
 import time
@@ -145,11 +143,7 @@ _INTEGRITY_FILES = [
     Path(__file__).resolve(),                          # craigslist_auto_rpa.py
     Path(__file__).resolve().parent / "rpa_overlay.py",
 ]
-_HASH_STORE    = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
-_INT_KEY_FILE  = Path(__file__).resolve().parent / "logs" / ".int_key.enc"  # DPAPI-encrypted HMAC key
-
-# ── 허용된 계정 이름 화이트리스트 ───────────────────────────────────────────
-_ALLOWED_ACCOUNTS = frozenset({"gray", "green", "brown", "purple", "default"})
+_HASH_STORE = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
 
 
 def _compute_hash(filepath: Path) -> str:
@@ -161,107 +155,24 @@ def _compute_hash(filepath: Path) -> str:
     return h.hexdigest()
 
 
-def _get_int_hmac_key() -> bytes:
-    """무결성 서명용 HMAC 키: DPAPI-암호화 캐시에서 로드, 없으면 신규 생성."""
-    import ctypes as _ct
-    import struct
-
-    class _Blob(_ct.Structure):
-        _fields_ = [("cbData", _ct.c_ulong), ("pbData", _ct.POINTER(_ct.c_char))]
-
-    def _dpapi_enc(data: bytes) -> bytes:
-        b_in = _Blob(len(data), _ct.cast(_ct.c_char_p(data), _ct.POINTER(_ct.c_char)))
-        b_out = _Blob()
-        if not _ct.windll.crypt32.CryptProtectData(
-                _ct.byref(b_in), None, None, None, None, 0, _ct.byref(b_out)):
-            raise RuntimeError("DPAPI encrypt 실패")
-        r = _ct.string_at(b_out.pbData, b_out.cbData)
-        _ct.windll.kernel32.LocalFree(b_out.pbData)
-        return r
-
-    def _dpapi_dec(data: bytes) -> bytes:
-        b_in = _Blob(len(data), _ct.cast(_ct.c_char_p(data), _ct.POINTER(_ct.c_char)))
-        b_out = _Blob()
-        if not _ct.windll.crypt32.CryptUnprotectData(
-                _ct.byref(b_in), None, None, None, None, 0, _ct.byref(b_out)):
-            raise RuntimeError("DPAPI decrypt 실패")
-        r = _ct.string_at(b_out.pbData, b_out.cbData)
-        _ct.windll.kernel32.LocalFree(b_out.pbData)
-        return r
-
-    if _INT_KEY_FILE.exists():
-        try:
-            return _dpapi_dec(base64.b64decode(_INT_KEY_FILE.read_text().strip()))
-        except Exception:
-            _INT_KEY_FILE.unlink(missing_ok=True)
-
-    # 신규 생성
-    new_key = secrets.token_bytes(32)
-    try:
-        _INT_KEY_FILE.write_text(base64.b64encode(_dpapi_enc(new_key)).decode())
-    except Exception:
-        pass
-    return new_key
-
-
-def _sign_hashes(hashes: dict) -> str:
-    """HMAC-SHA256으로 해시 딕셔너리 서명."""
-    import hmac as _hmac
-    key = _get_int_hmac_key()
-    data = json.dumps(hashes, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    return _hmac.new(key, data, hashlib.sha256).hexdigest()
-
-
 def integrity_init():
     """현재 파일들의 해시를 저장 (최초 실행 또는 업데이트 후)."""
     hashes = {}
     for fp in _INTEGRITY_FILES:
         if fp.exists():
             hashes[str(fp)] = _compute_hash(fp)
-    sig = _sign_hashes(hashes)
-    payload = {"hashes": hashes, "sig": sig}
-    _HASH_STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일 (HMAC 서명됨)")
+    _HASH_STORE.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
+    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일")
 
 
 def integrity_check() -> bool:
-    """파일 무결성 검증. 변조 감지 시 False 반환.
-    [FIX] 해시 파일 없으면 자동 재초기화 금지 — 명시적 --integrity-reset 필요
-    [FIX] HMAC으로 hash store 자체 위조 방지
-    """
+    """파일 무결성 검증. 변조 감지 시 False 반환."""
     if not _HASH_STORE.exists():
-        # [SECURITY] 삭제 후 재실행 공격 차단 — 자동 초기화 금지
-        print("\n  [SECURITY] 무결성 해시 파일 없음!")
-        print("  정상적인 업데이트 후라면:")
-        print("  python craigslist_auto_rpa.py --integrity-reset 1234")
-        _log_event("error", "SYSTEM", "integrity", "Hash store missing — refusing auto-init")
-        return False
+        print("  [INTEGRITY] 해시 파일 없음 → 최초 초기화")
+        integrity_init()
+        return True
 
-    try:
-        payload = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
-    except Exception as e:
-        print(f"  [SECURITY] 해시 파일 손상: {e}")
-        _log_event("error", "SYSTEM", "integrity", f"Hash store corrupt: {e}")
-        return False
-
-    # HMAC 서명 검증 (hash store 위조 방지)
-    if "sig" in payload and "hashes" in payload:
-        stored_hashes = payload["hashes"]
-        stored_sig    = payload.get("sig", "")
-        try:
-            import hmac as _hmac
-            expected_sig = _sign_hashes(stored_hashes)
-            if not _hmac.compare_digest(stored_sig, expected_sig):
-                print("\n  [SECURITY ALERT] 무결성 해시 파일 위조 감지!")
-                _log_event("error", "SYSTEM", "integrity", "Hash store HMAC mismatch — possible tampering")
-                return False
-        except Exception:
-            pass  # DPAPI 실패 시 (다른 사용자 등) HMAC 검증 건너뜀
-        stored = stored_hashes
-    else:
-        # 구형 형식 (sig 없음) → HMAC 없이 검증 후 재초기화 권고
-        stored = payload
-
+    stored = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
     tampered = []
     for fp in _INTEGRITY_FILES:
         if not fp.exists():
@@ -291,11 +202,6 @@ def integrity_check() -> bool:
         _log_event("error", "SYSTEM", "integrity",
                    f"File tampering detected: {', '.join(tampered)}")
         return False
-
-    # 구형 형식이면 HMAC 서명 추가하여 재저장
-    if "sig" not in payload:
-        integrity_init()
-
     return True
 
 # ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
@@ -893,10 +799,13 @@ def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chro
         opts.binary_location = chrome_bin
         print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
     opts.add_argument(f"--user-data-dir={profile_dir}")
-    # undetected-chromedriver 미설치 → headless=new은 Craigslist 봇탐지됨
-    # 대신: 창을 화면 밖으로 이동 (사용자에게 보이지 않지만 headless 아님)
-    opts.add_argument("--window-size=1920,1080")
-    opts.add_argument("--window-position=-10000,0")
+    if headless:
+        opts.add_argument("--headless=new")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--window-size=1920,1080")
+    else:
+        opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--remote-debugging-port=0")
     opts.add_argument("--no-first-run")
@@ -1766,26 +1675,12 @@ def main():
 
     # ── 무결성 해시 재초기화 ──
     if args.integrity_reset is not None:
-        # [FIX] 하드코딩 1234 제거 → vault 마스터키 입력으로 인증
-        try:
-            from tools.rpa_credential_vault import _load_master_key as _vmk
-            _vmk()  # 마스터키 로드 성공 = 인증 완료
-        except Exception:
-            # 마스터키 로드 불가 → getpass 폴백
-            import getpass as _gp
-            pw = _gp.getpass("무결성 초기화 인증 (마스터 키): ")
-            if not pw:
-                print("  인증 실패 — 취소됨.")
-                return
-        integrity_init()
-        print("무결성 해시가 재초기화되었습니다.")
+        if args.integrity_reset == "1234":
+            integrity_init()
+            print("무결성 해시가 재초기화되었습니다.")
+        else:
+            print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
         return
-
-    # ── --account 화이트리스트 검증 ────────────────────────────────────────────
-    if args.account and args.account not in _ALLOWED_ACCOUNTS:
-        print(f"[ERROR] 허용되지 않은 계정 이름: {args.account!r}")
-        print(f"  허용 목록: {sorted(_ALLOWED_ACCOUNTS)}")
-        sys.exit(1)
 
     # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
     if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
@@ -2185,27 +2080,10 @@ def main():
         return
 
     # ── 잠금 파일 (중복 실행 방지, per-account) ──
-    import atexit, ctypes as _ct
+    import atexit
     acct_key  = args.account or "default"
     acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    # 기존 잠금 파일이 있으면 PID 실제 생존 여부 확인
-    if acct_lock.exists():
-        try:
-            old_pid = int(acct_lock.read_text().strip())
-            h = _ct.windll.kernel32.OpenProcess(0x400, False, old_pid)
-            if h:
-                _ct.windll.kernel32.CloseHandle(h)
-                # 같은 PID면 자기 자신 (재시작 후 PID 재사용) → 무시
-                if old_pid != os.getpid():
-                    print(f"[WARN] 이미 실행 중인 RPA 감지 (PID={old_pid}) — 중복 실행 차단")
-                    sys.exit(0)
-            else:
-                acct_lock.unlink(missing_ok=True)  # stale lock 제거
-        except Exception:
-            acct_lock.unlink(missing_ok=True)
-
     acct_lock.write_text(str(os.getpid()), encoding="utf-8")
     atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
 
@@ -2218,51 +2096,13 @@ def main():
     except ImportError:
         _HAS_OVERLAY = False
 
-    def _is_driver_dead(drv) -> bool:
-        """ChromeDriver 연결이 끊어졌는지 빠르게 확인."""
-        try:
-            _ = drv.title  # 간단한 CDP 호출
-            return False
-        except Exception:
-            return True
-
-    def _rebuild_driver(old_drv) -> object:
-        """Chrome 크래시 시 드라이버 재시작 + 재로그인."""
-        try:
-            old_drv.quit()
-        except Exception:
-            pass
-        import time as _t
-        _t.sleep(3)
-        print("  [RECOVER] Chrome 재시작 중...")
-        new_drv = build_driver(headless=args.headless, account=acct_label)
-        if cl_login(new_drv):
-            print("  [RECOVER] 재로그인 성공 ✅")
-            return new_drv
-        else:
-            print("  [RECOVER] 재로그인 실패 ❌")
-            try:
-                new_drv.quit()
-            except Exception:
-                pass
-            return None
-
     def _run_post_session(ad_list):
-        """게시 세션 실행 (최초 + '더 올리기' 공통).
-        Chrome 크래시 감지 시 자동 재시작 + 재로그인.
-        """
+        """게시 세션 실행 (최초 + '더 올리기' 공통)."""
         hl_flag = args.headless
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-
-        try:
-            driver = build_driver(headless=hl_flag, account=acct_label)
-        except Exception as drv_exc:
-            print(f"[ABORT] Chrome 시작 실패: {drv_exc}")
-            _log_event("error", "—", "driver", f"Chrome start failed: {drv_exc}")
-            return 0
-
+        driver = build_driver(headless=hl_flag, account=acct_label)
         posted = 0
 
         try:
@@ -2315,25 +2155,9 @@ def main():
 
                 except Exception as exc:
                     err_msg = str(exc)[:300]
+                    mark_error(ad_id, err_msg)
                     _log_event("error", jcode, "post_exception", err_msg)
-                    print(f"  ❌ 예외 발생: {exc}")
-
-                    # Chrome 크래시 감지 → 자동 재시작
-                    if _is_driver_dead(driver):
-                        print("  [RECOVER] Chrome 크래시 감지 — 재시작 시도...")
-                        _log_event("warn", jcode, "chrome_crash", "ChromeDriver dead — rebuilding")
-                        mark_error(ad_id, f"[chrome_crash] {err_msg}")
-                        new_drv = _rebuild_driver(driver)
-                        if new_drv:
-                            driver = new_drv
-                            print("  [RECOVER] Chrome 복구 완료 — 다음 건부터 재시도")
-                        else:
-                            _log_event("error", "—", "chrome_recover_fail", "Cannot rebuild Chrome — aborting")
-                            print("  [ABORT] Chrome 복구 실패 — 세션 종료")
-                            break
-                    else:
-                        mark_error(ad_id, err_msg)
-
+                    print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
                     continue
 
                 if i < len(ad_list):
@@ -2344,10 +2168,7 @@ def main():
             _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
             print(f"[SESSION ERROR] {session_exc}")
         finally:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+            driver.quit()
 
         return posted
 

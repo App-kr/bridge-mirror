@@ -133,10 +133,8 @@ def wants_more() -> bool:
 
 
 def wants_more_count() -> int:
-    """wants_more() 가 True 반환한 후 호출 — 추가 게시 수 반환 후 초기화 (기본 5)"""
-    count = _post_more_count[0] if _post_more_count[0] > 0 else 5
-    _post_more_count[0] = 0
-    return count
+    """wants_more() 가 True 반환한 후 호출 — 추가 게시 수 반환 (기본 5)"""
+    return _post_more_count[0] if _post_more_count[0] > 0 else 5
 
 
 def stop_requested() -> bool:
@@ -309,24 +307,12 @@ class RPAOverlay:
 
     def show_complete(self, posted_count: int = 0) -> str:
         self._is_working = False
-        self.close()  # T_working에 quit 신호
-        # join() 금지 — 메인스레드 블락 + T_working의 root.destroy() 교착상태 유발
-        # 대신 짧은 sleep: T_working이 quit 처리 후 _safe_destroy 완료 시간(~150ms) 확보
-        import time as _t; _t.sleep(0.35)
+        self.close()
         _complete_result_val[0] = None
         _complete_done_event.clear()
         self._ready.clear()
-        def _safe_complete():
-            try:
-                self._build_complete(posted_count)
-            except Exception as _e:
-                _log_overlay(f"_build_complete CRASH: {_e}\n{traceback.format_exc()}")
-            finally:
-                # 크래시/정상 종료 모두 이벤트 해제 → 90초 무한대기 방지
-                self._ready.set()
-                _complete_done_event.set()
-
-        self._thread = threading.Thread(target=_safe_complete, daemon=True)
+        self._thread = threading.Thread(
+            target=self._build_complete, args=(posted_count,), daemon=True)
         self._thread.start()
         self._ready.wait(timeout=3)
         threading.Thread(target=self._play_complete_sound, daemon=True).start()
@@ -341,31 +327,16 @@ class RPAOverlay:
         except Exception:
             pass
 
-    @staticmethod
-    def _safe_destroy(root):
-        """overrideredirect 창 잔여물 방지: alpha=0 → destroy (반드시 Tk 스레드에서 호출)."""
-        try:
-            root.attributes("-alpha", 0.0)
-        except Exception:
-            pass
-        try:
-            root.destroy()
-        except Exception:
-            pass
-
     def close(self):
         self._is_working = False
         self._stop_remind()
-        root = self._root
-        self._root = None
-        self._ready.clear()
-        if root:
+        if self._root:
             try:
-                # quit() 신호만 → mainloop 종료 → 스레드 내 finally에서 _safe_destroy
-                # 절대 여기서 직접 destroy/update 호출 금지 (크로스 스레드 Tkinter 프리즈 원인)
-                root.after(0, root.quit)
+                self._root.after(0, self._root.destroy)
             except Exception:
-                pass  # after() 실패 = mainloop 이미 종료 → finally가 처리
+                pass
+            self._root = None
+        self._ready.clear()
         # HWND 파일 정리 (중복실행 포커스용)
         try:
             (Path(__file__).resolve().parent / "logs" / ".overlay_hwnd.txt").unlink(missing_ok=True)
@@ -543,36 +514,11 @@ class RPAOverlay:
         more_row = tk.Frame(btn_outer, bg=self.BG)
         more_row.pack(fill="x")
         _MORE_HOV = "#172817"   # 연한 초록 tint
-
-        # 예약 알림 레이블 (버튼 누른 후 "＋5 예약됨" 표시)
-        _more_notify = tk.Label(btn_outer, text="",
-                                font=tkfont.Font(family="Malgun Gothic", size=9),
-                                bg=self.BG, fg=self.GREEN)
-        _more_notify.pack(fill="x")
-        _more_reserved = [0]  # 누적 예약 수
-
-        def _clear_notify():
-            try:
-                if _more_notify.winfo_exists():
-                    _more_notify.configure(text="")
-            except Exception:
-                pass
-
         for _i, _n in enumerate([5, 10, 20]):
             def _post_more(count=_n):
-                _more_reserved[0] += count
-                _post_more_count[0] = _more_reserved[0]
+                _post_more_count[0] = count
                 _post_more_event.set()
-                # 총 건수 시각 업데이트
-                self._progress_var[1] += count
-                self._refresh_progress(self._progress_var[0], self._progress_var[1])
-                # 예약 알림 텍스트 표시 (3초 후 자동 제거)
-                try:
-                    if _more_notify.winfo_exists():
-                        _more_notify.configure(text=f"  ＋{count} 예약됨  (총 +{_more_reserved[0]}건 추가)")
-                        _more_notify.after(3000, _clear_notify)
-                except Exception:
-                    pass
+                self._dismiss_and_remind()
             _mb = tk.Label(more_row,
                            text=f"＋{_n}개",
                            font=tkfont.Font(family="Malgun Gothic", size=10),
@@ -684,8 +630,6 @@ class RPAOverlay:
             root.mainloop()
         except Exception:
             pass
-        finally:
-            RPAOverlay._safe_destroy(root)  # mainloop 종료 후 잔여물 완전 제거
 
     # ── Cute Robot animation ──────────────────
     def _draw_spinner(self, c, root, size=44):
@@ -1156,11 +1100,7 @@ class RPAOverlay:
         _XGRAY = "#c7c7cc"   # X 버튼 색상
 
         root = tk.Tk()
-        root.withdraw()              # 생성 즉시 숨김 — 날것 창 flash 완전 방지
-        root.overrideredirect(True)  # withdraw 상태에서 설정 (flash 없음)
-        root.attributes("-topmost", True)
-        root.attributes("-alpha", 0.0)
-        root.configure(bg=_SEP)
+        root.attributes("-alpha", 0.0)  # tk. 흰 창 즉시 투명화 (flash 방지)
         self._root = root
         _ico = Path(__file__).resolve().parent / "images" / "craig_icon.ico"
         if _ico.exists():
@@ -1174,6 +1114,9 @@ class RPAOverlay:
             root._rpa_icon = _img
         except Exception:
             pass
+        root.overrideredirect(True)
+        root.attributes("-topmost", True)
+        root.configure(bg=_SEP)
 
         w, h = 380, 360
         mx, my, mw, mh = 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
@@ -1192,7 +1135,7 @@ class RPAOverlay:
         card = tk.Frame(border, bg=_CARD)
         card.pack(fill="both", expand=True)
 
-        _countdown = [30]
+        _countdown = [12]
 
         def _set_result(res: str):
             _complete_result_val[0] = res
@@ -1200,11 +1143,11 @@ class RPAOverlay:
                 _post_more_event.set()
             _complete_done_event.set()
             try:
-                root.quit()   # mainloop 종료 → finally에서 _safe_destroy 실행
+                root.destroy()
             except Exception:
                 pass
 
-        # 모든 위젯 배치 완료 후 deiconify → fade-in
+        # fade-in 애니메이션
         def _fade(a=0.0):
             if not root.winfo_exists():
                 return
@@ -1215,7 +1158,6 @@ class RPAOverlay:
                 root.attributes("-alpha", 1.0)
                 root.after(2000, lambda: root.attributes("-topmost", False)
                            if root.winfo_exists() else None)
-        root.deiconify()
         root.after(10, _fade)
 
         # ── 상단 바 (X 버튼) ──────────────────────────────────
@@ -1247,15 +1189,13 @@ class RPAOverlay:
                            font=self._fn(10), bg=_CARD, fg=_T2)
         sub_lbl.pack(pady=(3, 12))
 
-        # ── 구분선 + 안내 ─────────────────────────────────────
+        # ── 구분선 ─────────────────────────────────────────────
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
-        tk.Label(card, text="계속 게시하시겠습니까?",
-                 font=self._fn(10), bg=_CARD, fg=_T2, pady=8).pack()
 
-        # ── 더 게시하기 버튼 행: 5개 | 10개 | 20개 ────────────
-        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
+        # ── 추가 게시 버튼 행: 5개 더 | 10개 더 | 20개 더 ──────
         more_row = tk.Frame(card, bg=_CARD)
         more_row.pack(fill="x")
+
         for i, (label, cnt) in enumerate([("5개 더", 5), ("10개 더", 10), ("20개 더", 20)]):
             def _click_more(n=cnt):
                 _post_more_count[0] = n
@@ -1273,10 +1213,74 @@ class RPAOverlay:
         # ── 구분선 ─────────────────────────────────────────────
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
 
+        # ── 계정변경 버튼 ──────────────────────────────────────
+        acct_content = tk.Frame(card, bg=_CARD)
+        acct_content.pack(fill="x")
+
+        main_acct_row = tk.Frame(acct_content, bg=_CARD)
+        main_acct_row.pack(fill="x")
+
+        def _show_accounts():
+            main_acct_row.pack_forget()
+            acct_picker.pack(fill="x")
+            _countdown[0] = 30
+
+        chg_btn = tk.Label(main_acct_row, text="계정변경",
+                           font=self._fn(11),
+                           bg=_CARD, fg=_BLUE, cursor="hand2", pady=9)
+        chg_btn.pack(fill="x")
+        chg_btn.bind("<Button-1>", lambda e: _show_accounts())
+        chg_btn.bind("<Enter>", lambda e: chg_btn.configure(bg=_HOV_B))
+        chg_btn.bind("<Leave>", lambda e: chg_btn.configure(bg=_CARD))
+
+        # 계정 선택 패널 (숨겨진 상태)
+        acct_picker = tk.Frame(acct_content, bg=_CARD)
+
+        def _darken(hc, factor=0.88):
+            r = int(int(hc[1:3], 16) * factor)
+            g = int(int(hc[3:5], 16) * factor)
+            b = int(int(hc[5:7], 16) * factor)
+            return "#{:02x}{:02x}{:02x}".format(min(r, 255), min(g, 255), min(b, 255))
+
+        current_email = (self._email or "").lower()
+        for acct_id, email, color in _ACCOUNT_LIST:
+            if email.lower() == current_email:
+                continue
+            name = email.split("@")[0]
+            hov_c = _darken(color)
+            wrap = tk.Frame(acct_picker, bg=_SEP, padx=1, pady=1)
+            wrap.pack(fill="x", padx=10, pady=2)
+            inner = tk.Label(wrap, text=f"  {name}",
+                             font=self._fn(11),
+                             bg=color, fg="#1d1d1f", cursor="hand2",
+                             pady=7, padx=6, anchor="w")
+            inner.pack(fill="both")
+            def _click_acct(aid=acct_id):
+                _set_result(f"CHANGE_{aid}")
+            inner.bind("<Button-1>", lambda e, f=_click_acct: f())
+            inner.bind("<Enter>", lambda e, b=inner, h=hov_c: b.configure(bg=h))
+            inner.bind("<Leave>", lambda e, b=inner, c=color: b.configure(bg=c))
+
+        def _back_to_main():
+            acct_picker.pack_forget()
+            main_acct_row.pack(fill="x")
+            _countdown[0] = 12
+
+        back_lbl = tk.Label(acct_picker, text="< 돌아가기",
+                            font=self._fn(10),
+                            bg=_CARD, fg=_XGRAY, cursor="hand2", pady=5)
+        back_lbl.pack()
+        back_lbl.bind("<Button-1>", lambda e: _back_to_main())
+        back_lbl.bind("<Enter>", lambda e: back_lbl.configure(fg=_T1))
+        back_lbl.bind("<Leave>", lambda e: back_lbl.configure(fg=_XGRAY))
+
+        # ── 구분선 ─────────────────────────────────────────────
+        tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
+
         # ── 종료하기 버튼 ──────────────────────────────────────
         exit_btn = tk.Label(card, text="종료하기",
                             font=self._fn(13, "bold"),
-                            bg=_CARD, fg=_RED, cursor="hand2", pady=12)
+                            bg=_CARD, fg=_RED, cursor="hand2", pady=11)
         exit_btn.pack(fill="x")
         exit_btn.bind("<Button-1>", lambda e: _set_result("EXIT"))
         exit_btn.bind("<Enter>", lambda e: exit_btn.configure(bg=_HOV_R))
@@ -1307,8 +1311,6 @@ class RPAOverlay:
             root.mainloop()
         except Exception:
             pass
-        finally:
-            RPAOverlay._safe_destroy(root)  # mainloop 종료 후 잔여물 완전 제거
         _complete_done_event.set()   # fallback if window closed externally
 
     # ── Progress helpers ──────────────────────
@@ -1877,13 +1879,13 @@ def ask_account_selection():
                         err_mk.configure(text="현재 키와 동일합니다"); return
                     v2 = CredentialVault()
                     if v2.rekey(cur, nw):
-                        err_mk.configure(text="[완료] 마스터 키 변경 완료", fg=_BLUE)
+                        err_mk.configure(text="✅ 마스터 키 변경 완료", fg=_BLUE)
                         top.after(1200, lambda: [top.grab_release(), top.destroy()])
                     else:
                         err_mk.configure(text="변경 실패 — 다시 시도하세요")
                 else:   # 새 키 없음 → 현재 키 저장만
                     _save_mk_cache(cur.encode("utf-8"))
-                    err_mk.configure(text="[완료] 마스터 키 저장 완료", fg=_BLUE)
+                    err_mk.configure(text="✅ 마스터 키 저장 완료", fg=_BLUE)
                     top.after(900, lambda: [top.grab_release(), top.destroy()])
 
             tk.Frame(ct, bg=_SEP, height=1).pack(fill="x", pady=(6, 0))
@@ -2489,7 +2491,7 @@ def ask_master_key_gui() -> str:
                     # 성공: 메인 입력창에 새 키 자동 입력 + 성공 메시지
                     e.delete(0, "end")
                     e.insert(0, new_k)
-                    err_lbl.configure(text="[완료] 마스터 키 변경 완료 — 확인을 누르세요", fg=_BLUE)
+                    err_lbl.configure(text="✅ 마스터 키 변경 완료 — 확인을 누르세요", fg=_BLUE)
                     top.grab_release()
                     top.destroy()
                 else:
