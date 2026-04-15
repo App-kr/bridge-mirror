@@ -433,6 +433,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url=None if _IS_PROD else "/docs",
     redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
     default_response_class=SafeJSONResponse,
 )
 
