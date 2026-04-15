@@ -5990,6 +5990,11 @@ async def admin_list_applications(
                     })
 
             # 구인자 — jobs 테이블 (원본 워드포맷 데이터 + raw_text 포함)
+            # 테이블 존재 여부 확인 (Render 신규/빈 DB 대비)
+            _exist_check = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('jobs','client_inquiries')"
+            ).fetchall()}
+
             job_rows = conn.execute(
                 "SELECT id, job_code, seq, location, city, district, region_name, "
                 "start_date, teaching_age, class_size, working_hours, salary_raw, "
@@ -5998,7 +6003,7 @@ async def admin_list_applications(
                 "enc_employer_name, enc_contact_name, enc_contact_phone, enc_contact_email, "
                 "enc_contact_kakao, employer_display_name "
                 "FROM jobs WHERE is_deleted = 0 ORDER BY seq ASC, job_code ASC"
-            ).fetchall()
+            ).fetchall() if "jobs" in _exist_check else []
             for j in job_rows:
                 # 암호화된 PII 필드 복호화
                 dec_employer = _safe_decrypt(j["enc_employer_name"], "enc_employer_name")
@@ -6047,7 +6052,7 @@ async def admin_list_applications(
                 "sick_leave, meal, memo, notes, assigned_to, submitted_at, raw_email_body, "
                 "COALESCE(inbox_status, 'new') as status "
                 "FROM client_inquiries WHERE is_deleted = 0 ORDER BY submitted_at DESC"
-            ).fetchall()
+            ).fetchall() if "client_inquiries" in _exist_check else []
             for inq in inq_rows:
                 # PII 필드 복호화
                 dec_email   = _safe_decrypt(inq["email"], "email")
@@ -12791,6 +12796,98 @@ async def admin_db_dump(request: Request):
         media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="master_dump_{today}.sql"'},
     )
+
+
+@app.get("/api/admin/db/stats", tags=["admin"])
+async def admin_db_stats(request: Request):
+    """Render DB 행 수 확인 — 데이터 복원 진단용."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    try:
+        tables = ["candidates", "jobs", "client_inquiries", "interviews", "file_uploads"]
+        stats = {}
+        for t in tables:
+            try:
+                row = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()
+                stats[t] = row[0] if row else 0
+            except Exception:
+                stats[t] = -1  # 테이블 없음
+        return ok(data=stats, message="DB 통계")
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/db/restore", tags=["admin"])
+async def admin_db_restore(request: Request):
+    """로컬 master.db SQL 덤프 → Render DB 복원.
+    Body: multipart/form-data, field=sql_dump (text/plain SQL).
+    관리자 인증 필수. 기존 테이블은 DROP 후 재생성.
+    """
+    _check_admin(request)
+    import shutil as _sh
+    import tempfile as _tf
+
+    try:
+        form = await request.form()
+        sql_file = form.get("sql_dump")
+        if not sql_file:
+            raise HTTPException(400, "sql_dump 필드가 없습니다.")
+        sql_text = await sql_file.read() if hasattr(sql_file, "read") else sql_file
+        if isinstance(sql_text, bytes):
+            sql_text = sql_text.decode("utf-8", errors="replace")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"업로드 파싱 실패: {e}")
+
+    # 기본 안전 검증 — SQLite dump 포맷인지 확인
+    if not sql_text.strip().startswith(("BEGIN TRANSACTION", "PRAGMA")):
+        raise HTTPException(400, "유효한 SQLite SQL dump 형식이 아닙니다.")
+
+    # 백업 후 복원
+    db_path = str(_ADMIN_DB_PATH)
+    backup_path = db_path + ".pre_restore"
+    try:
+        _sh.copy2(db_path, backup_path)
+    except Exception:
+        pass  # 기존 DB 없으면 스킵
+
+    try:
+        # 복원용 임시 DB 생성 후 교체
+        with _tf.NamedTemporaryFile(suffix=".db", delete=False, dir=str(Path(db_path).parent)) as tmp:
+            tmp_path = tmp.name
+
+        conn_new = sqlite3.connect(tmp_path)
+        conn_new.executescript(sql_text)
+        conn_new.commit()
+        conn_new.close()
+
+        # 교체 (atomic on same filesystem)
+        import os as _os
+        _os.replace(tmp_path, db_path)
+
+        # 복원 확인
+        conn_check = sqlite3.connect(db_path)
+        cand_count = conn_check.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+        jobs_count = conn_check.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        inq_count  = conn_check.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0]
+        conn_check.close()
+
+        _log.info("DB 복원 완료: candidates=%d, jobs=%d, client_inquiries=%d", cand_count, jobs_count, inq_count)
+        return ok(data={"candidates": cand_count, "jobs": jobs_count, "client_inquiries": inq_count},
+                  message=f"복원 완료: 후보자 {cand_count}명, 구인 {jobs_count}건, 문의 {inq_count}건")
+
+    except Exception as e:
+        # 복원 실패 시 백업 롤백
+        try:
+            import os as _os
+            if Path(backup_path).exists():
+                _os.replace(backup_path, db_path)
+        except Exception:
+            pass
+        _log.error("DB 복원 실패: %s", e, exc_info=True)
+        raise HTTPException(500, f"DB 복원 실패: {e}")
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
