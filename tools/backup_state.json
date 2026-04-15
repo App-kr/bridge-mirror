@@ -1695,8 +1695,24 @@
       "git": "1e657a25",
       "files": 2236,
       "db_hash": "6347dd4e7ac8"
+    },
+    {
+      "dir": "20260415_220517__RPA_4-15_작업완료_내일재개",
+      "task": "RPA 4/15 작업완료 내일재개",
+      "ts": "2026.04.15 22:05:38",
+      "git": "abafbfae",
+      "files": 2236,
+      "db_hash": "6347dd4e7ac8"
+    },
+    {
+      "dir": "20260415_221205__deploy_gate_BX_vault_토큰+즉시발송_수정",
+      "task": "deploy_gate BX vault 토큰+즉시발송 수정",
+      "ts": "2026.04.15 22:12:13",
+      "git": "abafbfae",
+      "files": 2236,
+      "db_hash": "6347dd4e7ac8"
     }
   ],
-  "last_backup": "2026.04.15 20:25:18",
-  "total_count": 212
+  "last_backup": "2026.04.15 22:12:13",
+  "total_count": 214
 }

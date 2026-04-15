@@ -1,16 +1,9 @@
 {
-  "last_updated": "2026-04-15 21:12:08",
-  "last_tool": "Edit",
-  "last_command": "Edit: Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
+  "last_updated": "2026-04-15 22:15:38",
+  "last_tool": "Write",
+  "last_command": "Write: Q:\\openrun_api\\.github\\workflows\\daily_enrich.yml",
   "git_head": "0bc8e25",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\RPA.vbs",
-    "Q:\\Claudework\\matjokdo_safe\\logs\\seirchoo_config.json",
-    "Q:\\Claudework\\matjokdo_safe\\main_seirchoo.py",
-    "Q:\\Claudework\\bridge base\\tools\\deploy_gate.py",
-    "Q:\\openrun_api\\enrich_fill_all.py",
-    "Q:\\Claudework\\bridge base\\tools\\set_rpa_passwords.py",
-    "Q:\\Claudework\\bridge base\\run_all4.bat",
     "Q:\\openrun_api\\main.py",
     "Q:\\Claudework\\matjokdo_safe\\rpa\\seirchoo.py",
     "Q:\\Claudework\\bridge base\\tools\\_restore_run.py",
@@ -23,7 +16,14 @@
     "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.vbs",
     "Q:\\Claudework\\matjokdo_safe\\RESTORE_GUIDE.md",
     "Q:\\Claudework\\bridge base\\tools\\db_persist.py",
-    "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js"
+    "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
+    "Q:\\Claudework\\bridge base\\craigslist_auto_rpa.py",
+    "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.pyw",
+    "Q:\\openrun_api\\fix_program_info.py",
+    "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\project_rpa_tomorrow.md",
+    "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\MEMORY.md",
+    "Q:\\openrun_api\\fix_booking_urls.py",
+    "Q:\\openrun_api\\.github\\workflows\\daily_enrich.yml"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
