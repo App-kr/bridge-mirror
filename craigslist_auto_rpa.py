@@ -1514,7 +1514,7 @@ def main():
                     continue
 
                 if i < len(ad_list):
-                    wait = random.randint(90, 150)
+                    wait = random.randint(30, 45)
                     countdown(wait, "다음 게시 대기")
 
         except Exception as session_exc:
