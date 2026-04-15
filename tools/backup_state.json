@@ -1679,8 +1679,16 @@
       "git": "9d29088c",
       "files": 2230,
       "db_hash": "aacb16d7afef"
+    },
+    {
+      "dir": "20260415_165134__security-test-전체",
+      "task": "security-test-전체",
+      "ts": "2026.04.15 16:52:28",
+      "git": "1925cb8e",
+      "files": 2234,
+      "db_hash": "9a3429c4b273"
     }
   ],
-  "last_backup": "2026.04.12 13:51:03",
-  "total_count": 210
+  "last_backup": "2026.04.15 16:52:28",
+  "total_count": 211
 }

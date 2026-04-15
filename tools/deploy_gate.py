@@ -1,8 +1,8 @@
 """
 배포 게이트 — git push 전 승인 대기
 ========================================
-1단계: 터미널에서 3분(180초) 대기 (화살표 키 선택 메뉴)
-2단계: 응답 없으면 텔레그램으로 알림 후 대기
+- 터미널 + 텔레그램 동시 대기 (먼저 응답한 쪽 채택)
+- 터미널 응답 없어도 텔레그램 yes/no 로 원격 승인 가능
 
 사용법:
   python tools/deploy_gate.py          ← pre-push 훅 자동 호출
@@ -13,8 +13,8 @@ import json
 import os
 import sys
 import subprocess
+import threading
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,31 +24,40 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 
-TG_TOKEN         = os.getenv("TELEGRAM_BOT_TOKEN", "")
 DB_PATH          = PROJECT_ROOT / "master.db"
-STATE_FILE       = PROJECT_ROOT / "logs" / "deploy_request.json"
-SKIP_FILE        = PROJECT_ROOT / "deploy_skip.json"   # "이번 세션 묻지마" 플래그 (프로젝트 루트 — git 추적)
-TERMINAL_TIMEOUT = int(os.getenv("DEPLOY_TERMINAL_TIMEOUT", "180"))  # 터미널 대기 (초, 기본 3분)
-TG_TIMEOUT       = int(os.getenv("DEPLOY_TG_TIMEOUT", "600"))         # 텔레 대기 (초)
+SKIP_FILE        = PROJECT_ROOT / "deploy_skip.json"
+TERMINAL_TIMEOUT = int(os.getenv("DEPLOY_TERMINAL_TIMEOUT", "180"))
+TG_TIMEOUT       = int(os.getenv("DEPLOY_TG_TIMEOUT", "600"))
 TERMINAL_NAME    = os.getenv("TERMINAL_NAME", "Claude Code")
 
 (PROJECT_ROOT / "logs").mkdir(exist_ok=True)
 
 
+# ── Token (BX vault 우선, .env 폴백) ─────────────────────────────────────────
+
+def get_token() -> str:
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+        from bx import _read as bx_read
+        t = bx_read("TELEGRAM_BOT_TOKEN")
+        if t:
+            return t
+    except Exception:
+        pass
+    return os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+
 # ── Session-skip helper ────────────────────────────────────────────────────
 
 def is_skip_active() -> bool:
-    """'이번 세션 묻지마' 플래그가 유효한지 확인 (8시간 유효)."""
     try:
         data = json.loads(SKIP_FILE.read_text(encoding="utf-8"))
-        expire = data.get("expire", 0)
-        return time.time() < expire
+        return time.time() < data.get("expire", 0)
     except Exception:
         return False
 
 
 def set_skip():
-    """'이번 세션 묻지마' 플래그 저장 (8시간)."""
     SKIP_FILE.write_text(
         json.dumps({"expire": time.time() + 8 * 3600, "set_at": datetime.now().isoformat()}),
         encoding="utf-8"
@@ -57,12 +66,12 @@ def set_skip():
 
 # ── Telegram ───────────────────────────────────────────────────────────────
 
-def tg_send(chat_id: int, text: str) -> bool:
-    if not TG_TOKEN:
+def tg_send(chat_id: int, text: str, token: str) -> bool:
+    if not token:
         return False
     try:
         r = requests.post(
-            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            f"https://api.telegram.org/bot{token}/sendMessage",
             json={"chat_id": chat_id, "text": text[:4000], "parse_mode": "HTML"},
             timeout=10,
         )
@@ -82,6 +91,60 @@ def get_subscribers() -> list[int]:
         return [r[0] for r in rows]
     except Exception:
         return []
+
+
+def tg_poll_response(token: str, subs: list[int], since_ts: float, deadline: float) -> str | None:
+    """
+    Telegram getUpdates 롱폴링으로 yes/no 응답 대기.
+    since_ts 이후 메시지만 처리. 'yes'|'no'|None 반환.
+    """
+    offset = 0
+    # offset 초기화: 기존 메시지 건너뜀
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params={"offset": -1},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            results = r.json().get("result", [])
+            if results:
+                offset = results[-1]["update_id"] + 1
+    except Exception:
+        pass
+
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        poll_timeout = min(30, max(1, int(remaining)))
+        try:
+            r = requests.get(
+                f"https://api.telegram.org/bot{token}/getUpdates",
+                params={"offset": offset, "timeout": poll_timeout, "allowed_updates": ["message"]},
+                timeout=poll_timeout + 5,
+            )
+            if r.status_code != 200:
+                time.sleep(2)
+                continue
+            for update in r.json().get("result", []):
+                offset = update["update_id"] + 1
+                msg = update.get("message", {})
+                chat_id = msg.get("chat", {}).get("id")
+                date = msg.get("date", 0)
+                text = msg.get("text", "").strip().lower()
+
+                if chat_id not in subs:
+                    continue
+                if date < since_ts:
+                    continue
+
+                if text in ("yes", "/yes", "y", "1"):
+                    return "yes"
+                elif text in ("no", "/no", "n", "0"):
+                    return "no"
+        except Exception:
+            time.sleep(2)
+
+    return None
 
 
 # ── Git info ───────────────────────────────────────────────────────────────
@@ -108,34 +171,6 @@ def get_commit_info() -> dict:
     }
 
 
-# ── State ──────────────────────────────────────────────────────────────────
-
-def write_state(request_id: str, info: dict):
-    STATE_FILE.write_text(
-        json.dumps({
-            "request_id": request_id,
-            "status":     "pending",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "info":       info,
-        }, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-
-def read_state() -> dict:
-    try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def clear_state():
-    try:
-        STATE_FILE.unlink(missing_ok=True)
-    except Exception:
-        pass
-
-
 # ── Interactive arrow-key menu (Windows) ───────────────────────────────────
 
 _ANSI_UP    = "\033[A"
@@ -145,17 +180,9 @@ _RESET      = "\033[0m"
 
 
 def _render(option_lines: list[list[str]], selected: int, redraw: bool):
-    """
-    option_lines: list of [line1, line2, ...] per option
-    각 옵션은 여러 줄일 수 있음.
-    """
-    # 총 출력 줄 수 계산
     total_lines = sum(len(ls) for ls in option_lines)
-
     if redraw:
-        # 커서를 total_lines 위로 올리고 이후 지우기
         sys.stdout.write(f"\033[{total_lines}A{_ANSI_CLEAR}")
-
     for i, lines in enumerate(option_lines):
         for j, line in enumerate(lines):
             if j == 0:
@@ -163,15 +190,11 @@ def _render(option_lines: list[list[str]], selected: int, redraw: bool):
                 sys.stdout.write(f"{prefix} {i+1}. {line}\n")
             else:
                 sys.stdout.write(f"      {line}\n")
-
     sys.stdout.flush()
 
 
 def interactive_menu(timeout: int, info: dict) -> str | None:
-    """
-    화살표 키 선택 메뉴.
-    반환값: 'yes' | 'yes_always' | 'no' | None(타임아웃)
-    """
+    """화살표 키 선택 메뉴. 반환: 'yes' | 'yes_always' | 'no' | None(타임아웃)"""
     try:
         import msvcrt
     except ImportError:
@@ -180,63 +203,50 @@ def interactive_menu(timeout: int, info: dict) -> str | None:
     proj_short = str(PROJECT_ROOT).replace("\\", "/")
     option_lines = [
         ["Yes"],
-        [
-            "Yes, and don't ask again for",
-            f"python commands in",
-            f"{proj_short}",
-        ],
+        ["Yes, and don't ask again for", f"python commands in", f"{proj_short}"],
         ["No"],
     ]
     choices = ["yes", "yes_always", "no"]
-
     selected = 0
 
     sys.stdout.write(f"\nDo you want to proceed?\n")
     _render(option_lines, selected, redraw=False)
 
     deadline = time.time() + timeout
-
     while time.time() < deadline:
         if msvcrt.kbhit():
             ch = msvcrt.getwch()
-
-            if ch in ('\x00', '\xe0'):          # 확장키 (화살표)
+            if ch in ('\x00', '\xe0'):
                 ch2 = msvcrt.getwch()
-                if ch2 == 'H':                  # 위 화살표
+                if ch2 == 'H':
                     selected = (selected - 1) % len(choices)
                     _render(option_lines, selected, redraw=True)
-                elif ch2 == 'P':                # 아래 화살표
+                elif ch2 == 'P':
                     selected = (selected + 1) % len(choices)
                     _render(option_lines, selected, redraw=True)
-
-            elif ch == '\r':                    # Enter
+            elif ch == '\r':
                 sys.stdout.write("\n")
                 return choices[selected]
-
-            elif ch in ('1', '2', '3'):         # 숫자 직접 입력
+            elif ch in ('1', '2', '3'):
                 idx = int(ch) - 1
                 if 0 <= idx < len(choices):
                     selected = idx
                     _render(option_lines, selected, redraw=True)
                     sys.stdout.write("\n")
                     return choices[selected]
-
             elif ch.lower() == 'y':
                 sys.stdout.write("\n")
                 return "yes"
-
             elif ch.lower() == 'n':
                 sys.stdout.write("\n")
                 return "no"
-
         time.sleep(0.05)
 
     sys.stdout.write("\n")
-    return None  # 타임아웃
+    return None
 
 
 def _plain_input(timeout: int) -> str | None:
-    """비-Windows 폴백: 텍스트 입력."""
     import threading
     result = [None]
 
@@ -263,8 +273,8 @@ def build_tg_msg(info: dict) -> str:
         f"📝 \"{info['latest_msg']}\"\n\n"
         f"📁 변경 파일 {info['file_count']}개:\n{files_str}\n\n"
         f"배포할까요?\n"
-        f"✅ <b>yes</b> 또는 <b>/yes</b> — 배포 진행\n"
-        f"❌ <b>no</b> 또는 <b>/no</b>   — 취소"
+        f"✅ <b>yes</b> — 배포 진행\n"
+        f"❌ <b>no</b> — 취소"
     )
 
 
@@ -275,7 +285,6 @@ def main():
         print("[deploy_gate] --force 통과")
         sys.exit(0)
 
-    # "이번 세션 묻지마" 플래그 확인
     if is_skip_active():
         print("[deploy_gate] ✅ 세션 스킵 활성 — 묻지 않고 push 진행")
         sys.exit(0)
@@ -285,69 +294,88 @@ def main():
         print("[deploy_gate] push할 커밋 없음 — 통과")
         sys.exit(0)
 
-    # ── 1단계: 터미널 대기 ────────────────────────────────
-    terminal_ans = interactive_menu(TERMINAL_TIMEOUT, info)
+    token       = get_token()
+    subscribers = get_subscribers()
 
-    if terminal_ans == "yes":
-        print("[deploy_gate] ✅ 터미널 승인 — push 진행")
-        sys.exit(0)
+    # ── 텔레그램 즉시 발송 ─────────────────────────────────
+    tg_sent    = False
+    request_ts = time.time()
 
-    elif terminal_ans == "yes_always":
-        set_skip()
-        print("[deploy_gate] ✅ 터미널 승인 (8시간 스킵 설정) — push 진행")
-        sys.exit(0)
+    if token and subscribers:
+        msg  = build_tg_msg(info)
+        sent = sum(1 for cid in subscribers if tg_send(cid, msg, token))
+        tg_sent = sent > 0
+        if tg_sent:
+            print(f"[deploy_gate] 📱 텔레그램 알림 발송 완료 — yes/no 로 응답하세요")
+        else:
+            print("[deploy_gate] 텔레그램 전송 실패")
+    else:
+        print("[deploy_gate] 텔레그램 미설정 (토큰 또는 구독자 없음)")
 
-    elif terminal_ans == "no":
-        print("[deploy_gate] ❌ 터미널 거부 — push 취소")
+    # ── 터미널 + 텔레그램 동시 대기 ───────────────────────
+    answer: list[tuple[str, str] | None] = [None]
+    lock   = threading.Lock()
+
+    def _terminal():
+        a = interactive_menu(TERMINAL_TIMEOUT, info)
+        if a is not None:
+            with lock:
+                if answer[0] is None:
+                    answer[0] = ("terminal", a)
+
+    def _telegram():
+        if not tg_sent:
+            return
+        total = TERMINAL_TIMEOUT + TG_TIMEOUT
+        a = tg_poll_response(token, subscribers, request_ts, time.time() + total)
+        if a is not None:
+            with lock:
+                if answer[0] is None:
+                    answer[0] = ("telegram", a)
+
+    t1 = threading.Thread(target=_terminal, daemon=True)
+    t2 = threading.Thread(target=_telegram, daemon=True)
+    t1.start()
+    t2.start()
+
+    total_deadline = time.time() + TERMINAL_TIMEOUT + TG_TIMEOUT
+    while time.time() < total_deadline:
+        with lock:
+            if answer[0] is not None:
+                break
+        time.sleep(1)
+
+    # 타임아웃
+    if answer[0] is None:
+        print("[deploy_gate] ⏰ 타임아웃 — push 차단")
+        if tg_sent:
+            for cid in subscribers:
+                tg_send(cid, "⏰ 응답 없음 — 배포 자동 취소됨\n다시 push하면 새로 물어봅니다.", token)
         sys.exit(1)
 
-    # ── 2단계: 텔레그램 알림 ─────────────────────────────
-    print(f"\n[deploy_gate] 터미널 응답 없음 → 텔레그램으로 전송 중...")
+    source, choice = answer[0]
+    print(f"[deploy_gate] {source} 응답: {choice}")
 
-    subscribers = get_subscribers()
-    if not subscribers or not TG_TOKEN:
-        print("[deploy_gate] 텔레그램 미설정 — 자동 통과")
-        sys.exit(0)
-
-    request_id = str(uuid.uuid4())
-    clear_state()
-    write_state(request_id, info)
-
-    msg = build_tg_msg(info)
-    sent = sum(1 for cid in subscribers if tg_send(cid, msg))
-
-    if sent == 0:
-        print("[deploy_gate] 텔레그램 전송 실패 — 자동 통과")
-        clear_state()
-        sys.exit(0)
-
-    print(f"[deploy_gate] 텔레그램 승인 대기 중 (최대 {TG_TIMEOUT}초) — yes/no 로 응답하세요")
-
-    deadline = time.time() + TG_TIMEOUT
-    while time.time() < deadline:
-        time.sleep(2)
-        status = read_state().get("status", "pending")
-
-        if status == "approved":
-            print("[deploy_gate] ✅ 텔레그램 승인 — push 진행")
+    if choice == "yes":
+        if tg_sent and source == "telegram":
             for cid in subscribers:
-                tg_send(cid, f"✅ 배포 시작!\n\"{info['latest_msg'][:80]}\"")
-            clear_state()
-            sys.exit(0)
+                tg_send(cid, f"✅ 배포 시작!\n\"{info['latest_msg'][:80]}\"", token)
+        print("[deploy_gate] ✅ 승인 — push 진행")
+        sys.exit(0)
 
-        elif status == "rejected":
-            print("[deploy_gate] ❌ 텔레그램 거부 — push 취소")
-            clear_state()
-            sys.exit(1)
+    elif choice == "yes_always":
+        set_skip()
+        print("[deploy_gate] ✅ 승인 (8시간 스킵 설정) — push 진행")
+        sys.exit(0)
 
-        remaining = int(deadline - time.time())
-        if remaining % 120 == 0 and remaining > 0:
-            print(f"[deploy_gate] 대기 중... {remaining}초 남음")
+    elif choice == "no":
+        if tg_sent and source == "telegram":
+            for cid in subscribers:
+                tg_send(cid, f"❌ 배포 취소됨", token)
+        print("[deploy_gate] ❌ 거부 — push 취소")
+        sys.exit(1)
 
-    print("[deploy_gate] ⏰ 타임아웃 — push 차단")
-    for cid in subscribers:
-        tg_send(cid, "⏰ 응답 없음 — 배포 자동 취소됨\n다시 push하면 새로 물어봅니다.")
-    clear_state()
+    # 예외: 알 수 없는 응답
     sys.exit(1)
 
 

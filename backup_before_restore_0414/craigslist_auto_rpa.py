@@ -1,0 +1,2326 @@
+"""
+BRIDGE Craigslist Auto RPA
+===========================
+master.db jobs → 광고 생성 → Seoul Craigslist 자동 게시
+
+보안 정책:
+  - 광고에 업체명·연락처·이메일·정확한 주소 절대 미포함
+  - internal_notes 완전 차단 (업체 전화/메일 포함)
+  - 노출 허용: 도시명, 급여, 근무시간, 연령대, 복지(일반)
+  - 카카오톡 ID 완전 차단
+  - 파일 무결성 체크 (해킹 시도 차단)
+
+다중 계정:
+  python craigslist_auto_rpa.py --account account1 --limit 10
+  python craigslist_auto_rpa.py --account account2 --headless --limit 10
+
+실행:
+  python craigslist_auto_rpa.py --dry-run          # 광고 텍스트 출력만
+  python craigslist_auto_rpa.py --generate         # ad_posts draft 저장만
+  python craigslist_auto_rpa.py --limit 3          # 최대 3건 실제 게시
+  python craigslist_auto_rpa.py --job-code Job.1633 --limit 1
+"""
+
+import argparse
+import hashlib
+import io
+import json
+import logging
+import os
+import random
+import re
+import sqlite3
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+
+# stdout/stderr 안전 처리 — pythonw / VBS hidden(0) / 일반 콘솔 모두 대응
+# pythonw: stdout=None, VBS hidden: stdout 쓰기 블로킹 가능
+# 해결: 로그 파일로 리다이렉트 (콘솔이 실제로 존재하는 경우만 원본 유지)
+_LOG_STDOUT = Path(__file__).resolve().parent / "logs" / "rpa_stdout.log"
+_LOG_STDOUT.parent.mkdir(parents=True, exist_ok=True)
+try:
+    if sys.stdout is None or not hasattr(sys.stdout, 'buffer') or sys.stdout.buffer is None:
+        # pythonw: stdout 완전 없음 → 로그 파일로
+        sys.stdout = open(str(_LOG_STDOUT), "w", encoding="utf-8", errors="replace", buffering=1)
+        sys.stderr = sys.stdout
+    else:
+        # python.exe: UTF-8 래핑 (cp949 인코딩 에러 방지)
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+except Exception:
+    # 최악의 경우: devnull
+    sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+    sys.stderr = sys.stdout
+
+# ── 글로벌 에러 핸들러 ────────────────────────────────────────────────────────
+ERROR_LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "rpa_crash.log"
+ERROR_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def _global_exception_handler(exc_type, exc_value, exc_traceback):
+    """모든 에러를 파일에 기록 + pythonw에서는 tkinter 팝업"""
+    try:
+        with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*70}\n")
+            f.write(f"[CRASH] {datetime.now().isoformat()}\n")
+            f.write(f"{'='*70}\n")
+            f.write(f"Error: {exc_type.__name__}: {exc_value}\n\n")
+            f.write("Traceback:\n")
+            traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+    except Exception:
+        pass
+
+    # 콘솔 출력 시도 (pythonw에서는 devnull이므로 무해)
+    try:
+        print(f"\n[CRITICAL ERROR] {exc_type.__name__}: {exc_value}")
+        print(f"에러 상세: {ERROR_LOG_FILE}")
+    except Exception:
+        pass
+
+    # pythonw.exe 환경: tkinter 팝업으로 에러 표시 (검은 창 방지)
+    try:
+        import tkinter as _tk
+        from tkinter import messagebox as _mb
+        _r = _tk.Tk(); _r.withdraw()
+        _mb.showerror("Bridge RPA 오류",
+                      f"{exc_type.__name__}:\n{str(exc_value)[:400]}\n\n로그: {ERROR_LOG_FILE}")
+        _r.destroy()
+    except Exception:
+        pass
+
+sys.excepthook = _global_exception_handler
+
+# ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
+BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
+DB_PATH  = Path(os.getenv("BRIDGE_DB_PATH", str(BASE_DIR / "data" / "master.db")))
+
+# DB fallback: data/master.db 없으면 루트의 master.db (기존 Windows 구조 호환)
+if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
+    DB_PATH = BASE_DIR / "master.db"
+
+SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
+SS_DIR.mkdir(parents=True, exist_ok=True)
+LOCK_FILE           = BASE_DIR / "logs" / ".rpa_running.lock"
+_STOP_GRACEFUL_FLAG = BASE_DIR / "logs" / ".rpa_stop_graceful.flag"
+# 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
+_IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
+_IMG_DIR.mkdir(parents=True, exist_ok=True)
+AD_IMAGE = _IMG_DIR / os.getenv("CRAIG_IMAGE_FILE", "B.jpg")
+
+# ── 구조화 에러 로그 (rpa_error.log) ─────────────────────────────────────────
+_LOG_DIR = BASE_DIR / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_err_logger = logging.getLogger("rpa_errors")
+_err_logger.setLevel(logging.INFO)
+_err_handler = logging.FileHandler(str(_LOG_DIR / "rpa_error.log"), encoding="utf-8")
+_err_handler.setFormatter(
+    logging.Formatter("%(asctime)s\t%(levelname)s\t%(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+)
+_err_logger.addHandler(_err_handler)
+
+
+def _log_event(level: str, job_code: str, stage: str, message: str, extra: dict | None = None):
+    """rpa_error.log 에 JSON 구조화 로그 기록."""
+    payload = {
+        "job_code": job_code,
+        "stage":    stage,
+        "message":  message,
+    }
+    if extra:
+        payload.update(extra)
+    line = json.dumps(payload, ensure_ascii=False)
+    if level == "error":
+        _err_logger.error(line)
+    elif level == "warn":
+        _err_logger.warning(line)
+    else:
+        _err_logger.info(line)
+
+# ── 계정별 .env 로딩 ─────────────────────────────────────────────────────────
+# --account account1 → account1.env 로딩
+# 미지정 시 기본 .env 사용
+def _load_account_env(account_id: str | None = None):
+    """계정별 .env 파일 로딩. account_id 없으면 기본 .env."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+
+    if account_id:
+        acct_env = Path(__file__).resolve().parent / f"{account_id}.env"
+        if acct_env.exists():
+            load_dotenv(acct_env, override=True)
+            print(f"  [ENV] {account_id}.env 로딩 완료")
+            return
+        else:
+            print(f"  [WARN] {acct_env} 없음 → 기본 .env 사용")
+
+    for _env_candidate in [
+        BASE_DIR / ".env",
+        BASE_DIR / "backend" / ".env",
+        Path(__file__).resolve().parent / ".env",
+    ]:
+        if _env_candidate.exists():
+            load_dotenv(_env_candidate, override=True)
+            break
+
+# 초기 로딩 (--account 파싱 전이므로 기본 .env)
+_load_account_env()
+
+
+
+# ── 허용된 계정 이름 화이트리스트 ───────────────────────────────────────────
+_ALLOWED_ACCOUNTS = frozenset({"gray", "green", "brown", "purple", "default"})
+
+
+
+# (integrity_check 완전 제거됨 — 해시 불일치 무음 종료 문제 원천 차단)
+
+# ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
+# cl_post() 함수에서 단계별 상태를 업데이트할 수 있도록 전역 함수 정의
+def _dummy_update_status(text: str):
+    """더미 함수 — main()에서 실제 함수로 교체됨."""
+    pass
+
+_update_status = _dummy_update_status
+
+# ── Selenium 지연 로드 (--dry-run/--generate 모드에서는 필요 없음) ──────────
+_SKIP_SELENIUM = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
+
+if not _SKIP_SELENIUM:
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support.ui import WebDriverWait, Select
+        from selenium.webdriver.support import expected_conditions as EC
+        from webdriver_manager.chrome import ChromeDriverManager
+        # 봇 탐지 우회용 undetected-chromedriver
+        try:
+            import undetected_chromedriver as uc
+            _HAS_UC = True
+        except ImportError:
+            _HAS_UC = False
+    except ImportError as e:
+        print(f"[ERROR] Selenium이 설치되지 않았습니다.")
+        print(f"설치 명령: pip install selenium webdriver-manager")
+        print(f"에러 상세: {e}")
+        sys.exit(1)
+else:
+    # --dry-run/--generate 모드: 더미 객체 정의 (타입 힌트 호환)
+    class _DummyWebDriver:
+        class Chrome:
+            def __init__(self, *args, **kwargs): pass
+            def quit(self): pass
+        class WebDriver:
+            pass
+
+    class _DummyService:
+        pass
+
+    class _DummyOptions:
+        pass
+
+    class _DummyBy:
+        pass
+
+    class _DummyKeys:
+        pass
+
+    class _DummyWebDriverWait:
+        pass
+
+    class _DummySelect:
+        pass
+
+    class _DummyEC:
+        pass
+
+    class _DummyCDM:
+        pass
+
+    webdriver = _DummyWebDriver()
+    Service = _DummyService
+    Options = _DummyOptions
+    By = _DummyBy
+    Keys = _DummyKeys
+    WebDriverWait = _DummyWebDriverWait
+    Select = _DummySelect
+    EC = _DummyEC
+    ChromeDriverManager = _DummyCDM
+
+# ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
+def _load_craigslist_credentials(account_name: str = "gray"):
+    """Craigslist 자격증명을 암호화 vault에서 복호화 로드.
+
+    ENV/평문 절대 사용 금지 — 3중 AES-256-GCM vault에서만 로드
+    DPAPI 캐시로 마스터 키 자동 로드 (재입력 불필요)
+
+    계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "tools"))
+        from rpa_credential_vault import CredentialVault
+        vault = CredentialVault()
+
+        email_key = f"{account_name}_email"
+        password_key = f"{account_name}_password"
+
+        email = vault.get_decrypted(email_key)
+        password = vault.get_decrypted(password_key)
+
+        if not email or not password:
+            print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
+            print("먼저 vault 설정을 실행하세요:")
+            print("  vault_setup.bat 더블클릭")
+            sys.exit(1)
+
+        print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
+        return email, password
+    except Exception as e:
+        print(f"[ERROR] 자격증명 로드 실패: {e}")
+        sys.exit(1)
+
+# ── 계정 선택 파싱 ────────────────────────────────────────────────────────────
+_ACCOUNT = "gray"  # 기본값: 회색
+if "--account" in sys.argv:
+    idx = sys.argv.index("--account")
+    if idx + 1 < len(sys.argv):
+        _ACCOUNT = sys.argv[idx + 1]
+
+# ── Craigslist 설정 ──────────────────────────────────────────────────────────
+# 초기 로드 (--account 지정 시 재로드)
+# dry-run/generate/--help 모드에서는 자격증명 불필요 — lazy load
+_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv or "--login-setup" in sys.argv
+CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
+CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
+CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
+
+CL_BASE_URL  = f"https://{CL_CITY}.craigslist.org"
+CL_LOGIN_URL = "https://accounts.craigslist.org/login/home"
+
+NOW = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+# ── 대기 (블로킹 없는 카운트다운) ─────────────────────────────────────────────
+def countdown(seconds: int, label: str = ""):
+    """CMD 에 카운트다운을 출력하며 대기. 블로킹 없음."""
+    for remaining in range(seconds, 0, -1):
+        print(f"  ⏳ {label} {remaining}s...", end="\r", flush=True)
+        time.sleep(1)
+    print(" " * 60, end="\r")
+
+
+def wait_for_captcha(driver, timeout: int = 120, headless: bool = False):
+    """
+    CAPTCHA 대기: timeout 초 동안 카운트다운 후 URL 재확인.
+    headless=True 이면 즉시 실패 처리 (시각 브라우저 없으므로 해결 불가).
+    """
+    if headless:
+        print("\n  ⚠️  [HEADLESS] CAPTCHA 감지 — 자동 해결 불가, 해당 건 스킵")
+        _log_event("warn", "—", "captcha", "CAPTCHA detected in headless mode — skipped")
+        return False
+
+    print(f"\n  ⚠️  CAPTCHA 또는 추가 인증 감지")
+    print(f"  브라우저에서 직접 풀어주세요. {timeout}초 자동 대기합니다.")
+    for remaining in range(timeout, 0, -5):
+        time.sleep(5)
+        print(f"  ⏳ CAPTCHA 대기 중... {remaining-5}s 남음", end="\r", flush=True)
+        if "login" not in driver.current_url.lower():
+            print("\n  ✅ CAPTCHA 해결 감지, 계속 진행합니다.")
+            return True
+    print(f"\n  ❌ {timeout}초 내 해결되지 않음.")
+    return False
+
+
+# ── DB ────────────────────────────────────────────────────────────────────────
+def get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
+    conn = get_conn()
+    params: list = []
+    where_clauses = [
+        "j.city IS NOT NULL AND j.city != ''",
+        "j.salary_raw IS NOT NULL AND j.salary_raw != ''",
+        "j.teaching_age IS NOT NULL AND j.teaching_age != ''",
+        """NOT EXISTS (
+            SELECT 1 FROM ad_posts ap
+            WHERE ap.job_code = j.job_code
+              AND ap.seq = j.seq
+              AND ap.platform = 'craigslist'
+              AND ap.status = 'posted'
+        )""",
+    ]
+    if job_code:
+        where_clauses.append("j.job_code = ?")
+        params.append(job_code)
+
+    where = "WHERE " + " AND ".join(where_clauses)
+
+    # 내용 풍부도 점수: 필드가 많이 채워진 직업을 우선
+    # 동점이면 RANDOM() → 매 실행마다 다른 직업이 선택됨
+    content_score = """(
+        CASE WHEN j.working_hours  IS NOT NULL AND j.working_hours  != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.teach_hrs_week IS NOT NULL AND j.teach_hrs_week != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.vacation       IS NOT NULL AND j.vacation       != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.native_count   IS NOT NULL AND j.native_count   != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.class_size     IS NOT NULL AND j.class_size     != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.housing        IS NOT NULL AND j.housing        != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.district       IS NOT NULL AND j.district       != '' THEN 1 ELSE 0 END +
+        CASE WHEN j.benefits       IS NOT NULL AND j.benefits       != '' THEN 1 ELSE 0 END
+    )"""
+
+    sql = f"""
+        SELECT j.id, j.job_code, j.seq, j.city, j.district,
+               j.teaching_age, j.salary_raw, j.salary_min, j.salary_max,
+               j.working_hours, j.daily_hours, j.teach_hrs_week,
+               j.housing, j.benefits, j.vacation, j.native_count,
+               j.start_date, j.class_size,
+               {content_score} AS content_score
+        FROM jobs j
+        {where}
+        ORDER BY content_score DESC, RANDOM()
+        LIMIT ?
+    """
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_draft(job: dict, title: str, body: str) -> int:
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT id FROM ad_posts WHERE job_code=? AND seq=? AND platform='craigslist'",
+        (job["job_code"], job["seq"])
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE ad_posts SET ad_title=?, ad_body=?, status='draft', draft_at=? WHERE id=?",
+            (title, body, NOW, existing[0])
+        )
+        conn.commit(); conn.close()
+        return existing[0]
+    cur = conn.execute(
+        "INSERT INTO ad_posts (job_code,seq,platform,status,ad_title,ad_body,draft_at) "
+        "VALUES (?,?,'craigslist','draft',?,?,?)",
+        (job["job_code"], job["seq"], title, body, NOW)
+    )
+    aid = cur.lastrowid
+    conn.commit(); conn.close()
+    return aid
+
+
+def mark_posted(ad_id: int, posted_url: str, screenshot: str):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE ad_posts SET status='posted',posted_at=?,posted_url=?,screenshot_path=? WHERE id=?",
+        (NOW, posted_url, screenshot, ad_id)
+    )
+    conn.commit(); conn.close()
+
+
+def mark_error(ad_id: int, msg: str):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE ad_posts SET status='error',error_msg=? WHERE id=?",
+        (msg[:500], ad_id)
+    )
+    conn.commit(); conn.close()
+
+
+# ── 광고 생성 ─────────────────────────────────────────────────────────────────
+# ⚠️  보안: 업체명·연락처·주소 절대 미포함
+# 허용: 도시(city), 급여(salary_raw), 근무시간, 연령대, 일반 복지
+# 실제 Craigslist 게시 포맷에 맞춤 (◾◾◾ 제목, 백틱 필드, 표준 요건 문구)
+
+_AGE_MAP = {
+    "pre":      "Pre-K",
+    "kindy":    "Kindy",
+    "kindergarten": "Kindy",
+    "elem":     "Elem",
+    "elementary": "Elem",
+    "middle":   "Middle",
+    "high":     "High School",
+    "adult":    "Adult",
+    "conversation": "Adult",
+}
+
+def _age_label(raw: str) -> str:
+    """'Kindy - Elem' 스타일 짧은 라벨 반환."""
+    lower = raw.lower()
+    labels, seen = [], set()
+    for key, label in _AGE_MAP.items():
+        if key in lower and label not in seen:
+            labels.append(label); seen.add(label)
+    if not labels:
+        return raw.strip()
+    # 중복 제거 및 순서 정렬 (Pre-K → Kindy → Elem → Middle → High → Adult)
+    order = ["Pre-K", "Kindy", "Elem", "Middle", "High School", "Adult"]
+    sorted_labels = [l for l in order if l in labels]
+    if not sorted_labels:
+        sorted_labels = labels
+    return " - ".join(sorted_labels)
+
+
+# ── 월 이름 정규화 (약어 포함) ───────────────────────────────────────────────
+_MONTH_NAMES = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6,
+    "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "september": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+_MONTH_LABEL = ["", "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"]
+
+
+def _safe_start_date(raw: str) -> str:
+    """안전하지 않은 시작일 → ASAP~6개월 뒤 중 랜덤 선택.
+
+    안전 기준: 현재월 + 2 이상만 허용.
+    이미 안전한 월 → 그대로 유지.
+    당월/차월/과거 → ASAP 또는 2~6개월 뒤 랜덤.
+    """
+    if not raw or not raw.strip():
+        return "Negotiable"
+
+    text = raw.strip()
+    low = text.lower().strip()
+
+    if low in ("asap", "immediately", "negotiable", "anytime"):
+        return text
+
+    cur_month = datetime.now().month
+    safe_start = cur_month + 2  # 이 달부터 안전
+
+    # 안전 풀: ASAP + 2~6개월 뒤
+    safe_pool = ["ASAP"]
+    for offset in range(2, 7):
+        m = (cur_month + offset - 1) % 12 + 1
+        safe_pool.append(_MONTH_LABEL[m])
+
+    # 텍스트에서 월 이름 존재 여부 확인
+    has_month = False
+    has_unsafe = False
+    for tok_m in re.finditer(r'\b([A-Za-z]+)\.?\b', text):
+        tok = tok_m.group(1).lower().rstrip('.')
+        if tok in _MONTH_NAMES:
+            has_month = True
+            if _MONTH_NAMES[tok] < safe_start:
+                has_unsafe = True
+                break
+
+    if not has_month or not has_unsafe:
+        return text  # 월 없거나 모두 안전 → 그대로
+
+    # 안전하지 않은 월 포함 → 전체를 랜덤 안전 값으로 교체
+    return random.choice(safe_pool)
+
+
+def _safe_benefits(raw: str) -> list[str]:
+    """복지 항목 파싱. 연락처/업체명 포함 항목 차단."""
+    defaults = ["Visa sponsorship", "severance pay", "pension", "insurance", "paid vacation"]
+    if not raw:
+        return defaults
+    items = [b.strip() for b in re.split(r"[,;\n]", raw) if b.strip()]
+    clean = []
+    for item in items:
+        if re.search(
+            r'@|010[-\s]?\d|02[-\s]?\d{3,4}[-\s]?\d{4}'
+            r'|학원|어학원|유치원|센터|학교'
+            r'|\d{3}-\d{2}-\d{5}'
+            r'|[가-힣]{2,4}\s*(?:원장|팀장|부장|선생님|교감|교장)'
+            r'|\+\d{1,3}[-\s]?\d', item):
+            continue
+        if len(item) > 80:
+            continue
+        clean.append(item)
+    return clean if clean else defaults
+
+
+def _title_feature(job: dict, teach_hrs: str, vacation: str, benefits: list[str]) -> str:
+    """제목 끝에 붙는 핵심 특징 (실제 게시 포맷 참고)."""
+    # 수업시간 명시 → 우선
+    if teach_hrs and re.search(r'\d', teach_hrs):
+        hrs = teach_hrs.strip().split()[0].split("~")[0]
+        return f"Teaching Hours per Week : {teach_hrs}"
+    # 휴가 20일 이상
+    if vacation:
+        m = re.search(r'(\d+)\s*days?', vacation, re.I)
+        if m and int(m.group(1)) >= 20:
+            return f"Vacation : {m.group(1)} days"
+    # 복지 중 눈에 띄는 항목
+    notable = ["airfare", "housing", "flight", "bonus"]
+    for b in benefits:
+        for kw in notable:
+            if kw in b.lower():
+                return b.strip().rstrip(".")
+    # 기본
+    return "Visa sponsorship"
+
+
+_HOUSING_KW = re.compile(
+    r'(?:accommodat|housing|airbnb|숙소|오피스텔|월세|보증금)', re.I
+)
+
+
+def _extract_housing(housing_col: str, benefits_raw: str) -> tuple[str, str]:
+    """
+    housing 컬럼 우선. 없으면 benefits 문자열에서 숙소 관련 항목 추출.
+    반환: (housing_str, benefits_raw_without_housing)
+    데이터에 없는 내용은 절대 추가하지 않음 — 불명확하면 빈 문자열 반환.
+    """
+    if housing_col:
+        return housing_col.strip(), benefits_raw
+
+    # benefits에서 숙소 키워드가 포함된 항목 추출
+    items = [b.strip() for b in re.split(r'[,;\n]', benefits_raw) if b.strip()]
+    housing_items, other_items = [], []
+    for item in items:
+        if _HOUSING_KW.search(item):
+            housing_items.append(item)
+        else:
+            other_items.append(item)
+
+    if housing_items:
+        # Housing 라인으로 이동 — benefits에서 중복 제거
+        return ", ".join(housing_items), ", ".join(other_items)
+
+    # 소스에 없으면 빈 문자열 (임의로 "Not provided" 추가 금지)
+    return "", benefits_raw
+
+
+def generate_ad(job: dict) -> tuple[str, str]:
+    """(title, body) 반환. 실제 Craigslist 게시 포맷."""
+    city       = (job.get("city")          or "Korea").strip()
+    district   = (job.get("district")      or "").strip()
+    age_raw    = (job.get("teaching_age")  or "").strip()
+    age        = _age_label(age_raw) if age_raw else "Various"
+    salary     = (job.get("salary_raw")    or "Negotiable").strip()
+    hours      = (job.get("working_hours") or "").strip()
+    teach_hrs  = (job.get("teach_hrs_week") or "").strip()
+    vacation   = (job.get("vacation")      or "").strip()
+    native     = (job.get("native_count")  or "").strip()
+    start      = _safe_start_date((job.get("start_date") or "Negotiable").strip())
+    class_size = (job.get("class_size")    or "").strip()
+    jcode      = (job.get("job_code")      or "").strip()
+
+    # Housing: housing 컬럼 → benefits 파생 → 없으면 빈 문자열 (임의 추가 금지)
+    housing, benefits_remaining = _extract_housing(
+        job.get("housing") or "",
+        job.get("benefits") or "",
+    )
+
+    # 도시+구 (구는 city 뒤 공백 구분으로만)
+    location = f"{city}{' ' + district if district else ''}"
+
+    benefits   = _safe_benefits(benefits_remaining)
+    ben_str    = ", ".join(benefits)
+
+    feature    = _title_feature(job, teach_hrs, vacation, benefits)
+
+    # ── 제목: 실제 포맷 ◾◾◾{도시} , {시작월}, {연령대}, {핵심특징}
+    title = f"\u25fe\u25fe\u25fe\u25fe{location} , {start}, {age_raw}, {feature}"
+
+    # ── 본문 필드 구성 (있는 필드 전부 출력, 개인정보만 제외)
+    job_num = jcode.replace("Job.", "").strip()
+    lines = [location, f"Job. {job_num}"]
+
+    if start:
+        lines.append(f"Starting Date : {start}")
+    if age_raw:
+        lines.append(f"Teaching Age : {age_raw}")
+    if class_size:
+        lines.append(f"Class size : {class_size}")
+    if hours:
+        lines.append(f"Working Hours : {hours}")
+    if salary:
+        lines.append(f"Monthly Salary : {salary}")
+    if teach_hrs:
+        lines.append(f"Average Teaching Hours per Week : {teach_hrs}")
+    if vacation:
+        lines.append(f"Vacation : {vacation}")
+    if native:
+        lines.append(f"Native Teacher (Numbers can change) : {native}")
+    if housing:
+        lines.append(f"Housing: {housing}")
+    if ben_str:
+        lines.append(f"Employee Benefits : {ben_str.rstrip('.')}.")
+
+    lines.append("")
+    lines.append("Requirements:")
+    lines.append("* Must-Haves: Clean background check & Bachelor's degree")
+    lines.append("* Nationality: UK, US, CA, AUS, NZ, IE, ZA")
+    lines.append("* SA : only those currently residing in Korea")
+    lines.append("* Korean/Gyopo Nationals: if all requirements are met")
+    lines.append("")
+    lines.append("IMPORTANT: PLEASE READ CAREFULLY")
+    lines.append("We CANNOT provide help for nationalities not listed above.")
+    lines.append("DO NOT APPLY if you are from a different nationality")
+
+    body = "\n".join(lines)
+    return title.strip(), body.strip()
+
+
+# ── Selenium ──────────────────────────────────────────────────────────────────
+def _delay(lo=0.8, hi=2.0):
+    time.sleep(random.uniform(lo, hi))
+
+
+def _type_slow(el, text: str):
+    for ch in text:
+        el.send_keys(ch)
+        time.sleep(random.uniform(0.04, 0.10))
+
+
+def _find_chrome_binary() -> str | None:
+    """Chrome 바이너리 경로 자동 탐색 (비표준 경로 포함)."""
+    import winreg
+    # 레지스트리 우선 (설치 경로가 어디든 확실히 탐색)
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            key = winreg.OpenKey(hive,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
+            val, _ = winreg.QueryValueEx(key, "")
+            winreg.CloseKey(key)
+            if val and Path(val).exists():
+                return val
+        except Exception:
+            pass
+    # 표준 경로 폴백
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
+        r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            return str(c)
+    return None
+
+
+def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
+    """Chrome 드라이버 생성.
+
+    headless=True: --headless=new + undetected-chromedriver (봇 탐지 우회)
+    계정별 Chrome 프로필 유지 → 쿠키/세션 재사용으로 로그인 반복 방지.
+    """
+    chrome_bin = _find_chrome_binary()
+
+    # 계정별 Chrome 프로필 (세션 쿠키 영속화)
+    profile_dir = str(BASE_DIR / ".chrome_rpa_profile" / account)
+    Path(profile_dir).mkdir(parents=True, exist_ok=True)
+
+    # ── undetected-chromedriver 우선 (봇 탐지 우회) ──
+    if _HAS_UC:
+        uc_opts = uc.ChromeOptions()
+        if chrome_bin:
+            uc_opts.binary_location = chrome_bin
+            print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+        # 계정별 프로필 → 쿠키 재사용, Further verification 반복 방지
+        uc_opts.add_argument(f"--user-data-dir={profile_dir}")
+        print(f"  [DRIVER] 프로필: {profile_dir}")
+        if headless:
+            uc_opts.add_argument("--headless=new")
+            uc_opts.add_argument("--no-sandbox")
+            uc_opts.add_argument("--disable-dev-shm-usage")
+            uc_opts.add_argument("--window-size=1920,1080")
+        else:
+            uc_opts.add_argument("--start-maximized")
+        uc_opts.add_argument("--no-first-run")
+        uc_opts.add_argument("--no-default-browser-check")
+        uc_opts.add_argument("--remote-debugging-port=0")
+        uc_opts.add_argument("--disable-sync")
+        uc_opts.add_argument("--disable-features=IdentityConsistency,ChromeWhatsNewUI")
+        uc_opts.add_argument("--suppress-message-center-popups")
+        if headless:
+            print("  [DRIVER] undetected + headless 모드")
+        else:
+            print("  [DRIVER] undetected + visible 모드")
+        # Chrome 버전 자동 감지 (version mismatch 방지)
+        _chrome_ver = None
+        if chrome_bin:
+            try:
+                import subprocess as _sp
+                _ver_out = _sp.check_output(
+                    ['powershell.exe', '-NoProfile', '-Command',
+                     f"(Get-Item '{chrome_bin}').VersionInfo.FileVersion"],
+                    text=True, timeout=10).strip()
+                _chrome_ver = int(_ver_out.split(".")[0])
+                print(f"  [DRIVER] Chrome 버전: {_chrome_ver}")
+            except Exception as _ve:
+                print(f"  [DRIVER] 버전 감지 실패: {_ve}")
+            # 레지스트리 폴백
+            if _chrome_ver is None:
+                try:
+                    _reg_out = _sp.check_output(
+                        'reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
+                        shell=True, text=True, timeout=10).strip()
+                    for _rl in _reg_out.splitlines():
+                        if "version" in _rl.lower():
+                            _chrome_ver = int(_rl.split()[-1].split(".")[0])
+                            print(f"  [DRIVER] Chrome 버전 (reg): {_chrome_ver}")
+                            break
+                except Exception:
+                    pass
+        driver = uc.Chrome(options=uc_opts, use_subprocess=True,
+                           version_main=_chrome_ver)
+        return driver
+
+    # ── 폴백: 일반 Selenium ──
+    print("  [DRIVER] WARNING: undetected-chromedriver 미설치 — 일반 Selenium 사용")
+    opts = Options()
+    if chrome_bin:
+        opts.binary_location = chrome_bin
+        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
+    opts.add_argument(f"--user-data-dir={profile_dir}")
+    # undetected-chromedriver 미설치 → headless=new은 Craigslist 봇탐지됨
+    # 대신: 창을 화면 밖으로 이동 (사용자에게 보이지 않지만 headless 아님)
+    opts.add_argument("--window-size=1920,1080")
+    opts.add_argument("--window-position=-10000,0")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--remote-debugging-port=0")
+    opts.add_argument("--no-first-run")
+    opts.add_argument("--no-default-browser-check")
+    opts.add_argument("--disable-sync")
+    opts.add_argument("--disable-features=IdentityConsistency,ChromeWhatsNewUI")
+    opts.add_argument("--suppress-message-center-popups")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
+    svc    = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=svc, options=opts)
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"}
+    )
+    return driver
+
+
+def _find(driver, selectors: list[str]):
+    for sel in selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                return el
+        except Exception:
+            pass
+    return None
+
+
+def _click_next(driver, timeout=8):
+    for sel in [
+        "button#go", "button[id*='continue']", "input[value*='continue']",
+        "button[type='submit']", "input[type='submit']",
+    ]:
+        try:
+            el = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+            )
+            el.click()
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def _has_captcha(driver) -> bool:
+    return any(k in driver.page_source.lower()
+               for k in ["recaptcha", "g-recaptcha", "hcaptcha"])
+
+
+def cl_login(driver: webdriver.Chrome) -> bool:
+    print("  [1/7] Craigslist 로그인...")
+
+    def _is_logged_in(d):
+        src = d.page_source.lower()
+        return "log out" in src or "logout" in src or "make new post" in src
+
+    def _minimize_if_needed(d):
+        """로그인 성공 후 창을 화면 밖으로 이동 (minimize는 클릭 무효화)"""
+        try:
+            d.set_window_position(-10000, -10000)
+            print("  [LOGIN] 창 최소화 완료")
+        except Exception:
+            pass
+
+    # ── 쿠키 세션 체크: 이미 로그인 상태면 스킵 ──
+    driver.get("https://accounts.craigslist.org/login/home")
+    _delay(2, 3)
+    src_check = driver.page_source.lower()
+    if "log out" in src_check or "logout" in src_check:
+        print("  [LOGIN] 기존 쿠키로 이미 로그인 상태 — 스킵 ✅")
+        _minimize_if_needed(driver)
+        return True
+
+    try:
+        email_el = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "inputEmailHandle"))
+        )
+        _type_slow(email_el, CL_EMAIL)
+        _delay()
+
+        pw_el = driver.find_element(By.ID, "inputPassword")
+        _type_slow(pw_el, CL_PASSWORD)
+        _delay(0.5, 1.0)
+        pw_el.send_keys(Keys.RETURN)
+
+        # Craigslist 는 로그인 후에도 URL 이 accounts.craigslist.org/login/home 유지
+        # → URL 대신 페이지 콘텐츠로 로그인 성공 여부 판단
+        try:
+            WebDriverWait(driver, 12).until(_is_logged_in)
+            print(f"  [LOGIN] 성공 ✅")
+            _minimize_if_needed(driver)
+            return True
+        except Exception:
+            pass
+
+        # "Further verification required" → 이메일 로그인 링크 자동 요청
+        src_after = driver.page_source.lower()
+        if "further verification" in src_after or "one-time login" in src_after:
+            print("  [LOGIN] ⚠️ 추가 인증 필요 — 이메일 로그인 링크 전송 시도...")
+            # 디버그: page source 저장 (버튼 구조 분석용)
+            try:
+                _dbg = _LOG_DIR / "login_page_source.html"
+                _dbg.write_text(driver.page_source, encoding="utf-8")
+                print(f"  [LOGIN] 페이지 소스 저장: {_dbg}")
+            except Exception:
+                pass
+            try:
+                # ── JavaScript로 직접 "E-mail a login link" 클릭 (가장 확실) ──
+                clicked = driver.execute_script("""
+                    // 1) 모든 input/button/a 중 "login link" 텍스트 포함 요소 클릭
+                    var targets = document.querySelectorAll('input, button, a');
+                    for (var i = 0; i < targets.length; i++) {
+                        var el = targets[i];
+                        var txt = (el.value || el.textContent || '').toLowerCase();
+                        if (txt.indexOf('login link') !== -1 || txt.indexOf('e-mail a login') !== -1) {
+                            el.click();
+                            return 'clicked: ' + el.tagName + ' = ' + txt.trim().substring(0, 60);
+                        }
+                    }
+                    // 2) "click here" 링크 폴백
+                    var links = document.querySelectorAll('a');
+                    for (var j = 0; j < links.length; j++) {
+                        var a = links[j];
+                        var t = (a.textContent || '').toLowerCase();
+                        if (t.indexOf('click here') !== -1) {
+                            a.click();
+                            return 'clicked: a.click_here = ' + t.trim().substring(0, 60);
+                        }
+                    }
+                    return null;
+                """)
+
+                if clicked:
+                    print(f"  [LOGIN] JS 클릭 성공: {clicked}")
+                    print(f"  [LOGIN] 📧 로그인 링크가 {CL_EMAIL}로 전송됨!")
+                    print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
+                    _log_event("warning", "—", "login",
+                               f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
+                    # 3분간 10초 간격으로 로그인 확인
+                    for wait_i in range(18):
+                        _delay(9, 11)
+                        try:
+                            driver.refresh()
+                            _delay(2, 3)
+                            if _is_logged_in(driver):
+                                print("  [LOGIN] 이메일 링크 인증 성공 ✅")
+                                _minimize_if_needed(driver)
+                                return True
+                        except Exception:
+                            pass
+                        remaining = (18 - wait_i - 1) * 10
+                        if remaining > 0:
+                            print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
+                else:
+                    print("  [LOGIN] 이메일 링크 버튼 미발견 (JS 탐색 실패)")
+                    # Selenium 폴백: 기존 방식
+                    link_btn = None
+                    for tag in ["input", "button", "a"]:
+                        for el in driver.find_elements(By.TAG_NAME, tag):
+                            val = (el.get_attribute("value") or el.text or "").lower()
+                            if "login link" in val or "e-mail a login" in val or "click here" in val:
+                                link_btn = el
+                                break
+                        if link_btn:
+                            break
+                    if link_btn:
+                        try:
+                            link_btn.click()
+                        except Exception:
+                            _js_click(driver, link_btn)
+                        print(f"  [LOGIN] Selenium 폴백 클릭 성공")
+                    else:
+                        print("  [LOGIN] 모든 버튼 탐색 실패 — page source 확인 필요")
+            except Exception as vex:
+                print(f"  [LOGIN] 인증 처리 오류: {vex}")
+
+        # CAPTCHA 감지
+        if _has_captcha(driver):
+            ok = wait_for_captcha(driver, timeout=120)
+            return ok
+
+        # 마지막 수단: 추가 30초 대기
+        print("  [LOGIN] 30초 추가 대기...")
+        countdown(30, "로그인 대기")
+        if _is_logged_in(driver):
+            print("  [LOGIN] 성공 ✅")
+            _minimize_if_needed(driver)
+            return True
+
+        # ── 자동 로그인 실패 → 오버레이 로그인 배너 + 크롬 창 표시 ──
+        print("  [LOGIN] 자동 로그인 실패 — 수동 로그인 대기 (5분)...")
+        try:
+            driver.set_window_position(100, 100)
+            driver.set_window_size(1024, 768)
+        except Exception:
+            pass
+        try:
+            from rpa_overlay import notify_login_needed, wait_for_login_done, reset_login_state
+            notify_login_needed()
+            print(f"  [LOGIN] 오버레이에 로그인 버튼 표시됨 — 크롬 창에서 로그인 후 '로그인 완료' 클릭")
+            confirmed = wait_for_login_done(timeout=300)
+            if confirmed:
+                _delay(2, 3)
+                if _is_logged_in(driver):
+                    print("  [LOGIN] 수동 로그인 성공 ✅")
+                    reset_login_state()
+                    _minimize_if_needed(driver)
+                    return True
+                else:
+                    print("  [LOGIN] 로그인 확인 실패 — 재시도")
+                    reset_login_state()
+            else:
+                print("  [LOGIN] 5분 타임아웃 — 로그인 미완료")
+                reset_login_state()
+        except Exception as login_ex:
+            print(f"  [LOGIN] 수동 로그인 처리 오류: {login_ex}")
+
+        ss_path = SS_DIR / "login_fail.png"
+        try:
+            driver.save_screenshot(str(ss_path))
+        except Exception:
+            pass
+        print(f"  [LOGIN] 실패 — 스크린샷: {ss_path}")
+        return False
+
+    except Exception as e:
+        print(f"  [LOGIN ERROR] {e}")
+        return False
+
+
+def _js_click(driver, el):
+    driver.execute_script("arguments[0].click();", el)
+
+
+def _step(url: str) -> str:
+    """URL 에서 ?s= 파라미터 추출."""
+    m = re.search(r'\?s=(\w+)', url)
+    return m.group(1) if m else ""
+
+
+def _wait_step_change(driver, old_step: str, timeout: int = 10) -> str:
+    """?s= 파라미터가 바뀔 때까지 대기 후 새 step 반환."""
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda d: _step(d.current_url) != old_step
+        )
+    except Exception:
+        pass
+    return _step(driver.current_url)
+
+
+def _advance(driver, old_step: str, timeout: int = 8) -> str:
+    """continue/submit 버튼 클릭 후 다음 step 으로 이동."""
+    _click_next(driver)
+    new_step = _wait_step_change(driver, old_step, timeout)
+    _delay(1.5, 2.5)
+    print(f"    → ?s={new_step}  ({driver.current_url.split('?')[0][-30:]})")
+    return new_step
+
+
+def _is_category_page(driver) -> bool:
+    """
+    현재 페이지가 카테고리 선택 페이지인지 판단.
+    step 이름이 알 수 없는 값일 때 폴백으로 사용.
+    """
+    try:
+        src = driver.page_source.lower()
+        return (
+            ("education" in src or "category" in src) and
+            ("finance" in src or "accounting" in src or "jobs" in src) and
+            ("input" in src and "radio" in src or "type=\"radio\"" in src)
+        )
+    except Exception:
+        return False
+
+
+def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str | None:
+    """Craigslist 포스팅 — URL ?s= 파라미터로 현재 단계 감지해 처리."""
+
+    # ── seoul.craigslist.org → "post to classifieds" 클릭 ─
+    # accounts.craigslist.org 에서 시작하면 지역이 다르게 잡힘
+    # seoul.craigslist.org 에서 시작해야 Seoul 이 자동 선택됨
+    _update_status("접속중")
+    print("  [POST] seoul.craigslist.org → post to classifieds...")
+    driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
+    _delay(2, 3)
+    try:
+        link = WebDriverWait(driver, 8).until(
+            EC.element_to_be_clickable((By.LINK_TEXT, "post to classifieds"))
+        )
+        link.click()
+        _delay(2, 3)
+    except Exception:
+        # 대안: 직접 URL
+        driver.get("https://post.craigslist.org")
+        _delay(2, 3)
+
+    # ── 단계별 처리 루프 (최대 15 스텝, 동일 step 3회 연속 시 중단) ──
+    _step_count: dict = {}
+    for _ in range(15):
+        step = _step(driver.current_url)
+        _step_count[step] = _step_count.get(step, 0) + 1
+        if _step_count[step] > 3:
+            ss = SS_DIR / f"stuck_{step}.png"
+            driver.save_screenshot(str(ss))
+            print(f"  [ABORT] ?s={step} 에서 3회 이상 반복 — 스크린샷: {ss}")
+            break
+        print(f"  [?s={step}] ", end="", flush=True)
+
+        if step == "copyfromanother":
+            # "copy from another posting?" → skip
+            print("이전 게시물 복사 스킵")
+            skip_el = None
+            for sel in ["input[value='skip']", "button"]:
+                for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                    txt = (el.get_attribute("value") or el.text or "").lower().strip()
+                    if txt == "skip":
+                        skip_el = el
+                        break
+                if skip_el:
+                    break
+
+            if skip_el:
+                # 1) native click
+                try:
+                    skip_el.click()
+                except Exception:
+                    _js_click(driver, skip_el)
+                _delay(0.5, 1.0)
+                # 2) still stuck? force form submit
+                if _step(driver.current_url) == step:
+                    try:
+                        driver.execute_script(
+                            "var f=arguments[0].closest('form');"
+                            "if(f) f.submit();", skip_el)
+                    except Exception:
+                        pass
+                    _delay(0.5, 1.0)
+
+            # 3) fallback: _advance (continue/submit 버튼)
+            if _step(driver.current_url) == step:
+                _advance(driver, step)
+            else:
+                _delay(1.0, 2.0)
+                print(f"    → ?s={_step(driver.current_url)}")
+
+        elif step == "area":
+            # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
+            print("지역 선택")
+            try:
+                # Seoul 또는 korea 옵션 찾기
+                opts = driver.find_elements(By.CSS_SELECTOR, "input[type='radio'], option")
+                for opt in opts:
+                    val = (opt.get_attribute("value") or "").lower()
+                    txt = (opt.text or "").lower()
+                    if "seoul" in val or "seoul" in txt or "korea" in val:
+                        _js_click(driver, opt); _delay(0.5, 1); break
+            except Exception:
+                pass
+            _advance(driver, step)
+
+        elif step == "type":
+            # 포스팅 타입 → "job offered" 선택
+            print("타입: job offered 선택")
+            selected = False
+            # 방법 1: input[value='jo'] — Craigslist 실제 value 값
+            try:
+                radio = driver.find_element(By.CSS_SELECTOR, "input[value='jo']")
+                _js_click(driver, radio); selected = True
+            except Exception:
+                pass
+            # 방법 2: 레이블 텍스트 폴백
+            if not selected:
+                try:
+                    for lbl in driver.find_elements(By.TAG_NAME, "label"):
+                        if "job offered" in lbl.text.lower():
+                            _js_click(driver, lbl); selected = True; break
+                except Exception:
+                    pass
+            if not selected:
+                print("    [WARN] job offered 라디오 미선택")
+            _delay(0.5, 1)
+            _advance(driver, step)
+
+        elif step in ("subarea", "cat", "subcat", "category", "subcatselect",
+                      "cattype", "jobcat", "jobtype", "catselect") or (
+                      step not in ("copyfromanother", "area", "type", "attr", "edit",
+                                   "img", "preview", "done", "manage", "") and
+                      _is_category_page(driver)):
+            # ─────────────────────────────────────────────────────────────────
+            # 카테고리 선택 페이지: education 강제 선택
+            # Craigslist Seoul education category value = '102' (jobs>education)
+            # finance = '110', accounting = '100' 등 — 절대 선택 금지
+            #
+            # 4단계 fallback 전략:
+            #   1) value='102' XPATH (가장 신뢰)
+            #   2) 텍스트 "education" 포함 라디오 인접 레이블
+            #   3) 레이블 href에 'edu' 포함 링크
+            #   4) DOM에 education 텍스트가 있으면 부모 클릭
+            # ─────────────────────────────────────────────────────────────────
+            _update_status("게시판 선택중")
+            print("카테고리: education 선택")
+
+            # 현재 페이지 HTML 저장 (디버그 — 카테고리 선택 실패 시 원인 파악용)
+            cat_debug = _LOG_DIR / "debug_category_page.html"
+            try:
+                cat_debug.write_text(driver.page_source, encoding="utf-8")
+                print(f"    [DEBUG] 카테고리 페이지 소스 저장: {cat_debug}")
+            except Exception:
+                pass
+
+            selected = False
+
+            # 방법 1: value='102' (Craigslist Seoul jobs>education 확인값)
+            if not selected:
+                try:
+                    radio = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.XPATH, "//input[@value='102']"))
+                    )
+                    _js_click(driver, radio); selected = True; _delay(0.5, 1)
+                    print("    [OK] education value=102 클릭")
+                except Exception:
+                    pass
+
+            # 방법 2: 텍스트 "education" 포함 라디오 버튼 (value 변동 대비)
+            if not selected:
+                try:
+                    # label 텍스트로 매칭 후 해당 input 클릭
+                    result = driver.execute_script("""
+                        var labels = document.querySelectorAll('label');
+                        for (var lbl of labels) {
+                            var txt = lbl.textContent.toLowerCase();
+                            if (txt.includes('education') && !txt.includes('special') && !txt.includes('finance')) {
+                                // for 속성으로 연결된 input 찾기
+                                var forId = lbl.getAttribute('for');
+                                if (forId) {
+                                    var inp = document.getElementById(forId);
+                                    if (inp) { inp.click(); return 'label-for:' + forId; }
+                                }
+                                // 인접 input 찾기
+                                var inp2 = lbl.querySelector('input') || lbl.previousElementSibling;
+                                if (inp2 && inp2.tagName === 'INPUT') { inp2.click(); return 'adjacent:' + inp2.value; }
+                                // 레이블 자체 클릭
+                                lbl.click(); return 'label-click';
+                            }
+                        }
+                        return null;
+                    """)
+                    if result:
+                        selected = True; _delay(0.5, 1)
+                        print(f"    [OK] education 레이블 매칭: {result}")
+                except Exception:
+                    pass
+
+            # 방법 3: href에 'edu' 또는 'education' 포함 링크
+            if not selected:
+                try:
+                    for a in driver.find_elements(By.TAG_NAME, "a"):
+                        href = (a.get_attribute("href") or "").lower()
+                        txt  = a.text.lower()
+                        if ("edu" in href or "education" in txt) and "finance" not in txt:
+                            _js_click(driver, a); selected = True; _delay(0.5, 1)
+                            print(f"    [OK] education 링크 클릭: {a.text.strip()}")
+                            break
+                except Exception:
+                    pass
+
+            # 방법 4: li 태그 텍스트 매칭
+            if not selected:
+                try:
+                    for li in driver.find_elements(By.TAG_NAME, "li"):
+                        if "education" in li.text.lower() and "finance" not in li.text.lower():
+                            _js_click(driver, li); selected = True; _delay(0.5, 1)
+                            print(f"    [OK] education li 클릭: {li.text.strip()[:40]}")
+                            break
+                except Exception:
+                    pass
+
+            if not selected:
+                _log_event("error", job.get("job_code", "?"), "category",
+                           "education selection failed — check debug_category_page.html")
+                print("    [ERROR] education 선택 실패 — debug_category_page.html 확인 후 value 값 수정 필요")
+                # 게시 중단 (잘못된 카테고리에 올라가는 것보다 중단이 안전)
+                return None
+            _advance(driver, step)
+
+        elif step in ("attr", "edit"):
+            # 광고 폼 입력 (?s=edit 또는 ?s=attr)
+            _update_status("글작성중")
+            print("폼 입력")
+            _delay(1, 2)
+            # 첫 진입 시 HTML 소스 저장 (디버그용)
+            if _step_count.get(step, 0) == 1:
+                debug_path = _LOG_DIR / "debug_edit_page.html"
+                debug_path.write_text(driver.page_source, encoding="utf-8")
+                print(f"    [DEBUG] 페이지 소스 저장: {debug_path}")
+
+            # ── JS 헬퍼: 값 설정 + input/change 이벤트 강제 발화 ──────────────
+            # React/Vue/jQuery 폼에서 send_keys 만으로는 값 인식 안 될 수 있음
+            def _js_set(selector: str, val: str) -> bool:
+                try:
+                    return bool(driver.execute_script("""
+                        var el = document.querySelector(arguments[0]);
+                        if (!el) return false;
+                        var nativeSet = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value') ||
+                            Object.getOwnPropertyDescriptor(
+                            window.HTMLTextAreaElement.prototype, 'value');
+                        if (nativeSet) nativeSet.set.call(el, arguments[1]);
+                        else el.value = arguments[1];
+                        el.dispatchEvent(new Event('input',  {bubbles:true}));
+                        el.dispatchEvent(new Event('change', {bubbles:true}));
+                        return true;
+                    """, selector, val))
+                except Exception:
+                    return False
+
+            def _fill(sels, val, slow=False):
+                el = _find(driver, sels)
+                if not el:
+                    return False
+                try:
+                    el.clear()
+                    if slow: _type_slow(el, val)
+                    else: el.send_keys(val)
+                    _delay(0.3, 0.6)
+                    return True
+                except Exception:
+                    return False
+
+            # ── posting title ─────────────────────────────────────────────────
+            # 실제 DOM: input[id='PostingTitle'] (대소문자 주의)
+            ok_t = (
+                _js_set("input[id='PostingTitle']", title) or
+                _js_set("input[name='PostingTitle']", title) or
+                _fill(["input[id='PostingTitle']", "input[name='PostingTitle']",
+                       "input[id*='posting']"], title, slow=True)
+            )
+
+            # ── city / neighborhood ───────────────────────────────────────────
+            city_val = job.get("city") or "Seoul"
+            try:
+                city_el = driver.execute_script("""
+                    var labels = document.querySelectorAll('label');
+                    for (var l of labels) {
+                        var txt = l.textContent.trim().toLowerCase();
+                        if (txt.includes('city') || txt.includes('neighborhood')) {
+                            var forId = l.getAttribute('for');
+                            if (forId) return document.getElementById(forId);
+                            return l.nextElementSibling;
+                        }
+                    }
+                    return document.querySelector('input[id*=city], input[name*=city]');
+                """)
+                if city_el:
+                    city_el.clear(); city_el.send_keys(city_val)
+                    _delay(0.3, 0.6)
+            except Exception:
+                _fill(["input[id='city']", "input[name='city']",
+                       "input[placeholder*='eighborhood']"], city_val)
+
+            # ── description (본문) ────────────────────────────────────────────
+            # 실제 DOM: textarea[id='PostingBody'] (대소문자 주의)
+            ok_b = (
+                _js_set("textarea[id='PostingBody']", body) or
+                _js_set("textarea[name='PostingBody']", body) or
+                _fill(["textarea[id='PostingBody']", "textarea[name='PostingBody']",
+                       "textarea[id*='description']", "textarea"], body)
+            )
+
+            # ── employment type → full-time ───────────────────────────────────
+            # 실제 DOM: select[name='employment_type'] (jQuery UI 가 숨김 처리)
+            # jQuery UI selectmenu 는 display:none select 를 커스텀 위젯으로 대체
+            # → 직접 name 으로 hidden select 를 찾아 값 설정 후 selectmenu refresh
+            try:
+                emp_result = driver.execute_script("""
+                    var sel = document.querySelector('select[name="employment_type"]');
+                    if (!sel) return 'NOT FOUND';
+                    // full-time 옵션(value=1) 직접 선택
+                    sel.value = '1';
+                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                    // jQuery UI selectmenu 가 있으면 refresh
+                    try {
+                        if (window.jQuery && jQuery(sel).selectmenu) {
+                            jQuery(sel).selectmenu('refresh');
+                        }
+                    } catch(e) {}
+                    var chosen = sel.options[sel.selectedIndex];
+                    return 'OK: value=' + sel.value + ' text=' + (chosen ? chosen.text : '?');
+                """)
+                print(f"    employment type → {emp_result}")
+                _delay(0.5, 1.0)
+            except Exception as e:
+                print(f"    [WARN] employment type: {e}")
+
+            # ── job title ─────────────────────────────────────────────────────
+            jt_ok = (
+                _js_set("input[name='job_title']", "ESL Teaching Position") or
+                _fill(["input[name='job_title']", "input[id*='job_title']",
+                       "input[id*='jobtitle']"], "ESL Teaching Position")
+            )
+            print(f"    job title={'OK' if jt_ok else 'SKIP'}")
+
+            # ── company name ─────────────────────────────────────────────────
+            _js_set("input[name='company_name']", "BRIDGE") or \
+            _fill(["input[name='company_name']", "input[id*='company']"], "BRIDGE")
+
+            # ── remuneration (보상/급여) ──────────────────────────────────────
+            # 실제 필드명: name='remuneration'  (이전 코드는 'compensation' 으로 잘못 조회)
+            salary_val = job.get("salary_raw") or ""
+            _js_set("input[name='remuneration']", salary_val) or \
+            _fill(["input[name='remuneration']", "input[name='compensation']",
+                   "input[placeholder*='ompensation']"], salary_val)
+
+            print(f"    제목={'OK' if ok_t else 'SKIP'}  본문={'OK' if ok_b else 'SKIP'}")
+            _advance(driver, step, timeout=12)
+
+        elif step in ("img", "editimage"):
+            # 이미지 업로드 — B.jpg 첨부
+            _update_status("사진첨부중")
+            # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
+            #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
+            #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
+            print("이미지 업로드")
+            img_step_before = step
+            if AD_IMAGE.exists():
+                try:
+                    # file input 은 보통 숨겨져 있음 → visibility 무시하고 send_keys
+                    file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                    if not file_inputs:
+                        # JS로 hidden input 노출 후 찾기
+                        driver.execute_script("""
+                            var fi = document.querySelectorAll('input[type=file]');
+                            fi.forEach(function(el){ el.style.display='block'; el.style.opacity='1'; });
+                        """)
+                        file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+
+                    if file_inputs:
+                        abs_path = str(AD_IMAGE.resolve())
+                        file_inputs[0].send_keys(abs_path)
+                        print(f"    이미지 경로 전송: {abs_path}")
+
+                        # 업로드 진행 대기 — 썸네일 또는 progress 사라질 때까지 최대 30초
+                        for _w in range(30):
+                            time.sleep(1)
+                            src = driver.page_source.lower()
+                            if "uploading" not in src and "progress" not in src:
+                                break
+                        print("    업로드 완료 대기 끝")
+
+                        # "done" 버튼 클릭
+                        done_btn = _find(driver, [
+                            "button.done", "button[id*='done']", "input[value='done']",
+                            "button[type='submit'][class*='done']",
+                            ".img-management button[type='submit']",
+                        ])
+                        if done_btn and done_btn.is_displayed():
+                            _js_click(driver, done_btn)
+                            _delay(2, 3)
+                            print("    done 버튼 클릭 완료")
+                            # done 클릭 후 step 자동 변경 여부 확인
+                            new_step_check = _step(driver.current_url)
+                            if new_step_check != img_step_before:
+                                # 자동으로 다음 단계로 넘어감 → _advance() 호출 불필요
+                                print(f"    → 자동 진행됨: ?s={new_step_check}")
+                                continue  # for loop 다음 iteration
+                        else:
+                            print("    [INFO] done 버튼 없음 또는 미표시 — continue 버튼으로 진행")
+                    else:
+                        print("    [WARN] file input 없음 — 이미지 스킵")
+                except Exception as img_err:
+                    print(f"    [WARN] 이미지 업로드 실패: {img_err} — 계속 진행")
+            else:
+                print(f"    [WARN] 이미지 파일 없음: {AD_IMAGE}")
+                print(f"    확인: {AD_IMAGE} 가 존재해야 합니다")
+            _advance(driver, step)
+
+        elif step == "preview":
+            # 미리보기 → CAPTCHA 체크 후 publish
+            _update_status("포스팅중")
+            print("미리보기 → publish")
+            if _has_captcha(driver):
+                print("    CAPTCHA 감지 — 브라우저에서 해결하세요...")
+                wait_for_captcha(driver, timeout=120)
+            pub = _find(driver, [
+                "button#publish", "button[id*='publish']",
+                "input[value='publish']", "button[type='submit']",
+                "input[type='submit']",
+            ])
+            if pub:
+                _js_click(driver, pub)
+                _delay(3, 5)
+                print(f"    → Publish 완료: {driver.current_url}")
+            else:
+                print("    [WARN] Publish 버튼 없음")
+            break  # 게시 완료 후 루프 종료
+
+        elif step in ("done", "manage", ""):
+            print("완료")
+            break
+
+        else:
+            # 알 수 없는 단계 → continue 시도
+            print(f"알 수 없는 단계 → continue 시도")
+            old = step
+            new = _advance(driver, step)
+            if new == old:   # 진행 없으면 중단
+                print("    [WARN] 페이지 진행 없음 — 중단")
+                break
+
+    # 이메일 인증 페이지 대기
+    if any(k in driver.current_url.lower() for k in ["confirm", "verify"]):
+        print("  📧 이메일 인증 필요. 60초 대기...")
+        countdown(60, "이메일 인증 대기")
+
+    return driver.current_url
+
+
+def take_screenshot(driver, job_code: str) -> str:
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = SS_DIR / f"{job_code}_{ts}.png"
+    driver.save_screenshot(str(path))
+    return str(path)
+
+
+# ── PII 강제 치환 (Zero-Leak Redaction) ──────────────────────────────────────
+# generate_ad() → redact_pii() → security_check() 순서로 적용
+# redact_pii()가 먼저 [REDACTED] 치환 → security_check()가 잔류 PII 최종 검증
+
+_REDACT_RULES: list[tuple[re.Pattern, str]] = [
+    # 한국 휴대전화
+    (re.compile(r'010[-\s]?\d{3,4}[-\s]?\d{4}'), '[REDACTED-PHONE]'),
+    # 한국 유선전화 (02, 031, 032 등)
+    (re.compile(r'\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b'), '[REDACTED-PHONE]'),
+    # 국제 전화 (+1 xxx xxx xxxx 등)
+    (re.compile(r'\+\d{1,3}[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}'), '[REDACTED-PHONE]'),
+    # 이메일 — CL_CONTACT 이외 전부 치환
+    (re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'), '[REDACTED-EMAIL]'),
+    # 카카오톡 ID
+    (re.compile(r'(?:kakao(?:talk)?|카[카]?오?톡?|KaTalk|카톡)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-KAKAO]'),
+    # LINE ID
+    (re.compile(r'(?:LINE|라인)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-LINE]'),
+    # 사업자등록번호
+    (re.compile(r'\b\d{3}-\d{2}-\d{5}\b'), '[REDACTED-BIZNUM]'),
+    # 한국어 학원/기관명
+    (re.compile(r'[\uac00-\ud7a3]+(어학원|학원|유치원|학교|센터|원)\b'), '[REDACTED-SCHOOL]'),
+    # 상세 도로명 주소 패턴 (x층, x호 등)
+    (re.compile(r'\d+층|\d+호\b'), '[REDACTED-ADDR]'),
+    # 도로명 주소 (xx로, xx길 + 번지)
+    (re.compile(r'[가-힣]+(?:로|길)\s*\d+(?:-\d+)?'), '[REDACTED-ADDR]'),
+    # 한국어 이름 — 담당자/성명/이름 컨텍스트 뒤 2-4자 한글
+    (re.compile(r'(?:담당자|성명|이름|문의처|연락처)[:：\s]{0,3}([가-힣]{2,4})'), '[REDACTED-NAME]'),
+    # 영어 이름 — "Name:", "Contact:", "Teacher:", "Director:" 뒤 Title Case 2단어
+    (re.compile(r'(?:Name|Contact|Teacher|Director|Recruiter|Manager):\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)'), '[REDACTED-NAME]'),
+    # 한국어 이름+직책 — "홍길동 원장", "김철수 팀장" 패턴
+    (re.compile(r'[가-힣]{2,4}\s*(?:원장|팀장|부장|과장|대리|주임|선생님|교감|교장|원감)\b'), '[REDACTED-NAME+TITLE]'),
+    # 웹사이트 URL (http/https/www)
+    (re.compile(r'(?:https?://|www\.)\S+', re.I), '[REDACTED-URL]'),
+    # 회사/업체명 (xx컴퍼니, xx주식회사, xx(주), xx Inc 등)
+    (re.compile(r'[\uac00-\ud7a3]+(?:주식회사|컴퍼니|에듀|잉글리시|영어마을|어린이집)\b'), '[REDACTED-COMPANY]'),
+    (re.compile(r'(?:주식회사|㈜|\(주\))\s*[\uac00-\ud7a3]+'), '[REDACTED-COMPANY]'),
+    (re.compile(r'[\w\s]+(?:Inc\.|Corp\.|Co\.,?\s*Ltd\.?|LLC)\b', re.I), '[REDACTED-COMPANY]'),
+    # 위챗 / WeChat ID
+    (re.compile(r'(?:WeChat|위챗|微信)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-WECHAT]'),
+    # 텔레그램 ID
+    (re.compile(r'(?:Telegram|텔레그램|텔레)\s*(?:id)?[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-TELEGRAM]'),
+    # 인스타그램 / SNS 핸들 (IG는 반드시 : 또는 @ 뒤에 ID가 와야 매칭 — "Eligible" 오탐 방지)
+    (re.compile(r'(?:Instagram|인스타(?:그램)?)\s*[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
+    (re.compile(r'(?<!\w)IG\s*[:：@]\s*[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
+    # 팩스 번호
+    (re.compile(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', re.I), '[REDACTED-FAX]'),
+    # 우편번호 (한국 5자리)
+    (re.compile(r'\b\d{5}\b(?=\s*[가-힣])'), '[REDACTED-ZIPCODE]'),
+    # 지번 주소 (xx동 xxx-xx번지)
+    (re.compile(r'[가-힣]+[동리면읍]\s*\d+(?:-\d+)?(?:\s*번지)?'), '[REDACTED-ADDR]'),
+]
+
+
+def redact_pii(text: str, preserve_email: str = "") -> tuple[str, list[str]]:
+    """
+    모든 PII 패턴을 [REDACTED-*] 태그로 강제 치환.
+
+    Args:
+        text:           원본 텍스트
+        preserve_email: 보존할 이메일 주소 (CL 공식 연락처 등)
+
+    Returns:
+        (redacted_text, list_of_removed_items)
+    """
+    out = text
+    removed: list[str] = []
+
+    for pattern, tag in _REDACT_RULES:
+        def _replacer(m: re.Match, _tag=tag, _preserve=preserve_email) -> str:
+            val = m.group(0)
+            # 보존 이메일은 치환하지 않음
+            if _preserve and val.lower() == _preserve.lower():
+                return val
+            removed.append(f"{_tag}={val}")
+            return _tag
+        out = pattern.sub(_replacer, out)
+
+    return out, removed
+
+
+# ── 보안 최종 검증 ────────────────────────────────────────────────────────────
+def security_check(body: str, job_code: str) -> bool:
+    """게시 전 광고 본문에서 개인정보 패턴 탐지."""
+    passed = True
+
+    # 한국 전화번호
+    if re.search(r'010[-\s]?\d{3,4}[-\s]?\d{4}', body):
+        print(f"  [보안 차단] {job_code}: '한국 전화번호' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 국제 전화번호 (+82 등)
+    if re.search(r'\+\d{1,3}[\s\-]?\d{2,4}[\s\-]?\d{3,4}[\s\-]?\d{4}', body):
+        print(f"  [보안 차단] {job_code}: '국제 전화번호' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 이메일 — Bridge 공식 연락처(CL_CONTACT) 이외 이메일 차단
+    all_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', body)
+    external = [e for e in all_emails if e.lower() != CL_CONTACT.lower()]
+    if external:
+        print(f"  [보안 차단] {job_code}: '외부 이메일' 감지 {external} → 게시 중단")
+        passed = False
+
+    # 학원명/직함 키워드
+    if re.search(r'어학원|학원원장|원장님|학원장', body):
+        print(f"  [보안 차단] {job_code}: '학원명/직함' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 이름+직책 패턴 (예: 홍길동 원장, 김철수 팀장)
+    if re.search(r'[가-힣]{2,4}\s*(?:원장|팀장|부장|과장|대리|주임|교감|교장|원감)', body):
+        print(f"  [보안 차단] {job_code}: '이름+직책' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 사업자등록번호
+    if re.search(r'\b\d{3}-\d{2}-\d{5}\b', body):
+        print(f"  [보안 차단] {job_code}: '사업자등록번호' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 카카오톡 ID
+    if re.search(r'(?:kakao(?:talk)?|카[카]?오?톡?|KaTalk|카톡)', body, re.I):
+        print(f"  [보안 차단] {job_code}: '카카오톡 ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # LINE ID
+    if re.search(r'(?:LINE|라인)\s*(?:id)?[:：\s]*[\w.\-]{2,}', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'LINE ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # URL 차단
+    if re.search(r'(?:https?://|www\.)\S+', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'URL' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 회사/업체명
+    if re.search(r'(?:주식회사|㈜|\(주\))|[\uac00-\ud7a3]+(?:컴퍼니|에듀|잉글리시|영어마을|어린이집)', body):
+        print(f"  [보안 차단] {job_code}: '업체명' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # SNS/메신저 ID (위챗, 텔레그램, 인스타)
+    if re.search(r'(?:WeChat|위챗|Telegram|텔레그램|Instagram|인스타)', body, re.I):
+        print(f"  [보안 차단] {job_code}: 'SNS/메신저 ID' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 팩스
+    if re.search(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', body, re.I):
+        print(f"  [보안 차단] {job_code}: '팩스번호' 패턴 감지 → 게시 중단")
+        passed = False
+
+    # 지번/도로명 상세주소
+    if re.search(r'[가-힣]+[동리면읍]\s*\d+(?:-\d+)?|[가-힣]+(?:로|길)\s*\d+', body):
+        print(f"  [보안 차단] {job_code}: '상세주소' 패턴 감지 → 게시 중단")
+        passed = False
+
+    return passed
+
+
+# ── MAIN ──────────────────────────────────────────────────────────────────────
+def main():
+    global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
+    parser = argparse.ArgumentParser(description="BRIDGE Craigslist Auto RPA")
+    parser.add_argument("--dry-run",   action="store_true", help="텍스트 출력만 (게시 없음)")
+    parser.add_argument("--generate",  action="store_true", help="draft DB 저장만 (브라우저 없음)")
+    parser.add_argument("--headless",  action="store_true", help="Headless Chrome (화면 없이 실행)")
+    parser.add_argument("--diagnose",  action="store_true",
+                        help="카테고리 페이지까지만 진행 → education 실제 value 자동 탐색 후 종료")
+    parser.add_argument("--account",   default=None,
+                        help="계정 ID (account1/account2/account3) → 해당 .env 로딩")
+    parser.add_argument("--all",       action="store_true",
+                        help="4계정 순차 실행 (gray→green→brown→purple)")
+    parser.add_argument("--login-setup", action="store_true",
+                        help="수동 로그인 셋업 — Chrome 창을 열어 수동 로그인 후 쿠키 저장")
+    parser.add_argument("--job-code",  default=None)
+    parser.add_argument("--limit",     type=int, default=10)
+    args = parser.parse_args()
+
+    # ── --account 화이트리스트 검증 ────────────────────────────────────────────
+    if args.account and args.account not in _ALLOWED_ACCOUNTS:
+        print(f"[ERROR] 허용되지 않은 계정 이름: {args.account!r}")
+        print(f"  허용 목록: {sorted(_ALLOWED_ACCOUNTS)}")
+        sys.exit(1)
+
+    # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
+    if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
+        try:
+            from rpa_overlay import ask_account_selection
+            account_id, selected_limit = ask_account_selection()
+        except Exception as e:
+            print(f"[ERROR] 계정 선택 팝업 실패: {e}")
+            sys.exit(1)
+        if account_id == "CANCEL":
+            print("취소됨.")
+            sys.exit(0)
+        args.account = account_id
+        args.limit   = selected_limit
+
+    # ── 중복 실행 방지 (per-account 잠금 파일 체크) ──────────────────────────
+    if not args.all and not args.dry_run and not args.generate and not args.diagnose:
+        acct_key  = args.account or "default"
+        acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
+        if acct_lock.exists():
+            try:
+                import ctypes as _ct
+                pid = int(acct_lock.read_text().strip())
+                h   = _ct.windll.kernel32.OpenProcess(0x400, False, pid)
+                if h:
+                    _ct.windll.kernel32.CloseHandle(h)
+                    print(f"[WARN] {acct_key} 계정 RPA 이미 실행 중 (PID={pid}) — 창 앞으로 가져오기")
+                    try:
+                        from rpa_overlay import _win32_focus_working
+                        _win32_focus_working()
+                    except Exception:
+                        pass
+                    sys.exit(0)
+                else:
+                    acct_lock.unlink(missing_ok=True)
+            except Exception:
+                acct_lock.unlink(missing_ok=True)
+
+    # ── Credential Vault 재로딩 (--account 지정 시) ──
+    # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
+    if args.account:
+        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(args.account)
+        CL_CITY     = "seoul"  # 기본값 유지
+        CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
+        CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
+
+    # ── --login-setup 모드: 수동 로그인으로 쿠키 저장 ──
+    if args.login_setup:
+        _SETUP_ACCOUNTS = ["gray", "green", "brown", "purple"]
+        if args.account:
+            _SETUP_ACCOUNTS = [args.account]
+        for acct_name in _SETUP_ACCOUNTS:
+            print(f"\n{'='*55}")
+            print(f"  [{acct_name}] 수동 로그인 셋업")
+            print(f"{'='*55}")
+            try:
+                email, password = _load_craigslist_credentials(acct_name)
+            except SystemExit:
+                print(f"  [SKIP] {acct_name} 자격증명 없음")
+                continue
+            print(f"  이메일: {email}")
+            print(f"  Chrome 창이 열립니다. 로그인하세요.")
+            print(f"  (이메일 인증 링크가 필요하면 메일에서 클릭)")
+            driver = build_driver(headless=False, account=acct_name)
+            driver.get("https://accounts.craigslist.org/login/home")
+            try:
+                # 자동 입력
+                _delay(2, 3)
+                email_el = driver.find_element(By.ID, "inputEmailHandle")
+                _type_slow(email_el, email)
+                pw_el = driver.find_element(By.ID, "inputPassword")
+                _type_slow(pw_el, password)
+                pw_el.send_keys(Keys.RETURN)
+            except Exception:
+                pass
+            print(f"  로그인 완료 후 Enter를 누르세요...")
+            input()
+            # 로그인 확인
+            src = driver.page_source.lower()
+            if "log out" in src or "logout" in src:
+                print(f"  [{acct_name}] 로그인 성공 — 쿠키 저장됨 ✅")
+            else:
+                print(f"  [{acct_name}] 로그인 미확인 — 쿠키가 저장되지 않았을 수 있음")
+            driver.quit()
+        print(f"\n셋업 완료. 이제 run.bat 또는 --all 로 실행하세요.")
+        return
+
+    # ── --all 모드: 4계정 순차 실행 (단일 프로세스, 오버레이 유지) ──
+    if args.all:
+        _ALL_ACCOUNTS = ["gray", "green", "brown", "purple"]
+        grand_total = 0
+        print("=" * 60)
+        print("  BRIDGE Craigslist Auto RPA — 4계정 순차 모드")
+        print("=" * 60)
+
+        # 오버레이 1회 초기화 (Chrome은 headless라 창 없음 — 오버레이는 사용자에게 보여야 함)
+        _has_ov = False
+        try:
+            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
+            _has_ov = True
+            globals()['_update_status'] = update_status
+        except ImportError:
+            pass
+
+        for acct_idx, acct_name in enumerate(_ALL_ACCOUNTS):
+          try:
+            print(f"\n{'='*55}")
+            print(f"  [{acct_idx+1}/4] 계정: {acct_name}")
+            print(f"{'='*55}")
+
+            # 계정 전환
+            try:
+                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(acct_name)
+            except SystemExit:
+                print(f"  [SKIP] {acct_name} 자격증명 없음 — 건너뜀")
+                continue
+            CL_CITY     = "seoul"
+            CL_CONTACT  = "bridgejobkr@gmail.com"
+            CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
+
+            jobs = fetch_jobs(args.job_code, args.limit)
+            print(f"  대상 포지션: {len(jobs)}건")
+            if not jobs:
+                print(f"  게시할 포지션 없음 — 다음 계정으로")
+                continue
+
+            ads = []
+            for job in jobs:
+                title, body = generate_ad(job)
+                body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+                if removed:
+                    body = body_clean
+                if not security_check(body, job["job_code"]):
+                    continue
+                ad_id = save_draft(job, title, body)
+                ads.append((job, title, body, ad_id))
+
+            if not ads:
+                print(f"  광고 생성 실패 — 다음 계정으로")
+                continue
+
+            # 오버레이 갱신
+            if _has_ov:
+                show_working(current=0, total=len(ads), email=CL_EMAIL)
+                update_status("로그인중")
+
+            hl_flag = True  # --all 모드: 항상 백그라운드 (사용자 작업 방해 방지)
+            driver = None
+            try:
+                driver = build_driver(headless=hl_flag, account=acct_name)
+            except Exception as drv_exc:
+                print(f"  [ERROR] Chrome 시작 실패: {drv_exc}")
+                _log_event("error", "—", "driver", f"{acct_name}: {drv_exc}")
+                continue
+            posted = 0
+            try:
+                if not cl_login(driver):
+                    print(f"  [ABORT] {acct_name} 로그인 실패 — 다음 계정으로")
+                    _log_event("error", "—", "login", f"{acct_name} login failed")
+                    continue
+
+                for i, (job, title, body, ad_id) in enumerate(ads, 1):
+                    if _has_ov and stop_requested():
+                        print("\n[STOP] 사용자 중단 요청")
+                        break
+                    jcode = job["job_code"]
+                    print(f"\n[{i}/{len(ads)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
+                    try:
+                        if _has_ov:
+                            update_status(f"게시중 ({i}/{len(ads)})")
+                        url = cl_post(driver, title, body, job)
+                        ss  = take_screenshot(driver, jcode)
+                        if url and url not in ("", "None", None):
+                            mark_posted(ad_id, url, ss)
+                            print(f"  ✅ 게시 완료: {url}")
+                            _log_event("info", jcode, "posted", "Post successful", {"url": url})
+                            posted += 1
+                            if _has_ov:
+                                update_progress(posted, len(ads))
+                        elif url is None:
+                            mark_error(ad_id, "카테고리 선택 실패")
+                            print(f"  ❌ 카테고리 선택 실패")
+                        else:
+                            mark_error(ad_id, "URL 획득 실패")
+                            print(f"  ⚠️  게시 URL 획득 실패")
+                    except Exception as exc:
+                        mark_error(ad_id, str(exc)[:300])
+                        print(f"  ❌ 예외: {exc}")
+                        continue
+
+                    if i < len(ads):
+                        wait = random.randint(90, 150)
+                        countdown(wait, "다음 게시 대기")
+
+            except Exception as sess_exc:
+                _log_event("error", "—", "session", f"{acct_name}: {sess_exc}")
+                print(f"  [SESSION ERROR] {sess_exc}")
+            finally:
+                if driver:
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+
+            grand_total += posted
+            print(f"  [{acct_name}] {posted}건 게시 완료")
+
+            # 계정 간 쿨다운
+            if acct_idx < len(_ALL_ACCOUNTS) - 1 and posted > 0:
+                countdown(30, "다음 계정 대기")
+
+          except Exception as acct_exc:
+            print(f"  [FATAL] {acct_name} 계정 처리 중 예외 — 다음 계정으로: {acct_exc}")
+            _log_event("error", "—", "account_fatal", f"{acct_name}: {acct_exc}")
+            continue
+
+        print(f"\n{'='*60}")
+        print(f"  전체 완료: {grand_total}건 게시 (4계정)")
+        print(f"{'='*60}")
+        if grand_total == 0:
+            print("  [WARN] 0건 게시 — 모든 계정 로그인 실패. 완료 처리 안 함.")
+            if _has_ov:
+                try:
+                    update_status("로그인 실패 — 0건 게시")
+                except Exception:
+                    pass
+                import time as _time
+                _time.sleep(5)
+                try:
+                    overlay_close()
+                except Exception:
+                    pass
+        elif _has_ov:
+            show_complete(posted_count=grand_total)
+            import time as _time
+            for _ in range(60):
+                _time.sleep(1)
+                if wants_more():
+                    break
+        return
+
+    acct_label = args.account or "default"
+    print("=" * 60)
+    print("  BRIDGE Craigslist Auto RPA")
+    print(f"  Target  : {CL_BASE_URL}")
+    print(f"  Account : {acct_label} ({CL_EMAIL})")
+    mode_str = ('DRY-RUN' if args.dry_run else
+                'GENERATE' if args.generate else
+                'DIAGNOSE' if args.diagnose else 'POST')
+    print(f"  Mode    : {mode_str}")
+    print("=" * 60)
+
+    # ── DIAGNOSE 모드: 카테고리 페이지 DOM 분석 ──────────────────────────────
+    if args.diagnose:
+        if not CL_EMAIL or not CL_PASSWORD:
+            print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
+            sys.exit(1)
+        print("\n[DIAGNOSE] 로그인 후 카테고리 선택 페이지까지 진행합니다...")
+        driver = build_driver(headless=False, account=acct_label)
+        try:
+            if not cl_login(driver):
+                print("[ABORT] 로그인 실패")
+                sys.exit(1)
+            driver.get(CL_BASE_URL)
+            _delay(2, 3)
+            try:
+                link = WebDriverWait(driver, 8).until(
+                    EC.element_to_be_clickable((By.LINK_TEXT, "post to classifieds"))
+                )
+                link.click(); _delay(2, 3)
+            except Exception:
+                driver.get("https://post.craigslist.org"); _delay(2, 3)
+
+            # type 선택 (job offered)
+            for _ in range(10):
+                step = _step(driver.current_url)
+                print(f"  현재 step: {step}")
+                if step == "type":
+                    try:
+                        radio = driver.find_element(By.CSS_SELECTOR, "input[value='jo']")
+                        _js_click(driver, radio); _delay(0.5, 1)
+                    except Exception:
+                        pass
+                    _advance(driver, step)
+                elif step in ("subarea", "cat", "subcat", "category", "subcatselect",
+                              "cattype", "jobcat", "jobtype", "catselect"):
+                    # 카테고리 페이지 도달 — DOM 분석
+                    print("\n" + "="*55)
+                    print("[DIAGNOSE] 카테고리 페이지 도달 — education 관련 요소 분석:")
+                    result = driver.execute_script("""
+                        var out = [];
+                        // 모든 라디오 버튼
+                        var radios = document.querySelectorAll('input[type=radio]');
+                        radios.forEach(function(r) {
+                            var lbl = '';
+                            var forEl = document.querySelector('label[for="' + r.id + '"]');
+                            if (forEl) lbl = forEl.textContent.trim();
+                            else {
+                                var p = r.parentElement;
+                                if (p) lbl = p.textContent.trim().substring(0, 60);
+                            }
+                            out.push({type:'radio', value: r.value, id: r.id, label: lbl});
+                        });
+                        // 모든 링크 (a 태그)
+                        var links = document.querySelectorAll('a');
+                        links.forEach(function(a) {
+                            var txt = a.textContent.trim();
+                            var href = a.getAttribute('href') || '';
+                            if (txt.length > 0 && txt.length < 80)
+                                out.push({type:'link', text: txt, href: href});
+                        });
+                        return JSON.stringify(out, null, 2);
+                    """)
+                    try:
+                        items = json.loads(result)
+                        edu_items = [x for x in items if
+                                     "edu" in json.dumps(x).lower() or
+                                     "teach" in json.dumps(x).lower() or
+                                     "tutor" in json.dumps(x).lower()]
+                        print(f"education 관련 요소 {len(edu_items)}개:")
+                        for item in edu_items:
+                            print(f"  {item}")
+                        print(f"\n전체 라디오 버튼 {sum(1 for x in items if x.get('type')=='radio')}개:")
+                        for item in [x for x in items if x.get('type')=='radio']:
+                            print(f"  value={item.get('value'):>5}  label={item.get('label','')[:50]}")
+                    except Exception:
+                        print(result[:2000])
+
+                    # HTML 저장
+                    dbg = _LOG_DIR / "debug_category_page.html"
+                    dbg.write_text(driver.page_source, encoding="utf-8")
+                    print(f"\n[DIAGNOSE] 전체 HTML 저장: {dbg}")
+                    print("[DIAGNOSE] 위 value 값 확인 후 코드의 '102' 를 실제 값으로 수정하세요")
+                    print("="*55)
+                    break
+                elif step in ("attr", "edit", "img", "preview", "done", "manage"):
+                    print(f"  [DIAGNOSE] 카테고리 단계를 건너뜀 (step={step}) — 예상치 못한 흐름")
+                    break
+                else:
+                    _advance(driver, step)
+        finally:
+            input("\n[DIAGNOSE] Enter 를 누르면 브라우저 종료...")
+            driver.quit()
+        return
+
+    if not args.dry_run and not args.generate:
+        if not CL_EMAIL or not CL_PASSWORD:
+            print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
+            sys.exit(1)
+
+    jobs = fetch_jobs(args.job_code, args.limit)
+    print(f"\n대상 포지션: {len(jobs)}건\n")
+    if not jobs:
+        print("게시할 포지션 없음 (이미 전부 posted 또는 조건 없음)")
+        return
+
+    # 광고 생성 + PII 강제 치환 + 보안 검증
+    ads: list[tuple[dict, str, str, int]] = []
+    for job in jobs:
+        title, body = generate_ad(job)
+
+        # ── [REDACTED] 강제 치환 ───────────────────────────────────────────
+        body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+        if removed:
+            # 보안: PII 실제 값은 로그에 절대 기록하지 않음 — 카테고리+개수만 기록
+            redact_tags = [r.split("=")[0] for r in removed]
+            tag_summary = ", ".join(set(redact_tags))
+            print(f"  [REDACT] {job['job_code']}: {len(removed)}개 PII 항목 자동 치환 ({tag_summary})")
+            _log_event("warn", job["job_code"], "redact",
+                       f"{len(removed)} PII items redacted", {"tags": tag_summary})
+            body = body_clean
+
+        if args.dry_run:
+            print(f"\n{'─'*55}")
+            print(f"[{job['job_code']}] {job['city']} | {job['teaching_age']}")
+            print(f"TITLE : {title}")
+            print(body)
+            continue
+
+        # ── 최종 보안 검증 (redact 이후 잔류 PII 재확인) ──────────────────
+        if not security_check(body, job["job_code"]):
+            _log_event("error", job["job_code"], "security_check",
+                       "PII survived redact — post blocked")
+            continue
+
+        ad_id = save_draft(job, title, body)
+        ads.append((job, title, body, ad_id))
+        print(f"  [DRAFT] {job['job_code']} → ad_posts id={ad_id}")
+
+    if args.dry_run or args.generate:
+        if args.generate:
+            print(f"\n완료: {len(ads)}건 draft 저장")
+        return
+
+    # ── 잠금 파일 (중복 실행 방지, per-account) ──
+    import atexit, ctypes as _ct
+    acct_key  = args.account or "default"
+    acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # 기존 잠금 파일이 있으면 PID 실제 생존 여부 확인
+    if acct_lock.exists():
+        try:
+            old_pid = int(acct_lock.read_text().strip())
+            h = _ct.windll.kernel32.OpenProcess(0x400, False, old_pid)
+            if h:
+                _ct.windll.kernel32.CloseHandle(h)
+                # 같은 PID면 자기 자신 (재시작 후 PID 재사용) → 무시
+                if old_pid != os.getpid():
+                    print(f"[WARN] 이미 실행 중인 RPA 감지 (PID={old_pid}) — 중복 실행 차단")
+                    sys.exit(0)
+            else:
+                acct_lock.unlink(missing_ok=True)  # stale lock 제거
+        except Exception:
+            acct_lock.unlink(missing_ok=True)
+
+    acct_lock.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
+
+    # 오버레이 알림 (설치되어 있으면 표시)
+    try:
+        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested
+        _HAS_OVERLAY = True
+        # 전역 _update_status 함수 설정 (cl_post()에서 사용)
+        globals()['_update_status'] = update_status
+    except ImportError:
+        _HAS_OVERLAY = False
+
+    def _is_driver_dead(drv) -> bool:
+        """ChromeDriver 연결이 끊어졌는지 빠르게 확인."""
+        try:
+            _ = drv.title  # 간단한 CDP 호출
+            return False
+        except Exception:
+            return True
+
+    def _rebuild_driver(old_drv) -> object:
+        """Chrome 크래시 시 드라이버 재시작 + 재로그인."""
+        try:
+            old_drv.quit()
+        except Exception:
+            pass
+        import time as _t
+        _t.sleep(3)
+        print("  [RECOVER] Chrome 재시작 중...")
+        new_drv = build_driver(headless=args.headless, account=acct_label)
+        if cl_login(new_drv):
+            print("  [RECOVER] 재로그인 성공 ✅")
+            return new_drv
+        else:
+            print("  [RECOVER] 재로그인 실패 ❌")
+            try:
+                new_drv.quit()
+            except Exception:
+                pass
+            return None
+
+    def _run_post_session(ad_list):
+        """게시 세션 실행 (최초 + '더 올리기' 공통).
+        Chrome 크래시 감지 시 자동 재시작 + 재로그인.
+        """
+        hl_flag = args.headless
+        print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
+        if _HAS_OVERLAY:
+            show_working(current=0, total=len(ad_list), email=CL_EMAIL)
+
+        try:
+            driver = build_driver(headless=hl_flag, account=acct_label)
+        except Exception as drv_exc:
+            print(f"[ABORT] Chrome 시작 실패: {drv_exc}")
+            _log_event("error", "—", "driver", f"Chrome start failed: {drv_exc}")
+            return 0
+
+        posted = 0
+
+        try:
+            if _HAS_OVERLAY:
+                update_status("로그인중")
+            if not cl_login(driver):
+                print("[ABORT] 로그인 실패")
+                _log_event("error", "—", "login", "Login failed — aborting session")
+                return 0
+
+            for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
+                _graceful_hit = _STOP_GRACEFUL_FLAG.exists()
+                if _graceful_hit:
+                    try:
+                        _STOP_GRACEFUL_FLAG.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                if (_HAS_OVERLAY and stop_requested()) or _graceful_hit:
+                    print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
+                    _log_event("info", "—", "user_stop", "User requested stop via overlay")
+                    break
+
+                jcode = job["job_code"]
+                print(f"\n{'='*55}")
+                print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
+
+                try:
+                    if _HAS_OVERLAY:
+                        update_status(f"게시중 ({i}/{len(ad_list)})")
+                    url = cl_post(driver, title, body, job)
+                    ss  = take_screenshot(driver, jcode)
+
+                    if url and url not in ("", "None", None):
+                        mark_posted(ad_id, url, ss)
+                        print(f"  ✅ 게시 완료: {url}")
+                        print(f"  📸 스크린샷 : {ss}")
+                        _log_event("info", jcode, "posted", "Post successful", {"url": url})
+                        posted += 1
+                        if _HAS_OVERLAY:
+                            update_progress(posted, len(ad_list))
+                    elif url is None:
+                        mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
+                        print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
+                        _log_event("error", jcode, "category_abort",
+                                   "cl_post returned None — education category not selected")
+                    else:
+                        mark_error(ad_id, "URL 획득 실패 (게시는 됐을 수 있음)")
+                        print(f"  ⚠️  게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
+                        _log_event("error", jcode, "post", "Posted URL not captured")
+
+                except Exception as exc:
+                    err_msg = str(exc)[:300]
+                    _log_event("error", jcode, "post_exception", err_msg)
+                    print(f"  ❌ 예외 발생: {exc}")
+
+                    # Chrome 크래시 감지 → 자동 재시작
+                    if _is_driver_dead(driver):
+                        print("  [RECOVER] Chrome 크래시 감지 — 재시작 시도...")
+                        _log_event("warn", jcode, "chrome_crash", "ChromeDriver dead — rebuilding")
+                        mark_error(ad_id, f"[chrome_crash] {err_msg}")
+                        new_drv = _rebuild_driver(driver)
+                        if new_drv:
+                            driver = new_drv
+                            print("  [RECOVER] Chrome 복구 완료 — 다음 건부터 재시도")
+                        else:
+                            _log_event("error", "—", "chrome_recover_fail", "Cannot rebuild Chrome — aborting")
+                            print("  [ABORT] Chrome 복구 실패 — 세션 종료")
+                            break
+                    else:
+                        mark_error(ad_id, err_msg)
+
+                    continue
+
+                if i < len(ad_list):
+                    wait = random.randint(90, 150)
+                    countdown(wait, "다음 게시 대기")
+
+        except Exception as session_exc:
+            _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
+            print(f"[SESSION ERROR] {session_exc}")
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+        return posted
+
+    # ── 첫 게시 세션 ──
+    total_posted = _run_post_session(ads)
+
+    # ── 쿨다운 타임스탬프 기록 (수동 실행도 4시간 쿨다운 적용) ──
+    if total_posted > 0:
+        try:
+            from scheduler import stamp_run
+            acct_id = args.account or "default"
+            stamp_run(acct_id)
+            print(f"  [COOLDOWN] {acct_id} — 4시간 쿨다운 기록 완료")
+        except Exception:
+            pass
+
+    print("\n" + "=" * 60)
+    print(f"  완료: {total_posted}건 게시")
+    print("=" * 60)
+
+    if _HAS_OVERLAY:
+        result = show_complete(posted_count=total_posted)
+
+        if result == "MORE" or wants_more():
+            more_count = wants_more_count()
+            print(f"\n[OVERLAY] 유저 요청: {more_count}개 더 올리기!")
+            overlay_close()
+
+            extra_jobs = fetch_jobs(None, more_count)
+            if not extra_jobs:
+                print("추가 게시할 포지션 없음")
+                show_complete(posted_count=total_posted)
+            else:
+                extra_ads = []
+                for job in extra_jobs:
+                    title, body = generate_ad(job)
+                    body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
+                    if removed:
+                        body = body_clean
+                    if not security_check(body, job["job_code"]):
+                        continue
+                    ad_id = save_draft(job, title, body)
+                    extra_ads.append((job, title, body, ad_id))
+
+                extra_posted = _run_post_session(extra_ads)
+                total_posted += extra_posted
+                print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
+                show_complete(posted_count=total_posted)
+
+        elif result and result.startswith("CHANGE_"):
+            new_acct = result.split("_", 1)[1]
+            print(f"\n[OVERLAY] 계정 변경: {new_acct}")
+            overlay_close()
+            import subprocess
+            _script = str(Path(__file__).resolve())
+            _cmd = [sys.executable, "-X", "utf8", _script,
+                    "--account", new_acct, "--limit", str(args.limit)]
+            if args.headless:
+                _cmd.append("--headless")
+            print(f"  새 프로세스 시작: {new_acct}")
+            subprocess.Popen(_cmd)
+
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[ABORT] 사용자에 의해 중단됨")
+        sys.exit(0)
+    except Exception as e:
+        import traceback
+        print(f"\n[FATAL ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)

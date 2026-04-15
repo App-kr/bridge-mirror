@@ -29,10 +29,21 @@ agent_ad_poster.py — Bridge Base: 구인광고 자동화 에이전트
 
 from __future__ import annotations
 
+import sys
+
+# ── 감사(Audit) 모듈 ──────────────────────────────────────────────────
+_AUDIT_BASE = r"Q:\Claudework"
+if _AUDIT_BASE not in sys.path:
+    sys.path.insert(0, _AUDIT_BASE)
+try:
+    from rpa_audit import AuditSession
+    _AUDIT_OK = True
+except ImportError:
+    _AUDIT_OK = False
+
 import argparse
 import os
 import sqlite3
-import sys
 import time
 import traceback
 from datetime import date, datetime, timezone
@@ -677,4 +688,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if _AUDIT_OK:
+        with AuditSession("agent_ad_poster", sites=["craigslist.org"]) as audit:
+            audit.preflight()
+            audit.step("main() 시작")
+            main()
+            audit.done()
+    else:
+        main()
