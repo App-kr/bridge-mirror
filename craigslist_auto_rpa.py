@@ -658,12 +658,39 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
+    # 드라이버 시작 전 기존 Chrome 창 hwnd 목록 저장
+    _existing_hwnds: set = set()
+    try:
+        import win32gui as _wg
+        def _collect(hwnd, _):
+            if _wg.GetClassName(hwnd) == "Chrome_WidgetWin_1":
+                _existing_hwnds.add(hwnd)
+        _wg.EnumWindows(_collect, None)
+    except Exception:
+        pass
+
     svc    = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=svc, options=opts)
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"}
     )
+
+    # 새로 생긴 Chrome 창만 작업표시줄에서 숨김 (기존 창 보존)
+    try:
+        import win32gui as _wg, win32con as _wc, time as _t
+        _t.sleep(1.5)
+        def _hide_new(hwnd, _):
+            if hwnd in _existing_hwnds:
+                return
+            if _wg.GetClassName(hwnd) == "Chrome_WidgetWin_1":
+                ex = _wg.GetWindowLong(hwnd, _wc.GWL_EXSTYLE)
+                _wg.SetWindowLong(hwnd, _wc.GWL_EXSTYLE,
+                    (ex | _wc.WS_EX_TOOLWINDOW) & ~_wc.WS_EX_APPWINDOW)
+                _wg.ShowWindow(hwnd, _wc.SW_HIDE)
+        _wg.EnumWindows(_hide_new, None)
+    except Exception:
+        pass
     return driver
 
 
