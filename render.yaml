@@ -7,13 +7,13 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn api_server:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     branch: main
     envVars:
       - key: ENV
         value: production
       - key: DB_PATH
-        value: /data/master.db
+        value: master.db
       - key: CORS_ORIGINS
         value: https://bridgejob.co.kr,https://www.bridgejob.co.kr,https://bridge-chi-lime.vercel.app
       - key: ADMIN_API_KEY
@@ -23,7 +23,7 @@ services:
       - key: BRIDGE_FIELD_KEY
         sync: false
       - key: BRIDGE_DB_PATH
-        value: /data/master.db
+        value: master.db
       - key: JWT_SECRET
         sync: false
       - key: SMTP_HOST
@@ -38,7 +38,4 @@ services:
         value: bridgejobkr@naver.com
       - key: NAVER_SMTP_PASS
         sync: false
-    disk:
-      name: bridge-data
-      mountPath: /data
-      sizeGB: 1
+    # disk: 미연결 (Render free plan 미지원 — 유료 플랜 업그레이드 필요)
