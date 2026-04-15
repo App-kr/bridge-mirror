@@ -618,9 +618,13 @@ def generate_ad(job: dict) -> tuple[str, str]:
         lines.append(f"Employee Benefits : {ben_str.rstrip('.')}.")
 
     lines.append("")
-    lines.append("Requirements: Clean record and at least a bachelor's degree.")
-    lines.append("(UK, US, CA, AUS, NZ, IR, SA or F visa holders preferred)")
-    lines.append("South Africans: Only those living in Korea can apply due to paperwork issues.")
+    lines.append("\U0001f534REQUIREMENTS:")
+    lines.append(" \u2022MUST-Haves: Clean background check & at least Bachelor's degree.")
+    lines.append(" \u2022Eligible Passports: UK, US, CA, AUS, NZ, IRL, ZA.")
+    lines.append(" \u2022SA: only those currently residing in Korea.")
+    lines.append(" \u2022Korean/Gyopo Nationals: Eligible if all requirements are met.")
+    lines.append("")
+    lines.append("\u26a0\ufe0fIMPORTANT: PLEASE READ CAREFULLY. We CANNOT offer or help for nationalities not listed above. DO NOT APPLY IF INELIGIBLE\u26a0\ufe0f")
 
     body = "\n".join(lines)
     return title.strip(), body.strip()
@@ -1244,8 +1248,8 @@ _REDACT_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r'(?:WeChat|위챗|微信)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-WECHAT]'),
     # 텔레그램 ID
     (re.compile(r'(?:Telegram|텔레그램|텔레)\s*(?:id)?[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-TELEGRAM]'),
-    # 인스타그램 / SNS 핸들
-    (re.compile(r'(?:Instagram|인스타(?:그램)?|IG)\s*[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
+    # 인스타그램 / SNS 핸들 (\bIG\b 단어경계 — "Eligible"/"INELIGIBLE" 오치환 방지)
+    (re.compile(r'(?:Instagram|인스타(?:그램)?|\bIG\b)\s*[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
     # 팩스 번호
     (re.compile(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', re.I), '[REDACTED-FAX]'),
     # 우편번호 (한국 5자리)
