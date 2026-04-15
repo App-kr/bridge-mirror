@@ -84,7 +84,7 @@ export default function InterviewsPage() {
     try {
       const res = await fetch(`${API}/interviews`, { headers: { 'x-admin-key': adminKey } })
       const data = await res.json()
-      setInterviews(data.interviews || data.data?.interviews || [])
+      setInterviews(Array.isArray(data.data) ? data.data : [])
     } catch { /* silent */ }
     finally { setLoading(false) }
   }, [adminKey])
@@ -103,6 +103,16 @@ export default function InterviewsPage() {
       flash(`상태 → ${ALL_STATUSES.find(s => s.key === newStatus)?.label || newStatus}`)
       fetchAll()
     } catch { flash('상태 변경 실패') }
+  }
+
+  // ─── 삭제 (soft delete) ─────────────────────────────────────
+  const deleteInterview = async (ivId: number) => {
+    if (!confirm(`인터뷰 #${ivId}를 삭제할까요?`)) return
+    try {
+      await fetch(`${API}/interviews/${ivId}`, { method: 'DELETE', headers: hdrs() })
+      flash(`#${ivId} 삭제됨`)
+      fetchAll()
+    } catch { flash('삭제 실패') }
   }
 
   // ─── 재시도 ─────────────────────────────────────────────────
@@ -280,36 +290,73 @@ export default function InterviewsPage() {
 
       {/* 파이프라인 뷰 */}
       {!loading && view === 'pipeline' && (
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 20 }}>
-          {PIPELINE_STAGES.map(stage => {
-            const items = interviews.filter(iv => iv.status === stage.key)
-            return (
-              <div key={stage.key} style={{ minWidth: 175, maxWidth: 210, flex: '0 0 auto' }}>
-                <div style={{
-                  background: stage.color, color: '#fff', padding: '7px 10px',
-                  borderRadius: '7px 7px 0 0', fontSize: 12, fontWeight: 600,
-                  display: 'flex', justifyContent: 'space-between',
-                }}>
-                  <span>{stage.label}</span>
-                  <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 10, padding: '0 5px', fontSize: 11 }}>
-                    {items.length}
-                  </span>
+        <div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12 }}>
+            {PIPELINE_STAGES.map(stage => {
+              const items = interviews.filter(iv => iv.status === stage.key)
+              return (
+                <div key={stage.key} style={{ minWidth: 175, maxWidth: 210, flex: '0 0 auto' }}>
+                  <div style={{
+                    background: stage.color, color: '#fff', padding: '7px 10px',
+                    borderRadius: '7px 7px 0 0', fontSize: 12, fontWeight: 600,
+                    display: 'flex', justifyContent: 'space-between',
+                  }}>
+                    <span>{stage.label}</span>
+                    <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 10, padding: '0 5px', fontSize: 11 }}>
+                      {items.length}
+                    </span>
+                  </div>
+                  <div style={{
+                    background: '#f1f5f9', borderRadius: '0 0 7px 7px',
+                    padding: 6, minHeight: 100, display: 'flex', flexDirection: 'column', gap: 5,
+                  }}>
+                    {items.map(iv => (
+                      <InterviewCard key={iv.id} iv={iv} allStatuses={ALL_STATUSES}
+                        onChangeStatus={changeStatus} onRetry={retryInterview} onDelete={deleteInterview} />
+                    ))}
+                    {items.length === 0 && (
+                      <div style={{ color: '#bbb', fontSize: 11, textAlign: 'center', padding: 16 }}>없음</div>
+                    )}
+                  </div>
                 </div>
-                <div style={{
-                  background: '#f1f5f9', borderRadius: '0 0 7px 7px',
-                  padding: 6, minHeight: 100, display: 'flex', flexDirection: 'column', gap: 5,
-                }}>
-                  {items.map(iv => (
-                    <InterviewCard key={iv.id} iv={iv} allStatuses={ALL_STATUSES}
-                      onChangeStatus={changeStatus} onRetry={retryInterview} />
-                  ))}
-                  {items.length === 0 && (
-                    <div style={{ color: '#bbb', fontSize: 11, textAlign: 'center', padding: 16 }}>없음</div>
-                  )}
-                </div>
+              )
+            })}
+          </div>
+          {/* 네거티브 단계 */}
+          {NEGATIVE_STAGES.some(s => interviews.some(iv => iv.status === s.key)) && (
+            <div>
+              <div style={{ fontSize: 12, color: '#888', margin: '8px 0 6px', fontWeight: 600 }}>네거티브</div>
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12 }}>
+                {NEGATIVE_STAGES.map(stage => {
+                  const items = interviews.filter(iv => iv.status === stage.key)
+                  if (!items.length) return null
+                  return (
+                    <div key={stage.key} style={{ minWidth: 175, maxWidth: 210, flex: '0 0 auto' }}>
+                      <div style={{
+                        background: stage.color, color: '#fff', padding: '7px 10px',
+                        borderRadius: '7px 7px 0 0', fontSize: 12, fontWeight: 600,
+                        display: 'flex', justifyContent: 'space-between',
+                      }}>
+                        <span>{stage.label}</span>
+                        <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 10, padding: '0 5px', fontSize: 11 }}>
+                          {items.length}
+                        </span>
+                      </div>
+                      <div style={{
+                        background: '#fff0f0', borderRadius: '0 0 7px 7px',
+                        padding: 6, display: 'flex', flexDirection: 'column', gap: 5,
+                      }}>
+                        {items.map(iv => (
+                          <InterviewCard key={iv.id} iv={iv} allStatuses={ALL_STATUSES}
+                            onChangeStatus={changeStatus} onRetry={retryInterview} onDelete={deleteInterview} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          )}
         </div>
       )}
 
@@ -330,7 +377,7 @@ export default function InterviewsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f1f5f9' }}>
-                {['ID', '구직자#', 'Job#', '날짜', '시간', '상태', 'Meet', '메모', '액션'].map(h => (
+                {['ID', '구직자#', 'Job#', '날짜', '시간', '상태', 'Meet', '메모', '액션', ''].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '2px solid #e2e8f0', fontSize: 12 }}>{h}</th>
                 ))}
               </tr>
@@ -373,6 +420,13 @@ export default function InterviewsPage() {
                         }}>재시도</button>
                       )}
                     </td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <button type="button" onClick={() => deleteInterview(iv.id)} style={{
+                        padding: '2px 6px', fontSize: 11,
+                        border: '1px solid #fca5a5', borderRadius: 4, background: '#fef2f2',
+                        color: '#dc2626', cursor: 'pointer',
+                      }}>삭제</button>
+                    </td>
                   </tr>
                 )
               })}
@@ -391,11 +445,12 @@ export default function InterviewsPage() {
 
 
 // ─── 칸반 카드 ────────────────────────────────────────────────
-function InterviewCard({ iv, allStatuses, onChangeStatus, onRetry }: {
+function InterviewCard({ iv, allStatuses, onChangeStatus, onRetry, onDelete }: {
   iv: Interview
   allStatuses: typeof ALL_STATUSES
   onChangeStatus: (id: number, status: string, memo: string) => void
   onRetry: (id: number) => void
+  onDelete: (id: number) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [memo, setMemo] = useState('')
@@ -441,6 +496,11 @@ function InterviewCard({ iv, allStatuses, onChangeStatus, onRetry }: {
               <option key={s.key} value={s.key}>{s.label}</option>
             ))}
           </select>
+          <button type="button" onClick={() => onDelete(iv.id)} style={{
+            marginTop: 4, width: '100%', padding: '3px 0', fontSize: 10,
+            border: '1px solid #fca5a5', borderRadius: 4, background: '#fef2f2',
+            color: '#dc2626', cursor: 'pointer',
+          }}>삭제</button>
         </div>
       )}
     </div>

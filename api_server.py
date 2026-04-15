@@ -6703,7 +6703,7 @@ class InterviewCreate(BaseModel):
     employer_email:    str = Field("", max_length=200)
     interview_date:    str = Field(..., min_length=8, max_length=20)
     interview_time:    str = Field(..., min_length=3, max_length=20)
-    meet_link:         str = Field(..., min_length=5, max_length=500)
+    meet_link:         str = Field("", max_length=500)
     notes:             str = Field("", max_length=2000)
     duration_minutes:  int = Field(20, ge=10, le=240)
     auto_send_email:   bool = Field(False)
