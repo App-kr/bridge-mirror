@@ -802,6 +802,12 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
     # accounts.craigslist.org 에서 시작하면 지역이 다르게 잡힘
     # seoul.craigslist.org 에서 시작해야 Seoul 이 자동 선택됨
     print("  [POST] seoul.craigslist.org → post to classifieds...")
+    # 이전 ABORT 후 Chrome 세션 초기화 (about:blank로 상태 리셋)
+    try:
+        driver.get("about:blank")
+        _delay(0.5, 1)
+    except Exception:
+        pass
     driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
     _delay(2, 3)
     try:
@@ -1615,10 +1621,13 @@ def main():
                         _log_event("error", jcode, "post", "Posted URL not captured")
 
                 except Exception as exc:
+                    import traceback as _tb
                     err_msg = str(exc)[:300]
+                    tb_str = _tb.format_exc()
                     mark_error(ad_id, err_msg)
-                    _log_event("error", jcode, "post_exception", err_msg)
+                    _log_event("error", jcode, "post_exception", err_msg, {"traceback": tb_str[-500:]})
                     print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
+                    print(tb_str[-300:])
                     continue
 
                 if i < len(ad_list):
