@@ -406,12 +406,16 @@ _FUTURE_START_POOL = ["ASAP","May","June","July","August","September"]
 def _fix_start_date(start_raw: str, seed_str: str = "") -> str:
     """과거/현재 달(Jan~Apr)이면 미래 날짜로 치환. 이미 미래면 그대로."""
     s = (start_raw or "").strip().lower()
-    if not s or "asap" in s or "즉시" in s or "negotiable" in s or "tbd" in s:
-        return start_raw  # 특수값은 그대로
+    if not s:
+        return start_raw
+    # 과거달 체크를 최우선 (ASAP과 섞여있어도 ex: "March, ASAP" → 치환)
     if any(k in s for k in _PAST_MONTH_KEYS):
         import hashlib as _h
         seed = int(_h.md5((seed_str + start_raw).encode()).hexdigest(), 16)
         return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
+    # 순수 특수값이면 그대로
+    if "asap" in s or "즉시" in s or "negotiable" in s or "tbd" in s:
+        return start_raw
     return start_raw  # 이미 미래 (May 이후)
 
 
