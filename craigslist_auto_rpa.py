@@ -1037,15 +1037,20 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                     return bool(driver.execute_script("""
                         var el = document.querySelector(arguments[0]);
                         if (!el) return false;
-                        var nativeSet = Object.getOwnPropertyDescriptor(
-                            window.HTMLInputElement.prototype, 'value') ||
-                            Object.getOwnPropertyDescriptor(
-                            window.HTMLTextAreaElement.prototype, 'value');
-                        if (nativeSet) nativeSet.set.call(el, arguments[1]);
-                        else el.value = arguments[1];
+                        // 요소 타입에 맞는 prototype 사용 (input/textarea 혼용 버그 수정)
+                        var proto = (el.tagName === 'TEXTAREA')
+                            ? window.HTMLTextAreaElement.prototype
+                            : window.HTMLInputElement.prototype;
+                        var nativeSet = Object.getOwnPropertyDescriptor(proto, 'value');
+                        if (nativeSet && nativeSet.set) {
+                            nativeSet.set.call(el, arguments[1]);
+                        } else {
+                            el.value = arguments[1];
+                        }
                         el.dispatchEvent(new Event('input',  {bubbles:true}));
                         el.dispatchEvent(new Event('change', {bubbles:true}));
-                        return true;
+                        el.dispatchEvent(new Event('blur',   {bubbles:true}));
+                        return !!el.value;
                     """, selector, val))
                 except Exception:
                     return False
@@ -1095,13 +1100,26 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                        "input[placeholder*='eighborhood']"], city_val)
 
             # ── description (본문) ────────────────────────────────────────────
-            # 실제 DOM: textarea[id='PostingBody'] (대소문자 주의)
+            # Craigslist json-form: textarea[id='PostingBody']
             ok_b = (
                 _js_set("textarea[id='PostingBody']", body) or
-                _js_set("textarea[name='PostingBody']", body) or
-                _fill(["textarea[id='PostingBody']", "textarea[name='PostingBody']",
-                       "textarea[id*='description']", "textarea"], body)
+                _js_set("textarea[name='PostingBody']", body)
             )
+            if not ok_b:
+                # JS 실패 시 직접 클릭 + send_keys 폴백
+                try:
+                    from selenium.webdriver.common.action_chains import ActionChains as _AC
+                    tb = driver.find_element(By.CSS_SELECTOR, "textarea[id='PostingBody']")
+                    driver.execute_script("arguments[0].scrollIntoView(true);", tb)
+                    _delay(0.3, 0.5)
+                    _AC(driver).click(tb).perform()
+                    _delay(0.2, 0.4)
+                    tb.send_keys(body)
+                    _delay(0.3, 0.5)
+                    ok_b = bool(tb.get_attribute("value") or tb.get_attribute("innerHTML"))
+                except Exception:
+                    ok_b = _fill(["textarea[id='PostingBody']", "textarea[name='PostingBody']",
+                                  "textarea[id*='description']", "textarea"], body)
 
             # ── employment type → full-time ───────────────────────────────────
             # 실제 DOM: select[name='employment_type'] (jQuery UI 가 숨김 처리)
