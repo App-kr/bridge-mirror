@@ -352,6 +352,112 @@ def mark_error(ad_id: int, msg: str):
 # ── 광고 생성 ─────────────────────────────────────────────────────────────────
 # ⚠️  보안: 업체명·연락처·주소 절대 미포함
 # 허용: 도시(city), 급여(salary_raw), 근무시간, 연령대, 일반 복지
+# ── 제목 생성 (샘플 포맷: ◾◾◾◾ CITY, ... 67~72자) ────────────────────────────
+
+_CITY_UPPER = {
+    "서울":"SEOUL","Seoul":"SEOUL","부산":"BUSAN","Busan":"BUSAN",
+    "대구":"DAEGU","Daegu":"DAEGU","인천":"INCHEON","Incheon":"INCHEON",
+    "광주":"GWANGJU","Gwangju":"GWANGJU","대전":"DAEJEON","Daejeon":"DAEJEON",
+    "울산":"ULSAN","Ulsan":"ULSAN","세종":"SEJONG","Sejong":"SEJONG",
+    "수원":"SUWON","Suwon":"SUWON","성남":"SEONGNAM","Seongnam":"SEONGNAM",
+    "전주":"JEONJU","Jeonju":"JEONJU","청주":"CHEONGJU","Cheongju":"CHEONGJU",
+    "제주":"JEJU","Jeju":"JEJU","안양":"ANYANG","Anyang":"ANYANG",
+    "안산":"ANSAN","Ansan":"ANSAN","고양":"GYEONGGI","Goyang":"GYEONGGI",
+    "용인":"YONGIN","Yongin":"YONGIN","의정부":"UIJEONGBU","Uijeongbu":"UIJEONGBU",
+    "춘천":"CHUNCHEON","Chuncheon":"CHUNCHEON","원주":"WONJU","Wonju":"WONJU",
+    "천안":"CHEONAN","Cheonan":"CHEONAN","아산":"ASAN","Asan":"ASAN",
+    "창원":"CHANGWON","Changwon":"CHANGWON","구미":"GUMI","Gumi":"GUMI",
+    "파주":"PAJU","Paju":"PAJU","김포":"GIMPO","Gimpo":"GIMPO",
+    "경기":"GYEONGGI","Gyeonggi":"GYEONGGI","Korea":"KOREA",
+}
+
+_TITLE_OPENERS = [
+    "Energetic ESL Teacher Wanted",
+    "Passionate Minds Wanted",
+    "Enthusiastic Teacher",
+    "Motivated Native Teacher",
+    "Nature-Loving Teacher Needed",
+    "Bright and Positive Teacher",
+    "Passion for Teaching Needed",
+    "Creative Minds Wanted",
+    "Positive and Adaptable Teacher",
+    "Professional and Punctual",
+    "Warm-Hearted Teacher",
+    "Active and Positive Role",
+    "Dedicated Teacher",
+    "Experienced and Professional Minds",
+    "High Energy Required",
+    "Active and Friendly",
+    "Enthusiastic and Dedicated Teacher",
+    "Dynamic and Creative Teacher",
+    "Committed ESL Teacher Wanted",
+    "Friendly and Motivated Teacher",
+]
+
+def _age_to_level(age_raw: str) -> str:
+    a = age_raw.lower()
+    if "adult" in a:                          return "ADULT ESL"
+    if "high" in a and "school" in a:         return "ELEM-HIGH SCHOOL"
+    if "high" in a:                           return "KINDY-HIGH SCHOOL"
+    if "middle" in a and ("elem" in a or "kindy" in a or "kinder" in a):
+                                              return "ELEM-MIDDLE"
+    if "middle" in a:                         return "KINDER-MIDDLE"
+    if ("kindy" in a or "kinder" in a) and ("elem" in a):
+                                              return "KINDER-ELEM"
+    if "kindy" in a or "kinder" in a or "kindergarten" in a:
+                                              return "KINDY-ELEM"
+    if "elem" in a:                           return "KINDER-ELEM"
+    return "KINDER-ELEM"
+
+def _start_to_label(start: str) -> tuple[str, str]:
+    """(month_word, suffix) — e.g. ('July', 'July Start') / ('ASAP', 'ASAP')"""
+    s = start.strip().lower()
+    if not s or s in ("negotiable","tbd","협의","미정"): return ("Negotiable","Negotiable Start")
+    if "asap" in s or "즉시" in s:           return ("ASAP","ASAP Start")
+    months = [("jan","January"),("feb","February"),("mar","March"),("apr","April"),
+              ("may","May"),("jun","June"),("jul","July"),("aug","August"),
+              ("sep","September"),("oct","October"),("nov","November"),("dec","December"),
+              ("1월","January"),("2월","February"),("3월","March"),("4월","April"),
+              ("5월","May"),("6월","June"),("7월","July"),("8월","August"),
+              ("9월","September"),("10월","October"),("11월","November"),("12월","December")]
+    for key, name in months:
+        if key in s: return (name, f"{name} Start")
+    return ("Negotiable","Negotiable Start")
+
+def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
+    """◾◾◾◾ {CITY}, ... 형식 제목 생성. 67~72자 맞춤."""
+    city_up = _CITY_UPPER.get(city_raw, city_raw.upper())
+    level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"
+    month, start_suffix = _start_to_label(start_raw)
+
+    prefix = "\u25fe\u25fe\u25fe\u25fe "          # ◾◾◾◾ (6자)
+    city_part = f"{city_up}, "
+
+    # 후보 패턴 목록 (A: opener for LEVEL (start), B: start: opener LEVEL)
+    candidates = []
+    is_month = month not in ("ASAP", "Negotiable")
+    abbr = month[:3] + "." if is_month and len(month) > 4 else month
+    for opener in _TITLE_OPENERS:
+        # 패턴 A
+        candidates.append(f"{prefix}{city_part}{opener} for {level} ({start_suffix})")
+        if is_month:
+            candidates.append(f"{prefix}{city_part}{opener} for {level} ({abbr} Start)")
+        # 패턴 B (달 이름이 있을 때만)
+        if is_month:
+            candidates.append(f"{prefix}{city_part}{month} Start: {opener} {level}")
+            candidates.append(f"{prefix}{city_part}{opener} {level} for {month} Openings")
+
+    # 67~72자 범위 내 후보 선택 (직업코드 해시로 매번 다른 것)
+    import hashlib as _h
+    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode()).hexdigest(), 16)
+    valid = [c for c in candidates if 67 <= len(c) <= 72]
+    if valid:
+        return valid[seed % len(valid)]
+
+    # 범위 밖이면 가장 가까운 것 선택
+    return min(candidates, key=lambda c: abs(len(c) - 69))
+
+
 # 실제 Craigslist 게시 포맷에 맞춤 (◾◾◾ 제목, 백틱 필드, 표준 요건 문구)
 
 _AGE_MAP = {
@@ -483,10 +589,8 @@ def generate_ad(job: dict) -> tuple[str, str]:
     benefits   = _safe_benefits(benefits_remaining)
     ben_str    = ", ".join(benefits)
 
-    feature    = _title_feature(job, teach_hrs, vacation, benefits)
-
-    # ── 제목: 실제 포맷 ◾◾◾{도시} , {시작월}, {연령대}, {핵심특징}
-    title = f"\u25fe\u25fe\u25fe\u25fe{location} , {start}, {age_raw}, {feature}"
+    # ── 제목: 샘플 포맷 ◾◾◾◾ {CITY}, ... (67~72자)
+    title = _build_title(city, age_raw, start)
 
     # ── 본문 필드 구성 (있는 필드 전부 출력, 개인정보만 제외)
     job_num = jcode.replace("Job.", "").strip()
