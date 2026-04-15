@@ -1,11 +1,9 @@
 {
-  "last_updated": "2026-04-15 18:13:57",
+  "last_updated": "2026-04-15 21:12:08",
   "last_tool": "Edit",
-  "last_command": "Edit: Q:\\openrun_api\\main.py",
+  "last_command": "Edit: Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
   "git_head": "0bc8e25",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\test_gui_launch.bat",
-    "Q:\\Claudework\\bridge base\\craigslist_auto_rpa.py",
     "Q:\\Claudework\\bridge base\\RPA.vbs",
     "Q:\\Claudework\\matjokdo_safe\\logs\\seirchoo_config.json",
     "Q:\\Claudework\\matjokdo_safe\\main_seirchoo.py",
@@ -23,7 +21,9 @@
     "Q:\\Claudework\\bridge base\\render.yaml",
     "Q:\\Claudework\\bridge base\\docs\\RPA_작업메모_20260415.md",
     "Q:\\Claudework\\matjokdo_safe\\launch_dashboard.vbs",
-    "Q:\\Claudework\\matjokdo_safe\\RESTORE_GUIDE.md"
+    "Q:\\Claudework\\matjokdo_safe\\RESTORE_GUIDE.md",
+    "Q:\\Claudework\\bridge base\\tools\\db_persist.py",
+    "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
