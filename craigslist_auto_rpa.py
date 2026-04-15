@@ -652,7 +652,9 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         opts.add_argument("--window-size=1920,1080")
         print("  [DRIVER] Headless 모드로 Chrome 시작")
     else:
-        opts.add_argument("--start-maximized")
+        # 화면 밖으로 이동 — headless 아니라 봇 감지 없고, 사용자 화면에는 안 보임
+        opts.add_argument("--window-position=-10000,-10000")
+        opts.add_argument("--window-size=1920,1080")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
