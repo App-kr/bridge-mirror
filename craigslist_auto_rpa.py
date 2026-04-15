@@ -291,14 +291,17 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     )"""
 
     sql = f"""
-        SELECT j.id, j.job_code, j.seq, j.city, j.district,
-               j.teaching_age, j.salary_raw, j.salary_min, j.salary_max,
-               j.working_hours, j.daily_hours, j.teach_hrs_week,
-               j.housing, j.benefits, j.vacation, j.native_count,
-               j.start_date, j.class_size,
-               {content_score} AS content_score
-        FROM jobs j
-        {where}
+        SELECT * FROM (
+            SELECT j.id, j.job_code, j.seq, j.city, j.district,
+                   j.teaching_age, j.salary_raw, j.salary_min, j.salary_max,
+                   j.working_hours, j.daily_hours, j.teach_hrs_week,
+                   j.housing, j.benefits, j.vacation, j.native_count,
+                   j.start_date, j.class_size,
+                   {content_score} AS content_score
+            FROM jobs j
+            {where}
+        )
+        WHERE content_score >= 2
         ORDER BY content_score DESC, RANDOM()
         LIMIT ?
     """
@@ -393,6 +396,24 @@ _TITLE_OPENERS = [
     "Committed ESL Teacher Wanted",
     "Friendly and Motivated Teacher",
 ]
+
+# ── Starting Date 미래 치환 ────────────────────────────────────────────────
+# 현재 기준(2026-04): January~April = 과거/현재 → 미래 풀로 교체
+_PAST_MONTH_KEYS = {"jan","feb","mar","apr",
+                    "1월","2월","3월","4월"}
+_FUTURE_START_POOL = ["ASAP","May","June","July","August","September"]
+
+def _fix_start_date(start_raw: str, seed_str: str = "") -> str:
+    """과거/현재 달(Jan~Apr)이면 미래 날짜로 치환. 이미 미래면 그대로."""
+    s = (start_raw or "").strip().lower()
+    if not s or "asap" in s or "즉시" in s or "negotiable" in s or "tbd" in s:
+        return start_raw  # 특수값은 그대로
+    if any(k in s for k in _PAST_MONTH_KEYS):
+        import hashlib as _h
+        seed = int(_h.md5((seed_str + start_raw).encode()).hexdigest(), 16)
+        return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
+    return start_raw  # 이미 미래 (May 이후)
+
 
 def _age_to_level(age_raw: str) -> str:
     a = age_raw.lower()
@@ -587,7 +608,10 @@ def generate_ad(job: dict) -> tuple[str, str]:
     teach_hrs  = (job.get("teach_hrs_week") or "").strip()
     vacation   = (job.get("vacation")      or "").strip()
     native     = (job.get("native_count")  or "").strip()
-    start      = (job.get("start_date")    or "Negotiable").strip()
+    start      = _fix_start_date(
+                     (job.get("start_date") or "Negotiable").strip(),
+                     seed_str=job.get("job_code","")
+                 )
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
