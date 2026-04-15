@@ -433,19 +433,33 @@ def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
     prefix = "\u25fe\u25fe\u25fe\u25fe "          # ◾◾◾◾ (6자)
     city_part = f"{city_up}, "
 
-    # 후보 패턴 목록 (A: opener for LEVEL (start), B: start: opener LEVEL)
+    # 후보 패턴 목록
     candidates = []
     is_month = month not in ("ASAP", "Negotiable")
     abbr = month[:3] + "." if is_month and len(month) > 4 else month
+    is_asap = month == "ASAP"
     for opener in _TITLE_OPENERS:
-        # 패턴 A
+        # 패턴 A: opener for LEVEL (start)
         candidates.append(f"{prefix}{city_part}{opener} for {level} ({start_suffix})")
         if is_month:
             candidates.append(f"{prefix}{city_part}{opener} for {level} ({abbr} Start)")
-        # 패턴 B (달 이름이 있을 때만)
+        # 패턴 B: 달 이름 포함
         if is_month:
             candidates.append(f"{prefix}{city_part}{month} Start: {opener} {level}")
             candidates.append(f"{prefix}{city_part}{opener} {level} for {month} Openings")
+        # 패턴 C: opener LEVEL Specialist (start)
+        candidates.append(f"{prefix}{city_part}{opener} {level} Specialist ({start_suffix})")
+        # 패턴 D: opener for LEVEL Teacher
+        candidates.append(f"{prefix}{city_part}{opener} for {level} Teacher")
+        # 패턴 E: opener for LEVEL School Level
+        candidates.append(f"{prefix}{city_part}{opener} for {level} School Level")
+        # 패턴 F: opener for LEVEL Openings Now
+        candidates.append(f"{prefix}{city_part}{opener} for {level} Openings Now")
+        # 패턴 G: opener for Year-Round LEVEL Classes
+        candidates.append(f"{prefix}{city_part}{opener} for Year-Round {level} Classes")
+        # 패턴 H: ASAP 전용 — opener for ASAP LEVEL Study Groups
+        if is_asap:
+            candidates.append(f"{prefix}{city_part}{opener} for ASAP {level} Study Groups")
 
     # 67~72자 범위 내 후보 선택 (직업코드 해시로 매번 다른 것)
     import hashlib as _h
