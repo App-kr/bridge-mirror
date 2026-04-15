@@ -32,32 +32,10 @@ import re
 import sqlite3
 import sys
 import time
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
-# ── 글로벌 에러 핸들러 ────────────────────────────────────────────────────────
-ERROR_LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "rpa_crash.log"
-ERROR_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-def _global_exception_handler(exc_type, exc_value, exc_traceback):
-    """모든 에러를 파일에 기록"""
-    with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"\n{'='*70}\n")
-        f.write(f"[CRASH] {datetime.now().isoformat()}\n")
-        f.write(f"{'='*70}\n")
-        f.write(f"Error: {exc_type.__name__}: {exc_value}\n\n")
-        f.write("Traceback:\n")
-        traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-
-    # 콘솔에도 출력
-    print(f"\n[CRITICAL ERROR] {exc_type.__name__}: {exc_value}")
-    print(f"에러 상세: {ERROR_LOG_FILE}")
-    print("프로그램이 종료됩니다.")
-
-sys.excepthook = _global_exception_handler
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
 BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
@@ -69,8 +47,7 @@ if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
-LOCK_FILE           = BASE_DIR / "logs" / ".rpa_running.lock"
-_STOP_GRACEFUL_FLAG = BASE_DIR / "logs" / ".rpa_stop_graceful.flag"
+LOCK_FILE = BASE_DIR / "logs" / ".rpa_running.lock"
 # 사진 폴더: 환경변수 CRAIG_IMAGE_DIR 또는 기본 images/
 _IMG_DIR = Path(os.getenv("CRAIG_IMAGE_DIR", str(BASE_DIR / "images")))
 _IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -138,125 +115,101 @@ def _load_account_env(account_id: str | None = None):
 _load_account_env()
 
 
-# ── Overlay 상태 업데이트 (전역) ──────────────────────────────────────────────
-# cl_post() 함수에서 단계별 상태를 업데이트할 수 있도록 전역 함수 정의
-def _dummy_update_status(text: str):
-    """더미 함수 — main()에서 실제 함수로 교체됨."""
-    pass
+# ── 파일 무결성 체크 (해킹 시도 차단) ────────────────────────────────────────
+_INTEGRITY_FILES = [
+    Path(__file__).resolve(),                          # craigslist_auto_rpa.py
+    Path(__file__).resolve().parent / "rpa_overlay.py",
+]
+_HASH_STORE = Path(__file__).resolve().parent / "logs" / ".file_hashes.json"
 
-_update_status = _dummy_update_status
 
-# ── Selenium 지연 로드 (--dry-run/--generate 모드에서는 필요 없음) ──────────
-_SKIP_SELENIUM = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv
+def _compute_hash(filepath: Path) -> str:
+    """SHA-256 해시 계산."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-if not _SKIP_SELENIUM:
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.keys import Keys
-        from selenium.webdriver.support.ui import WebDriverWait, Select
-        from selenium.webdriver.support import expected_conditions as EC
-        from webdriver_manager.chrome import ChromeDriverManager
-        # 봇 탐지 우회용 undetected-chromedriver
+
+def integrity_init():
+    """현재 파일들의 해시를 저장 (최초 실행 또는 업데이트 후)."""
+    hashes = {}
+    for fp in _INTEGRITY_FILES:
+        if fp.exists():
+            hashes[str(fp)] = _compute_hash(fp)
+    _HASH_STORE.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
+    print(f"  [INTEGRITY] 해시 저장 완료: {len(hashes)}개 파일")
+
+
+def integrity_check() -> bool:
+    """파일 무결성 검증. 변조 감지 시 False 반환."""
+    if not _HASH_STORE.exists():
+        print("  [INTEGRITY] 해시 파일 없음 → 최초 초기화")
+        integrity_init()
+        return True
+
+    stored = json.loads(_HASH_STORE.read_text(encoding="utf-8"))
+    tampered = []
+    for fp in _INTEGRITY_FILES:
+        if not fp.exists():
+            continue
+        key = str(fp)
+        if key not in stored:
+            continue
+        current = _compute_hash(fp)
+        if current != stored[key]:
+            tampered.append(fp.name)
+
+    if tampered:
+        print(f"\n  !!!!! [SECURITY ALERT] 파일 변조 감지 !!!!!")
+        for name in tampered:
+            print(f"    - {name}")
+        print(f"  비밀번호 입력 팝업을 확인하세요...")
         try:
-            import undetected_chromedriver as uc
-            _HAS_UC = True
-        except ImportError:
-            _HAS_UC = False
-    except ImportError as e:
-        print(f"[ERROR] Selenium이 설치되지 않았습니다.")
-        print(f"설치 명령: pip install selenium webdriver-manager")
-        print(f"에러 상세: {e}")
-        sys.exit(1)
-else:
-    # --dry-run/--generate 모드: 더미 객체 정의 (타입 힌트 호환)
-    class _DummyWebDriver:
-        class Chrome:
-            def __init__(self, *args, **kwargs): pass
-            def quit(self): pass
-        class WebDriver:
-            pass
+            from rpa_overlay import ask_integrity_password
+            if ask_integrity_password():
+                integrity_init()
+                print("  무결성 해시가 재초기화되었습니다. 계속 실행합니다.")
+                return True
+        except Exception as exc:
+            print(f"  [팝업 오류] {exc}")
+            print(f"  CLI 리셋: python craigslist_auto_rpa.py --integrity-reset 1234")
+        print(f"  실행을 중단합니다.")
+        _log_event("error", "SYSTEM", "integrity",
+                   f"File tampering detected: {', '.join(tampered)}")
+        return False
+    return True
 
-    class _DummyService:
-        pass
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import WebDriverWait, Select
+    from selenium.webdriver.support import expected_conditions as EC
+    from webdriver_manager.chrome import ChromeDriverManager
+except ImportError:
+    print("[ERROR] pip install selenium webdriver-manager")
+    sys.exit(1)
 
-    class _DummyOptions:
-        pass
-
-    class _DummyBy:
-        pass
-
-    class _DummyKeys:
-        pass
-
-    class _DummyWebDriverWait:
-        pass
-
-    class _DummySelect:
-        pass
-
-    class _DummyEC:
-        pass
-
-    class _DummyCDM:
-        pass
-
-    webdriver = _DummyWebDriver()
-    Service = _DummyService
-    Options = _DummyOptions
-    By = _DummyBy
-    Keys = _DummyKeys
-    WebDriverWait = _DummyWebDriverWait
-    Select = _DummySelect
-    EC = _DummyEC
-    ChromeDriverManager = _DummyCDM
-
-# ── RPA Credential Vault 임포트 ──────────────────────────────────────────────
-def _load_craigslist_credentials(account_name: str = "gray"):
-    """Craigslist 자격증명을 암호화 vault에서 복호화 로드.
-
-    ENV/평문 절대 사용 금지 — 3중 AES-256-GCM vault에서만 로드
-    DPAPI 캐시로 마스터 키 자동 로드 (재입력 불필요)
-
-    계정 옵션: gray(회색), green(초록), brown(갈색), purple(보라)
-    """
+# ── 비밀번호 복호화 헬퍼 ──────────────────────────────────────────────────────
+def _decrypt_env_password(raw: str) -> str:
+    """ENC: 접두사 비밀번호를 Fernet 복호화. 평문이면 그대로 반환."""
+    if not raw.startswith("ENC:"):
+        return raw
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent / "tools"))
-        from rpa_credential_vault import CredentialVault
-        vault = CredentialVault()
-
-        email_key = f"{account_name}_email"
-        password_key = f"{account_name}_password"
-
-        email = vault.get_decrypted(email_key)
-        password = vault.get_decrypted(password_key)
-
-        if not email or not password:
-            print(f"[ERROR] 계정 '{account_name}'의 자격증명을 찾을 수 없습니다.")
-            print("먼저 vault 설정을 실행하세요:")
-            print("  vault_setup.bat 더블클릭")
-            sys.exit(1)
-
-        print(f"[OK] 계정 [{account_name}] 로드됨: {email}")
-        return email, password
+        from crypto_util import decrypt_value
+        return decrypt_value(raw)
     except Exception as e:
-        print(f"[ERROR] 자격증명 로드 실패: {e}")
+        print(f"  [ERROR] 비밀번호 복호화 실패: {e}")
+        print(f"  .bridge.key 파일 확인 또는 python crypto_util.py setup 실행")
         sys.exit(1)
-
-# ── 계정 선택 파싱 ────────────────────────────────────────────────────────────
-_ACCOUNT = "gray"  # 기본값: 회색
-if "--account" in sys.argv:
-    idx = sys.argv.index("--account")
-    if idx + 1 < len(sys.argv):
-        _ACCOUNT = sys.argv[idx + 1]
 
 # ── Craigslist 설정 ──────────────────────────────────────────────────────────
-# 초기 로드 (--account 지정 시 재로드)
-# dry-run/generate/--help 모드에서는 자격증명 불필요 — lazy load
-_SKIP_CREDS = "--dry-run" in sys.argv or "--generate" in sys.argv or "--help" in sys.argv or "-h" in sys.argv or "--login-setup" in sys.argv
-CL_EMAIL, CL_PASSWORD = (_load_craigslist_credentials(_ACCOUNT) if not _SKIP_CREDS else ("", ""))
+CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
+CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
 CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
 CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
 
@@ -430,60 +383,6 @@ def _age_label(raw: str) -> str:
     return " - ".join(sorted_labels)
 
 
-# ── 월 이름 정규화 (약어 포함) ───────────────────────────────────────────────
-_MONTH_NAMES = {
-    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
-    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6,
-    "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "september": 9,
-    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
-}
-_MONTH_LABEL = ["", "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"]
-
-
-def _safe_start_date(raw: str) -> str:
-    """안전하지 않은 시작일 → ASAP~6개월 뒤 중 랜덤 선택.
-
-    안전 기준: 현재월 + 2 이상만 허용.
-    이미 안전한 월 → 그대로 유지.
-    당월/차월/과거 → ASAP 또는 2~6개월 뒤 랜덤.
-    """
-    if not raw or not raw.strip():
-        return "Negotiable"
-
-    text = raw.strip()
-    low = text.lower().strip()
-
-    if low in ("asap", "immediately", "negotiable", "anytime"):
-        return text
-
-    cur_month = datetime.now().month
-    safe_start = cur_month + 2  # 이 달부터 안전
-
-    # 안전 풀: ASAP + 2~6개월 뒤
-    safe_pool = ["ASAP"]
-    for offset in range(2, 7):
-        m = (cur_month + offset - 1) % 12 + 1
-        safe_pool.append(_MONTH_LABEL[m])
-
-    # 텍스트에서 월 이름 존재 여부 확인
-    has_month = False
-    has_unsafe = False
-    for tok_m in re.finditer(r'\b([A-Za-z]+)\.?\b', text):
-        tok = tok_m.group(1).lower().rstrip('.')
-        if tok in _MONTH_NAMES:
-            has_month = True
-            if _MONTH_NAMES[tok] < safe_start:
-                has_unsafe = True
-                break
-
-    if not has_month or not has_unsafe:
-        return text  # 월 없거나 모두 안전 → 그대로
-
-    # 안전하지 않은 월 포함 → 전체를 랜덤 안전 값으로 교체
-    return random.choice(safe_pool)
-
-
 def _safe_benefits(raw: str) -> list[str]:
     """복지 항목 파싱. 연락처/업체명 포함 항목 차단."""
     defaults = ["Visa sponsorship", "severance pay", "pension", "insurance", "paid vacation"]
@@ -568,7 +467,7 @@ def generate_ad(job: dict) -> tuple[str, str]:
     teach_hrs  = (job.get("teach_hrs_week") or "").strip()
     vacation   = (job.get("vacation")      or "").strip()
     native     = (job.get("native_count")  or "").strip()
-    start      = _safe_start_date((job.get("start_date") or "Negotiable").strip())
+    start      = (job.get("start_date")    or "Negotiable").strip()
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
@@ -634,116 +533,19 @@ def _type_slow(el, text: str):
         time.sleep(random.uniform(0.04, 0.10))
 
 
-def _find_chrome_binary() -> str | None:
-    """Chrome 바이너리 경로 자동 탐색 (비표준 경로 포함)."""
-    import winreg
-    # 레지스트리 우선 (설치 경로가 어디든 확실히 탐색)
-    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
-        try:
-            key = winreg.OpenKey(hive,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
-            val, _ = winreg.QueryValueEx(key, "")
-            winreg.CloseKey(key)
-            if val and Path(val).exists():
-                return val
-        except Exception:
-            pass
-    # 표준 경로 폴백
-    candidates = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
-        r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe",
-    ]
-    for c in candidates:
-        if Path(c).exists():
-            return str(c)
-    return None
-
-
-def build_driver(headless: bool = True, account: str = "gray") -> webdriver.Chrome:
-    """Chrome 드라이버 생성.
-
-    headless=True: --headless=new + undetected-chromedriver (봇 탐지 우회)
-    계정별 Chrome 프로필 유지 → 쿠키/세션 재사용으로 로그인 반복 방지.
-    """
-    chrome_bin = _find_chrome_binary()
-
-    # 계정별 Chrome 프로필 (세션 쿠키 영속화)
-    profile_dir = str(BASE_DIR / ".chrome_rpa_profile" / account)
-    Path(profile_dir).mkdir(parents=True, exist_ok=True)
-
-    # ── undetected-chromedriver 우선 (봇 탐지 우회) ──
-    if _HAS_UC:
-        uc_opts = uc.ChromeOptions()
-        if chrome_bin:
-            uc_opts.binary_location = chrome_bin
-            print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-        # 계정별 프로필 → 쿠키 재사용, Further verification 반복 방지
-        uc_opts.add_argument(f"--user-data-dir={profile_dir}")
-        print(f"  [DRIVER] 프로필: {profile_dir}")
-        if headless:
-            uc_opts.add_argument("--headless=new")
-            uc_opts.add_argument("--no-sandbox")
-            uc_opts.add_argument("--disable-dev-shm-usage")
-            uc_opts.add_argument("--window-size=1920,1080")
-        else:
-            uc_opts.add_argument("--start-maximized")
-        uc_opts.add_argument("--no-first-run")
-        uc_opts.add_argument("--no-default-browser-check")
-        uc_opts.add_argument("--remote-debugging-port=0")
-        if headless:
-            print("  [DRIVER] undetected + headless 모드")
-        else:
-            print("  [DRIVER] undetected + visible 모드")
-        # Chrome 버전 자동 감지 (version mismatch 방지)
-        _chrome_ver = None
-        if chrome_bin:
-            try:
-                import subprocess as _sp
-                _ver_out = _sp.check_output(
-                    ['powershell.exe', '-NoProfile', '-Command',
-                     f"(Get-Item '{chrome_bin}').VersionInfo.FileVersion"],
-                    text=True, timeout=10).strip()
-                _chrome_ver = int(_ver_out.split(".")[0])
-                print(f"  [DRIVER] Chrome 버전: {_chrome_ver}")
-            except Exception as _ve:
-                print(f"  [DRIVER] 버전 감지 실패: {_ve}")
-            # 레지스트리 폴백
-            if _chrome_ver is None:
-                try:
-                    _reg_out = _sp.check_output(
-                        'reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
-                        shell=True, text=True, timeout=10).strip()
-                    for _rl in _reg_out.splitlines():
-                        if "version" in _rl.lower():
-                            _chrome_ver = int(_rl.split()[-1].split(".")[0])
-                            print(f"  [DRIVER] Chrome 버전 (reg): {_chrome_ver}")
-                            break
-                except Exception:
-                    pass
-        driver = uc.Chrome(options=uc_opts, use_subprocess=True,
-                           version_main=_chrome_ver)
-        return driver
-
-    # ── 폴백: 일반 Selenium ──
-    print("  [DRIVER] WARNING: undetected-chromedriver 미설치 — 일반 Selenium 사용")
+def build_driver(headless: bool = False) -> webdriver.Chrome:
     opts = Options()
-    if chrome_bin:
-        opts.binary_location = chrome_bin
-        print(f"  [DRIVER] Chrome 경로: {chrome_bin}")
-    opts.add_argument(f"--user-data-dir={profile_dir}")
     if headless:
+        # Headless 모드: 화면 미러링 잠금 상태에서 작동
+        # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--window-size=1920,1080")
+        print("  [DRIVER] Headless 모드로 Chrome 시작")
     else:
         opts.add_argument("--start-maximized")
     opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_argument("--remote-debugging-port=0")
-    opts.add_argument("--no-first-run")
-    opts.add_argument("--no-default-browser-check")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
     svc    = Service(ChromeDriverManager().install())
@@ -789,27 +591,8 @@ def _has_captcha(driver) -> bool:
 
 def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
-
-    def _is_logged_in(d):
-        src = d.page_source.lower()
-        return "log out" in src or "logout" in src or "make new post" in src
-
-    def _minimize_if_needed(d):
-        """로그인 성공 후 창을 화면 밖으로 이동 (minimize는 클릭 무효화)"""
-        try:
-            d.set_window_position(-10000, -10000)
-            print("  [LOGIN] 창 최소화 완료")
-        except Exception:
-            pass
-
-    # ── 쿠키 세션 체크: 이미 로그인 상태면 스킵 ──
-    driver.get("https://accounts.craigslist.org/login/home")
+    driver.get(CL_LOGIN_URL)
     _delay(2, 3)
-    src_check = driver.page_source.lower()
-    if "log out" in src_check or "logout" in src_check:
-        print("  [LOGIN] 기존 쿠키로 이미 로그인 상태 — 스킵 ✅")
-        _minimize_if_needed(driver)
-        return True
 
     try:
         email_el = WebDriverWait(driver, 15).until(
@@ -825,94 +608,16 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
         # Craigslist 는 로그인 후에도 URL 이 accounts.craigslist.org/login/home 유지
         # → URL 대신 페이지 콘텐츠로 로그인 성공 여부 판단
+        def _is_logged_in(d):
+            src = d.page_source.lower()
+            return "log out" in src or "logout" in src or "make new post" in src
+
         try:
             WebDriverWait(driver, 12).until(_is_logged_in)
             print(f"  [LOGIN] 성공 ✅")
-            _minimize_if_needed(driver)
             return True
         except Exception:
             pass
-
-        # "Further verification required" → 이메일 로그인 링크 자동 요청
-        src_after = driver.page_source.lower()
-        if "further verification" in src_after or "one-time login" in src_after:
-            print("  [LOGIN] ⚠️ 추가 인증 필요 — 이메일 로그인 링크 전송 시도...")
-            # 디버그: page source 저장 (버튼 구조 분석용)
-            try:
-                _dbg = _LOG_DIR / "login_page_source.html"
-                _dbg.write_text(driver.page_source, encoding="utf-8")
-                print(f"  [LOGIN] 페이지 소스 저장: {_dbg}")
-            except Exception:
-                pass
-            try:
-                # ── JavaScript로 직접 "E-mail a login link" 클릭 (가장 확실) ──
-                clicked = driver.execute_script("""
-                    // 1) 모든 input/button/a 중 "login link" 텍스트 포함 요소 클릭
-                    var targets = document.querySelectorAll('input, button, a');
-                    for (var i = 0; i < targets.length; i++) {
-                        var el = targets[i];
-                        var txt = (el.value || el.textContent || '').toLowerCase();
-                        if (txt.indexOf('login link') !== -1 || txt.indexOf('e-mail a login') !== -1) {
-                            el.click();
-                            return 'clicked: ' + el.tagName + ' = ' + txt.trim().substring(0, 60);
-                        }
-                    }
-                    // 2) "click here" 링크 폴백
-                    var links = document.querySelectorAll('a');
-                    for (var j = 0; j < links.length; j++) {
-                        var a = links[j];
-                        var t = (a.textContent || '').toLowerCase();
-                        if (t.indexOf('click here') !== -1) {
-                            a.click();
-                            return 'clicked: a.click_here = ' + t.trim().substring(0, 60);
-                        }
-                    }
-                    return null;
-                """)
-
-                if clicked:
-                    print(f"  [LOGIN] JS 클릭 성공: {clicked}")
-                    print(f"  [LOGIN] 📧 로그인 링크가 {CL_EMAIL}로 전송됨!")
-                    print(f"  [LOGIN] 이메일에서 링크를 클릭하세요 (3분 대기)...")
-                    _log_event("warning", "—", "login",
-                               f"One-time login link sent to {CL_EMAIL} — click email link then re-run")
-                    # 3분간 10초 간격으로 로그인 확인
-                    for wait_i in range(18):
-                        _delay(9, 11)
-                        try:
-                            driver.refresh()
-                            _delay(2, 3)
-                            if _is_logged_in(driver):
-                                print("  [LOGIN] 이메일 링크 인증 성공 ✅")
-                                _minimize_if_needed(driver)
-                                return True
-                        except Exception:
-                            pass
-                        remaining = (18 - wait_i - 1) * 10
-                        if remaining > 0:
-                            print(f"  [LOGIN] 대기중... ({remaining}초 남음)")
-                else:
-                    print("  [LOGIN] 이메일 링크 버튼 미발견 (JS 탐색 실패)")
-                    # Selenium 폴백: 기존 방식
-                    link_btn = None
-                    for tag in ["input", "button", "a"]:
-                        for el in driver.find_elements(By.TAG_NAME, tag):
-                            val = (el.get_attribute("value") or el.text or "").lower()
-                            if "login link" in val or "e-mail a login" in val or "click here" in val:
-                                link_btn = el
-                                break
-                        if link_btn:
-                            break
-                    if link_btn:
-                        try:
-                            link_btn.click()
-                        except Exception:
-                            _js_click(driver, link_btn)
-                        print(f"  [LOGIN] Selenium 폴백 클릭 성공")
-                    else:
-                        print("  [LOGIN] 모든 버튼 탐색 실패 — page source 확인 필요")
-            except Exception as vex:
-                print(f"  [LOGIN] 인증 처리 오류: {vex}")
 
         # CAPTCHA 감지
         if _has_captcha(driver):
@@ -924,7 +629,6 @@ def cl_login(driver: webdriver.Chrome) -> bool:
         countdown(30, "로그인 대기")
         if _is_logged_in(driver):
             print("  [LOGIN] 성공 ✅")
-            _minimize_if_needed(driver)
             return True
 
         ss_path = SS_DIR / "login_fail.png"
@@ -989,7 +693,6 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
     # ── seoul.craigslist.org → "post to classifieds" 클릭 ─
     # accounts.craigslist.org 에서 시작하면 지역이 다르게 잡힘
     # seoul.craigslist.org 에서 시작해야 Seoul 이 자동 선택됨
-    _update_status("접속중")
     print("  [POST] seoul.craigslist.org → post to classifieds...")
     driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
     _delay(2, 3)
@@ -1017,41 +720,9 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         print(f"  [?s={step}] ", end="", flush=True)
 
         if step == "copyfromanother":
-            # "copy from another posting?" → skip
+            # "copy from another posting?" → 그냥 continue (skip)
             print("이전 게시물 복사 스킵")
-            skip_el = None
-            for sel in ["input[value='skip']", "button"]:
-                for el in driver.find_elements(By.CSS_SELECTOR, sel):
-                    txt = (el.get_attribute("value") or el.text or "").lower().strip()
-                    if txt == "skip":
-                        skip_el = el
-                        break
-                if skip_el:
-                    break
-
-            if skip_el:
-                # 1) native click
-                try:
-                    skip_el.click()
-                except Exception:
-                    _js_click(driver, skip_el)
-                _delay(0.5, 1.0)
-                # 2) still stuck? force form submit
-                if _step(driver.current_url) == step:
-                    try:
-                        driver.execute_script(
-                            "var f=arguments[0].closest('form');"
-                            "if(f) f.submit();", skip_el)
-                    except Exception:
-                        pass
-                    _delay(0.5, 1.0)
-
-            # 3) fallback: _advance (continue/submit 버튼)
-            if _step(driver.current_url) == step:
-                _advance(driver, step)
-            else:
-                _delay(1.0, 2.0)
-                print(f"    → ?s={_step(driver.current_url)}")
+            _advance(driver, step)
 
         elif step == "area":
             # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
@@ -1107,7 +778,6 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             #   3) 레이블 href에 'edu' 포함 링크
             #   4) DOM에 education 텍스트가 있으면 부모 클릭
             # ─────────────────────────────────────────────────────────────────
-            _update_status("게시판 선택중")
             print("카테고리: education 선택")
 
             # 현재 페이지 HTML 저장 (디버그 — 카테고리 선택 실패 시 원인 파악용)
@@ -1195,7 +865,6 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step in ("attr", "edit"):
             # 광고 폼 입력 (?s=edit 또는 ?s=attr)
-            _update_status("글작성중")
             print("폼 입력")
             _delay(1, 2)
             # 첫 진입 시 HTML 소스 저장 (디버그용)
@@ -1326,7 +995,6 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step in ("img", "editimage"):
             # 이미지 업로드 — B.jpg 첨부
-            _update_status("사진첨부중")
             # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
             #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
@@ -1386,7 +1054,6 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
         elif step == "preview":
             # 미리보기 → CAPTCHA 체크 후 publish
-            _update_status("포스팅중")
             print("미리보기 → publish")
             if _has_captcha(driver):
                 print("    CAPTCHA 감지 — 브라우저에서 해결하세요...")
@@ -1588,7 +1255,6 @@ def security_check(body: str, job_code: str) -> bool:
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
     parser = argparse.ArgumentParser(description="BRIDGE Craigslist Auto RPA")
     parser.add_argument("--dry-run",   action="store_true", help="텍스트 출력만 (게시 없음)")
     parser.add_argument("--generate",  action="store_true", help="draft DB 저장만 (브라우저 없음)")
@@ -1597,253 +1263,35 @@ def main():
                         help="카테고리 페이지까지만 진행 → education 실제 value 자동 탐색 후 종료")
     parser.add_argument("--account",   default=None,
                         help="계정 ID (account1/account2/account3) → 해당 .env 로딩")
-    parser.add_argument("--all",       action="store_true",
-                        help="4계정 순차 실행 (gray→green→brown→purple)")
-    parser.add_argument("--login-setup", action="store_true",
-                        help="수동 로그인 셋업 — Chrome 창을 열어 수동 로그인 후 쿠키 저장")
+    parser.add_argument("--integrity-reset", nargs="?", const="", default=None,
+                        help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
     parser.add_argument("--job-code",  default=None)
     parser.add_argument("--limit",     type=int, default=10)
     args = parser.parse_args()
 
-    # ── GUI 계정 선택 (--account 미지정 시 팝업 표시) ──────────────────────────
-    if not args.account and not args.all and not args.dry_run and not args.generate and not args.diagnose:
-        try:
-            from rpa_overlay import ask_account_selection
-            account_id, selected_limit = ask_account_selection()
-        except Exception as e:
-            print(f"[ERROR] 계정 선택 팝업 실패: {e}")
-            sys.exit(1)
-        if account_id == "CANCEL":
-            print("취소됨.")
-            sys.exit(0)
-        args.account = account_id
-        args.limit   = selected_limit
+    # ── 무결성 해시 재초기화 ──
+    if args.integrity_reset is not None:
+        if args.integrity_reset == "1234":
+            integrity_init()
+            print("무결성 해시가 재초기화되었습니다.")
+        else:
+            print("  비밀번호가 틀렸습니다. 사용법: --integrity-reset 1234")
+        return
 
-    # ── 중복 실행 방지 (per-account 잠금 파일 체크) ──────────────────────────
-    if not args.all and not args.dry_run and not args.generate and not args.diagnose:
-        acct_key  = args.account or "default"
-        acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
-        if acct_lock.exists():
-            try:
-                import ctypes as _ct
-                pid = int(acct_lock.read_text().strip())
-                h   = _ct.windll.kernel32.OpenProcess(0x400, False, pid)
-                if h:
-                    _ct.windll.kernel32.CloseHandle(h)
-                    print(f"[WARN] {acct_key} 계정 RPA 이미 실행 중 (PID={pid}) — 중복 실행 차단")
-                    try:
-                        from rpa_overlay import ask_already_running
-                        ask_already_running(acct_key)
-                    except Exception:
-                        pass
-                    sys.exit(0)
-                else:
-                    acct_lock.unlink(missing_ok=True)
-            except Exception:
-                acct_lock.unlink(missing_ok=True)
-
-    # ── Credential Vault 재로딩 (--account 지정 시) ──
-    # NOTE: ENV는 절대 사용 금지, Vault에서만 로드
+    # ── 계정별 .env 재로딩 (--account 지정 시) ──
     if args.account:
-        CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(args.account)
-        CL_CITY     = "seoul"  # 기본값 유지
-        CL_CONTACT  = "bridgejobkr@gmail.com"  # 기본값 유지
+        _load_account_env(args.account)
+        # 환경변수 재읽기
+        global CL_EMAIL, CL_PASSWORD, CL_CITY, CL_CONTACT, CL_BASE_URL
+        CL_EMAIL    = os.getenv("CRAIGSLIST_EMAIL",    "")
+        CL_PASSWORD = _decrypt_env_password(os.getenv("CRAIGSLIST_PASSWORD", ""))
+        CL_CITY     = os.getenv("CRAIGSLIST_CITY",     "seoul")
+        CL_CONTACT  = os.getenv("CRAIGSLIST_CONTACT",  "bridgejobkr@gmail.com")
         CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
 
-    # ── --login-setup 모드: 수동 로그인으로 쿠키 저장 ──
-    if args.login_setup:
-        _SETUP_ACCOUNTS = ["gray", "green", "brown", "purple"]
-        if args.account:
-            _SETUP_ACCOUNTS = [args.account]
-        for acct_name in _SETUP_ACCOUNTS:
-            print(f"\n{'='*55}")
-            print(f"  [{acct_name}] 수동 로그인 셋업")
-            print(f"{'='*55}")
-            try:
-                email, password = _load_craigslist_credentials(acct_name)
-            except SystemExit:
-                print(f"  [SKIP] {acct_name} 자격증명 없음")
-                continue
-            print(f"  이메일: {email}")
-            print(f"  Chrome 창이 열립니다. 로그인하세요.")
-            print(f"  (이메일 인증 링크가 필요하면 메일에서 클릭)")
-            driver = build_driver(headless=False, account=acct_name)
-            driver.get("https://accounts.craigslist.org/login/home")
-            try:
-                # 자동 입력
-                _delay(2, 3)
-                email_el = driver.find_element(By.ID, "inputEmailHandle")
-                _type_slow(email_el, email)
-                pw_el = driver.find_element(By.ID, "inputPassword")
-                _type_slow(pw_el, password)
-                pw_el.send_keys(Keys.RETURN)
-            except Exception:
-                pass
-            print(f"  로그인 완료 후 Enter를 누르세요...")
-            input()
-            # 로그인 확인
-            src = driver.page_source.lower()
-            if "log out" in src or "logout" in src:
-                print(f"  [{acct_name}] 로그인 성공 — 쿠키 저장됨 ✅")
-            else:
-                print(f"  [{acct_name}] 로그인 미확인 — 쿠키가 저장되지 않았을 수 있음")
-            driver.quit()
-        print(f"\n셋업 완료. 이제 run.bat 또는 --all 로 실행하세요.")
-        return
-
-    # ── --all 모드: 4계정 순차 실행 (단일 프로세스, 오버레이 유지) ──
-    if args.all:
-        _ALL_ACCOUNTS = ["gray", "green", "brown", "purple"]
-        grand_total = 0
-        print("=" * 60)
-        print("  BRIDGE Craigslist Auto RPA — 4계정 순차 모드")
-        print("=" * 60)
-
-        # 오버레이 1회 초기화 (Chrome은 headless라 창 없음 — 오버레이는 사용자에게 보여야 함)
-        _has_ov = False
-        try:
-            from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, stop_requested
-            _has_ov = True
-            globals()['_update_status'] = update_status
-        except ImportError:
-            pass
-
-        for acct_idx, acct_name in enumerate(_ALL_ACCOUNTS):
-          try:
-            print(f"\n{'='*55}")
-            print(f"  [{acct_idx+1}/4] 계정: {acct_name}")
-            print(f"{'='*55}")
-
-            # 계정 전환
-            try:
-                CL_EMAIL, CL_PASSWORD = _load_craigslist_credentials(acct_name)
-            except SystemExit:
-                print(f"  [SKIP] {acct_name} 자격증명 없음 — 건너뜀")
-                continue
-            CL_CITY     = "seoul"
-            CL_CONTACT  = "bridgejobkr@gmail.com"
-            CL_BASE_URL = f"https://{CL_CITY}.craigslist.org"
-
-            jobs = fetch_jobs(args.job_code, args.limit)
-            print(f"  대상 포지션: {len(jobs)}건")
-            if not jobs:
-                print(f"  게시할 포지션 없음 — 다음 계정으로")
-                continue
-
-            ads = []
-            for job in jobs:
-                title, body = generate_ad(job)
-                body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
-                if removed:
-                    body = body_clean
-                if not security_check(body, job["job_code"]):
-                    continue
-                ad_id = save_draft(job, title, body)
-                ads.append((job, title, body, ad_id))
-
-            if not ads:
-                print(f"  광고 생성 실패 — 다음 계정으로")
-                continue
-
-            # 오버레이 갱신
-            if _has_ov:
-                show_working(current=0, total=len(ads), email=CL_EMAIL)
-                update_status("로그인중")
-
-            hl_flag = True  # --all 모드: 항상 백그라운드 (사용자 작업 방해 방지)
-            driver = None
-            try:
-                driver = build_driver(headless=hl_flag, account=acct_name)
-            except Exception as drv_exc:
-                print(f"  [ERROR] Chrome 시작 실패: {drv_exc}")
-                _log_event("error", "—", "driver", f"{acct_name}: {drv_exc}")
-                continue
-            posted = 0
-            try:
-                if not cl_login(driver):
-                    print(f"  [ABORT] {acct_name} 로그인 실패 — 다음 계정으로")
-                    _log_event("error", "—", "login", f"{acct_name} login failed")
-                    continue
-
-                for i, (job, title, body, ad_id) in enumerate(ads, 1):
-                    if _has_ov and stop_requested():
-                        print("\n[STOP] 사용자 중단 요청")
-                        break
-                    jcode = job["job_code"]
-                    print(f"\n[{i}/{len(ads)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
-                    try:
-                        if _has_ov:
-                            update_status(f"게시중 ({i}/{len(ads)})")
-                        url = cl_post(driver, title, body, job)
-                        ss  = take_screenshot(driver, jcode)
-                        if url and url not in ("", "None", None):
-                            mark_posted(ad_id, url, ss)
-                            print(f"  ✅ 게시 완료: {url}")
-                            _log_event("info", jcode, "posted", "Post successful", {"url": url})
-                            posted += 1
-                            if _has_ov:
-                                update_progress(posted, len(ads))
-                        elif url is None:
-                            mark_error(ad_id, "카테고리 선택 실패")
-                            print(f"  ❌ 카테고리 선택 실패")
-                        else:
-                            mark_error(ad_id, "URL 획득 실패")
-                            print(f"  ⚠️  게시 URL 획득 실패")
-                    except Exception as exc:
-                        mark_error(ad_id, str(exc)[:300])
-                        print(f"  ❌ 예외: {exc}")
-                        continue
-
-                    if i < len(ads):
-                        wait = random.randint(90, 150)
-                        countdown(wait, "다음 게시 대기")
-
-            except Exception as sess_exc:
-                _log_event("error", "—", "session", f"{acct_name}: {sess_exc}")
-                print(f"  [SESSION ERROR] {sess_exc}")
-            finally:
-                if driver:
-                    try:
-                        driver.quit()
-                    except Exception:
-                        pass
-
-            grand_total += posted
-            print(f"  [{acct_name}] {posted}건 게시 완료")
-
-            # 계정 간 쿨다운
-            if acct_idx < len(_ALL_ACCOUNTS) - 1 and posted > 0:
-                countdown(30, "다음 계정 대기")
-
-          except Exception as acct_exc:
-            print(f"  [FATAL] {acct_name} 계정 처리 중 예외 — 다음 계정으로: {acct_exc}")
-            _log_event("error", "—", "account_fatal", f"{acct_name}: {acct_exc}")
-            continue
-
-        print(f"\n{'='*60}")
-        print(f"  전체 완료: {grand_total}건 게시 (4계정)")
-        print(f"{'='*60}")
-        if grand_total == 0:
-            print("  [WARN] 0건 게시 — 모든 계정 로그인 실패. 완료 처리 안 함.")
-            if _has_ov:
-                try:
-                    update_status("로그인 실패 — 0건 게시")
-                except Exception:
-                    pass
-                import time as _time
-                _time.sleep(5)
-                try:
-                    overlay_close()
-                except Exception:
-                    pass
-        elif _has_ov:
-            show_complete(posted_count=grand_total)
-            import time as _time
-            for _ in range(60):
-                _time.sleep(1)
-                if wants_more():
-                    break
-        return
+    # ── 파일 무결성 체크 ──
+    if not integrity_check():
+        sys.exit(99)
 
     acct_label = args.account or "default"
     print("=" * 60)
@@ -1862,7 +1310,7 @@ def main():
             print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
             sys.exit(1)
         print("\n[DIAGNOSE] 로그인 후 카테고리 선택 페이지까지 진행합니다...")
-        driver = build_driver(headless=False, account=acct_label)
+        driver = build_driver(headless=False)
         try:
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
@@ -1998,20 +1446,16 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
-    # ── 잠금 파일 (중복 실행 방지, per-account) ──
+    # ── 잠금 파일 (중복 실행 방지) ──
     import atexit
-    acct_key  = args.account or "default"
-    acct_lock = LOCK_FILE.parent / f".rpa_{acct_key}.lock"
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    acct_lock.write_text(str(os.getpid()), encoding="utf-8")
-    atexit.register(lambda p=acct_lock: p.unlink(missing_ok=True))
+    LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
+    atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
 
     # 오버레이 알림 (설치되어 있으면 표시)
     try:
-        from rpa_overlay import show_working, show_complete, update_progress, update_status, close as overlay_close, wants_more, wants_more_count, stop_requested
+        from rpa_overlay import show_working, show_complete, update_progress, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
-        # 전역 _update_status 함수 설정 (cl_post()에서 사용)
-        globals()['_update_status'] = update_status
     except ImportError:
         _HAS_OVERLAY = False
 
@@ -2021,25 +1465,17 @@ def main():
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag, account=acct_label)
+        driver = build_driver(headless=hl_flag)
         posted = 0
 
         try:
-            if _HAS_OVERLAY:
-                update_status("로그인중")
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
                 _log_event("error", "—", "login", "Login failed — aborting session")
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
-                _graceful_hit = _STOP_GRACEFUL_FLAG.exists()
-                if _graceful_hit:
-                    try:
-                        _STOP_GRACEFUL_FLAG.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                if (_HAS_OVERLAY and stop_requested()) or _graceful_hit:
+                if _HAS_OVERLAY and stop_requested():
                     print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
                     _log_event("info", "—", "user_stop", "User requested stop via overlay")
                     break
@@ -2049,8 +1485,6 @@ def main():
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
 
                 try:
-                    if _HAS_OVERLAY:
-                        update_status(f"게시중 ({i}/{len(ad_list)})")
                     url = cl_post(driver, title, body, job)
                     ss  = take_screenshot(driver, jcode)
 
@@ -2109,18 +1543,22 @@ def main():
     print("=" * 60)
 
     if _HAS_OVERLAY:
-        result = show_complete(posted_count=total_posted)
+        show_complete(posted_count=total_posted)
 
-        if result == "MORE" or wants_more():
-            more_count = wants_more_count()
-            print(f"\n[OVERLAY] 유저 요청: {more_count}개 더 올리기!")
-            overlay_close()
+        # "5개 더 올리기" 대기 (최대 60초)
+        import time as _time
+        for _ in range(60):
+            _time.sleep(1)
+            if wants_more():
+                print("\n[OVERLAY] 유저 요청: 5개 더 올리기!")
+                overlay_close()
 
-            extra_jobs = fetch_jobs(None, more_count)
-            if not extra_jobs:
-                print("추가 게시할 포지션 없음")
-                show_complete(posted_count=total_posted)
-            else:
+                extra_jobs = fetch_jobs(None, 5)
+                if not extra_jobs:
+                    print("추가 게시할 포지션 없음")
+                    show_complete(posted_count=total_posted)
+                    break
+
                 extra_ads = []
                 for job in extra_jobs:
                     title, body = generate_ad(job)
@@ -2136,30 +1574,9 @@ def main():
                 total_posted += extra_posted
                 print(f"\n추가 {extra_posted}건 완료 (총 {total_posted}건)")
                 show_complete(posted_count=total_posted)
-
-        elif result and result.startswith("CHANGE_"):
-            new_acct = result.split("_", 1)[1]
-            print(f"\n[OVERLAY] 계정 변경: {new_acct}")
-            overlay_close()
-            import subprocess
-            _script = str(Path(__file__).resolve())
-            _cmd = [sys.executable, "-X", "utf8", _script,
-                    "--account", new_acct, "--limit", str(args.limit)]
-            if args.headless:
-                _cmd.append("--headless")
-            print(f"  새 프로세스 시작: {new_acct}")
-            subprocess.Popen(_cmd)
+                break
 
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[ABORT] 사용자에 의해 중단됨")
-        sys.exit(0)
-    except Exception as e:
-        import traceback
-        print(f"\n[FATAL ERROR] {type(e).__name__}: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        sys.exit(1)
+    main()
