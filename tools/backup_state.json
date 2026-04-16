@@ -1711,8 +1711,16 @@
       "git": "abafbfae",
       "files": 2236,
       "db_hash": "6347dd4e7ac8"
+    },
+    {
+      "dir": "20260416_165741__anti-flag_완성_+_종료백업",
+      "task": "anti-flag 완성 + 종료백업",
+      "ts": "2026.04.16 16:58:31",
+      "git": "95c78415",
+      "files": 2244,
+      "db_hash": "6347dd4e7ac8"
     }
   ],
-  "last_backup": "2026.04.15 22:12:13",
-  "total_count": 214
+  "last_backup": "2026.04.16 16:58:31",
+  "total_count": 215
 }
