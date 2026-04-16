@@ -12821,74 +12821,96 @@ async def admin_db_stats(request: Request):
 
 @app.post("/api/admin/db/restore", tags=["admin"])
 async def admin_db_restore(request: Request):
-    """로컬 master.db SQL 덤프 → Render DB 복원.
-    Body: multipart/form-data, field=sql_dump (text/plain SQL).
-    관리자 인증 필수. 기존 테이블은 DROP 후 재생성.
+    """로컬 master.db → Render DB 복원.
+    - field=db_file (바이너리 .db): SQLite 파일 직접 업로드 (권장)
+    - field=sql_dump (text SQL): SQL 덤프 방식 (레거시)
+    관리자 인증 필수.
     """
     _check_admin(request)
     import shutil as _sh
     import tempfile as _tf
+    import os as _os
+
+    db_path = str(_ADMIN_DB_PATH)
+    backup_path = db_path + ".pre_restore"
 
     try:
         form = await request.form()
+        db_file = form.get("db_file")
         sql_file = form.get("sql_dump")
-        if not sql_file:
-            raise HTTPException(400, "sql_dump 필드가 없습니다.")
-        sql_text = await sql_file.read() if hasattr(sql_file, "read") else sql_file
-        if isinstance(sql_text, bytes):
-            sql_text = sql_text.decode("utf-8", errors="replace")
+
+        # ── 방식 1: 바이너리 .db 직접 업로드 ──
+        if db_file is not None:
+            db_bytes = await db_file.read() if hasattr(db_file, "read") else db_file
+            if not isinstance(db_bytes, bytes):
+                db_bytes = db_bytes.encode("latin-1")
+            # SQLite 매직 바이트 검증
+            if not db_bytes.startswith(b"SQLite format 3"):
+                raise HTTPException(400, "유효한 SQLite DB 파일이 아닙니다.")
+
+            # 백업
+            try:
+                _sh.copy2(db_path, backup_path)
+            except Exception:
+                pass
+
+            # 임시 파일에 쓰고 atomic 교체
+            with _tf.NamedTemporaryFile(suffix=".db", delete=False, dir=str(Path(db_path).parent)) as tmp:
+                tmp.write(db_bytes)
+                tmp_path = tmp.name
+
+            _os.replace(tmp_path, db_path)
+
+        # ── 방식 2: SQL 덤프 (레거시) ──
+        elif sql_file is not None:
+            sql_text = await sql_file.read() if hasattr(sql_file, "read") else sql_file
+            if isinstance(sql_text, bytes):
+                sql_text = sql_text.decode("utf-8", errors="replace")
+            if not sql_text.strip().startswith(("BEGIN TRANSACTION", "PRAGMA")):
+                raise HTTPException(400, "유효한 SQLite SQL dump 형식이 아닙니다.")
+
+            try:
+                _sh.copy2(db_path, backup_path)
+            except Exception:
+                pass
+
+            with _tf.NamedTemporaryFile(suffix=".db", delete=False, dir=str(Path(db_path).parent)) as tmp:
+                tmp_path = tmp.name
+
+            conn_new = sqlite3.connect(tmp_path)
+            conn_new.executescript(sql_text)
+            conn_new.commit()
+            conn_new.close()
+            _os.replace(tmp_path, db_path)
+
+        else:
+            raise HTTPException(400, "db_file 또는 sql_dump 필드가 필요합니다.")
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(400, f"업로드 파싱 실패: {e}")
 
-    # 기본 안전 검증 — SQLite dump 포맷인지 확인
-    if not sql_text.strip().startswith(("BEGIN TRANSACTION", "PRAGMA")):
-        raise HTTPException(400, "유효한 SQLite SQL dump 형식이 아닙니다.")
-
-    # 백업 후 복원
-    db_path = str(_ADMIN_DB_PATH)
-    backup_path = db_path + ".pre_restore"
+    # 복원 확인
     try:
-        _sh.copy2(db_path, backup_path)
-    except Exception:
-        pass  # 기존 DB 없으면 스킵
-
-    try:
-        # 복원용 임시 DB 생성 후 교체
-        with _tf.NamedTemporaryFile(suffix=".db", delete=False, dir=str(Path(db_path).parent)) as tmp:
-            tmp_path = tmp.name
-
-        conn_new = sqlite3.connect(tmp_path)
-        conn_new.executescript(sql_text)
-        conn_new.commit()
-        conn_new.close()
-
-        # 교체 (atomic on same filesystem)
-        import os as _os
-        _os.replace(tmp_path, db_path)
-
-        # 복원 확인
         conn_check = sqlite3.connect(db_path)
         cand_count = conn_check.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
         jobs_count = conn_check.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         inq_count  = conn_check.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0]
         conn_check.close()
-
-        _log.info("DB 복원 완료: candidates=%d, jobs=%d, client_inquiries=%d", cand_count, jobs_count, inq_count)
-        return ok(data={"candidates": cand_count, "jobs": jobs_count, "client_inquiries": inq_count},
-                  message=f"복원 완료: 후보자 {cand_count}명, 구인 {jobs_count}건, 문의 {inq_count}건")
-
     except Exception as e:
-        # 복원 실패 시 백업 롤백
+        # 롤백
         try:
-            import os as _os
             if Path(backup_path).exists():
                 _os.replace(backup_path, db_path)
         except Exception:
             pass
         _log.error("DB 복원 실패: %s", e, exc_info=True)
         raise HTTPException(500, f"DB 복원 실패: {e}")
+
+    _log.info("DB 복원 완료: candidates=%d, jobs=%d, client_inquiries=%d", cand_count, jobs_count, inq_count)
+    return ok(data={"candidates": cand_count, "jobs": jobs_count, "client_inquiries": inq_count},
+              message=f"복원 완료: 후보자 {cand_count}명, 구인 {jobs_count}건, 문의 {inq_count}건")
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
