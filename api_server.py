@@ -509,17 +509,20 @@ if not _IS_PROD:
     _TRUSTED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_TRUSTED_HOSTS)
 
-# Body size 제한 — 10MB (파일 업로드 포함), 관리자 외 일반 요청은 1MB
-_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10MB
+# Body size 제한 — 일반 10MB / DB 복원 경로 30MB
+_MAX_BODY_BYTES         = 10 * 1024 * 1024  # 10MB (일반)
+_MAX_BODY_BYTES_RESTORE = 30 * 1024 * 1024  # 30MB (DB 복원 전용)
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         cl = request.headers.get("content-length")
-        if cl and int(cl) > _MAX_BODY_BYTES:
-            return JSONResponse(status_code=413, content={
-                "isError": True, "errorCategory": "PAYLOAD_TOO_LARGE",
-                "isRetryable": False, "context": "Request body too large (max 10MB)."
-            })
+        if cl:
+            limit = _MAX_BODY_BYTES_RESTORE if request.url.path == "/api/admin/db/restore" else _MAX_BODY_BYTES
+            if int(cl) > limit:
+                return JSONResponse(status_code=413, content={
+                    "isError": True, "errorCategory": "PAYLOAD_TOO_LARGE",
+                    "isRetryable": False, "context": f"Request body too large (max {limit // (1024*1024)}MB)."
+                })
         return await call_next(request)
 
 app.add_middleware(BodySizeLimitMiddleware)
