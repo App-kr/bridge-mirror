@@ -5428,6 +5428,28 @@ def _ip_hash(request: Request) -> str:
     ip = _get_client_ip(request)
     return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
+
+def _is_ssrf_safe_url(url: str) -> bool:
+    """SSRF 방어: 내부 IP/메타데이터 URL 차단. True=안전, False=차단."""
+    import ipaddress, urllib.parse
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname or ""
+        # 메타데이터 서버 차단
+        if host in ("169.254.169.254", "metadata.google.internal"):
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False
+        except ValueError:
+            pass  # 도메인 이름이면 통과 (DNS rebinding은 별도 처리)
+        return True
+    except Exception:
+        return False
+
 def _rate_ok(ip_hash: str, window: int = 300, max_posts: int = 5) -> bool:
     """5분 안에 최대 5건 포스팅 허용 (IP 해시 기반)."""
     now = _time.time()
@@ -7913,14 +7935,21 @@ async def upload_file(
     # rel = file_path.relative_to(_UPLOAD_BASE); file_url = f"/uploads/{rel.as_posix()}"
     file_url = s3_presigned_url(s3_key, expires=3600)
 
+    # SHA-256 무결성 해시 계산 (SEC-08)
+    file_sha256 = hashlib.sha256(data).hexdigest()
+
     # Record in SQLite file_uploads table
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
+            conn.execute("ALTER TABLE file_uploads ADD COLUMN sha256_hash TEXT")
+        except Exception:
+            pass  # 컬럼 이미 존재
+        try:
             conn.execute(
-                "INSERT INTO file_uploads (entity_type, entity_id, file_type, file_url, file_size, s3_key) VALUES (?, ?, ?, ?, ?, ?)",
-                (entity_type, entity_id, file_type, file_url, len(data), s3_key),
+                "INSERT INTO file_uploads (entity_type, entity_id, file_type, file_url, file_size, s3_key, sha256_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (entity_type, entity_id, file_type, file_url, len(data), s3_key, file_sha256),
             )
             # Update candidates photo_url/thumb_url if photo upload
             if entity_type == "candidate" and file_type == "photo":
