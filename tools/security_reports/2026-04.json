@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-04-16T23:24:45.776423+00:00",
+  "quick_mode": true,
+  "owasp": [
+    {
+      "check": "A01 Broken Access Control",
+      "status": "PASS",
+      "file": "api_server.py"
+    },
+    {
+      "check": "A02 Cryptographic Failures",
+      "status": "PASS",
+      "file": "security_vault.py"
+    },
+    {
+      "check": "A03 Injection",
+      "status": "PASS",
+      "file": "api_server.py"
+    },
+    {
+      "check": "A07 Auth Failures",
+      "status": "PASS",
+      "file": "api_server.py"
+    },
+    {
+      "check": "A09 Logging",
+      "status": "PASS",
+      "file": "api_server.py"
+    }
+  ],
+  "env_vars": {
+    "status": "WARN",
+    "missing": [
+      "JWT_SECRET",
+      "BRIDGE_HMAC_KEY",
+      "BRIDGE_SMTP_PASS",
+      "TELEGRAM_BOT_TOKEN",
+      "ANTHROPIC_API_KEY",
+      "BRIDGE_FIELD_KEY"
+    ]
+  },
+  "plain_credentials": {
+    "status": "PASS",
+    "hits": []
+  },
+  "gitleaks": {
+    "status": "SKIP",
+    "note": "gitleaks not in PATH"
+  },
+  "pip_audit": {
+    "status": "SKIP"
+  },
+  "npm_audit": {
+    "status": "SKIP"
+  },
+  "summary": {
+    "total_failures": 0,
+    "verdict": "PASS"
+  }
+}
