@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js Frontend (port 3000)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "web_frontend",
+      "port": 3000
+    },
+    {
+      "name": "FastAPI Backend (port 8000)",
+      "runtimeExecutable": "Q:/Phtyon 3/python.exe",
+      "runtimeArgs": ["-X", "utf8", "api_server.py"],
+      "cwd": ".",
+      "port": 8000
+    }
+  ]
+}

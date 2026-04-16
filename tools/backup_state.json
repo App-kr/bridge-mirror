@@ -1719,8 +1719,16 @@
       "git": "95c78415",
       "files": 2244,
       "db_hash": "6347dd4e7ac8"
+    },
+    {
+      "dir": "20260417_085340__employers-pii-decrypt-fix",
+      "task": "employers-pii-decrypt-fix",
+      "ts": "2026.04.17 08:53:58",
+      "git": "97fe638e",
+      "files": 2246,
+      "db_hash": "6347dd4e7ac8"
     }
   ],
-  "last_backup": "2026.04.16 16:58:31",
-  "total_count": 215
+  "last_backup": "2026.04.17 08:53:58",
+  "total_count": 216
 }
