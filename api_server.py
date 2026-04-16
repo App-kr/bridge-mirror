@@ -12894,12 +12894,26 @@ async def admin_db_restore(request: Request):
     except Exception as e:
         raise HTTPException(400, f"업로드 파싱 실패: {e}")
 
+    # WAL/SHM 파일 제거 (구 DB 흔적 제거)
+    for ext in ("-wal", "-shm"):
+        wal_path = db_path + ext
+        if _os.path.exists(wal_path):
+            try:
+                _os.remove(wal_path)
+            except Exception:
+                pass
+
     # 복원 확인
     try:
         conn_check = sqlite3.connect(db_path)
+        conn_check.execute("PRAGMA journal_mode=DELETE")  # WAL 모드 해제 후 재확인
+        tables = [r[0] for r in conn_check.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        _log.info("DB 복원 후 테이블 목록: %s", tables)
+        if "candidates" not in tables:
+            raise Exception(f"candidates 테이블 없음. 존재하는 테이블: {tables}")
         cand_count = conn_check.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
-        jobs_count = conn_check.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
-        inq_count  = conn_check.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0]
+        jobs_count = conn_check.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] if "jobs" in tables else 0
+        inq_count  = conn_check.execute("SELECT COUNT(*) FROM client_inquiries").fetchone()[0] if "client_inquiries" in tables else 0
         conn_check.close()
     except Exception as e:
         # 롤백
