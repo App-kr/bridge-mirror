@@ -181,7 +181,7 @@ export function defaultCols(): ColDef[] {
     { key: 'reference', label: '레퍼런스', w: 210, type: 'long', v: true },
     { key: 'totalExp', label: '총경력', w: 62, type: 't', v: true },
     { key: 'employment', label: '직업', w: 75, type: 't', v: true },
-    { key: 'notice', label: '통보', w: 52, type: 't', v: true },
+    { key: 'notice', label: '기피', w: 70, type: 't', v: true },
     { key: 'preference', label: '선호/인터뷰', w: 190, type: 'long', v: true },
     { key: 'applied', label: '지원/요청', w: 175, type: 'long', v: true },
     { key: 'contractOffer', label: '계약제안', w: 120, type: 'long', v: true },

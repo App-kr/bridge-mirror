@@ -3008,7 +3008,10 @@ _ADMIN_DECRYPT_FIELDS = {
 
 
 def _safe_decrypt(val, column_name: str = ""):
-    """단일 값 안전 복호화. 컬럼명 포함 L1 키 정확도 보장. 실패 시 원본 반환"""
+    """단일 값 안전 복호화. 컬럼명 포함 L1 키 정확도 보장.
+    암호화된 값인데 복호화 실패 시 "" 반환 (암호문 UI 노출 방지).
+    평문 값이면 그대로 반환.
+    """
     if val is None:
         return val
     try:
@@ -3023,11 +3026,19 @@ def _safe_decrypt(val, column_name: str = ""):
         for candidate in [padded, cleaned]:
             if is_encrypted(candidate):
                 result = decrypt_field(candidate, column_name)
-                return result if result is not None else val
+                # 암호화된 값 복호화 실패 → "" 반환 (암호문 UI 노출 방지)
+                return result if result is not None else ""
         return val
     except Exception as exc:
         _log = logging.getLogger("bridge.decrypt")
         _log.debug("_safe_decrypt 실패 col=%s (len=%d): %s", column_name, len(str(val)), type(exc).__name__)
+        # 암호화 여부 재확인 후 암호문이면 "" 반환
+        try:
+            cleaned2 = str(val).strip().replace('\n', '').replace('\r', '').replace('\t', '').replace(' ', '')
+            if is_encrypted(cleaned2):
+                return ""
+        except Exception:
+            pass
         return val
 
 
@@ -3174,7 +3185,8 @@ async def admin_candidates(
                     message="0명 조회",
                 ))
             _ALL_COLS = [
-                "candidate_id", "sheet_number", "email", "full_name", "nationality", "ancestry",
+                "candidate_id", "sheet_number", "email", "full_name", "nationality",
+                "nationality_plain", "ancestry",
                 "dob", "gender", "current_location", "start_date", "target", "area_prefs",
                 "experience", "current_salary", "desired_salary", "certification", "e_visa",
                 "mobile_phone", "kakaotalk", "criminal_record", "housing", "arc_holders",
@@ -3186,7 +3198,8 @@ async def admin_candidates(
                 "consent", "fact_check", "photo_url", "criminal_record_check", "doc_status",
                 "how_to", "tattoo", "visa_type", "stage", "mail_tags", "korea_experience",
                 "employment", "contract_offered", "personal_consideration",
-                "recruiter_memo", "passport_status",
+                "recruiter_memo", "passport_status", "resume_status",
+                "talent_visible", "talent_badge", "talent_reference_star", "talent_summary",
             ]
             _COLS = ", ".join(c for c in _ALL_COLS if c in _db_cols)
 
@@ -3209,7 +3222,7 @@ async def admin_candidates(
             else:
                 # offset-based pagination
                 safe_offset = max(0, offset)
-                safe_limit = max(1, min(500, limit))
+                safe_limit = max(1, min(2000, limit))
                 query_params = list(params) + [safe_limit, safe_offset]
                 rows_raw = conn.execute(
                     f"""SELECT {_COLS}, rowid FROM candidates

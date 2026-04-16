@@ -625,9 +625,8 @@ export class GridEngine {
       return
     }
 
-    // Column name click: select only (sort moved to dblclick)
-    this.selection.selectAll(this.rows.length)
-    this.selection.selectCell(0, hit.visCol)
+    // Column name click: 열 선택만 (전체 행 선택 금지, sort는 dblclick)
+    this.selection.selectColumn(hit.visCol, this.rows.length)
     this.cb.onSelectionChange(this.selection.getSelectedRows())
     this.requestRender()
   }
