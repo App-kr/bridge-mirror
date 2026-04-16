@@ -12846,10 +12846,10 @@ async def admin_db_restore(request: Request):
         if db_file is not None:
             db_bytes = await db_file.read() if hasattr(db_file, "read") else db_file
             if not isinstance(db_bytes, bytes):
-                db_bytes = db_bytes.encode("latin-1")
+                db_bytes = bytes(db_bytes)
             # SQLite 매직 바이트 검증
             if not db_bytes.startswith(b"SQLite format 3"):
-                raise HTTPException(400, "유효한 SQLite DB 파일이 아닙니다.")
+                raise HTTPException(400, f"유효한 SQLite DB 파일이 아닙니다. (받은 크기: {len(db_bytes)}B, 첫 16바이트: {db_bytes[:16]!r})")
 
             # 백업
             try:
@@ -12858,9 +12858,9 @@ async def admin_db_restore(request: Request):
                 pass
 
             # 임시 파일에 쓰고 atomic 교체
-            with _tf.NamedTemporaryFile(suffix=".db", delete=False, dir=str(Path(db_path).parent)) as tmp:
+            tmp_path = db_path + ".uploading"
+            with open(tmp_path, "wb") as tmp:
                 tmp.write(db_bytes)
-                tmp_path = tmp.name
 
             _os.replace(tmp_path, db_path)
 
