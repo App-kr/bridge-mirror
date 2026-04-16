@@ -30,6 +30,13 @@ def _load_or_create_key() -> bytes:
     return key
 
 
+def _load_key_strict() -> bytes:
+    """키 로딩 전용 (복호화용). 키 파일 없으면 RuntimeError — 새 키 생성 금지."""
+    if not KEY_PATH.exists():
+        raise RuntimeError(f".bridge.key 파일 없음: {KEY_PATH}")
+    return KEY_PATH.read_bytes().strip()
+
+
 def encrypt_value(plain: str) -> str:
     """평문 → ENC:암호문"""
     key = _load_or_create_key()
@@ -39,10 +46,13 @@ def encrypt_value(plain: str) -> str:
 
 
 def decrypt_value(enc_str: str) -> str:
-    """ENC:암호문 → 평문. ENC: 접두사 없으면 그대로 반환."""
+    """ENC:암호문 → 평문. ENC: 접두사 없으면 그대로 반환.
+
+    복호화 실패 시 새 키를 생성하지 않고 RuntimeError 발생.
+    """
     if not enc_str.startswith("ENC:"):
         return enc_str
-    key = _load_or_create_key()
+    key = _load_key_strict()   # 엄격 로딩 — 키 없으면 예외
     f = Fernet(key)
     token = enc_str[4:]
     return f.decrypt(token.encode("utf-8")).decode("utf-8")

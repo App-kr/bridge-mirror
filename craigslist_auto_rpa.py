@@ -30,6 +30,7 @@ import os
 import random
 import re
 import sqlite3
+import struct
 import sys
 import time
 from datetime import datetime, timezone
@@ -296,7 +297,7 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
                    j.teaching_age, j.salary_raw, j.salary_min, j.salary_max,
                    j.working_hours, j.daily_hours, j.teach_hrs_week,
                    j.housing, j.benefits, j.vacation, j.native_count,
-                   j.start_date, j.class_size,
+                   j.start_date, j.class_size, j.raw_text,
                    {content_score} AS content_score
             FROM jobs j
             {where}
@@ -404,18 +405,38 @@ _PAST_MONTH_KEYS = {"jan","feb","mar","apr",
 _FUTURE_START_POOL = ["ASAP","May","June","July","August","September"]
 
 def _fix_start_date(start_raw: str, seed_str: str = "") -> str:
-    """과거/현재 달(Jan~Apr)이면 미래 날짜로 치환. 이미 미래면 그대로."""
-    s = (start_raw or "").strip().lower()
+    """과거/현재 달(Jan~Apr)이면 제거 또는 미래 날짜로 치환.
+
+    복수 달("February, August")이면 과거달만 제거하고 나머지 유지.
+    전부 과거이면 미래 풀에서 랜덤 선택.
+    """
+    s = (start_raw or "").strip()
     if not s:
         return start_raw
-    # 과거달 체크를 최우선 (ASAP과 섞여있어도 ex: "March, ASAP" → 치환)
-    if any(k in s for k in _PAST_MONTH_KEYS):
-        import hashlib as _h
-        seed = int(_h.md5((seed_str + start_raw).encode()).hexdigest(), 16)
-        return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
-    # 순수 특수값이면 그대로
-    if "asap" in s or "즉시" in s or "negotiable" in s or "tbd" in s:
+
+    sl = s.lower()
+    # 특수값 그대로
+    if "asap" in sl or "즉시" in sl or "negotiable" in sl or "tbd" in sl:
         return start_raw
+
+    # 복수 달 처리 (쉼표·슬래시 구분)
+    parts = [p.strip() for p in re.split(r"[,/]", s) if p.strip()]
+    if len(parts) > 1:
+        future_parts = [
+            p for p in parts
+            if not any(k in p.lower() for k in _PAST_MONTH_KEYS)
+        ]
+        if future_parts:
+            return ", ".join(future_parts)
+        # 전부 과거 → 랜덤 미래 선택
+        seed = int(hashlib.md5((seed_str + start_raw).encode()).hexdigest(), 16)
+        return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
+
+    # 단일 달 — 과거면 치환
+    if any(k in sl for k in _PAST_MONTH_KEYS):
+        seed = int(hashlib.md5((seed_str + start_raw).encode()).hexdigest(), 16)
+        return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
+
     return start_raw  # 이미 미래 (May 이후)
 
 
@@ -450,12 +471,16 @@ def _start_to_label(start: str) -> tuple[str, str]:
     return ("Negotiable","Negotiable Start")
 
 def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
-    """◾◾◾◾ {CITY}, ... 형식 제목 생성. 67~72자 맞춤."""
+    """접두어 다양화 + {CITY}, ... 형식 제목 생성. 67~72자 맞춤."""
+    import hashlib as _h
+    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode()).hexdigest(), 16)
+
     city_up = _CITY_UPPER.get(city_raw, city_raw.upper())
     level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"
     month, start_suffix = _start_to_label(start_raw)
 
-    prefix = "\u25fe\u25fe\u25fe\u25fe "          # ◾◾◾◾ (6자)
+    # seed 기반으로 접두어 선택 (◾◾◾◾ / ▪▪▪▪ / ●●● / ◆◆◆ / ■■■)
+    prefix = _TITLE_PREFIX_POOL[seed % len(_TITLE_PREFIX_POOL)]
     city_part = f"{city_up}, "
 
     # 후보 패턴 목록
@@ -486,9 +511,7 @@ def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
         if is_asap:
             candidates.append(f"{prefix}{city_part}{opener} for ASAP {level} Study Groups")
 
-    # 67~72자 범위 내 후보 선택 (직업코드 해시로 매번 다른 것)
-    import hashlib as _h
-    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode()).hexdigest(), 16)
+    # 67~72자 범위 내 후보 선택
     valid = [c for c in candidates if 67 <= len(c) <= 72]
     if valid:
         return valid[seed % len(valid)]
@@ -510,6 +533,80 @@ _AGE_MAP = {
     "adult":    "Adult",
     "conversation": "Adult",
 }
+
+# ── 이미지 해시 다양화 (플래그 방지) ──────────────────────────────────────────
+def _unique_image(seed_str: str) -> Path:
+    """B.jpg에 JPEG COM 마커 삽입 → 포스팅마다 파일 해시 다름. 비주얼 변화 없음.
+
+    Craigslist는 동일 이미지 해시 반복 감지 → 플래그. 이 함수로 해시를 매번 다르게 함.
+    """
+    if not AD_IMAGE.exists():
+        return AD_IMAGE
+    try:
+        data = AD_IMAGE.read_bytes()
+        if data[:2] != b'\xff\xd8':
+            return AD_IMAGE   # JPEG 아니면 원본 사용
+
+        # seed 기반 고유 코멘트 (최대 20바이트)
+        comment = f"BRIDGE-{seed_str[:16]}".encode("utf-8")
+        length  = len(comment) + 2          # COM 마커 길이 필드 포함
+        marker  = b'\xff\xfe' + struct.pack(">H", length) + comment
+
+        # SOI(2바이트) 바로 뒤에 COM 마커 삽입
+        unique_data = data[:2] + marker + data[2:]
+
+        # 로그 폴더에 임시 파일 저장 (job_code 기반 이름)
+        seed_int = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
+        tmp_path = _LOG_DIR / f"_img_{seed_int % 99999:05d}.jpg"
+        tmp_path.write_bytes(unique_data)
+        return tmp_path
+    except Exception:
+        return AD_IMAGE   # 실패 시 원본 폴백
+
+
+# ── REQUIREMENTS 문구 풀 (포스팅마다 다른 표현 → 텍스트 지문 다양화) ──────────
+_REQ_MUST = [
+    "MUST-Haves: Clean background check & at least Bachelor's degree.",
+    "Required: Valid criminal background check + Bachelor's degree minimum.",
+    "Essentials: Clean record & Bachelor's degree or above.",
+    "Must have: Background check clearance & a Bachelor's degree.",
+]
+_REQ_PASSPORT = [
+    "Eligible Passports: UK, US, CA, AUS, NZ, IRL, ZA.",
+    "Accepted nationalities: UK / US / CA / AUS / NZ / IRL / ZA.",
+    "Open to: UK, US, Canada, Australia, NZ, Ireland, South Africa.",
+    "Valid for: UK, US, CA, AUS, NZ, IRL or ZA passport holders.",
+]
+_REQ_SA = [
+    "SA: only those currently residing in Korea.",
+    "South Africa applicants: Korea-based only.",
+    "SA nationals: must currently be located in Korea.",
+]
+_REQ_GYOPO = [
+    "Korean/Gyopo Nationals: Eligible if all requirements are met.",
+    "Korean nationals & Gyopo: welcome if all criteria are satisfied.",
+    "Gyopo/Korean passport: eligible provided full requirements are fulfilled.",
+]
+_REQ_WARNING = [
+    "\u26a0\ufe0fIMPORTANT: PLEASE READ CAREFULLY. We CANNOT offer or help for nationalities not listed above. DO NOT APPLY IF INELIGIBLE\u26a0\ufe0f",
+    "\u26a0\ufe0fPLEASE NOTE: We are unable to assist nationalities not on the list. Do not apply if ineligible.\u26a0\ufe0f",
+    "\u26a0\ufe0fATTENTION: Applications from unlisted nationalities cannot be processed. Verify eligibility before applying.\u26a0\ufe0f",
+]
+
+# ── 제목 접두어 풀 (◾◾◾◾ 고정 패턴 탈피) ──────────────────────────────────────
+_TITLE_PREFIX_POOL = [
+    "\u25fe\u25fe\u25fe\u25fe ",   # ◾◾◾◾ (기존)
+    "\u25aa\u25aa\u25aa\u25aa ",   # ▪▪▪▪
+    "\u25cf\u25cf\u25cf ",         # ●●●
+    "\u25c6\u25c6\u25c6 ",         # ◆◆◆
+    "\u25a0\u25a0\u25a0 ",         # ■■■
+]
+
+
+def _pick(pool: list, seed_int: int) -> str:
+    """seed 기반 풀 선택 (같은 job_code면 항상 같은 값)."""
+    return pool[seed_int % len(pool)]
+
 
 def _age_label(raw: str) -> str:
     """'Kindy - Elem' 스타일 짧은 라벨 반환."""
@@ -601,6 +698,54 @@ def _extract_housing(housing_col: str, benefits_raw: str) -> tuple[str, str]:
     return "", benefits_raw
 
 
+# raw_text 에서 표준 DB 필드로 매핑되는 알려진 레이블
+_RAW_KNOWN_PREFIXES = (
+    "starting date", "working hours", "teaching age", "monthly salary",
+    "vacation", "employee benefits", "class size", "housing",
+    "native teacher", "average teaching", "daily hours",
+)
+
+
+def _parse_raw_extras(raw_text: str) -> tuple[list[str], str]:
+    """raw_text 백틱 줄 중 표준 DB 필드에 없는 추가 설명 줄과 raw benefits 반환.
+
+    반환: (extra_lines, benefits_from_raw)
+      extra_lines     — body에 직접 추가할 설명 줄 목록
+      benefits_from_raw — DB benefits가 NULL일 때 쓸 혜택 문자열
+    """
+    if not raw_text:
+        return [], ""
+
+    extra_lines: list[str] = []
+    benefits_from_raw = ""
+
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        # 지원 포맷: "`...", "`...", ""`...", 등
+        norm = stripped.lstrip('"').lstrip("'")
+        if not norm.startswith("`"):
+            continue
+        clean = norm.lstrip('`').rstrip('"').rstrip("'").strip()
+        if not clean:
+            continue
+        cl = clean.lower()
+
+        # Employee Benefits → raw_benefits 별도 저장
+        if cl.startswith("employee benefits"):
+            val = re.sub(r"^employee benefits\s*:?\s*", "", clean, flags=re.I).strip()
+            if val:
+                benefits_from_raw = val
+            continue
+
+        # 표준 DB 필드에 대응되는 줄 제외
+        if any(cl.startswith(p) for p in _RAW_KNOWN_PREFIXES):
+            continue
+
+        extra_lines.append(clean)
+
+    return extra_lines, benefits_from_raw
+
+
 def generate_ad(job: dict) -> tuple[str, str]:
     """(title, body) 반환. 실제 Craigslist 게시 포맷."""
     city       = (job.get("city")          or "Korea").strip()
@@ -619,10 +764,17 @@ def generate_ad(job: dict) -> tuple[str, str]:
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
-    # Housing: housing 컬럼 → benefits 파생 → 없으면 빈 문자열 (임의 추가 금지)
+    # seed — job_code 기반 정수 (같은 job이면 항상 같은 문구 선택)
+    _seed = int(hashlib.md5(jcode.encode()).hexdigest(), 16)
+
+    # raw_text 추가 줄 파싱 (표준 DB 필드에 없는 설명 항목)
+    extra_lines, raw_benefits = _parse_raw_extras(job.get("raw_text") or "")
+
+    # Housing: housing 컬럼 → benefits 파생 → raw_text 폴백 → 없으면 빈 문자열
+    raw_ben_src = job.get("benefits") or raw_benefits or ""
     housing, benefits_remaining = _extract_housing(
         job.get("housing") or "",
-        job.get("benefits") or "",
+        raw_ben_src,
     )
 
     # 도시+구 (구는 city 뒤 공백 구분으로만)
@@ -659,14 +811,18 @@ def generate_ad(job: dict) -> tuple[str, str]:
     if ben_str:
         lines.append(f"Employee Benefits : {ben_str.rstrip('.')}.")
 
+    # raw_text 에서 파싱된 추가 설명 줄 (F-visa, Subject teaching 등)
+    for extra in extra_lines:
+        lines.append(extra)
+
     lines.append("")
     lines.append("\U0001f534REQUIREMENTS:")
-    lines.append(" \u2022MUST-Haves: Clean background check & at least Bachelor's degree.")
-    lines.append(" \u2022Eligible Passports: UK, US, CA, AUS, NZ, IRL, ZA.")
-    lines.append(" \u2022SA: only those currently residing in Korea.")
-    lines.append(" \u2022Korean/Gyopo Nationals: Eligible if all requirements are met.")
+    lines.append(f" \u2022{_pick(_REQ_MUST,     _seed)}")
+    lines.append(f" \u2022{_pick(_REQ_PASSPORT, _seed + 1)}")
+    lines.append(f" \u2022{_pick(_REQ_SA,       _seed + 2)}")
+    lines.append(f" \u2022{_pick(_REQ_GYOPO,    _seed + 3)}")
     lines.append("")
-    lines.append("\u26a0\ufe0fIMPORTANT: PLEASE READ CAREFULLY. We CANNOT offer or help for nationalities not listed above. DO NOT APPLY IF INELIGIBLE\u26a0\ufe0f")
+    lines.append(_pick(_REQ_WARNING, _seed + 4))
 
     body = "\n".join(lines)
     return title.strip(), body.strip()
@@ -698,7 +854,13 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         opts.add_argument("--window-position=-10000,-10000")
         opts.add_argument("--window-size=1920,1080")
     opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_argument("--log-level=3")              # FATAL 만 출력 (DevTools/TF 메시지 제거)
+    opts.add_argument("--disable-logging")
+    opts.add_argument("--disable-gpu-logging")
+    opts.add_argument("--silent")
+    opts.add_argument("--no-first-run")
+    opts.add_argument("--disable-background-networking")  # GCM/DEPRECATED_ENDPOINT 제거
+    opts.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     opts.add_experimental_option("useAutomationExtension", False)
     # 드라이버 시작 전 기존 Chrome 창 hwnd 목록 저장
     _existing_hwnds: set = set()
@@ -711,7 +873,12 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
     except Exception:
         pass
 
-    svc    = Service(ChromeDriverManager().install())
+    import subprocess as _sp, os as _os
+    svc = Service(
+        ChromeDriverManager().install(),
+        log_output=_sp.DEVNULL,         # ChromeDriver 로그 완전 억제
+    )
+    svc.creation_flags = _sp.CREATE_NO_WINDOW   # 검은 CMD 창 숨김
     driver = webdriver.Chrome(service=svc, options=opts)
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
@@ -1203,7 +1370,8 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
             print("이미지 업로드")
             img_step_before = step
-            if AD_IMAGE.exists():
+            _img_path = _unique_image(job.get("job_code") or "")
+            if _img_path.exists():
                 try:
                     # file input 은 보통 숨겨져 있음 → visibility 무시하고 send_keys
                     file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
@@ -1216,7 +1384,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                         file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
 
                     if file_inputs:
-                        abs_path = str(AD_IMAGE.resolve())
+                        abs_path = str(_img_path.resolve())
                         file_inputs[0].send_keys(abs_path)
                         print(f"    이미지 경로 전송: {abs_path}")
 
@@ -1252,7 +1420,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                     print(f"    [WARN] 이미지 업로드 실패: {img_err} — 계속 진행")
             else:
                 print(f"    [WARN] 이미지 파일 없음: {AD_IMAGE}")
-                print(f"    확인: {AD_IMAGE} 가 존재해야 합니다")
+                print(f"    확인: {_img_path} 가 존재해야 합니다")
             _advance(driver, step)
 
         elif step == "preview":
@@ -1469,7 +1637,9 @@ def main():
     parser.add_argument("--integrity-reset", nargs="?", const="", default=None,
                         help="파일 무결성 해시 재초기화 (비밀번호 필요: --integrity-reset 1234)")
     parser.add_argument("--job-code",  default=None)
-    parser.add_argument("--limit",     type=int, default=10)
+    parser.add_argument("--limit",      type=int, default=10)
+    parser.add_argument("--no-overlay", action="store_true",
+                        help="RPAOverlay 창 띄우지 않음 (Admin Board 통합 모드)")
     args = parser.parse_args()
 
     # ── 무결성 해시 재초기화 ──
@@ -1655,8 +1825,10 @@ def main():
     LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
     atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
 
-    # 오버레이 알림 (설치되어 있으면 표시)
+    # 오버레이 알림 (--no-overlay 플래그 없을 때만 사용)
     try:
+        if getattr(args, "no_overlay", False):
+            raise ImportError("no-overlay mode")
         from rpa_overlay import show_working, show_complete, update_progress, close as overlay_close, wants_more, stop_requested
         _HAS_OVERLAY = True
     except ImportError:
@@ -1720,8 +1892,12 @@ def main():
                     continue
 
                 if i < len(ad_list):
-                    wait = random.randint(30, 45)
-                    countdown(wait, "다음 게시 대기")
+                    # 5건마다 25초 휴식, 그 외 10~20초 랜덤
+                    if posted > 0 and posted % 5 == 0:
+                        countdown(25, f"[{posted}건 완료] 5건 단위 휴식")
+                    else:
+                        wait = random.randint(10, 20)
+                        countdown(wait, "다음 게시 대기")
 
         except Exception as session_exc:
             _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
