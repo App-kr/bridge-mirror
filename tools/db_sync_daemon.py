@@ -21,8 +21,9 @@ BASE_DIR  = Path(__file__).resolve().parent.parent
 DB_PATH   = BASE_DIR / "master.db"
 LOG_PATH  = BASE_DIR / "logs" / "db_sync.log"
 LOCK_PATH = BASE_DIR / "logs" / "db_sync.lock"
-POLL_SEC  = 5       # 감시 주기 (초)
-DEBOUNCE  = 15      # 변경 후 대기 (초) — 연속 쓰기 마무리 대기
+POLL_SEC       = 5       # 감시 주기 (초)
+DEBOUNCE       = 15      # 변경 후 대기 (초) — 연속 쓰기 마무리 대기
+HEALTH_INTERVAL = 1800   # Render DB 헬스체크 주기 (30분) — 배포 후 초기화 감지
 RENDER_API = "https://bridge-n7hk.onrender.com"
 
 sys.path.insert(0, str(BASE_DIR))
@@ -107,6 +108,24 @@ def upload_db() -> bool:
         return False
 
 
+def _render_candidate_count() -> int:
+    """Render DB candidates 건수 조회. 실패 시 -1 반환."""
+    try:
+        admin_key = _bx_read("ADMIN_API_KEY")
+        if not admin_key:
+            return -1
+        req = urllib.request.Request(
+            f"{RENDER_API}/api/admin/db/stats",
+            headers={"x-admin-key": admin_key},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("data", {}).get("candidates", -1)
+    except Exception as e:
+        log.debug("헬스체크 실패: %s", e)
+        return -1
+
+
 def run_daemon() -> None:
     LOG_PATH.parent.mkdir(exist_ok=True)
 
@@ -125,6 +144,7 @@ def run_daemon() -> None:
     log.info("DB Sync Daemon 시작 — %s 감시 중 (%.0fs 주기)", DB_PATH.name, POLL_SEC)
     last_mtime = DB_PATH.stat().st_mtime if DB_PATH.exists() else 0
     changed_at: float = 0
+    last_health_check: float = 0   # 마지막 헬스체크 시각
 
     try:
         while True:
@@ -143,6 +163,20 @@ def run_daemon() -> None:
                 changed_at = 0
                 log.info("Render 업로드 시작...")
                 upload_db()
+                last_health_check = time.time()  # 업로드 후 헬스체크 리셋
+
+            # 주기적 Render DB 헬스체크 — 배포로 DB 초기화된 경우 자동 복원
+            now = time.time()
+            if now - last_health_check >= HEALTH_INTERVAL:
+                last_health_check = now
+                count = _render_candidate_count()
+                if count == 0:
+                    log.warning("Render DB 비어있음 (0명) — 자동 복원 시작")
+                    _tg_notify("[BRIDGE DB Sync] Render DB 초기화 감지 → 자동 복원 시작")
+                    upload_db()
+                elif count > 0:
+                    log.info("Render DB 헬스체크 OK: %d명", count)
+                # count == -1 이면 Render 오프라인 — 다음 주기에 재시도
 
     finally:
         LOCK_PATH.unlink(missing_ok=True)
