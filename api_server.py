@@ -440,23 +440,28 @@ app = FastAPI(
 
 # ── Startup: DB 무결성 검사 + 자동 복원 ─────────────────────────────────────
 def _startup_db_health_check() -> None:
-    """서버 시작 시 candidates 테이블이 비어있으면 Google Drive에서 자동 복원.
-    Render free tier는 컨테이너가 ephemeral이라 배포/cold-start 후 DB 초기화될 수 있음.
-    비블로킹: 백그라운드 스레드로 실행 (Render startup timeout 회피).
+    """서버 시작 시 DB 헬스체크 (Persistent Disk 사용).
+    /data 마운트 확인 + 테이블 카운트 로그만 남김. 자동 복원 없음.
+    (Persistent Disk는 재배포 시 유지되므로 복원 로직 불필요)
     """
     _log = logging.getLogger("bridge.startup")
     try:
         db_path = os.getenv("BRIDGE_DB_PATH") or os.getenv("DB_PATH") or str(_ADMIN_DB_PATH)
+        _log.info("[STARTUP] DB_PATH: %s", db_path)
+        # /data 마운트 여부 확인 (Persistent Disk 체크)
+        if db_path.startswith("/data/"):
+            data_dir = Path("/data")
+            if data_dir.exists():
+                _log.info("[STARTUP] ✓ Persistent Disk /data 마운트 확인")
+            else:
+                _log.error("[STARTUP] ✗ /data 미마운트 — Render Persistent Disk 설정 확인 필요")
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA busy_timeout = 3000")
         try:
-            # 테이블 존재 확인
             tables = {r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()}
-            # 필수 테이블 체크 목록 — 하나라도 비면 복원 트리거
             _REQUIRED = ("candidates", "jobs", "client_inquiries")
-            missing = [t for t in _REQUIRED if t not in tables]
             counts = {}
             for t in _REQUIRED:
                 if t in tables:
@@ -465,40 +470,16 @@ def _startup_db_health_check() -> None:
                     except Exception:
                         counts[t] = 0
                 else:
-                    counts[t] = 0
-            need_restore = bool(missing) or any(v == 0 for v in counts.values())
+                    counts[t] = -1  # 테이블 없음
         finally:
             conn.close()
 
-        _log.info("[STARTUP] 테이블 상태: %s, missing=%s, need_restore=%s",
-                  counts, missing, need_restore)
-        if not need_restore:
-            return
-
-        # DB 비어있음 → S3 백업에서 복원 시도
-        _log.warning("[STARTUP] DB 필수 테이블 부족 — S3 자동 복원 시도")
-
-        # S3 환경변수 확인 (이력서 업로드와 동일 크레덴셜)
-        if not all([os.getenv("AWS_ACCESS_KEY_ID"),
-                    os.getenv("AWS_SECRET_ACCESS_KEY"),
-                    os.getenv("AWS_S3_BUCKET")]):
-            _log.error(
-                "[STARTUP] S3 환경변수 미설정 — 자동 복원 불가. "
-                "Render 대시보드에 AWS_ACCESS_KEY_ID/SECRET/BUCKET 확인 필요."
+        _log.info("[STARTUP] 테이블 카운트: %s", counts)
+        if any(v <= 0 for v in counts.values()):
+            _log.warning(
+                "[STARTUP] ⚠ 일부 테이블 비어있거나 없음 — "
+                "로컬에서 tools/render_db_upload.py 실행 필요"
             )
-            return
-
-        # db_persist.restore() 호출 (S3 최신 백업에서)
-        try:
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from tools.db_persist import restore as _s3_restore
-            ok_flag = _s3_restore(dry_run=False)
-            if ok_flag:
-                _log.warning("[STARTUP] ✓ S3 자동 복원 완료")
-            else:
-                _log.error("[STARTUP] S3 복원 실패 — 수동 복원 필요")
-        except Exception as e:
-            _log.error("[STARTUP] db_persist.restore 실패: %s", e, exc_info=True)
     except Exception as e:
         _log.error("[STARTUP] DB 헬스체크 실패: %s", e, exc_info=True)
 
