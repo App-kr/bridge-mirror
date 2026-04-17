@@ -20,15 +20,13 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       // supabase 제거됨 (f5bd33e) — AWS S3 + Render 전용
       "img-src 'self' data: blob: https://*.amazonaws.com https://*.gstatic.com",
-      "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
+      "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com https://fonts.googleapis.com",
       "connect-src 'self' https://bridgejob.co.kr https://www.bridgejob.co.kr https://api.bridgejob.co.kr https://*.vercel.app https://*.onrender.com https://*.amazonaws.com https://cdn.jsdelivr.net",
-      "worker-src 'none'",
+      "worker-src 'self' blob:",
       "media-src 'self' https://*.amazonaws.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      // SRI 강제: 외부 script/style은 integrity 없이 로드 불가
-      "require-sri-for script style",
       // upgrade-insecure-requests: HTTP 요청을 HTTPS로 강제 업그레이드
       "upgrade-insecure-requests",
     ].join('; '),

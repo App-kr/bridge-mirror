@@ -1,9 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import BridgeAdminSheet from '../components/BridgeAdminSheet'
+
+// Canvas/virtualizer 컴포넌트는 SSR 비활성화 (hydration mismatch #418 방지)
+const BridgeAdminSheet = dynamic(
+  () => import('../components/BridgeAdminSheet'),
+  { ssr: false, loading: () => null }
+)
 
 export default function AdminSheetPage() {
   const { authed, login, waking } = useAdminAuth()
