@@ -32,6 +32,7 @@ ALLOWED_WRITE_ROOTS = [
     Path(r"Q:\openrun_api"),
     Path(r"Q:\openrun_app"),
     Path(r"Q:\openrun_admin"),
+    Path(r"Q:\wealth_manager"),
 ]
 
 LOG_PATH = Path(r"Q:\Claudework\bridge base\.claude\hooks\bridge_guard.log")
