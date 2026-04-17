@@ -6155,7 +6155,7 @@ async def admin_list_applications(
                     "housing_detail": j["housing_detail"],
                     "native_count": j["native_count"],
                     "benefits": j["benefits"],
-                    "memo": _safe_decrypt(j["internal_notes"], "internal_notes"),   # T3v1 복호화
+                    "memo": _safe_decrypt(j["internal_notes"], "memo"),   # T3v1 복호화 (암호화 시 column_name='memo' 사용됨)
                     "notes": None,
                     "raw_text": j["raw_text"] or None,            # 원본 텍스트 (어드민: PII 미제거)
                     "status": j["status"] or "open",
