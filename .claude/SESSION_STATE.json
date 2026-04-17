@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-17 09:41:14",
+  "last_updated": "2026-04-17 10:05:30",
   "last_tool": "Bash",
-  "last_command": "ls \"C:/Users/Scarlett/Desktop/\"*.png \"C:/Users/Scarlett/Desktop/\"*.jpg 2>/dev/null | head -30",
+  "last_command": "\"Q:/Phtyon 3/python.exe\" -X utf8 -c \"\npath = 'C:/Users/Scarlett/AppData/Roaming/Antigravity/User/settings.json'\nwith open(path, 'r', encoding='utf-8') as f:\n    content = f.read()\n\n# 잘못된 경로 수정 (단일 백슬래",
   "git_head": "1027cbc",
   "modified_files": [
     "Q:\\openrun_app\\lib\\features\\onboarding\\genre_select_screen.dart",
@@ -489,6 +489,4 @@
     "matjokdo_safe/save_session.py",
     "matjokdo_safe/test_launch.vbs",
     "on_startup.ps1",
-    "rpa_audit.py"
-  ]
-}
+ 
