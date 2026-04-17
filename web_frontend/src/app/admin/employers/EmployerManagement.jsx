@@ -197,13 +197,17 @@ function mapJobsV2(r) {
     cityKo = CITY_EN_KO[locParts[0]] || locParts[0];
     if (cityKo === regionKo) cityKo = "";
   }
-  // PII: 암호화 필드 → memo fallback
+  // PII: 복호화된 contact_* 필드 우선, 없으면 memo fallback
   let name = r.employer_display_name || "";
   // 업체명 잡음 제거 (DB 미정리 데이터 방어)
   const _slashN = name.match(/^(.+?)\/\s*(.+)$/);
   if (_slashN && _slashN[2].length > 4) name = _slashN[1].trim();
   name = name.replace(/\s*0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{3,4}\s*$/, "").trim();
-  let contact = ""; let phone = ""; let email = "";
+  // 서버에서 복호화된 필드 우선 사용
+  let contact = r.contact_name  || "";
+  let phone   = r.contact_phone || "";
+  let email   = r.contact_email || "";
+  let kakao   = r.contact_kakao || "";
   let parsedCity = "";
   let memoDisplay = r.internal_notes || "";
   let memoForParse = memoDisplay;
@@ -219,10 +223,10 @@ function mapJobsV2(r) {
   }
   if (memoForParse) {
     const p = parseMemoPII(memoForParse);
-    if (!name) name = p.name;
+    if (!name)    name    = p.name;
     if (!contact) contact = p.contact;
-    if (!phone) phone = p.phone;
-    if (!email) email = p.email;
+    if (!phone)   phone   = p.phone;
+    if (!email)   email   = p.email;
     parsedCity = p.city;
   }
   // 메모에서 파싱된 도시가 있으면 → DB값 무시하고 메모 우선
@@ -261,7 +265,7 @@ function mapJobsV2(r) {
     emails:      email ? [email] : [],
     phone,
     contact,
-    kakao:       "",
+    kakao,
     teachingAge: r.teaching_age || "",
     salary:      r.salary_raw || "",
     status,
@@ -439,6 +443,7 @@ const ColorPalette=({onSelect,onClose,colors})=>(
 const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName,candidateNumber})=>{
   const[tplId,setTplId]=useState("intro");
   const[sender,setSender]=useState(SENDERS[0]);
+  const[allTpls,setAllTpls]=useState(TEMPLATES);
   const[subject,setSubject]=useState(TEMPLATES[0].subject);
   const[attachments,setAttachments]=useState([]);
   const[autoAttachResume,setAutoAttachResume]=useState(false);
@@ -485,9 +490,38 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
   },[localRecipients,extraEmails]);
   const totalEmails=allRecipientEmails.length;
 
+  // DB 템플릿 로드 (마운트 시 1회 — 하드코딩 TEMPLATES 위에 DB 템플릿 병합)
+  useEffect(()=>{
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
+    if(!adminKey)return;
+    fetch(`${API_BASE}/api/admin/email-templates`,{headers:{"x-admin-key":adminKey}})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        const dbTpls=(Array.isArray(d?.data)?d.data:[]).map(t=>({id:t.template_key,name:t.template_key,subject:t.subject||"",html:t.body_html||""}));
+        if(dbTpls.length>0){
+          // DB 템플릿은 앞에, 하드코딩은 그 뒤 (DB에 없는 것만)
+          const dbKeys=new Set(dbTpls.map(t=>t.id));
+          setAllTpls([...dbTpls,...TEMPLATES.filter(t=>!dbKeys.has(t.id))]);
+        }
+      }).catch(()=>{/* DB 없으면 하드코딩 유지 */});
+  },[]);
+
   const exec=(cmd,val=null)=>{document.execCommand(cmd,false,val);(activeEditor===1?editorRef:editorRef2).current?.focus();};
-  const selectTpl=useCallback(id=>{setTplId(id);const t=TEMPLATES.find(x=>x.id===id);if(t){setSubject(t.subject);const ref=activeEditor===1?editorRef:editorRef2;if(ref.current)ref.current.innerHTML=t.html;}},[activeEditor]);
-  useEffect(()=>{if(editorRef.current)editorRef.current.innerHTML=TEMPLATES[0].html;if(editorRef2.current)editorRef2.current.innerHTML="";},[]);
+  const selectTpl=useCallback(id=>{setTplId(id);const t=allTpls.find(x=>x.id===id)||TEMPLATES.find(x=>x.id===id);if(t){setSubject(t.subject);const ref=activeEditor===1?editorRef:editorRef2;if(ref.current)ref.current.innerHTML=t.html;}},[activeEditor,allTpls]);
+  // 현재 에디터 내용을 DB 템플릿으로 저장
+  const saveTplToDb=useCallback(async()=>{
+    const ref=activeEditor===1?editorRef:editorRef2;
+    const html=ref.current?.innerHTML||"";
+    if(!subject.trim()||!html.trim()){alert("제목과 내용을 입력하세요.");return;}
+    const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
+    const key=tplId==="custom"?`custom_${Date.now()}`:tplId;
+    const res=await fetch(`${API_BASE}/api/admin/email-templates/${encodeURIComponent(key)}`,{method:"PUT",headers:{"Content-Type":"application/json","x-admin-key":adminKey},body:JSON.stringify({subject,body_html:html})}).catch(()=>null);
+    if(res?.ok){
+      setAllTpls(p=>{const exists=p.find(t=>t.id===key);if(exists)return p.map(t=>t.id===key?{...t,subject,html}:t);return[{id:key,name:key,subject,html},...p];});
+      alert("DB에 저장되었습니다.");
+    }else{alert("저장 실패");}
+  },[tplId,subject,activeEditor]);
+  useEffect(()=>{if(editorRef.current)editorRef.current.innerHTML=allTpls[0]?.html||TEMPLATES[0].html;if(editorRef2.current)editorRef2.current.innerHTML="";},[]);
   const updatePreview=useCallback(()=>{const ref=activeEditor===1?editorRef:editorRef2;const raw=ref.current?.innerHTML||"";if(!initRecipients.length){setPreviewHtml(raw);return;}const r=initRecipients[0];setPreviewHtml(raw.replace(/\{\{name\}\}/g,r.name).replace(/\{\{region\}\}/g,r.region).replace(/\{\{city\}\}/g,r.city).replace(/\{\{teachingAge\}\}/g,r.teachingAge));},[initRecipients,activeEditor]);
   useEffect(()=>{const t=setInterval(updatePreview,500);return()=>clearInterval(t);},[updatePreview]);
 
@@ -691,7 +725,8 @@ const MailComposer=({recipients:initRecipients,onClose,candidateId,candidateName
               </div>
               {/* 템플릿 버튼 */}
               <div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
-                {TEMPLATES.map(t=><button key={t.id} onClick={()=>selectTpl(t.id)} style={{padding:"3px 9px",borderRadius:4,border:tplId===t.id?"1px solid #03c75a":"1px solid #eee",background:tplId===t.id?"#e8faf0":"#fff",color:tplId===t.id?"#03c75a":"#777",fontSize:"0.72rem",fontWeight:tplId===t.id?700:400,cursor:"pointer"}}>{t.name}</button>)}
+                {allTpls.map(t=><button key={t.id} onClick={()=>selectTpl(t.id)} style={{padding:"3px 9px",borderRadius:4,border:tplId===t.id?"1px solid #03c75a":"1px solid #eee",background:tplId===t.id?"#e8faf0":"#fff",color:tplId===t.id?"#03c75a":"#777",fontSize:"0.72rem",fontWeight:tplId===t.id?700:400,cursor:"pointer"}}>{t.name}</button>)}
+                <button onClick={saveTplToDb} title="현재 내용을 DB 템플릿으로 저장" style={{padding:"3px 9px",borderRadius:4,border:"1px solid #2563eb",background:"#eff6ff",color:"#2563eb",fontSize:"0.72rem",fontWeight:600,cursor:"pointer"}}>DB저장</button>
               </div>
               {/* 에디터 탭 */}
               {[1,2].map(n=>(

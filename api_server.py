@@ -3011,6 +3011,7 @@ def _safe_decrypt(val, column_name: str = ""):
     """단일 값 안전 복호화. 컬럼명 포함 L1 키 정확도 보장.
     암호화된 값인데 복호화 실패 시 "" 반환 (암호문 UI 노출 방지).
     평문 값이면 그대로 반환.
+    주의: decrypt_field는 실패 시 원본을 반환하므로, 결과가 여전히 암호문인지 재확인함.
     """
     if val is None:
         return val
@@ -3026,8 +3027,12 @@ def _safe_decrypt(val, column_name: str = ""):
         for candidate in [padded, cleaned]:
             if is_encrypted(candidate):
                 result = decrypt_field(candidate, column_name)
-                # 암호화된 값 복호화 실패 → "" 반환 (암호문 UI 노출 방지)
-                return result if result is not None else ""
+                if result is None:
+                    return ""
+                # decrypt_field가 실패 시 원본 암호문을 반환 → 재확인 후 "" 반환
+                if isinstance(result, str) and is_encrypted(result):
+                    return ""
+                return result
         return val
     except Exception as exc:
         _log = logging.getLogger("bridge.decrypt")
@@ -8971,11 +8976,13 @@ async def admin_list_jobs_v2(
             )
             params.extend([s, s, s, s, s])
         w = " AND ".join(where)
-        # 필요한 컬럼만 조회 (87→16컬럼, 페이로드 ~80% 절감)
+        # 필요한 컬럼만 조회 (87→20컬럼 — PII 복호화 포함)
         _V2_COLS = (
             "brj_id, id, job_code, region, region_name, location, city, "
             "employer_display_name, internal_notes, raw_text, teaching_age, "
-            "salary_raw, status, is_hot, created_at"
+            "salary_raw, status, is_hot, created_at, "
+            "enc_contact_email, enc_contact_name, enc_contact_phone, enc_contact_kakao, "
+            "enc_employer_name"
         )
         total = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {w}", params).fetchone()[0]
         rows = conn.execute(
@@ -8990,6 +8997,14 @@ async def admin_list_jobs_v2(
                 _m = re.search(r"Monthly Salary\s*:\s*(.+)", d["raw_text"])
                 if _m:
                     d["salary_raw"] = _m.group(1).strip().strip('`"')
+            # PII 복호화 — enc_ 필드를 contact_* 로 변환 (원본 enc_ 필드는 제거)
+            d["contact_email"] = _safe_decrypt(d.pop("enc_contact_email", ""), "enc_contact_email") or ""
+            d["contact_name"]  = _safe_decrypt(d.pop("enc_contact_name", ""),  "enc_contact_name")  or ""
+            d["contact_phone"] = _safe_decrypt(d.pop("enc_contact_phone", ""), "enc_contact_phone") or ""
+            d["contact_kakao"] = _safe_decrypt(d.pop("enc_contact_kakao", ""), "enc_contact_kakao") or ""
+            _enc_emp = d.pop("enc_employer_name", "")
+            if _enc_emp and not d.get("employer_display_name"):
+                d["employer_display_name"] = _safe_decrypt(_enc_emp, "enc_employer_name") or ""
             data.append(d)
         return ok(data={"jobs": data, "total": total})
     finally:
