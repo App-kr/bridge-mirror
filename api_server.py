@@ -454,16 +454,25 @@ def _startup_db_health_check() -> None:
             tables = {r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()}
-            if "candidates" not in tables:
-                _log.warning("[STARTUP] candidates 테이블 없음 → 복원 시도")
-                cand_count = 0
-            else:
-                cand_count = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+            # 필수 테이블 체크 목록 — 하나라도 비면 복원 트리거
+            _REQUIRED = ("candidates", "jobs", "client_inquiries")
+            missing = [t for t in _REQUIRED if t not in tables]
+            counts = {}
+            for t in _REQUIRED:
+                if t in tables:
+                    try:
+                        counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                    except Exception:
+                        counts[t] = 0
+                else:
+                    counts[t] = 0
+            need_restore = bool(missing) or any(v == 0 for v in counts.values())
         finally:
             conn.close()
 
-        _log.info("[STARTUP] candidates 카운트: %d", cand_count)
-        if cand_count > 0:
+        _log.info("[STARTUP] 테이블 상태: %s, missing=%s, need_restore=%s",
+                  counts, missing, need_restore)
+        if not need_restore:
             return
 
         # DB 비어있음 → 복원 시도 (gcp_service_account.json 또는 GCP_SA_JSON_B64)
