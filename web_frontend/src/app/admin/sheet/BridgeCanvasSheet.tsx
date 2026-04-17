@@ -1024,6 +1024,12 @@ export default function BridgeCanvasSheet() {
     e.setRowHeight(rowHeight)
     e.setRowHeights(rowHeights)
     e.setActiveFilters(filters)
+    // 강제 재측정 + 재그리기 (viewport 초기화 누락 시 복구)
+    e.forceRedraw()
+    // 데이터 도착 직후 레이아웃 완료 안 됐을 수 있어 다음 프레임에 한번 더 시도
+    if (displayRows.length > 0) {
+      requestAnimationFrame(() => { engineRef.current?.forceRedraw() })
+    }
   }, [ready, displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights, filters])
 
   /* ── Context menu ── */

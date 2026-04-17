@@ -195,6 +195,26 @@ export class GridEngine {
 
   refresh(): void { this.requestRender() }
 
+  /** Force full redraw: re-measure viewport + re-layout + render.
+   *  데이터 도착 직후 캔버스 크기 미확정 상태를 복구. */
+  forceRedraw(): void {
+    if (this.destroyed) return
+    const r = this.container.getBoundingClientRect()
+    if (r.width > 0 && r.height > 0) {
+      this.viewW = r.width
+      this.viewH = r.height
+      this.canvas.width = this.viewW * this.dpr
+      this.canvas.height = this.viewH * this.dpr
+      this.canvas.style.width = this.viewW + 'px'
+      this.canvas.style.height = this.viewH + 'px'
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+    }
+    this.computeRowYs()
+    this.computeColXs()
+    this.updateSizer()
+    this.requestRender()
+  }
+
   /** Return all custom row heights as a plain object */
   getRowHeightsMap(): Record<string, number> {
     const out: Record<string, number> = {}
