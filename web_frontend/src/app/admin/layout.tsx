@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import AdminSidebar from "@/components/admin/AdminSidebar"
 import AdminAuthModal from "@/components/admin/AdminAuthModal"
@@ -16,6 +16,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isFullWidth = pathname === '/admin/sheet' || pathname === '/admin/employers'
   const isMobilePath = pathname === '/admin/m' || pathname?.startsWith('/admin/m/')
 
+  // SSR/CSR hydration 일관성: useAdminAuth가 sessionStorage 읽기 때문에
+  // 서버 렌더(authed=false)와 클라이언트 첫 렌더(authed=true/false) 불일치 → #418
+  // mounted 플래그로 클라이언트 마운트 후에만 auth 분기 적용
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
   useEffect(() => {
     document.body.style.filter = ""
   }, [])
@@ -30,6 +36,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace('/admin/m')
     }
   }, [pathname, router])
+
+  // mounted 전에는 빈 shell만 — 서버와 클라이언트 첫 렌더 동일
+  if (!mounted) {
+    return <div className="fixed inset-0 bg-[#f5f5f7]" />
+  }
 
   if (!authed) {
     return (

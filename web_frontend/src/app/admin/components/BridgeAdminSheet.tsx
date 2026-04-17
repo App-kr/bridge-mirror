@@ -723,7 +723,7 @@ export default function BridgeAdminSheet() {
   if (!ready) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>
 
   return (
-    <div style={{ fontFamily: "'Malgun Gothic',sans-serif", background: '#eaecf0', minHeight: '100vh', fontSize: 15, display: 'flex', flexDirection: 'column', color: '#000' }}>
+    <div style={{ fontFamily: "'Malgun Gothic',sans-serif", background: '#eaecf0', height: '100%', minHeight: 400, fontSize: 15, display: 'flex', flexDirection: 'column', color: '#000' }}>
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display: 'none' }} />
 
       {/* 상단 바 */}
@@ -793,7 +793,7 @@ export default function BridgeAdminSheet() {
       </div>
 
       {/* 테이블 */}
-      <div ref={tblRef} onScroll={onBS} style={{ flex: 1, overflow: 'auto', background: '#fff' }}>
+      <div ref={tblRef} onScroll={onBS} style={{ flex: 1, minHeight: 300, overflow: 'auto', background: '#fff' }}>
         <table style={{ borderCollapse: 'collapse', width: tw, minWidth: '100%', tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: 34 }} />

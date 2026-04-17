@@ -249,7 +249,7 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total, onLo
       )}
       <div
         className="ag-theme-quartz"
-        style={{ flex: 1, width: '100%', minHeight: 0 }}
+        style={{ flex: 1, width: '100%', minHeight: 400, height: '100%' }}
       >
         <AgGridReact
           rowData={rows}
