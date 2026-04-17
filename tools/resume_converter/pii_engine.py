@@ -45,21 +45,36 @@ class PIIResult:
 
 # ── Layer 1: Regex 패턴 ────────────────────────────────────────────────────
 _PATTERNS = {
-    "phone_kr":  re.compile(r"(?:010|011|016|017|018|019)[-.\s]?\d{3,4}[-.\s]?\d{4}"),
-    "phone_intl":re.compile(r"\+?\d{1,3}[-.\s]\(?\d{1,4}\)?[-.\s]\d{3,4}[-.\s]\d{3,4}"),
-    "email":     re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"),
-    "addr_kr":   re.compile(
+    "phone_kr":   re.compile(r"(?:010|011|016|017|018|019)[-.\s]?\d{3,4}[-.\s]?\d{4}"),
+    "phone_intl": re.compile(r"\+?\d{1,3}[-.\s]\(?\d{1,4}\)?[-.\s]\d{3,4}[-.\s]\d{3,4}"),
+    # US 국내 형식: NXX-NXX-XXXX (예: 445-900-3414 / (215) 555-1234)
+    "phone_us":   re.compile(
+        r"\b(?:\(?\d{3}\)?[-.\s])?\d{3}[-.\s]\d{4}\b"
+        r"(?!\s*(?:19|20)\d{2})",  # 연도 뒤 숫자 차단
+    ),
+    "email":      re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"),
+    "addr_kr":    re.compile(
         r"(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)"
         r"[가-힣\s\d,.-]{2,40}"
         r"(?:시|구|동|로|길|번길|번지|읍|면|리)(?:\s*\d+)?",
     ),
-    "kakao":     re.compile(r"(?:카카오|kakao|카톡)[:\s]?\s*(\S{3,30})", re.IGNORECASE),
-    "sns":       re.compile(
+    # US/캐나다 거주지 주소: 123 Eagle Mount Dr., Richboro PA 18954
+    # 대소문자 구분 필수 (IGNORECASE 없음) — "17 with an ave" 오탐 방지
+    # 집 번호: 2~5자리 / 도로명: 대문자 시작 1~4 단어 / 도로 접미사: 대/소문자 모두 허용
+    "addr_us":    re.compile(
+        r"\b\d{2,5}\s+"
+        r"(?:[A-Z][A-Za-z'\-]+\s+){1,4}"
+        r"(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|"
+        r"Way|Court|Ct|Place|Pl|Circle|Cir|Mount|Mt|Highway|Hwy)"
+        r"\.?(?:[,\s]+[A-Za-z]{2,20}(?:\s+[A-Z]{2})?)?(?:[,\s]*\d{5}(?:-\d{4})?)?",
+    ),
+    "kakao":      re.compile(r"(?:카카오|kakao|카톡)[:\s]?\s*(\S{3,30})", re.IGNORECASE),
+    "sns":        re.compile(
         r"(?:instagram\.com|fb\.com|facebook\.com|twitter\.com|t\.me|line\.me|wechat|위챗)"
         r"[/\s]?\S{2,30}",
         re.IGNORECASE,
     ),
-    "linkedin":  re.compile(
+    "linkedin":   re.compile(
         r"(?:linkedin\.com/in/|linkedin:\s*)\S{3,60}",
         re.IGNORECASE,
     ),
@@ -72,8 +87,9 @@ RE_KR_RESIDENTIAL = re.compile(
     r"(?:아파트|빌라|오피스텔|주공|자이|푸르지오|래미안|힐스테이트|더샵|sk뷰|sk view|e편한세상|"
     r"이편한세상|롯데캐슬|브라운스톤|경남아너스빌|포스코더샵|두산위브|대림|현대|삼성|"
     r"한신|부영|우미|중흥|반도|효성|동원|태영|제일|신동아|진흥|극동|청솔|"
-    r"트리지움|위브|어울림|센트럴|파크|팰리스|아이파크|더리버|하늘채|금호|한라|"
-    r"apartment|apt|villa|officetel)",
+    r"트리지움|위브|어울림|센트럴|파크|팰리스|아이파크|더리버|하늘채|금호|한라)"
+    # 영문 아파트 키워드: 단어 경계 필수 (adapt, aptitude 오탐 방지)
+    r"|\b(?:apartment|apt|officetel)\b",
     re.IGNORECASE,
 )
 
@@ -132,9 +148,10 @@ _KR_WORKPLACE = re.compile(
     r"kindergarten|nursery|tutoring|hagwon|institute|academy|center|centre)"
     r"|Wonderland|King'?s\s*Speech|English\s*Village|Global\s*Village|Brown\s*Bears"
     r"|Smart\s*Tree|English\s*Eye|MBC\s*English|GEM\s*Academy"
-    r"|Saint\s*Paul\s*American\s*Scholars|GCIS|Kids\s*Club|Worwick|BIE|IEB|GEA|SIE|DIS"
+    r"|Saint\s*Paul\s*American\s*Scholars|GCIS|Kids\s*Club|Worwick"
     r"|KIS\s*Academy|CDI|Willson\s*English|GGE\s*English|3030\s*English"
     r"|Kids\s*Town|English\s*City)",
+    # BIE/IEB/GEA/SIE/DIS 제거: _KR_ACADEMY_RE_SHORT에서 대소문자 구분으로 처리
     re.IGNORECASE,
 )
 
@@ -219,11 +236,29 @@ _KR_ACADEMY_LIST = sorted(list(set([
     "JLS", "PSA", "LCI", "OHC", "BIE", "IEB", "GEA", "SIE", "DIS",
     "GCIS", "Sei", "Kaplan",
 ])), key=len, reverse=True)
-_KR_ACADEMY_RE = re.compile(
-    r"\b(" + "|".join(re.escape(n) for n in _KR_ACADEMY_LIST) + r")"
+# 4자 이하 약어(YBM, DIS 등): 대소문자 구분 필수 → 소문자 오탐(dis, sei…) 방지
+_KR_ACADEMY_SHORT = [n for n in _KR_ACADEMY_LIST if len(n) <= 4]
+_KR_ACADEMY_LONG  = [n for n in _KR_ACADEMY_LIST if len(n) > 4]
+
+_KR_ACADEMY_RE_LONG = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in _KR_ACADEMY_LONG) + r")"
     r"(?:\s+(?:English|Language|Academy|School|Institute|Center|Centre|학원))?\b",
     re.IGNORECASE,
-)
+) if _KR_ACADEMY_LONG else None
+
+_KR_ACADEMY_RE_SHORT = re.compile(
+    r"\b(" + "|".join(re.escape(n) for n in _KR_ACADEMY_SHORT) + r")"
+    r"(?:\s+(?:English|Language|Academy|School|Institute|Center|Centre|학원))?\b",
+    # 대소문자 구분 — 소문자 "dis", "sei" 등 일반 영어 단어 오탐 방지
+) if _KR_ACADEMY_SHORT else None
+
+def _KR_ACADEMY_RE_finditer(line: str):
+    results = []
+    if _KR_ACADEMY_RE_LONG:
+        results.extend(_KR_ACADEMY_RE_LONG.finditer(line))
+    if _KR_ACADEMY_RE_SHORT:
+        results.extend(_KR_ACADEMY_RE_SHORT.finditer(line))
+    return results
 
 # Reference 섹션 헤더 패턴 — v2.8
 _REF_HEADER_RE = re.compile(
@@ -260,7 +295,7 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     for ptype, pattern in _PATTERNS.items():
         for m in pattern.finditer(cleaned):
             # 전화번호 False Positive: 연도 범위(2017-2021 등) 차단
-            if ptype in ("phone_kr", "phone_intl") and _is_year_range(m.group(0)):
+            if ptype in ("phone_kr", "phone_intl", "phone_us") and _is_year_range(m.group(0)):
                 continue
             replacement = f"[{ptype.upper()}_REMOVED]"
             found.append(PIIMatch(
@@ -309,7 +344,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
             if any(kw.lower() in orig.lower() for kw in PRESERVE_INSTITUTION):
                 continue
             # 수정 3: 직함/스킬 내 보호 패턴
-            if _TITLE_SAFE_RE.search(orig):
+            # 예외: 한국 컨텍스트이고 3단어 이상 기관명 → 고유명사이므로 삭제
+            # (예: "Daewon Foreign Language High School" ≠ "High School Teacher")
+            if _TITLE_SAFE_RE.search(orig) and not (has_kr_ctx and len(orig.split()) >= 3):
                 continue
             # 수정 2: 교육 섹션 내 학위/전공명 삭제 금지
             if in_edu_section:
@@ -366,7 +403,7 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         )
 
         # KR_ACADEMY_RE: 고유명사 (수정 5/6/7)
-        for m in _KR_ACADEMY_RE.finditer(line):
+        for m in _KR_ACADEMY_RE_finditer(line):
             orig = m.group(0)
             # 수정 7: 해외 컨텍스트가 명확하고 한국 컨텍스트 없으면 보존
             if has_foreign3 and not has_kr3:

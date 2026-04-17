@@ -225,7 +225,22 @@ def _compress_cover_to_1page(text: str) -> bytes:
 
 # ── PDF 에서 텍스트 추출 ───────────────────────────────────────────────────
 def extract_text_from_pdf(pdf_path: Path) -> str:
-    """pdfplumber로 텍스트 추출."""
+    """PyMuPDF 우선 텍스트 추출 (CID 인코딩 처리), pdfplumber 폴백."""
+    # PyMuPDF — 대부분의 임베디드 폰트 CID 인코딩을 유니코드로 변환
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        pages = []
+        for p in doc:
+            pages.append(p.get_text("text"))
+        doc.close()
+        text = "\n".join(pages)
+        if text.strip():
+            return text
+    except Exception as e:
+        log.debug(f"PyMuPDF 추출 실패 → pdfplumber 폴백: {e}")
+
+    # pdfplumber 폴백
     try:
         with pdfplumber.open(str(pdf_path)) as pdf:
             return "\n".join(p.extract_text() or "" for p in pdf.pages)
