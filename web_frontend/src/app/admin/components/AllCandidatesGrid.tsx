@@ -167,10 +167,13 @@ function buildColDefs(): ColDef[] {
     { field: 'history',      headerName: '과거기록',    width: 150 },
   ]
 
+  // long-text 컬럼: wrapText + autoHeight (행 높이 가변)
+  const LONG_FIELDS = new Set(['reference', 'preference', 'applied', 'proposal', 'mailStatus', 'history', 'interviewCol'])
+
   return base.map((c, i) => ({
     field: c.field,
-    // 구글시트 스타일 2줄 헤더: 알파벳(A,B,C...) + 한글 라벨
-    headerName: c.field === 'rowNum' ? '#' : `${colLetter(i - 1)}  ${c.headerName}`,
+    // 2줄 헤더: 알파벳(A, B, C...) \n 한글 라벨 — CSS white-space: pre-line 필요
+    headerName: c.field === 'rowNum' ? '#' : `${colLetter(i - 1)}\n${c.headerName}`,
     width: c.width,
     pinned: c.pinned,
     cellRenderer: c.cellRenderer,
@@ -183,8 +186,12 @@ function buildColDefs(): ColDef[] {
     lockPosition: c.field === 'rowNum' ? 'left' : undefined,
     lockPinned: c.field === 'rowNum',
     headerTooltip: c.headerName,
+    wrapText: LONG_FIELDS.has(c.field),
+    autoHeight: LONG_FIELDS.has(c.field),
     cellStyle: c.field === 'rowNum'
       ? ({ backgroundColor: '#f8f9fa', color: '#5f6368', textAlign: 'center', fontSize: 11 } as Record<string, string | number>)
+      : LONG_FIELDS.has(c.field)
+      ? ({ whiteSpace: 'normal', lineHeight: '1.4' } as Record<string, string | number>)
       : (i < 3) ? ({ fontWeight: 700 } as Record<string, string | number>) : undefined,
   })) as ColDef[]
 }
@@ -273,7 +280,7 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total, onLo
           defaultColDef={defaultColDef}
           components={components}
           rowHeight={30}
-          headerHeight={28}
+          headerHeight={44}
           suppressCellFocus={false}
           enableCellTextSelection
           suppressRowClickSelection

@@ -127,7 +127,7 @@ function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Recor
     photoSize: Number(ov.photoSize ?? 50),
     email: String(c.email ?? ''),
     name: String(c.full_name ?? ''),
-    mgtNum: cid.slice(-4),
+    mgtNum: String(c.sheet_number ?? c.row_id ?? '') || cid.slice(-4),
     arc: String(c.arc_holders ?? ''),
     nationality: String(c.nationality_plain || c.nationality || ''),
     background: String(c.ancestry ?? ''),

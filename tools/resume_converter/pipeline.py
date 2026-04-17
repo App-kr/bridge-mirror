@@ -23,7 +23,7 @@ from typing import Callable, Optional
 
 from .file_classifier import detect_file_type, INBOX_DIR
 from .face_crop        import crop_face, crop_face_from_bytes, FaceNotFoundError
-from .pii_engine       import analyze_pii, PIIResult, load_api_key
+from .pii_engine       import analyze_pii, PIIResult
 from .pdf_builder      import build_pdf, build_filename, extract_text_from_pdf
 from .security         import encrypt_file, secure_delete, secure_delete_dir, log_processing
 from .sheets_connector import get_candidate_info, write_processed_entry
@@ -59,6 +59,7 @@ class PipelineJob:
     output_size:  int = 0
 
     # 메타 (구글시트에서 조회)
+    name:         str = ""
     nationality:  str = ""
     gender:       str = ""
     birth_year:   str = ""
@@ -85,7 +86,6 @@ class Pipeline:
         self.auto_mode      = auto_mode
         self.pause_callback = pause_callback
         self.on_progress    = on_progress or (lambda msg: log.info(msg))
-        self.api_key        = load_api_key()
 
     def _emit(self, msg: str):
         self.on_progress(msg)
@@ -155,6 +155,21 @@ class Pipeline:
     def _step_pii(self, job: PipelineJob) -> bool:
         self._emit("[3/5] PII 탐지 + 제거")
 
+        # 구글시트에서 이름/메타 먼저 조회 (이름 기반 삭제에 사용)
+        if not job.name:
+            try:
+                info = get_candidate_info(job.candidate_id)
+                if info:
+                    job.name        = info.get("name", "")
+                    job.nationality = info.get("nationality", "")
+                    job.gender      = info.get("gender", "")
+                    job.birth_year  = info.get("birth_year", "")
+                    self._emit(f"  시트 조회 완료 (이름 마스킹됨)")
+            except Exception as e:
+                job.warnings.append(f"시트 조회 실패: {e}")
+
+        known_names = [job.name] if job.name else []
+
         def _process(ftype: str, label: str) -> Optional[PIIResult]:
             p = job.files.get(ftype)
             if not p:
@@ -162,9 +177,8 @@ class Pipeline:
             text = _extract_text(p)
             if not text.strip():
                 return None
-            result = analyze_pii(text, self.api_key)
-            self._emit(f"  {label}: {len(result.pii_found)}개 제거, "
-                       f"{len(result.uncertain)}개 불확실")
+            result = analyze_pii(text, known_names=known_names)
+            self._emit(f"  {label}: {len(result.pii_found)}개 제거")
             return result
 
         job.cover_pii  = _process("cover",  "커버레터")
@@ -177,16 +191,16 @@ class Pipeline:
     def _step_build_pdf(self, job: PipelineJob) -> bool:
         self._emit("[4/5] PDF 조립")
 
-        # 구글시트에서 메타 조회
-        try:
-            info = get_candidate_info(job.candidate_id)
-            if info:
-                job.nationality = info.get("nationality", "")
-                job.gender      = info.get("gender", "")
-                job.birth_year  = info.get("birth_year", "")
-                self._emit(f"  시트 조회: {job.nationality}/{job.gender}/{job.birth_year}")
-        except Exception as e:
-            job.warnings.append(f"시트 조회 실패: {e}")
+        # 메타가 아직 없으면 시트 재조회 (PII 단계에서 실패한 경우)
+        if not job.nationality:
+            try:
+                info = get_candidate_info(job.candidate_id)
+                if info:
+                    job.nationality = info.get("nationality", "")
+                    job.gender      = info.get("gender", "")
+                    job.birth_year  = info.get("birth_year", "")
+            except Exception as e:
+                job.warnings.append(f"시트 조회 실패: {e}")
 
         out_path, size = build_pdf(
             candidate_id = job.candidate_id,

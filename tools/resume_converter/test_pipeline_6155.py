@@ -75,8 +75,11 @@ print("\n[4/6] PII 탐지 + 제거")
 from resume_converter.pii_engine import analyze_pii
 
 # API 키 없이 실행 (Layer 1 regex only)
-cover_result  = analyze_pii(cover_raw,  api_key=None)
-resume_result = analyze_pii(resume_raw, api_key=None)
+# 6155 강사 이름 (구글시트 연동 대신 직접 지정)
+KNOWN_NAMES = ["Domenica Ann Kempisty"]
+
+cover_result  = analyze_pii(cover_raw,  known_names=KNOWN_NAMES)
+resume_result = analyze_pii(resume_raw, known_names=KNOWN_NAMES)
 
 print(f"\n  커버레터 PII:")
 print(f"    탐지됨: {len(cover_result.pii_found)}개 제거, {len(cover_result.uncertain)}개 불확실")

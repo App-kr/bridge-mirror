@@ -448,99 +448,66 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     return cleaned, found
 
 
-# ── Layer 2: Claude API ────────────────────────────────────────────────────
-_CLAUDE_MODEL = "claude-sonnet-4-6"
+# ── Layer 2: 이름 정확 매칭 삭제 (구글시트 name 기반) ────────────────────────
+# 최소 글자 수: 4자 미만 단독 토큰은 삭제 안 함 (Ann, Jo 등 일반 단어 오탐 방지)
+_MIN_NAME_TOKEN_LEN = 4
 
-_SYSTEM_PROMPT = """You are a PII detector for Korean ESL teacher resumes.
-Analyze the text and find:
-1. Personal names (English and Korean)
-2. Korean company/school names (학원, 학교, 어학원 names)
-3. Signatures with name + affiliation + contact in recommendation letters
-4. Any other identifying information
+def _apply_known_names(text: str, known_names: list[str]) -> tuple[str, list[PIIMatch]]:
+    """구글시트에서 받은 이름으로 정확 매칭 삭제.
 
-Return ONLY valid JSON with this exact structure:
-{
-  "to_remove": [
-    {"text": "exact text to remove", "type": "name|company|signature|other", "replacement": "replacement text or empty string"}
-  ],
-  "uncertain": [
-    {"text": "suspicious text", "reason": "why uncertain"}
-  ]
-}
+    삭제 범위:
+      - 풀네임 전체 (대소문자 무관)
+      - 이름(first name, ≥4자)
+      - 성(last name, ≥4자)
+    중간 이름은 단독 삭제 안 함 (오탐 방지).
+    """
+    found:   list[PIIMatch] = []
+    cleaned: str = text
 
-Rules:
-- Replace personal names with empty string ""
-- Replace Korean school/company names with "학원" or "학교"
-- Remove signatures entirely (name + affiliation + phone/email block)
-- For uncertain items, do NOT remove, just flag them
-- Return only JSON, no explanation"""
+    for full_name in known_names:
+        full_name = full_name.strip()
+        if not full_name:
+            continue
+        parts = full_name.split()
 
-def _call_claude(text: str, api_key: str, focus: bool = False) -> dict:
-    """Claude API 호출. focus=True 이면 집중점검 모드."""
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
+        # 1) 풀네임 전체
+        pat = re.compile(re.escape(full_name), re.IGNORECASE)
+        for m in pat.finditer(cleaned):
+            found.append(PIIMatch("name", m.group(0), m.start(), 0.99, "red"))
+        cleaned = pat.sub("", cleaned)
 
-    user_msg = f"{'[FOCUS CHECK] ' if focus else ''}Detect PII in this text:\n\n{text[:8000]}"
+        # 2) first name (index 0, ≥4자)
+        if parts and len(parts[0]) >= _MIN_NAME_TOKEN_LEN:
+            pat = re.compile(r'\b' + re.escape(parts[0]) + r'\b', re.IGNORECASE)
+            for m in pat.finditer(cleaned):
+                found.append(PIIMatch("name", m.group(0), m.start(), 0.97, "red"))
+            cleaned = pat.sub("", cleaned)
 
-    try:
-        resp = client.messages.create(
-            model=_CLAUDE_MODEL,
-            max_tokens=2000,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-        raw = resp.content[0].text.strip()
-        # JSON 추출
-        m = re.search(r"\{[\s\S]+\}", raw)
-        if m:
-            return json.loads(m.group(0))
-    except Exception as e:
-        log.warning(f"Claude API 오류 (regex only 폴백): {e}")
+        # 3) last name (last token, ≥4자, first name과 다를 때)
+        if len(parts) >= 2 and parts[-1] != parts[0] and len(parts[-1]) >= _MIN_NAME_TOKEN_LEN:
+            pat = re.compile(r'\b' + re.escape(parts[-1]) + r'\b', re.IGNORECASE)
+            for m in pat.finditer(cleaned):
+                found.append(PIIMatch("name", m.group(0), m.start(), 0.97, "red"))
+            cleaned = pat.sub("", cleaned)
 
-    return {"to_remove": [], "uncertain": []}
-
-def _apply_claude(text: str, claude_result: dict) -> tuple[str, list[PIIMatch], list[dict]]:
-    """Claude 결과를 텍스트에 적용."""
-    found:     list[PIIMatch] = []
-    uncertain: list[dict]    = []
-    cleaned    = text
-
-    for item in claude_result.get("to_remove", []):
-        orig        = item.get("text", "")
-        replacement = item.get("replacement", "")
-        ptype       = item.get("type", "unknown")
-        if orig and orig in cleaned:
-            found.append(PIIMatch(
-                type=ptype,
-                original_value=orig,
-                position=cleaned.find(orig),
-                confidence=0.88,
-                color="red",
-            ))
-            cleaned = cleaned.replace(orig, replacement)
-
-    for item in claude_result.get("uncertain", []):
-        uncertain.append({
-            "text":   item.get("text", ""),
-            "reason": item.get("reason", ""),
-        })
-
-    return cleaned, found, uncertain
+    return cleaned, found
 
 
 # ── 메인 함수 ──────────────────────────────────────────────────────────────
 def analyze_pii(
-    text:    str,
-    api_key: str | None = None,
-    focus:   bool = False,
+    text:        str,
+    api_key:     str | None  = None,   # 하위 호환용, 더 이상 사용 안 함
+    focus:       bool        = False,  # 하위 호환용, 더 이상 사용 안 함
+    known_names: list[str] | None = None,
 ) -> PIIResult:
     """
     전체 PII 분석 실행.
 
     Args:
-        text:    분석할 텍스트
-        api_key: Anthropic API 키 (없으면 regex only)
-        focus:   True이면 Claude 집중점검 모드
+        text:        분석할 텍스트
+        api_key:     미사용 (하위 호환 유지)
+        focus:       미사용 (하위 호환 유지)
+        known_names: 구글시트에서 받은 강사 이름 목록 (정확 매칭 삭제)
 
     Returns:
         PIIResult
@@ -551,31 +518,22 @@ def analyze_pii(
     # Layer 1: regex
     cleaned1, found1 = _apply_regex(text)
 
-    # Layer 2: Claude
-    found2:     list[PIIMatch] = []
-    uncertain:  list[dict]    = []
-
-    if api_key:
-        try:
-            claude_result = _call_claude(cleaned1, api_key, focus)
-            cleaned2, found2, uncertain = _apply_claude(cleaned1, claude_result)
-        except Exception as e:
-            log.warning(f"Claude 레이어 실패 (regex 결과 사용): {e}")
-            cleaned2 = cleaned1
+    # Layer 2: 구글시트 이름 정확 매칭
+    if known_names:
+        cleaned2, found2 = _apply_known_names(cleaned1, known_names)
     else:
-        log.info("API 키 없음 → regex only 모드")
-        cleaned2 = cleaned1
+        cleaned2, found2 = cleaned1, []
 
     return PIIResult(
         cleaned_text=cleaned2,
         pii_found=found1 + found2,
-        uncertain=uncertain,
+        uncertain=[],
     )
 
 
-def analyze_pii_focus(text: str, api_key: str) -> PIIResult:
-    """집중점검: 선택 텍스트만 Claude 재분석."""
-    return analyze_pii(text, api_key, focus=True)
+def analyze_pii_focus(text: str, api_key: str | None = None) -> PIIResult:
+    """하위 호환 — analyze_pii 위임."""
+    return analyze_pii(text)
 
 
 # ── 로드 API 키 ────────────────────────────────────────────────────────────
