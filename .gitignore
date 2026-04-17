@@ -204,3 +204,8 @@ tools/store_smtp_credentials.py
 tools/.gdrive_backup_state.json
 tools/.tmp_backup_*.db
 tools/gdrive_backup.log
+
+# Google OAuth credentials (개인 Drive 백업용 — 절대 커밋 금지)
+drive_oauth_credentials.json
+drive_oauth_token.json
+client_secret_*.json

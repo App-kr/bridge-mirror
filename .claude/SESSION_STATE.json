@@ -1,10 +1,9 @@
 {
-  "last_updated": "2026-04-17 14:11:11",
+  "last_updated": "2026-04-17 14:30:55",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base/web_frontend\" && npm run build 2>&1 | tail -6",
+  "last_command": "grep -n \"get_candidate_info\\|name\\|full_name\\|영문\\|NAME\" \"Q:/Claudework/bridge base/tools/resume_converter/sheets_connector.py\" | head -30",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\main.py",
     "Q:\\wealth_manager\\src\\app\\reservoir\\page.tsx",
     "Q:\\Claudework\\bridge base\\tools\\db_persist.py",
     "Q:\\Claudework\\bridge base\\api_server.py",
@@ -23,7 +22,8 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\components\\AllCandidatesGrid.tsx",
     "Q:\\Claudework\\bridge base\\tools\\resume_converter\\test_pipeline_6155.py",
     "Q:\\Claudework\\bridge base\\tools\\resume_converter\\pii_engine.py",
-    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\pdf_builder.py"
+    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\pdf_builder.py",
+    "Q:\\wealth_manager\\app\\layout.tsx"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
