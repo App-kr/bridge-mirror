@@ -1,10 +1,9 @@
 {
-  "last_updated": "2026-04-17 10:08:42",
-  "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base/web_frontend\" && npm run build 2>&1 | tail -5",
+  "last_updated": "2026-04-17 10:36:44",
+  "last_tool": "Edit",
+  "last_command": "Edit: Q:\\Claudework\\Game Discord\\bot\\index.js",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\openrun_app\\lib\\features\\onboarding\\genre_select_screen.dart",
     "Q:\\openrun_app\\lib\\features\\onboarding\\city_select_screen.dart",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
     "Q:\\Claudework\\ClaudeBlog\\modules\\keyword_manager.py",
@@ -23,7 +22,8 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\employers\\EmployerManagement.jsx",
     "Q:\\Claudework\\bridge base\\api_server.py",
     "Q:\\Claudework\\bridge base\\render.yaml",
-    "Q:\\Claudework\\fix_acrobat_registry.ps1"
+    "Q:\\Claudework\\fix_acrobat_registry.ps1",
+    "Q:\\Claudework\\Game Discord\\bot\\index.js"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
@@ -39,6 +39,7 @@
     ".snapshots/20260412_091140_actions.py",
     ".snapshots/20260412_091154_actions.py",
     "FINAL_BACKUP_20260331_171844/bridge base_backup",
+    "Game Discord/bot/index.js",
     "bridge base_backup",
     "bridge_jobs",
     "matjokdo_safe/.chrome_matjokdo_profile/BrowserMetrics/BrowserMetrics-69DAE312-490C.pma",
