@@ -9079,15 +9079,6 @@ async def admin_list_jobs_v2(
             _enc_emp = d.pop("enc_employer_name", "")
             if _enc_emp and not d.get("employer_display_name"):
                 d["employer_display_name"] = _safe_decrypt(_enc_emp, "enc_employer_name") or ""
-            # internal_notes 가 T3v1 암호화되어 있으면 복호화 (is_encrypted 체크 내장, 실패 시 원본 유지)
-            _notes = d.get("internal_notes")
-            if _notes and isinstance(_notes, str) and len(_notes) < 2000:
-                try:
-                    _dec = _safe_decrypt(_notes, "internal_notes")
-                    if _dec and _dec != _notes:
-                        d["internal_notes"] = _dec
-                except Exception:
-                    pass  # 복호화 실패 시 원본 유지
             data.append(d)
         return ok(data={"jobs": data, "total": total})
     finally:
