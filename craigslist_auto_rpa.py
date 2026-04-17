@@ -479,9 +479,9 @@ def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
     level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"
     month, start_suffix = _start_to_label(start_raw)
 
-    # seed 기반으로 접두어 선택 (◾◾◾◾ / ▪▪▪▪ / ●●● / ◆◆◆ / ■■■)
+    # 이모티콘 제거 후 67~72자 유지: ", Korea," 추가로 보정
     prefix = _TITLE_PREFIX_POOL[seed % len(_TITLE_PREFIX_POOL)]
-    city_part = f"{city_up}, "
+    city_part = f"{city_up}, Korea, "
 
     # 후보 패턴 목록
     candidates = []
@@ -593,13 +593,9 @@ _REQ_WARNING = [
     "\u26a0\ufe0fATTENTION: Applications from unlisted nationalities cannot be processed. Verify eligibility before applying.\u26a0\ufe0f",
 ]
 
-# ── 제목 접두어 풀 (◾◾◾◾ 고정 패턴 탈피) ──────────────────────────────────────
+# ── 제목 접두어 풀 (이모티콘 제거 — 스팸 필터 회피) ────────────────────────────
 _TITLE_PREFIX_POOL = [
-    "\u25fe\u25fe\u25fe\u25fe ",   # ◾◾◾◾ (기존)
-    "\u25aa\u25aa\u25aa\u25aa ",   # ▪▪▪▪
-    "\u25cf\u25cf\u25cf ",         # ●●●
-    "\u25c6\u25c6\u25c6 ",         # ◆◆◆
-    "\u25a0\u25a0\u25a0 ",         # ■■■
+    "",   # 접두어 없음 (클린 텍스트 제목)
 ]
 
 
