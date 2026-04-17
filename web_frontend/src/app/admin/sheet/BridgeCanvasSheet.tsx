@@ -1001,6 +1001,14 @@ export default function BridgeCanvasSheet() {
       prefsRef.current.save(newCols as ColDef[], frozenCols)
     }
     engineRef.current = engine
+    // 엔진 생성 직후 초기 데이터 동기화 (race condition 방지)
+    engine.setCols(cols)
+    engine.setData(displayRows)
+    engine.setFrozenCols(frozenCols)
+    engine.setSort(sortKey, sortDir)
+    engine.setRowHeight(rowHeight)
+    engine.setRowHeights(rowHeights)
+    engine.setActiveFilters(filters)
     return () => { engine.destroy(); engineRef.current = null }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
@@ -1016,7 +1024,7 @@ export default function BridgeCanvasSheet() {
     e.setRowHeight(rowHeight)
     e.setRowHeights(rowHeights)
     e.setActiveFilters(filters)
-  }, [displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights, filters])
+  }, [ready, displayRows, cols, frozenCols, sortKey, sortDir, rowHeight, rowHeights, filters])
 
   /* ── Context menu ── */
   const ctxAction = useCallback((action: string) => {
