@@ -586,12 +586,25 @@ def load_api_key() -> Optional[str]:
     if key:
         return key
 
-    # 2. vault
+    # 2. Q:/Claudework/.vault/anthropic.key (평문 파일)
     vault_path = Path("Q:/Claudework/.vault/anthropic.key")
     if vault_path.exists():
         return vault_path.read_text(encoding="utf-8").strip()
 
-    # 3. 같은 폴더 .api_key
+    # 3. Bridge MasterVault (tools/master_vault.py seal로 등록된 경우)
+    try:
+        import sys as _sys
+        _vault_dir = str(Path(__file__).parent.parent)
+        if _vault_dir not in _sys.path:
+            _sys.path.insert(0, _vault_dir)
+        from master_vault import get_secret
+        key = get_secret("ANTHROPIC_API_KEY")
+        if key:
+            return key
+    except Exception:
+        pass
+
+    # 4. 같은 폴더 .api_key (개발용 로컬 파일)
     local = Path(__file__).parent / ".api_key"
     if local.exists():
         return local.read_text(encoding="utf-8").strip()
