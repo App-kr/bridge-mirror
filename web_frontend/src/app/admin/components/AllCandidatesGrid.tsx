@@ -256,8 +256,8 @@ export default function AllCandidatesGrid({ rows, onCopyTo, loading, total, onLo
           columnDefs={colDefs}
           defaultColDef={defaultColDef}
           components={components}
-          rowHeight={38}
-          headerHeight={36}
+          rowHeight={30}
+          headerHeight={28}
           suppressCellFocus={false}
           enableCellTextSelection
           suppressRowClickSelection

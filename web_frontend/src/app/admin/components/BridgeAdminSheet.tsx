@@ -7,6 +7,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AllCandidatesGrid from './AllCandidatesGrid'
 import SecureAdminImage from '@/components/SecureAdminImage'
 import LinkPanel from './LinkPanel'
+import '../sheet/google-sheets-theme.css'
 
 /* ─── Types ─── */
 type CategoryKey = 'active' | 'past' | 'blacklist'
@@ -723,7 +724,7 @@ export default function BridgeAdminSheet() {
   if (!ready) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>
 
   return (
-    <div style={{ fontFamily: "'Malgun Gothic',sans-serif", background: '#eaecf0', height: '100%', minHeight: 400, fontSize: 15, display: 'flex', flexDirection: 'column', color: '#000' }}>
+    <div className="gs-sheet" style={{ fontFamily: "Roboto, Arial, 'Malgun Gothic', sans-serif", background: '#ffffff', height: '100%', minHeight: 400, fontSize: 13, display: 'flex', flexDirection: 'column', color: '#202124' }}>
       <input ref={photoRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display: 'none' }} />
 
       {/* 상단 바 */}
@@ -793,7 +794,7 @@ export default function BridgeAdminSheet() {
       </div>
 
       {/* 테이블 */}
-      <div ref={tblRef} onScroll={onBS} style={{ flex: 1, minHeight: 300, overflow: 'auto', background: '#fff' }}>
+      <div ref={tblRef} onScroll={onBS} className="gs-table" style={{ flex: 1, minHeight: 300, overflow: 'auto', background: '#fff' }}>
         <table style={{ borderCollapse: 'collapse', width: tw, minWidth: '100%', tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: 34 }} />
@@ -938,6 +939,20 @@ export default function BridgeAdminSheet() {
       </div>
       </>
       )}
+
+      {/* 하단 Google Sheets 스타일 탭 바 */}
+      <div className="gs-tabs-bottom">
+        {TABS.map(t => (
+          <div
+            key={t.key}
+            className={`gs-tab ${tab === t.key ? 'gs-tab-active' : ''}`}
+            onClick={() => { setTab(t.key); setSel(new Set()); setFi({}) }}
+          >
+            {t.label}
+            <span className="gs-tab-count">{cnt[t.key] ?? 0}</span>
+          </div>
+        ))}
+      </div>
 
       {/* 하단 상태바 */}
       <div style={{ background: '#f1f5f9', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>

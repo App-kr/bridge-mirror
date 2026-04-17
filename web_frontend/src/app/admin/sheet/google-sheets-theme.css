@@ -1,0 +1,185 @@
+/* ==========================================================================
+   Google Sheets Theme — AG Grid 오버라이드 + HTML 테이블 공통 스타일
+   페이지: /admin/sheet
+   적용 범위: AllCandidatesGrid (AG Grid) + BridgeAdminSheet 수동 탭 테이블
+   ==========================================================================
+
+   데이터 로직/체인 영향 없음 — 순수 CSS 시각 스타일만 교체.
+*/
+
+/* ── 공통 폰트/배경 ─────────────────────────────────────────────────────── */
+.gs-sheet,
+.gs-sheet .ag-theme-quartz,
+.gs-sheet table {
+  font-family: Roboto, Arial, 'Malgun Gothic', sans-serif;
+  font-size: 13px;
+  color: #202124;
+}
+
+/* ── AG Grid: Google Sheets 룩 ──────────────────────────────────────────── */
+.gs-sheet .ag-theme-quartz {
+  --ag-background-color: #ffffff;
+  --ag-header-background-color: #f8f9fa;
+  --ag-odd-row-background-color: #ffffff;
+  --ag-row-hover-color: #f1f3f4;
+  --ag-selected-row-background-color: #e8f0fe;
+  --ag-range-selection-background-color: rgba(26, 115, 232, 0.12);
+  --ag-range-selection-border-color: #1a73e8;
+  --ag-border-color: #e0e0e0;
+  --ag-header-column-separator-color: #d7d7d7;
+  --ag-cell-horizontal-border: solid #e0e0e0;
+  --ag-row-border-color: #e0e0e0;
+  --ag-foreground-color: #202124;
+  --ag-header-foreground-color: #3c4043;
+  --ag-header-cell-hover-background-color: #f1f3f4;
+  --ag-row-height: 30px;
+  --ag-header-height: 28px;
+  --ag-font-family: Roboto, Arial, sans-serif;
+  --ag-font-size: 13px;
+}
+
+/* 헤더: Google Sheets 스타일 (하단 굵은 회색 선) */
+.gs-sheet .ag-theme-quartz .ag-header {
+  border-bottom: 1px solid #c0c0c0;
+  background: #f8f9fa;
+}
+
+.gs-sheet .ag-theme-quartz .ag-header-cell {
+  font-weight: 500;
+  color: #3c4043;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.gs-sheet .ag-theme-quartz .ag-header-cell-label {
+  justify-content: center;
+}
+
+/* 셀: 가는 회색 테두리 */
+.gs-sheet .ag-theme-quartz .ag-cell {
+  border-right: 1px solid #e0e0e0;
+  line-height: 29px;
+  padding: 0 8px;
+}
+
+/* 포커스 셀: Google Sheets 파란 테두리 */
+.gs-sheet .ag-theme-quartz .ag-cell-focus {
+  border: 2px solid #1a73e8 !important;
+  outline: none !important;
+  z-index: 2;
+}
+
+/* 선택된 행: 연한 파랑 */
+.gs-sheet .ag-theme-quartz .ag-row-selected {
+  background-color: #e8f0fe !important;
+}
+
+/* 정렬 화살표 색상 */
+.gs-sheet .ag-theme-quartz .ag-sort-ascending-icon,
+.gs-sheet .ag-theme-quartz .ag-sort-descending-icon {
+  color: #1a73e8;
+}
+
+/* ── HTML 테이블 (수동 탭): Google Sheets 룩 ────────────────────────────── */
+.gs-sheet .gs-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.gs-sheet .gs-table thead th,
+.gs-sheet .gs-table thead td {
+  background: #f8f9fa !important;
+  color: #3c4043 !important;
+  font-weight: 500 !important;
+  font-size: 12px !important;
+  border: 1px solid #d7d7d7 !important;
+  border-bottom: 1px solid #c0c0c0 !important;
+  padding: 4px 8px !important;
+}
+
+.gs-sheet .gs-table tbody td {
+  border: 1px solid #e0e0e0 !important;
+  background: #fff;
+  padding: 4px 8px !important;
+  color: #202124;
+}
+
+.gs-sheet .gs-table tbody tr:hover td {
+  background: #f8f9fa;
+}
+
+/* 행 번호 / 체크박스 열 (첫 열) */
+.gs-sheet .gs-table tbody td:first-child,
+.gs-sheet .gs-table thead td:first-child,
+.gs-sheet .gs-table thead th:first-child {
+  background: #f8f9fa !important;
+  text-align: center;
+  color: #5f6368;
+  font-size: 11px;
+}
+
+/* ── 스크롤바: Google Sheets 스타일 ───────────────────────────────────── */
+.gs-sheet ::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+.gs-sheet ::-webkit-scrollbar-track {
+  background: #f1f3f4;
+}
+.gs-sheet ::-webkit-scrollbar-thumb {
+  background: #dadce0;
+  border: 3px solid #f1f3f4;
+  border-radius: 7px;
+}
+.gs-sheet ::-webkit-scrollbar-thumb:hover {
+  background: #bdc1c6;
+}
+
+/* ── 하단 시트 탭 바 (Google Sheets 스타일) ───────────────────────────── */
+.gs-sheet .gs-tabs-bottom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: #f1f3f4;
+  border-top: 1px solid #c0c0c0;
+  flex-shrink: 0;
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.gs-sheet .gs-tab {
+  padding: 6px 14px;
+  background: #e8eaed;
+  color: #3c4043;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid #c0c0c0;
+  border-bottom: none;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.gs-sheet .gs-tab:hover {
+  background: #dadce0;
+}
+
+.gs-sheet .gs-tab.gs-tab-active {
+  background: #ffffff;
+  color: #1a73e8;
+  font-weight: 600;
+  border-bottom: 2px solid #1a73e8;
+  margin-bottom: -1px;
+}
+
+.gs-sheet .gs-tab .gs-tab-count {
+  margin-left: 6px;
+  color: #5f6368;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.gs-sheet .gs-tab.gs-tab-active .gs-tab-count {
+  color: #1a73e8;
+}
