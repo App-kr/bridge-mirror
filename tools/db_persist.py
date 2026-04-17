@@ -1,7 +1,13 @@
 """
-DB 영속성 — Google Drive 백업/복원.
-서비스 계정: bridge-sheet-sync-103 (기존, 추가 토큰 불필요)
-스코프: drive.file (자기가 만든 파일만)
+DB 영속성 — AWS S3 백업/복원.
+기존 S3 크레덴셜(이력서 업로드용) 재사용 → Service Account 쿼터 이슈 해결.
+
+환경변수:
+  AWS_ACCESS_KEY_ID     : AWS 액세스 키
+  AWS_SECRET_ACCESS_KEY : AWS 시크릿 키
+  AWS_S3_BUCKET         : S3 버킷 이름
+  AWS_REGION            : AWS 리전 (기본 ap-northeast-2)
+  DB_PATH               : master.db 경로 (기본: Q:/Claudework/bridge base/master.db)
 
 사용법:
   python tools/db_persist.py backup
@@ -10,43 +16,40 @@ DB 영속성 — Google Drive 백업/복원.
   python tools/db_persist.py status
 """
 from __future__ import annotations
-import argparse, gzip, io, os, sqlite3, sys, tempfile, time
+import argparse, gzip, io, os, sqlite3, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 BASE        = Path(__file__).resolve().parent.parent
 DB_PATH     = Path(os.getenv("DB_PATH", str(BASE / "master.db")))
-SA_JSON     = BASE / "gcp_service_account.json"
-FOLDER_NAME = "BRIDGE_DB_BACKUPS"
-FOLDER_ID   = "19dTJgPDQjPG-8ukIR9q_8K2TWAd5G0eF"  # 사용자 Drive 공유 폴더
-MAX_KEEP    = 20
-SCOPES      = ["https://www.googleapis.com/auth/drive"]
+S3_PREFIX   = "backups/"       # S3 key prefix
+MAX_KEEP    = 7                # 최근 7개만 유지
 
-# ── Drive 클라이언트 ──────────────────────────────────────────────────────────
+# ── S3 클라이언트 ──────────────────────────────────────────────────────────────
 
-def _drive():
-    from google.oauth2.service_account import Credentials
-    from googleapiclient.discovery import build
-    import warnings
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    creds = Credentials.from_service_account_file(str(SA_JSON), scopes=SCOPES)
-    return build("drive", "v3", credentials=creds)
-
-
-def _get_or_create_folder(drive) -> str:
-    """공유된 BRIDGE_DB_BACKUPS 폴더 ID 반환."""
-    return FOLDER_ID
+def _s3_client():
+    """boto3 S3 클라이언트 — 환경변수 미설정 시 RuntimeError."""
+    import boto3
+    ak = os.environ.get("AWS_ACCESS_KEY_ID")
+    sk = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    bk = os.environ.get("AWS_S3_BUCKET")
+    rg = os.environ.get("AWS_REGION", "ap-northeast-2")
+    if not all([ak, sk, bk]):
+        raise RuntimeError(
+            "S3 환경변수 미설정 — AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET 필요"
+        )
+    return boto3.client("s3", region_name=rg, aws_access_key_id=ak, aws_secret_access_key=sk), bk
 
 
-def _list_backups(drive, folder_id: str) -> list[dict]:
-    """최신순 백업 목록."""
-    res = drive.files().list(
-        q=f"'{folder_id}' in parents and name contains 'bridge_db_' and trashed=false",
-        orderBy="createdTime desc",
-        fields="files(id, name, size, createdTime)",
-        pageSize=50,
-    ).execute()
-    return res.get("files", [])
+def _list_backups(client, bucket: str) -> list[dict]:
+    """최신순 백업 목록 (S3)."""
+    resp = client.list_objects_v2(Bucket=bucket, Prefix=S3_PREFIX)
+    items = resp.get("Contents", [])
+    # bridge_db_ 접두사만 필터 + 최신순 정렬
+    items = [it for it in items if "bridge_db_" in it["Key"]]
+    items.sort(key=lambda x: x["LastModified"], reverse=True)
+    return items
+
 
 # ── SQL 덤프 생성 ──────────────────────────────────────────────────────────────
 
@@ -97,10 +100,11 @@ def _make_sql_dump() -> bytes:
     sql = buf.getvalue()
     return gzip.compress(sql.encode("utf-8"), compresslevel=6)
 
+
 # ── 공개 API ──────────────────────────────────────────────────────────────────
 
 def backup(dry_run: bool = False) -> bool:
-    """master.db → Drive 백업."""
+    """master.db → S3 백업."""
     if not DB_PATH.exists():
         print("[backup] master.db 없음 — 스킵")
         return False
@@ -123,61 +127,52 @@ def backup(dry_run: bool = False) -> bool:
     gz_data = _make_sql_dump()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     fname = f"bridge_db_{ts}.sql.gz"
-    print(f"  크기: {len(gz_data)//1024}KB → {fname}")
+    key = S3_PREFIX + fname
+    print(f"  크기: {len(gz_data)//1024}KB → s3://.../{key}")
 
     if dry_run:
-        print("  [dry-run] Drive 업로드 스킵")
+        print("  [dry-run] S3 업로드 스킵")
         return True
 
-    from googleapiclient.http import MediaIoBaseUpload
-    drive = _drive()
-    folder_id = _get_or_create_folder(drive)
+    client, bucket = _s3_client()
+    client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=gz_data,
+        ContentType="application/gzip",
+        ServerSideEncryption="AES256",
+    )
+    print(f"  [S3] 업로드 완료: {key}")
 
-    media = MediaIoBaseUpload(io.BytesIO(gz_data), mimetype="application/gzip", resumable=False)
-    drive.files().create(
-        body={"name": fname, "parents": [folder_id]},
-        media_body=media,
-        fields="id",
-    ).execute()
-    print(f"  [Drive] 업로드 완료: {fname}")
-
-    # 오래된 백업 정리
-    backups = _list_backups(drive, folder_id)
+    # 오래된 백업 정리 (MAX_KEEP 개 초과 삭제)
+    backups = _list_backups(client, bucket)
     if len(backups) > MAX_KEEP:
         for old in backups[MAX_KEEP:]:
-            drive.files().delete(fileId=old["id"]).execute()
-            print(f"  [Drive] 오래된 백업 삭제: {old['name']}")
+            client.delete_object(Bucket=bucket, Key=old["Key"])
+            print(f"  [S3] 오래된 백업 삭제: {old['Key']}")
 
     return True
 
 
 def restore(dry_run: bool = False) -> bool:
-    """Drive 최신 백업 → master.db 복원."""
-    drive = _drive()
-    folder_id = _get_or_create_folder(drive)
-    backups = _list_backups(drive, folder_id)
+    """S3 최신 백업 → master.db 복원."""
+    client, bucket = _s3_client()
+    backups = _list_backups(client, bucket)
 
     if not backups:
-        print("[restore] Drive에 백업 없음")
+        print("[restore] S3에 백업 없음")
         return False
 
     latest = backups[0]
-    print(f"[restore] 최신 백업: {latest['name']} ({int(latest.get('size',0))//1024}KB)")
+    print(f"[restore] 최신 백업: {latest['Key']} ({latest['Size']//1024}KB, {latest['LastModified']})")
 
     if dry_run:
         print("  [dry-run] 복원 스킵")
         return True
 
     # 다운로드
-    from googleapiclient.http import MediaIoBaseDownload
-    request = drive.files().get_media(fileId=latest["id"])
-    buf = io.BytesIO()
-    downloader = MediaIoBaseDownload(buf, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    buf.seek(0)
-    gz_data = buf.read()
+    resp = client.get_object(Bucket=bucket, Key=latest["Key"])
+    gz_data = resp["Body"].read()
 
     # gunzip → SQL
     sql_text = gzip.decompress(gz_data).decode("utf-8")
@@ -192,10 +187,18 @@ def restore(dry_run: bool = False) -> bool:
         conn = sqlite3.connect(tmp_path)
         conn.executescript(sql_text)
         conn.commit()
-        # 검증
-        cand = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+        # 검증 — 3개 필수 테이블 모두 확인
+        counts = {}
+        for t in ("candidates", "jobs", "client_inquiries"):
+            try:
+                counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            except Exception:
+                counts[t] = 0
         conn.close()
-        print(f"  검증: candidates={cand}행")
+        print(f"  검증: {counts}")
+        # 어느 필수 테이블이든 0이면 부분 복원 경고
+        if any(v == 0 for v in counts.values()):
+            print("  [WARN] 일부 테이블 비어있음 — 백업 덤프 확인 필요")
         os.replace(tmp_path, db_str)
         print(f"  [restore] 완료 ✓")
 
@@ -213,24 +216,24 @@ def restore(dry_run: bool = False) -> bool:
 
 
 def status() -> None:
-    """Drive 백업 목록 출력."""
-    drive = _drive()
-    folder_id = _get_or_create_folder(drive)
-    backups = _list_backups(drive, folder_id)
-    if not backups:
-        print("Drive에 백업 없음")
+    """S3 백업 목록 출력."""
+    try:
+        client, bucket = _s3_client()
+    except RuntimeError as e:
+        print(f"[status] {e}")
         return
-    print(f"Drive 백업 목록 ({len(backups)}개):")
-    for i, b in enumerate(backups):
-        mark = " ← 최신" if i == 0 else ""
-        size_kb = int(b.get("size", 0)) // 1024
-        print(f"  {i+1:2d}. {b['name']}  {size_kb}KB  {b['createdTime'][:16]}{mark}")
+    backups = _list_backups(client, bucket)
+    if not backups:
+        print(f"[status] S3://{bucket}/{S3_PREFIX} 에 백업 없음")
+        return
+    print(f"S3 백업 목록 ({len(backups)}개, bucket={bucket}):")
+    for i, b in enumerate(backups[:20], 1):
+        marker = " ← 최신" if i == 1 else ""
+        print(f"  {i:2d}. {b['Key']}  {b['Size']//1024}KB  {b['LastModified'].strftime('%Y-%m-%dT%H:%M')}{marker}")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="BRIDGE DB ↔ Google Drive")
+def main():
+    p = argparse.ArgumentParser()
     p.add_argument("cmd", choices=["backup", "restore", "status"])
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
@@ -241,5 +244,9 @@ if __name__ == "__main__":
     elif args.cmd == "restore":
         ok = restore(dry_run=args.dry_run)
         sys.exit(0 if ok else 1)
-    elif args.cmd == "status":
+    else:
         status()
+
+
+if __name__ == "__main__":
+    main()

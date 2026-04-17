@@ -475,37 +475,28 @@ def _startup_db_health_check() -> None:
         if not need_restore:
             return
 
-        # DB 비어있음 → 복원 시도 (gcp_service_account.json 또는 GCP_SA_JSON_B64)
-        _log.warning("[STARTUP] DB 비어있음 — Google Drive 복원 시도")
+        # DB 비어있음 → S3 백업에서 복원 시도
+        _log.warning("[STARTUP] DB 필수 테이블 부족 — S3 자동 복원 시도")
 
-        # Render 환경변수 GCP_SA_JSON_B64 → 파일로 복원
-        sa_json_b64 = os.getenv("GCP_SA_JSON_B64", "").strip()
-        sa_path = Path(__file__).resolve().parent / "gcp_service_account.json"
-        if sa_json_b64 and not sa_path.exists():
-            try:
-                import base64
-                sa_path.write_bytes(base64.b64decode(sa_json_b64))
-                os.chmod(str(sa_path), 0o600)
-                _log.info("[STARTUP] gcp_service_account.json 환경변수에서 복원")
-            except Exception as e:
-                _log.error("[STARTUP] SA JSON 복원 실패: %s", e)
-
-        if not sa_path.exists():
+        # S3 환경변수 확인 (이력서 업로드와 동일 크레덴셜)
+        if not all([os.getenv("AWS_ACCESS_KEY_ID"),
+                    os.getenv("AWS_SECRET_ACCESS_KEY"),
+                    os.getenv("AWS_S3_BUCKET")]):
             _log.error(
-                "[STARTUP] gcp_service_account.json 없음 — 자동 복원 불가. "
-                "Render 대시보드에 GCP_SA_JSON_B64 환경변수 추가 필요."
+                "[STARTUP] S3 환경변수 미설정 — 자동 복원 불가. "
+                "Render 대시보드에 AWS_ACCESS_KEY_ID/SECRET/BUCKET 확인 필요."
             )
             return
 
-        # db_persist.restore() 호출 (Google Drive 최신 백업에서)
+        # db_persist.restore() 호출 (S3 최신 백업에서)
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from tools.db_persist import restore as _drive_restore
-            ok_flag = _drive_restore(dry_run=False)
+            from tools.db_persist import restore as _s3_restore
+            ok_flag = _s3_restore(dry_run=False)
             if ok_flag:
-                _log.warning("[STARTUP] ✓ Google Drive 자동 복원 완료")
+                _log.warning("[STARTUP] ✓ S3 자동 복원 완료")
             else:
-                _log.error("[STARTUP] Google Drive 복원 실패 — 수동 복원 필요")
+                _log.error("[STARTUP] S3 복원 실패 — 수동 복원 필요")
         except Exception as e:
             _log.error("[STARTUP] db_persist.restore 실패: %s", e, exc_info=True)
     except Exception as e:
@@ -12960,6 +12951,47 @@ async def admin_db_stats(request: Request):
         return ok(data=stats, message="DB 통계")
     finally:
         conn.close()
+
+
+@app.post("/api/admin/db/backup", tags=["admin"])
+async def admin_db_backup(request: Request):
+    """현재 Render master.db → S3 백업 (admin 트리거).
+    환경변수 AWS_ACCESS_KEY_ID/SECRET/BUCKET 필요.
+    """
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.db_persist import backup as _s3_backup
+        ok_flag = _s3_backup(dry_run=False)
+        if ok_flag:
+            return ok(message="S3 백업 완료", data={"status": "uploaded"})
+        raise HTTPException(500, "백업 실패 — 로그 확인")
+    except RuntimeError as e:
+        raise HTTPException(503, f"S3 미설정: {e}")
+    except Exception as e:
+        logging.getLogger("bridge.api").error("[BACKUP] 실패: %s", e, exc_info=True)
+        raise HTTPException(500, f"백업 오류: {e}")
+
+
+@app.get("/api/admin/db/backup-list", tags=["admin"])
+async def admin_db_backup_list(request: Request):
+    """S3 백업 목록 조회."""
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.db_persist import _s3_client, _list_backups
+        client, bucket = _s3_client()
+        items = _list_backups(client, bucket)
+        data = [{
+            "key": it["Key"],
+            "size_kb": it["Size"] // 1024,
+            "modified": it["LastModified"].isoformat(),
+        } for it in items[:20]]
+        return ok(data={"bucket": bucket, "count": len(items), "items": data})
+    except RuntimeError as e:
+        raise HTTPException(503, f"S3 미설정: {e}")
+    except Exception as e:
+        raise HTTPException(500, f"조회 실패: {e}")
 
 
 @app.post("/api/admin/db/restore", tags=["admin"])
