@@ -129,13 +129,13 @@ function mapCandidateToRow(c: Record<string, unknown>, idx: number, edits: Recor
     name: String(c.full_name ?? ''),
     mgtNum: cid.slice(-4),
     arc: String(c.arc_holders ?? ''),
-    nationality: String(c.nationality ?? ''),
+    nationality: String(c.nationality_plain || c.nationality || ''),
     background: String(c.ancestry ?? ''),
     age: String(c.dob ?? ''),
     gender: String(c.gender ?? ''),
     currentLoc: String(c.current_location ?? ''),
     startDate: String(c.start_date ?? ''),
-    university: String(c.target ?? ''),
+    university: String(c.target ?? c.target_age ?? ''),
     prefRegion: String(c.area_prefs ?? ''),
     reference: ov.reference ?? String(c.reference ?? ''),
     totalExp: String(c.experience ?? ''),
@@ -750,18 +750,39 @@ export default function BridgeAdminSheet() {
         </div>
       </div>
 
-      {/* 탭 */}
-      <div style={{ background: '#fff', display: 'flex', borderBottom: '2px solid ' + (cti?.color || '#e2e8f0'), flexShrink: 0 }}>
-        {TABS.map(t => { const ia = tab === t.key; return (
-          <button key={t.key} onClick={() => { setTab(t.key); setSel(new Set()); setFi({}) }}
-            style={{ flex: 1, padding: '9px 8px', fontSize: 13, fontWeight: ia ? 700 : 400, border: 'none', borderBottom: ia ? '2px solid ' + t.color : '2px solid transparent', background: ia ? t.bg : '#fff', color: ia ? t.accent : '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}>
-            {t.label}
-            <span style={{ fontSize: 11, fontWeight: 600, background: ia ? t.color : '#f1f5f9', color: ia ? '#fff' : '#64748b', padding: '1px 7px', borderRadius: 10 }}>{cnt[t.key]}</span>
-          </button>
-        )})}
+      {/* 상단 탭 제거됨 — 하단 gs-tabs-bottom 으로 이동 */}
+
+      {/* 구글시트 스타일 툴바 */}
+      <div style={{ background: '#f1f3f4', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, borderBottom: '1px solid #c0c0c0', flexShrink: 0, flexWrap: 'wrap', fontSize: 13 }}>
+        <button onClick={undo} disabled={!undoStack.length} title="되돌리기 (Ctrl+Z)"
+          style={{ padding: '4px 8px', fontSize: 14, border: 'none', borderRadius: 4, background: undoStack.length ? 'transparent' : 'transparent', color: undoStack.length ? '#202124' : '#bdc1c6', cursor: undoStack.length ? 'pointer' : 'default' }}>↶</button>
+        <button disabled title="다시실행 (Ctrl+Y)"
+          style={{ padding: '4px 8px', fontSize: 14, border: 'none', borderRadius: 4, background: 'transparent', color: '#bdc1c6', cursor: 'default' }}>↷</button>
+        <span style={{ borderLeft: '1px solid #dadce0', height: 18, margin: '0 4px' }} />
+        <button disabled title="굵게 (Ctrl+B)"
+          style={{ padding: '4px 10px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 4, background: 'transparent', color: '#bdc1c6', cursor: 'default' }}>B</button>
+        <button disabled title="기울임 (Ctrl+I)"
+          style={{ padding: '4px 10px', fontSize: 13, fontStyle: 'italic', border: 'none', borderRadius: 4, background: 'transparent', color: '#bdc1c6', cursor: 'default' }}>I</button>
+        <span style={{ borderLeft: '1px solid #dadce0', height: 18, margin: '0 4px' }} />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="⌕ 검색..."
+          style={{ padding: '4px 10px', fontSize: 13, border: '1px solid #dadce0', borderRadius: 4, outline: 'none', width: 200, background: '#fff' }} />
+        <span style={{ borderLeft: '1px solid #dadce0', height: 18, margin: '0 4px' }} />
+        <span style={{ fontSize: 12, color: '#5f6368' }}>열고정:</span>
+        <select value={frozenCols} onChange={e => setFC(Number(e.target.value))}
+          style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid #dadce0', background: '#fff' }}>
+          {[0, 1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {hdn > 0 && <button onClick={() => setCols(p => p.map(c => ({ ...c, v: true })))}
+          style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #1a73e8', borderRadius: 4, background: '#e8f0fe', color: '#1a73e8', cursor: 'pointer' }}>숨긴{hdn}열 표시</button>}
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#5f6368' }}>진행:</span>
+          {STAGES.filter(s => s.key !== 'none').map(s => <span key={s.key}
+            style={{ fontSize: 11, padding: '2px 8px', borderRadius: 3, background: s.color, color: s.text }}>{s.label}</span>)}
+        </div>
       </div>
 
-      {/* 툴바 */}
+      {/* 기존 툴바 (숨김) */}
+      <div style={{ display: 'none' }}>
       <div style={{ background: '#f8fafc', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e2e8f0', flexShrink: 0, flexWrap: 'wrap' }}>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="⌕ 검색..." style={{ padding: '8px 14px', fontSize: 15, border: '2px solid #cbd5e1', borderRadius: 8, outline: 'none', width: 220 }} />
         <span style={{ fontSize: 14, fontWeight: 700 }}>열고정:</span>
@@ -773,6 +794,7 @@ export default function BridgeAdminSheet() {
           <span style={{ fontSize: 14, fontWeight: 700 }}>색:</span>
           {STAGES.filter(s => s.key !== 'none').map(s => <span key={s.key} style={{ fontSize: 13, padding: '4px 10px', borderRadius: 6, background: s.color, color: s.text }}>{s.label}</span>)}
         </div>
+      </div>
       </div>
 
       {/* 전체 탭: AG Grid + 스크롤 기반 append 로드 */}

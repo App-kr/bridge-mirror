@@ -100,10 +100,22 @@ function NewBadgeRenderer({ value }: ICellRendererParams) {
   return <span>{v}</span>
 }
 
+/* ─── Alphabet header helper (A, B, ..., Z, AA, AB, ...) ─── */
+function colLetter(i: number): string {
+  let s = ''
+  i += 1
+  while (i > 0) {
+    const m = (i - 1) % 26
+    s = String.fromCharCode(65 + m) + s
+    i = Math.floor((i - 1) / 26)
+  }
+  return s
+}
+
 /* ─── Column definitions ─── */
 function buildColDefs(): ColDef[] {
   const base: Array<{ field: string; headerName: string; width: number; pinned?: 'left'; cellRenderer?: string }> = [
-    { field: 'rowNum',       headerName: '#',         width: 52,  pinned: 'left' },
+    { field: 'rowNum',       headerName: '#',         width: 50,  pinned: 'left' },
     { field: 'email',        headerName: '메일',       width: 200, pinned: 'left' },
     { field: 'name',         headerName: '이름',       width: 140, pinned: 'left' },
     { field: 'photoUrl',     headerName: '사진',       width: 60,  cellRenderer: 'photoRenderer' },
@@ -157,7 +169,8 @@ function buildColDefs(): ColDef[] {
 
   return base.map((c, i) => ({
     field: c.field,
-    headerName: c.headerName,
+    // 구글시트 스타일 2줄 헤더: 알파벳(A,B,C...) + 한글 라벨
+    headerName: c.field === 'rowNum' ? '#' : `${colLetter(i - 1)}  ${c.headerName}`,
     width: c.width,
     pinned: c.pinned,
     cellRenderer: c.cellRenderer,
@@ -166,11 +179,14 @@ function buildColDefs(): ColDef[] {
     resizable: true,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     valueGetter: c.field === 'rowNum' ? (p: any) => (p.node?.rowIndex ?? 0) + 1 : undefined,
-    suppressMovable: false,
+    suppressMovable: c.field === 'rowNum',
+    lockPosition: c.field === 'rowNum' ? 'left' : undefined,
+    lockPinned: c.field === 'rowNum',
     headerTooltip: c.headerName,
-    // 이메일, 이름은 bold
-    cellStyle: (i < 3) ? { fontWeight: 700 } : undefined,
-  }))
+    cellStyle: c.field === 'rowNum'
+      ? ({ backgroundColor: '#f8f9fa', color: '#5f6368', textAlign: 'center', fontSize: 11 } as Record<string, string | number>)
+      : (i < 3) ? ({ fontWeight: 700 } as Record<string, string | number>) : undefined,
+  })) as ColDef[]
 }
 
 /* ─── Main Component ─── */
