@@ -23,7 +23,7 @@ LOG_PATH  = BASE_DIR / "logs" / "db_sync.log"
 LOCK_PATH = BASE_DIR / "logs" / "db_sync.lock"
 POLL_SEC       = 5       # 감시 주기 (초)
 DEBOUNCE       = 15      # 변경 후 대기 (초) — 연속 쓰기 마무리 대기
-HEALTH_INTERVAL = 1800   # Render DB 헬스체크 주기 (30분) — 배포 후 초기화 감지
+HEALTH_INTERVAL = 300    # Render DB 헬스체크 주기 (5분) — cold start/배포 후 빠른 복원
 RENDER_API = "https://bridge-n7hk.onrender.com"
 
 sys.path.insert(0, str(BASE_DIR))

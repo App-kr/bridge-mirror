@@ -38,4 +38,9 @@ services:
         value: bridgejobkr@naver.com
       - key: NAVER_SMTP_PASS
         sync: false
+      # Google Drive DB 자동 복원용 (base64 인코딩된 service account JSON)
+      # 설정 방법: `certutil -encode gcp_service_account.json tmp.b64` 로 base64 생성 후
+      #           Render 대시보드 → Environment → GCP_SA_JSON_B64 값으로 붙여넣기
+      - key: GCP_SA_JSON_B64
+        sync: false
     # disk: 미연결 (Render free plan 미지원 — 유료 플랜 업그레이드 필요)

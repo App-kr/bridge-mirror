@@ -437,6 +437,80 @@ app = FastAPI(
     default_response_class=SafeJSONResponse,
 )
 
+
+# ── Startup: DB 무결성 검사 + 자동 복원 ─────────────────────────────────────
+def _startup_db_health_check() -> None:
+    """서버 시작 시 candidates 테이블이 비어있으면 Google Drive에서 자동 복원.
+    Render free tier는 컨테이너가 ephemeral이라 배포/cold-start 후 DB 초기화될 수 있음.
+    비블로킹: 백그라운드 스레드로 실행 (Render startup timeout 회피).
+    """
+    _log = logging.getLogger("bridge.startup")
+    try:
+        db_path = os.getenv("BRIDGE_DB_PATH") or os.getenv("DB_PATH") or str(_ADMIN_DB_PATH)
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA busy_timeout = 3000")
+        try:
+            # 테이블 존재 확인
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()}
+            if "candidates" not in tables:
+                _log.warning("[STARTUP] candidates 테이블 없음 → 복원 시도")
+                cand_count = 0
+            else:
+                cand_count = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+        finally:
+            conn.close()
+
+        _log.info("[STARTUP] candidates 카운트: %d", cand_count)
+        if cand_count > 0:
+            return
+
+        # DB 비어있음 → 복원 시도 (gcp_service_account.json 또는 GCP_SA_JSON_B64)
+        _log.warning("[STARTUP] DB 비어있음 — Google Drive 복원 시도")
+
+        # Render 환경변수 GCP_SA_JSON_B64 → 파일로 복원
+        sa_json_b64 = os.getenv("GCP_SA_JSON_B64", "").strip()
+        sa_path = Path(__file__).resolve().parent / "gcp_service_account.json"
+        if sa_json_b64 and not sa_path.exists():
+            try:
+                import base64
+                sa_path.write_bytes(base64.b64decode(sa_json_b64))
+                os.chmod(str(sa_path), 0o600)
+                _log.info("[STARTUP] gcp_service_account.json 환경변수에서 복원")
+            except Exception as e:
+                _log.error("[STARTUP] SA JSON 복원 실패: %s", e)
+
+        if not sa_path.exists():
+            _log.error(
+                "[STARTUP] gcp_service_account.json 없음 — 자동 복원 불가. "
+                "Render 대시보드에 GCP_SA_JSON_B64 환경변수 추가 필요."
+            )
+            return
+
+        # db_persist.restore() 호출 (Google Drive 최신 백업에서)
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from tools.db_persist import restore as _drive_restore
+            ok_flag = _drive_restore(dry_run=False)
+            if ok_flag:
+                _log.warning("[STARTUP] ✓ Google Drive 자동 복원 완료")
+            else:
+                _log.error("[STARTUP] Google Drive 복원 실패 — 수동 복원 필요")
+        except Exception as e:
+            _log.error("[STARTUP] db_persist.restore 실패: %s", e, exc_info=True)
+    except Exception as e:
+        _log.error("[STARTUP] DB 헬스체크 실패: %s", e, exc_info=True)
+
+
+@app.on_event("startup")
+async def _startup_event():
+    """FastAPI startup hook — 비블로킹 백그라운드 DB 헬스체크."""
+    try:
+        threading.Thread(target=_startup_db_health_check, daemon=True).start()
+    except Exception as e:
+        logging.getLogger("bridge.startup").error("[STARTUP] 스레드 시작 실패: %s", e)
+
 # ── 글로벌 HTTPException 핸들러 — 모든 에러를 구조화된 JSON으로 자동 변환 ───
 # 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}
 # 이미 구조화된 detail(dict)은 그대로 통과. 향후 새 엔드포인트도 자동 적용.
