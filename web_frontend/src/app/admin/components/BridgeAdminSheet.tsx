@@ -853,7 +853,7 @@ export default function BridgeAdminSheet() {
                     {rnCol === col.key
                       ? <input value={rnVal} onChange={e => setRnVal(e.target.value)} onBlur={() => { setCols(p => p.map(c => c.key === rnCol ? { ...c, label: rnVal } : c)); setRnCol(null) }} onKeyDown={e => { if (e.key === 'Enter') { setCols(p => p.map(c => c.key === rnCol ? { ...c, label: rnVal } : c)); setRnCol(null) } if (e.key === 'Escape') setRnCol(null) }} autoFocus style={{ width: '100%', fontSize: 13, border: '2px solid #2563eb', padding: '2px', textAlign: 'center', fontWeight: 800, borderRadius: 3, boxSizing: 'border-box' }} />
                       : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, flexWrap: 'wrap' }}>
-                          <span onClick={() => !['rowNum', 'photo', 'mailAction', 'mailStatus', 'stage'].includes(col.key) && col.type !== 'dropdown' && tS(col.key)} style={{ cursor: 'pointer' }}>{col.label}</span>
+                          <span className="gs-th-label" onClick={() => !['rowNum', 'photo', 'mailAction', 'mailStatus', 'stage'].includes(col.key) && col.type !== 'dropdown' && tS(col.key)} style={{ cursor: 'pointer' }}>{`${String.fromCharCode(65 + (i % 26))}\n${col.label}`}</span>
                           {sk === col.key && <span style={{ fontSize: 10, color: '#2563eb' }}>{sd === 'asc' ? '▲' : '▼'}</span>}
                           {!['rowNum', 'photo', 'mailAction', 'stage'].includes(col.key) && col.type !== 'dropdown' && <span onClick={e => { e.stopPropagation(); setShowFi(showFi === col.key ? null : col.key) }} style={{ cursor: 'pointer', fontSize: 10, color: hf ? '#2563eb' : '#94a3b8' }}>▼</span>}
                         </div>}
