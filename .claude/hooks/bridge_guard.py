@@ -95,6 +95,27 @@ BASH_RULES: list[tuple[str, str, bool]] = [
 
     # master.db 직접 삭제 — 명령 경계
     (r"(?:^|&&|\|\||;|\n)\s*(rm|del).+master\.db\b", "master.db 삭제 시도 차단", True),
+
+    # ── Quanta Spot 유형 악성코드 패턴 (2026-04-18 추가) ─────────────────────
+    # AppData\Roaming 하위 .exe 실행 차단 (악성코드 위장 위치)
+    (r"AppData[/\\]Roaming[/\\].+\.exe\b", "AppData\\Roaming .exe 실행 차단 (악성코드 위장 패턴)", True),
+    # AppData\Local 하위 비정상 .exe 실행 차단 (Programs/Microsoft/Google/npm 제외)
+    (r"AppData[/\\]Local[/\\](?!Programs|Microsoft|Google|npm).+\.exe\b",
+     "AppData\\Local 비허용 경로 .exe 실행 차단", True),
+
+    # 예약 태스크 등록 차단 (Quanta Spot 지속성 패턴)
+    (r"schtasks\s+/create\b", "schtasks /create 예약 태스크 등록 차단", True),
+    (r"New-ScheduledTask\b", "New-ScheduledTask 예약 태스크 등록 차단", True),
+    (r"Register-ScheduledTask\b", "Register-ScheduledTask 예약 태스크 등록 차단", True),
+
+    # PowerShell 난독화 실행 차단 (base64+zlib Azure.log 패턴)
+    (r"powershell\b.*(?:-EncodedCommand|-enc)\s+[A-Za-z0-9+/]{40,}", "PowerShell 인코딩 명령 실행 차단", True),
+    (r"\[System\.Convert\]::FromBase64String", "PowerShell Base64 디코드 실행 차단", True),
+    (r"(?:^|&&|\|\||;|\n)\s*IEX\s*\(", "IEX 실행 차단", True),
+
+    # 민감 크리덴셜 파일 직접 읽기 경고
+    (r"(?:cat|type|Get-Content|gc\b)\s+.*(?:\.env|\.bridge\.key|\.rpa_vault|settings\.local\.json)\b",
+     "크리덴셜 파일 직접 읽기 감지 (경고)", False),
 ]
 
 
