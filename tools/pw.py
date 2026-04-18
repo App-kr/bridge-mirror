@@ -409,7 +409,7 @@ def main():
 
     root = tk.Tk()
     root.title("BX Credential Manager")
-    root.geometry("460x580")
+    root.geometry("480x660")
     root.resizable(False, False)
     root.configure(bg="#1a1a2e")
     root.attributes("-topmost", True)
@@ -453,14 +453,22 @@ def main():
     frame.pack(padx=30, fill="x", pady=(8, 0))
 
     # ── 서비스 선택 ────────────────────────────────────────────────────────
-    tk.Label(frame, text="서비스 선택", font=("Segoe UI", 10),
-             fg="#aaaaaa", bg="#1a1a2e", anchor="w").pack(fill="x")
+    tk.Label(frame, text="저장할 서비스 선택", font=("Segoe UI", 10, "bold"),
+             fg="#cccccc", bg="#1a1a2e", anchor="w").pack(fill="x")
 
     preset_names = [p[0] for p in PRESETS]
     combo = ttk.Combobox(frame, values=preset_names, state="readonly",
                          font=("Segoe UI", 10), width=38)
     combo.set(preset_names[0])
-    combo.pack(pady=(2, 8), fill="x")
+    combo.pack(pady=(2, 4), fill="x", ipady=2)
+
+    # 선택된 서비스명 크게 표시
+    selected_svc_var = tk.StringVar(value=preset_names[0])
+    selected_svc_lbl = tk.Label(frame, textvariable=selected_svc_var,
+                                font=("Segoe UI", 12, "bold"),
+                                fg="#4fc3f7", bg="#1a1a2e", anchor="w",
+                                wraplength=380)
+    selected_svc_lbl.pack(fill="x", pady=(0, 6))
 
     custom_frame = tk.Frame(frame, bg="#1a1a2e")
     custom_lbl   = tk.Label(custom_frame, text="BX 키 이름", font=("Segoe UI", 10),
@@ -471,6 +479,7 @@ def main():
 
     def on_combo_change(event=None):
         idx = combo.current()
+        selected_svc_var.set(PRESETS[idx][0])
         if PRESETS[idx][1] == "":
             custom_frame.pack(fill="x", pady=(0, 5))
             custom_lbl.pack(fill="x")
@@ -486,21 +495,24 @@ def main():
 
     # ── 해시 체크박스 ──────────────────────────────────────────────────────
     hash_var = tk.BooleanVar(value=True)
-    tk.Checkbutton(frame, text="pbkdf2 해시 저장 (비밀번호용)",
-                   variable=hash_var, font=("Segoe UI", 9),
-                   fg="#888888", bg="#1a1a2e", selectcolor="#16213e",
-                   activebackground="#1a1a2e", activeforeground="#cccccc"
-                   ).pack(anchor="w", pady=(5, 5))
+    hash_chk = tk.Checkbutton(frame,
+                   text="pbkdf2 해시 저장   ← 일반 비밀번호만 체크 / API키·토큰은 체크 해제",
+                   variable=hash_var, font=("Segoe UI", 8),
+                   fg="#ff9800", bg="#1a1a2e", selectcolor="#16213e",
+                   activebackground="#1a1a2e", activeforeground="#ffb74d"
+                   )
+    hash_chk.pack(anchor="w", pady=(5, 5))
 
-    # ── 비밀번호 입력 ──────────────────────────────────────────────────────
-    tk.Label(frame, text="새 값", font=("Segoe UI", 10),
-             fg="#cccccc", bg="#1a1a2e", anchor="w").pack(fill="x", pady=(5, 0))
+    # ── 비밀번호 / 값 입력 ────────────────────────────────────────────────
+    pw1_label = tk.Label(frame, text="비밀번호 / 값 입력", font=("Segoe UI", 10, "bold"),
+             fg="#cccccc", bg="#1a1a2e", anchor="w")
+    pw1_label.pack(fill="x", pady=(5, 0))
     pw1 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 11),
                    bg="#16213e", fg="white", insertbackground="white",
                    relief="flat", highlightthickness=1, highlightcolor="#0f3460")
     pw1.pack(fill="x", ipady=4, pady=(2, 5))
 
-    tk.Label(frame, text="확인", font=("Segoe UI", 10),
+    tk.Label(frame, text="비밀번호 재확인", font=("Segoe UI", 10, "bold"),
              fg="#cccccc", bg="#1a1a2e", anchor="w").pack(fill="x")
     pw2 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 11),
                    bg="#16213e", fg="white", insertbackground="white",
