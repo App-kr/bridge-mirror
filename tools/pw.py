@@ -57,7 +57,9 @@ PRESETS = [
     ("Gemini Key — coreabridge@gmail.com",    "GEMINI_KEY_2",          False),
     ("Gemini Key — ferrari812fast@gmail.com", "GEMINI_KEY_3",          False),
     ("Gemini Key — airelair00@gmail.com",     "GEMINI_KEY_4",          False),
-    ("직접 입력",                        "",                      False),
+    ("Render API Token",                      "RENDER_API_TOKEN",      False),
+    ("Render Service ID (bridge-api)",        "RENDER_SERVICE_ID",     False),
+    ("직접 입력",                             "",                      False),
 ]
 
 
@@ -74,6 +76,19 @@ GEMINI_ACCOUNTS = [
 CLAUDEBLOG_SYNC_KEYS = {
     "BRIDGE_NAVER_PW", "MATJOKDO_NAVER_PW", "ANTHROPIC_API_KEY",
     "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3", "GEMINI_KEY_4",
+}
+
+# bx 키 → Render 환경변수명 매핑 (저장 시 Render 자동 푸시 대상)
+RENDER_SYNC_MAP = {
+    "JWT_SECRET":           "JWT_SECRET",
+    "BRIDGE_HMAC_KEY":      "BRIDGE_HMAC_KEY",
+    "ANTHROPIC_API_KEY":    "ANTHROPIC_API_KEY",
+    "TELEGRAM_BOT_TOKEN":   "TELEGRAM_BOT_TOKEN",
+    "BRIDGE_FIELD_KEY":     "BRIDGE_FIELD_KEY",
+    "BRIDGE_SMTP_PASS":     "BRIDGE_SMTP_PASS",
+    "ADMIN_API_KEY":        "ADMIN_API_KEY",
+    "ADMIN_PASSWORD":       "ADMIN_PASSWORD",
+    "WEBHOOK_SECRET":       "WEBHOOK_SECRET",
 }
 
 
@@ -179,6 +194,58 @@ def sync_to_claudeblog() -> tuple[bool, str]:
         return False, "encrypt_programmatic 실패"
     except Exception as e:
         return False, f"동기화 오류: {e}"
+
+
+def sync_to_render(changed_key: str = "", changed_value: str = "") -> tuple[bool, str]:
+    """bx에 저장된 값을 Render 환경변수에 자동 반영."""
+    import urllib.request, urllib.error
+    api_token = read_from_bx("RENDER_API_TOKEN")
+    service_id = read_from_bx("RENDER_SERVICE_ID")
+    if not api_token or not service_id:
+        return False, "RENDER_API_TOKEN 또는 RENDER_SERVICE_ID가 bx에 없습니다.\npw.py에서 먼저 저장하세요."
+    try:
+        # 현재 Render 환경변수 조회
+        req = urllib.request.Request(
+            f"https://api.render.com/v1/services/{service_id}/env-vars",
+            headers={"Authorization": f"Bearer {api_token}", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            current = json.loads(resp.read().decode())
+        # {key: value} dict로 변환
+        env_dict = {item["envVar"]["key"]: item["envVar"]["value"] for item in current}
+        # bx에서 관리 중인 키들을 읽어서 업데이트
+        updated = []
+        for bx_key, render_key in RENDER_SYNC_MAP.items():
+            val = read_from_bx(bx_key)
+            if val and val != env_dict.get(render_key, ""):
+                env_dict[render_key] = val
+                updated.append(render_key)
+        # 방금 저장한 키도 즉시 반영
+        if changed_key in RENDER_SYNC_MAP and changed_value:
+            render_key = RENDER_SYNC_MAP[changed_key]
+            env_dict[render_key] = changed_value
+            if render_key not in updated:
+                updated.append(render_key)
+        if not updated:
+            return True, "변경된 항목 없음 (Render와 동일)"
+        # PUT으로 전체 업데이트
+        payload = json.dumps([{"key": k, "value": v} for k, v in env_dict.items()]).encode()
+        req2 = urllib.request.Request(
+            f"https://api.render.com/v1/services/{service_id}/env-vars",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_token}",
+                "Content-Type": "application/json",
+            },
+            method="PUT",
+        )
+        with urllib.request.urlopen(req2, timeout=15) as resp2:
+            resp2.read()
+        return True, f"Render 동기화 완료\n업데이트된 키: {', '.join(updated)}\n\n* Render Manual Deploy를 실행해야 적용됩니다."
+    except urllib.error.HTTPError as e:
+        return False, f"Render API 오류 ({e.code}): {e.reason}"
+    except Exception as e:
+        return False, f"Render 동기화 오류: {e}"
 
 
 def read_from_bx(key: str) -> str:
@@ -331,6 +398,7 @@ def show_pin_dialog() -> bool:
 def main():
     import tkinter as tk
     from tkinter import ttk, messagebox
+    sys.path.insert(0, str(BASE_DIR))
     from tools.bx import has_master_pin, migrate_all_to_v2, set_master_pin, derive_pin_key
 
     # PIN 인증
@@ -496,6 +564,10 @@ def main():
             # ClaudeBlog 자동 동기화 (관련 키인 경우)
             if bx_key in CLAUDEBLOG_SYNC_KEYS:
                 root.after(100, _auto_sync_claudeblog)
+            # Render 자동 동기화 (관련 키인 경우)
+            if bx_key in RENDER_SYNC_MAP:
+                raw_val = p1  # 해시 전 원본값
+                root.after(200, lambda v=raw_val, k=bx_key: _auto_sync_render(k, v))
         else:
             messagebox.showerror("오류", "BX 저장 실패")
 
@@ -562,6 +634,36 @@ def main():
     tk.Label(frame, text="* bx에 저장된 값을 ClaudeBlog secrets.enc에 자동 반영",
              font=("Segoe UI", 8), fg="#555566", bg="#1a1a2e",
              anchor="w").pack(fill="x")
+
+    # ── Render 동기화 버튼 ─────────────────────────────────────────────────
+    def on_sync_render():
+        touch_activity()
+        btn_render.config(state="disabled", text="Render 동기화 중...")
+        root.update_idletasks()
+        ok, msg = sync_to_render()
+        status_var.set(f"{'[완료]' if ok else '[오류]'} {msg.split(chr(10))[0]}")
+        status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
+        btn_render.config(state="normal", text="[Render] 환경변수 동기화 (JWT/HMAC/API Keys)")
+        if ok:
+            messagebox.showinfo("Render 동기화 완료", msg)
+
+    btn_render = tk.Button(frame,
+                           text="[Render] 환경변수 동기화 (JWT/HMAC/API Keys)",
+                           command=on_sync_render,
+                           font=("Segoe UI", 10), width=38,
+                           bg="#1a2a3a", fg="#88aacc", activebackground="#2a4a6a",
+                           activeforeground="white", relief="flat", cursor="hand2")
+    btn_render.pack(ipady=3, pady=(5, 3))
+    tk.Label(frame, text="* bx 값을 Render 서버 환경변수에 자동 반영 (API Token 필요)",
+             font=("Segoe UI", 8), fg="#555566", bg="#1a1a2e",
+             anchor="w").pack(fill="x")
+
+    # _auto_sync_render 헬퍼
+    def _auto_sync_render(bx_key: str, raw_value: str):
+        ok, msg = sync_to_render(bx_key, raw_value)
+        first = msg.split("\n")[0]
+        status_var.set(f"{'[Render 동기화 완료]' if ok else '[Render 오류]'} {first}")
+        status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
 
     # v2 마이그레이션 버튼 (PIN 설정된 경우만 표시)
     if is_pin_set and _session_pin_key is not None:

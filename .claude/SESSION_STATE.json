@@ -1,12 +1,9 @@
 {
-  "last_updated": "2026-04-19 08:02:18",
-  "last_tool": "Bash",
-  "last_command": "grep -n \"def \\|getpass\\|input(\" \"Q:/Claudework/ClaudeBlog/encrypt_secrets.py\" | head -30",
+  "last_updated": "2026-04-19 08:28:13",
+  "last_tool": "Edit",
+  "last_command": "Edit: Q:\\Claudework\\bridge base\\.claude\\worktrees\\hardcore-franklin-e75ea6\\CLAUDE.md",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\bridge_jobs\\frontend\\app\\admin\\subscriptions\\page.tsx",
-    "Q:\\Claudework\\bridge_jobs\\frontend\\app\\admin\\jobs\\JobsAdminClient.tsx",
-    "Q:\\Claudework\\bridge_jobs\\frontend\\app\\admin\\subscriptions\\SubsAdminClient.tsx",
     "Q:\\openrun_app\\lib\\features\\onboarding\\city_select_screen.dart",
     "Q:\\Claudework\\bridge base\\.claude\\hooks\\bridge_guard.py",
     "Q:\\Claudework\\bridge base\\.claude\\worktrees\\hardcore-franklin-e75ea6\\security_vault.py",
@@ -23,7 +20,10 @@
     "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\MEMORY.md",
     "Q:\\Claudework\\sleep_now.ps1",
     "Q:\\Claudework\\sleep_now.vbs",
-    "Q:\\Claudework\\make_shortcut.ps1"
+    "Q:\\Claudework\\make_shortcut.ps1",
+    "Q:\\Claudework\\ClaudeBlog\\encrypt_secrets.py",
+    "Q:\\Claudework\\bridge base\\CLAUDE.md",
+    "Q:\\Claudework\\bridge base\\.claude\\worktrees\\hardcore-franklin-e75ea6\\CLAUDE.md"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
   "git_changed": [
