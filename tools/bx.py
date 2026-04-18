@@ -22,6 +22,8 @@ import sys
 import os
 import json
 import hashlib
+import hmac
+import struct
 import getpass
 import ctypes
 import ctypes.wintypes
@@ -185,6 +187,130 @@ def cmd_import_json(args):
         n += 1
         print(f"  + {k}")
     print(f"  Imported {n} keys")
+
+# ── PIN 2중 암호화 (v2) — DPAPI + PIN 파생 키 ──────────────────────────────
+_V2_MAGIC      = b"BXv2"
+_PIN_HASH_FILE = os.path.join(_BX_DIR, ".pinlock")
+_KEY_SALT_FILE = os.path.join(_BX_DIR, ".keysalt")
+
+
+def _get_or_create_key_salt() -> bytes:
+    """설치별 고유 salt — .bx 디렉터리와 함께 이동 가능"""
+    if os.path.exists(_KEY_SALT_FILE):
+        with open(_KEY_SALT_FILE, "rb") as f:
+            return f.read()
+    salt = os.urandom(32)
+    _ensure_dir()
+    with open(_KEY_SALT_FILE, "wb") as f:
+        f.write(salt)
+    return salt
+
+
+def _stream_cipher(key: bytes, nonce: bytes, length: int) -> bytes:
+    """HMAC-SHA256 기반 스트림 암호 (외부 라이브러리 불필요)"""
+    ks, counter = b"", 0
+    while len(ks) < length:
+        ks += hmac.new(key, nonce + struct.pack(">Q", counter), "sha256").digest()
+        counter += 1
+    return ks[:length]
+
+
+def _pin_encrypt(data: bytes, pin_key: bytes) -> bytes:
+    """PIN 키로 암호화: BXv2 magic + nonce(16) + MAC(32) + ciphertext"""
+    nonce = os.urandom(16)
+    ks    = _stream_cipher(pin_key, nonce, len(data))
+    ct    = bytes(a ^ b for a, b in zip(data, ks))
+    mac   = hmac.new(pin_key, nonce + ct, "sha256").digest()
+    return _V2_MAGIC + nonce + mac + ct
+
+
+def _pin_decrypt(data: bytes, pin_key: bytes) -> bytes:
+    """PIN 키로 복호화 + MAC 검증 (MAC 불일치 → 즉시 오류)"""
+    if not data.startswith(_V2_MAGIC):
+        raise ValueError("v2 포맷 아님")
+    body          = data[4:]
+    nonce, mac, ct = body[:16], body[16:48], body[48:]
+    expected = hmac.new(pin_key, nonce + ct, "sha256").digest()
+    if not hmac.compare_digest(mac, expected):
+        raise ValueError("PIN 오류 또는 데이터 변조")
+    ks = _stream_cipher(pin_key, nonce, len(ct))
+    return bytes(a ^ b for a, b in zip(ct, ks))
+
+
+def set_master_pin(pin: str):
+    """마스터 PIN을 PBKDF2-SHA256 (600k iterations) 으로 해시 저장"""
+    _ensure_dir()
+    salt  = os.urandom(16).hex()
+    iters = 600_000
+    dk    = hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt.encode(), iters)
+    with open(_PIN_HASH_FILE, "w") as f:
+        json.dump({"salt": salt, "iters": iters, "dk": dk.hex(), "v": 1}, f)
+
+
+def verify_master_pin(pin: str) -> bool:
+    """PIN 검증. PIN 미설정 시 항상 True 반환."""
+    if not os.path.exists(_PIN_HASH_FILE):
+        return True
+    with open(_PIN_HASH_FILE) as f:
+        d = json.load(f)
+    dk = hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), d["salt"].encode(), d["iters"])
+    return hmac.compare_digest(dk.hex(), d["dk"])
+
+
+def has_master_pin() -> bool:
+    return os.path.exists(_PIN_HASH_FILE)
+
+
+def derive_pin_key(pin: str) -> bytes:
+    """PIN → 32바이트 암호화 키 파생 (PBKDF2, 300k iterations, 설치별 salt)"""
+    salt = _get_or_create_key_salt()
+    return hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, 300_000, dklen=32)
+
+
+def _store_v2(name: str, value: str, pin_key: bytes):
+    """v2 이중 암호화: PIN → DPAPI 순서로 래핑"""
+    _ensure_dir()
+    pin_enc  = _pin_encrypt(value.encode("utf-8"), pin_key)
+    dpapi_enc = _encrypt(pin_enc)
+    with open(_path(name), "wb") as f:
+        f.write(dpapi_enc)
+
+
+def _read_auto(name: str, pin_key: bytes | None = None) -> str | None:
+    """v1(DPAPI 전용) / v2(DPAPI+PIN) 자동 판별 후 복호화"""
+    p = _path(name)
+    if not os.path.exists(p):
+        return None
+    with open(p, "rb") as f:
+        enc = f.read()
+    dpapi_dec = _decrypt(enc)
+    if dpapi_dec.startswith(_V2_MAGIC):
+        if pin_key is None:
+            raise ValueError("v2 항목은 PIN 키 필요")
+        return _pin_decrypt(dpapi_dec, pin_key).decode("utf-8")
+    return dpapi_dec.decode("utf-8")
+
+
+def migrate_all_to_v2(pin_key: bytes) -> int:
+    """기존 v1(DPAPI 전용) 항목을 전부 v2로 재암호화. 완료 건수 반환."""
+    migrated = 0
+    for key in MANAGED:
+        try:
+            p = _path(key)
+            if not os.path.exists(p):
+                continue
+            with open(p, "rb") as f:
+                raw = f.read()
+            dpapi_dec = _decrypt(raw)
+            if dpapi_dec.startswith(_V2_MAGIC):
+                continue  # 이미 v2
+            val = dpapi_dec.decode("utf-8")
+            _store_v2(key, val, pin_key)
+            migrated += 1
+        except Exception:
+            pass
+    return migrated
+
 
 # ── api_server.py / main.py 에서 import 용 ─────────────────────────────────
 def load_to_env():
