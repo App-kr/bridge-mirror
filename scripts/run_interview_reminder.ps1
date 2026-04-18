@@ -3,12 +3,29 @@
 # 보안: .env 파일에서 SMTP 크리덴셜 로드
 
 $ProjectRoot = "Q:\Claudework\bridge base"
+$PythonExe  = "Q:\Phtyon 3\python.exe"
+$LogFile    = "$ProjectRoot\logs\interview_reminder.log"
 
-Set-Location $ProjectRoot
+function Write-RLog($msg) {
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $LogFile -Value "[$ts] $msg" -Encoding UTF8
+}
+
+if (-not (Test-Path $PythonExe)) {
+    Write-RLog "SKIP: python not found at $PythonExe"
+    exit 0
+}
 
 try {
-    & python tools/interview_reminder.py 2>&1 | Out-Null
+    # -WindowStyle Hidden: 콘솔 창 없이 백그라운드 실행
+    $p = Start-Process `
+        -FilePath $PythonExe `
+        -ArgumentList "-X utf8 `"$ProjectRoot\tools\interview_reminder.py`"" `
+        -WorkingDirectory $ProjectRoot `
+        -WindowStyle Hidden `
+        -PassThru `
+        -ErrorAction Stop
+    $p.WaitForExit(30000)   # 최대 30초 대기
 } catch {
-    $errTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path "$ProjectRoot\logs\interview_reminder.log" -Value "[$errTime] RUNNER ERROR: $_" -Encoding UTF8
+    Write-RLog "RUNNER ERROR: $_"
 }
