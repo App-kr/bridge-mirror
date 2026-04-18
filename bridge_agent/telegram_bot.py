@@ -491,10 +491,281 @@ async def _handle_claude_cli(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await update.message.reply_text(chunk)
 
 
-# ── Message Handlers ──────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# ── 대화형 명령 시스템 ─────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+_BASE = Path(__file__).resolve().parent.parent
+_PY   = str(_BASE.parent.parent / "Phtyon 3" / "python.exe")
+if not Path(_PY).exists():
+    _PY = sys.executable
+
+
+def _run_bg(cmd: list[str], cwd: str | None = None) -> subprocess.Popen:
+    return subprocess.Popen(
+        cmd, cwd=cwd or str(_BASE),
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace",
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+
+
+async def _stream_output(update: Update, proc: subprocess.Popen,
+                         label: str = "") -> int:
+    """프로세스 stdout을 실시간으로 텔레그램에 전송."""
+    buf = []
+    last_send = asyncio.get_event_loop().time()
+
+    def flush_buf():
+        nonlocal last_send
+        if not buf:
+            return
+        chunk = "\n".join(buf[-30:])  # 최근 30줄
+        buf.clear()
+        last_send = asyncio.get_event_loop().time()
+        return chunk
+
+    loop = asyncio.get_event_loop()
+
+    def read_lines():
+        lines = []
+        for line in proc.stdout:
+            lines.append(line.rstrip())
+        return lines
+
+    lines = await loop.run_in_executor(None, read_lines)
+    proc.wait()
+
+    # 결과 요약 전송
+    result_lines = [l for l in lines if any(
+        k in l for k in ["완료", "성공", "✅", "ERROR", "실패", "게시"]
+    )]
+    summary = "\n".join(result_lines[-15:]) if result_lines else "\n".join(lines[-10:])
+    if label:
+        summary = f"{label}\n\n{summary}"
+    await _send_long(update, summary or "(출력 없음)")
+    return proc.returncode
+
+
+async def _detect_intent(text: str) -> dict:
+    """Haiku로 사용자 의도 파악. {intent, params} 반환."""
+    api_key = _get_api_key()
+    if not api_key:
+        return {"intent": "chat", "params": {}}
+
+    system = """BRIDGE 프로젝트 명령 분류기.
+사용자 메시지에서 의도를 파악해 JSON으로만 답하세요.
+
+intent 종류:
+- rpa       : 크레이그리스트 RPA 실행 (게시, 올려, rpa, 포스팅, craigslist)
+- blog      : ClaudeBlog 작업 (블로그, 댓글, 새글, 포스트)
+- matjokdo  : 맛족도 작업 (서이추, 서로이웃, 맛족도, 하트, 댓글달기)
+- server    : 서버/상태 확인 (서버, 점검, 상태, 브릿지, health, status)
+- rpa_stats : 오늘 RPA 게시 통계 (몇 건, 통계, 오늘 결과)
+- chat      : 일반 대화 (그 외)
+
+params 예시:
+- rpa: {"accounts": ["account1","account2"], "limit": 5}
+  (계정 지정 없으면 accounts=["account1","account2","account3","account4"], limit=5)
+  (숫자 언급 시 limit 반영, "account1만" → accounts=["account1"])
+- blog: {"task": "댓글확인"} or {"task": "새글작성"}
+- matjokdo: {"task": "서이추체크"} or {"task": "댓글"}
+
+JSON만 반환. 예:
+{"intent":"rpa","params":{"accounts":["account1"],"limit":10}}
+{"intent":"server","params":{}}
+{"intent":"chat","params":{}}"""
+
+    try:
+        import urllib.request as _ur, json as _j
+        data = _j.dumps({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 120,
+            "system": system,
+            "messages": [{"role": "user", "content": text}],
+        }).encode()
+        req = _ur.Request(
+            "https://api.anthropic.com/v1/messages", data=data,
+            headers={"Content-Type": "application/json",
+                     "x-api-key": api_key,
+                     "anthropic-version": "2023-06-01"},
+        )
+        resp = _j.loads(_ur.urlopen(req, timeout=10).read())
+        raw = resp["content"][0]["text"].strip()
+        # JSON 추출
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        return _j.loads(raw[start:end]) if start >= 0 else {"intent": "chat", "params": {}}
+    except Exception:
+        return {"intent": "chat", "params": {}}
+
+
+# ── 명령 핸들러들 ──────────────────────────────────────────────
+
+async def _handle_rpa(update: Update, params: dict):
+    accounts = params.get("accounts", ["account1", "account2", "account3", "account4"])
+    limit    = params.get("limit", 5)
+    total    = len(accounts)
+
+    await update.message.reply_text(
+        f"알겠어요! {', '.join(accounts)} — 각 {limit}건씩 시작할게요 🚀\n"
+        f"총 {total}개 계정 순차 실행 중..."
+    )
+
+    script = str(_BASE / "craigslist_auto_rpa.py")
+    success, fail = 0, 0
+
+    for i, acct in enumerate(accounts, 1):
+        await update.message.reply_chat_action(ChatAction.TYPING)
+        proc = _run_bg([_PY, "-X", "utf8", script,
+                        "--headless", "--account", acct,
+                        "--limit", str(limit), "--no-overlay"])
+        rc = await asyncio.get_event_loop().run_in_executor(None, proc.wait)
+        out = proc.stdout.read() if proc.stdout else ""
+        posted = len([l for l in out.splitlines() if "✅" in l or "게시 완료" in l])
+        if rc == 0:
+            success += 1
+            await update.message.reply_text(
+                f"✅ [{i}/{total}] {acct} — {posted}건 완료!"
+            )
+        else:
+            fail += 1
+            await update.message.reply_text(
+                f"⚠️ [{i}/{total}] {acct} — 문제가 있었어요 (exit {rc})"
+            )
+
+    await update.message.reply_text(
+        f"🎉 RPA 완료!\n"
+        f"성공 {success}개 / 실패 {fail}개\n"
+        f"총 약 {success * limit}건 게시됐어요"
+    )
+
+
+async def _handle_blog(update: Update, params: dict):
+    task = params.get("task", "댓글확인")
+    blog_py = Path(r"Q:\Claudework\ClaudeBlog\.venv\Scripts\python.exe")
+    blog_main = Path(r"Q:\Claudework\ClaudeBlog\main.py")
+
+    if not blog_main.exists():
+        await update.message.reply_text("ClaudeBlog 경로를 찾을 수 없어요 😢")
+        return
+
+    await update.message.reply_text(f"블로그 {task} 시작할게요 📝")
+    await update.message.reply_chat_action(ChatAction.TYPING)
+
+    py = str(blog_py) if blog_py.exists() else _PY
+    proc = _run_bg([py, "-X", "utf8", str(blog_main), "--dry"],
+                   cwd=str(blog_main.parent))
+    await _stream_output(update, proc, f"📝 블로그 {task} 결과")
+
+
+async def _handle_matjokdo(update: Update, params: dict):
+    task = params.get("task", "서이추체크")
+    mat_dir = Path(r"Q:\Claudework\matjokdo_safe")
+    script  = mat_dir / "main.py"
+
+    if not script.exists():
+        await update.message.reply_text("맛족도 스크립트를 찾을 수 없어요 😢")
+        return
+
+    await update.message.reply_text(f"맛족도 {task} 시작할게요 🍽️")
+    await update.message.reply_chat_action(ChatAction.TYPING)
+    proc = _run_bg([_PY, "-X", "utf8", str(script)], cwd=str(mat_dir))
+    await _stream_output(update, proc, f"🍽️ 맛족도 {task} 결과")
+
+
+async def _handle_server(update: Update, _params: dict):
+    await update.message.reply_text("브릿지 서버 점검 중... 🔍")
+    await update.message.reply_chat_action(ChatAction.TYPING)
+
+    lines = []
+
+    # Render API
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "--max-time", "10", "https://bridge-n7hk.onrender.com/api/health"],
+            capture_output=True, text=True, timeout=15,
+        )
+        code = result.stdout.strip()
+        lines.append(f"{'✅' if code == '200' else '❌'} Render API: {code}")
+    except Exception:
+        lines.append("❌ Render API: 응답 없음 (cold start?)")
+
+    # Vercel
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "--max-time", "8", "https://bridge-chi-lime.vercel.app"],
+            capture_output=True, text=True, timeout=12,
+        )
+        code = result.stdout.strip()
+        lines.append(f"{'✅' if code == '200' else '❌'} Vercel 프론트: {code}")
+    except Exception:
+        lines.append("❌ Vercel: 응답 없음")
+
+    # 로컬 API
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "--max-time", "3", "http://localhost:8000/api/health"],
+            capture_output=True, text=True, timeout=5,
+        )
+        code = result.stdout.strip()
+        lines.append(f"{'✅' if code == '200' else '⚪'} 로컬 API(8000): {code}")
+    except Exception:
+        lines.append("⚪ 로컬 API: 꺼져 있음")
+
+    # Git 상태
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            capture_output=True, text=True, timeout=5,
+            cwd=str(_BASE),
+        )
+        n = len(result.stdout.strip().splitlines()) if result.stdout.strip() else 0
+        lines.append(f"📁 미커밋 변경: {n}개 파일")
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        "🏥 브릿지 서버 상태\n"
+        "━━━━━━━━━━━━━━━━━━\n" +
+        "\n".join(lines)
+    )
+
+
+async def _handle_rpa_stats(update: Update, _params: dict):
+    """오늘 RPA 게시 통계."""
+    import sqlite3, datetime
+    try:
+        conn = sqlite3.connect(str(_BASE / "master.db"))
+        today = datetime.date.today().isoformat()
+        rows = conn.execute(
+            "SELECT account_id, COUNT(*) FROM rpa_log "
+            "WHERE date(posted_at) = ? GROUP BY account_id",
+            (today,)
+        ).fetchall()
+        conn.close()
+        if rows:
+            lines = [f"  {r[0]}: {r[1]}건" for r in rows]
+            total = sum(r[1] for r in rows)
+            await update.message.reply_text(
+                f"📊 오늘 RPA 현황 ({today})\n"
+                "━━━━━━━━━━━━━━━━━━\n" +
+                "\n".join(lines) +
+                f"\n합계: {total}건 🎉"
+            )
+        else:
+            await update.message.reply_text(f"오늘({today}) 아직 게시 기록이 없어요")
+    except Exception:
+        # rpa_log 테이블 없을 수도 있음
+        await update.message.reply_text("RPA 통계 조회가 안 됐어요 (로그 테이블 확인 필요)")
+
+
+# ── 메인 텍스트 핸들러 ─────────────────────────────────────────
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle regular text messages → send to agent."""
     if not _check_auth(update.effective_chat.id):
         return
 
@@ -502,40 +773,57 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
 
-    # ── ! 접두사 → Claude Code CLI ──
+    # ! 접두사 → Claude Code CLI
     if user_text.startswith("!"):
         await _handle_claude_cli(update, context, user_text)
         return
 
-    # ── Prompt injection defense ──
+    # Prompt injection defense
     user_text = sanitize(user_text)
     guard = scan(user_text)
     if guard.blocked:
-        logger.warning("Prompt injection blocked: %s (score=%d)", guard.matched_patterns, guard.risk_score)
-        await update.message.reply_text("⚠️ 처리할 수 없는 입력입니다.")
+        logger.warning("Prompt injection blocked")
+        await update.message.reply_text("⚠️ 처리할 수 없는 입력이에요")
         return
 
     await update.message.reply_chat_action(ChatAction.TYPING)
 
+    # ── 의도 파악 ──────────────────────────────
+    parsed = await _detect_intent(user_text)
+    intent = parsed.get("intent", "chat")
+    params = parsed.get("params", {})
+
+    logger.info(f"Intent: {intent} | params: {params} | text: {user_text[:60]}")
+
+    if intent == "rpa":
+        await _handle_rpa(update, params)
+        return
+    if intent == "blog":
+        await _handle_blog(update, params)
+        return
+    if intent == "matjokdo":
+        await _handle_matjokdo(update, params)
+        return
+    if intent == "server":
+        await _handle_server(update, params)
+        return
+    if intent == "rpa_stats":
+        await _handle_rpa_stats(update, params)
+        return
+
+    # ── 일반 대화 → 오케스트레이터 ────────────
     try:
         session = _get_session(update.effective_chat.id)
         orch: Orchestrator = session["orchestrator"]
-
-        # Save user message to DB
         db.add_message(session["conv_id"], "user", user_text)
-
-        # Get agent response
         response = orch.chat(user_text)
-
-        # Save and send
         db.add_message(session["conv_id"], "assistant", response)
         await _send_long(update, response)
-
     except ValueError as e:
         await update.message.reply_text(f"설정 필요: {e}")
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
-        await update.message.reply_text(f"에러: {str(e)[:500]}")
+        await update.message.reply_text(f"앗, 에러가 났어요: {str(e)[:300]}")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):

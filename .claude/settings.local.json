@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(*)",
       "Bash(grep ^Job\\\\.:*)",
       "Bash(cd \"Q:/Claudework/bridge base\" && python load_jobs.py --dry-run 2>&1)",
       "Bash(cd \"Q:/Claudework/bridge base\" && python load_jobs.py 2>&1)",

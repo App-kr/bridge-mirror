@@ -21,6 +21,9 @@ RENDER_API = "https://bridge-n7hk.onrender.com"
 
 # ── 프리셋: (표시명, BX키, 해시여부) ────────────────────────────────────────
 PRESETS = [
+    ("네이버 Bridge (bridgejob 블로그)",  "BRIDGE_NAVER_PW",       False),
+    ("네이버 맛족도 (matjokdo 블로그)",   "MATJOKDO_NAVER_PW",     False),
+    ("네이버 bestpucca",                 "BESTPUCCA_NAVER_PW",    False),
     ("BRIDGE Admin (bridgejob.co.kr)",  "ADMIN_PASSWORD",        True),
     ("Gmail App Password",              "GMAIL_APP_PASSWORD",     False),
     ("Naver App Password",              "NAVER_APP_PASSWORD",     False),

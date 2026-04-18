@@ -60,8 +60,23 @@ def _drive():
                     "Google Cloud Console에서 Desktop app credentials 발급 후 저장 필요."
                 )
             from google_auth_oauthlib.flow import InstalledAppFlow
+            import webbrowser
             flow = InstalledAppFlow.from_client_secrets_file(str(CRED_PATH), SCOPES)
-            creds = flow.run_local_server(port=0)
+            # open_browser=True 명시 + webbrowser.open 백업 (Windows에서 자동 실행 보장)
+            _old_open = webbrowser.open
+            def _force_open(url, *a, **k):
+                print(f"\n[oauth] 브라우저 열기: {url[:80]}...\n")
+                try:
+                    import subprocess
+                    subprocess.Popen(['cmd.exe', '/c', 'start', '', url], shell=False)
+                except Exception:
+                    _old_open(url, *a, **k)
+                return True
+            webbrowser.open = _force_open
+            try:
+                creds = flow.run_local_server(port=0, open_browser=True)
+            finally:
+                webbrowser.open = _old_open
         # token 저장 (0600 권한)
         TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
         try:

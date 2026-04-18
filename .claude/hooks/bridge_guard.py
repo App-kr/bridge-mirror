@@ -20,6 +20,9 @@ stdout: 차단 시 {"hookSpecificOutput": {"hookEventName": "PreToolUse",
 import json
 import re
 import sys
+import time
+import uuid
+import urllib.request
 import unicodedata
 from pathlib import Path
 from datetime import datetime
@@ -126,8 +129,240 @@ def log(msg: str):
         pass
 
 
-def deny(reason: str) -> None:
-    """PreToolUse 차단 응답 출력 후 종료."""
+# ── Telegram 승인 시스템 ──────────────────────────────────────────────────────
+
+_TG_TIMEOUT = 86400   # 24시간 — 보스가 답할 때까지 무한 대기
+_DB_PATH = Path(r"Q:\Claudework\bridge base\master.db")
+
+
+def _tg_token() -> str:
+    """BX vault에서 Telegram 토큰 읽기."""
+    try:
+        import sqlite3 as _sql
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "tools"))
+        from bx import _read as bx_read
+        return bx_read("TELEGRAM_BOT_TOKEN") or ""
+    except Exception:
+        return ""
+
+
+def _tg_subscribers() -> list[int]:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(str(_DB_PATH))
+        rows = conn.execute("SELECT chat_id FROM tg_alert_subscribers WHERE active=1").fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
+
+def _tg_post(token: str, method: str, payload: dict) -> dict:
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    return json.loads(urllib.request.urlopen(req, timeout=10).read())
+
+
+def _ai_review(danger_type: str, command: str) -> tuple[bool, str]:
+    """Claude Haiku가 위험 명령 검토 — (승인여부, 이유) 반환."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "tools"))
+        from bx import _read as bx_read
+        api_key = bx_read("ANTHROPIC_API_KEY")
+    except Exception:
+        return False, "API key 없음"
+
+    if not api_key:
+        return False, "API key 없음"
+
+    prompt = f"""당신은 BRIDGE 프로젝트 자동 보안 관리자입니다.
+아래 명령어가 실행되려고 합니다. 안전한지 판단해주세요.
+
+위험 유형: {danger_type}
+명령어:
+{command[:600]}
+
+판단 기준:
+- 복구 가능 / 로컬 개발·테스트 목적 → APPROVE
+- master.db 영구 손실 위험 → DENY
+- main/master 브랜치 파괴 위험 → DENY
+- 운영 서버(bridge-n7hk.onrender.com) 데이터 삭제 → DENY
+- .next 캐시·임시파일 정리 → APPROVE
+- git reset (로컬 only) → APPROVE
+
+첫 단어를 반드시 APPROVE 또는 DENY로 쓰고, 짧은 이유를 한 줄로.
+예: APPROVE - .next 캐시 삭제, 복구 가능
+예: DENY - master.db 직접 삭제, 운영 DB 손실"""
+
+    try:
+        data = json.dumps({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 80,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=15).read())
+        answer = resp["content"][0]["text"].strip()
+        approved = answer.upper().startswith("APPROVE")
+        return approved, answer
+    except Exception as e:
+        return False, f"AI 검토 실패: {e}"
+
+
+def _tg_ask(danger_type: str, command_preview: str) -> bool:
+    """위험 작업을 텔레그램으로 묻고 결과 반환 (True=허용, False=거절)."""
+    token = _tg_token()
+    if not token:
+        return False
+
+    subs = _tg_subscribers()
+    if not subs:
+        return False
+
+    rid = str(uuid.uuid4())[:8]
+    preview = command_preview[:250] + ("..." if len(command_preview) > 250 else "")
+    now = time.strftime("%H:%M")
+
+    msg = (
+        f"🚨 확인 필요해요! ({now})\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"<b>{danger_type}</b>\n\n"
+        f"<code>{preview}</code>\n\n"
+        f"시간 나실 때 <b>응</b> 또는 <b>아니</b> 로 답장해주세요\n"
+        f"답장 전까지 작업은 멈춰서 기다리고 있을게요 🙂"
+    )
+    keyboard = {"inline_keyboard": [[
+        {"text": "✅ 승인", "callback_data": f"allow_{rid}"},
+        {"text": "❌ 거절", "callback_data": f"deny_{rid}"},
+    ]]}
+
+    # 메시지 발송
+    msg_info = []
+    for cid in subs[:1]:
+        try:
+            resp = _tg_post(token, "sendMessage", {
+                "chat_id": cid,
+                "text": msg,
+                "parse_mode": "HTML",
+                "reply_markup": keyboard,
+            })
+            if resp.get("ok"):
+                msg_info.append((cid, resp["result"]["message_id"]))
+        except Exception:
+            pass
+
+    if not msg_info:
+        return False
+
+    # 현재 offset 확보 (이전 업데이트 skip)
+    try:
+        resp = _tg_post(token, "getUpdates", {"limit": 1, "timeout": 0})
+        updates = resp.get("result", [])
+        offset = (updates[-1]["update_id"] + 1) if updates else 0
+    except Exception:
+        offset = 0
+
+    # 승인 키워드
+    YES = {"응", "ㅇ", "예", "yes", "y", "ok", "오케", "오케이", "해", "해줘", "고", "go",
+           "승인", "허용", "그래", "ㄱ", "ㄱㄱ", "굿", "좋아", "좋아요", "넵", "넴"}
+    NO  = {"아니", "ㄴ", "노", "no", "n", "안돼", "안돼요", "거절", "스톱", "stop",
+           "하지마", "취소", "cancel", "말아", "말아줘", "싫어"}
+
+    # 45초간 텍스트 메시지 polling
+    deadline = time.time() + _TG_TIMEOUT
+    result = None
+    while time.time() < deadline and result is None:
+        try:
+            remaining = max(1, int(deadline - time.time()))
+            poll_t = min(remaining, 10)
+            resp = _tg_post(token, "getUpdates", {
+                "offset": offset,
+                "timeout": poll_t,
+                "allowed_updates": ["message"],
+            })
+            for upd in resp.get("result", []):
+                offset = upd["update_id"] + 1
+                message = upd.get("message", {})
+                # 구독자 chat_id에서 온 메시지만
+                if message.get("chat", {}).get("id") not in subs:
+                    continue
+                text = message.get("text", "").strip().lower()
+                if text in YES:
+                    result = True
+                elif text in NO:
+                    result = False
+                if result is not None:
+                    label = "✅ 승인됐어요!" if result else "❌ 거절됐어요!"
+                    try:
+                        cid, mid = msg_info[0]
+                        _tg_post(token, "editMessageText", {
+                            "chat_id": cid, "message_id": mid,
+                            "text": f"{label}\n\n{msg}",
+                            "parse_mode": "HTML",
+                        })
+                        # 답장 확인 메시지
+                        _tg_post(token, "sendMessage", {
+                            "chat_id": message["chat"]["id"],
+                            "text": label,
+                        })
+                    except Exception:
+                        pass
+                    break
+        except Exception:
+            time.sleep(1)
+
+    if result is None:
+        # 24시간 초과 — 사실상 없는 케이스지만 혹시 모르니 로그만
+        log("TG_WAIT_TIMEOUT 24h 초과")
+        return False
+
+    return result
+
+
+def deny(reason: str, ask_telegram: bool = False, cmd_preview: str = "") -> None:
+    """PreToolUse 차단 응답 출력 후 종료.
+
+    흐름:
+      1. AI 관리자봇(Haiku)이 먼저 검토
+         → APPROVE : 바로 허용 (보스 알림 없음)
+         → DENY    : 보스 텔레그램으로 에스컬레이션
+      2. 보스가 "응/아니" 답장
+         → 응  : 허용
+         → 아니 / 타임아웃 : 최종 차단
+    """
+    if ask_telegram and cmd_preview:
+        # ── 1단계: AI 관리자봇 검토 ─────────────────
+        ai_ok, ai_reason = _ai_review(reason, cmd_preview)
+        log(f"AI_REVIEW [{('OK' if ai_ok else 'NO')}] {reason} | {ai_reason}")
+
+        if ai_ok:
+            # AI가 안전하다고 판단 → 바로 통과
+            log(f"AI_APPROVED {reason}")
+            sys.exit(0)
+
+        # ── 2단계: AI가 NO → 보스에게 에스컬레이션 ──
+        log(f"TG_ESCALATE {reason} | AI: {ai_reason}")
+
+        # Telegram 메시지에 AI 판단 이유 포함
+        enriched = f"{cmd_preview}\n\n🤖 AI관리자: {ai_reason}"
+        approved = _tg_ask(reason, enriched)
+        if approved:
+            log(f"BOSS_APPROVED {reason}")
+            sys.exit(0)
+        log(f"BOSS_DENIED {reason}")
+
     log(f"DENY {reason}")
     out = {
         "hookSpecificOutput": {
@@ -242,7 +477,12 @@ def check_bash(tool_input: dict):
     for pattern, desc, block in BASH_RULES:
         if re.search(pattern, scan_target, re.IGNORECASE):
             if block:
-                deny(f"Bash 위험 패턴 차단: {desc}\n명령어: {command[:200]}")
+                # 텔레그램으로 승인 요청 → 거절/타임아웃이면 차단
+                deny(
+                    f"Bash 위험 패턴: {desc}",
+                    ask_telegram=True,
+                    cmd_preview=command,
+                )
             else:
                 warn(f"Bash 위험 패턴 경고: {desc}\n명령어: {command[:200]}")
 
@@ -254,12 +494,12 @@ def check_write_edit(tool_name: str, tool_input: dict):
 
     # 허용 경로 외부 쓰기
     if not is_allowed_write_path(file_path):
-        deny(f"{tool_name} 허용 경로 외부 쓰기 차단: {file_path}")
+        deny(f"{tool_name} 허용 경로 외부 쓰기", ask_telegram=True, cmd_preview=file_path)
 
     # 특정 위험 경로 패턴
     for pattern, desc in WRITE_BLOCK_PATTERNS:
         if re.search(pattern, file_path, re.IGNORECASE):
-            deny(f"{tool_name} 차단: {desc} | 경로: {file_path}")
+            deny(f"{tool_name} 위험 경로: {desc}", ask_telegram=True, cmd_preview=file_path)
 
     # Write일 때 content에 하드코딩 시크릿 감지
     if tool_name == "Write":
