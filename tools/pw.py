@@ -53,8 +53,28 @@ PRESETS = [
     ("Notion Page ID",                  "NOTION_PAGE_ID",        False),
     ("Supabase DB Password",            "SUPABASE_DB_PASSWORD",  False),
     ("OpenRun Admin Secret",            "OPENRUN_ADMIN_SECRET",  False),
+    ("Gemini Key — bridgejobkr@gmail.com",    "GEMINI_KEY_1",          False),
+    ("Gemini Key — coreabridge@gmail.com",    "GEMINI_KEY_2",          False),
+    ("Gemini Key — ferrari812fast@gmail.com", "GEMINI_KEY_3",          False),
+    ("Gemini Key — airelair00@gmail.com",     "GEMINI_KEY_4",          False),
     ("직접 입력",                        "",                      False),
 ]
+
+
+CLAUDEBLOG_DIR = Path(r"Q:\Claudework\ClaudeBlog")
+
+GEMINI_ACCOUNTS = [
+    ("GEMINI_KEY_1", "bridgejobkr@gmail.com"),
+    ("GEMINI_KEY_2", "coreabridge@gmail.com"),
+    ("GEMINI_KEY_3", "ferrari812fast@gmail.com"),
+    ("GEMINI_KEY_4", "airelair00@gmail.com"),
+]
+
+# 저장 시 ClaudeBlog 자동 동기화 트리거 키
+CLAUDEBLOG_SYNC_KEYS = {
+    "BRIDGE_NAVER_PW", "MATJOKDO_NAVER_PW", "ANTHROPIC_API_KEY",
+    "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3", "GEMINI_KEY_4",
+}
 
 
 # ── 유틸 ────────────────────────────────────────────────────────────────────
@@ -112,6 +132,53 @@ def save_to_bx(key: str, value: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def sync_to_claudeblog() -> tuple[bool, str]:
+    """bx에 저장된 값을 읽어 ClaudeBlog secrets.enc에 자동 반영."""
+    try:
+        sys.path.insert(0, str(CLAUDEBLOG_DIR))
+        from encrypt_secrets import encrypt_programmatic
+
+        updates = {}
+
+        naver_pw = read_from_bx("BRIDGE_NAVER_PW")
+        if naver_pw:
+            updates["BRIDGE_NAVER_PW"] = naver_pw
+
+        matjokdo_pw = read_from_bx("MATJOKDO_NAVER_PW")
+        if matjokdo_pw:
+            updates["MATJOKDO_NAVER_PW"] = matjokdo_pw
+
+        anthropic = read_from_bx("ANTHROPIC_API_KEY")
+        if anthropic:
+            updates["ANTHROPIC_API_KEY"] = anthropic
+
+        # Gemini 키 4개 → JSON 배열로 조합
+        gemini_list = []
+        for bx_key, account in GEMINI_ACCOUNTS:
+            val = read_from_bx(bx_key)
+            if val:
+                gemini_list.append({"key": val, "account": account})
+        if gemini_list:
+            updates["GEMINI_KEYS"] = json.dumps(gemini_list)
+
+        if not updates:
+            return False, "동기화할 값이 없습니다.\n먼저 pw.py에서 값을 저장하세요."
+
+        ok = encrypt_programmatic(updates)
+        if ok:
+            keys = list(updates.keys())
+            gemini_count = len(gemini_list)
+            return True, (
+                f"ClaudeBlog 동기화 완료\n\n"
+                f"반영된 항목: {', '.join(k for k in keys if k != 'GEMINI_KEYS')}\n"
+                f"Gemini 키: {gemini_count}개\n\n"
+                f"secrets.enc 업데이트됨"
+            )
+        return False, "encrypt_programmatic 실패"
+    except Exception as e:
+        return False, f"동기화 오류: {e}"
 
 
 def read_from_bx(key: str) -> str:
@@ -378,6 +445,15 @@ def main():
              fg="#888888", bg="#1a1a2e", anchor="w").pack(fill="x")
 
     # ── 저장 버튼 ──────────────────────────────────────────────────────────
+    def _auto_sync_claudeblog():
+        status_var.set("ClaudeBlog 자동 동기화 중...")
+        status_lbl.config(fg="#ff9800")
+        root.update_idletasks()
+        ok, msg = sync_to_claudeblog()
+        first_line = msg.split('\n')[0]
+        status_var.set(f"{'[동기화 완료]' if ok else '[동기화 오류]'} {first_line}")
+        status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
+
     def on_save():
         touch_activity()
         idx    = combo.current()
@@ -417,6 +493,9 @@ def main():
             pw1.delete(0, "end")
             pw2.delete(0, "end")
             clip_var.set("")
+            # ClaudeBlog 자동 동기화 (관련 키인 경우)
+            if bx_key in CLAUDEBLOG_SYNC_KEYS:
+                root.after(100, _auto_sync_claudeblog)
         else:
             messagebox.showerror("오류", "BX 저장 실패")
 
@@ -458,6 +537,29 @@ def main():
     btn_reset.pack(ipady=3, pady=(5, 3))
 
     tk.Label(frame, text="* 반복 로그인 실패로 차단된 IP를 해제합니다",
+             font=("Segoe UI", 8), fg="#555566", bg="#1a1a2e",
+             anchor="w").pack(fill="x")
+
+    # ── ClaudeBlog 동기화 버튼 ─────────────────────────────────────────────
+    def on_sync_claudeblog():
+        touch_activity()
+        btn_sync.config(state="disabled", text="동기화 중...")
+        root.update_idletasks()
+        ok, msg = sync_to_claudeblog()
+        status_var.set(f"{'[완료]' if ok else '[오류]'} {msg.split(chr(10))[0]}")
+        status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
+        btn_sync.config(state="normal", text="[ClaudeBlog] 시크릿 동기화 (Naver/Anthropic/Gemini)")
+        if ok:
+            messagebox.showinfo("동기화 완료", msg)
+
+    btn_sync = tk.Button(frame,
+                         text="[ClaudeBlog] 시크릿 동기화 (Naver/Anthropic/Gemini)",
+                         command=on_sync_claudeblog,
+                         font=("Segoe UI", 10), width=38,
+                         bg="#1a3a3a", fg="#88cccc", activebackground="#2a5a5a",
+                         activeforeground="white", relief="flat", cursor="hand2")
+    btn_sync.pack(ipady=3, pady=(5, 3))
+    tk.Label(frame, text="* bx에 저장된 값을 ClaudeBlog secrets.enc에 자동 반영",
              font=("Segoe UI", 8), fg="#555566", bg="#1a1a2e",
              anchor="w").pack(fill="x")
 
