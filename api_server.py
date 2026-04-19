@@ -582,6 +582,38 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(BodySizeLimitMiddleware)
 
+# ── 미들웨어 레벨 IP Rate Limit — body 검증 이전 단계에서 차단 ──────────────
+# 목적: 잘못된 payload 반복 전송으로 Pydantic 검증 부하 유발하는 DoS 방어
+_IP_REQ_COUNTS: dict[str, list[float]] = {}
+_IP_RL_WINDOW = 10        # 10초 창
+_IP_RL_MAX    = 120       # 10초 내 120회 = 초당 12회 평균까지 허용
+_IP_RL_EXEMPT = {"/health", "/api/health"}
+
+class IPRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in _IP_RL_EXEMPT:
+            return await call_next(request)
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = _IP_REQ_COUNTS.setdefault(client_ip, [])
+        # 창 밖 요청 제거
+        cutoff = now - _IP_RL_WINDOW
+        bucket[:] = [t for t in bucket if t > cutoff]
+        if len(bucket) >= _IP_RL_MAX:
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many requests", "retry_after": _IP_RL_WINDOW},
+                headers={"Retry-After": str(_IP_RL_WINDOW)},
+            )
+        bucket.append(now)
+        # 메모리 보호: 1만 IP 이상이면 가장 오래된 IP 제거
+        if len(_IP_REQ_COUNTS) > 10000:
+            oldest_ip = min(_IP_REQ_COUNTS, key=lambda k: max(_IP_REQ_COUNTS[k]) if _IP_REQ_COUNTS[k] else 0)
+            _IP_REQ_COUNTS.pop(oldest_ip, None)
+        return await call_next(request)
+
+app.add_middleware(IPRateLimitMiddleware)
+
 # ── Kill-Switch (MAINT 모드) — 침해 의심 시 모든 mutation 503 반환 ──────────
 class MaintenanceMiddleware(BaseHTTPMiddleware):
     """env MAINT=1 이면 POST/PUT/PATCH/DELETE 전체 503. GET은 정상."""
