@@ -13,6 +13,7 @@ import hashlib
 import hmac as _hmac_mod
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -738,9 +739,11 @@ class AdminBoard:
         self._blink       = False
         self._log_widget  = None
         self._batch_running = False
+        self._log_queue   = queue.Queue()   # 워커→메인 로그 큐 (응답없음 방지)
 
         self._build()
         self.root.after(200, self._tick)
+        self.root.after(100, self._flush_log_queue)   # 로그 배치 처리 시작
         self.root.after(400, self._save_hwnd)
         self.root.after(800, self._integrity_check_startup)
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
@@ -1037,6 +1040,18 @@ class AdminBoard:
 
     # ── 상태 깜박임 ───────────────────────────────────────────────────────────
 
+    def _flush_log_queue(self):
+        """100ms마다 로그 큐 드레인 — 응답없음 방지."""
+        try:
+            processed = 0
+            while processed < 50:   # 한 번에 최대 50줄
+                line, tag = self._log_queue.get_nowait()
+                self._append_log(line, tag)
+                processed += 1
+        except queue.Empty:
+            pass
+        self.root.after(100, self._flush_log_queue)
+
     def _tick(self):
         if self._running:
             self._blink = not self._blink
@@ -1127,7 +1142,7 @@ class AdminBoard:
                 for line in self._proc.stdout:
                     line = line.rstrip("\r\n")
                     if line:
-                        self.root.after(0, self._append_log, line)
+                        self._log_queue.put((line, ""))
 
                 self._proc.wait()
                 rc = self._proc.returncode
@@ -1270,7 +1285,7 @@ class AdminBoard:
         for line in self._proc.stdout:
             line = line.rstrip("\r\n")
             if line:
-                self.root.after(0, self._append_log, line)
+                self._log_queue.put((line, ""))
 
         self._proc.wait()
         rc = self._proc.returncode
