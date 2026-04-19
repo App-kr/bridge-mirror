@@ -295,13 +295,13 @@ def _tg_ask(danger_type: str, command_preview: str) -> bool:
     except Exception:
         offset = 0
 
-    # 승인 키워드
+    # 승인 키워드 (텍스트 답장용)
     YES = {"응", "ㅇ", "예", "yes", "y", "ok", "오케", "오케이", "해", "해줘", "고", "go",
            "승인", "허용", "그래", "ㄱ", "ㄱㄱ", "굿", "좋아", "좋아요", "넵", "넴"}
     NO  = {"아니", "ㄴ", "노", "no", "n", "안돼", "안돼요", "거절", "스톱", "stop",
            "하지마", "취소", "cancel", "말아", "말아줘", "싫어"}
 
-    # 45초간 텍스트 메시지 polling
+    # polling: 버튼(callback_query) + 텍스트(message) 둘 다 처리
     deadline = time.time() + _TG_TIMEOUT
     result = None
     while time.time() < deadline and result is None:
@@ -311,12 +311,48 @@ def _tg_ask(danger_type: str, command_preview: str) -> bool:
             resp = _tg_post(token, "getUpdates", {
                 "offset": offset,
                 "timeout": poll_t,
-                "allowed_updates": ["message"],
+                "allowed_updates": ["message", "callback_query"],  # 버튼 클릭 수신
             })
             for upd in resp.get("result", []):
                 offset = upd["update_id"] + 1
+
+                # ── 인라인 버튼 클릭 처리 (callback_query) ──────────────
+                cb = upd.get("callback_query", {})
+                if cb:
+                    cb_uid = cb.get("from", {}).get("id")
+                    cb_data = cb.get("data", "")
+                    if cb_uid in subs:
+                        if cb_data == f"allow_{rid}":
+                            result = True
+                        elif cb_data == f"deny_{rid}":
+                            result = False
+                        if result is not None:
+                            label = "✅ 승인됐어요!" if result else "❌ 거절됐어요!"
+                            # 버튼 로딩 스피너 해제
+                            try:
+                                _tg_post(token, "answerCallbackQuery", {
+                                    "callback_query_id": cb["id"],
+                                    "text": label,
+                                })
+                            except Exception:
+                                pass
+                            # 원본 메시지 수정 (버튼 제거 + 결과 표시)
+                            try:
+                                cid, mid = msg_info[0]
+                                _tg_post(token, "editMessageText", {
+                                    "chat_id": cid, "message_id": mid,
+                                    "text": f"{label}\n\n{msg}",
+                                    "parse_mode": "HTML",
+                                })
+                            except Exception:
+                                pass
+                            break
+                    continue  # callback_query 처리했으면 message 처리 건너뜀
+
+                # ── 텍스트 답장 처리 (message) ──────────────────────────
                 message = upd.get("message", {})
-                # 구독자 chat_id에서 온 메시지만
+                if not message:
+                    continue
                 if message.get("chat", {}).get("id") not in subs:
                     continue
                 text = message.get("text", "").strip().lower()
@@ -333,7 +369,6 @@ def _tg_ask(danger_type: str, command_preview: str) -> bool:
                             "text": f"{label}\n\n{msg}",
                             "parse_mode": "HTML",
                         })
-                        # 답장 확인 메시지
                         _tg_post(token, "sendMessage", {
                             "chat_id": message["chat"]["id"],
                             "text": label,
