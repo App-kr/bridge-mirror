@@ -14,9 +14,11 @@ import hmac as _hmac_mod
 import json
 import os
 import queue
+import re as _re
 import subprocess
 import sys
 import threading
+import time as _time
 import tkinter as tk
 from pathlib import Path
 from tkinter import font as tkfont
@@ -64,6 +66,25 @@ FN_SM   = ("Malgun Gothic", 11)
 FN_TAG  = ("Consolas",      10, "bold")
 FN_MONO = ("Consolas",      11)
 FN_BTN  = ("Malgun Gothic", 12, "bold")
+
+# ── 게이지 액션 키워드 매핑 ──────────────────────────────────────────────────
+_ACTION_KEYWORDS = [
+    ("publish",             "게시 완료"),
+    ("[POST]",              "게시글 제출 중"),
+    ("[LOGIN] 성공",         "로그인 성공"),
+    ("[LOGIN]",             "Craigslist 로그인 중"),
+    ("[DRIVER]",            "Chrome 실행 중"),
+    ("copyfromAnother",     "게시물 복사 중"),
+    ("?s=area",             "지역 선택 중"),
+    ("?s=type",             "분류 입력 중"),
+    ("?s=cat",              "카테고리 선택 중"),
+    ("[DRAFT]",             "초안 준비 중"),
+    ("Chrome 시작",          "Chrome 실행 중"),
+    ("로그인",               "Craigslist 로그인 중"),
+    ("제목",                 "제목 작성 중"),
+    ("본문",                 "본문 작성 중"),
+    ("대상 포지션",           "대상 포지션 확인 중"),
+]
 
 
 # ══════════════════════════════════════════ .env 유틸 ══════════════════════════
@@ -478,6 +499,111 @@ class AccountCard(tk.Canvas):
         self.configure(cursor="hand2")
 
 
+# ══════════════════════════════════════════ 진행률 게이지 ════════════════════
+
+class _ProgressGauge(tk.Canvas):
+    """배치 실행 진행률 게이지 — 배치 버튼 대체."""
+    H = 66
+    R = 10
+
+    def __init__(self, parent, **kw):
+        super().__init__(parent, height=self.H, bg=BG,
+                         highlightthickness=0, bd=0, **kw)
+        self._pct    = 0.0
+        self._action = "준비 중..."
+        self._done   = 0
+        self._total  = 0
+        self._eta    = "예상 소요시간 계산 중..."
+        self._blink  = False
+        self.bind("<Configure>", self._draw)
+
+    def refresh(self, pct: float, action: str, done: int, total: int,
+                eta: str, blink: bool):
+        self._pct    = max(0.0, min(1.0, pct))
+        self._action = action
+        self._done   = done
+        self._total  = total
+        self._eta    = eta
+        self._blink  = blink
+        self._draw()
+
+    def _draw(self, _=None):
+        self.delete("all")
+        w, h, r = self.winfo_width(), self.winfo_height(), self.R
+        if w < 4:
+            return
+
+        # 배경
+        self._rr(0, 0, w, h, r, "#0a1628")
+
+        # 진행률 채움 (왼쪽 라운드, 오른쪽 flat)
+        fw = max(0, int(w * self._pct))
+        if fw > 0:
+            fc = "#1d4ed8" if self._blink else "#163179"
+            if fw >= w:
+                self._rr(0, 0, w, h, r, fc)
+            else:
+                self._rr_left(0, 0, fw, h, r, fc)
+
+        # 깜박 점
+        dot_c = "#22c55e" if self._blink else "#166534"
+        self.create_oval(12, h//2-5, 22, h//2+5,
+                         fill=dot_c, outline=dot_c)
+
+        # 라인 1: 현재 작업 + 카운트
+        if self._total > 0:
+            cnt = f"    {self._done:02d}/{self._total:02d} 건...총"
+        else:
+            cnt = ""
+        self.create_text(30, h//2 - 10,
+                         text=f"{self._action}{cnt}",
+                         fill=TEXT1,
+                         font=("Malgun Gothic", 11, "bold"),
+                         anchor="w")
+
+        # 라인 2: 예상 소요시간
+        self.create_text(30, h//2 + 11,
+                         text=self._eta,
+                         fill=TEXT3,
+                         font=("Malgun Gothic", 9),
+                         anchor="w")
+
+        # 퍼센트 (우측)
+        pct_c = "#60a5fa" if self._blink else "#2563eb"
+        self.create_text(w - 12, h//2,
+                         text=f"{int(self._pct * 100)}%",
+                         fill=pct_c,
+                         font=("Consolas", 10, "bold"),
+                         anchor="e")
+
+    def _rr(self, x1, y1, x2, y2, r, fill):
+        if x2 <= x1 or y2 <= y1:
+            return
+        rr = min(r, (x2-x1)//2, (y2-y1)//2)
+        for args in [
+            (x1, y1, x1+2*rr, y1+2*rr, 90,  90),
+            (x2-2*rr, y1, x2, y1+2*rr, 0,   90),
+            (x1, y2-2*rr, x1+2*rr, y2, 180, 90),
+            (x2-2*rr, y2-2*rr, x2, y2, 270, 90),
+        ]:
+            self.create_arc(*args[:4], start=args[4], extent=args[5],
+                            fill=fill, outline=fill)
+        self.create_rectangle(x1+rr, y1, x2-rr, y2, fill=fill, outline=fill)
+        self.create_rectangle(x1, y1+rr, x2, y2-rr, fill=fill, outline=fill)
+
+    def _rr_left(self, x1, y1, x2, y2, r, fill):
+        """왼쪽만 라운드, 오른쪽 flat."""
+        if x2 <= x1 or y2 <= y1:
+            return
+        rr = min(r, (x2-x1)//2, (y2-y1)//2)
+        self.create_arc(x1, y1, x1+2*rr, y1+2*rr,
+                        start=90, extent=90, fill=fill, outline=fill)
+        self.create_arc(x1, y2-2*rr, x1+2*rr, y2,
+                        start=180, extent=90, fill=fill, outline=fill)
+        self.create_rectangle(x1+rr, y1, x2, y2, fill=fill, outline=fill)
+        self.create_rectangle(x1, y1+rr, x1+rr, y2-rr, fill=fill, outline=fill)
+
+
 # ══════════════════════════════════════════ 다이얼로그 ═══════════════════════
 
 class _BaseDialog(tk.Toplevel):
@@ -741,6 +867,14 @@ class AdminBoard:
         self._batch_running = False
         self._log_queue   = queue.Queue()   # 워커→메인 로그 큐 (응답없음 방지)
 
+        # ── 게이지 상태 ─────────────────────────────────────────────────────
+        self._gauge_done    = 0
+        self._gauge_total   = 0
+        self._gauge_action  = "준비 중..."
+        self._gauge_start   = 0.0
+        self._gauge_blink   = False
+        self._gauge: "_ProgressGauge | None" = None
+
         self._build()
         self.root.after(200, self._tick)
         self.root.after(100, self._flush_log_queue)   # 로그 배치 처리 시작
@@ -915,6 +1049,10 @@ class AdminBoard:
         )
         self._batch_btn.pack(fill="x", padx=p, pady=(0, 6))
 
+        # 게이지 바 (배치 실행 중에만 표시, 평소엔 숨김)
+        self._gauge = _ProgressGauge(left)
+        # 초기엔 숨김 — _show_gauge() 호출 시 pack
+
     def _build_log_panel(self, parent):
         """오른쪽 실시간 로그 패널."""
         LOG_BG = "#0d0d0f"
@@ -1041,15 +1179,50 @@ class AdminBoard:
     # ── 상태 깜박임 ───────────────────────────────────────────────────────────
 
     def _flush_log_queue(self):
-        """100ms마다 로그 큐 드레인 — 응답없음 방지."""
+        """100ms마다 로그 큐 드레인 — 배치 처리로 응답없음 방지.
+
+        state toggle을 배치당 1회로 줄여 Text 위젯 부하 최소화.
+        """
+        batch: list[tuple[str, str]] = []
         try:
-            processed = 0
-            while processed < 50:   # 한 번에 최대 50줄
-                line, tag = self._log_queue.get_nowait()
-                self._append_log(line, tag)
-                processed += 1
+            while len(batch) < 80:
+                batch.append(self._log_queue.get_nowait())
         except queue.Empty:
             pass
+
+        if batch and self._log_widget:
+            from datetime import datetime as _dt
+            ts = _dt.now().strftime("%H:%M:%S")
+            self._log_widget.configure(state="normal")
+            for line, force_tag in batch:
+                if force_tag:
+                    tag = force_tag
+                elif any(k in line for k in ("완료", "성공", "Publish")):
+                    tag = "success"
+                elif any(k in line for k in ("ERROR", "오류", "실패", "Exception", "Traceback")):
+                    tag = "error"
+                elif any(k in line for k in ("WARNING", "주의", "skip", "SKIP")):
+                    tag = "warn"
+                elif line.startswith("  [") or line.startswith("["):
+                    tag = "info"
+                elif line.startswith("=") or line.startswith("-"):
+                    tag = "dim"
+                else:
+                    tag = "normal"
+                self._log_widget.insert("end", f"[{ts}] ", "ts")
+                self._log_widget.insert("end", line + "\n", tag)
+
+            # 로그 2000줄 초과 시 앞부분 정리 (메모리 보호)
+            try:
+                total_lines = int(self._log_widget.index("end-1c").split(".")[0])
+                if total_lines > 2000:
+                    self._log_widget.delete("1.0", f"{total_lines - 1500}.0")
+            except Exception:
+                pass
+
+            self._log_widget.see("end")
+            self._log_widget.configure(state="disabled")
+
         self.root.after(100, self._flush_log_queue)
 
     def _tick(self):
@@ -1066,6 +1239,71 @@ class AdminBoard:
             self._start_btn.update_text("시작하기")
             self._start_btn.update_fill(GREEN, "#ffffff")
         self.root.after(600, self._tick)
+
+    # ── 게이지 제어 ──────────────────────────────────────────────────────────
+
+    def _show_gauge(self):
+        """배치 버튼 숨기고 게이지 바 표시."""
+        self._batch_btn.pack_forget()
+        if self._gauge:
+            self._gauge.pack(fill="x",
+                             padx=self.PAD, pady=(0, 6))
+        self._gauge_tick()
+
+    def _hide_gauge(self):
+        """게이지 바 숨기고 배치 버튼 복원."""
+        if self._gauge:
+            self._gauge.pack_forget()
+        self._batch_btn.pack(fill="x",
+                             padx=self.PAD, pady=(0, 6))
+
+    def _gauge_tick(self):
+        """600ms마다 게이지 갱신 (깜박 + ETA)."""
+        if not self._batch_running or not self._gauge:
+            return
+        self._gauge_blink = not self._gauge_blink
+
+        done  = self._gauge_done
+        total = self._gauge_total
+        elapsed = _time.time() - self._gauge_start if self._gauge_start else 0
+
+        if done > 0 and elapsed > 0 and total > done:
+            rate_sec = elapsed / done
+            rem = rate_sec * (total - done)
+            if rem >= 3600:
+                eta = f"예상 소요시간 약 {int(rem/3600)}시간 {int((rem%3600)/60)}분 남음"
+            elif rem >= 60:
+                eta = f"예상 소요시간 약 {int(rem/60)}분 남음"
+            else:
+                eta = f"예상 소요시간 약 {int(rem)}초 남음"
+        elif done == 0:
+            eta = "예상 소요시간 계산 중..."
+        else:
+            eta = "거의 완료 중..."
+
+        pct = done / total if total > 0 else 0.0
+        self._gauge.refresh(
+            pct, self._gauge_action, done, total, eta, self._gauge_blink)
+        self.root.after(600, self._gauge_tick)
+
+    def _set_gauge_action(self, action: str):
+        """메인 스레드에서 게이지 액션 텍스트 갱신."""
+        self._gauge_action = action
+
+    def _inc_gauge_done(self, n: int):
+        """게이지 완료 카운트 증가 (메인 스레드)."""
+        self._gauge_done = min(self._gauge_done + n, self._gauge_total)
+
+    def _detect_action(self, line: str) -> str | None:
+        """로그 줄에서 현재 액션 감지."""
+        # [N/M] Job. 패턴 — 가장 구체적
+        m = _re.search(r'\[(\d+)/(\d+)\]\s+Job\.', line)
+        if m:
+            return f"Job {m.group(1)}/{m.group(2)} 처리 중"
+        for kw, action in _ACTION_KEYWORDS:
+            if kw in line:
+                return action
+        return None
 
     # ── 계정 이벤트 ──────────────────────────────────────────────────────────
 
@@ -1165,6 +1403,7 @@ class AdminBoard:
     def _on_stop(self):
         # 배치 + 일반 모두 중단
         self._batch_running = False
+        self._hide_gauge()
         if self._proc:
             try:
                 subprocess.run(
@@ -1199,7 +1438,14 @@ class AdminBoard:
         self._batch_running = True
         self._batch_btn.set_enabled(False)
         self._start_btn.set_enabled(False)
-        self._batch_btn.update_text("배치 실행 중...")
+
+        # 게이지 초기화 + 표시
+        self._gauge_done   = 0
+        self._gauge_total  = (cnt1 + cnt2) * reps * len(selected)
+        self._gauge_action = "배치 시작 중..."
+        self._gauge_start  = _time.time()
+        self._show_gauge()
+
         self._append_log(
             f"=== 배치 시작: {len(selected)}계정 × [{cnt1}건 → {rest}분 → {cnt2}건] × {reps}회 ===",
             "info")
@@ -1214,6 +1460,8 @@ class AdminBoard:
                                 f"--- [{rep}/{reps}회] 라운드A ({cnt1}건/계정) 시작 ---", "info")
                 self.root.after(0, self._msg,
                                 f"배치 {rep}/{reps}회 — 라운드A", "#60a5fa")
+                self.root.after(0, self._set_gauge_action,
+                                f"{rep}/{reps}회 라운드A 시작")
                 for i, acct in enumerate(selected, 1):
                     if not self._batch_running:
                         break
@@ -1233,7 +1481,10 @@ class AdminBoard:
                     if s % 30 == 0 or s <= 10:
                         self.root.after(0, self._msg,
                                         f"배치 {rep}/{reps}회 — 휴식 {s}초 남음", TEXT3)
-                    import time as _t; _t.sleep(1)
+                    if s % 5 == 0 or s <= 10:
+                        self.root.after(0, self._set_gauge_action,
+                                        f"라운드 휴식 중  {s}초 남음")
+                    _time.sleep(1)
                 if not self._batch_running:
                     break
 
@@ -1242,6 +1493,8 @@ class AdminBoard:
                                 f"--- [{rep}/{reps}회] 라운드B ({cnt2}건/계정) 시작 ---", "info")
                 self.root.after(0, self._msg,
                                 f"배치 {rep}/{reps}회 — 라운드B", "#60a5fa")
+                self.root.after(0, self._set_gauge_action,
+                                f"{rep}/{reps}회 라운드B 시작")
                 for i, acct in enumerate(selected, 1):
                     if not self._batch_running:
                         break
@@ -1251,6 +1504,7 @@ class AdminBoard:
 
             # ── 완료 ──────────────────────────────────────
             self._batch_running = False
+            self.root.after(0, self._hide_gauge)
             self.root.after(0, self._batch_btn.set_enabled, True)
             self.root.after(0, self._start_btn.set_enabled, True)
             self.root.after(0, self._batch_btn.update_text, "배치 시작")
@@ -1286,12 +1540,17 @@ class AdminBoard:
             line = line.rstrip("\r\n")
             if line:
                 self._log_queue.put((line, ""))
+                action = self._detect_action(line)
+                if action:
+                    self.root.after(0, self._set_gauge_action, action)
 
         self._proc.wait()
         rc = self._proc.returncode
         self.root.after(0, self._append_log,
                         f"  {acct['label']} 완료 (exit {rc})",
                         "success" if rc == 0 else "error")
+        if rc == 0:
+            self.root.after(0, self._inc_gauge_done, count)
         self._proc = None
         PID_FILE.unlink(missing_ok=True)
 
