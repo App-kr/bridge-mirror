@@ -181,7 +181,7 @@ except Exception as _jwt_exc:
     import traceback; traceback.print_exc()
     _jwt = None
 
-_JWT_SECRET  = os.getenv("JWT_SECRET") or os.getenv("BRIDGE_FIELD_KEY")
+_JWT_SECRET  = os.getenv("JWT_SECRET")  # BRIDGE_FIELD_KEY 폴백 제거 — 키 분리 원칙
 if not _JWT_SECRET:
     print("[CRITICAL] JWT_SECRET 환경변수가 설정되지 않았습니다. 서버를 시작할 수 없습니다.")
     print("[CRITICAL] Render 대시보드 → Environment Variables → JWT_SECRET 추가 후 재배포.")
@@ -3355,6 +3355,9 @@ async def admin_candidates_brief(request: Request):
 async def admin_export_candidates(request: Request, format: str = "csv"):
     """후보자 전체 내보내기 (CSV / XLSX). PII 복호화 포함."""
     _check_admin(request)
+    # SECURITY: export는 하루 10회 제한 — 대량 PII dump 방어
+    if not _rate_ok(_ip_hash(request), window=86400, max_posts=10):
+        raise HTTPException(429, "export 요청 한도 초과 (일 10회). 잠시 후 시도하세요.")
     import csv as _csv_mod
     import io as _io_mod
 
@@ -4124,7 +4127,7 @@ def _mail_rate_record():
 def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bridgejobkr@gmail.com") -> bool:
     """Gmail SMTP로 이메일 발송. 실패 시 False."""
     if not _SMTP_USER or not _SMTP_PASS or _SMTP_PASS == "your_app_password":
-        _log_email.warning("SMTP 미설정 — 발송 스킵 (to=%s)", to_email)
+        _log_email.warning("SMTP 미설정 — 발송 스킵 (to=%s)", to_email[:4] + "***")
         return False
     try:
         msg = MIMEMultipart("alternative")
@@ -4147,10 +4150,10 @@ def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bri
             # SECURITY: sendmail에 수신자 1명만 전달
             srv.sendmail(_SMTP_USER, [to_email], msg.as_string())
 
-        _log_email.info("이메일 발송 성공: %s → %s", subject[:40], to_email)
+        _log_email.info("이메일 발송 성공: %s → %s", subject[:40], to_email[:4] + "***")
         return True
     except Exception as e:
-        _log_email.error("이메일 발송 실패 (to=%s): %s", to_email, e, exc_info=True)
+        _log_email.error("이메일 발송 실패 (to=%s): %s", to_email[:4] + "***", e, exc_info=True)
         return False
 
 
@@ -4269,7 +4272,7 @@ def _secure_send_email(to_email: str, subject: str, html_body: str,
     """
     # SECURITY: 블랙리스트 차단
     if _is_email_blacklisted(to_email):
-        _log_email.warning("블랙리스트 차단 (to=%s)", to_email)
+        _log_email.warning("블랙리스트 차단 (to=%s)", to_email[:4] + "***")
         return False, "블랙리스트 등록 이메일 — 발송 차단됨"
 
     # SECURITY: PII 스캔
@@ -4277,7 +4280,7 @@ def _secure_send_email(to_email: str, subject: str, html_body: str,
         violations = _pii_scan_body(html_body)
         if violations:
             detail = "; ".join(violations)
-            _log_email.warning("PII 발송 차단 (to=%s): %s", to_email, detail)
+            _log_email.warning("PII 발송 차단 (to=%s): %s", to_email[:4] + "***", detail)
             return False, f"PII 위반으로 발송 차단: {detail}"
 
     # SECURITY: Rate limit 체크
@@ -7578,7 +7581,10 @@ _FILE_LIMITS: dict[str, tuple[int, set[str], list[bytes]]] = {
     "video": (
         100 * 1024 * 1024,
         {".mp4", ".mov", ".webm"},
-        [],  # skip magic for video (too many codecs)
+        [b"ftyp", b"\x00\x00\x00\x18ftyp", b"\x00\x00\x00\x20ftyp",
+         b"\x1aE\xdf\xa3",   # WebM/MKV
+         b"RIFF",             # AVI
+         ],
     ),
     "attachment": (
         10 * 1024 * 1024,
@@ -7612,8 +7618,12 @@ def _validate_file(data: bytes, filename: str, file_type: str) -> str:
     if ext not in allowed_ext:
         raise HTTPException(400, f"Invalid file extension '{ext}'. Allowed: {', '.join(sorted(allowed_ext))}")
 
-    if magic_prefixes and not any(data[:8].startswith(m) for m in magic_prefixes):
-        raise HTTPException(400, "File content does not match its extension.")
+    if magic_prefixes:
+        header = data[:12]
+        # MP4/MOV: ftyp box는 바이트 4~8에 위치 (box size 가변)
+        is_mp4 = header[4:8] == b"ftyp"
+        if not (any(header[:8].startswith(m) for m in magic_prefixes) or is_mp4):
+            raise HTTPException(400, "File content does not match its extension.")
 
     # ZIP bomb 방어: 압축 해제 후 크기 및 파일 수 제한
     if ext == ".zip":
