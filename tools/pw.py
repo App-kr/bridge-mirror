@@ -202,7 +202,7 @@ def sync_to_render(changed_key: str = "", changed_value: str = "") -> tuple[bool
     api_token = read_from_bx("RENDER_API_TOKEN")
     service_id = read_from_bx("RENDER_SERVICE_ID")
     if not api_token or not service_id:
-        return False, "RENDER_API_TOKEN 또는 RENDER_SERVICE_ID가 bx에 없습니다.\npw.py에서 먼저 저장하세요."
+        return None, ""  # 토큰 미설정 시 자동 트리거에서 조용히 스킵
     try:
         # 현재 Render 환경변수 조회
         req = urllib.request.Request(
@@ -653,9 +653,14 @@ def main():
         btn_render.config(state="disabled", text="Render 동기화 중...")
         root.update_idletasks()
         ok, msg = sync_to_render()
+        btn_render.config(state="normal", text="[Render] 환경변수 동기화 (JWT/HMAC/API Keys)")
+        if ok is None:
+            messagebox.showwarning("Render 토큰 필요",
+                "RENDER_API_TOKEN 과 RENDER_SERVICE_ID를\n먼저 pw.py에서 저장하세요.\n\n"
+                "Render 대시보드 → Account Settings → API Keys")
+            return
         status_var.set(f"{'[완료]' if ok else '[오류]'} {msg.split(chr(10))[0]}")
         status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
-        btn_render.config(state="normal", text="[Render] 환경변수 동기화 (JWT/HMAC/API Keys)")
         if ok:
             messagebox.showinfo("Render 동기화 완료", msg)
 
@@ -673,6 +678,8 @@ def main():
     # _auto_sync_render 헬퍼
     def _auto_sync_render(bx_key: str, raw_value: str):
         ok, msg = sync_to_render(bx_key, raw_value)
+        if ok is None:  # 토큰 미설정 — 조용히 스킵
+            return
         first = msg.split("\n")[0]
         status_var.set(f"{'[Render 동기화 완료]' if ok else '[Render 오류]'} {first}")
         status_lbl.config(fg="#66bb6a" if ok else "#ef5350")
