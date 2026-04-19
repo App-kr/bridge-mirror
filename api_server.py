@@ -582,6 +582,70 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(BodySizeLimitMiddleware)
 
+# ── Kill-Switch (MAINT 모드) — 침해 의심 시 모든 mutation 503 반환 ──────────
+class MaintenanceMiddleware(BaseHTTPMiddleware):
+    """env MAINT=1 이면 POST/PUT/PATCH/DELETE 전체 503. GET은 정상."""
+    _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
+
+    async def dispatch(self, request: Request, call_next):
+        if os.getenv("MAINT", "0") == "1" and request.method in self._MUTATION:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Service under maintenance", "code": "MAINT_MODE"},
+                headers={"Retry-After": "300"},
+            )
+        return await call_next(request)
+
+app.add_middleware(MaintenanceMiddleware)
+
+# ── Threat Feed — Spamhaus/Firehol 블록리스트 (무료 공개 피드) ─────────────
+_THREAT_NETS: list = []
+_THREAT_FEED_PATH = Path(__file__).parent / "data" / "threat_feed.txt"
+def _load_threat_feed():
+    global _THREAT_NETS
+    try:
+        if not _THREAT_FEED_PATH.exists():
+            return
+        import ipaddress as _ipm
+        nets = []
+        with open(_THREAT_FEED_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    nets.append(_ipm.ip_network(line, strict=False))
+                except ValueError:
+                    continue
+        _THREAT_NETS = nets
+        logging.getLogger("bridge.api").info("[threat_feed] %d개 CIDR 로드됨", len(nets))
+    except Exception as e:
+        logging.getLogger("bridge.api").warning("[threat_feed] 로드 실패: %s", e)
+
+_load_threat_feed()
+
+class ThreatFeedMiddleware(BaseHTTPMiddleware):
+    """Spamhaus/Firehol 위협 피드 IP 즉시 차단."""
+    async def dispatch(self, request: Request, call_next):
+        if not _THREAT_NETS:
+            return await call_next(request)
+        client_ip = request.client.host if request.client else ""
+        if client_ip:
+            try:
+                import ipaddress as _ipm
+                ip_obj = _ipm.ip_address(client_ip)
+                for net in _THREAT_NETS:
+                    if ip_obj in net:
+                        logging.getLogger("bridge.security").warning(
+                            "[threat_feed] 차단: %s → %s", client_ip, net
+                        )
+                        return JSONResponse(status_code=403, content={"error": "Blocked"})
+            except ValueError:
+                pass
+        return await call_next(request)
+
+app.add_middleware(ThreatFeedMiddleware)
+
 # ── CSRF Origin 검증 — 관리자 mutation 요청의 Origin 헤더 검증 ──────────────
 _ALLOWED_ORIGINS_SET = set(ALLOWED_ORIGINS)
 

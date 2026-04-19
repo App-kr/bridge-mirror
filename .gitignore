@@ -209,3 +209,8 @@ tools/gdrive_backup.log
 drive_oauth_credentials.json
 drive_oauth_token.json
 client_secret_*.json
+
+# IOC baseline (로컬 시스템 상태)
+.ioc_baseline.json
+.maint_flag
+.behavior_baseline.json
