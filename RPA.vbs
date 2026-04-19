@@ -18,5 +18,7 @@ accounts(3) = "account4"
 Dim i
 For i = 0 To 3
     strCmd = """" & strPythonEXE & """ -X utf8 """ & strScript & """ --headless --account " & accounts(i)
-    objShell.Run strCmd, 1, True
+    ' 0 = 창 완전 숨김 (작업표시줄에도 안 나옴), True = 완료 대기 (순차 실행)
+    ' Python 내부 watchdog(25분)이 Chrome 멈춤 시 강제 종료 → VBS 응답없음 방지
+    objShell.Run strCmd, 0, True
 Next

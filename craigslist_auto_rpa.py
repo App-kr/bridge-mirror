@@ -36,7 +36,24 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+class _SafeStdout:
+    """headless/PIPE 모드에서 stdout OSError 무시 래퍼."""
+    def __init__(self, wrapped):
+        self._w = wrapped
+    def write(self, s):
+        try:
+            return self._w.write(s)
+        except OSError:
+            return 0
+    def flush(self):
+        try:
+            self._w.flush()
+        except OSError:
+            pass
+    def __getattr__(self, name):
+        return getattr(self._w, name)
+
+sys.stdout = _SafeStdout(io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace"))
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
 BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
@@ -876,6 +893,9 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
     )
     svc.creation_flags = _sp.CREATE_NO_WINDOW   # 검은 CMD 창 숨김
     driver = webdriver.Chrome(service=svc, options=opts)
+    # ── 타임아웃 설정 (응답없음 방지) ────────────────────────────────────────
+    driver.set_page_load_timeout(50)   # 50초 초과 시 TimeoutException (무한 대기 방지)
+    driver.set_script_timeout(25)      # JS 실행 25초 제한
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"}
@@ -933,7 +953,15 @@ def _has_captcha(driver) -> bool:
 
 def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
-    driver.get(CL_LOGIN_URL)
+    try:
+        driver.get(CL_LOGIN_URL)
+    except Exception:
+        print("  [TIMEOUT] 로그인 페이지 로드 타임아웃 — 재시도")
+        try:
+            driver.get(CL_LOGIN_URL)
+        except Exception as e:
+            print(f"  [LOGIN ERROR] 페이지 로드 실패: {e}")
+            return False
     _delay(2, 3)
 
     try:
@@ -1042,7 +1070,15 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         _delay(0.5, 1)
     except Exception:
         pass
-    driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
+    try:
+        driver.get(CL_BASE_URL)   # https://seoul.craigslist.org
+    except Exception:
+        print("  [TIMEOUT] seoul.craigslist.org 로드 타임아웃 → 직접 post.craigslist.org")
+        try:
+            driver.get("https://post.craigslist.org")
+        except Exception as e:
+            print(f"  [ERROR] post.craigslist.org 로드 실패: {e}")
+            return ""
     _delay(2, 3)
     try:
         link = WebDriverWait(driver, 8).until(
@@ -1052,7 +1088,11 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         _delay(2, 3)
     except Exception:
         # 대안: 직접 URL
-        driver.get("https://post.craigslist.org")
+        try:
+            driver.get("https://post.craigslist.org")
+        except Exception as e:
+            print(f"  [ERROR] post.craigslist.org 타임아웃: {e}")
+            return ""
         _delay(2, 3)
 
     # ── 단계별 처리 루프 (최대 15 스텝, 동일 step 3회 연속 시 중단) ──
@@ -1637,6 +1677,17 @@ def main():
     parser.add_argument("--no-overlay", action="store_true",
                         help="RPAOverlay 창 띄우지 않음 (Admin Board 통합 모드)")
     args = parser.parse_args()
+
+    # ── 워치독: 계정당 최대 25분 실행 (응답없음 방지) ──────────────────────────
+    import threading as _thr
+    _MAX_RPA_SEC = 25 * 60  # 25분
+    def _watchdog():
+        time.sleep(_MAX_RPA_SEC)
+        print(f"\n[WATCHDOG] {_MAX_RPA_SEC // 60}분 초과 → 프로세스 강제 종료 (응답없음 방지)")
+        _log_event("error", "—", "watchdog",
+                   f"Force-killed after {_MAX_RPA_SEC}s to prevent hang")
+        os._exit(2)
+    _thr.Thread(target=_watchdog, daemon=True, name="rpa-watchdog").start()
 
     # ── 무결성 해시 재초기화 ──
     if args.integrity_reset is not None:
