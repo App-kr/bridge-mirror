@@ -244,8 +244,10 @@ function FileUpload({
         if (file.type.startsWith('image/')) file = await resizeImage(file)
         const fd = new FormData()
         fd.append('file', file)
+        const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
         const res = await fetch(`${API}/api/upload/${entityType}/${entityId}?file_type=${fileType}`, {
           method: 'POST', body: fd,
+          headers: token ? { 'X-Apply-Token': token } : {},
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.detail ?? 'Upload failed')
@@ -309,6 +311,7 @@ const INIT = {
   health_info: '', criminal_record_check: '', korean_criminal_record: '',
   interview_time: '', kakaotalk: '', mobile_phone: '',
   agreement: '', facts: '',
+  _url: '',   // honeypot — 봇 방어용, 비어있어야 함
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -375,8 +378,10 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
         if (file.type.startsWith('image/')) file = await resizeImage(file)
         const fd = new FormData()
         fd.append('file', file)
+        const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
         const res = await fetch(`${API}/api/upload/candidate/${cid}?file_type=${item.type}`, {
           method: 'POST', body: fd,
+          headers: token ? { 'X-Apply-Token': token } : {},
         })
         if (!res.ok) {
           const json = await res.json().catch(() => ({ detail: 'Upload failed' }))
@@ -590,6 +595,17 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
             <section className="card space-y-4">
               <Sec title="Basic Information" />
+              {/* Honeypot 필드 — 봇만 채움. 사용자 눈에 보이지 않음 */}
+              <input
+                type="text"
+                name="_url"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', opacity: 0 }}
+                value={(form as Record<string, unknown>)._url as string || ''}
+                onChange={set('_url' as keyof typeof form)}
+              />
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label required>Full Name</Label>

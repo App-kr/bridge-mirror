@@ -63,7 +63,7 @@ const STATUS_BADGES: Record<string, string> = {
 }
 
 export default function AdminInboxPage() {
-  const { authed, headers } = useAdminAuth()
+  const { authed, headers, adminFetch } = useAdminAuth()
 
   const [items, setItems] = useState<InboxItem[]>([])
   const [total, setTotal] = useState(0)
@@ -93,7 +93,15 @@ export default function AdminInboxPage() {
       if (status !== 'all') params.set('status', status)
       if (search.trim()) params.set('search', search.trim())
 
-      const res = await fetch(`${API}/api/admin/inbox?${params}`, { headers: headers() })
+      const res = await adminFetch(`${API}/api/admin/inbox?${params}`, { headers: headers() })
+      if (res.status === 401) {
+        // JWT_SECRET 로테이션으로 기존 세션 만료 → 재로그인
+        setError('세션이 만료되었습니다. 다시 로그인해주세요.')
+        sessionStorage.removeItem('bridge_admin_key')
+        sessionStorage.removeItem('bridge_admin_key_expiry')
+        setTimeout(() => window.location.reload(), 1500)
+        return
+      }
       if (res.status === 403) {
         const errBody = await res.json().catch(() => ({}))
         if (errBody.error?.includes?.('Access denied')) {
@@ -118,7 +126,7 @@ export default function AdminInboxPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, source, status, search, headers])
+  }, [page, source, status, search, headers, adminFetch])
 
   useEffect(() => {
     if (authed) fetchInbox()

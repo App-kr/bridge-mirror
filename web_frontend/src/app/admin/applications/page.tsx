@@ -211,7 +211,7 @@ function v(s: string | null | undefined): string {
 }
 
 export default function AdminApplicationsPage() {
-  const { authed, login, headers, waking } = useAdminAuth()
+  const { authed, login, headers, waking, adminFetch } = useAdminAuth()
 
   const [employers, setEmployers] = useState<EmployerApp[]>([])
   const [loading, setLoading] = useState(false)
@@ -231,7 +231,14 @@ export default function AdminApplicationsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API}/api/admin/applications`, { headers: headers() })
+      const res = await adminFetch(`${API}/api/admin/applications`, { headers: headers() })
+      if (res.status === 401) {
+        setError('Session expired. Please log in again.')
+        sessionStorage.removeItem('bridge_admin_key')
+        sessionStorage.removeItem('bridge_admin_key_expiry')
+        setTimeout(() => window.location.reload(), 1500)
+        return
+      }
       if (res.status === 403) {
         const errBody = await res.json().catch(() => ({}))
         if (errBody.error?.includes?.('Access denied')) {
@@ -254,7 +261,7 @@ export default function AdminApplicationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [headers])
+  }, [headers, adminFetch])
 
   useEffect(() => {
     if (authed) fetchApplications()

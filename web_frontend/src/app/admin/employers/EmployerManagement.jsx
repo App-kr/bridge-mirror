@@ -1529,8 +1529,17 @@ export default function EmployerManagement(){
         const adminKey=(typeof window!=='undefined'?sessionStorage.getItem("bridge_admin_key"):"")||"";
         if(!adminKey){if(!cancelled)setLoading(false);return;}
         const hdrs={"Content-Type":"application/json","x-admin-key":adminKey};
-        const res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs});
-        if(!res.ok)throw new Error(`HTTP ${res.status}`);
+        // Render cold-start 대응: 최대 5회 재시도 (3s, 6s, 9s, 12s 백오프)
+        let res=null;
+        for(let attempt=0;attempt<5;attempt++){
+          try{
+            res=await fetch(`${API_BASE}/api/admin/jobs/v2?limit=2000`,{headers:hdrs,signal:AbortSignal.timeout(45000)});
+            if(res.ok)break;
+            if(res.status>=500||res.status===429){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}
+            break;
+          }catch(_err){if(attempt<4){await new Promise(r=>setTimeout(r,3000*(attempt+1)));continue;}throw _err;}
+        }
+        if(!res||!res.ok)throw new Error(`HTTP ${res?.status||'net'}`);
         const body=await res.json();
         const jobs=Array.isArray(body?.data?.jobs)?body.data.jobs:[];
         console.log(`[employers] loaded via /api/admin/jobs/v2: ${jobs.length} jobs`);

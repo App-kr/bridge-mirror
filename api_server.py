@@ -586,14 +586,21 @@ app.add_middleware(BodySizeLimitMiddleware)
 # 목적: 잘못된 payload 반복 전송으로 Pydantic 검증 부하 유발하는 DoS 방어
 _IP_REQ_COUNTS: dict[str, list[float]] = {}
 _IP_RL_WINDOW = 10        # 10초 창
-_IP_RL_MAX    = 120       # 10초 내 120회 = 초당 12회 평균까지 허용
-_IP_RL_EXEMPT = {"/health", "/api/health"}
+_IP_RL_MAX    = 240       # 10초 내 240회 = 초당 24회 평균 (admin 페이지 병렬 로드 여유)
+_IP_RL_EXEMPT = {"/health", "/api/health", "/api/admin/key", "/api/admin/sessions"}
+
+def _real_client_ip(request: Request) -> str:
+    # Render/Vercel proxy 뒤에서 실제 IP 추출 (첫 XFF 엔트리)
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 class IPRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path in _IP_RL_EXEMPT:
             return await call_next(request)
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = _real_client_ip(request)
         now = time.time()
         bucket = _IP_REQ_COUNTS.setdefault(client_ip, [])
         # 창 밖 요청 제거
@@ -631,49 +638,87 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
 app.add_middleware(MaintenanceMiddleware)
 
 # ── Threat Feed — Spamhaus/Firehol 블록리스트 (무료 공개 피드) ─────────────
-_THREAT_NETS: list = []
+# 성능 최적화: v4/v6 분리 + LRU 캐시로 요청당 O(1) amortized
+import ipaddress as _threat_ipm
+_THREAT_NETS_V4: list = []
+_THREAT_NETS_V6: list = []
 _THREAT_FEED_PATH = Path(__file__).parent / "data" / "threat_feed.txt"
+# IP 판정 캐시 — 같은 IP 반복 조회 시 재스캔 회피 (Render 단일 서버 메모리)
+_THREAT_CACHE: dict[str, bool] = {}
+_THREAT_CACHE_MAX = 20000
+
 def _load_threat_feed():
-    global _THREAT_NETS
+    global _THREAT_NETS_V4, _THREAT_NETS_V6
     try:
         if not _THREAT_FEED_PATH.exists():
             return
-        import ipaddress as _ipm
-        nets = []
+        nets_v4, nets_v6 = [], []
         with open(_THREAT_FEED_PATH, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
                 try:
-                    nets.append(_ipm.ip_network(line, strict=False))
+                    net = _threat_ipm.ip_network(line, strict=False)
+                    if net.version == 4:
+                        nets_v4.append(net)
+                    else:
+                        nets_v6.append(net)
                 except ValueError:
                     continue
-        _THREAT_NETS = nets
-        logging.getLogger("bridge.api").info("[threat_feed] %d개 CIDR 로드됨", len(nets))
+        _THREAT_NETS_V4 = nets_v4
+        _THREAT_NETS_V6 = nets_v6
+        logging.getLogger("bridge.api").info(
+            "[threat_feed] v4=%d v6=%d CIDR 로드됨", len(nets_v4), len(nets_v6)
+        )
     except Exception as e:
         logging.getLogger("bridge.api").warning("[threat_feed] 로드 실패: %s", e)
 
 _load_threat_feed()
 
 class ThreatFeedMiddleware(BaseHTTPMiddleware):
-    """Spamhaus/Firehol 위협 피드 IP 즉시 차단."""
+    """Spamhaus/Firehol 위협 피드 IP 즉시 차단 (캐시 + v4/v6 분리)."""
+    # health 엔드포인트는 스킵 (Render health check 보호)
+    _EXEMPT = {"/health", "/api/health"}
+
     async def dispatch(self, request: Request, call_next):
-        if not _THREAT_NETS:
+        if not (_THREAT_NETS_V4 or _THREAT_NETS_V6):
+            return await call_next(request)
+        if request.url.path in self._EXEMPT:
             return await call_next(request)
         client_ip = request.client.host if request.client else ""
-        if client_ip:
-            try:
-                import ipaddress as _ipm
-                ip_obj = _ipm.ip_address(client_ip)
-                for net in _THREAT_NETS:
-                    if ip_obj in net:
-                        logging.getLogger("bridge.security").warning(
-                            "[threat_feed] 차단: %s → %s", client_ip, net
-                        )
-                        return JSONResponse(status_code=403, content={"error": "Blocked"})
-            except ValueError:
-                pass
+        if not client_ip:
+            return await call_next(request)
+
+        # 캐시 조회 (O(1))
+        cached = _THREAT_CACHE.get(client_ip)
+        if cached is True:
+            return JSONResponse(status_code=403, content={"error": "Blocked"})
+        if cached is False:
+            return await call_next(request)
+
+        # 첫 조회만 O(N)
+        blocked = False
+        try:
+            ip_obj = _threat_ipm.ip_address(client_ip)
+            nets = _THREAT_NETS_V4 if ip_obj.version == 4 else _THREAT_NETS_V6
+            for net in nets:
+                if ip_obj in net:
+                    blocked = True
+                    logging.getLogger("bridge.security").warning(
+                        "[threat_feed] 차단: %s → %s", client_ip, net
+                    )
+                    break
+        except ValueError:
+            pass
+
+        # 캐시 저장 (bounded LRU: 용량 초과 시 초기화)
+        if len(_THREAT_CACHE) >= _THREAT_CACHE_MAX:
+            _THREAT_CACHE.clear()
+        _THREAT_CACHE[client_ip] = blocked
+
+        if blocked:
+            return JSONResponse(status_code=403, content={"error": "Blocked"})
         return await call_next(request)
 
 app.add_middleware(ThreatFeedMiddleware)
@@ -8052,8 +8097,38 @@ async def upload_file(
     """
     if entity_type not in ("candidate", "inquiry", "community"):
         raise HTTPException(400, "entity_type must be 'candidate', 'inquiry', or 'community'")
-    # SECURITY: 모든 entity_type에 대해 관리자 인증 필수 (candidate/inquiry 포함)
-    _check_admin(request)
+
+    # SECURITY: candidate는 apply_token(JWT) 또는 관리자 인증
+    # inquiry/community는 관리자 인증 필수
+    is_admin_ok = False
+    try:
+        _check_admin(request)
+        is_admin_ok = True
+    except HTTPException:
+        pass
+
+    if not is_admin_ok:
+        if entity_type != "candidate":
+            raise HTTPException(403, "인증이 필요합니다.")
+        # candidate: apply_token 헤더 또는 쿼리로 검증 + 해당 candidate_id 일치
+        apply_token = (
+            request.headers.get("X-Apply-Token")
+            or request.query_params.get("apply_token")
+            or ""
+        ).strip()
+        if not apply_token:
+            raise HTTPException(403, "apply_token이 필요합니다.")
+        try:
+            token_cid = _verify_candidate_token(apply_token)
+            if str(token_cid) != str(entity_id):
+                raise HTTPException(403, "토큰과 entity_id 불일치")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(403, "apply_token 검증 실패")
+        # 공개 업로드는 photo/cv/cover_letter만 허용 (사이즈 제한은 _validate_file이 처리)
+        if file_type not in ("photo", "cv", "cover_letter", "certificate"):
+            raise HTTPException(403, f"공개 업로드에서는 '{file_type}' 타입을 사용할 수 없습니다.")
 
     if not _rate_ok(_ip_hash(request), window=60, max_posts=30):
         raise HTTPException(429, "Too many uploads. Please slow down.")

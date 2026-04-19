@@ -223,6 +223,7 @@ const INIT = {
 
   /* Step 3 — 개인정보 동의 */
   privacy_policy: '',
+  _url: '',   // honeypot — 봇 방어용, 비어있어야 함
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -411,6 +412,17 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
 
             <section className="card space-y-4">
               <Sec title="담당자 정보" subtitle="Contact Person" />
+              {/* Honeypot — 봇만 채움, 사용자 안 보임 */}
+              <input
+                type="text"
+                name="_url"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', opacity: 0 }}
+                value={form._url as string || ''}
+                onChange={set('_url' as keyof typeof form)}
+              />
               <div>
                 <Label required>이메일 주소 / Email</Label>
                 <input type="email" className="input" placeholder="school@example.com"

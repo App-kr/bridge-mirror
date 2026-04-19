@@ -383,7 +383,8 @@ export default function BridgeAdminSheet() {
     const currentOffset = dbOffsetRef.current
     const edits = loadEdits()
     const ctrl = new AbortController()
-    const ctrlTimer = setTimeout(() => ctrl.abort(), 5000)
+    // Render cold start: 최대 45초 (첫 spin-up 대응). 이후 abort 시 재시도 루프가 이어받음.
+    const ctrlTimer = setTimeout(() => ctrl.abort(), 45000)
     let res: Response
     try {
       res = await fetch(
