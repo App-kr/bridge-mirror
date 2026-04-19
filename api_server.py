@@ -3246,7 +3246,7 @@ async def admin_candidates(
                 ))
             _ALL_COLS = [
                 "candidate_id", "sheet_number", "email", "full_name", "nationality",
-                "nationality_plain", "ancestry",
+                "ancestry",  # nationality_plain 제거 — 복호화된 nationality로 대체
                 "dob", "gender", "current_location", "start_date", "target", "area_prefs",
                 "experience", "current_salary", "desired_salary", "certification", "e_visa",
                 "mobile_phone", "kakaotalk", "criminal_record", "housing", "arc_holders",
@@ -3711,24 +3711,51 @@ async def admin_list_inquiries(
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.row_factory = sqlite3.Row
         try:
-            where_clauses = ["is_deleted = 0"]
-            params: list = []
             if q:
-                where_clauses.append(
-                    "(school_name_plain LIKE ? OR contact_name LIKE ? OR email LIKE ? OR phone LIKE ? OR memo LIKE ? OR location_plain LIKE ?)"
-                )
-                like = f"%{q}%"
-                params.extend([like] * 6)
-            if source:
-                where_clauses.append("source_file = ?")
-                params.append(source)
-            where_sql = " WHERE " + " AND ".join(where_clauses)
-            total = conn.execute(f"SELECT COUNT(*) FROM client_inquiries{where_sql}", params).fetchone()[0]
-            rows = conn.execute(
-                f"SELECT * FROM client_inquiries{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
-                params + [limit, offset],
-            ).fetchall()
-            return ok(data={"total": total, "inquiries": [_decrypt_row(dict(r)) for r in rows]})
+                # SECURITY FIX: contact_name/email/phone은 T3v1 암호화 → SQL LIKE 불가
+                # 전체 로드 후 복호화하여 Python 메모리에서 필터 (1239건 기준 <100ms)
+                base_where = "WHERE is_deleted = 0"
+                if source:
+                    base_where += " AND source_file = ?"
+                    src_params: list = [source]
+                else:
+                    src_params = []
+                all_rows = conn.execute(
+                    f"SELECT * FROM client_inquiries {base_where} ORDER BY id DESC",
+                    src_params,
+                ).fetchall()
+                q_lower = q.lower()
+
+                def _inq_match(r: dict) -> bool:
+                    fields = [
+                        r.get("contact_name") or "",
+                        r.get("email") or "",
+                        r.get("phone") or "",
+                        r.get("memo") or "",
+                        r.get("school_name_plain") or r.get("school_name") or "",
+                        r.get("location_plain") or r.get("location") or "",
+                        r.get("notes") or "",
+                    ]
+                    return any(q_lower in str(f).lower() for f in fields)
+
+                decrypted_all = [_decrypt_row(dict(r)) for r in all_rows]
+                filtered = [r for r in decrypted_all if _inq_match(r)]
+                total = len(filtered)
+                page = filtered[offset: offset + limit]
+                return ok(data={"total": total, "inquiries": page})
+            else:
+                where_clauses = ["is_deleted = 0"]
+                params: list = []
+                if source:
+                    where_clauses.append("source_file = ?")
+                    params.append(source)
+                where_sql = " WHERE " + " AND ".join(where_clauses)
+                total = conn.execute(f"SELECT COUNT(*) FROM client_inquiries{where_sql}", params).fetchone()[0]
+                rows = conn.execute(
+                    f"SELECT * FROM client_inquiries{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+                    params + [limit, offset],
+                ).fetchall()
+                return ok(data={"total": total, "inquiries": [_decrypt_row(dict(r)) for r in rows]})
         finally:
             conn.close()
     except HTTPException:
