@@ -6,9 +6,8 @@
  * config prop: 관리자가 편집한 옵션 (없으면 *_DEFAULT 하드코딩 폴백)
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { resizeImage } from '@/lib/image-resize'
-import GuidePopup from '@/components/GuidePopup'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
@@ -339,6 +338,20 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   const CRC             = config.CRC             ?? CRC_DEFAULT
   const KR_CRC          = config.KR_CRC          ?? KR_CRC_DEFAULT
 
+  // ── 흐름: notice → captcha → form ──────────────────────────────────────
+  const [phase, setPhase] = useState<'notice' | 'captcha' | 'form'>('notice')
+
+  useEffect(() => {
+    // 같은 세션에서 이미 캡차 통과했으면 바로 form으로
+    if (sessionStorage.getItem('bridge_captcha_ok')) setPhase('form')
+  }, [])
+
+  function handleCaptchaVerified(token: string) {
+    sessionStorage.setItem('bridge_captcha_ok', '1')
+    setForm((p) => ({ ...p, captcha_token: token }))
+    setPhase('form')
+  }
+
   const [step,        setStep]        = useState(1)
   const [status,      setStatus]      = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMsg,    setErrorMsg]    = useState('')
@@ -491,21 +504,76 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
     )
   }
 
+  // ── Notice 화면 ─────────────────────────────────────────────────────────
+  if (phase === 'notice') {
+    return (
+      <div className="max-w-xl mx-auto py-10 px-4 space-y-6">
+        <div className="space-y-1">
+          <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
+                           border border-blue-200 rounded-full px-3 py-1 uppercase tracking-wider">
+            For Teachers
+          </span>
+          <h1 className="text-2xl font-black text-gray-900 pt-1">Before You Apply</h1>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-6 pt-6 pb-4 space-y-3">
+            {[
+              'Have your passport-style photo ready (JPG/PNG, max 5 MB).',
+              'Prepare your CV/resume and cover letter (PDF or DOC).',
+              'TEFL/TESOL or teaching license certificate, if you have one.',
+              'A short video introduction is recommended but optional (MP4, max 100 MB).',
+              'All fields marked with * are required.',
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-3 text-sm text-gray-700 leading-relaxed">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-[11px] font-bold flex items-center justify-center mt-0.5 border border-blue-200">
+                  {i + 1}
+                </span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="px-6 pb-4 pt-2 space-y-3 border-t border-gray-100 mt-2">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              By continuing, you consent to the collection and use of your personal data for recruitment purposes,
+              in accordance with our Privacy Policy. All data is AES-256 encrypted and never shared publicly.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPhase('captcha')}
+              className="w-full py-3 bg-[#1a1a2e] text-white text-sm font-semibold rounded-xl hover:bg-[#2a2a3e] transition-colors"
+            >
+              I Agree &amp; Continue →
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Captcha 팝업 ─────────────────────────────────────────────────────────
+  if (phase === 'captcha') {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+          <div className="px-6 pt-6 pb-2">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Security Verification</h2>
+            <p className="text-sm text-gray-500 mb-4">Complete the puzzle to continue with your application.</p>
+            <PuzzleCaptcha
+              onVerified={handleCaptchaVerified}
+              onError={(err) => alert(`CAPTCHA Error: ${err}`)}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ── Form ────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
-      <GuidePopup
-        storageKey="bridge_apply_guide_seen"
-        title="Before You Start"
-        items={[
-          'Have your passport-style photo ready (JPG/PNG, max 5 MB).',
-          'Prepare your CV/resume and cover letter (PDF or DOC).',
-          'TEFL/TESOL or teaching license certificate, if you have one.',
-          'A short video introduction is recommended but optional (MP4, max 100 MB).',
-          'All fields marked with * are required. You can save progress anytime.',
-        ]}
-        cta="Start Application"
-      />
+
 
       <div className="space-y-2">
         <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
@@ -879,11 +947,6 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
                 </div>
               </div>
             </section>
-
-            <PuzzleCaptcha
-              onVerified={(token) => setForm((p) => ({ ...p, captcha_token: token }))}
-              onError={(error) => alert(`CAPTCHA Error: ${error}`)}
-            />
 
             <section className="card space-y-4">
               <Sec title="Agreement & Declaration" />

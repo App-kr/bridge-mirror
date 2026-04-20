@@ -1,224 +1,248 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+
+interface Piece {
+  x: number
+  y: number
+  targetX: number
+  targetY: number
+  color: string
+  label: string
+}
 
 interface PuzzleCaptchaProps {
   onVerified: (token: string) => void
   onError?: (error: string) => void
 }
 
-export default function PuzzleCaptcha({ onVerified, onError }: PuzzleCaptchaProps) {
+const CW = 420
+const CH = 280
+const PW = 68
+const PH = 68
+const TARGETS: { x: number; y: number }[] = [
+  { x: 50, y: 104 },
+  { x: 176, y: 104 },
+  { x: 302, y: 104 },
+]
+const PIECE_COLORS = ['#e74c3c', '#27ae60', '#2980b9']
+const INIT_POSITIONS = [
+  { x: 20, y: 195 },
+  { x: 170, y: 185 },
+  { x: 315, y: 198 },
+]
+
+export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isVerified, setIsVerified] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
-  const [puzzleState, setPuzzleState] = useState<{
-    pieces: Array<{ x: number; y: number; correctX: number; correctY: number; img?: ImageData }>
-    draggedPieceIdx: number | null
-    offsetX: number
-    offsetY: number
-  }>({
-    pieces: [],
-    draggedPieceIdx: null,
-    offsetX: 0,
-    offsetY: 0,
-  })
+  const piecesRef = useRef<Piece[]>([])
+  const dragRef = useRef<{ idx: number; ox: number; oy: number } | null>(null)
 
-  // 퍼즐 초기화
-  useEffect(() => {
+  const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // 캔버스 크기: 400x300
-    canvas.width = 400
-    canvas.height = 300
-    ctx.fillStyle = '#e3f2fd'
-    ctx.fillRect(0, 0, 400, 300)
+    // 배경 그라디언트
+    const bg = ctx.createLinearGradient(0, 0, CW, CH)
+    bg.addColorStop(0, '#667eea')
+    bg.addColorStop(1, '#764ba2')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, CW, CH)
 
-    // 테스트 그래디언트 배경
-    const gradient = ctx.createLinearGradient(0, 0, 400, 300)
-    gradient.addColorStop(0, '#667eea')
-    gradient.addColorStop(1, '#764ba2')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, 400, 300)
-
-    // 텍스트
-    ctx.fillStyle = 'white'
-    ctx.font = 'bold 24px Arial'
+    // 안내 텍스트
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'
+    ctx.font = '13px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('Drag pieces below', 200, 150)
+    ctx.fillText('아래 색상 블록을 같은 번호의 빈칸에 끌어다 놓으세요', CW / 2, 82)
 
-    // 퍼즐 조각 3개 생성
-    const pieceWidth = 80
-    const pieceHeight = 80
-    const pieces = [
-      { x: 50, y: 50, correctX: 0, correctY: 0 },
-      { x: 250, y: 80, correctX: 120, correctY: 0 },
-      { x: 100, y: 200, correctX: 240, correctY: 0 },
-    ]
+    // 타겟 홀 (점선 박스)
+    TARGETS.forEach((t, i) => {
+      ctx.save()
+      ctx.setLineDash([5, 4])
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+      ctx.lineWidth = 2
+      ctx.strokeRect(t.x, t.y, PW, PH)
+      ctx.restore()
 
-    // 각 조각을 ImageData로 추출
-    const piecesWithImg = pieces.map((p) => ({
-      ...p,
-      img: ctx.getImageData(p.correctX, p.correctY, pieceWidth, pieceHeight),
-    }))
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'
+      ctx.fillRect(t.x, t.y, PW, PH)
 
-    setPuzzleState({
-      pieces: piecesWithImg,
-      draggedPieceIdx: null,
-      offsetX: 0,
-      offsetY: 0,
+      // 번호
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'
+      ctx.font = 'bold 22px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(i + 1), t.x + PW / 2, t.y + PH / 2)
     })
 
-    // 스크램블된 위치에 조각 그리기
-    ctx.strokeStyle = '#333'
-    ctx.lineWidth = 2
-    piecesWithImg.forEach((piece, idx) => {
-      ctx.strokeRect(piece.x - 2, piece.y - 2, pieceWidth + 4, pieceHeight + 4)
-      ctx.fillStyle = 'rgba(255,255,255,0.1)'
-      ctx.fillRect(piece.x - 2, piece.y - 2, pieceWidth + 4, pieceHeight + 4)
+    // 구분선
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(10, 185)
+    ctx.lineTo(CW - 10, 185)
+    ctx.stroke()
+
+    // 조각 그리기 (드래그 중인 것은 맨 위)
+    const pieces = piecesRef.current
+    const dragIdx = dragRef.current?.idx ?? -1
+    const drawOrder = [...pieces.keys()].filter((i) => i !== dragIdx)
+    if (dragIdx !== -1) drawOrder.push(dragIdx)
+
+    drawOrder.forEach((i) => {
+      const p = pieces[i]
+      const dragging = i === dragIdx
+
+      ctx.save()
+      if (dragging) {
+        ctx.shadowColor = 'rgba(0,0,0,0.45)'
+        ctx.shadowBlur = 12
+      }
+
+      // 조각 배경 (roundRect 폴백 — arcTo로 구형 Safari 대응)
+      const r = 6
+      ctx.fillStyle = p.color
+      ctx.beginPath()
+      ctx.moveTo(p.x + r, p.y)
+      ctx.lineTo(p.x + PW - r, p.y)
+      ctx.arcTo(p.x + PW, p.y, p.x + PW, p.y + r, r)
+      ctx.lineTo(p.x + PW, p.y + PH - r)
+      ctx.arcTo(p.x + PW, p.y + PH, p.x + PW - r, p.y + PH, r)
+      ctx.lineTo(p.x + r, p.y + PH)
+      ctx.arcTo(p.x, p.y + PH, p.x, p.y + PH - r, r)
+      ctx.lineTo(p.x, p.y + r)
+      ctx.arcTo(p.x, p.y, p.x + r, p.y, r)
+      ctx.closePath()
+      ctx.fill()
+
+      // 조각 테두리
+      ctx.strokeStyle = dragging ? '#fff' : 'rgba(255,255,255,0.55)'
+      ctx.lineWidth = dragging ? 3 : 1.5
+      ctx.setLineDash([])
+      ctx.stroke()
+
+      // 번호
+      ctx.fillStyle = 'white'
+      ctx.font = 'bold 26px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(p.label, p.x + PW / 2, p.y + PH / 2)
+
+      ctx.restore()
     })
   }, [])
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    // 어느 조각을 클릭했나 확인
-    const pieceWidth = 80
-    const pieceHeight = 80
-    for (let i = 0; i < puzzleState.pieces.length; i++) {
-      const p = puzzleState.pieces[i]
-      if (
-        x >= p.x - 2 &&
-        x <= p.x + pieceWidth + 2 &&
-        y >= p.y - 2 &&
-        y <= p.y + pieceHeight + 2
-      ) {
-        setIsDragging(true)
-        setPuzzleState((prev) => ({
-          ...prev,
-          draggedPieceIdx: i,
-          offsetX: x - p.x,
-          offsetY: y - p.y,
-        }))
-        return
-      }
-    }
-  }
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || puzzleState.draggedPieceIdx === null) return
-
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    setPuzzleState((prev) => {
-      const newPieces = [...prev.pieces]
-      newPieces[prev.draggedPieceIdx!] = {
-        ...newPieces[prev.draggedPieceIdx!],
-        x: x - prev.offsetX,
-        y: y - prev.offsetY,
-      }
-      return { ...prev, pieces: newPieces }
-    })
-
-    // 실시간 재렌더링
-    redrawCanvas()
-  }
-
-  const handleMouseUp = () => {
-    if (puzzleState.draggedPieceIdx === null) return
-
-    setIsDragging(false)
-
-    // 모든 조각이 올바른 위치에 있는지 확인
-    const tolerance = 15
-    const allCorrect = puzzleState.pieces.every(
-      (p) =>
-        Math.abs(p.x - p.correctX) <= tolerance &&
-        Math.abs(p.y - p.correctY) <= tolerance
-    )
-
-    if (allCorrect) {
-      setIsVerified(true)
-      // 검증 토큰 생성 (서버에서 검증됨)
-      const token = generateCaptchaToken()
-      onVerified(token)
-      showSuccessMessage()
-    }
-
-    setPuzzleState((prev) => ({
-      ...prev,
-      draggedPieceIdx: null,
+  useEffect(() => {
+    piecesRef.current = TARGETS.map((t, i) => ({
+      x: INIT_POSITIONS[i].x,
+      y: INIT_POSITIONS[i].y,
+      targetX: t.x,
+      targetY: t.y,
+      color: PIECE_COLORS[i],
+      label: String(i + 1),
     }))
-  }
+    draw()
+  }, [draw])
 
-  const redrawCanvas = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // 배경 다시 그리기
-    const gradient = ctx.createLinearGradient(0, 0, 400, 300)
-    gradient.addColorStop(0, '#667eea')
-    gradient.addColorStop(1, '#764ba2')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, 400, 300)
-
-    ctx.fillStyle = 'white'
-    ctx.font = 'bold 24px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('Drag pieces', 200, 150)
-
-    // 현재 조각 위치로 그리기
-    const pieceWidth = 80
-    puzzleState.pieces.forEach((piece) => {
-      if (piece.img) {
-        ctx.putImageData(piece.img, Math.round(piece.x), Math.round(piece.y))
+  const getXY = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+    canvas: HTMLCanvasElement
+  ) => {
+    const rect = canvas.getBoundingClientRect()
+    const sx = CW / rect.width
+    const sy = CH / rect.height
+    if ('touches' in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * sx,
+        y: (e.touches[0].clientY - rect.top) * sy,
       }
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 2
-      ctx.strokeRect(piece.x, piece.y, pieceWidth, 80)
-    })
+    }
+    return {
+      x: (e.clientX - rect.left) * sx,
+      y: (e.clientY - rect.top) * sy,
+    }
   }
 
-  const generateCaptchaToken = (): string => {
-    // 서버에서 검증할 토큰 (클라이언트에서는 간단히 생성)
-    const timestamp = Date.now()
-    const nonce = Math.random().toString(36).substring(7)
-    return `puzzle_${timestamp}_${nonce}`
+  const hitTest = (x: number, y: number) => {
+    const pieces = piecesRef.current
+    for (let i = pieces.length - 1; i >= 0; i--) {
+      const p = pieces[i]
+      if (x >= p.x && x <= p.x + PW && y >= p.y && y <= p.y + PH) return i
+    }
+    return -1
   }
 
-  const showSuccessMessage = () => {
+  const onDown = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const { x, y } = getXY(e, canvas)
+    const idx = hitTest(x, y)
+    if (idx === -1) return
+    const p = piecesRef.current[idx]
+    dragRef.current = { idx, ox: x - p.x, oy: y - p.y }
+    draw()
+  }
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  const onMove = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
+    if (!dragRef.current) return
+    e.preventDefault()
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const { x, y } = getXY(e, canvas)
+    const { idx, ox, oy } = dragRef.current
+    const pieces = piecesRef.current
+    pieces[idx] = {
+      ...pieces[idx],
+      x: Math.max(0, Math.min(CW - PW, x - ox)),
+      y: Math.max(0, Math.min(CH - PH, y - oy)),
+    }
+    draw()
+  }
 
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'
-    ctx.fillRect(0, 0, 400, 300)
-
-    ctx.fillStyle = '#4caf50'
-    ctx.font = 'bold 32px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('✓ Verified!', 200, 150)
+  const onUp = () => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    const TOL = 22
+    const allCorrect = piecesRef.current.every(
+      (p) =>
+        Math.abs(p.x - p.targetX) <= TOL && Math.abs(p.y - p.targetY) <= TOL
+    )
+    if (allCorrect) {
+      // 조각을 정확한 위치에 스냅
+      piecesRef.current = piecesRef.current.map((p) => ({
+        ...p,
+        x: p.targetX,
+        y: p.targetY,
+      }))
+      draw()
+      setIsVerified(true)
+      const token = `puzzle_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      onVerified(token)
+      // 성공 오버레이
+      setTimeout(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'
+        ctx.fillRect(0, 0, CW, CH)
+        ctx.fillStyle = '#4caf50'
+        ctx.font = 'bold 34px Arial'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('✓ Verified!', CW / 2, CH / 2)
+      }, 50)
+    } else {
+      draw()
+    }
   }
 
   return (
@@ -229,27 +253,38 @@ export default function PuzzleCaptcha({ onVerified, onError }: PuzzleCaptchaProp
 
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => setIsDragging(false)}
-        className="border-2 border-gray-400 rounded-lg cursor-move w-full max-w-md mx-auto block"
+        width={CW}
+        height={CH}
+        onMouseDown={onDown}
+        onMouseMove={onMove}
+        onMouseUp={onUp}
+        onMouseLeave={onUp}
+        onTouchStart={onDown}
+        onTouchMove={onMove}
+        onTouchEnd={onUp}
+        className="border-2 border-gray-400 rounded-lg cursor-grab active:cursor-grabbing w-full max-w-md mx-auto block"
         style={{ touchAction: 'none', userSelect: 'none' }}
       />
 
-      {isVerified && (
+      {isVerified ? (
         <div className="mt-3 p-2 bg-green-100 border border-green-400 text-green-700 rounded text-center text-sm">
           ✓ CAPTCHA verified successfully
         </div>
-      )}
-
-      {!isVerified && (
+      ) : (
         <div className="mt-3 p-2 bg-blue-100 border border-blue-400 text-blue-700 rounded text-center text-sm">
           👆 Drag all 3 pieces to their correct positions to continue
         </div>
       )}
 
-      <input type="hidden" name="captcha_token" value={isVerified ? generateCaptchaToken() : ''} />
+      <input
+        type="hidden"
+        name="captcha_token"
+        value={
+          isVerified
+            ? `puzzle_${Date.now()}_${Math.random().toString(36).substring(7)}`
+            : ''
+        }
+      />
     </div>
   )
 }
