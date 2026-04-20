@@ -3,7 +3,7 @@ import path from 'path'
 import { API_URL } from '@/lib/api'
 
 /**
- * Data access layer — Render API (primary) + static JSON fallback.
+ * Data access layer -- Render API (primary) + static JSON fallback.
  *
  * On Vercel, the static JSON files in data/ are build-time snapshots and
  * become stale as admins edit content via the Render backend.
@@ -23,12 +23,17 @@ function readJson(filename: string): Record<string, unknown>[] {
   }
 }
 
-/** Synchronous fallback — reads from static JSON in data/ directory */
+/**
+ * Public jobs fallback -- reads ONLY from ad_only mirror (jobs_clean.json).
+ *
+ * jobs.json 은 master.db 전체 덤프라 internal_notes 에 PII(한글/메일/전화)가
+ * 포함되어 있어 공개 경로에서 쓸 수 없다. 광고 공개 경로는 ad_only 가 유일 소스.
+ */
 export function getJobs(): Record<string, unknown>[] {
-  return readJson('jobs.json')
+  return readJson('jobs_clean.json')
 }
 
-/** Synchronous fallback — reads from static JSON in data/ directory */
+/** Synchronous fallback -- reads from static JSON in data/ directory */
 export function getBoardPosts(board: string): Record<string, unknown>[] {
   return readJson(`board-${board}.json`)
 }
@@ -59,7 +64,7 @@ export async function fetchBoardPostsFromRender(
       const json = await res.json()
       if (json.success && json.data?.posts?.length > 0) return json
     }
-  } catch { /* Render unreachable — fall through to static JSON */ }
+  } catch { /* Render unreachable -- fall through to static JSON */ }
 
   // Fallback: static JSON
   const allPosts = getBoardPosts(board)

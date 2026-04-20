@@ -3,7 +3,7 @@ BRIDGE API Server  v2.4 (2026-03-31 hotfix)
 ===================================
 bridgejob.co.kr 웹사이트용 백엔드 API
 
-🔥 Hotfix: Render 강제 재배포 — API 403 에러 해결
+🔥 Hotfix: Render 강제 재배포 -- API 403 에러 해결
 
 엔드포인트:
   GET  /              → 상태 확인
@@ -18,7 +18,7 @@ bridgejob.co.kr 웹사이트용 백엔드 API
 환경변수 (.env):
   SUPABASE_URL=https://xxxx.supabase.co
   SUPABASE_ANON_KEY=eyJ...
-  SUPABASE_SERVICE_KEY=eyJ...  (서버사이드 전용 — 노출 금지)
+  SUPABASE_SERVICE_KEY=eyJ...  (서버사이드 전용 -- 노출 금지)
 """
 import io
 import os
@@ -40,6 +40,19 @@ import hmac
 import asyncio
 import threading
 import html as _html
+
+# ad_only 광고 전용 소스 (fail-closed PII 가드)
+try:
+    from ad_only.loader import load_all_jobs as _ad_load_all_jobs, get_job as _ad_get_job
+    from ad_only.pii_guard import assert_clean as _ad_assert_clean, PIIContaminationError as _ADPIIErr
+    _AD_READY = True
+except Exception as _ad_err:
+    _AD_READY = False
+    _ad_load_all_jobs = None
+    _ad_get_job = None
+    _ad_assert_clean = None
+    _ADPIIErr = RuntimeError
+    logging.getLogger("bridge.api").warning("ad_only 미사용 (fallback DB): %s", _ad_err)
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
@@ -109,7 +122,7 @@ def bridge_error(
     retryable: bool = False,
     status: int = 500,
 ):
-    """구조화된 에러 응답 — isError/errorCategory/isRetryable/context 포함"""
+    """구조화된 에러 응답 -- isError/errorCategory/isRetryable/context 포함"""
     return JSONResponse(
         status_code=status,
         content={
@@ -126,7 +139,7 @@ try:
     _PILLOW_OK = True
 except ImportError:
     _PILLOW_OK = False
-    print("[INFO] Pillow 미설치 — 썸네일 생성 비활성화 (pip install Pillow)")
+    print("[INFO] Pillow 미설치 -- 썸네일 생성 비활성화 (pip install Pillow)")
 
 try:
     from supabase import create_client, Client
@@ -142,7 +155,7 @@ try:
     _EMAIL_OK = True
 except ImportError:
     _EMAIL_OK = False
-    print("[INFO] email_templates 미설치 — 확인 이메일 발송 비활성화")
+    print("[INFO] email_templates 미설치 -- 확인 이메일 발송 비활성화")
 
 # ── security_vault (PII 필드 암호화) ─────────────────────────────────────────
 try:
@@ -181,7 +194,7 @@ except Exception as _jwt_exc:
     import traceback; traceback.print_exc()
     _jwt = None
 
-_JWT_SECRET  = os.getenv("JWT_SECRET")  # BRIDGE_FIELD_KEY 폴백 제거 — 키 분리 원칙
+_JWT_SECRET  = os.getenv("JWT_SECRET")  # BRIDGE_FIELD_KEY 폴백 제거 -- 키 분리 원칙
 if not _JWT_SECRET:
     print("[CRITICAL] JWT_SECRET 환경변수가 설정되지 않았습니다. 서버를 시작할 수 없습니다.")
     print("[CRITICAL] Render 대시보드 → Environment Variables → JWT_SECRET 추가 후 재배포.")
@@ -236,7 +249,7 @@ _PII_BLOCKED_KEYS: frozenset[str] = frozenset({
     "full_name", "first_name", "last_name", "name",
     "contact_name", "contact_person",
     "recruiter_name", "recruiter_email",
-    # 직책/포지션 (담당자 직책 — 채용 포지션 타입과 혼동 주의)
+    # 직책/포지션 (담당자 직책 -- 채용 포지션 타입과 혼동 주의)
     "contact_position", "contact_title",
     "recruiter_position", "recruiter_title",
     "position_title", "staff_position",
@@ -260,7 +273,7 @@ _PII_BLOCKED_KEYS: frozenset[str] = frozenset({
     "mobile_phone", "phone_number", "contact_phone",
 })
 
-# 값 수준 정규식 마스킹 — 블록키를 통과한 문자열에 잔류 PII가 있을 경우 대비
+# 값 수준 정규식 마스킹 -- 블록키를 통과한 문자열에 잔류 PII가 있을 경우 대비
 _PII_PATTERNS: list[tuple[re.Pattern, str]] = [
     # 한국 휴대전화 (010-xxxx-xxxx / 01x-xxx-xxxx)
     (re.compile(r"\b01[016789][- ]?\d{3,4}[- ]?\d{4}\b"), "***-****-****"),
@@ -272,9 +285,9 @@ _PII_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b\d{3}-\d{2}-\d{5}\b"), "***-**-*****"),
     # 주민등록번호 앞자리+뒷자리 패턴
     (re.compile(r"\b\d{6}-[1-4]\d{6}\b"), "******-*******"),
-    # 한국어 이름 — 담당자/성명 컨텍스트 뒤에 오는 2-4자 한글
+    # 한국어 이름 -- 담당자/성명 컨텍스트 뒤에 오는 2-4자 한글
     (re.compile(r"(?:담당자|성명|이름|문의|연락처)[:：\s]{0,3}([가-힣]{2,4})"), "[REDACTED-NAME]"),
-    # 영어 이름 — "Name:", "Contact:", "Teacher:" 뒤 Title Case
+    # 영어 이름 -- "Name:", "Contact:", "Teacher:" 뒤 Title Case
     (re.compile(r"(?:Name|Contact|Teacher|Recruiter|Manager):\s*([A-Z][a-z]+ [A-Z][a-z]+)"), "[REDACTED-NAME]"),
 ]
 
@@ -286,7 +299,7 @@ def _scrub_value(v: str) -> str:
     return v
 
 
-# 관리자 작성 콘텐츠 필드 — 값 수준 PII 정규식 스캔 제외
+# 관리자 작성 콘텐츠 필드 -- 값 수준 PII 정규식 스캔 제외
 # (FAQ 본문, 게시글 본문 등 의도적으로 포함된 비즈니스 이메일/연락처 보호)
 _CONTENT_FIELDS: frozenset[str] = frozenset({
     "body", "preview", "review_text", "html_content", "description",
@@ -305,7 +318,7 @@ def _scrub_obj(obj: Any, _key: str = "") -> Any:
         return [_scrub_obj(item, _key=_key) for item in obj]
     if isinstance(obj, str):
         if _key in _CONTENT_FIELDS:
-            return obj  # 콘텐츠 필드는 값 수준 스캔 제외 — 비즈니스 연락처 마스킹 방지
+            return obj  # 콘텐츠 필드는 값 수준 스캔 제외 -- 비즈니스 연락처 마스킹 방지
         return _scrub_value(obj)
     return obj
 
@@ -320,13 +333,13 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        # X-XSS-Protection deprecated (OWASP 2025) — disabled, CSP replaces it
+        # X-XSS-Protection deprecated (OWASP 2025) -- disabled, CSP replaces it
         "X-XSS-Protection": "0",
         # HSTS: 2년 + subdomains + preload (Google/Apple/Microsoft 표준)
         "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
         # Permissions-Policy: 불필요 기능 비활성화
         "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
-        # CSP: 순수 JSON API — 리소스 로드 완전 차단 + 삽입 공격 차단
+        # CSP: 순수 JSON API -- 리소스 로드 완전 차단 + 삽입 공격 차단
         # frame-ancestors: X-Frame-Options 대체 (모던 브라우저 우선)
         "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     }
@@ -383,7 +396,7 @@ SUPABASE_URL      = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")   # 공개 API용
 SUPABASE_SVC_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "") # 서버사이드 삽입용
 
-# CORS 허용 출처 — 기본 도메인 + 환경변수 추가분 병합
+# CORS 허용 출처 -- 기본 도메인 + 환경변수 추가분 병합
 _CORE_ORIGINS = [
     "https://bridgejob.co.kr",
     "https://www.bridgejob.co.kr",
@@ -399,7 +412,7 @@ _DEV_ORIGINS = [
 _cors_env = os.getenv("CORS_ORIGINS", "")
 _IS_PROD = os.getenv("BRIDGE_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
 
-# CORS 환경변수 안전 검증 — 와일드카드(*) 또는 비HTTPS 도메인 차단
+# CORS 환경변수 안전 검증 -- 와일드카드(*) 또는 비HTTPS 도메인 차단
 _extra: list[str] = []
 for _o in (_cors_env.split(",") if _cors_env else []):
     _o = _o.strip()
@@ -408,7 +421,7 @@ for _o in (_cors_env.split(",") if _cors_env else []):
     if _o == "*":
         import logging as _log_cors
         _log_cors.getLogger("bridge").error(
-            "🚨 CORS_ORIGINS에 와일드카드(*) 감지 — 차단됨. "
+            "🚨 CORS_ORIGINS에 와일드카드(*) 감지 -- 차단됨. "
             "허용 도메인을 명시적으로 설정하세요."
         )
         continue  # 와일드카드 추가 거부
@@ -454,7 +467,7 @@ def _startup_db_health_check() -> None:
             if data_dir.exists():
                 _log.info("[STARTUP] ✓ Persistent Disk /data 마운트 확인")
             else:
-                _log.error("[STARTUP] ✗ /data 미마운트 — Render Persistent Disk 설정 확인 필요")
+                _log.error("[STARTUP] ✗ /data 미마운트 -- Render Persistent Disk 설정 확인 필요")
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA busy_timeout = 3000")
         try:
@@ -477,7 +490,7 @@ def _startup_db_health_check() -> None:
         _log.info("[STARTUP] 테이블 카운트: %s", counts)
         if any(v <= 0 for v in counts.values()):
             _log.warning(
-                "[STARTUP] ⚠ 일부 테이블 비어있거나 없음 — "
+                "[STARTUP] ⚠ 일부 테이블 비어있거나 없음 -- "
                 "로컬에서 tools/render_db_upload.py 실행 필요"
             )
     except Exception as e:
@@ -486,13 +499,13 @@ def _startup_db_health_check() -> None:
 
 @app.on_event("startup")
 async def _startup_event():
-    """FastAPI startup hook — 비블로킹 백그라운드 DB 헬스체크."""
+    """FastAPI startup hook -- 비블로킹 백그라운드 DB 헬스체크."""
     try:
         threading.Thread(target=_startup_db_health_check, daemon=True).start()
     except Exception as e:
         logging.getLogger("bridge.startup").error("[STARTUP] 스레드 시작 실패: %s", e)
 
-# ── 글로벌 HTTPException 핸들러 — 모든 에러를 구조화된 JSON으로 자동 변환 ───
+# ── 글로벌 HTTPException 핸들러 -- 모든 에러를 구조화된 JSON으로 자동 변환 ───
 # 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}
 # 이미 구조화된 detail(dict)은 그대로 통과. 향후 새 엔드포인트도 자동 적용.
 _STATUS_TO_CATEGORY = {
@@ -525,10 +538,10 @@ async def _structured_error_handler(request: Request, exc: HTTPException):
     )
 
 
-# 보안 미들웨어 — 헤더 + Rate Limit + 감사 로그
+# 보안 미들웨어 -- 헤더 + Rate Limit + 감사 로그
 try:
     from security_middleware import SecurityMiddleware, security_router, admin_security_router
-    # 배포 직후 블랙리스트 초기화 — 이전 세션 잔여 차단 해제
+    # 배포 직후 블랙리스트 초기화 -- 이전 세션 잔여 차단 해제
     try:
         from security_middleware import ip_blacklist
         if ip_blacklist._list or ip_blacklist._permanent:
@@ -544,7 +557,7 @@ try:
 except ImportError:
     pass  # 선택적: 파일 없으면 무시
 
-# PII 마스킹 미들웨어 — CORS보다 먼저 등록해야 응답 전체를 커버
+# PII 마스킹 미들웨어 -- CORS보다 먼저 등록해야 응답 전체를 커버
 app.add_middleware(PIIMaskingMiddleware)
 
 app.add_middleware(
@@ -555,16 +568,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature", "Cookie"],
 )
 
-# GZip 압축 — 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
+# GZip 압축 -- 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# TrustedHost — 허용된 호스트만 접근 (Host 헤더 위조 방지)
+# TrustedHost -- 허용된 호스트만 접근 (Host 헤더 위조 방지)
 _TRUSTED_HOSTS = ["bridgejob.co.kr", "www.bridgejob.co.kr", "api.bridgejob.co.kr", "bridge-n7hk.onrender.com"]
 if not _IS_PROD:
     _TRUSTED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_TRUSTED_HOSTS)
 
-# Body size 제한 — 일반 10MB / DB 복원 경로 30MB
+# Body size 제한 -- 일반 10MB / DB 복원 경로 30MB
 _MAX_BODY_BYTES         = 10 * 1024 * 1024  # 10MB (일반)
 _MAX_BODY_BYTES_RESTORE = 30 * 1024 * 1024  # 30MB (DB 복원 전용)
 
@@ -582,7 +595,7 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(BodySizeLimitMiddleware)
 
-# ── 미들웨어 레벨 IP Rate Limit — body 검증 이전 단계에서 차단 ──────────────
+# ── 미들웨어 레벨 IP Rate Limit -- body 검증 이전 단계에서 차단 ──────────────
 # 목적: 잘못된 payload 반복 전송으로 Pydantic 검증 부하 유발하는 DoS 방어
 _IP_REQ_COUNTS: dict[str, list[float]] = {}
 _IP_RL_WINDOW = 10        # 10초 창
@@ -621,7 +634,7 @@ class IPRateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(IPRateLimitMiddleware)
 
-# ── Kill-Switch (MAINT 모드) — 침해 의심 시 모든 mutation 503 반환 ──────────
+# ── Kill-Switch (MAINT 모드) -- 침해 의심 시 모든 mutation 503 반환 ──────────
 class MaintenanceMiddleware(BaseHTTPMiddleware):
     """env MAINT=1 이면 POST/PUT/PATCH/DELETE 전체 503. GET은 정상."""
     _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
@@ -637,13 +650,13 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(MaintenanceMiddleware)
 
-# ── Threat Feed — Spamhaus/Firehol 블록리스트 (무료 공개 피드) ─────────────
+# ── Threat Feed -- Spamhaus/Firehol 블록리스트 (무료 공개 피드) ─────────────
 # 성능 최적화: v4/v6 분리 + LRU 캐시로 요청당 O(1) amortized
 import ipaddress as _threat_ipm
 _THREAT_NETS_V4: list = []
 _THREAT_NETS_V6: list = []
 _THREAT_FEED_PATH = Path(__file__).parent / "data" / "threat_feed.txt"
-# IP 판정 캐시 — 같은 IP 반복 조회 시 재스캔 회피 (Render 단일 서버 메모리)
+# IP 판정 캐시 -- 같은 IP 반복 조회 시 재스캔 회피 (Render 단일 서버 메모리)
 _THREAT_CACHE: dict[str, bool] = {}
 _THREAT_CACHE_MAX = 20000
 
@@ -723,7 +736,7 @@ class ThreatFeedMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(ThreatFeedMiddleware)
 
-# ── CSRF Origin 검증 — 관리자 mutation 요청의 Origin 헤더 검증 ──────────────
+# ── CSRF Origin 검증 -- 관리자 mutation 요청의 Origin 헤더 검증 ──────────────
 _ALLOWED_ORIGINS_SET = set(ALLOWED_ORIGINS)
 
 class CSRFOriginMiddleware(BaseHTTPMiddleware):
@@ -756,7 +769,7 @@ class CSRFOriginMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(CSRFOriginMiddleware)
 
-# ── 관리자 변경 감사 로그 — 모든 admin mutation 상세 기록 ────────────────────
+# ── 관리자 변경 감사 로그 -- 모든 admin mutation 상세 기록 ────────────────────
 class AdminAuditMiddleware(BaseHTTPMiddleware):
     """관리자 POST/PATCH/DELETE 요청을 감사 로그에 기록."""
     _MUTATION = {"POST", "PUT", "PATCH", "DELETE"}
@@ -800,7 +813,7 @@ def _ensure_candidate_indexes() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_name ON candidates(full_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_created ON candidates(created_at)")
-        # 추가 인덱스 — 대량 유입 대비 (WHERE is_deleted 매 쿼리 공통)
+        # 추가 인덱스 -- 대량 유입 대비 (WHERE is_deleted 매 쿼리 공통)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_deleted ON candidates(is_deleted)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_sheet ON candidates(sheet_number)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_visible ON candidates(talent_visible)")
@@ -855,7 +868,7 @@ def get_svc_client() -> "Client":
 # ── 요청 모델 ─────────────────────────────────────────────────────────────────
 class CandidateApply(BaseModel):
     """
-    구직자 지원 웹폼 — 구글폼 42개 항목 100% 매핑
+    구직자 지원 웹폼 -- 구글폼 42개 항목 100% 매핑
     Google Form + Native Web Form 병렬 운영 공통 스키마
     """
     # ── 기본 식별 ──────────────────────────────────────────────────────────
@@ -931,7 +944,7 @@ class CandidateApply(BaseModel):
 
 class ClientInquiry(BaseModel):
     """
-    구인처 채용 문의 — 구글폼 43개 항목 100% 매핑
+    구인처 채용 문의 -- 구글폼 43개 항목 100% 매핑
     Google Form + Native Web Form 병렬 운영 공통 스키마
     """
     # ── 담당자 식별 ────────────────────────────────────────────────────────
@@ -1005,7 +1018,7 @@ def ok(data=None, message: str = "ok"):
 
 
 def err(message: str, code: int = 400, error_code: str = ""):
-    """구조화 에러 — HTTPException에 error_code 포함."""
+    """구조화 에러 -- HTTPException에 error_code 포함."""
     raise HTTPException(
         status_code=code,
         detail={"message": message, "error_code": error_code or _http_to_error_code(code)},
@@ -1048,7 +1061,7 @@ async def health_check():
     }
 
 
-# ── Render 슬립 방지 — 10분마다 self-ping ──────────────────────────────────────
+# ── Render 슬립 방지 -- 10분마다 self-ping ──────────────────────────────────────
 _RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "")
 
 def _keep_alive_loop():
@@ -1070,9 +1083,8 @@ if _RENDER_URL:
 
 
 def _job_row_to_public(row: dict) -> dict:
-    """SQLite jobs row → PublicJob 형태로 매핑 (민감 필드 제외)"""
+    """SQLite jobs row → PublicJob 형태로 매핑 (민감 필드 제외, 관리자 경로 전용)"""
     teaching_age_raw = row.get("teaching_age") or ""
-    # "Kindy - Elem" 같은 텍스트를 age group 배열로 변환
     age_map = {
         "kindy": "kindergarten", "kindergarten": "kindergarten",
         "elem": "elementary", "elementary": "elementary",
@@ -1088,10 +1100,9 @@ def _job_row_to_public(row: dict) -> dict:
     benefits_raw = row.get("benefits") or ""
     benefits_list = [b.strip() for b in benefits_raw.split(",") if b.strip()] if benefits_raw else []
 
-    # raw_text: 내부 메모(괄호 블록)·연락처 PII 제거 후 공개
     raw_text = row.get("raw_text") or ""
     if raw_text:
-        raw_text = re.sub(r'\([^)]*\)', '', raw_text)   # ( 업체명 이메일 전화 ) 제거
+        raw_text = re.sub(r'\([^)]*\)', '', raw_text)
         raw_text = "\n".join(l for l in raw_text.splitlines() if l.strip())
 
     return {
@@ -1118,6 +1129,74 @@ def _job_row_to_public(row: dict) -> dict:
     }
 
 
+def _ad_only_to_public(j: dict) -> dict:
+    """
+    ad_only 클린 dict → PublicJob 매핑.
+
+    입력 스키마: location, job_code, start_date, teaching_age, class_size,
+                 working_hours, monthly_salary, teach_hrs_week, vacation,
+                 housing, native_count, benefits, extra_lines
+    (이미 pii_guard 통과된 데이터)
+    """
+    teaching_age_raw = j.get("teaching_age") or ""
+    age_map = {
+        "kindy": "kindergarten", "kindergarten": "kindergarten",
+        "elem": "elementary", "elementary": "elementary",
+        "pre_k": "pre_k", "pre-k": "pre_k", "prek": "pre_k",
+        "middle": "middle", "high": "high", "adult": "adult",
+    }
+    age_groups = []
+    for token in re.split(r"[,/\-&·\s]+", teaching_age_raw.lower()):
+        token = token.strip()
+        if token in age_map and age_map[token] not in age_groups:
+            age_groups.append(age_map[token])
+
+    benefits_raw = j.get("benefits") or ""
+    benefits_list = [b.strip() for b in benefits_raw.split(",") if b.strip()] if benefits_raw else []
+
+    extras = j.get("extra_lines") or []
+    raw_text = "\n".join(extras) if isinstance(extras, list) else None
+
+    out = {
+        "location":                j.get("location"),
+        "job_id":                  j.get("job_code", ""),
+        "starting_date":           j.get("start_date"),
+        "teaching_age":            age_groups or None,
+        "teaching_age_raw":        teaching_age_raw or None,
+        "class_size":              j.get("class_size"),
+        "working_hours":           j.get("working_hours"),
+        "monthly_salary":          j.get("monthly_salary"),
+        "teaching_hours_per_week": j.get("teach_hrs_week"),
+        "vacation":                j.get("vacation"),
+        "native_teacher_count":    j.get("native_count"),
+        "housing":                 j.get("housing"),
+        "preferences":             None,
+        "employee_benefits":       benefits_list or None,
+        "raw_text":                raw_text or None,
+        "notes":                   None,
+        "is_hot":                  False,
+        "employment_type":         "full_time",
+        "hours_per_day":           None,
+        "status":                  "open",
+    }
+    # 방어선 2: 응답 레벨 최종 스캔 (location 은 strict, 나머지는 한글/메일/전화만)
+    if _AD_READY and _ad_assert_clean:
+        for k, v in out.items():
+            if isinstance(v, str) and v:
+                _ad_assert_clean(v, context=f"public_jobs.{k}",
+                                 strict_brand=(k == "location"))
+            elif isinstance(v, list):
+                for it in v:
+                    if isinstance(it, str):
+                        _ad_assert_clean(it, context=f"public_jobs.{k}[]",
+                                         strict_brand=False)
+    return out
+
+
+def _admin_key_ok(request: Request) -> bool:
+    return bool(_ADMIN_KEY) and request.headers.get("x-admin-key", "") == _ADMIN_KEY
+
+
 @app.get("/api/jobs", tags=["jobs"])
 async def list_jobs(
     request:   Request,
@@ -1128,15 +1207,40 @@ async def list_jobs(
     offset:    int = 0,
 ):
     """
-    공개 구인 목록 조회 (SQLite, status='open' 만 반환)
-    - city: 도시 필터 (서울, 인천, 수원 등)
-    - is_hot: HOT 포지션만 (true/false)
-    - include_closed: true면 closed 포함 (admin용)
-    - limit / offset: 페이지네이션
+    공개 구인 목록 조회.
+
+    - 기본 공개 경로: ad_only/jobs_clean.txt (PII 0건, fail-closed 가드)
+    - include_closed=true + admin key: master.db 직접 조회 (관리자 전용)
     """
-    limit = min(max(limit, 1), 100)  # 스크래핑 방지: 1~100 강제
+    limit = min(max(limit, 1), 100)
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         return bridge_error("RATE_LIMIT", "Too many requests. Please slow down.", retryable=True, status=429)
+
+    admin_mode = bool(include_closed) and _admin_key_ok(request)
+
+    # 공개 경로 -- ad_only 전용
+    if not admin_mode:
+        if not _AD_READY or _ad_load_all_jobs is None:
+            logging.getLogger("bridge.api").error("ad_only 미가용 -- 공개 jobs 응답 0건")
+            return ok(data=[], message="0건 조회 (ad_only 미가용)")
+        try:
+            jobs = _ad_load_all_jobs()
+            if city:
+                c = city.strip()[:50].lower()
+                jobs = [j for j in jobs if c in (j.get("location") or "").lower()]
+            if is_hot is True:
+                jobs = []  # ad_only 는 is_hot 메타 없음 -- 필터 시 빈 결과
+            paged = jobs[offset: offset + limit]
+            data = [_ad_only_to_public(j) for j in paged]
+            return ok(data=data, message=f"{len(data)}건 조회 (ad_only)")
+        except _ADPIIErr as pe:
+            logging.getLogger("bridge.api").error("ad_only PII 감지 -- 공개 응답 차단: %s", pe)
+            return ok(data=[], message="0건 조회 (PII 가드 차단)")
+        except Exception as e:
+            logging.getLogger("bridge.api").error("list_jobs ad_only 실패: %s", e, exc_info=True)
+            return ok(data=[], message="0건 조회 (내부 오류)")
+
+    # 관리자 경로 -- master.db 직접
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout=5000")
@@ -1144,14 +1248,6 @@ async def list_jobs(
         try:
             where = ["is_deleted = 0"]
             params: list[Any] = []
-
-            # include_closed requires admin key
-            if include_closed and _ADMIN_KEY and request.headers.get("x-admin-key", "") == _ADMIN_KEY:
-                pass  # no status filter
-            else:
-                where.append("status = ?")
-                params.append("open")
-
             if city:
                 city = city.strip()[:50]
                 where.append("(city LIKE ? OR location LIKE ?)")
@@ -1159,53 +1255,69 @@ async def list_jobs(
             if is_hot is not None:
                 where.append("is_hot = ?")
                 params.append(1 if is_hot else 0)
-
             sql = (
                 "SELECT * FROM jobs WHERE " + " AND ".join(where)
                 + " ORDER BY is_hot DESC, CASE WHEN COALESCE(raw_text, '') = '' THEN 1 ELSE 0 END ASC, created_at DESC"
                 + " LIMIT ? OFFSET ?"
             )
             params.extend([limit, offset])
-
             rows = conn.execute(sql, params).fetchall()
             data = [_job_row_to_public(dict(r)) for r in rows]
-            return ok(data=data, message=f"{len(data)}건 조회")
+            return ok(data=data, message=f"{len(data)}건 조회 (admin)")
         finally:
             conn.close()
-
     except Exception as e:
-        logging.getLogger("bridge.api").error("list_jobs 실패: %s", e, exc_info=True)
+        logging.getLogger("bridge.api").error("list_jobs admin 실패: %s", e, exc_info=True)
         err("구인 목록을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
 @app.get("/api/jobs/{job_id}", tags=["jobs"])
 async def get_job(job_id: str, request: Request):
-    """포지션 상세 조회 — 민감 필드(구인처 연락처/주소 등) 제외, SQLite"""
+    """포지션 상세 조회 -- 공개 경로는 ad_only, admin key 있으면 master.db."""
     if not _rate_ok(_ip_hash(request), window=60, max_posts=60):
         return bridge_error("RATE_LIMIT", "Too many requests. Please slow down.", retryable=True, status=429)
+
+    # 공개 경로 -- ad_only
+    if not _admin_key_ok(request):
+        if not _AD_READY or _ad_get_job is None:
+            err("포지션을 찾을 수 없습니다.", 404)
+        try:
+            j = _ad_get_job(job_id)
+            if not j:
+                err("포지션을 찾을 수 없습니다.", 404)
+            return ok(data=_ad_only_to_public(j))
+        except HTTPException:
+            raise
+        except _ADPIIErr as pe:
+            logging.getLogger("bridge.api").error("ad_only PII 감지 -- 상세 차단: %s", pe)
+            err("포지션 정보를 불러올 수 없습니다.", 500)
+        except Exception as e:
+            logging.getLogger("bridge.api").error("get_job ad_only 실패: %s", e, exc_info=True)
+            err("포지션 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
+
+    # 관리자 경로
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout=5000")
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute(
-                "SELECT * FROM jobs WHERE id = ? AND status = ? AND is_deleted = 0",
-                [job_id, "open"],
+                "SELECT * FROM jobs WHERE id = ? AND is_deleted = 0",
+                [job_id],
             ).fetchone()
             if not row:
                 err("포지션을 찾을 수 없습니다.", 404)
             return ok(data=_job_row_to_public(dict(row)))
         finally:
             conn.close()
-
     except HTTPException:
         raise
     except Exception as e:
-        logging.getLogger("bridge.api").error("get_job 실패: %s", e, exc_info=True)
+        logging.getLogger("bridge.api").error("get_job admin 실패: %s", e, exc_info=True)
         err("포지션 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.", 500)
 
 
-# 구직자 암호화 필드 — 고위험 PII 전체 + 준식별자(quasi-identifier) 포함
+# 구직자 암호화 필드 -- 고위험 PII 전체 + 준식별자(quasi-identifier) 포함
 _CANDIDATE_ENCRYPT = {
     # ── 직접 식별자 ──
     "full_name",            # 식별 가능 이름
@@ -1221,7 +1333,7 @@ _CANDIDATE_ENCRYPT = {
     "religion",             # 종교 [고위험]
     "health_info",          # 건강 정보 [고위험]
     # ── 준식별자 (단독으론 무해하나 조합 시 재식별 가능) ──
-    "dob",                  # 생년월일 — 재식별 위험
+    "dob",                  # 생년월일 -- 재식별 위험
     "nationality",          # 국적
     "current_location",     # 현재 거주지
     "reference",            # 소개자/이전 학교 연락처 (제3자 PII 포함)
@@ -1428,7 +1540,7 @@ async def refresh_apply_token(request: Request):
     """유효한 지원자 JWT를 새 1시간 토큰으로 갱신.
 
     Authorization: Bearer <current_token> 헤더 필요.
-    만료된 토큰은 갱신 불가 — 재지원 필요.
+    만료된 토큰은 갱신 불가 -- 재지원 필요.
     """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -1460,7 +1572,7 @@ async def inquiry(request: Request, body: ClientInquiry):
     _INQUIRY_ENCRYPT = {
         "phone", "email", "contact_name", "business_registration",  # 직접 식별자
         "school_location",  # 위치 정보
-        "memo",             # 자유 입력 — PII 노출 가능성
+        "memo",             # 자유 입력 -- PII 노출 가능성
     }
 
     try:
@@ -1532,7 +1644,7 @@ async def inquiry(request: Request, body: ClientInquiry):
                 daemon=True,
             ).start()
 
-            # 자동 채용공고 생성 (status='pending_review') — 실패해도 접수 완료
+            # 자동 채용공고 생성 (status='pending_review') -- 실패해도 접수 완료
             threading.Thread(
                 target=_auto_create_job_from_inquiry,
                 args=(new_id, body.school_name),
@@ -1563,7 +1675,7 @@ async def inquiry(request: Request, body: ClientInquiry):
 
 # ── 인재 게시판 공개 API ───────────────────────────────────────────────────────
 
-# TTL 인메모리 캐시 (key → (data, expires_at))  — 대량 유입 대비
+# TTL 인메모리 캐시 (key → (data, expires_at))  -- 대량 유입 대비
 _PUBLIC_CACHE: dict[str, tuple[list, float]] = {}
 _PUBLIC_CACHE_TTL = 60  # 60초
 
@@ -1578,7 +1690,7 @@ def _public_cache_get(key: str):
 
 
 def _public_cache_set(key: str, data: list) -> None:
-    """캐시 저장 (최대 100항목 — 초과 시 오래된 항목 제거)."""
+    """캐시 저장 (최대 100항목 -- 초과 시 오래된 항목 제거)."""
     if len(_PUBLIC_CACHE) >= 100:
         oldest = min(_PUBLIC_CACHE, key=lambda k: _PUBLIC_CACHE[k][1])
         _PUBLIC_CACHE.pop(oldest, None)
@@ -1586,7 +1698,7 @@ def _public_cache_set(key: str, data: list) -> None:
 
 
 def _db_connect(row_factory: bool = False) -> sqlite3.Connection:
-    """최적화된 SQLite 연결 — 공개 API 대량 유입 대비.
+    """최적화된 SQLite 연결 -- 공개 API 대량 유입 대비.
     busy_timeout / cache_size / mmap / temp_store 모두 설정.
     """
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -1600,7 +1712,7 @@ def _db_connect(row_factory: bool = False) -> sqlite3.Connection:
 
 
 def _ok_public(data, max_age: int = 300) -> JSONResponse:
-    """공개 API 전용 응답 — Cache-Control 헤더 포함.
+    """공개 API 전용 응답 -- Cache-Control 헤더 포함.
     Admin API에는 절대 사용 금지.
     """
     body = {"success": True, "message": "ok", "data": _sanitize_data(data)}
@@ -1624,7 +1736,7 @@ async def public_talents(
     q: str | None = None,
 ):
     """
-    공개 강사 목록 — talent_visible=1 인 Active 강사만, PII 절대 없음.
+    공개 강사 목록 -- talent_visible=1 인 Active 강사만, PII 절대 없음.
     nationality/area/target/q(sheet_number) 필터 지원.
     캐시: 필터 없는 기본 요청은 60초 TTL 캐시 적용.
     """
@@ -1663,7 +1775,7 @@ async def public_talents(
     result = []
     for row in rows:
         r = dict(row)
-        # T3v1 복호화: nationality (국가명만 공개 — 이름·주소 아님)
+        # T3v1 복호화: nationality (국가명만 공개 -- 이름·주소 아님)
         nat_raw = r.get("nationality") or ""
         r["nationality"] = decrypt_field(nat_raw, "nationality") if nat_raw else ""
 
@@ -2046,7 +2158,7 @@ async def admin_talent_auth_revoke(request: Request, email_enc: str):
 
 @app.get("/api/admin/talent-auth/doc/{request_id}", tags=["talent-auth-admin"])
 async def admin_talent_auth_doc(request: Request, request_id: int):
-    """사업자등록증명원 반환 — S3 presigned URL 우선, 없으면 DB BLOB 직접 응답."""
+    """사업자등록증명원 반환 -- S3 presigned URL 우선, 없으면 DB BLOB 직접 응답."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -2081,7 +2193,7 @@ async def admin_talent_auth_doc(request: Request, request_id: int):
 
 @app.post("/api/admin/talent-preview-session", tags=["talent-auth-admin"])
 async def admin_talent_preview_session(request: Request):
-    """관리자 인재게시판 미리보기 — 30일 세션 즉시 생성."""
+    """관리자 인재게시판 미리보기 -- 30일 세션 즉시 생성."""
     _check_admin(request)
     import secrets as _sec
     now = datetime.utcnow()
@@ -2122,7 +2234,7 @@ class _TalentInquiry(BaseModel):
 
 @app.post("/api/public/talent-inquiry", status_code=201, tags=["public"])
 async def public_talent_inquiry(request: Request, body: _TalentInquiry):
-    """강사 게시판 문의 접수 — IP당 5회/시간, PII 암호화 저장."""
+    """강사 게시판 문의 접수 -- IP당 5회/시간, PII 암호화 저장."""
     if not _rate_ok(_ip_hash(request), window=3600, max_posts=5):
         raise HTTPException(429, "Too many requests. Please try again later.")
 
@@ -2212,7 +2324,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Admin: ad_posts 대시보드 ──────────────────────────────────────────────────
 _ADMIN_DB_PATH = Path(os.getenv("DB_PATH", os.getenv("BRIDGE_DB_PATH", str(Path(__file__).resolve().parent / "master.db"))))
-# Render 디스크 마운트 경로(/data) 자동 생성 — 없으면 sqlite3 연결 불가
+# Render 디스크 마운트 경로(/data) 자동 생성 -- 없으면 sqlite3 연결 불가
 try:
     _ADMIN_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 except OSError as _mkdir_err:
@@ -2224,7 +2336,7 @@ _FORM_CONFIG_READ_KEY   = os.getenv("FORM_CONFIG_READ_KEY", "")  # 서버-to-서
 # ── Supabase (community_posts 영구 저장) ─────────────────────────────────────
 # SUPABASE_URL + SUPABASE_SERVICE_KEY 환경변수 설정 시 커뮤니티 데이터를 Supabase에 저장.
 # 미설정 시 기존 SQLite 폴백 사용 (개발/오프라인 환경 호환).
-# ⚠️ 반드시 service_role 키를 사용할 것 — anon 키는 RLS로 쓰기 차단됨.
+# ⚠️ 반드시 service_role 키를 사용할 것 -- anon 키는 RLS로 쓰기 차단됨.
 _SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 _SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 _supa = None
@@ -2244,7 +2356,7 @@ def _validate_supabase_service_key(key: str) -> bool:
         return False  # 파싱 실패 시 보수적으로 false
 
 if _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
-    # service_role 키인지 먼저 검증 — anon 키 실수 사용 즉시 차단
+    # service_role 키인지 먼저 검증 -- anon 키 실수 사용 즉시 차단
     if not _validate_supabase_service_key(_SUPABASE_SERVICE_KEY):
         logging.getLogger("bridge.api").error(
             "[Supabase] 🚨 SECURITY HALT: SUPABASE_SERVICE_KEY가 service_role 키가 아닙니다. "
@@ -2305,7 +2417,7 @@ _SESSION_LOCK = threading.Lock()
 _MAX_SESSIONS = 50  # 최대 동시 세션 수
 
 def _get_client_ip(request: Request) -> str:
-    """실제 클라이언트 IP 추출 — 스푸핑 방지 우선순위.
+    """실제 클라이언트 IP 추출 -- 스푸핑 방지 우선순위.
 
     우선순위:
       1. CF-Connecting-IP  : Cloudflare가 설정 (위조 불가)
@@ -2342,7 +2454,7 @@ def _get_client_ip(request: Request) -> str:
         except ValueError:
             pass
 
-    # 2순위: X-Real-IP — TCP 연결이 신뢰 프록시 대역인 경우에만 수용
+    # 2순위: X-Real-IP -- TCP 연결이 신뢰 프록시 대역인 경우에만 수용
     if tcp_host and _is_trusted_proxy(tcp_host):
         real_ip = request.headers.get("X-Real-IP", "").strip()
         if real_ip:
@@ -2393,7 +2505,7 @@ def _create_session(request: Request) -> str:
     return token
 
 def _validate_session(request: Request) -> bool:
-    """세션 토큰 검증 — HttpOnly 쿠키 우선, 헤더 폴백. 유효하면 True."""
+    """세션 토큰 검증 -- HttpOnly 쿠키 우선, 헤더 폴백. 유효하면 True."""
     token = (
         request.cookies.get("bridge_session", "")          # HttpOnly 쿠키 (XSS 안전)
         or request.headers.get("x-admin-token", "")        # 헤더 폴백 (하위 호환)
@@ -2445,7 +2557,7 @@ except Exception:
 if not _ADMIN_KEY:
     import logging as _log_adm
     _log_adm.getLogger("bridge.api").warning(
-        "[SECURITY] ADMIN_API_KEY 미설정 — 관리자 엔드포인트가 인증 없이 노출됩니다! "
+        "[SECURITY] ADMIN_API_KEY 미설정 -- 관리자 엔드포인트가 인증 없이 노출됩니다! "
         ".env에 ADMIN_API_KEY를 반드시 설정하세요."
     )
 
@@ -2615,7 +2727,7 @@ except Exception as _e:
 def _log_unauthorized_access(request: Request):
     """비관리자 접근 시 IP + URL + 시간 기록"""
     try:
-        ip = _get_client_ip(request)  # 첫 XFF 항목 위조 방지 — _get_client_ip 사용
+        ip = _get_client_ip(request)  # 첫 XFF 항목 위조 방지 -- _get_client_ip 사용
         url = str(request.url.path)
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("INSERT INTO access_logs (ip, url) VALUES (?, ?)", (ip, url))
@@ -2634,7 +2746,7 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
             return hmac.compare_digest(dk.hex(), dk_hex)
         except Exception:
             return False
-    # 평문 비밀번호 거부 — ADMIN_PASSWORD가 pbkdf2:sha256: 형식이어야 합니다
+    # 평문 비밀번호 거부 -- ADMIN_PASSWORD가 pbkdf2:sha256: 형식이어야 합니다
     logging.getLogger("bridge.security").error(
         "[H1] ADMIN_PASSWORD가 pbkdf2:sha256: 형식이 아닙니다. "
         "python tools/bridge_reset_password.py 실행 후 Render 환경변수 재설정 필요."
@@ -2644,15 +2756,15 @@ def _verify_admin_password(input_pw: str, stored: str) -> bool:
 
 def _check_admin(request: Request):
     """
-    관리자 인증 — 3단계 검증:
-    1. 세션 토큰 (x-admin-token) — 유효하면 즉시 통과 (HMAC/API키 스킵)
-    2. API 키 (x-admin-key) — 기존 방식
-    3. IP 화이트리스트 (ADMIN_ALLOWED_IPS) — 설정 시 추가 검증
+    관리자 인증 -- 3단계 검증:
+    1. 세션 토큰 (x-admin-token) -- 유효하면 즉시 통과 (HMAC/API키 스킵)
+    2. API 키 (x-admin-key) -- 기존 방식
+    3. IP 화이트리스트 (ADMIN_ALLOWED_IPS) -- 설정 시 추가 검증
     """
     if not _ADMIN_KEY:
         raise HTTPException(status_code=503, detail={"isError": True, "errorCategory": "DB_UNAVAILABLE", "isRetryable": True, "context": "관리자 기능이 비활성화되어 있습니다."})
 
-    # ── Layer 1: 세션 토큰 (최우선 — 프론트엔드 내부 사용자용) ──
+    # ── Layer 1: 세션 토큰 (최우선 -- 프론트엔드 내부 사용자용) ──
     if _validate_session(request):
         return  # 세션 유효 → 즉시 통과
 
@@ -2728,7 +2840,7 @@ async def admin_login(request: Request):
     # 세션 토큰 발급 (IP /24 서브넷 바인딩, 8시간 만료)
     session_token = _create_session(request)
     _log.info("관리자 로그인 성공: ip=%s subnet=%s", real_ip[:12] + "***", _ip_subnet24(real_ip))
-    # HttpOnly 쿠키 설정 — XSS로 탈취 불가 (SameSite=None for cross-origin Vercel→Render)
+    # HttpOnly 쿠키 설정 -- XSS로 탈취 불가 (SameSite=None for cross-origin Vercel→Render)
     cookie = (
         f"bridge_session={session_token}; HttpOnly; Secure; "
         f"SameSite=None; Path=/; Max-Age={_SESSION_TTL}"
@@ -2747,7 +2859,7 @@ async def get_admin_key(request: Request):
 
 @app.post("/api/admin/logout", tags=["admin"])
 async def admin_logout(request: Request):
-    """세션 토큰 폐기 (로그아웃) — 쿠키 + 헤더 토큰 모두 폐기."""
+    """세션 토큰 폐기 (로그아웃) -- 쿠키 + 헤더 토큰 모두 폐기."""
     # 쿠키 토큰
     cookie_token = request.cookies.get("bridge_session", "").strip()
     if cookie_token:
@@ -2827,7 +2939,7 @@ async def _render_update_env_var(key: str, value: str) -> tuple[bool, str]:
 
 @app.post("/api/admin/change-password", tags=["admin"])
 async def admin_change_password(request: Request):
-    """관리자 비밀번호 변경 — in-memory + .env + Render 환경변수 동시 업데이트."""
+    """관리자 비밀번호 변경 -- in-memory + .env + Render 환경변수 동시 업데이트."""
     _check_admin(request)
     try:
         body = await request.json()
@@ -2862,7 +2974,7 @@ async def admin_change_password(request: Request):
         )
         msg = (
             "비밀번호 변경 완료 (현재 세션 즉시 적용). "
-            f"Render 환경변수 자동 업데이트 실패: {render_err} — "
+            f"Render 환경변수 자동 업데이트 실패: {render_err} -- "
             "Render 대시보드에서 ADMIN_PASSWORD를 수동으로 업데이트하세요."
         )
     return ok(data={"render_synced": render_ok}, message=msg)
@@ -2886,7 +2998,7 @@ async def admin_reset_blacklist(request: Request):
 
 @app.get("/api/admin/dashboard", tags=["admin"])
 async def admin_dashboard(request: Request):
-    """관리자 대시보드 — 전체 통계 + 최근 활동."""
+    """관리자 대시보드 -- 전체 통계 + 최근 활동."""
     _check_admin(request)
 
     # Render cold-start 방어: 컬럼 없으면 즉시 추가
@@ -3122,7 +3234,7 @@ class _AdPostUpdate(BaseModel):
 
 @app.post("/api/admin/ad-posts", tags=["admin"])
 async def admin_ad_posts_create(request: Request, body: _AdPostCreate):
-    """ad_posts 신규 생성 — status 초기값 draft"""
+    """ad_posts 신규 생성 -- status 초기값 draft"""
     _check_admin(request)
     if not _ADMIN_DB_PATH.exists():
         raise HTTPException(status_code=500, detail="master.db not found")
@@ -3144,7 +3256,7 @@ async def admin_ad_posts_create(request: Request, body: _AdPostCreate):
 
 @app.patch("/api/admin/ad-posts/{post_id}", tags=["admin"])
 async def admin_ad_posts_update(request: Request, post_id: int, body: _AdPostUpdate):
-    """ad_posts 수정 — 전달된 필드만 업데이트"""
+    """ad_posts 수정 -- 전달된 필드만 업데이트"""
     _check_admin(request)
     if not _ADMIN_DB_PATH.exists():
         raise HTTPException(status_code=500, detail="master.db not found")
@@ -3169,7 +3281,7 @@ async def admin_ad_posts_update(request: Request, post_id: int, body: _AdPostUpd
 
 @app.delete("/api/admin/ad-posts/{post_id}", tags=["admin"])
 async def admin_ad_posts_delete(request: Request, post_id: int):
-    """ad_posts 삭제 — status='deleted' 논리 삭제"""
+    """ad_posts 삭제 -- status='deleted' 논리 삭제"""
     _check_admin(request)
     if not _ADMIN_DB_PATH.exists():
         raise HTTPException(status_code=500, detail="master.db not found")
@@ -3244,7 +3356,7 @@ def _safe_decrypt(val, column_name: str = ""):
 
 
 def _decrypt_row(row: dict) -> dict:
-    """candidates 행 전체 복호화 — 컬럼명 포함 L1 키 정확 복호화"""
+    """candidates 행 전체 복호화 -- 컬럼명 포함 L1 키 정확 복호화"""
     result = dict(row)
     for key, val in result.items():
         if val is not None and isinstance(val, str):
@@ -3260,9 +3372,9 @@ def _sanitize_str(v):
     v = v.replace('\x00', '')
     # 2. All C0 control chars except \t \n \r (which json.dumps handles)
     v = re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', v)
-    # 3. C1 control chars (U+0080–U+009F) — break some parsers
+    # 3. C1 control chars (U+0080-U+009F) -- break some parsers
     v = re.sub(r'[\x80-\x9f]', '', v)
-    # 4. Unicode surrogates (U+D800–U+DFFF) — invalid in JSON
+    # 4. Unicode surrogates (U+D800-U+DFFF) -- invalid in JSON
     v = re.sub(r'[\ud800-\udfff]', '', v)
     # 5. BOM and other zero-width chars
     v = v.replace('\ufeff', '').replace('\ufffe', '')
@@ -3286,7 +3398,7 @@ _PAST_STATUSES = {"placed", "rejected", "withdrawn", "inactive", "Inactive", "Cl
 
 @app.get("/api/admin/decrypt-check", tags=["admin"])
 async def decrypt_check(request: Request):
-    """복호화 진단 — 첫 5개 후보자의 암호화 필드 원본/복호화 값 비교"""
+    """복호화 진단 -- 첫 5개 후보자의 암호화 필드 원본/복호화 값 비교"""
     _check_admin(request)
     import os, hashlib
     vault_ok = _VAULT_OK
@@ -3335,7 +3447,7 @@ async def admin_candidates(
     cursor:      int = 0,   # cursor-based: 마지막으로 받은 rowid (0=처음부터)
 ):
     """
-    지원자 목록 — SQLite. status=active|past|<specific> 필터 지원.
+    지원자 목록 -- SQLite. status=active|past|<specific> 필터 지원.
     offset/limit 기반 페이지네이션 (cursor=0일 때 offset 사용).
     cursor>0이면 rowid<cursor 조건 추가 (하위호환 유지).
     보호: X-Admin-Key 필수
@@ -3387,7 +3499,7 @@ async def admin_candidates(
                 ))
             _ALL_COLS = [
                 "candidate_id", "sheet_number", "email", "full_name", "nationality",
-                "ancestry",  # nationality_plain 제거 — 복호화된 nationality로 대체
+                "ancestry",  # nationality_plain 제거 -- 복호화된 nationality로 대체
                 "dob", "gender", "current_location", "start_date", "target", "area_prefs",
                 "experience", "current_salary", "desired_salary", "certification", "e_visa",
                 "mobile_phone", "kakaotalk", "criminal_record", "housing", "arc_holders",
@@ -3468,7 +3580,7 @@ async def admin_candidates(
 
 @app.get("/api/admin/candidates/brief", tags=["admin"])
 async def admin_candidates_brief(request: Request):
-    """후보자 경량 목록 — 드롭다운용 (4필드만)."""
+    """후보자 경량 목록 -- 드롭다운용 (4필드만)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -3496,7 +3608,7 @@ async def admin_candidates_brief(request: Request):
 async def admin_export_candidates(request: Request, format: str = "csv"):
     """후보자 전체 내보내기 (CSV / XLSX). PII 복호화 포함."""
     _check_admin(request)
-    # SECURITY: export는 하루 10회 제한 — 대량 PII dump 방어
+    # SECURITY: export는 하루 10회 제한 -- 대량 PII dump 방어
     if not _rate_ok(_ip_hash(request), window=86400, max_posts=10):
         raise HTTPException(429, "export 요청 한도 초과 (일 10회). 잠시 후 시도하세요.")
     import csv as _csv_mod
@@ -3682,7 +3794,7 @@ async def admin_update_candidate(
     update = {k: v for k, v in body.items() if k in EDITABLE}
     if not update:
         raise HTTPException(400, "수정 가능한 필드 없음")
-    # PII 필드 재암호화 — 평문 저장 방지
+    # PII 필드 재암호화 -- 평문 저장 방지
     for field in _CANDIDATE_ENCRYPT:
         if field in update and update[field]:
             update[field] = _encrypt_if_needed(str(update[field]), field)
@@ -3708,7 +3820,7 @@ async def admin_update_candidate(
 
 @app.delete("/api/admin/candidates/{candidate_id}", tags=["admin"])
 async def admin_delete_candidate(candidate_id: str, request: Request):
-    """Soft Delete — status='Deleted' 설정 (물리 삭제 금지)."""
+    """Soft Delete -- status='Deleted' 설정 (물리 삭제 금지)."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -3758,11 +3870,11 @@ async def admin_full_update_candidate(candidate_id: str, request: Request, body:
     for _immutable in ("candidate_id", "id", "created_at", "source_file", "source_row",
                        "gmail_message_id", "raw_email_body", "parsed_data"):
         body.pop(_immutable, None)
-    # 화이트리스트 필터 — DB에 없는 컬럼명 주입 차단
+    # 화이트리스트 필터 -- DB에 없는 컬럼명 주입 차단
     body = {k: v for k, v in body.items() if k in _CANDIDATES_MUTABLE_COLS}
     if not body:
         raise HTTPException(400, "수정할 데이터 없음")
-    # PII 필드 재암호화 — 평문 저장 방지
+    # PII 필드 재암호화 -- 평문 저장 방지
     for field in _CANDIDATE_ENCRYPT:
         if field in body and body[field]:
             body[field] = _encrypt_if_needed(str(body[field]), field)
@@ -3845,7 +3957,7 @@ async def admin_list_inquiries(
     q: str = "",
     source: str = "",
 ):
-    """채용의뢰 목록 — client_inquiries 테이블. q=검색어, source=소스필터."""
+    """채용의뢰 목록 -- client_inquiries 테이블. q=검색어, source=소스필터."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -3935,7 +4047,7 @@ async def admin_update_inquiry(inquiry_id: int, request: Request, body: dict):
 
 @app.patch("/api/admin/inquiries/{inquiry_id}", tags=["admin"])
 async def admin_patch_inquiry(inquiry_id: int, request: Request, body: dict):
-    """채용의뢰 필드 수정 — memo, raw_email_body, school_name, email, phone, location, inbox_status."""
+    """채용의뢰 필드 수정 -- memo, raw_email_body, school_name, email, phone, location, inbox_status."""
     _check_admin(request)
     EDITABLE = {"memo", "raw_email_body", "school_name", "email", "phone", "location", "inbox_status", "notes", "assigned_to"}
     update = {k: v for k, v in body.items() if k in EDITABLE}
@@ -3970,7 +4082,7 @@ async def admin_patch_inquiry(inquiry_id: int, request: Request, body: dict):
 
 @app.patch("/api/admin/inquiries/{inquiry_id}/duplicate-flag", tags=["admin"])
 async def admin_toggle_duplicate_flag(inquiry_id: int, request: Request):
-    """중복 의심 마킹 토글 — 삭제하지 않고 플래그만 표시."""
+    """중복 의심 마킹 토글 -- 삭제하지 않고 플래그만 표시."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -4168,7 +4280,7 @@ def _load_smtp_from_vault() -> None:
         import json as _json_sv
         data = _json_sv.loads(vault_file.read_text(encoding="utf-8"))
         if data.get("version") != "T3v1":
-            _log_smtp.warning("[SMTP Vault] 버전 불일치 — 스킵")
+            _log_smtp.warning("[SMTP Vault] 버전 불일치 -- 스킵")
             return
         entries = data.get("entries", {})
         injected = []
@@ -4220,7 +4332,7 @@ _TEMPLATE_COL_MAP = {
 }
 
 
-# ── SECURITY: PII 스캔 — 메일 본문에 개인정보 포함 시 발송 차단 ───────────────
+# ── SECURITY: PII 스캔 -- 메일 본문에 개인정보 포함 시 발송 차단 ───────────────
 _PII_EMAIL_RE = re.compile(r'[\w.\-+]+@[\w.\-]+\.\w+')
 _PII_PHONE_RE = re.compile(r'\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4}')
 _PII_KR_ID_RE = re.compile(r'\d{6}-[1-4]\d{6}')
@@ -4295,13 +4407,13 @@ def _mail_rate_record():
 def _smtp_send(to_email: str, subject: str, html_body: str, reply_to: str = "bridgejobkr@gmail.com") -> bool:
     """Gmail SMTP로 이메일 발송. 실패 시 False."""
     if not _SMTP_USER or not _SMTP_PASS or _SMTP_PASS == "your_app_password":
-        _log_email.warning("SMTP 미설정 — 발송 스킵 (to=%s)", to_email[:4] + "***")
+        _log_email.warning("SMTP 미설정 -- 발송 스킵 (to=%s)", to_email[:4] + "***")
         return False
     try:
         msg = MIMEMultipart("alternative")
-        # SECURITY: From 고정 — BRIDGE 공식 계정
+        # SECURITY: From 고정 -- BRIDGE 공식 계정
         msg["From"] = f"BRIDGE <{_SMTP_USER}>"
-        # SECURITY: To에 수신자 1명만 — CC/BCC 절대 금지
+        # SECURITY: To에 수신자 1명만 -- CC/BCC 절대 금지
         msg["To"] = to_email
         msg["Subject"] = subject
         # SECURITY: Reply-To → 우리 메일로만 회신
@@ -4361,7 +4473,7 @@ def _send_one_email(provider_key: str, to_email: str, subject: str,
             server.sendmail(cfg["user"], to_email, msg.as_string())
         return {"ok": True}
     except smtplib.SMTPAuthenticationError:
-        return {"ok": False, "error": "SMTP 인증 실패 — 앱 비밀번호 확인"}
+        return {"ok": False, "error": "SMTP 인증 실패 -- 앱 비밀번호 확인"}
     except smtplib.SMTPRecipientsRefused:
         return {"ok": False, "error": f"수신 거부: {to_email}"}
     except Exception as e:
@@ -4432,16 +4544,16 @@ def _secure_send_email(to_email: str, subject: str, html_body: str,
     """보안 규칙 적용 이메일 발송. (성공여부, 메시지) 반환.
 
     Security rules applied:
-    0. 블랙리스트 차단 — 등록된 이메일 발송 불가
-    1. 개별 발송 (CC/BCC 없음) — _smtp_send에서 강제
-    2. PII 스캔 — 본문에 개인정보 감지 시 차단
-    3. Rate limit — 3초 간격, 10/분, 200/일
-    4. Reply-To 격리 — bridgejobkr@gmail.com
+    0. 블랙리스트 차단 -- 등록된 이메일 발송 불가
+    1. 개별 발송 (CC/BCC 없음) -- _smtp_send에서 강제
+    2. PII 스캔 -- 본문에 개인정보 감지 시 차단
+    3. Rate limit -- 3초 간격, 10/분, 200/일
+    4. Reply-To 격리 -- bridgejobkr@gmail.com
     """
     # SECURITY: 블랙리스트 차단
     if _is_email_blacklisted(to_email):
         _log_email.warning("블랙리스트 차단 (to=%s)", to_email[:4] + "***")
-        return False, "블랙리스트 등록 이메일 — 발송 차단됨"
+        return False, "블랙리스트 등록 이메일 -- 발송 차단됨"
 
     # SECURITY: PII 스캔
     if not skip_pii_scan:
@@ -4551,14 +4663,14 @@ def _substitute_vars(html: str, candidate: dict, guide_links: dict) -> str:
 def _build_profile_card(c: dict) -> str:
     """PII 제외 후보자 프로필 카드 HTML 생성."""
     cid = _html.escape(str(c.get("id", "")))
-    nationality = _html.escape(str(c.get("nationality", "—")))
-    visa = _html.escape(str(c.get("visa_type", "—")))
-    age = _html.escape(str(c.get("age", "—")))
-    education = _html.escape(str(c.get("education_level", "—")))
-    teaching_exp = _html.escape(str(c.get("teaching_experience", "—")))
-    korea_exp = _html.escape(str(c.get("korea_experience", "—")))
-    location = _html.escape(str(c.get("city", "—")))
-    available = _html.escape(str(c.get("start_month") or c.get("available_from", "—")))
+    nationality = _html.escape(str(c.get("nationality", "--")))
+    visa = _html.escape(str(c.get("visa_type", "--")))
+    age = _html.escape(str(c.get("age", "--")))
+    education = _html.escape(str(c.get("education_level", "--")))
+    teaching_exp = _html.escape(str(c.get("teaching_experience", "--")))
+    korea_exp = _html.escape(str(c.get("korea_experience", "--")))
+    location = _html.escape(str(c.get("city", "--")))
+    available = _html.escape(str(c.get("start_month") or c.get("available_from", "--")))
     photo = c.get("photo_url", "")
 
     photo_html = ""
@@ -4899,7 +5011,7 @@ def _ensure_candidates_all_cols():
         ("is_deleted", "INTEGER", "0"),
         ("read_at", "TEXT", "NULL"),
         ("photo_s3_key", "TEXT", "NULL"),
-        # v3 추가 — _COLS SELECT에 포함, 없으면 500
+        # v3 추가 -- _COLS SELECT에 포함, 없으면 500
         ("recruiter_memo", "TEXT", "NULL"),
         ("passport_status", "TEXT", "NULL"),
         ("criminal_record_check", "TEXT", "NULL"),
@@ -5201,7 +5313,7 @@ class BulkSendBody(BaseModel):
 
 @app.post("/api/admin/candidates/bulk-patch", tags=["admin"])
 async def admin_bulk_patch(request: Request, body: dict = None):
-    """암호화 복원용 벌크 패치 — candidate_id 기준으로 여러 필드를 한꺼번에 업데이트.
+    """암호화 복원용 벌크 패치 -- candidate_id 기준으로 여러 필드를 한꺼번에 업데이트.
     body: { "rows": [{"candidate_id": "...", "field1": "val1", ...}, ...] }
     """
     _check_admin(request)
@@ -5478,7 +5590,7 @@ async def admin_matching_employers(request: Request, candidate_id: str):
         target = cand.get("target", "") or ""
         target_age = cand.get("target_age", "") or ""
 
-        # jobs 테이블 조회 — 삭제 안 된 것만
+        # jobs 테이블 조회 -- 삭제 안 된 것만
         employers = conn.execute(
             "SELECT id, brj_id, job_code, region, location, city, "
             "employer_display_name, teaching_age, salary_raw, status, created_at "
@@ -5702,7 +5814,7 @@ if not _raw_hmac_key:
     import secrets as _sec_hmac
     _raw_hmac_key = _sec_hmac.token_hex(32)
     logging.getLogger("bridge.api").warning(
-        "[WARNING] BRIDGE_HMAC_KEY 미설정 — 임시 랜덤 키 사용 중. "
+        "[WARNING] BRIDGE_HMAC_KEY 미설정 -- 임시 랜덤 키 사용 중. "
         "Render 대시보드 → Environment Variables → BRIDGE_HMAC_KEY 추가 권장."
     )
 _CAPTCHA_HMAC_KEY: bytes = _raw_hmac_key.encode()
@@ -5714,7 +5826,7 @@ _CAPTCHA_NONCES: "dict[str, float]" = {}  # nonce → 만료 시각(epoch)
 
 def _verify_captcha_token(token: str, ip_hash: str) -> bool:
     """CAPTCHA 토큰 검증: 타임스탬프 유효성 + nonce 재사용 방지.
-    C1 패치: return True 하드코딩 제거 — 실제 검증 수행.
+    C1 패치: return True 하드코딩 제거 -- 실제 검증 수행.
     """
     if not _CAPTCHA_ENABLED:
         return True
@@ -6218,7 +6330,7 @@ async def admin_list_applications(
     page: int = 1,
     limit: int = 200,
 ):
-    """구직자 + 구인자 접수 통합 목록 — SQLite.
+    """구직자 + 구인자 접수 통합 목록 -- SQLite.
     type=employer → 구인자만 (구직자 스킵, 성능 향상).
     page/limit → 페이지네이션 (type=employer 시 적용).
     """
@@ -6234,7 +6346,7 @@ async def admin_list_applications(
         try:
             apps: list[dict] = []
 
-            # 구직자 (candidates) — employer_only 시 스킵
+            # 구직자 (candidates) -- employer_only 시 스킵
             if not employer_only:
                 cands = conn.execute(
                     "SELECT candidate_id, full_name, email, nationality, mobile_phone, "
@@ -6259,7 +6371,7 @@ async def admin_list_applications(
                         "updated_at": c["updated_at"],
                     })
 
-            # 구인자 — jobs 테이블 (원본 워드포맷 데이터 + raw_text 포함)
+            # 구인자 -- jobs 테이블 (원본 워드포맷 데이터 + raw_text 포함)
             # 테이블 존재 여부 확인 (Render 신규/빈 DB 대비)
             _exist_check = {r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('jobs','client_inquiries')"
@@ -6314,7 +6426,7 @@ async def admin_list_applications(
                     "created_at": j["created_at"] or "",
                 })
 
-            # 구인자 — client_inquiries 테이블 (이메일/폼 접수 데이터)
+            # 구인자 -- client_inquiries 테이블 (이메일/폼 접수 데이터)
             inq_rows = conn.execute(
                 "SELECT id, school_name, email, contact_name, phone, location, "
                 "start_date, vacancies, teaching_age, schedule, working_hours, "
@@ -6392,7 +6504,7 @@ class StatusUpdate(BaseModel):
 
 @app.patch("/api/admin/applications/{app_id}", tags=["admin"])
 async def admin_update_application(app_id: str, body: StatusUpdate, request: Request):
-    """접수 상태/메모/본문 변경 — SQLite."""
+    """접수 상태/메모/본문 변경 -- SQLite."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6460,7 +6572,7 @@ async def admin_update_application(app_id: str, body: StatusUpdate, request: Req
 
 @app.get("/api/admin/payments", tags=["admin"])
 async def admin_list_payments(request: Request):
-    """결제 기록 목록 — SQLite (테이블 없으면 빈 배열)."""
+    """결제 기록 목록 -- SQLite (테이블 없으면 빈 배열)."""
     _check_admin(request)
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -6771,7 +6883,7 @@ def _ensure_interview_templates():
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
 
-    employer_subject = "인터뷰 일정 안내 — {scheduled_at}"
+    employer_subject = "인터뷰 일정 안내 -- {scheduled_at}"
     employer_html = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
@@ -6817,7 +6929,7 @@ def _ensure_interview_templates():
 </div>
 </body></html>"""
 
-    candidate_subject = "Interview Scheduled — {scheduled_at}"
+    candidate_subject = "Interview Scheduled -- {scheduled_at}"
     candidate_html = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
@@ -6865,7 +6977,7 @@ def _ensure_interview_templates():
 </body></html>"""
 
     # profile_broadcast 템플릿 (구인자에게 후보자 프로필 발송용)
-    profile_subject = "BRIDGE — 채용 후보자 프로필 안내"
+    profile_subject = "BRIDGE -- 채용 후보자 프로필 안내"
     profile_html = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;line-height:1.7;">
@@ -7185,7 +7297,7 @@ class InterviewStatusUpdate(BaseModel):
 
 @app.patch("/api/admin/interviews/{interview_id}", tags=["admin"])
 async def admin_update_interview(interview_id: int, body: InterviewStatusUpdate, request: Request):
-    """인터뷰 수정 — 상태/날짜/시간/메모 등 부분 업데이트."""
+    """인터뷰 수정 -- 상태/날짜/시간/메모 등 부분 업데이트."""
     _check_admin(request)
     valid_statuses = {
         # 파이프라인 단계
@@ -7244,7 +7356,7 @@ class _InterviewStatusPatch(BaseModel):
 
 @app.patch("/api/admin/interviews/{interview_id}/status", tags=["admin"])
 async def admin_update_interview_status(interview_id: int, body: _InterviewStatusPatch, request: Request):
-    """인터뷰 상태 변경 전용 — Sprint C-FINAL 칸반 뷰용."""
+    """인터뷰 상태 변경 전용 -- Sprint C-FINAL 칸반 뷰용."""
     _check_admin(request)
     return await admin_update_interview(
         interview_id,
@@ -7271,7 +7383,7 @@ async def admin_delete_interview(interview_id: int, request: Request):
 
 @app.get("/api/admin/interviews/pipeline", tags=["admin"])
 async def admin_interviews_pipeline(request: Request):
-    """인터뷰 파이프라인 — 상태별 그룹화 (Kanban 뷰용)."""
+    """인터뷰 파이프라인 -- 상태별 그룹화 (Kanban 뷰용)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -7552,8 +7664,8 @@ async def admin_confirm_interview(body: InterviewConfirm, request: Request):
         },
         message=(
             f"Interview #{interview_id} confirmed"
-            + (f" — GCal: {gcal_error}" if gcal_error else "")
-            + (f" — email errors: {len(email_errors)}" if email_errors else "")
+            + (f" -- GCal: {gcal_error}" if gcal_error else "")
+            + (f" -- email errors: {len(email_errors)}" if email_errors else "")
         ),
     )
 
@@ -7591,7 +7703,7 @@ except Exception as _s3_exc:
         pass
 
     async def s3_upload_bytes(*a, **kw):
-        raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
+        raise RuntimeError("S3 스토리지 미설정 -- backend.utils.storage 로드 실패")
 
     def s3_upload_bytes_sync(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정")
@@ -7600,7 +7712,7 @@ except Exception as _s3_exc:
         raise RuntimeError("S3 스토리지 미설정")
 
     async def s3_upload_file(*a, **kw):
-        raise RuntimeError("S3 스토리지 미설정 — backend.utils.storage 로드 실패")
+        raise RuntimeError("S3 스토리지 미설정 -- backend.utils.storage 로드 실패")
 
     def get_presigned_url(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정")
@@ -7611,7 +7723,7 @@ except Exception as _s3_exc:
     def check_s3_connection():
         return False
 
-# ── 서명 URL (HMAC-SHA256) — 업로드 파일 접근 보호 ──────────────────────────
+# ── 서명 URL (HMAC-SHA256) -- 업로드 파일 접근 보호 ──────────────────────────
 _UPLOAD_SIGN_KEY: str = os.getenv("UPLOAD_SIGN_KEY", "").strip()
 _SIGN_EXPIRY: int = 600  # 10분
 
@@ -7690,7 +7802,7 @@ async def serve_protected_file(
     mime, _ = mimetypes.guess_type(str(file_path))
     media_type = mime or "application/octet-stream"
 
-    # [비활성 — 로컬 파일 서빙] S3 전환 후 불필요. 아래 S3 redirect 사용.
+    # [비활성 -- 로컬 파일 서빙] S3 전환 후 불필요. 아래 S3 redirect 사용.
     # return _FR(path=str(file_path), media_type=media_type, headers={...})
     # ── S3 presigned URL 리다이렉트 ────────────────────────────────────────
     # DB에서 s3_key를 조회하는 것이 이상적이나,
@@ -7877,7 +7989,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
             _digits = re.sub(r"[^0-9]", "", entity_id)[-4:]
             brj_number = int(_digits) if _digits else 0
             if not brj_number:
-                _log_upload.info("[AutoProcess] %s — 번호 생성 불가, 스킵", entity_id)
+                _log_upload.info("[AutoProcess] %s -- 번호 생성 불가, 스킵", entity_id)
                 _set_resume_status(entity_id, "error")
                 return
 
@@ -7989,7 +8101,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                     )
             except Exception as pipe_err:
                 _log_upload.warning(
-                    "[AutoProcess] Pipeline 실패 → doc_processor 폴백: %s — %s",
+                    "[AutoProcess] Pipeline 실패 → doc_processor 폴백: %s -- %s",
                     entity_id, pipe_err,
                 )
 
@@ -8018,7 +8130,7 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                         entity_id, brj_number, pii_count, len(processed_bytes),
                     )
                 except Exception as dp_err:
-                    _log_upload.error("[AutoProcess] doc_processor 폴백도 실패: %s — %s",
+                    _log_upload.error("[AutoProcess] doc_processor 폴백도 실패: %s -- %s",
                                      entity_id, dp_err, exc_info=True)
 
             if not processed_bytes:
@@ -8162,7 +8274,7 @@ async def upload_file(
         fname = f"{att_id}{ext}"
 
     file_path = entity_dir / fname
-    # [비활성 — 로컬 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
+    # [비활성 -- 로컬 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
     # file_path.write_bytes(data)
 
     # ── S3 업로드 ──────────────────────────────────────────────────────────
@@ -8192,14 +8304,14 @@ async def upload_file(
     # Thumbnail for photos
     thumb_url = None
     if file_type == "photo" and ext in (".jpg", ".jpeg", ".png", ".webp"):
-        # [비활성 — 로컬 썸네일] S3 전환 후 미구현. TODO: Pillow → S3 업로드 방식으로 구현 예정.
+        # [비활성 -- 로컬 썸네일] S3 전환 후 미구현. TODO: Pillow → S3 업로드 방식으로 구현 예정.
         # thumb_path = entity_dir / "photo_thumb.jpg"
         # if _make_thumbnail(file_path, thumb_path):
         #     thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
         pass
 
-    # Build URL (S3 presigned — 1시간 유효)
-    # [비활성 — 로컬 URL] S3 presigned URL 사용 (아래 코드 참조)
+    # Build URL (S3 presigned -- 1시간 유효)
+    # [비활성 -- 로컬 URL] S3 presigned URL 사용 (아래 코드 참조)
     # rel = file_path.relative_to(_UPLOAD_BASE); file_url = f"/uploads/{rel.as_posix()}"
     file_url = s3_presigned_url(s3_key, expires=3600)
 
@@ -8317,7 +8429,7 @@ async def delete_processed_cv(candidate_id: str, request: Request):
 
 @app.post("/api/admin/candidates/{candidate_id}/reprocess-cv", tags=["admin"])
 async def reprocess_cv(candidate_id: str, request: Request):
-    """수동 재처리 트리거 — sheet_number 변경 후 호출."""
+    """수동 재처리 트리거 -- sheet_number 변경 후 호출."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -8462,7 +8574,7 @@ async def admin_upload_editor_image(
     if not data:
         raise HTTPException(400, "Empty file.")
     ext = _validate_file(data, file.filename or "image.png", "community_image")
-    # [비활성 — 로컬 에디터 이미지 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
+    # [비활성 -- 로컬 에디터 이미지 저장] S3 전환 후 불필요. 아래 S3 업로드 사용.
     # img_dir = _UPLOAD_BASE / "editor"; img_dir.mkdir(parents=True, exist_ok=True)
     # fname = f"{uuid.uuid4().hex[:12]}{ext}"; file_path = img_dir / fname
     # file_path.write_bytes(data); file_url = f"/uploads/editor/{fname}"
@@ -8745,7 +8857,7 @@ def _save_raw_submission(payload: dict, source: str, record_id: str = "") -> Non
     """
     제출 시점 원본 JSON을 별도 AES-256-GCM 파일로 보관.
     backups/raw/raw_{source}_{YYYYMMDD_HHMMSS}_{id}.enc
-    - DB와 독립된 불변 원본 — 관리자도 DB에서 수정해도 이 파일은 보존
+    - DB와 독립된 불변 원본 -- 관리자도 DB에서 수정해도 이 파일은 보존
     - 복호화 키: BRIDGE_FIELD_KEY (Render 환경변수, 서버만 보유)
     - 최근 200개 유지
     """
@@ -9239,7 +9351,7 @@ async def admin_list_jobs_v2(
             )
             params.extend([s, s, s, s, s])
         w = " AND ".join(where)
-        # 필요한 컬럼만 조회 (87→20컬럼 — PII 복호화 포함)
+        # 필요한 컬럼만 조회 (87→20컬럼 -- PII 복호화 포함)
         _V2_COLS = (
             "brj_id, id, job_code, region, region_name, location, city, "
             "employer_display_name, internal_notes, raw_text, teaching_age, "
@@ -9260,7 +9372,7 @@ async def admin_list_jobs_v2(
                 _m = re.search(r"Monthly Salary\s*:\s*(.+)", d["raw_text"])
                 if _m:
                     d["salary_raw"] = _m.group(1).strip().strip('`"')
-            # PII 복호화 — enc_ 필드를 contact_* 로 변환 (원본 enc_ 필드는 제거)
+            # PII 복호화 -- enc_ 필드를 contact_* 로 변환 (원본 enc_ 필드는 제거)
             d["contact_email"] = _safe_decrypt(d.pop("enc_contact_email", ""), "enc_contact_email") or ""
             d["contact_name"]  = _safe_decrypt(d.pop("enc_contact_name", ""),  "enc_contact_name")  or ""
             d["contact_phone"] = _safe_decrypt(d.pop("enc_contact_phone", ""), "enc_contact_phone") or ""
@@ -9710,7 +9822,7 @@ class PostUpdate(BaseModel):
 
 @app.put("/api/admin/posts/{post_id}", tags=["admin"])
 async def admin_put_post(post_id: int, body: PostUpdate, request: Request):
-    """게시글 수정 — PUT alias (관리자)."""
+    """게시글 수정 -- PUT alias (관리자)."""
     _check_admin(request)
     _tag_re = re.compile(r'<[^>]+>')
     updates: list[str] = []
@@ -9741,7 +9853,7 @@ async def admin_put_post(post_id: int, body: PostUpdate, request: Request):
 
 @app.delete("/api/admin/posts/{post_id}", tags=["admin"])
 async def admin_delete_post(post_id: int, request: Request):
-    """게시글 삭제 — soft delete (관리자, 게시판 무관)."""
+    """게시글 삭제 -- soft delete (관리자, 게시판 무관)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -9918,7 +10030,7 @@ async def admin_update_partner(partner_id: int, body: PartnerUpdate, request: Re
 
 @app.delete("/api/admin/partners/{partner_id}", tags=["admin"])
 async def admin_delete_partner(partner_id: int, request: Request):
-    """파트너 삭제 — soft delete (관리자)."""
+    """파트너 삭제 -- soft delete (관리자)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -9990,7 +10102,7 @@ def _ensure_site_settings_table():
         ('footer_text', '© 2026 BRIDGE Recruitment · bridgejob.co.kr'),
         ('footer_description', 'Korea ESL Recruitment Platform'),
         ('hero_tagline', 'A career that changes your life'),
-        ('hero_subtitle', "Korea's #1 ESL recruitment platform — 원어민 영어강사 채용 전문"),
+        ('hero_subtitle', "Korea's #1 ESL recruitment platform -- 원어민 영어강사 채용 전문"),
         ('nav_menu', '[{"href":"/community/about","label":"About us"},{"href":"/community/korea","label":"Korea"},{"href":"/community/visa","label":"Visa"},{"href":"/jobs","label":"Job Board"},{"href":"/community/support","label":"Support"},{"href":"/community/support_kr","label":"업무지원"},{"href":"/community","label":"Community"}]'),
         ('nav_cta_1', '{"href":"/apply","label":"Apply"}'),
         ('nav_cta_2', '{"href":"/inquiry","label":"원어민채용의뢰"}'),
@@ -10576,7 +10688,7 @@ async def admin_create_download_link(request: Request):
 
 @app.get("/dl/{link_uuid}", tags=["download"])
 async def download_file(link_uuid: str, request: Request):
-    """SECURITY: 보안 파일 다운로드 — UUID 기반, 횟수/만료 제한."""
+    """SECURITY: 보안 파일 다운로드 -- UUID 기반, 횟수/만료 제한."""
     from fastapi.responses import FileResponse as FastFileResponse
 
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -10674,8 +10786,8 @@ async def admin_matching_send_profile_secure(request: Request, body: SecureProfi
     """SECURITY: 매칭된 employer들에게 후보자 프로필 개별 발송 (전체 보안 규칙 적용).
 
     보안 규칙:
-    1. 완전 개별 발송 — CC/BCC 절대 금지, To에 1명만
-    2. PII 마스킹 — 후보자 실명/이메일/전화/주소 절대 미포함
+    1. 완전 개별 발송 -- CC/BCC 절대 금지, To에 1명만
+    2. PII 마스킹 -- 후보자 실명/이메일/전화/주소 절대 미포함
     3. Reply-To: bridgejobkr@gmail.com (회신 격리)
     4. 발송 전 PII 자동 스캔
     5. Rate limit: 3초 간격, 10/분, 200/일
@@ -10697,7 +10809,7 @@ async def admin_matching_send_profile_secure(request: Request, body: SecureProfi
             raise HTTPException(404, "Candidate not found")
         cand_d = dict(cand)
 
-        # SECURITY: 프로필 카드 — PII 제외
+        # SECURITY: 프로필 카드 -- PII 제외
         card_html = _build_profile_card(cand_d)
 
         # 템플릿 로드
@@ -10748,7 +10860,7 @@ async def admin_matching_send_profile_secure(request: Request, body: SecureProfi
             else:
                 fail_count += 1
 
-            # SECURITY: 발송 로그 — 이메일 마스킹 저장
+            # SECURITY: 발송 로그 -- 이메일 마스킹 저장
             conn.execute(
                 """INSERT INTO profile_sends (candidate_id, employer_id, school_name, to_email, status)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -10880,7 +10992,7 @@ async def _handle_mail_send(request: Request):
     if not subject:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
 
-    # SECURITY: 블랙리스트 필터링 — 차단된 이메일 자동 제거
+    # SECURITY: 블랙리스트 필터링 -- 차단된 이메일 자동 제거
     blocked = [e for e in recipients if _is_email_blacklisted(e)]
     if blocked:
         logging.getLogger("bridge.mail").warning("블랙리스트 차단 %d건: %s", len(blocked), blocked[:3])
@@ -11031,7 +11143,7 @@ async def record_profile_send(request: Request):
 
 @app.get("/api/admin/profile-sends", tags=["admin"])
 async def get_profile_sends(request: Request):
-    """발송 이력 목록 — 최근 100건."""
+    """발송 이력 목록 -- 최근 100건."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -11077,7 +11189,7 @@ async def check_duplicate_send(request: Request):
 @app.post("/api/admin/mail/send-profile", tags=["admin"])
 async def send_profile_mail(request: Request):
     """
-    소개발송 전용 — 1:1 개별 발송 + profile_sends 자동 기록.
+    소개발송 전용 -- 1:1 개별 발송 + profile_sends 자동 기록.
     body: {sender, candidate_id, candidate_number, recipients:[{email,name,job_id}],
            subject, html_body, attachment_paths}
     """
@@ -11191,7 +11303,7 @@ async def send_profile_mail(request: Request):
 
 @app.get("/api/admin/email-blacklist", tags=["admin"])
 async def admin_list_blacklist(request: Request):
-    """블랙리스트 목록 (해시+라벨만 반환 — 원문 이메일 미포함)."""
+    """블랙리스트 목록 (해시+라벨만 반환 -- 원문 이메일 미포함)."""
     _check_admin(request)
     _ensure_email_blacklist_table()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -11306,7 +11418,7 @@ async def employers_for_mail(
     per_page: int = 100,
 ):
     """
-    소개 메일 수신자 목록 — client_inquiries 테이블 기반.
+    소개 메일 수신자 목록 -- client_inquiries 테이블 기반.
     필터: location(도시), teaching_age(대상 연령)
     """
     _check_admin(request)
@@ -11357,7 +11469,7 @@ async def employers_for_mail(
 
 
 def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
-    """강사 1명의 소개 HTML 블록 생성 (PII 없음 — 번호·국적·조건만)."""
+    """강사 1명의 소개 HTML 블록 생성 (PII 없음 -- 번호·국적·조건만)."""
     snum    = cand.get("sheet_number") or ""
     nat     = cand.get("nationality_plain") or cand.get("nationality") or ""
     gender  = cand.get("gender") or ""
@@ -11373,7 +11485,7 @@ def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
     star    = cand.get("talent_reference_star")
     star_str = ("★" * int(star) + "☆" * (5 - int(star)) + f" ({star}점)") if star else ""
 
-    # presigned URL — cv_processed_s3_key 우선, 없으면 원본 file_uploads 폴백
+    # presigned URL -- cv_processed_s3_key 우선, 없으면 원본 file_uploads 폴백
     cv_key  = cand.get("cv_processed_s3_key") or cand.get("fallback_cv_s3_key") or ""
     cv_link = ""
     if cv_key:
@@ -11503,7 +11615,7 @@ async def mail_introduce(request: Request):
         for cr in cand_rows:
             teacher_blocks += _build_teacher_html_block(dict(cr), expiry_days)
 
-        template_subject = "📢 BRIDGE 원어민 강사 소식 — 국내/해외 프로필 확인하세요"
+        template_subject = "📢 BRIDGE 원어민 강사 소식 -- 국내/해외 프로필 확인하세요"
         candidate_ids_str = _json_intro.dumps([str(c) for c in candidate_ids])
 
         sent = 0
@@ -11652,7 +11764,7 @@ async def get_introduce_log(request: Request, limit: int = 50):
         conn.close()
 
 
-# ── 구인자 관리 (employers) CRUD — employers 테이블 기반 ──────────────────────
+# ── 구인자 관리 (employers) CRUD -- employers 테이블 기반 ──────────────────────
 
 _EMPLOYERS_ENC_FIELDS = {"email", "phone", "memo"}
 
@@ -11687,12 +11799,12 @@ def _parse_memo_pii(memo: str) -> dict:
 
     full_text = memo.strip()
 
-    # 이메일 추출 — 전체 메모에서 (ASCII 로컬파트만 매칭)
+    # 이메일 추출 -- 전체 메모에서 (ASCII 로컬파트만 매칭)
     emails = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", full_text)
     if emails:
         result["email"] = emails[0]
 
-    # 전화번호 추출 — 전체 메모에서
+    # 전화번호 추출 -- 전체 메모에서
     phones = re.findall(r"01[016789][-\s]?\d{3,4}[-\s]?\d{4}", full_text)
     if phones:
         raw_ph = re.sub(r"[\s-]", "", phones[0])
@@ -11703,7 +11815,7 @@ def _parse_memo_pii(memo: str) -> dict:
         else:
             result["phone"] = raw_ph
 
-    # 담당자 직함 추출 — 전체 메모에서
+    # 담당자 직함 추출 -- 전체 메모에서
     _TITLES = ["원장", "부원장", "대표", "이사", "부장", "실장", "팀장", "담당", "선생", "매니저", "관장", "사장"]
     for title in _TITLES:
         # 패턴1: "이름+직함+전화" (직함 앞에 이름, 뒤에 전화)
@@ -11828,7 +11940,7 @@ def _normalize_raw_text(raw: str) -> str:
 
 @app.get("/api/employers", tags=["employers"])
 async def get_employers(request: Request):
-    """구인자 전체 목록 — jobs 테이블 기반 (PII 복호화 포함)."""
+    """구인자 전체 목록 -- jobs 테이블 기반 (PII 복호화 포함)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -11931,7 +12043,7 @@ async def get_employers(request: Request):
 
 @app.patch("/api/employers/{j_number}", tags=["employers"])
 async def update_employer(j_number: str, request: Request):
-    """구인자 정보 수정 — jobs 테이블 (job_code 또는 brj_id로 식별)."""
+    """구인자 정보 수정 -- jobs 테이블 (job_code 또는 brj_id로 식별)."""
     _check_admin(request)
     data = await request.json()
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -11966,7 +12078,7 @@ async def update_employer(j_number: str, request: Request):
 
 @app.delete("/api/employers/{j_number}", tags=["employers"])
 async def delete_employer(j_number: str, request: Request):
-    """구인자 논리 삭제 — jobs 테이블 (is_deleted=1)."""
+    """구인자 논리 삭제 -- jobs 테이블 (is_deleted=1)."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -11985,7 +12097,7 @@ async def delete_employer(j_number: str, request: Request):
 # ── 구인자 메일 단건 발송 (/api/send-mail) ────────────────────────────────────
 @app.post("/api/send-mail", tags=["mail"])
 async def send_mail_single(request: Request):
-    """MailComposer(구인자관리)에서 단건 발송 — Naver/Gmail 자동 분기."""
+    """MailComposer(구인자관리)에서 단건 발송 -- Naver/Gmail 자동 분기."""
     _check_admin(request)
     data = await request.json()
     to_email: str = data.get("to", "").strip()
@@ -12087,7 +12199,7 @@ except Exception as _e:
 
 
 def get_secret(key: str) -> "str | None":
-    """내부 전용 — 복호화된 시크릿 값 반환. 없으면 None, env var 폴백 포함."""
+    """내부 전용 -- 복호화된 시크릿 값 반환. 없으면 None, env var 폴백 포함."""
     # 환경변수 우선 (Render 대시보드 설정 값)
     env_val = os.getenv(key)
     if env_val:
@@ -12115,7 +12227,7 @@ def get_secret(key: str) -> "str | None":
 
 @app.get("/api/admin/secrets", tags=["admin"])
 async def list_secrets(request: Request):
-    """비밀키 목록 — 키 이름·설명·수정일만 반환. 값은 절대 포함 안 함."""
+    """비밀키 목록 -- 키 이름·설명·수정일만 반환. 값은 절대 포함 안 함."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -12131,7 +12243,7 @@ async def list_secrets(request: Request):
 
 @app.post("/api/admin/secrets", tags=["admin"])
 async def set_secret(request: Request):
-    """비밀키 등록/수정 — AES-256 암호화 저장. body: {key, value, description}"""
+    """비밀키 등록/수정 -- AES-256 암호화 저장. body: {key, value, description}"""
     _check_admin(request)
     body = await request.json()
     key   = str(body.get("key", "")).strip().upper().replace(" ", "_")
@@ -12183,11 +12295,11 @@ _KAKAO_OTC: "dict[str, dict]" = {}   # otc → {api_key, expires_at}
 
 @app.get("/api/admin/kakao/login", tags=["admin"])
 async def kakao_login():
-    """카카오 OAuth 시작 — Kakao 인증 페이지로 redirect."""
+    """카카오 OAuth 시작 -- Kakao 인증 페이지로 redirect."""
     from fastapi.responses import RedirectResponse
     client_id = get_secret("KAKAO_CLIENT_ID")
     if not client_id:
-        raise HTTPException(503, "KAKAO_CLIENT_ID 미설정 — /admin/settings 비밀키 관리에서 등록하세요.")
+        raise HTTPException(503, "KAKAO_CLIENT_ID 미설정 -- /admin/settings 비밀키 관리에서 등록하세요.")
     redirect_uri = "https://bridge-n7hk.onrender.com/api/admin/kakao/callback"
     kakao_url = (
         "https://kauth.kakao.com/oauth/authorize"
@@ -12200,7 +12312,7 @@ async def kakao_login():
 
 @app.get("/api/admin/kakao/callback", tags=["admin"])
 async def kakao_callback(code: str = "", error: str = "", error_description: str = ""):
-    """Kakao 인증 콜백 — code → token → user_id → OTC 발급."""
+    """Kakao 인증 콜백 -- code → token → user_id → OTC 발급."""
     from fastapi.responses import RedirectResponse
     import httpx as _httpx
 
@@ -12254,8 +12366,8 @@ async def kakao_callback(code: str = "", error: str = "", error_description: str
         return RedirectResponse(f"{front_url}/admin?kakao_error=network_error")
 
     if not allowed_ids:
-        # 초기 설정 중 — ID를 셋업 페이지로 전달 (로그인은 허용 안 함)
-        logging.getLogger("bridge.api").warning("[KAKAO] KAKAO_ADMIN_IDS 미설정 — 셋업 유도: %s", kakao_id)
+        # 초기 설정 중 -- ID를 셋업 페이지로 전달 (로그인은 허용 안 함)
+        logging.getLogger("bridge.api").warning("[KAKAO] KAKAO_ADMIN_IDS 미설정 -- 셋업 유도: %s", kakao_id)
         return RedirectResponse(f"{front_url}/admin/kakao-setup?kakao_id={kakao_id}")
     if kakao_id not in allowed_ids:
         logging.getLogger("bridge.api").warning("[KAKAO] 미허가 계정: %s", kakao_id)
@@ -12351,7 +12463,7 @@ def _interview_reminder_loop():
 threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").start()
 
 
-# ── Resume Converter API — 이력서 PII 제거 ──────────────────────────────────────
+# ── Resume Converter API -- 이력서 PII 제거 ──────────────────────────────────────
 
 @app.post("/api/resume/process", tags=["admin"])
 async def process_resume_files(
@@ -12670,7 +12782,7 @@ async def process_resume_files(
 
 
 # ── Form Config 엔드포인트 ──────────────────────────────────────────────────────
-# 내부 서비스 키 전용 (브라우저 미노출 — Vercel Server Component 전용)
+# 내부 서비스 키 전용 (브라우저 미노출 -- Vercel Server Component 전용)
 @app.get("/api/internal/form-config/{form_name}", include_in_schema=False)
 async def internal_get_form_config(form_name: str, request: Request):
     if form_name not in ("apply", "inquiry"):
@@ -12796,7 +12908,7 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
             conn.close()
 
 
-# ── Sprint B — 이력서 자동첨부 + 지역/연령 매칭 + Excel 다운로드 ───────────────
+# ── Sprint B -- 이력서 자동첨부 + 지역/연령 매칭 + Excel 다운로드 ───────────────
 # B-1: 이력서 자동첨부 (processed CV presigned URL)
 # B-2: jobs 기반 양방향 매칭 API
 # B-3: jobs Excel 다운로드
@@ -12805,7 +12917,7 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
 @app.get("/api/admin/resume/find/{candidate_number}", tags=["admin"])
 async def find_resume_by_candidate_number(candidate_number: int, request: Request):
     """
-    Sprint B B-1 — sheet_number(=candidate_number)로 PII 제거 이력서 presigned URL 반환.
+    Sprint B B-1 -- sheet_number(=candidate_number)로 PII 제거 이력서 presigned URL 반환.
     MailComposer 자동첨부용. 없으면 404.
     """
     _check_admin(request)
@@ -12825,7 +12937,7 @@ async def find_resume_by_candidate_number(candidate_number: int, request: Reques
 
     candidate_id, s3_key, full_name = row
     if not s3_key:
-        raise HTTPException(404, "처리된 이력서 없음 — resume_converter로 처리 필요")
+        raise HTTPException(404, "처리된 이력서 없음 -- resume_converter로 처리 필요")
 
     try:
         presigned = s3_presigned_url(s3_key, expires=3600)
@@ -12852,7 +12964,7 @@ async def matching_jobs_for_candidate(
     limit: int = 30,
 ):
     """
-    Sprint B B-2a — 후보자 area_prefs/target_age 기반 jobs 매칭 목록.
+    Sprint B B-2a -- 후보자 area_prefs/target_age 기반 jobs 매칭 목록.
     match_score: 지역(2) + 연령(1) = 최대 3.
     """
     _check_admin(request)
@@ -12911,7 +13023,7 @@ async def matching_candidates_for_job(
     limit: int = 30,
 ):
     """
-    Sprint B B-2b — jobs 지역/교습연령 기반 Active 후보자 매칭 목록.
+    Sprint B B-2b -- jobs 지역/교습연령 기반 Active 후보자 매칭 목록.
     brj_id(BRJ-xxx) 또는 job_id(정수 PK) 중 하나 필수.
     """
     _check_admin(request)
@@ -12988,7 +13100,7 @@ async def download_jobs_xlsx(
     include_pii: bool = False,
 ):
     """
-    Sprint B B-3 — jobs 테이블 Excel(.xlsx) 다운로드.
+    Sprint B B-3 -- jobs 테이블 Excel(.xlsx) 다운로드.
     include_pii=true 시 enc_contact_* 복호화 컬럼 포함 (관리자 전용).
     """
     _check_admin(request)
@@ -13124,7 +13236,7 @@ async def admin_db_dump(request: Request):
 
 @app.get("/api/admin/db/stats", tags=["admin"])
 async def admin_db_stats(request: Request):
-    """Render DB 행 수 확인 — 데이터 복원 진단용."""
+    """Render DB 행 수 확인 -- 데이터 복원 진단용."""
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 3000")
@@ -13154,7 +13266,7 @@ async def admin_db_backup(request: Request):
         ok_flag = _s3_backup(dry_run=False)
         if ok_flag:
             return ok(message="S3 백업 완료", data={"status": "uploaded"})
-        raise HTTPException(500, "백업 실패 — 로그 확인")
+        raise HTTPException(500, "백업 실패 -- 로그 확인")
     except RuntimeError as e:
         raise HTTPException(503, f"S3 미설정: {e}")
     except Exception as e:
