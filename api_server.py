@@ -489,10 +489,28 @@ def _startup_db_health_check() -> None:
 
         _log.info("[STARTUP] 테이블 카운트: %s", counts)
         if any(v <= 0 for v in counts.values()):
-            _log.warning(
-                "[STARTUP] ⚠ 일부 테이블 비어있거나 없음 -- "
-                "로컬에서 tools/render_db_upload.py 실행 필요"
-            )
+            _log.warning("[STARTUP] ⚠ 일부 테이블 비어있거나 없음")
+            # ── Drive 자동 복원 시도 ──────────────────────────────────────────
+            if os.getenv("DRIVE_OAUTH_TOKEN_JSON"):
+                _log.info("[STARTUP] DRIVE_OAUTH_TOKEN_JSON 감지 → Drive 자동 복원 시작")
+                try:
+                    import sys as _sys
+                    _tools_dir = str(Path(__file__).resolve().parent / "tools")
+                    if _tools_dir not in _sys.path:
+                        _sys.path.insert(0, _tools_dir)
+                    from db_persist import restore as _drive_restore  # type: ignore
+                    ok = _drive_restore()
+                    if ok:
+                        _log.info("[STARTUP] ✓ Drive 자동 복원 성공 — DB 준비 완료")
+                    else:
+                        _log.error("[STARTUP] ✗ Drive 복원 실패 — 수동 복원 필요")
+                except Exception as _re:
+                    _log.error("[STARTUP] Drive 복원 예외: %s", _re, exc_info=True)
+            else:
+                _log.warning(
+                    "[STARTUP] DRIVE_OAUTH_TOKEN_JSON 미설정 -- "
+                    "Render 환경변수에 추가하거나 수동으로 tools/render_db_upload.py 실행"
+                )
     except Exception as e:
         _log.error("[STARTUP] DB 헬스체크 실패: %s", e, exc_info=True)
 

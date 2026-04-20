@@ -39,6 +39,19 @@ def _drive():
     from google.auth.transport.requests import Request as GRequest
     from googleapiclient.discovery import build
 
+    # ── Headless/Render 모드: 환경변수에서 토큰 복원 ──────────────────────────
+    token_json_env = os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip()
+    if token_json_env and not TOKEN_PATH.exists():
+        try:
+            TOKEN_PATH.write_text(token_json_env, encoding="utf-8")
+            try:
+                os.chmod(str(TOKEN_PATH), 0o600)
+            except Exception:
+                pass
+            print("[oauth] DRIVE_OAUTH_TOKEN_JSON → token 파일 복원 완료", flush=True)
+        except Exception as e:
+            print(f"[oauth] token 환경변수 복원 실패: {e}", flush=True)
+
     creds = None
     if TOKEN_PATH.exists():
         try:
