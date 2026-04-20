@@ -1,12 +1,55 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-13 (세션 35 — Phase 4 완료 + git 진단)
+최근 업데이트: 2026-04-20 (세션 36 — ad_only 전체 광고 채널 통합)
 
-## ⏭ 다음 세션 우선순위 (2026-04-13 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-20 기준)
 
-1. ~~**Canvas Sheet 가상 렌더링 (Phase 4)**~~ ✅ 완료 (c1954c6a, 86ed207f, a9bc23bb)
-2. ~~**master.db git tracking 제거**~~ ✅ 불필요 — 한 번도 커밋된 적 없음 (.gitignore 정상 차단 확인)
-3. ~~**security_vault.py 3중 AES-256-GCM**~~ ✅ 완료 (4ea4b080) — encrypt_field stub → T3v1 실암호화, 11개 호출사이트 column_name 전달, 28/28 테스트 PASS
-4. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
+1. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
+2. **Render 수동 배포** — Dashboard → bridge-api → Manual Deploy (이전 세션 api_server.py 반영)
+3. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행 (ad_only 일일 자동 전파)
+4. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+
+## ✅ 2026-04-20 완료된 작업 (세션 36 — ad_only 광고 채널 통합)
+
+### 배경
+"우리 광고는 오로지 AD전용(개인정보, 기관명 등 없음)만 사용" — 모든 광고 서피스를 ad_only 단일 소스로 전환.
+
+### 커밋
+- `c7542fcb` — ad_only 폴더 마이그레이션 + PII 가드
+- `76468b2b` — api_server.py 공개 엔드포인트 ad_only 전환
+- `a51a7119` — ESL Cafe Manager + refresh_all 오케스트레이터
+- `351dbe20` — ESL Cafe 시작일 과거→미래 자동 치환
+
+### 변경 내용
+- `ad_only/export_esl_cafe.py` **신규** — `eslcafe_manager/BRIDGE_ESLCafe.html` DEFAULT_JOBS 자동 재생성
+  - 878건 엔트리, region 매핑 (seoul=258 / gg=298 / etc=322)
+  - 각 문자열 필드 `assert_clean` 최종 PII 검증
+  - `_fix_start_date_esl()`: 과거/현재 월 → ASAP 또는 미래 풀 치환
+  - `re.sub` 콜러블 치환 (`\n` 이스케이프 해석 차단 버그 수정)
+- `ad_only/refresh_all.py` **신규** — sync → loader → frontend mirror → ESL Cafe 전파 오케스트레이터
+- `scripts/register_ad_only_refresh.bat` **신규** — Task Scheduler 등록 헬퍼 (관리자 권한 필요)
+
+### 현재 광고 채널 상태 (전부 ad_only 단일 소스)
+| 서피스 | 경로 | 상태 |
+|--------|------|------|
+| 홈 Featured Positions | `/api/jobs` → `_ad_only_to_public()` | ✅ |
+| `/jobs` 페이지 | `/api/jobs` → `_ad_only_to_public()` | ✅ |
+| Next.js static fallback | `web_frontend/data/jobs_clean.json` | ✅ |
+| Craigslist RPA | `run_select.vbs` → `rpa_select_launcher` → `ad_only` | ✅ |
+| Teast 자동 게시 | `tools/_teast_build_post.py` → `ad_only` | ✅ |
+| ESL Cafe Manager | `eslcafe_manager/BRIDGE_ESLCafe.html` DEFAULT_JOBS | ✅ |
+
+### PII 검증 결과
+- `web_frontend/data/jobs_clean.json`: 878건, 한글 0 / 이메일 0 / 전화 0
+- `BRIDGE_ESLCafe.html` DEFAULT_JOBS: 878건, 한글 0 / 이메일 0 / 전화 0 / 업체 브랜드 0
+
+### 운영 절차
+```bash
+# 수동 전파 (원본 변경 있을 때)
+"Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/ad_only/refresh_all.py"
+
+# 원본 스킵 (캐시만 갱신)
+"Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/ad_only/refresh_all.py" --skip-source
+```
 
 ## ✅ 2026-04-13 점검 완료 (세션 34)
 
