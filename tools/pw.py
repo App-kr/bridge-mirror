@@ -416,7 +416,7 @@ def main():
 
     root = tk.Tk()
     root.title("BX Credential Manager")
-    root.geometry("520x720")
+    root.geometry("540x820")
     root.resizable(False, False)
     root.configure(bg="#1a1a2e")
     root.attributes("-topmost", True)
@@ -460,27 +460,25 @@ def main():
     frame.pack(padx=30, fill="x", pady=(8, 0))
 
     # ── 서비스 선택 ────────────────────────────────────────────────────────
-    tk.Label(frame, text="저장할 서비스 선택", font=("Segoe UI", 12, "bold"),
+    tk.Label(frame, text="저장할 서비스 선택", font=("Segoe UI", 14),
              fg="white", bg="#1a1a2e", anchor="w").pack(fill="x", pady=(0, 4))
 
     preset_names = [p[0] for p in PRESETS]
-    # ttk Combobox 폰트 — 대형 크기
     style = ttk.Style()
-    style.configure("Big.TCombobox", padding=6)
+    style.configure("Big.TCombobox", padding=8)
     combo = ttk.Combobox(frame, values=preset_names, state="readonly",
-                         font=("Segoe UI", 13, "bold"), width=36,
+                         font=("Segoe UI", 14), width=36,
                          style="Big.TCombobox")
-    # 드롭다운 리스트 자체 폰트도 크게
-    root.option_add("*TCombobox*Listbox.Font", ("Segoe UI", 12))
+    root.option_add("*TCombobox*Listbox.Font", ("Segoe UI", 13))
     combo.set(preset_names[0])
-    combo.pack(pady=(2, 6), fill="x", ipady=6)
+    combo.pack(pady=(2, 6), fill="x", ipady=8)
 
     # 선택된 서비스명 크게 표시
     selected_svc_var = tk.StringVar(value=preset_names[0])
     selected_svc_lbl = tk.Label(frame, textvariable=selected_svc_var,
-                                font=("Segoe UI", 14, "bold"),
+                                font=("Segoe UI", 15),
                                 fg="#4fc3f7", bg="#1a1a2e", anchor="w",
-                                wraplength=380)
+                                wraplength=420)
     selected_svc_lbl.pack(fill="x", pady=(0, 8))
 
     custom_frame = tk.Frame(frame, bg="#1a1a2e")
@@ -506,47 +504,60 @@ def main():
 
     combo.bind("<<ComboboxSelected>>", lambda e: (on_combo_change(e), sync_hash_check(e)))
 
-    # ── 해시 체크박스 (눈에 띄게 + 깜박임) ───────────────────────────────
+    # ── 해시 토글 (큼직한 ON/OFF 버튼, 상태 명확) ─────────────────────────
     hash_var = tk.BooleanVar(value=True)
-    hash_frame = tk.Frame(frame, bg="#1a1a2e", pady=4)
-    hash_frame.pack(fill="x", pady=(6, 6))
-    hash_chk = tk.Checkbutton(hash_frame,
-                   text="⚠ pbkdf2 해시 저장 — 비밀번호만 ON / API키·토큰은 반드시 OFF",
-                   variable=hash_var, font=("Segoe UI", 11, "bold"),
-                   fg="white", bg="#ff3366", selectcolor="#16213e",
-                   activebackground="#ff3366", activeforeground="white",
-                   padx=10, pady=6, relief="raised", bd=2,
-                   )
-    hash_chk.pack(fill="x")
+    hash_info = tk.Label(frame,
+                   text="해시 저장 (비밀번호만 ON / API 키·토큰은 OFF)",
+                   font=("Segoe UI", 14), fg="white", bg="#1a1a2e", anchor="w")
+    hash_info.pack(fill="x", pady=(8, 4))
 
-    # 형광 깜박임 — 700ms 주기로 배경색 토글
+    hash_btn = tk.Button(frame, text="", font=("Segoe UI", 22),
+                          relief="raised", bd=4, cursor="hand2",
+                          padx=30, pady=18, width=30)
+    hash_btn.pack(fill="x", pady=(0, 8))
+
+    def _update_hash_btn():
+        if hash_var.get():
+            hash_btn.config(text="✅  해시 저장  ON", bg="#00c853", fg="white",
+                            activebackground="#00e676", activeforeground="white")
+        else:
+            hash_btn.config(text="⭕  해시 저장  OFF", bg="#424242", fg="#eeeeee",
+                            activebackground="#616161", activeforeground="white")
+
+    def _toggle_hash():
+        hash_var.set(not hash_var.get())
+        _update_hash_btn()
+
+    hash_btn.config(command=_toggle_hash)
+    _update_hash_btn()
+
+    # 깜박임 — OFF 일 때 배경에 노란 깜박임 (API 키 실수 방지)
     _blink_state = {"on": True}
     def _blink_hash():
-        if _blink_state["on"]:
-            hash_chk.config(bg="#ffff00", fg="#000000", activebackground="#ffff00",
-                            activeforeground="#000000")
-        else:
-            hash_chk.config(bg="#ff3366", fg="white", activebackground="#ff3366",
-                            activeforeground="white")
-        _blink_state["on"] = not _blink_state["on"]
-        root.after(700, _blink_hash)
-    root.after(500, _blink_hash)
+        if not hash_var.get():  # OFF 상태일 때만 깜박임
+            if _blink_state["on"]:
+                hash_btn.config(bg="#ffeb3b", fg="#000000")
+            else:
+                hash_btn.config(bg="#424242", fg="#eeeeee")
+            _blink_state["on"] = not _blink_state["on"]
+        root.after(600, _blink_hash)
+    root.after(300, _blink_hash)
 
     # ── 비밀번호 / 값 입력 ────────────────────────────────────────────────
-    pw1_label = tk.Label(frame, text="비밀번호 / 값 입력", font=("Segoe UI", 10, "bold"),
-             fg="#cccccc", bg="#1a1a2e", anchor="w")
-    pw1_label.pack(fill="x", pady=(5, 0))
-    pw1 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 11),
+    pw1_label = tk.Label(frame, text="비밀번호 / 값 입력", font=("Segoe UI", 13),
+             fg="white", bg="#1a1a2e", anchor="w")
+    pw1_label.pack(fill="x", pady=(6, 2))
+    pw1 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 14),
                    bg="#16213e", fg="white", insertbackground="white",
                    relief="flat", highlightthickness=1, highlightcolor="#0f3460")
-    pw1.pack(fill="x", ipady=4, pady=(2, 5))
+    pw1.pack(fill="x", ipady=8, pady=(0, 6))
 
-    tk.Label(frame, text="비밀번호 재확인", font=("Segoe UI", 10, "bold"),
-             fg="#cccccc", bg="#1a1a2e", anchor="w").pack(fill="x")
-    pw2 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 11),
+    tk.Label(frame, text="비밀번호 재확인", font=("Segoe UI", 13),
+             fg="white", bg="#1a1a2e", anchor="w").pack(fill="x", pady=(0, 2))
+    pw2 = tk.Entry(frame, show="*", width=38, font=("Segoe UI", 14),
                    bg="#16213e", fg="white", insertbackground="white",
                    relief="flat", highlightthickness=1, highlightcolor="#0f3460")
-    pw2.pack(fill="x", ipady=4, pady=(2, 6))
+    pw2.pack(fill="x", ipady=8, pady=(0, 8))
 
     # ── 클립보드 알림 ──────────────────────────────────────────────────────
     clip_var = tk.StringVar()
@@ -613,10 +624,10 @@ def main():
             messagebox.showerror("오류", "BX 저장 실패")
 
     tk.Button(frame, text="저장", command=on_save,
-              font=("Segoe UI", 11, "bold"), width=38,
+              font=("Segoe UI", 16), width=38,
               bg="#0f3460", fg="white", activebackground="#1a5276",
               activeforeground="white", relief="flat", cursor="hand2"
-              ).pack(ipady=4)
+              ).pack(ipady=10, pady=(4, 2))
 
     # ── 구분선 ─────────────────────────────────────────────────────────────
     tk.Frame(frame, bg="#333355", height=1).pack(fill="x", pady=(14, 10))
