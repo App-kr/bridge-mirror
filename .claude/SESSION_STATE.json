@@ -1,15 +1,9 @@
 {
-  "last_updated": "2026-04-20 21:50:17",
+  "last_updated": "2026-04-20 22:15:56",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base\" && grep -A12 \"File type configs\" api_server.py | head -30",
+  "last_command": "cd \"Q:/Claudework/bridge base\" && git push origin main 2>&1 | tail -5",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\matjokdo_safe\\api\\claude_handler.py",
-    "Q:\\Claudework\\matjokdo_safe\\main_neighbor.py",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\PuzzleCaptcha.tsx",
-    "Q:\\Claudework\\matjokdo_safe\\rpa\\browser.py",
-    "Q:\\Claudework\\matjokdo_safe\\main.py",
-    "Q:\\Claudework\\bridge base\\tools\\gdrive_backup.py",
     "Q:\\Claudework\\bridge base\\.claude\\worktrees\\charming-napier-f580ff\\.claude\\work_state.md",
     "Q:\\Claudework\\bridge base\\tools\\doc_processor.py",
     "Q:\\Claudework\\bridge base\\api_server.py",
@@ -23,9 +17,15 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\pipeline\\page.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\admin\\AdminSidebar.tsx",
-    "Q:\\Claudework\\bridge base\\tools\\resume_backfill.py"
+    "Q:\\Claudework\\bridge base\\tools\\resume_backfill.py",
+    "Q:\\Claudework\\bridge base\\scripts\\register_ad_only_refresh.bat",
+    "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
+    "Q:\\Claudework\\bridge base\\scripts\\ad_only_refresh_task.xml",
+    "Q:\\Claudework\\bridge base\\scripts\\_register_task_tmp.bat",
+    "Q:\\Claudework\\bridge base\\scripts\\_query_task_tmp.bat",
+    "Q:\\Claudework\\bridge base\\scripts\\_test_run_task.bat"
   ],
-  "current_task": "⏭ 다음 세션 우선순위 (2026-04-13 기준)",
+  "current_task": "⏭ 다음 세션 우선순위 (2026-04-20 기준)",
   "git_changed": [
     ".claude/settings.local.json",
     ".snapshots/20260412_084518_WORKFLOW.md",
