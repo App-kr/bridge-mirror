@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -19,6 +20,48 @@ sys.path.insert(0, str(BASE))
 
 from ad_only.loader import load_all_jobs
 from ad_only.pii_guard import assert_clean, PIIContaminationError
+
+# ── Starting Date 미래 치환 (동적) ──────────────────────────────────────────
+_ESL_NOW_MONTH = datetime.now().month
+_ESL_MONTHS_EN = [
+    "january","february","march","april","may","june",
+    "july","august","september","october","november","december"
+]
+_ESL_PAST_KEYS: set[str] = (
+    {m[:3] for m in _ESL_MONTHS_EN[:_ESL_NOW_MONTH]}
+    | {f"{i+1}월" for i in range(_ESL_NOW_MONTH)}
+)
+_ESL_FUTURE_MONTHS = [
+    _ESL_MONTHS_EN[i].capitalize()
+    for i in range(_ESL_NOW_MONTH, min(_ESL_NOW_MONTH + 5, 12))
+]
+_ESL_FUTURE_POOL = ["ASAP"] + _ESL_FUTURE_MONTHS
+
+
+def _fix_start_date_esl(sd: str) -> str:
+    """과거/현재 월 → 미래 또는 ASAP 치환. 복수 월이면 미래 부분만 유지."""
+    s = (sd or "").strip()
+    if not s:
+        return "ASAP"
+    sl = s.lower()
+    # 특수값 그대로
+    if any(k in sl for k in ("asap", "즉시", "negotiable", "tbd", "flexible", "year-round", "year round")):
+        return s
+    # 복수 월 처리 (쉼표·슬래시·대시 구분)
+    parts = [p.strip() for p in re.split(r"[,/\-]", s) if p.strip()]
+    if len(parts) > 1:
+        future_parts = [
+            p for p in parts
+            if not any(k in p.lower() for k in _ESL_PAST_KEYS)
+        ]
+        if future_parts:
+            return ", ".join(future_parts)
+        # 전부 과거 → 미래 풀에서 첫 번째
+        return _ESL_FUTURE_POOL[0]
+    # 단일 월 — 과거면 미래 풀 첫 번째로 교체
+    if any(k in sl for k in _ESL_PAST_KEYS):
+        return _ESL_FUTURE_POOL[0]
+    return s  # 이미 미래
 
 HTML_PATH = BASE / "eslcafe_manager" / "BRIDGE_ESLCafe.html"
 
@@ -54,6 +97,10 @@ def _job_id(job_code: str) -> str:
 
 def _build_txt(j: dict) -> str:
     """ESL Cafe txt 필드용 멀티라인 블록."""
+    # start_date 미래 변환 적용
+    j = dict(j)
+    if j.get("start_date"):
+        j["start_date"] = _fix_start_date_esl(j["start_date"])
     lines: list[str] = []
     fields = [
         ("start_date",     "Starting Date"),
@@ -81,6 +128,8 @@ def _build_txt(j: dict) -> str:
 def _to_esl_entry(j: dict) -> dict:
     jid = _job_id(j.get("job_code", ""))
     location = (j.get("location") or "").strip()
+    raw_date = (j.get("start_date") or "").strip()
+    safe_date = _fix_start_date_esl(raw_date)  # 과거/현재 → 미래 변환
     entry = {
         "id":   jid,
         "l":    location,
@@ -89,7 +138,7 @@ def _to_esl_entry(j: dict) -> dict:
         "h":    False,  # hot: 관리자가 ESL UI 에서 토글
         "a":    True,   # active: 기본 ON
         "sal":  (j.get("monthly_salary") or "").strip(),
-        "date": (j.get("start_date")     or "").strip(),
+        "date": safe_date,
         "hrs":  (j.get("working_hours")  or "").strip(),
         "hsg":  (j.get("housing")        or "").strip(),
         "txt":  _build_txt(j),
