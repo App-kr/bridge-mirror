@@ -24,7 +24,7 @@ LOCK_PATH = BASE_DIR / "logs" / "db_sync.lock"
 POLL_SEC       = 5       # 감시 주기 (초)
 DEBOUNCE       = 15      # 변경 후 대기 (초) — 연속 쓰기 마무리 대기
 HEALTH_INTERVAL = 300    # Render DB 헬스체크 주기 (5분) — cold start/배포 후 빠른 복원
-RENDER_API = "https://bridge-n7hk.onrender.com"
+RENDER_API = os.getenv("RENDER_API_URL", "https://bridge-n7hk.onrender.com")
 
 sys.path.insert(0, str(BASE_DIR))
 
@@ -187,21 +187,25 @@ def install_task() -> None:
     import subprocess
     pythonw = str(Path(sys.executable).parent / "pythonw.exe")
     script  = str(Path(__file__).resolve())
-    cmd = (
-        f'schtasks /create /tn "BRIDGE\\DBSyncDaemon" '
-        f'/tr "\"{pythonw}\" -X utf8 \"{script}\"" '
-        f'/sc onlogon /rl highest /f'
-    )
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    tr_value = f'"{pythonw}" -X utf8 "{script}"'
+    cmd = [
+        "schtasks", "/create",
+        "/tn", "BRIDGE\\DBSyncDaemon",
+        "/tr", tr_value,
+        "/sc", "onlogon",
+        "/rl", "highest",
+        "/f",
+    ]
+    result = subprocess.run(cmd, shell=False, capture_output=True, encoding='cp949', errors='replace')
     if result.returncode == 0:
         print("Task Scheduler 등록 완료: BRIDGE\\DBSyncDaemon")
     else:
-        print("등록 실패:", result.stderr)
+        print("등록 실패:", result.stderr or result.stdout)
 
 
 def uninstall_task() -> None:
     import subprocess
-    result = subprocess.run('schtasks /delete /tn "BRIDGE\\DBSyncDaemon" /f', shell=True, capture_output=True, text=True)
+    result = subprocess.run(["schtasks", "/delete", "/tn", "BRIDGE\\DBSyncDaemon", "/f"], capture_output=True, encoding='cp949', errors='replace')
     print("해제 완료" if result.returncode == 0 else f"실패: {result.stderr}")
 
 

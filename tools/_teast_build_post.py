@@ -214,20 +214,28 @@ def get_magic_link() -> str:
     return ""
 
 
-def do_login_and_post(description: str, draft: bool = True):
-    import pickle
+def do_login_and_post(description: str, title: str = None, draft: bool = True):
     import undetected_chromedriver as uc
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.select import Select as _Sel
 
-    CHROME_BINARY = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-    COOKIE_FILE   = TOOLS_DIR / ".teast_cookies.pkl"
+    if not title:
+        latest_month = MONTH_NAMES[min(NOW_MONTH + 6, 12)]
+        title = f"Official BRIDGE Korea ESL Teaching Jobs ASAP-{latest_month} 2026"
+
+    CHROME_BINARY   = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    # Google 계정 세션을 영구 보존하는 전용 프로필 디렉토리
+    TEAST_PROFILE   = TOOLS_DIR / ".teast_chrome_profile"
+    TEAST_PROFILE.mkdir(exist_ok=True)
 
     opts = uc.ChromeOptions()
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1280,900")
+    # ★ 전용 프로필 사용 → Google 세션 로컬 유지, 재로그인 불필요
+    opts.add_argument(f"--user-data-dir={TEAST_PROFILE}")
 
     driver = uc.Chrome(
         options=opts,
@@ -249,135 +257,183 @@ def do_login_and_post(description: str, draft: bool = True):
             arguments[0].dispatchEvent(new Event('change', {{bubbles: true}}));
         """, el, val)
 
-    def _is_logged_in():
-        return "teast.co" in driver.current_url and "login" not in driver.current_url.lower()
+    def fill_form_fields():
+        """전체 폼 필드 채우기 (스크롤 위치 무관하게 반복 호출)."""
+        inputs = driver.find_elements(By.CSS_SELECTOR,
+            "input:not([type=hidden]):not([type=checkbox]):not([type=radio])")
+        textareas = driver.find_elements(By.TAG_NAME, "textarea")
+        selects   = driver.find_elements(By.TAG_NAME, "select")
 
-    def _save_cookies():
-        cookies = driver.get_cookies()
-        with open(COOKIE_FILE, "wb") as f:
-            pickle.dump(cookies, f)
-        print(f"✓ 쿠키 저장 완료 ({len(cookies)}개) → {COOKIE_FILE}")
+        title_done = city_done = pay_done = email_done = desc_done = False
 
-    def _load_cookies():
-        if not COOKIE_FILE.exists():
-            return False
-        driver.get("https://teast.co")
-        time.sleep(2)
-        with open(COOKIE_FILE, "rb") as f:
-            cookies = pickle.load(f)
-        for c in cookies:
+        # ── inputs ────────────────────────────────────────────────────────────
+        for inp in inputs:
             try:
-                driver.add_cookie(c)
+                if not inp.is_displayed() or not inp.is_enabled():
+                    continue
+            except Exception:
+                continue
+            ph    = (inp.get_attribute("placeholder") or "").lower()
+            itype = (inp.get_attribute("type") or "text").lower()
+            cur   = (inp.get_attribute("value") or "").strip()
+
+            if not title_done and ("title" in ph or (ph == "" and not city_done)):
+                js_set(inp, title)
+                title_done = True
+                print(f"[폼] Title: {title[:60]}")
+            elif not city_done and ("city" in ph):
+                js_set(inp, "Seoul")
+                city_done = True
+                print("[폼] City: Seoul")
+            elif not pay_done and itype == "number":
+                js_set(inp, "3500000")
+                pay_done = True
+                print("[폼] Pay: 3500000")
+            elif not email_done and (itype == "email"
+                    or any(k in ph for k in ("email","website","social","link"))):
+                js_set(inp, "bridgejobkr@gmail.com")
+                email_done = True
+                print("[폼] Email: bridgejobkr@gmail.com")
+
+        # ── textarea (description) ─────────────────────────────────────────
+        for ta in textareas:
+            try:
+                if not ta.is_displayed() or not ta.is_enabled():
+                    continue
+            except Exception:
+                continue
+            js_set(ta, description)
+            desc_done = True
+            print(f"[폼] Description: {len(description)} chars")
+            break
+
+        # ── <select> dropdowns ─────────────────────────────────────────────
+        for sel in selects:
+            try:
+                if not sel.is_displayed():
+                    continue
+                s = _Sel(sel)
+                opts_lower = [o.text.strip().lower() for o in s.options]
+
+                if "south korea" in opts_lower:
+                    s.select_by_visible_text("South Korea")
+                    print("[폼] Country: South Korea")
+                elif any("full" in o for o in opts_lower):
+                    s.select_by_visible_text("Full-Time")
+                    print("[폼] Employment: Full-Time")
+                elif "language school" in opts_lower:
+                    s.select_by_visible_text("Language School")
+                    print("[폼] Category: Language School")
+                elif "per month" in opts_lower:
+                    s.select_by_visible_text("per month")
+                    print("[폼] Pay type: per month")
+                elif "email" in opts_lower and len(opts_lower) < 6:
+                    s.select_by_visible_text("Email")
+                    print("[폼] Apply Type: Email")
             except Exception:
                 pass
-        print(f"쿠키 로드 완료 ({len(cookies)}개)")
-        return True
+
+    def _on_post_page():
+        url = driver.current_url
+        return "teast.co" in url and "login" not in url.lower() and "job/post" in url
+
+    def _logged_in():
+        url = driver.current_url
+        return "teast.co" in url and "login" not in url.lower()
 
     try:
-        # ── 1단계: 쿠키로 세션 복원 시도 ────────────────────────────────────
-        if COOKIE_FILE.exists():
-            print("저장된 세션 쿠키 로드 중...")
-            _load_cookies()
-            driver.get("https://teast.co/en/job/post")
-            time.sleep(4)
-            print(f"URL: {driver.current_url}")
+        # ── 1단계: 프로필로 직접 폼 페이지 이동 ─────────────────────────────
+        print("teast.co/job/post 이동 중...")
+        driver.get("https://teast.co/job/post")
+        time.sleep(4)
+        print(f"URL: {driver.current_url}")
 
-        # ── 2단계: 로그인 필요 시 Google 로그인 ─────────────────────────────
-        if not COOKIE_FILE.exists() or "login" in driver.current_url.lower():
-            print("로그인 필요 -- Chrome 창에서 Google 계정으로 직접 로그인해주세요 (최대 5분)")
-            driver.get("https://teast.co/en/login")
-            time.sleep(3)
+        # ── 2단계: 로그인 필요 시 → Google 로그인 대기 ──────────────────────
+        if not _logged_in():
+            print("=" * 55)
+            print("첫 실행: Chrome 창에서 Google 계정으로 로그인해주세요")
+            print("  1. 'Sign in with Google' 클릭")
+            print("  2. bridgejobkr@gmail.com 선택")
+            print("  3. 완료 후 자동으로 진행됩니다 (최대 5분)")
+            print("=" * 55)
             driver.save_screenshot(str(SHOTS_DIR / "teast_login_open.png"))
 
             logged_in = False
             for i in range(150):
                 time.sleep(2)
-                if _is_logged_in():
+                if _logged_in():
                     logged_in = True
-                    print(f"✓ 로그인 완료 ({(i+1)*2}초 후)")
+                    print(f"✓ 로그인 완료 ({(i+1)*2}초 후) — 프로필에 세션 저장됨")
                     break
-                if i % 15 == 0:
-                    print(f"  ... 대기 중 ({(i+1)*2}초) -- Chrome 창에서 Google 계정 선택하세요")
+                if i % 10 == 0:
+                    print(f"  대기 중 {(i+1)*2}초...")
 
             if not logged_in:
                 print("❌ 로그인 실패 (5분 초과)")
                 driver.save_screenshot(str(SHOTS_DIR / "teast_login_fail.png"))
                 return
 
-            _save_cookies()
-            driver.get("https://teast.co/en/job/post")
+            # 로그인 후 폼 페이지로
+            driver.get("https://teast.co/job/post")
             time.sleep(4)
 
         print(f"Post Job 페이지: {driver.current_url}")
-
-        # ── 폼 필드 탐색 ─────────────────────────────────────────────────────
-        # 현재 날짜 기준 타이틀
-        latest_month = MONTH_NAMES[min(NOW_MONTH + 6, 12)]
-        post_title = f"Official BRIDGE Korea ESL Teaching Jobs ASAP-{latest_month} 2026"
-
-        inputs = driver.find_elements(By.CSS_SELECTOR, "input:not([type=hidden])")
-        textareas = driver.find_elements(By.TAG_NAME, "textarea")
-        print(f"Inputs: {len(inputs)}, Textareas: {len(textareas)}")
-
-        # Job Title (첫 번째 보이는 text input)
-        title_filled = False
-        for inp in inputs:
-            placeholder = (inp.get_attribute("placeholder") or "").lower()
-            if inp.is_displayed() and inp.is_enabled():
-                if not title_filled and ("title" in placeholder or not placeholder):
-                    js_set(inp, post_title)
-                    title_filled = True
-                    print(f"Title 입력: {post_title[:50]}")
-                    break
-
-        # 스크린샷: 폼 초기 상태
         driver.save_screenshot(str(SHOTS_DIR / "teast_form_start.png"))
 
-        # Job Description textarea (가장 큰 textarea)
-        desc_filled = False
-        for ta in textareas:
-            if ta.is_displayed() and ta.is_enabled():
-                # description textarea는 placeholder에 "description" 포함 가능
-                ph = (ta.get_attribute("placeholder") or "").lower()
-                js_set(ta, description)
-                desc_filled = True
-                print(f"Description 입력 완료 ({len(description)} chars)")
-                break
+        # ── 폼 필드 3단계 채우기 (상단 → 중단 → 하단 스크롤) ───────────────
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+        fill_form_fields()
+        time.sleep(1)
 
-        time.sleep(2)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+        time.sleep(1)
+        fill_form_fields()
+        time.sleep(1)
+
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+        fill_form_fields()
+        time.sleep(1)
+
         driver.save_screenshot(str(SHOTS_DIR / "teast_form_filled.png"))
+        print(f"스크린샷: {SHOTS_DIR / 'teast_form_filled.png'}")
 
         if draft:
-            print("★ DRAFT MODE -- 폼 입력 완료, Chrome 열어둠 (점검 후 닫아주세요)")
-            print(f"스크린샷: {SHOTS_DIR / 'teast_form_filled.png'}")
-            # Chrome 창 유지 -- driver.quit() 호출 안 함
+            print("★ DRAFT MODE — 폼 입력 완료, Chrome 열어둠 (확인 후 닫아주세요)")
             try:
                 while True:
                     time.sleep(5)
-                    _ = driver.current_url  # 창 닫히면 예외 발생 → 루프 종료
+                    _ = driver.current_url
             except Exception:
                 pass
             return
 
-        # ── 실제 제출 ────────────────────────────────────────────────────────
-        # Submit 버튼 찾기
+        # ── 실제 제출: POST JOB - FREE 버튼 ───────────────────────────────
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
         submit_keywords = ["post job", "submit", "publish", "post"]
         submitted = False
         btns = driver.find_elements(By.TAG_NAME, "button")
-        for b in btns:
-            if b.is_displayed() and any(k in b.text.lower() for k in submit_keywords):
-                print(f"제출 버튼 클릭: '{b.text}'")
-                b.click()
-                time.sleep(5)
-                submitted = True
-                break
+        for b in reversed(btns):          # 하단 버튼부터 탐색
+            try:
+                if b.is_displayed() and any(k in b.text.lower() for k in submit_keywords):
+                    print(f"제출 버튼 클릭: '{b.text.strip()}'")
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", b)
+                    time.sleep(0.5)
+                    b.click()
+                    time.sleep(6)
+                    submitted = True
+                    break
+            except Exception:
+                pass
 
         print(f"After submit URL: {driver.current_url}")
         driver.save_screenshot(str(SHOTS_DIR / "teast_submitted.png"))
         if submitted:
             print("✅ 포스팅 제출 완료")
         else:
-            print("⚠ 제출 버튼 미발견")
+            print("⚠ 제출 버튼 미발견 — 스크린샷 확인: teast_form_filled.png")
 
     finally:
         time.sleep(3)
@@ -390,7 +446,26 @@ def _cli_main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", action="store_true")
     ap.add_argument("--show", action="store_true", help="포스팅 내용만 출력")
+    ap.add_argument("--from-file", dest="from_file", default="",
+                    help="외부 JSON {title, description} 파일 경로 — 지정 시 ad_only 생성 건너뜀")
     args = ap.parse_args()
+
+    # ── 외부 파일 모드 (발행하기 버튼 → Flask → 여기) ──────────────────────
+    if args.from_file:
+        import json as _json
+        fp = Path(args.from_file)
+        if not fp.exists():
+            print(f"[FAIL] 파일 없음: {fp}")
+            sys.exit(1)
+        data = _json.loads(fp.read_text(encoding="utf-8"))
+        ext_title = (data.get("title") or "").strip()
+        ext_desc  = (data.get("description") or "").strip()
+        if not ext_desc:
+            print("[FAIL] description 없음")
+            sys.exit(1)
+        print(f"[외부 파일 모드] title={ext_title[:60]}, desc={len(ext_desc)} chars")
+        do_login_and_post(ext_desc, title=ext_title or None, draft=not args.live)
+        return
 
     jobs = select_jobs(8)
     print(f"\n선택된 잡 {len(jobs)}개:")

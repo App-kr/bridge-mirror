@@ -3066,6 +3066,30 @@ async function publishTeast(){
   var ta=document.getElementById('teastOut');
   if(!ta||!ta.value.trim()){toast('먼저 광고생성을 눌러주세요!','er');return;}
 
+  /* ── 발행 전 경고 팝업 ── */
+  var confirmed=await new Promise(function(resolve){
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML=
+      '<div style="background:#fff;border-radius:14px;padding:32px 36px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.22);font-family:inherit">'
+      +'<div style="font-size:20px;font-weight:700;color:#1a2942;margin-bottom:12px">발행 전 확인</div>'
+      +'<div style="font-size:13.5px;color:#444;line-height:1.8;margin-bottom:24px">'
+      +'Chrome이 열려있으면 <b style="color:#e53935">충돌이 발생</b>합니다.<br>'
+      +'발행 전 <b>Chrome을 완전히 닫아주세요.</b><br><br>'
+      +'<span style="font-size:12px;color:#999">첫 실행 시 Chrome 창에서 Google 계정 로그인이 필요합니다.</span>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px">'
+      +'<button id="_pcan" style="flex:1;padding:11px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:#f5f5f5;color:#666">취소</button>'
+      +'<button id="_pok" style="flex:2;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;background:#1a2942;color:#fff">Chrome 닫고 발행</button>'
+      +'</div>'
+      +'</div>';
+    document.body.appendChild(ov);
+    document.getElementById('_pok').onclick=function(){document.body.removeChild(ov);resolve(true);};
+    document.getElementById('_pcan').onclick=function(){document.body.removeChild(ov);resolve(false);};
+    ov.onclick=function(e){if(e.target===ov){document.body.removeChild(ov);resolve(false);}};
+  });
+  if(!confirmed)return;
+
   var content=ta.value;
   /* 첫 비어있지 않은 줄을 타이틀로 */
   var title=(content.split('\n').filter(function(l){return l.trim();})[0]||'BRIDGE Korea ESL Jobs').trim();

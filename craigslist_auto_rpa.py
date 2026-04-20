@@ -490,11 +490,23 @@ _TITLE_OPENERS = [
     "Friendly and Motivated Teacher",
 ]
 
-# ── Starting Date 미래 치환 ────────────────────────────────────────────────
-# 현재 기준(2026-04): January~April = 과거/현재 → 미래 풀로 교체
-_PAST_MONTH_KEYS = {"jan","feb","mar","apr",
-                    "1월","2월","3월","4월"}
-_FUTURE_START_POOL = ["ASAP","May","June","July","August","September"]
+# ── Starting Date 미래 치환 (동적 — 실행 시점 기준) ─────────────────────────
+_NOW_MONTH = datetime.now().month  # 1=Jan … 12=Dec (실행 시 자동 계산)
+_ALL_MONTHS_EN = [
+    "january","february","march","april","may","june",
+    "july","august","september","october","november","december"
+]
+# 현재 월 포함 이전 모두 = 과거/현재 키 (3자 약어 + 한국어)
+_PAST_MONTH_KEYS: set[str] = (
+    {m[:3] for m in _ALL_MONTHS_EN[:_NOW_MONTH]}          # "jan"…current 3-letter
+    | {f"{i+1}월" for i in range(_NOW_MONTH)}              # "1월"…current 한국어
+)
+# 미래 풀: 다음 달부터 최대 5개 + ASAP 항상 포함
+_FUTURE_MONTHS_EN = [
+    _ALL_MONTHS_EN[i].capitalize()
+    for i in range(_NOW_MONTH, min(_NOW_MONTH + 5, 12))    # next ~ +5개월
+]
+_FUTURE_START_POOL = ["ASAP"] + _FUTURE_MONTHS_EN
 
 def _fix_start_date(start_raw: str, seed_str: str = "") -> str:
     """과거/현재 달(Jan~Apr)이면 제거 또는 미래 날짜로 치환.
@@ -1549,6 +1561,8 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             else:
                 print(f"    [WARN] 이미지 파일 없음: {AD_IMAGE}")
                 print(f"    확인: {_img_path} 가 존재해야 합니다")
+            # 업로드 후 임시파일 정리
+            _img_path.unlink(missing_ok=True)
             _advance(driver, step)
 
         elif step == "preview":

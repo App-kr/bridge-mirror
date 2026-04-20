@@ -4,7 +4,20 @@
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO   = CreateObject("Scripting.FileSystemObject")
 
-strDir     = objFSO.GetParentFolderName(WScript.ScriptFullName)
+' ── 1단계: 좀비 Chrome/ChromeDriver 프로세스 정리 (메모리 확보) ──
+' chromedriver.exe는 항상 RPA 전용이므로 안전하게 종료
+objShell.Run "taskkill /F /IM chromedriver.exe", 0, True
+
+' ── 2단계: 잠금 파일 정리 ──
+strDir   = objFSO.GetParentFolderName(WScript.ScriptFullName)
+strLock  = strDir & "\logs\.rpa_running.lock"
+If objFSO.FileExists(strLock) Then
+    On Error Resume Next
+    objFSO.DeleteFile strLock, True
+    On Error GoTo 0
+End If
+
+' ── 3단계: 런처 실행 ──
 strPythonW = "Q:\Phtyon 3\pythonw.exe"
 strScript  = objFSO.BuildPath(strDir, "rpa_select_launcher.py")
 

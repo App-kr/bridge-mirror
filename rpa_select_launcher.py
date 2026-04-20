@@ -1001,6 +1001,10 @@ class AdminBoard:
         )
         self._stop_btn.pack(side="left")
 
+        # ── 일반 실행 게이지 (시작하기 아래, 실행 중에만 표시) ───
+        self._start_gauge = _ProgressGauge(left)
+        # 초기엔 숨김 — _show_start_gauge() 호출 시 pack
+
         # ── 왼쪽: 배치 모드 ──────────────────────────────
         _div(left, padx=p, pady=(8, 0))
 
@@ -1150,7 +1154,9 @@ class AdminBoard:
     def _save_hwnd(self):
         try:
             LOGS_DIR.mkdir(exist_ok=True)
-            ADMIN_HWND_FILE.write_text(str(self.root.winfo_id()), encoding="utf-8")
+            # HWND + PID 함께 저장 (재사용 HWND 오인 방지)
+            ADMIN_HWND_FILE.write_text(
+                f"{self.root.winfo_id()}:{os.getpid()}", encoding="utf-8")
         except Exception:
             pass
 
@@ -1230,9 +1236,10 @@ class AdminBoard:
             self._blink = not self._blink
             # 점 깜박 (초록 ↔ 어두운 초록)
             self._dot.configure(fg=GREEN if self._blink else GREEN_D)
-            # 텍스트도 깜박 (밝은 초록 ↔ 살짝 어두운 초록)
+            # 상태 텍스트: 현재 액션 실시간 표시
+            action_text = self._gauge_action if self._gauge_action and self._gauge_action != "준비 중..." else "작업이 진행 중입니다."
             lbl_fg = "#22c55e" if self._blink else "#15803d"
-            self._st_lbl.configure(text="작업이 진행 중입니다.", fg=lbl_fg)
+            self._st_lbl.configure(text=action_text, fg=lbl_fg)
         else:
             self._dot.configure(fg=TEXT3)
             self._st_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
@@ -1240,7 +1247,49 @@ class AdminBoard:
             self._start_btn.update_fill(GREEN, "#ffffff")
         self.root.after(600, self._tick)
 
-    # ── 게이지 제어 ──────────────────────────────────────────────────────────
+    # ── 일반 실행 게이지 제어 ────────────────────────────────────────────────
+
+    def _show_start_gauge(self):
+        """시작하기 버튼 아래 게이지 표시."""
+        if self._start_gauge:
+            self._start_gauge.pack(fill="x", padx=self.PAD, pady=(4, 2))
+        self._start_gauge_tick()
+
+    def _hide_start_gauge(self):
+        """일반 실행 게이지 숨김."""
+        if self._start_gauge:
+            self._start_gauge.pack_forget()
+
+    def _start_gauge_tick(self):
+        """600ms마다 일반 실행 게이지 갱신."""
+        if not self._running or not self._start_gauge:
+            return
+        self._gauge_blink = not self._gauge_blink
+
+        done    = self._gauge_done
+        total   = self._gauge_total
+        elapsed = _time.time() - self._gauge_start if self._gauge_start else 0
+
+        if done > 0 and elapsed > 0 and total > done:
+            rate_sec = elapsed / done
+            rem = rate_sec * (total - done)
+            if rem >= 3600:
+                eta = f"예상 소요 약 {int(rem/3600)}시간 {int((rem%3600)/60)}분 남음"
+            elif rem >= 60:
+                eta = f"예상 소요 약 {int(rem/60)}분 남음"
+            else:
+                eta = f"예상 소요 약 {int(rem)}초 남음"
+        elif done == 0:
+            eta = "예상 소요시간 계산 중..."
+        else:
+            eta = "거의 완료 중..."
+
+        pct = done / total if total > 0 else 0.0
+        self._start_gauge.refresh(
+            pct, self._gauge_action, done, total, eta, self._gauge_blink)
+        self.root.after(600, self._start_gauge_tick)
+
+    # ── 배치 게이지 제어 ──────────────────────────────────────────────────────
 
     def _show_gauge(self):
         """배치 버튼 숨기고 게이지 바 표시."""
@@ -1344,8 +1393,15 @@ class AdminBoard:
         count = self._cnt.get()
         self._running = True
         self._start_btn.update_text("실행 중 ...")
-        self._start_btn.update_fill("#0d2e14", TEXT1)
+        self._start_btn.update_fill("#4b5563", TEXT2)   # 회색으로 변경
         self._start_btn.set_enabled(False)
+
+        # 게이지 초기화 + 표시
+        self._gauge_done   = 0
+        self._gauge_total  = len(selected) * count
+        self._gauge_action = "시작 중..."
+        self._gauge_start  = _time.time()
+        self._show_start_gauge()
 
         def worker():
             total = len(selected)
@@ -1359,7 +1415,7 @@ class AdminBoard:
                 try:
                     self._proc = subprocess.Popen(
                         [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
-                         "--headless", "--account", acct["id"],
+                         "--account", acct["id"],
                          "--limit", str(count), "--no-overlay"],
                         cwd=str(_DIR),
                         stdout=subprocess.PIPE,
@@ -1376,34 +1432,52 @@ class AdminBoard:
                     LOGS_DIR.mkdir(exist_ok=True)
                     PID_FILE.write_text(str(self._proc.pid))
 
-                # stdout 실시간 읽기
+                # stdout 실시간 읽기 + 액션 감지 + 완료 건수 추적
                 for line in self._proc.stdout:
                     line = line.rstrip("\r\n")
-                    if line:
-                        self._log_queue.put((line, ""))
+                    if not line:
+                        continue
+                    self._log_queue.put((line, ""))
+                    action = self._detect_action(line)
+                    if action:
+                        self.root.after(0, self._set_gauge_action, action)
+                    # 게시 완료 1건 감지
+                    if ("✅" in line or "게시 완료" in line or
+                            '"posted"' in line or "Post successful" in line):
+                        self.root.after(0, self._inc_gauge_done, 1)
 
                 self._proc.wait()
                 rc = self._proc.returncode
                 self.root.after(0, self._append_log,
                                 f"=== {acct['label']} 종료 (exit {rc}) ===",
                                 "success" if rc == 0 else "error")
+                # 비정상 종료 시 Chrome 좀비 정리
+                if rc != 0:
+                    self.root.after(0, self._append_log,
+                                    f"  [CLEANUP] Chrome 좀비 정리 중...", "warn")
+                    self._kill_chrome_orphans()
+                else:
+                    _time.sleep(2)
 
             PID_FILE.unlink(missing_ok=True)
+            self._running = False
+            self._proc    = None
+            self.root.after(0, self._hide_start_gauge)
             self.root.after(0, self._msg, f"완료  ({total}개 계정)", GREEN)
             self.root.after(0, self._append_log,
                             f"--- 전체 완료: {total}개 계정 ---", "success")
             self.root.after(0, self._start_btn.update_text, "시작하기")
             self.root.after(0, self._start_btn.update_fill, GREEN, "#ffffff")
             self.root.after(0, self._start_btn.set_enabled, True)
-            self._running = False
-            self._proc    = None
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_stop(self):
         # 배치 + 일반 모두 중단
         self._batch_running = False
+        self._running = False
         self._hide_gauge()
+        self._hide_start_gauge()
         if self._proc:
             try:
                 subprocess.run(
@@ -1514,12 +1588,33 @@ class AdminBoard:
 
         threading.Thread(target=_batch_worker, daemon=True).start()
 
+    # ── Chrome 좀비 프로세스 강제 정리 ─────────────────────────────────────────
+    @staticmethod
+    def _kill_chrome_orphans():
+        """chromedriver.exe + 우리 RPA가 남긴 chrome.exe 정리.
+
+        chrome.exe 전체를 죽이면 사용자 Chrome도 죽으므로
+        chromedriver.exe 만 종료 (Chrome은 driver.quit()로 정리됨).
+        """
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chromedriver.exe"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+        # 혹시 ChromeDriver 종료 후 Chrome이 부모 없이 떠도는 경우는
+        # 드물지만 --headless 모드에서 발생할 수 있음 —
+        # headless chrome은 사용자 창이 아니므로 강제 종료 가능.
+        # 단, 안전을 위해 5초 대기 후 체크.
+        _time.sleep(3)
+
     def _run_single(self, acct: dict, count: int):
         """단일 계정 RPA 실행 (배치용 — 동기, 워커 스레드에서 호출)."""
         try:
             self._proc = subprocess.Popen(
                 [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
-                 "--headless", "--account", acct["id"],
+                 "--account", acct["id"],
                  "--limit", str(count), "--no-overlay"],
                 cwd=str(_DIR),
                 stdout=subprocess.PIPE,
@@ -1546,13 +1641,26 @@ class AdminBoard:
 
         self._proc.wait()
         rc = self._proc.returncode
+        tag = "success" if rc == 0 else "error"
         self.root.after(0, self._append_log,
                         f"  {acct['label']} 완료 (exit {rc})",
-                        "success" if rc == 0 else "error")
+                        tag)
         if rc == 0:
             self.root.after(0, self._inc_gauge_done, count)
         self._proc = None
         PID_FILE.unlink(missing_ok=True)
+
+        # ── Chrome/ChromeDriver 좀비 정리 (다음 계정 DLL_INIT_FAILED 방지) ──
+        if rc != 0:
+            self.root.after(0, self._append_log,
+                            f"  [CLEANUP] 비정상 종료 감지 — Chrome 좀비 프로세스 정리 중...",
+                            "warn")
+            self._kill_chrome_orphans()
+            self.root.after(0, self._append_log,
+                            "  [CLEANUP] Chrome 정리 완료", "dim")
+        else:
+            # 정상 종료도 2초 대기 (DLL 해제 시간 확보)
+            _time.sleep(2)
 
     def _on_hide(self):
         self.root.withdraw()
@@ -1586,8 +1694,32 @@ if __name__ == "__main__":
     LOGS_DIR.mkdir(exist_ok=True)
     if ADMIN_HWND_FILE.exists():
         try:
-            hwnd = _safe_hwnd(ADMIN_HWND_FILE.read_text(encoding="utf-8"))
-            if hwnd and ctypes.windll.user32.IsWindow(hwnd):
+            raw = ADMIN_HWND_FILE.read_text(encoding="utf-8").strip()
+            # 구형 포맷(숫자만) / 신형 포맷(hwnd:pid) 모두 지원
+            if ":" in raw:
+                hwnd_str, pid_str = raw.split(":", 1)
+                hwnd = _safe_hwnd(hwnd_str)
+                pid  = _safe_pid(pid_str)
+            else:
+                hwnd = _safe_hwnd(raw)
+                pid  = None
+
+            # PID가 기록됐으면 프로세스 생존 여부로 먼저 확인
+            pid_alive = False
+            if pid is not None:
+                try:
+                    import psutil as _psu
+                    pid_alive = _psu.pid_exists(pid)
+                except ImportError:
+                    # psutil 없으면 os.kill(pid, 0) 으로 확인
+                    try:
+                        import signal as _sig
+                        os.kill(pid, 0)
+                        pid_alive = True
+                    except OSError:
+                        pid_alive = False
+
+            if hwnd and ctypes.windll.user32.IsWindow(hwnd) and pid_alive:
                 ctypes.windll.user32.ShowWindow(hwnd, 5)
                 _bring_hwnd_to_front(hwnd)
                 sys.exit(0)
