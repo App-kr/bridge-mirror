@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   CalendarCheck,
   Globe,
+  Activity,
 } from 'lucide-react'
 
 interface NavItem {
@@ -66,6 +67,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { href: '/admin/interviews', label: '인터뷰 관리', icon: <CalendarCheck size={ICON_SIZE} /> },
       { href: '/admin/interview-setup', label: '인터뷰 세팅', icon: <Video size={ICON_SIZE} /> },
       { href: '/admin/resume-converter', label: '이력서 편집기', icon: <FilePen size={ICON_SIZE} /> },
+      { href: '/admin/pipeline', label: '파이프라인 상태', icon: <Activity size={ICON_SIZE} /> },
       { href: '/admin/talent-auth', label: '게시판 접근 관리', icon: <ShieldCheck size={ICON_SIZE} /> },
     ],
   },

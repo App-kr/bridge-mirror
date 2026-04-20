@@ -11683,6 +11683,60 @@ def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
     )
 
 
+@app.post("/api/admin/candidates/check-processed-status", tags=["admin"])
+async def candidates_check_processed_status(request: Request):
+    """
+    sheet_number 목록 → cv_processed_status 일괄 조회.
+    body: { "sheet_numbers": [5739, 6121, ...] }
+    반환: { "statuses": { "5739": {"status": "done", "has_cv": true, "name_hash": "..."}, ... } }
+    """
+    _check_admin(request)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    sheet_numbers = data.get("sheet_numbers") or []
+    if not isinstance(sheet_numbers, list):
+        raise HTTPException(400, "sheet_numbers must be an array")
+    # 정수 필터
+    nums: list[int] = []
+    for v in sheet_numbers[:500]:
+        try:
+            nums.append(int(v))
+        except Exception:
+            continue
+    if not nums:
+        return ok(data={"statuses": {}})
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    conn.row_factory = sqlite3.Row
+    try:
+        placeholders = ",".join("?" * len(nums))
+        rows = conn.execute(
+            f"SELECT sheet_number, cv_processed_status, cv_processed_s3_key, "
+            f"cv_processed_at, cv_processed_attempts, cv_processed_last_error "
+            f"FROM candidates WHERE sheet_number IN ({placeholders}) AND status != 'Deleted'",
+            nums,
+        ).fetchall()
+        statuses = {}
+        for r in rows:
+            statuses[str(r["sheet_number"])] = {
+                "status": r["cv_processed_status"] or "pending",
+                "has_cv": bool(r["cv_processed_s3_key"]),
+                "processed_at": r["cv_processed_at"] or "",
+                "attempts": r["cv_processed_attempts"] or 0,
+                "last_error": (r["cv_processed_last_error"] or "")[:150],
+            }
+        # 누락된 번호 표시
+        for n in nums:
+            if str(n) not in statuses:
+                statuses[str(n)] = {"status": "not_found", "has_cv": False,
+                                    "processed_at": "", "attempts": 0, "last_error": ""}
+        return ok(data={"statuses": statuses})
+    finally:
+        conn.close()
+
+
 @app.post("/api/admin/mail/introduce", tags=["admin"])
 async def mail_introduce(request: Request):
     """
@@ -11693,6 +11747,7 @@ async def mail_introduce(request: Request):
     link_expiry_days: presigned URL 유효기간 (기본 10일)
     sender: naver | gmail
     custom_message: 상단 추가 메시지
+    require_processed_cv: bool (기본 True) — True면 cv_processed_status='done' 아닌 강사 있으면 400
     """
     _check_admin(request)
     import json as _json_intro
@@ -11738,6 +11793,21 @@ async def mail_introduce(request: Request):
 
         if not cand_rows:
             raise HTTPException(404, "조회된 강사 없음")
+
+        # ── v2.0 발송 전 이중 검증 — processed CV 없는 강사 차단 (100% 보장) ──
+        require_processed_cv = bool(data.get("require_processed_cv", True))
+        if require_processed_cv:
+            missing = []
+            for cr in cand_rows:
+                d = dict(cr)
+                if not d.get("cv_processed_s3_key"):
+                    missing.append(str(d.get("sheet_number")))
+            if missing:
+                raise HTTPException(
+                    400,
+                    f"이력서 미처리 강사 있음 — 발송 차단: {', '.join(missing)}. "
+                    f"재처리 후 다시 시도하거나 require_processed_cv=false 로 우회 가능."
+                )
 
         # ── 2. 구인자(수신자) 조회 ──
         if employer_ids:

@@ -182,6 +182,52 @@ function IntroduceMailContent() {
       .filter(s => s && /^\d+$/.test(s))
   }
 
+  /* ── v2.0: 강사별 CV 처리 상태 (chip 표시용) ── */
+  interface CvStatus {
+    status: string
+    has_cv: boolean
+    processed_at: string
+    attempts: number
+    last_error: string
+  }
+  const [cvStatuses, setCvStatuses] = useState<Record<string, CvStatus>>({})
+  const [statusLoading, setStatusLoading] = useState(false)
+
+  useEffect(() => {
+    const ids = candidateInput
+      .split(/[\n,\s]+/).map(s => s.trim()).filter(s => s && /^\d+$/.test(s))
+    if (ids.length === 0) { setCvStatuses({}); return }
+    const ctl = new AbortController()
+    const timer = setTimeout(async () => {
+      setStatusLoading(true)
+      try {
+        const res = await adminFetch(`${API_URL}/api/admin/candidates/check-processed-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheet_numbers: ids.map(x => parseInt(x, 10)) }),
+          signal: ctl.signal,
+        })
+        if (res.ok) {
+          const j = await res.json()
+          setCvStatuses(j.data?.statuses || {})
+        }
+      } catch { /* abort or network */ }
+      finally { setStatusLoading(false) }
+    }, 350) // debounce
+    return () => { clearTimeout(timer); ctl.abort() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateInput])
+
+  const cvStatusBadge = (sn: string): { label: string; color: string; bg: string; title: string } => {
+    const s = cvStatuses[sn]
+    if (!s) return { label: '...', color: '#6B7280', bg: '#F3F4F6', title: '조회 중' }
+    if (s.status === 'done' && s.has_cv) return { label: '✓', color: '#047857', bg: '#D1FAE5', title: `이력서 처리됨 (${s.processed_at.slice(0,10)})` }
+    if (s.status === 'running' || s.status === 'queued') return { label: '⏳', color: '#B45309', bg: '#FEF3C7', title: `처리중 (시도 ${s.attempts}회)` }
+    if (s.status === 'failed' || s.status === 'dlq') return { label: '✗', color: '#B91C1C', bg: '#FEE2E2', title: `실패: ${s.last_error || '알 수 없음'}` }
+    if (s.status === 'not_found') return { label: '?', color: '#9CA3AF', bg: '#F3F4F6', title: '존재하지 않는 강사번호' }
+    return { label: '·', color: '#6B7280', bg: '#F3F4F6', title: '미처리(pending)' }
+  }
+
   /* ── 발송 ── */
   async function handleSend() {
     const candidateIds = getCandidateIds()
@@ -263,11 +309,34 @@ function IntroduceMailContent() {
             <div style={{ marginTop: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
                 입력된 강사: <strong>{candidateIds.length}명</strong>
+                {statusLoading && <span style={{ marginLeft: 8, color: '#9CA3AF' }}>상태 조회중…</span>}
+                {(() => {
+                  const missing = candidateIds.filter(id => {
+                    const s = cvStatuses[id]
+                    return !s || !(s.status === 'done' && s.has_cv)
+                  })
+                  if (missing.length === 0) return null
+                  return (
+                    <span style={{ marginLeft: 10, color: '#B91C1C', fontWeight: 700 }}>
+                      ⚠ 이력서 미처리 {missing.length}명 — 발송 차단됨
+                    </span>
+                  )
+                })()}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {candidateIds.map(id => (
-                  <span key={id} style={CHIP}>{id}</span>
-                ))}
+                {candidateIds.map(id => {
+                  const b = cvStatusBadge(id)
+                  return (
+                    <span key={id} style={CHIP} title={b.title}>
+                      {id}
+                      <span style={{
+                        marginLeft: 4, padding: '0 5px', borderRadius: 3,
+                        fontSize: 11, fontWeight: 700,
+                        color: b.color, background: b.bg,
+                      }}>{b.label}</span>
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -420,20 +489,34 @@ function IntroduceMailContent() {
             {loadingPreview ? '미리보기 생성 중...' : '메일 미리보기'}
           </button>
 
-          {/* 발송 버튼 */}
-          <button
-            onClick={handleSend}
-            disabled={sending || candidateIds.length === 0 || selectedIds.size === 0}
-            style={{
-              width: '100%', padding: '12px 0',
-              background: '#111', color: '#fff', border: 'none',
-              borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
-              opacity: (sending || candidateIds.length === 0 || selectedIds.size === 0) ? 0.45 : 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {sending ? '발송 중...' : `소개 메일 발송 (${selectedIds.size}개 기관)`}
-          </button>
+          {/* 발송 버튼 — v2.0: 이력서 미처리 강사가 있으면 disable */}
+          {(() => {
+            const missingCvCount = candidateIds.filter(id => {
+              const s = cvStatuses[id]
+              return !s || !(s.status === 'done' && s.has_cv)
+            }).length
+            const blocked = sending || candidateIds.length === 0 || selectedIds.size === 0 || missingCvCount > 0
+            return (
+              <button
+                onClick={handleSend}
+                disabled={blocked}
+                title={missingCvCount > 0 ? `이력서 미처리 강사 ${missingCvCount}명 — 재처리 필요` : undefined}
+                style={{
+                  width: '100%', padding: '12px 0',
+                  background: missingCvCount > 0 ? '#9CA3AF' : '#111', color: '#fff', border: 'none',
+                  borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: blocked ? 'not-allowed' : 'pointer',
+                  opacity: blocked ? 0.55 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {sending
+                  ? '발송 중...'
+                  : missingCvCount > 0
+                    ? `발송 불가 — 이력서 미처리 ${missingCvCount}명`
+                    : `소개 메일 발송 (${selectedIds.size}개 기관)`}
+              </button>
+            )
+          })()}
 
           {/* 결과 */}
           {sendResult && (

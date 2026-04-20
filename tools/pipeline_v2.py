@@ -94,13 +94,18 @@ def enqueue_resume_process(
 ) -> int:
     """
     이력서 처리 작업 큐 등록. 멱등성 보장: 동일 (candidate_id, cv_s3_key) 중복 호출 시 기존 job_id 반환.
+    trigger 는 메타데이터(payload)에 포함하되 idempotency_key 계산에서는 제외.
     """
     payload = {
         "candidate_id": str(candidate_id),
         "cv_s3_key": str(cv_s3_key),
         "trigger": str(trigger),
     }
-    idempotency_key = _make_idempotency_key("resume_process", payload)
+    # idempotency 는 후보자 + 파일 key 만 고려 — trigger 변경으로 중복 허용되지 않음
+    idempotency_key = _make_idempotency_key(
+        "resume_process",
+        {"candidate_id": str(candidate_id), "cv_s3_key": str(cv_s3_key)},
+    )
 
     conn = _conn()
     try:
