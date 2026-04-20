@@ -138,8 +138,8 @@ _NAT_KR = {
 }
 
 _GENDER_KR = {
-    "male": "남", "m": "남", "남": "남", "남성": "남",
-    "female": "여", "f": "여", "여": "여", "여성": "여",
+    "male": "남성", "m": "남성", "남": "남성", "남성": "남성",
+    "female": "여성", "f": "여성", "여": "여성", "여성": "여성",
 }
 
 
@@ -213,39 +213,50 @@ def _merge_pdfs(cover_pdf: Path, resume_pdf: Path, output_pdf: Path):
 
 
 def _build_output_filename(number: int, candidate: dict = None, ext: str = ".docx") -> str:
-    """출력 파일명: 3060영국_여(89born).docx"""
-    nat_kr = ""
-    gender_kr = ""
-    birth_yr = ""
+    """
+    파일명 단일 규격 (SSoT v2.0):
+        {sheet_number}{국적}_{성별}({YY}born){ext}
+    예: 5739영국_여성(00born).pdf / 6121아일랜드_남성(00born).pdf
+
+    누락 요소는 폴백 문자열로 대체 (파일명 생성 100% 보장):
+        국적 → "국적미상", 성별 → "성별미상", 생년 → "미상"
+
+    호출 지점 (유일 SSoT — 다른 경로에서 파일명 직접 조합 금지):
+      1) tools.doc_processor.process_docx / process_pdf
+      2) api_server._auto_process_resume (자동 처리)
+      3) api_server._fetch_processed_cv_attachment (메일 첨부)
+      4) /api/admin/resume/preview/{id}
+    """
+    nat_kr = "국적미상"
+    gender_kr = "성별미상"
+    birth_yr = "미상"
 
     if candidate:
-        # 국적
         nat_raw = (candidate.get("nationality") or "").strip().lower()
-        nat_kr = _NAT_KR.get(nat_raw, nat_raw[:4] if nat_raw else "")
+        if nat_raw:
+            mapped = _NAT_KR.get(nat_raw)
+            if mapped:
+                nat_kr = mapped
+            elif re.match(r"^[가-힣]+$", nat_raw):
+                # 이미 한글 국적이 들어온 경우 (e.g. "미국")
+                nat_kr = nat_raw[:6]
 
-        # 성별
         gen_raw = (candidate.get("gender") or "").strip().lower()
-        gender_kr = _GENDER_KR.get(gen_raw, gen_raw[:1] if gen_raw else "")
+        if gen_raw:
+            mapped_g = _GENDER_KR.get(gen_raw)
+            if mapped_g:
+                gender_kr = mapped_g
 
-        # 생년 (2자리)
         dob = (candidate.get("dob") or "").strip()
         if dob:
-            # "1989-05-15", "1989", "89", "May 15, 1989" 등
             yr_match = re.search(r"(19|20)(\d{2})", dob)
             if yr_match:
                 birth_yr = yr_match.group(2)
             elif re.match(r"^\d{2}$", dob):
                 birth_yr = dob
 
-    parts = [str(number)]
-    if nat_kr:
-        parts.append(nat_kr)
-    if gender_kr:
-        parts.append(f"_{gender_kr}")
-    if birth_yr:
-        parts.append(f"({birth_yr}born)")
-
-    return "".join(parts) + ext
+    # 규격: 항상 3요소 모두 포함 (누락 시 폴백 문자열)
+    return f"{number}{nat_kr}_{gender_kr}({birth_yr}born){ext}"
 
 
 def find_candidate_by_email(email: str):

@@ -10948,22 +10948,41 @@ async def get_mail_stats(request: Request):
 
 # ─── 엔드포인트 2: 메일 발송 (/send + /send-bulk 동일 핸들러) ────────────────
 def _fetch_processed_cv_attachment(candidate_id: str) -> "tuple[bytes, str] | None":
-    """S3에서 processed CV 다운로드 → (bytes, filename) or None."""
+    """S3에서 processed CV 다운로드 → (bytes, filename) or None.
+    파일명은 _build_output_filename() SSoT 사용 — {번호}{국적}_{성별}({YY}born).pdf
+    """
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
+        conn.row_factory = sqlite3.Row
         try:
             row = conn.execute(
-                "SELECT cv_processed_s3_key, sheet_number FROM candidates WHERE candidate_id = ?",
+                "SELECT cv_processed_s3_key, sheet_number, nationality, nationality_plain, gender, dob "
+                "FROM candidates WHERE candidate_id = ?",
                 (candidate_id,),
             ).fetchone()
         finally:
             conn.close()
-        if not row or not row[0]:
+        if not row or not row["cv_processed_s3_key"]:
             return None
-        pdf_data = s3_download_bytes(row[0])
-        num = row[1] or "resume"
-        return pdf_data, f"BRJ{num}_resume.pdf"
+        pdf_data = s3_download_bytes(row["cv_processed_s3_key"])
+
+        # 파일명 생성 — SSoT 사용
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from tools.doc_processor import _build_output_filename  # type: ignore
+            nat = row["nationality_plain"] or ""
+            if not nat and row["nationality"]:
+                nat = _safe_decrypt(row["nationality"], "nationality") or ""
+            gender = _safe_decrypt(row["gender"], "gender") if row["gender"] else ""
+            dob    = _safe_decrypt(row["dob"], "dob") if row["dob"] else ""
+            cand = {"nationality": nat, "gender": gender, "dob": dob}
+            fname = _build_output_filename(int(row["sheet_number"] or 0), cand, ".pdf")
+        except Exception as _fn_err:
+            logging.getLogger("bridge.mail").warning("filename fallback: %s", _fn_err)
+            fname = f"{row['sheet_number'] or 'resume'}.pdf"
+
+        return pdf_data, fname
     except Exception as e:
         logging.getLogger("bridge.mail").warning("CV 첨부 실패 %s: %s", candidate_id, e)
         return None
@@ -11044,19 +11063,32 @@ async def _handle_mail_send(request: Request):
         msg["Subject"] = subject
         msg["Reply-To"] = "bridgejobkr@gmail.com"
         msg.attach(MIMEText(body, "html", "utf-8"))
-        # Processed CV 첨부
+        # Processed CV 첨부 (RFC 5987 한글 파일명 안전 처리)
+        from urllib.parse import quote as _urlquote
         for pdf_data, pdf_name in cv_attachments:
             part = MIMEBase("application", "pdf")
             part.set_payload(pdf_data)
             _email_encoders.encode_base64(part)
-            part.add_header("Content-Disposition", "attachment", filename=pdf_name)
+            try:
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename*=UTF-8''{_urlquote(pdf_name)}"
+                )
+            except Exception:
+                part.add_header("Content-Disposition", "attachment", filename=pdf_name)
             msg.attach(part)
-        # 수동 첨부파일 (드래그&드롭/파일선택)
+        # 수동 첨부파일 (드래그&드롭/파일선택) — RFC 5987
         for file_data, file_name in manual_files:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(file_data)
             _email_encoders.encode_base64(part)
-            part.add_header("Content-Disposition", "attachment", filename=file_name)
+            try:
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename*=UTF-8''{_urlquote(file_name)}"
+                )
+            except Exception:
+                part.add_header("Content-Disposition", "attachment", filename=file_name)
             msg.attach(part)
         return msg
 
@@ -12145,7 +12177,7 @@ async def send_mail_single(request: Request):
         msg["Reply-To"] = "bridgejobkr@gmail.com"
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        # S3 이력서 첨부 (sprint B B-1)
+        # S3 이력서 첨부 (sprint B B-1) — 파일명 SSoT(_build_output_filename) 사용
         if resume_s3_key:
             try:
                 _pdf_bytes = s3_download_bytes(resume_s3_key)
@@ -12155,8 +12187,46 @@ async def send_mail_single(request: Request):
                     _part = _MB("application", "pdf")
                     _part.set_payload(_pdf_bytes)
                     _enc.encode_base64(_part)
-                    _fname = resume_s3_key.split("/")[-1] or "resume.pdf"
-                    _part.add_header("Content-Disposition", f'attachment; filename="{_fname}"')
+
+                    # SSoT 파일명: candidate_id 주어지면 DB에서 정보 조회 후 _build_output_filename
+                    _cid_hint = data.get("candidate_id", "")
+                    _fname = None
+                    if _cid_hint:
+                        try:
+                            sys.path.insert(0, str(Path(__file__).resolve().parent))
+                            from tools.doc_processor import _build_output_filename  # type: ignore
+                            _fn_conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+                            _fn_conn.row_factory = sqlite3.Row
+                            try:
+                                _fn_row = _fn_conn.execute(
+                                    "SELECT sheet_number, nationality, nationality_plain, gender, dob "
+                                    "FROM candidates WHERE candidate_id = ?",
+                                    (str(_cid_hint),)
+                                ).fetchone()
+                            finally:
+                                _fn_conn.close()
+                            if _fn_row:
+                                _nat = _fn_row["nationality_plain"] or (_safe_decrypt(_fn_row["nationality"], "nationality") if _fn_row["nationality"] else "")
+                                _fn_cand = {
+                                    "nationality": _nat,
+                                    "gender": _safe_decrypt(_fn_row["gender"], "gender") if _fn_row["gender"] else "",
+                                    "dob": _safe_decrypt(_fn_row["dob"], "dob") if _fn_row["dob"] else "",
+                                }
+                                _fname = _build_output_filename(int(_fn_row["sheet_number"] or 0), _fn_cand, ".pdf")
+                        except Exception as _fn_e:
+                            logging.getLogger("bridge.api").debug("SSoT filename skip: %s", _fn_e)
+                    if not _fname:
+                        _fname = resume_s3_key.split("/")[-1] or f"BRIDGE_CV.pdf"
+
+                    # RFC 5987 한글 파일명 안전 처리
+                    try:
+                        from urllib.parse import quote
+                        _part.add_header(
+                            "Content-Disposition",
+                            f"attachment; filename*=UTF-8''{quote(_fname)}"
+                        )
+                    except Exception:
+                        _part.add_header("Content-Disposition", f'attachment; filename="{_fname}"')
                     msg.attach(_part)
             except Exception as _att_e:
                 logging.getLogger("bridge.api").warning("이력서 첨부 실패(계속): %s", _att_e)
