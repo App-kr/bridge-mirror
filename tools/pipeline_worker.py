@@ -37,15 +37,10 @@ JOB_TIMEOUT = 120  # 개별 작업 타임아웃 (초)
 
 
 def _process_resume_job(job: dict) -> tuple[bool, str]:
-    """
-    resume_process 작업 실행.
-    Returns: (success, error_message)
-    """
+    """resume_process 작업 — CV/DOCX PDF 변환 + PII 제거."""
     payload = json.loads(job["payload_json"])
     candidate_id = payload.get("candidate_id", "")
-    cv_s3_key = payload.get("cv_s3_key", "")
-
-    # 기존 _auto_process_resume 재사용 (api_server 모듈 import)
+    cv_s3_key = payload.get("cv_s3_key") or payload.get("s3_key", "")
     try:
         import api_server
         api_server._auto_process_resume(candidate_id, cv_s3_key)
@@ -54,31 +49,130 @@ def _process_resume_job(job: dict) -> tuple[bool, str]:
         return False, str(e)[:500]
 
 
+def _process_image_job(job: dict) -> tuple[bool, str]:
+    """image_process 작업 — SHA-256 해시 + photo_s3_key 갱신.
+    사진은 PII 불필요. 무결성 해시만 기록.
+    """
+    import hashlib
+    import sqlite3 as _sql
+
+    payload = json.loads(job["payload_json"])
+    candidate_id = payload.get("candidate_id", "")
+    s3_key = payload.get("s3_key", "")
+
+    try:
+        import api_server
+        # S3 다운로드
+        data = api_server.s3_download_bytes(s3_key)
+        if not data:
+            return False, f"S3 다운로드 실패: {s3_key}"
+        sha = hashlib.sha256(data).hexdigest()
+
+        # candidates.photo_s3_key / photo_sha256 갱신
+        conn = _sql.connect(str(api_server._ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            conn.execute(
+                "UPDATE candidates SET photo_s3_key = ?, photo_sha256 = ? WHERE candidate_id = ?",
+                (s3_key, sha, candidate_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        from pipeline_v2 import log_event
+        log_event("image_processed", candidate_id=candidate_id,
+                  job_id=job["id"], details={"sha256": sha[:16], "size": len(data)})
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:500]
+
+
+def _process_video_job(job: dict) -> tuple[bool, str]:
+    """video_process 작업 — SHA-256 해시만. 영상 PII 제거는 미구현."""
+    import hashlib
+    payload = json.loads(job["payload_json"])
+    candidate_id = payload.get("candidate_id", "")
+    s3_key = payload.get("s3_key", "")
+    try:
+        import api_server
+        data = api_server.s3_download_bytes(s3_key)
+        if not data:
+            return False, f"S3 다운로드 실패: {s3_key}"
+        sha = hashlib.sha256(data).hexdigest()
+        from pipeline_v2 import log_event
+        log_event("video_processed", candidate_id=candidate_id,
+                  job_id=job["id"], details={"sha256": sha[:16], "size": len(data)})
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:500]
+
+
+def _process_attachment_job(job: dict) -> tuple[bool, str]:
+    """attachment_store 작업 — 해시만 기록 (reference, certificate, 기타)."""
+    import hashlib
+    payload = json.loads(job["payload_json"])
+    candidate_id = payload.get("candidate_id", "")
+    s3_key = payload.get("s3_key", "")
+    file_type = payload.get("file_type", "attachment")
+    try:
+        import api_server
+        data = api_server.s3_download_bytes(s3_key)
+        if not data:
+            return False, f"S3 다운로드 실패: {s3_key}"
+        sha = hashlib.sha256(data).hexdigest()
+        from pipeline_v2 import log_event
+        log_event("attachment_stored", candidate_id=candidate_id,
+                  job_id=job["id"],
+                  details={"sha256": sha[:16], "size": len(data), "file_type": file_type})
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:500]
+
+
+# Job type dispatcher
+_JOB_HANDLERS = {
+    "resume_process":   _process_resume_job,
+    "image_process":    _process_image_job,
+    "video_process":    _process_video_job,
+    "attachment_store": _process_attachment_job,
+}
+
+# 워커가 처리할 job_type 목록 (전체)
+_ALL_JOB_TYPES = list(_JOB_HANDLERS.keys())
+
+
 def _run_one_job() -> bool:
-    """큐에서 1건 가져와 실행. 작업이 있으면 True, 없으면 False."""
+    """큐에서 1건 가져와 실행. 작업이 있으면 True, 없으면 False.
+    모든 job_type 중에서 가장 오래된 queued 작업 처리.
+    """
     from pipeline_v2 import (
-        get_next_job, mark_job_running, mark_job_done, mark_job_failed,
+        get_next_job_any, mark_job_running, mark_job_done, mark_job_failed,
     )
 
-    job = get_next_job("resume_process")
+    job = get_next_job_any(_ALL_JOB_TYPES)
     if not job:
         return False
 
     job_id = job["id"]
+    job_type = job["job_type"]
     if not mark_job_running(job_id):
-        # 다른 워커가 가져감
         return True
 
     payload = json.loads(job["payload_json"])
     candidate_id = payload.get("candidate_id", "")
 
-    _log.info("[WORKER] start job_id=%s cid=%s", job_id, candidate_id)
+    _log.info("[WORKER] start job_id=%s type=%s cid=%s", job_id, job_type, candidate_id)
 
-    # 타임아웃 스레드
+    handler = _JOB_HANDLERS.get(job_type)
+    if not handler:
+        mark_job_failed(job_id, f"unknown job_type: {job_type}", candidate_id=candidate_id)
+        return True
+
     result = {"ok": False, "err": "timeout"}
 
     def _target():
-        ok, err = _process_resume_job(job)
+        ok, err = handler(dict(job))
         result["ok"] = ok
         result["err"] = err
 
@@ -88,15 +182,16 @@ def _run_one_job() -> bool:
 
     if t.is_alive():
         mark_job_failed(job_id, f"timeout after {JOB_TIMEOUT}s", candidate_id=candidate_id)
-        _log.warning("[WORKER] timeout job_id=%s", job_id)
+        _log.warning("[WORKER] timeout job_id=%s type=%s", job_id, job_type)
         return True
 
     if result["ok"]:
         mark_job_done(job_id, candidate_id=candidate_id)
-        _log.info("[WORKER] done job_id=%s cid=%s", job_id, candidate_id)
+        _log.info("[WORKER] done job_id=%s type=%s cid=%s", job_id, job_type, candidate_id)
     else:
         outcome = mark_job_failed(job_id, result["err"], candidate_id=candidate_id)
-        _log.warning("[WORKER] fail job_id=%s → %s err=%s", job_id, outcome, result["err"][:100])
+        _log.warning("[WORKER] fail job_id=%s type=%s → %s err=%s",
+                     job_id, job_type, outcome, result["err"][:100])
     return True
 
 

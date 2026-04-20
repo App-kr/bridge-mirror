@@ -7935,32 +7935,37 @@ _FILE_LIMITS: dict[str, tuple[int, set[str], list[bytes]]] = {
         [b"\xff\xd8\xff", b"\x89PNG", b"RIFF"],  # JPEG, PNG, WebP
     ),
     "cv": (
-        10 * 1024 * 1024,
-        {".pdf", ".doc", ".docx"},
-        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK"],  # PDF, DOC, DOCX
+        20 * 1024 * 1024,   # v2.0: 10MB → 20MB (사진 embed DOCX 대응)
+        {".pdf", ".doc", ".docx", ".rtf", ".odt"},
+        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"{\\rtf"],  # PDF, DOC, DOCX/ODT, RTF
     ),
     "cover_letter": (
-        10 * 1024 * 1024,
-        {".pdf", ".doc", ".docx"},
-        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK"],
+        20 * 1024 * 1024,
+        {".pdf", ".doc", ".docx", ".rtf", ".odt"},
+        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"{\\rtf"],
     ),
     "certificate": (
-        10 * 1024 * 1024,
-        {".pdf", ".jpg", ".jpeg", ".png"},
-        [b"%PDF", b"\xff\xd8\xff", b"\x89PNG"],
+        15 * 1024 * 1024,
+        {".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"},
+        [b"%PDF", b"\xff\xd8\xff", b"\x89PNG", b"\xd0\xcf\x11\xe0", b"PK"],
+    ),
+    "reference": (
+        15 * 1024 * 1024,
+        {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"},
+        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"\xff\xd8\xff", b"\x89PNG"],
     ),
     "video": (
-        100 * 1024 * 1024,
-        {".mp4", ".mov", ".webm"},
+        200 * 1024 * 1024,   # v2.0: 100MB → 200MB
+        {".mp4", ".mov", ".webm", ".avi", ".mkv"},
         [b"ftyp", b"\x00\x00\x00\x18ftyp", b"\x00\x00\x00\x20ftyp",
          b"\x1aE\xdf\xa3",   # WebM/MKV
          b"RIFF",             # AVI
          ],
     ),
     "attachment": (
-        10 * 1024 * 1024,
-        {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"},
-        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"\xff\xd8\xff", b"\x89PNG"],
+        20 * 1024 * 1024,
+        {".pdf", ".doc", ".docx", ".rtf", ".odt", ".jpg", ".jpeg", ".png", ".txt", ".zip"},
+        [b"%PDF", b"\xd0\xcf\x11\xe0", b"PK", b"\xff\xd8\xff", b"\x89PNG", b"{\\rtf"],
     ),
     "community_image": (
         5 * 1024 * 1024,
@@ -8441,26 +8446,33 @@ async def upload_file(
         _log_upload.error("File metadata save failed: %s", e)
         # File is saved locally; metadata failure is non-blocking
 
-    # ── Auto-process: CV/커버레터 업로드 시 PII 자동 제거 ──
-    # v2.0: durable queue 멱등 enqueue + 레거시 스레드 직접 실행 병행
-    #       (큐는 워커가 처리, 스레드는 즉시 처리 — 이중 안전망)
-    if entity_type == "candidate" and file_type in ("cv", "cover_letter"):
+    # ── v2.0 Universal Enqueue: 전 파일타입 파이프라인 등록 ─────────────
+    # 문서(cv/cover_letter/certificate/reference) → resume_process (PII 제거)
+    # 이미지(photo) → image_process (해시 + photo_s3_key 갱신)
+    # 영상(video) → video_process (해시만)
+    # 기타(attachment 등) → attachment_store (해시만)
+    if entity_type == "candidate":
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from tools.pipeline_v2 import enqueue_resume_process  # type: ignore
-            _job_id = enqueue_resume_process(
+            from tools.pipeline_v2 import enqueue_file_process  # type: ignore
+            _job_id = enqueue_file_process(
                 candidate_id=entity_id,
-                cv_s3_key=s3_key,
+                s3_key=s3_key,
+                file_type=file_type,
+                filename=fname,
                 trigger="upload_endpoint",
             )
             logging.getLogger("bridge.pipeline").info(
-                "[ENQUEUE] cid=%s job_id=%s key=%s", entity_id, _job_id, s3_key[:60]
+                "[ENQUEUE] cid=%s job_id=%s type=%s file=%s",
+                entity_id, _job_id, file_type, fname[:60]
             )
         except Exception as _enq_err:
             logging.getLogger("bridge.pipeline").warning(
                 "[ENQUEUE] fail cid=%s err=%s", entity_id, _enq_err
             )
-        # 레거시 즉시 처리 (큐 워커 미구동 시 안전망)
+
+    # 레거시 즉시 처리 (CV/커버레터만) — 큐 워커 미구동 시 안전망
+    if entity_type == "candidate" and file_type in ("cv", "cover_letter"):
         threading.Thread(
             target=_auto_process_resume,
             args=(entity_id, s3_key),

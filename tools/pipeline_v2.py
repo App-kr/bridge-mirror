@@ -156,6 +156,119 @@ def enqueue_resume_process(
     return job_id
 
 
+# ── v2.0 확장: 전 파일타입 큐 등록 ───────────────────────────────────────
+_FILE_CATEGORY_TO_JOB_TYPE = {
+    "document": "resume_process",
+    "image":    "image_process",
+    "video":    "video_process",
+    "other":    "attachment_store",
+}
+
+
+def enqueue_file_process(
+    candidate_id: str,
+    s3_key: str,
+    file_type: str = "",             # 'cv'/'cover_letter'/'photo'/'video'/...
+    filename: str = "",
+    trigger: str = "unknown",
+    max_attempts: int = 10,
+) -> int:
+    """
+    v2.0 Universal file enqueue — CV/DOCX/이미지/영상/기타 모두 처리.
+    파일 확장자 또는 file_type 으로 job_type 자동 결정.
+    """
+    # 카테고리 결정: 확장자 우선 → file_type 폴백
+    ext = ""
+    if filename:
+        ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if not ext and s3_key:
+        ext = "." + s3_key.rsplit(".", 1)[-1].lower() if "." in s3_key else ""
+
+    # 확장자 → category
+    doc_exts = {".pdf", ".docx", ".doc", ".rtf", ".odt", ".hwp"}
+    img_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"}
+    vid_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv"}
+
+    if ext in doc_exts:
+        category = "document"
+    elif ext in img_exts:
+        category = "image"
+    elif ext in vid_exts:
+        category = "video"
+    elif file_type in ("cv", "cover_letter", "certificate", "reference"):
+        category = "document"
+    elif file_type in ("photo", "community_image"):
+        category = "image"
+    elif file_type == "video":
+        category = "video"
+    else:
+        category = "other"
+
+    job_type = _FILE_CATEGORY_TO_JOB_TYPE.get(category, "attachment_store")
+
+    payload = {
+        "candidate_id": str(candidate_id),
+        "s3_key": str(s3_key),
+        "file_type": str(file_type),
+        "filename": str(filename),
+        "category": category,
+        "trigger": str(trigger),
+    }
+    # 멱등 key: job_type + candidate_id + s3_key (trigger 제외)
+    idempotency_key = _make_idempotency_key(
+        job_type,
+        {"candidate_id": str(candidate_id), "s3_key": str(s3_key)},
+    )
+
+    conn = _conn()
+    try:
+        existing = conn.execute(
+            "SELECT id, status FROM job_queue WHERE idempotency_key = ?",
+            (idempotency_key,),
+        ).fetchone()
+        if existing:
+            existing_id = existing["id"]
+            if existing["status"] in ("dlq", "failed"):
+                conn.execute(
+                    "UPDATE job_queue SET status='queued', attempts=0, next_run_at=NULL, "
+                    "last_error=NULL, updated_at=? WHERE id=?",
+                    (_now(), existing_id),
+                )
+                conn.commit()
+                log_event(
+                    "job_requeued",
+                    candidate_id=candidate_id,
+                    job_id=existing_id,
+                    details={"trigger": trigger, "category": category},
+                )
+            return existing_id
+
+        cur = conn.execute(
+            """INSERT INTO job_queue
+               (job_type, payload_json, idempotency_key, status, max_attempts, next_run_at)
+               VALUES (?, ?, ?, 'queued', ?, datetime('now'))""",
+            (
+                job_type,
+                json.dumps(payload, ensure_ascii=False),
+                idempotency_key,
+                max_attempts,
+            ),
+        )
+        conn.commit()
+        job_id = cur.lastrowid or 0
+    finally:
+        conn.close()
+
+    log_event(
+        "job_enqueued",
+        candidate_id=candidate_id,
+        job_id=job_id,
+        details={"trigger": trigger, "job_type": job_type, "category": category,
+                 "s3_key": s3_key[:80], "file_type": file_type},
+    )
+    return job_id
+
+
 # ── 워커용 큐 조회 ───────────────────────────────────────────────────────
 def get_next_job(job_type: str = "resume_process") -> Optional[sqlite3.Row]:
     """실행 대기 작업 1건 반환 (next_run_at <= 현재)."""
@@ -168,6 +281,34 @@ def get_next_job(job_type: str = "resume_process") -> Optional[sqlite3.Row]:
                ORDER BY id LIMIT 1""",
             (job_type,),
         ).fetchone()
+        return row
+    finally:
+        conn.close()
+
+
+def get_next_job_any(job_types: list = None) -> Optional[sqlite3.Row]:
+    """여러 job_type 중 가장 오래된 queued 작업 1건.
+    job_types=None 이면 전 타입. 빈 리스트는 빈 결과."""
+    conn = _conn()
+    try:
+        if job_types is None:
+            row = conn.execute(
+                """SELECT * FROM job_queue
+                   WHERE status = 'queued'
+                     AND (next_run_at IS NULL OR next_run_at <= datetime('now'))
+                   ORDER BY id LIMIT 1"""
+            ).fetchone()
+        elif job_types:
+            placeholders = ",".join("?" * len(job_types))
+            row = conn.execute(
+                f"""SELECT * FROM job_queue
+                    WHERE job_type IN ({placeholders}) AND status = 'queued'
+                      AND (next_run_at IS NULL OR next_run_at <= datetime('now'))
+                    ORDER BY id LIMIT 1""",
+                job_types,
+            ).fetchone()
+        else:
+            return None
         return row
     finally:
         conn.close()

@@ -259,6 +259,161 @@ def _build_output_filename(number: int, candidate: dict = None, ext: str = ".doc
     return f"{number}{nat_kr}_{gender_kr}({birth_yr}born){ext}"
 
 
+# ── v2.0 전 파일타입 dispatcher ──────────────────────────────────────────
+# 파일 확장자 → 처리 카테고리
+_EXT_CATEGORY = {
+    # PII 제거 대상 (PDF/워드)
+    ".pdf":  "document",
+    ".docx": "document",
+    ".doc":  "document",
+    ".rtf":  "document",
+    ".odt":  "document",
+    ".hwp":  "document",
+    # 이미지 (PII 불필요)
+    ".jpg":  "image",
+    ".jpeg": "image",
+    ".png":  "image",
+    ".webp": "image",
+    ".gif":  "image",
+    ".bmp":  "image",
+    ".tiff": "image",
+    # 영상 (보관만)
+    ".mp4":  "video",
+    ".mov":  "video",
+    ".avi":  "video",
+    ".mkv":  "video",
+    ".webm": "video",
+    ".wmv":  "video",
+    # 기타 (해시만)
+}
+
+
+def detect_file_category(filename: str) -> str:
+    """파일 확장자로 카테고리 자동 판별.
+    Returns: 'document' | 'image' | 'video' | 'other'
+    """
+    ext = Path(filename).suffix.lower()
+    return _EXT_CATEGORY.get(ext, "other")
+
+
+def process_file(
+    filepath: Path,
+    brj_number: int,
+    candidate: dict = None,
+    file_category: str = None,
+    dry: bool = False,
+    photo_path: Path = None,
+):
+    """
+    v2.0 Universal file processor — 파일 타입에 따라 적절한 처리 라우팅.
+
+    Returns: dict {
+        "category": "document"|"image"|"video"|"other",
+        "processed": bool,       # PII 제거 완료 여부
+        "output_path": Path|None,# 처리 결과 저장 경로 (document만)
+        "pii_count": int,        # 검출된 PII 수 (document만)
+        "logs": list[str],
+        "sha256": str|None,      # 출력 파일 무결성 해시
+        "error": str|None,
+    }
+    """
+    import hashlib as _hl
+
+    if file_category is None:
+        file_category = detect_file_category(filepath.name)
+
+    result = {
+        "category": file_category,
+        "processed": False,
+        "output_path": None,
+        "pii_count": 0,
+        "logs": [],
+        "sha256": None,
+        "error": None,
+    }
+
+    try:
+        ext = filepath.suffix.lower()
+
+        # ── DOCUMENT: PII 제거 (PDF/DOCX/DOC) ────────────────────────────
+        if file_category == "document":
+            if ext in (".docx", ".doc"):
+                doc, logs = process_docx(
+                    filepath, brj_number=brj_number, candidate=candidate,
+                    dry=dry, photo_path=photo_path,
+                )
+                out_name = _build_output_filename(brj_number, candidate, ".docx")
+                out_path = filepath.parent / out_name
+                if not dry:
+                    doc.save(str(out_path))
+                    with open(out_path, "rb") as f:
+                        result["sha256"] = _hl.sha256(f.read()).hexdigest()
+                result["processed"] = True
+                result["output_path"] = out_path
+                result["logs"] = logs
+                result["pii_count"] = sum(
+                    1 for l in logs
+                    if any(kw in l for kw in ("EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"))
+                )
+
+            elif ext == ".pdf":
+                out_path, logs = process_pdf(
+                    filepath, brj_number=brj_number, candidate=candidate,
+                    dry=dry, photo_path=photo_path,
+                )
+                if out_path and Path(out_path).exists():
+                    with open(out_path, "rb") as f:
+                        result["sha256"] = _hl.sha256(f.read()).hexdigest()
+                result["processed"] = True
+                result["output_path"] = Path(out_path) if out_path else None
+                result["logs"] = logs
+                result["pii_count"] = sum(
+                    1 for l in logs
+                    if any(kw in l for kw in ("EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"))
+                )
+
+            else:
+                # rtf/odt/hwp — PII 처리 모듈 없음 → pass-through
+                with open(filepath, "rb") as f:
+                    result["sha256"] = _hl.sha256(f.read()).hexdigest()
+                result["processed"] = False
+                result["output_path"] = filepath
+                result["logs"] = [f"[SKIP] {ext} 포맷 PII 처리 미지원 — 원본 보존"]
+
+        # ── IMAGE: 해시 + 크기 검증만 (PII 불필요) ───────────────────────
+        elif file_category == "image":
+            with open(filepath, "rb") as f:
+                data = f.read()
+                result["sha256"] = _hl.sha256(data).hexdigest()
+            result["processed"] = True   # 처리 완료로 간주 (PII 없음)
+            result["output_path"] = filepath
+            result["logs"] = [f"[IMAGE] size={len(data)} sha256={result['sha256'][:16]}"]
+
+        # ── VIDEO: 해시 + 메타데이터만 (변환/블러 미지원) ────────────────
+        elif file_category == "video":
+            with open(filepath, "rb") as f:
+                data = f.read()
+                result["sha256"] = _hl.sha256(data).hexdigest()
+            result["processed"] = True
+            result["output_path"] = filepath
+            result["logs"] = [f"[VIDEO] size={len(data)} sha256={result['sha256'][:16]}"]
+
+        # ── OTHER: 해시만 ─────────────────────────────────────────────────
+        else:
+            with open(filepath, "rb") as f:
+                data = f.read()
+                result["sha256"] = _hl.sha256(data).hexdigest()
+            result["processed"] = True
+            result["output_path"] = filepath
+            result["logs"] = [f"[OTHER] ext={ext} size={len(data)} — 원본 보존"]
+
+    except Exception as e:
+        result["error"] = str(e)[:500]
+        result["logs"].append(f"[ERROR] {type(e).__name__}: {e}")
+
+    return result
+
+
 def find_candidate_by_email(email: str):
     """이메일로 후보자 검색 → dict or None (정확 매칭 우선, 없으면 LIKE)"""
     db = _get_db()
