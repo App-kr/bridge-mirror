@@ -48,6 +48,18 @@ MANAGED = [
     "BRIDGE_WEBHOOK_SECRET",
     "GEMINI_KEYS_JSON",
     "RENDER_API_KEY",
+    # bridge_ads 광고 포털
+    "ADS_SMTP_PASS",
+    "ADS_GOOGLE_CLIENT_ID",
+    "ADS_GOOGLE_CLIENT_SECRET",
+    "ADS_PAYPAL_CLIENT_ID",
+    "ADS_PAYPAL_CLIENT_SECRET",
+    "ADS_PAYPAL_WEBHOOK_ID",
+    "ADS_JWT_SECRET",
+    "ADS_CSRF_SECRET",
+    "ADS_OTP_HMAC_SECRET",
+    "ADS_FIELD_ENCRYPTION_KEY",
+    "ADS_RENDER_SERVICE_ID",
 ]
 
 # ── Windows DPAPI (ctypes, 설치 불필요) ─────────────────────────────────────

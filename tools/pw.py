@@ -59,6 +59,7 @@ PRESETS = [
     ("Gemini Key — airelair00@gmail.com",     "GEMINI_KEY_4",          False),
     ("Render API Token",                      "RENDER_API_TOKEN",      False),
     ("Render Service ID (bridge-api)",        "RENDER_SERVICE_ID",     False),
+    ("Render Service ID (bridge-ads)",        "ADS_RENDER_SERVICE_ID", False),
     ("Render API Key (통합)",                  "RENDER_API_KEY",        False),
     ("Vercel Access Token",                   "VERCEL_TOKEN",          False),
     ("GitHub Personal Access Token",          "GIT_TK",                False),
@@ -66,6 +67,17 @@ PRESETS = [
     ("Google OAuth Client ID",                "GOOGLE_CLIENT_ID",      False),
     ("NextAuth Secret",                       "NEXTAUTH_SECRET",       False),
     ("Admin Token (legacy)",                  "ADMIN_TOKEN",           False),
+    # ── bridge_ads (광고 포털) ──────────────────────────────────────────────
+    ("[ADS] Gmail App Password (SMTP)",       "ADS_SMTP_PASS",         False),
+    ("[ADS] Google OAuth Client ID",          "ADS_GOOGLE_CLIENT_ID",  False),
+    ("[ADS] Google OAuth Client Secret",      "ADS_GOOGLE_CLIENT_SECRET", False),
+    ("[ADS] PayPal Client ID",                "ADS_PAYPAL_CLIENT_ID",  False),
+    ("[ADS] PayPal Client Secret",            "ADS_PAYPAL_CLIENT_SECRET", False),
+    ("[ADS] PayPal Webhook ID",               "ADS_PAYPAL_WEBHOOK_ID", False),
+    ("[ADS] JWT Secret",                      "ADS_JWT_SECRET",        False),
+    ("[ADS] CSRF Secret",                     "ADS_CSRF_SECRET",       False),
+    ("[ADS] OTP HMAC Secret",                 "ADS_OTP_HMAC_SECRET",   False),
+    ("[ADS] Field Encryption Key",            "ADS_FIELD_ENCRYPTION_KEY", False),
     ("직접 입력",                             "",                      False),
 ]
 
@@ -96,6 +108,17 @@ RENDER_SYNC_MAP = {
     "ADMIN_API_KEY":        "ADMIN_API_KEY",
     "ADMIN_PASSWORD":       "ADMIN_PASSWORD",
     "WEBHOOK_SECRET":       "WEBHOOK_SECRET",
+    # bridge_ads → Render bridge-ads 서비스
+    "ADS_SMTP_PASS":              "SMTP_PASS",
+    "ADS_GOOGLE_CLIENT_ID":       "GOOGLE_CLIENT_ID",
+    "ADS_GOOGLE_CLIENT_SECRET":   "GOOGLE_CLIENT_SECRET",
+    "ADS_PAYPAL_CLIENT_ID":       "PAYPAL_CLIENT_ID",
+    "ADS_PAYPAL_CLIENT_SECRET":   "PAYPAL_CLIENT_SECRET",
+    "ADS_PAYPAL_WEBHOOK_ID":      "PAYPAL_WEBHOOK_ID",
+    "ADS_JWT_SECRET":             "JWT_SECRET",
+    "ADS_CSRF_SECRET":            "CSRF_SECRET",
+    "ADS_OTP_HMAC_SECRET":        "OTP_HMAC_SECRET",
+    "ADS_FIELD_ENCRYPTION_KEY":   "FIELD_ENCRYPTION_KEY",
 }
 
 
@@ -203,56 +226,86 @@ def sync_to_claudeblog() -> tuple[bool, str]:
         return False, f"동기화 오류: {e}"
 
 
-def sync_to_render(changed_key: str = "", changed_value: str = "") -> tuple[bool, str]:
-    """bx에 저장된 값을 Render 환경변수에 자동 반영."""
+ADS_BX_KEYS = {k for k in RENDER_SYNC_MAP if k.startswith("ADS_")}
+
+
+def _sync_one_render_service(api_token: str, service_id: str, key_filter, changed_key: str, changed_value: str) -> tuple[bool, str, list]:
+    """단일 Render 서비스 동기화 공통 로직."""
     import urllib.request, urllib.error
+    req = urllib.request.Request(
+        f"https://api.render.com/v1/services/{service_id}/env-vars",
+        headers={"Authorization": f"Bearer {api_token}", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        current = json.loads(resp.read().decode())
+    env_dict = {item["envVar"]["key"]: item["envVar"]["value"] for item in current}
+    updated = []
+    for bx_key, render_key in RENDER_SYNC_MAP.items():
+        if not key_filter(bx_key):
+            continue
+        val = read_from_bx(bx_key)
+        if val and val != env_dict.get(render_key, ""):
+            env_dict[render_key] = val
+            updated.append(render_key)
+    if changed_key in RENDER_SYNC_MAP and key_filter(changed_key) and changed_value:
+        render_key = RENDER_SYNC_MAP[changed_key]
+        env_dict[render_key] = changed_value
+        if render_key not in updated:
+            updated.append(render_key)
+    if not updated:
+        return True, "", []
+    payload = json.dumps([{"key": k, "value": v} for k, v in env_dict.items()]).encode()
+    req2 = urllib.request.Request(
+        f"https://api.render.com/v1/services/{service_id}/env-vars",
+        data=payload,
+        headers={"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"},
+        method="PUT",
+    )
+    with urllib.request.urlopen(req2, timeout=15) as resp2:
+        resp2.read()
+    return True, "", updated
+
+
+def sync_to_render(changed_key: str = "", changed_value: str = "") -> tuple[bool, str]:
+    """bx에 저장된 값을 Render 환경변수에 자동 반영 (bridge-api + bridge-ads 분리)."""
+    import urllib.error
     api_token = read_from_bx("RENDER_API_TOKEN")
+    if not api_token:
+        return None, ""
+    msgs = []
+    # ── bridge-api (ADS 제외)
     service_id = read_from_bx("RENDER_SERVICE_ID")
-    if not api_token or not service_id:
-        return None, ""  # 토큰 미설정 시 자동 트리거에서 조용히 스킵
-    try:
-        # 현재 Render 환경변수 조회
-        req = urllib.request.Request(
-            f"https://api.render.com/v1/services/{service_id}/env-vars",
-            headers={"Authorization": f"Bearer {api_token}", "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            current = json.loads(resp.read().decode())
-        # {key: value} dict로 변환
-        env_dict = {item["envVar"]["key"]: item["envVar"]["value"] for item in current}
-        # bx에서 관리 중인 키들을 읽어서 업데이트
-        updated = []
-        for bx_key, render_key in RENDER_SYNC_MAP.items():
-            val = read_from_bx(bx_key)
-            if val and val != env_dict.get(render_key, ""):
-                env_dict[render_key] = val
-                updated.append(render_key)
-        # 방금 저장한 키도 즉시 반영
-        if changed_key in RENDER_SYNC_MAP and changed_value:
-            render_key = RENDER_SYNC_MAP[changed_key]
-            env_dict[render_key] = changed_value
-            if render_key not in updated:
-                updated.append(render_key)
-        if not updated:
-            return True, "변경된 항목 없음 (Render와 동일)"
-        # PUT으로 전체 업데이트
-        payload = json.dumps([{"key": k, "value": v} for k, v in env_dict.items()]).encode()
-        req2 = urllib.request.Request(
-            f"https://api.render.com/v1/services/{service_id}/env-vars",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_token}",
-                "Content-Type": "application/json",
-            },
-            method="PUT",
-        )
-        with urllib.request.urlopen(req2, timeout=15) as resp2:
-            resp2.read()
-        return True, f"Render 동기화 완료\n업데이트된 키: {', '.join(updated)}\n\n* Render Manual Deploy를 실행해야 적용됩니다."
-    except urllib.error.HTTPError as e:
-        return False, f"Render API 오류 ({e.code}): {e.reason}"
-    except Exception as e:
-        return False, f"Render 동기화 오류: {e}"
+    if service_id:
+        try:
+            ok, _, updated = _sync_one_render_service(
+                api_token, service_id,
+                lambda k: k not in ADS_BX_KEYS,
+                changed_key, changed_value,
+            )
+            if updated:
+                msgs.append(f"bridge-api: {', '.join(updated)}")
+        except urllib.error.HTTPError as e:
+            return False, f"bridge-api Render 오류 ({e.code}): {e.reason}"
+        except Exception as e:
+            return False, f"bridge-api Render 오류: {e}"
+    # ── bridge-ads (ADS_* 키만)
+    ads_service_id = read_from_bx("ADS_RENDER_SERVICE_ID")
+    if ads_service_id and any(k in ADS_BX_KEYS for k in ([changed_key] if changed_key else RENDER_SYNC_MAP)):
+        try:
+            ok, _, updated = _sync_one_render_service(
+                api_token, ads_service_id,
+                lambda k: k in ADS_BX_KEYS,
+                changed_key, changed_value,
+            )
+            if updated:
+                msgs.append(f"bridge-ads: {', '.join(updated)}")
+        except urllib.error.HTTPError as e:
+            return False, f"bridge-ads Render 오류 ({e.code}): {e.reason}"
+        except Exception as e:
+            return False, f"bridge-ads Render 오류: {e}"
+    if not msgs:
+        return True, "변경된 항목 없음 (Render와 동일)"
+    return True, "Render 동기화 완료\n" + "\n".join(msgs) + "\n\n* Render Manual Deploy를 실행해야 적용됩니다."
 
 
 def read_from_bx(key: str) -> str:
