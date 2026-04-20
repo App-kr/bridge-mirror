@@ -214,3 +214,5 @@ client_secret_*.json
 .ioc_baseline.json
 .maint_flag
 .behavior_baseline.json
+drive_oauth_token*.json
+client_secret_*.json

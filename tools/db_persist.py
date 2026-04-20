@@ -60,23 +60,61 @@ def _drive():
                     "Google Cloud Console에서 Desktop app credentials 발급 후 저장 필요."
                 )
             from google_auth_oauthlib.flow import InstalledAppFlow
-            import webbrowser
+            import webbrowser, threading, time
             flow = InstalledAppFlow.from_client_secrets_file(str(CRED_PATH), SCOPES)
-            # open_browser=True 명시 + webbrowser.open 백업 (Windows에서 자동 실행 보장)
-            _old_open = webbrowser.open
-            def _force_open(url, *a, **k):
-                print(f"\n[oauth] 브라우저 열기: {url[:80]}...\n")
+            PORT = 18765
+
+            def _open_browser_delayed(url):
+                time.sleep(1.5)
+                print(f"\n[oauth] 브라우저 열기 시도: {url[:100]}\n")
+                opened = False
+                # 1) PowerShell Start-Process (Windows GUI 보장)
                 try:
                     import subprocess
-                    subprocess.Popen(['cmd.exe', '/c', 'start', '', url], shell=False)
+                    subprocess.Popen(
+                        ["powershell", "-NoProfile", "-Command",
+                         f"Start-Process '{url}'"],
+                        creationflags=0x08000000  # CREATE_NO_WINDOW
+                    )
+                    opened = True
+                    print("[oauth] PowerShell Start-Process 성공")
+                except Exception as e:
+                    print(f"[oauth] PowerShell 실패: {e}")
+                # 2) cmd start 폴백
+                if not opened:
+                    try:
+                        subprocess.Popen(['cmd.exe', '/c', 'start', '', url], shell=False)
+                        opened = True
+                        print("[oauth] cmd start 성공")
+                    except Exception as e:
+                        print(f"[oauth] cmd 실패: {e}")
+                # 3) webbrowser 폴백
+                if not opened:
+                    webbrowser.open(url)
+                    print("[oauth] webbrowser.open 시도")
+
+            URL_FILE = BASE / "_oauth_url.txt"
+            _old_open = webbrowser.open
+            def _force_open(url, *a, **k):
+                # URL을 파일에 저장 (다른 프로세스에서 읽어 브라우저 오픈용)
+                try:
+                    URL_FILE.write_text(url, encoding="utf-8")
+                    print(f"\n[oauth] URL 파일 저장: {URL_FILE}", flush=True)
                 except Exception:
-                    _old_open(url, *a, **k)
+                    pass
+                # 브라우저 열기 시도
+                t = threading.Thread(target=_open_browser_delayed, args=(url,), daemon=True)
+                t.start()
                 return True
             webbrowser.open = _force_open
             try:
-                creds = flow.run_local_server(port=0, open_browser=True)
+                print(f"[oauth] 로컬 서버 포트 {PORT} 시작 중...", flush=True)
+                creds = flow.run_local_server(port=PORT, open_browser=True,
+                                              success_message="인증 완료! 이 창을 닫아도 됩니다.")
             finally:
                 webbrowser.open = _old_open
+                try: URL_FILE.unlink(missing_ok=True)
+                except Exception: pass
         # token 저장 (0600 권한)
         TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
         try:
