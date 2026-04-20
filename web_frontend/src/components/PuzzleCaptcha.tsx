@@ -2,253 +2,604 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 
-interface Piece {
-  x: number
-  y: number
-  targetX: number
-  targetY: number
-  color: string
-  label: string
-}
+// ── Constants ────────────────────────────────────────────────────────────────
+const CW = 420
+const CH = 260
+
+type CaptchaType = 'slide' | 'rotate' | 'order'
 
 interface PuzzleCaptchaProps {
   onVerified: (token: string) => void
   onError?: (error: string) => void
 }
 
-const CW = 420
-const CH = 280
-const PW = 68
-const PH = 68
-const TARGETS: { x: number; y: number }[] = [
-  { x: 50, y: 104 },
-  { x: 176, y: 104 },
-  { x: 302, y: 104 },
-]
-const PIECE_COLORS = ['#e74c3c', '#27ae60', '#2980b9']
-const INIT_POSITIONS = [
-  { x: 20, y: 195 },
-  { x: 170, y: 185 },
-  { x: 315, y: 198 },
-]
+function genToken() {
+  return `puzzle_${Date.now()}_${Math.random().toString(36).substring(7)}`
+}
 
+function rnd(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min)) + min
+}
+
+// rounded rect via arcTo (universal browser support)
+function rrect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number
+) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.arcTo(x + w, y, x + w, y + r, r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+  ctx.lineTo(x + r, y + h)
+  ctx.arcTo(x, y + h, x, y + h - r, r)
+  ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r)
+  ctx.closePath()
+}
+
+// ── TYPE A: SLIDE ─────────────────────────────────────────────────────────────
+interface SlideState {
+  pieceX: number      // current x of sliding piece
+  targetX: number     // x where hole is
+  targetY: number     // y of hole
+  PW: number          // piece width
+  PH: number          // piece height
+  bgSnap: ImageData | null
+  dragging: boolean
+  startMX: number
+  startPX: number
+}
+
+function initSlide(): SlideState {
+  return {
+    pieceX: 12,
+    targetX: rnd(150, 320),
+    targetY: rnd(60, 140),
+    PW: 64,
+    PH: 64,
+    bgSnap: null,
+    dragging: false,
+    startMX: 0,
+    startPX: 0,
+  }
+}
+
+function drawSlide(ctx: CanvasRenderingContext2D, s: SlideState) {
+  // Background gradient
+  const bg = ctx.createLinearGradient(0, 0, CW, CH)
+  bg.addColorStop(0, '#4158D0')
+  bg.addColorStop(0.46, '#C850C0')
+  bg.addColorStop(1, '#FFCC70')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, CW, CH)
+
+  // Decorative circles
+  ;[
+    [60, 55, 38], [340, 80, 50], [200, 30, 28],
+    [310, 170, 40], [95, 160, 22], [160, 120, 18],
+  ].forEach(([cx, cy, r]) => {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'
+    ctx.fill()
+  })
+
+  // Instruction
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.font = '13px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText('→  조각을 슬라이드하여 구멍에 채워 넣으세요', CW / 2, 8)
+
+  // Snapshot background at hole position (once)
+  if (!s.bgSnap) {
+    s.bgSnap = ctx.getImageData(s.targetX, s.targetY, s.PW, s.PH)
+  }
+
+  // Draw hole (dark cutout)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  rrect(ctx, s.targetX, s.targetY, s.PW, s.PH, 6)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([5, 4])
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // Draw sliding piece (image extracted from hole area)
+  if (s.bgSnap) {
+    ctx.putImageData(s.bgSnap, s.pieceX, s.targetY)
+  }
+  rrect(ctx, s.pieceX, s.targetY, s.PW, s.PH, 6)
+  ctx.strokeStyle = s.dragging ? '#fff' : 'rgba(255,255,255,0.7)'
+  ctx.lineWidth = s.dragging ? 2.5 : 1.5
+  ctx.setLineDash([])
+  ctx.stroke()
+
+  // Slide track bar (bottom)
+  const trackY = CH - 40
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  rrect(ctx, 8, trackY, CW - 16, 30, 15)
+  ctx.fill()
+
+  // Track fill (progress)
+  const progress = Math.max(0, s.pieceX - 8)
+  if (progress > 0) {
+    ctx.save()
+    ctx.beginPath()
+    rrect(ctx, 8, trackY, progress + s.PW * 0.5, 30, 15)
+    ctx.clip()
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'
+    ctx.fillRect(8, trackY, CW - 16, 30)
+    ctx.restore()
+  }
+
+  // Track handle
+  rrect(ctx, s.pieceX, trackY, s.PW, 30, 15)
+  ctx.fillStyle = s.dragging
+    ? 'rgba(255,255,255,0.95)'
+    : 'rgba(255,255,255,0.80)'
+  ctx.fill()
+  ctx.fillStyle = '#555'
+  ctx.font = 'bold 13px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('▶▶', s.pieceX + s.PW / 2, trackY + 15)
+}
+
+// ── TYPE B: ROTATE ────────────────────────────────────────────────────────────
+interface RotateState {
+  angle: number
+  target: number
+  dragging: boolean
+  startMA: number   // start mouse angle
+  startA: number    // start arrow angle
+  cx: number
+  cy: number
+}
+
+function initRotate(): RotateState {
+  const target = (rnd(0, 8) * 45 * Math.PI) / 180
+  return {
+    angle: target + Math.PI * 0.6 + Math.random() * Math.PI,
+    target,
+    dragging: false,
+    startMA: 0,
+    startA: 0,
+    cx: CW / 2,
+    cy: CH / 2 + 5,
+  }
+}
+
+function drawRotate(ctx: CanvasRenderingContext2D, s: RotateState) {
+  // Dark bg
+  ctx.fillStyle = '#0f172a'
+  ctx.fillRect(0, 0, CW, CH)
+
+  // Dot grid
+  for (let x = 15; x < CW; x += 28) {
+    for (let y = 15; y < CH; y += 28) {
+      ctx.beginPath()
+      ctx.arc(x, y, 1, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'
+      ctx.fill()
+    }
+  }
+
+  const { cx, cy, angle, target } = s
+
+  // Outer ring
+  ctx.beginPath()
+  ctx.arc(cx, cy, 88, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  // Tick marks
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4
+    const r1 = 88, r2 = i % 2 === 0 ? 78 : 82
+    ctx.beginPath()
+    ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a))
+    ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a))
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  }
+
+  // Ghost target arrow
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(target)
+  ctx.beginPath()
+  ctx.moveTo(0, -62); ctx.lineTo(12, -30)
+  ctx.lineTo(5, -30); ctx.lineTo(5, 62)
+  ctx.lineTo(-5, 62); ctx.lineTo(-5, -30)
+  ctx.lineTo(-12, -30); ctx.closePath()
+  ctx.fillStyle = 'rgba(255,255,255,0.10)'
+  ctx.fill()
+  ctx.restore()
+
+  // Accuracy glow
+  const diff = ((angle - target) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)
+  const norm = Math.min(diff, Math.PI * 2 - diff)
+  const glow = Math.max(0, 1 - norm / 0.35)
+  if (glow > 0) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, 88, 0, Math.PI * 2)
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 88)
+    g.addColorStop(0, `rgba(74,222,128,${glow * 0.25})`)
+    g.addColorStop(1, `rgba(74,222,128,0)`)
+    ctx.fillStyle = g
+    ctx.fill()
+    ctx.restore()
+  }
+
+  // Main arrow
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(angle)
+  const ag = ctx.createLinearGradient(0, -70, 0, 70)
+  ag.addColorStop(0, '#ef4444')
+  ag.addColorStop(0.5, '#f97316')
+  ag.addColorStop(1, '#3b82f6')
+  ctx.beginPath()
+  ctx.moveTo(0, -65); ctx.lineTo(14, -25)
+  ctx.lineTo(6, -25); ctx.lineTo(6, 65)
+  ctx.lineTo(-6, 65); ctx.lineTo(-6, -25)
+  ctx.lineTo(-14, -25); ctx.closePath()
+  ctx.fillStyle = ag
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  // Center hub
+  ctx.beginPath()
+  ctx.arc(0, 0, 9, 0, Math.PI * 2)
+  ctx.fillStyle = '#fff'
+  ctx.fill()
+  ctx.restore()
+
+  // Instruction
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '13px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText('🔄  드래그하여 화살표를 투명 방향에 맞추세요', CW / 2, 8)
+}
+
+// ── TYPE C: CLICK ORDER ───────────────────────────────────────────────────────
+const SHAPES = ['circle', 'tri', 'star', 'diamond', 'penta', 'cross'] as const
+type Shape = typeof SHAPES[number]
+const COLORS6 = ['#ef4444', '#22c55e', '#3b82f6', '#f59e0b', '#a855f7', '#06b6d4']
+const SYM: Record<Shape, string> = {
+  circle: '●', tri: '▲', star: '★', diamond: '◆', penta: '⬠', cross: '✚',
+}
+
+interface OrderItem { x: number; y: number; shape: Shape; color: string }
+interface OrderState {
+  items: OrderItem[]
+  seq: number[]     // correct click order
+  done: number[]    // indices clicked so far
+}
+
+function initOrder(): OrderState {
+  const pick = [...Array(6).keys()].sort(() => Math.random() - 0.5).slice(0, 5)
+  const items: OrderItem[] = pick.map((si, i) => ({
+    x: 42 + i * 68 + rnd(0, 18),
+    y: 100 + rnd(0, 70),
+    shape: SHAPES[si],
+    color: COLORS6[si],
+  }))
+  const seq = [...Array(items.length).keys()].sort(() => Math.random() - 0.5).slice(0, 3)
+  return { items, seq, done: [] }
+}
+
+function drawShapeAt(ctx: CanvasRenderingContext2D, shape: Shape, cx: number, cy: number, r: number) {
+  ctx.beginPath()
+  switch (shape) {
+    case 'circle':
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      break
+    case 'tri':
+      ctx.moveTo(cx, cy - r)
+      ctx.lineTo(cx + r * 0.866, cy + r * 0.5)
+      ctx.lineTo(cx - r * 0.866, cy + r * 0.5)
+      ctx.closePath()
+      break
+    case 'star':
+      for (let i = 0; i < 5; i++) {
+        const ao = (i * 4 * Math.PI) / 5 - Math.PI / 2
+        const ai = ao + (2 * Math.PI) / 5
+        const p = i === 0 ? ctx.moveTo.bind(ctx) : ctx.lineTo.bind(ctx)
+        p(cx + r * Math.cos(ao), cy + r * Math.sin(ao))
+        ctx.lineTo(cx + r * 0.4 * Math.cos(ai - Math.PI / 5), cy + r * 0.4 * Math.sin(ai - Math.PI / 5))
+      }
+      ctx.closePath()
+      break
+    case 'diamond':
+      ctx.moveTo(cx, cy - r)
+      ctx.lineTo(cx + r * 0.65, cy)
+      ctx.lineTo(cx, cy + r)
+      ctx.lineTo(cx - r * 0.65, cy)
+      ctx.closePath()
+      break
+    case 'penta':
+      for (let i = 0; i < 5; i++) {
+        const a = (i * 2 * Math.PI) / 5 - Math.PI / 2
+        const p = i === 0 ? ctx.moveTo.bind(ctx) : ctx.lineTo.bind(ctx)
+        p(cx + r * Math.cos(a), cy + r * Math.sin(a))
+      }
+      ctx.closePath()
+      break
+    case 'cross': {
+      const t = r * 0.38
+      ctx.moveTo(cx - t, cy - r)
+      ctx.lineTo(cx + t, cy - r)
+      ctx.lineTo(cx + t, cy - t)
+      ctx.lineTo(cx + r, cy - t)
+      ctx.lineTo(cx + r, cy + t)
+      ctx.lineTo(cx + t, cy + t)
+      ctx.lineTo(cx + t, cy + r)
+      ctx.lineTo(cx - t, cy + r)
+      ctx.lineTo(cx - t, cy + t)
+      ctx.lineTo(cx - r, cy + t)
+      ctx.lineTo(cx - r, cy - t)
+      ctx.lineTo(cx - t, cy - t)
+      ctx.closePath()
+      break
+    }
+  }
+}
+
+function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
+  ctx.fillStyle = '#0c1445'
+  ctx.fillRect(0, 0, CW, CH)
+
+  // Star field
+  for (let i = 0; i < 60; i++) {
+    ctx.beginPath()
+    ctx.arc(rnd(0, CW), rnd(48, CH), Math.random() < 0.3 ? 1.5 : 1, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.12})`
+    ctx.fill()
+  }
+
+  // Header bar
+  ctx.fillStyle = 'rgba(255,255,255,0.07)'
+  ctx.fillRect(0, 0, CW, 50)
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '13px Arial'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('순서대로 클릭:', 12, 25)
+
+  // Sequence preview
+  s.seq.forEach((itemIdx, pos) => {
+    const item = s.items[itemIdx]
+    const isDone = s.done.includes(itemIdx)
+    const ox = 130 + pos * 85
+
+    ctx.save()
+    ctx.translate(ox + 14, 25)
+    drawShapeAt(ctx, item.shape, 0, 0, 12)
+    ctx.fillStyle = isDone ? 'rgba(255,255,255,0.2)' : item.color
+    ctx.fill()
+    ctx.strokeStyle = isDone ? 'rgba(255,255,255,0.2)' : 'white'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    ctx.restore()
+
+    if (pos < s.seq.length - 1) {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)'
+      ctx.font = '12px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('→', ox + 55, 25)
+    }
+  })
+
+  // Items
+  s.items.forEach((item, i) => {
+    const isDone = s.done.includes(i)
+    const clickPos = s.done.indexOf(i)
+
+    // Glow bg
+    if (!isDone) {
+      ctx.save()
+      const g = ctx.createRadialGradient(item.x, item.y, 0, item.x, item.y, 30)
+      g.addColorStop(0, item.color + '33')
+      g.addColorStop(1, 'transparent')
+      ctx.fillStyle = g
+      ctx.fillRect(item.x - 30, item.y - 30, 60, 60)
+      ctx.restore()
+    }
+
+    drawShapeAt(ctx, item.shape, item.x, item.y, 22)
+    ctx.fillStyle = isDone ? 'rgba(100,100,100,0.5)' : item.color
+    ctx.fill()
+    ctx.strokeStyle = isDone ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.8)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    if (isDone) {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.font = 'bold 14px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(clickPos + 1), item.x, item.y)
+    }
+  })
+}
+
+// ── MAIN COMPONENT ─────────────────────────────────────────────────────────────
 export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isVerified, setIsVerified] = useState(false)
-  const piecesRef = useRef<Piece[]>([])
-  const dragRef = useRef<{ idx: number; ox: number; oy: number } | null>(null)
+
+  const [type] = useState<CaptchaType>(() => {
+    const opts: CaptchaType[] = ['slide', 'rotate', 'order']
+    return opts[Math.floor(Math.random() * opts.length)]
+  })
+
+  const slideS = useRef<SlideState>(initSlide())
+  const rotateS = useRef<RotateState>(initRotate())
+  const orderS = useRef<OrderState>(initOrder())
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    if (type === 'slide') drawSlide(ctx, slideS.current)
+    else if (type === 'rotate') drawRotate(ctx, rotateS.current)
+    else drawOrder(ctx, orderS.current)
+  }, [type])
 
-    // 배경 그라디언트
-    const bg = ctx.createLinearGradient(0, 0, CW, CH)
-    bg.addColorStop(0, '#667eea')
-    bg.addColorStop(1, '#764ba2')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, CW, CH)
+  useEffect(() => { draw() }, [draw])
 
-    // 안내 텍스트
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'
-    ctx.font = '13px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('아래 색상 블록을 같은 번호의 빈칸에 끌어다 놓으세요', CW / 2, 82)
-
-    // 타겟 홀 (점선 박스)
-    TARGETS.forEach((t, i) => {
-      ctx.save()
-      ctx.setLineDash([5, 4])
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-      ctx.lineWidth = 2
-      ctx.strokeRect(t.x, t.y, PW, PH)
-      ctx.restore()
-
-      ctx.fillStyle = 'rgba(0,0,0,0.18)'
-      ctx.fillRect(t.x, t.y, PW, PH)
-
-      // 번호
-      ctx.fillStyle = 'rgba(255,255,255,0.45)'
-      ctx.font = 'bold 22px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(i + 1), t.x + PW / 2, t.y + PH / 2)
-    })
-
-    // 구분선
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)'
-    ctx.lineWidth = 1
-    ctx.setLineDash([])
-    ctx.beginPath()
-    ctx.moveTo(10, 185)
-    ctx.lineTo(CW - 10, 185)
-    ctx.stroke()
-
-    // 조각 그리기 (드래그 중인 것은 맨 위)
-    const pieces = piecesRef.current
-    const dragIdx = dragRef.current?.idx ?? -1
-    const drawOrder = [...pieces.keys()].filter((i) => i !== dragIdx)
-    if (dragIdx !== -1) drawOrder.push(dragIdx)
-
-    drawOrder.forEach((i) => {
-      const p = pieces[i]
-      const dragging = i === dragIdx
-
-      ctx.save()
-      if (dragging) {
-        ctx.shadowColor = 'rgba(0,0,0,0.45)'
-        ctx.shadowBlur = 12
-      }
-
-      // 조각 배경 (roundRect 폴백 — arcTo로 구형 Safari 대응)
-      const r = 6
-      ctx.fillStyle = p.color
-      ctx.beginPath()
-      ctx.moveTo(p.x + r, p.y)
-      ctx.lineTo(p.x + PW - r, p.y)
-      ctx.arcTo(p.x + PW, p.y, p.x + PW, p.y + r, r)
-      ctx.lineTo(p.x + PW, p.y + PH - r)
-      ctx.arcTo(p.x + PW, p.y + PH, p.x + PW - r, p.y + PH, r)
-      ctx.lineTo(p.x + r, p.y + PH)
-      ctx.arcTo(p.x, p.y + PH, p.x, p.y + PH - r, r)
-      ctx.lineTo(p.x, p.y + r)
-      ctx.arcTo(p.x, p.y, p.x + r, p.y, r)
-      ctx.closePath()
-      ctx.fill()
-
-      // 조각 테두리
-      ctx.strokeStyle = dragging ? '#fff' : 'rgba(255,255,255,0.55)'
-      ctx.lineWidth = dragging ? 3 : 1.5
-      ctx.setLineDash([])
-      ctx.stroke()
-
-      // 번호
-      ctx.fillStyle = 'white'
-      ctx.font = 'bold 26px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(p.label, p.x + PW / 2, p.y + PH / 2)
-
-      ctx.restore()
-    })
-  }, [])
-
-  useEffect(() => {
-    piecesRef.current = TARGETS.map((t, i) => ({
-      x: INIT_POSITIONS[i].x,
-      y: INIT_POSITIONS[i].y,
-      targetX: t.x,
-      targetY: t.y,
-      color: PIECE_COLORS[i],
-      label: String(i + 1),
-    }))
-    draw()
-  }, [draw])
-
-  const getXY = (
+  // ── coordinate helper ──────────────────────────────────────────────────────
+  const xy = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
     canvas: HTMLCanvasElement
   ) => {
     const rect = canvas.getBoundingClientRect()
-    const sx = CW / rect.width
-    const sy = CH / rect.height
-    if ('touches' in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * sx,
-        y: (e.touches[0].clientY - rect.top) * sy,
+    const sx = CW / rect.width, sy = CH / rect.height
+    const src =
+      'touches' in e
+        ? (e.touches[0] ?? (e as React.TouchEvent).changedTouches[0])
+        : e
+    return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy }
+  }
+
+  // ── verified ───────────────────────────────────────────────────────────────
+  const verify = useCallback(() => {
+    setIsVerified(true)
+    onVerified(genToken())
+    setTimeout(() => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'
+      ctx.fillRect(0, 0, CW, CH)
+      ctx.fillStyle = '#4ade80'
+      ctx.font = 'bold 36px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('✓ Verified!', CW / 2, CH / 2)
+    }, 60)
+  }, [onVerified])
+
+  // ── slide handlers ─────────────────────────────────────────────────────────
+  const sDown = (x: number) => {
+    const s = slideS.current
+    const trackY = CH - 40
+    // Hit on track handle
+    if (x >= s.pieceX && x <= s.pieceX + s.PW) {
+      s.dragging = true; s.startMX = x; s.startPX = s.pieceX
+    }
+    // Also hit on piece image in canvas
+    if (x >= s.pieceX && x <= s.pieceX + s.PW) {
+      s.dragging = true; s.startMX = x; s.startPX = s.pieceX
+    }
+    void trackY
+  }
+  const sMove = (x: number) => {
+    const s = slideS.current
+    if (!s.dragging) return
+    s.pieceX = Math.max(12, Math.min(CW - s.PW - 12, s.startPX + (x - s.startMX)))
+    draw()
+  }
+  const sUp = () => {
+    const s = slideS.current
+    if (!s.dragging) return
+    s.dragging = false
+    if (Math.abs(s.pieceX - s.targetX) <= 22) { s.pieceX = s.targetX; draw(); verify() }
+    else draw()
+  }
+
+  // ── rotate handlers ────────────────────────────────────────────────────────
+  const rDown = (x: number, y: number) => {
+    const s = rotateS.current
+    const dx = x - s.cx, dy = y - s.cy
+    if (Math.sqrt(dx * dx + dy * dy) > 92) return
+    s.dragging = true
+    s.startMA = Math.atan2(dy, dx)
+    s.startA = s.angle
+  }
+  const rMove = (x: number, y: number) => {
+    const s = rotateS.current
+    if (!s.dragging) return
+    s.angle = s.startA + (Math.atan2(y - s.cy, x - s.cx) - s.startMA)
+    draw()
+  }
+  const rUp = () => {
+    const s = rotateS.current
+    if (!s.dragging) return
+    s.dragging = false
+    const diff = ((s.angle - s.target) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)
+    if (Math.min(diff, Math.PI * 2 - diff) <= 0.22) verify()
+    else draw()
+  }
+
+  // ── order handler ──────────────────────────────────────────────────────────
+  const oClick = (x: number, y: number) => {
+    const s = orderS.current
+    for (let i = 0; i < s.items.length; i++) {
+      if (s.done.includes(i)) continue
+      const it = s.items[i]
+      if (Math.abs(x - it.x) < 26 && Math.abs(y - it.y) < 26) {
+        if (i === s.seq[s.done.length]) {
+          s.done = [...s.done, i]
+          draw()
+          if (s.done.length === s.seq.length) setTimeout(verify, 180)
+        } else {
+          s.done = []   // wrong order — reset
+          draw()
+        }
+        return
       }
     }
-    return {
-      x: (e.clientX - rect.left) * sx,
-      y: (e.clientY - rect.top) * sy,
-    }
   }
 
-  const hitTest = (x: number, y: number) => {
-    const pieces = piecesRef.current
-    for (let i = pieces.length - 1; i >= 0; i--) {
-      const p = pieces[i]
-      if (x >= p.x && x <= p.x + PW && y >= p.y && y <= p.y + PH) return i
-    }
-    return -1
+  // ── unified events ─────────────────────────────────────────────────────────
+  const onDown = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (isVerified) return
+    const canvas = canvasRef.current; if (!canvas) return
+    const { x, y } = xy(e, canvas)
+    if (type === 'slide') sDown(x)
+    else if (type === 'rotate') rDown(x, y)
+    else oClick(x, y)
   }
 
-  const onDown = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const { x, y } = getXY(e, canvas)
-    const idx = hitTest(x, y)
-    if (idx === -1) return
-    const p = piecesRef.current[idx]
-    dragRef.current = { idx, ox: x - p.x, oy: y - p.y }
-    draw()
-  }
-
-  const onMove = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
-    if (!dragRef.current) return
+  const onMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (isVerified || type === 'order') return
     e.preventDefault()
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const { x, y } = getXY(e, canvas)
-    const { idx, ox, oy } = dragRef.current
-    const pieces = piecesRef.current
-    pieces[idx] = {
-      ...pieces[idx],
-      x: Math.max(0, Math.min(CW - PW, x - ox)),
-      y: Math.max(0, Math.min(CH - PH, y - oy)),
-    }
-    draw()
+    const canvas = canvasRef.current; if (!canvas) return
+    const { x, y } = xy(e, canvas)
+    if (type === 'slide') sMove(x)
+    else rMove(x, y)
   }
 
   const onUp = () => {
-    if (!dragRef.current) return
-    dragRef.current = null
-    const TOL = 22
-    const allCorrect = piecesRef.current.every(
-      (p) =>
-        Math.abs(p.x - p.targetX) <= TOL && Math.abs(p.y - p.targetY) <= TOL
-    )
-    if (allCorrect) {
-      // 조각을 정확한 위치에 스냅
-      piecesRef.current = piecesRef.current.map((p) => ({
-        ...p,
-        x: p.targetX,
-        y: p.targetY,
-      }))
-      draw()
-      setIsVerified(true)
-      const token = `puzzle_${Date.now()}_${Math.random().toString(36).substring(7)}`
-      onVerified(token)
-      // 성공 오버레이
-      setTimeout(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.fillStyle = 'rgba(0,0,0,0.65)'
-        ctx.fillRect(0, 0, CW, CH)
-        ctx.fillStyle = '#4caf50'
-        ctx.font = 'bold 34px Arial'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('✓ Verified!', CW / 2, CH / 2)
-      }, 50)
-    } else {
-      draw()
-    }
+    if (isVerified) return
+    if (type === 'slide') sUp()
+    else if (type === 'rotate') rUp()
+  }
+
+  const HINT: Record<CaptchaType, string> = {
+    slide:  '조각을 오른쪽으로 드래그하여 구멍에 끼워 넣으세요',
+    rotate: '화살표를 드래그하여 투명 방향에 정확히 맞추세요',
+    order:  '위에 표시된 순서대로 도형을 클릭하세요',
   }
 
   return (
-    <div className="my-6 p-4 border border-gray-300 rounded-lg bg-white">
+    <div className="my-4 p-4 border border-gray-200 rounded-xl bg-white">
       <label className="block text-sm font-medium text-gray-700 mb-3">
-        🧩 Puzzle CAPTCHA — Drag pieces to complete the puzzle
+        🔐 Security Check
       </label>
 
       <canvas
@@ -262,8 +613,12 @@ export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
         onTouchStart={onDown}
         onTouchMove={onMove}
         onTouchEnd={onUp}
-        className="border-2 border-gray-400 rounded-lg cursor-grab active:cursor-grabbing w-full max-w-md mx-auto block"
-        style={{ touchAction: 'none', userSelect: 'none' }}
+        className="border border-gray-200 rounded-xl w-full max-w-md mx-auto block"
+        style={{
+          touchAction: 'none',
+          userSelect: 'none',
+          cursor: type === 'order' ? 'pointer' : 'grab',
+        }}
       />
 
       {isVerified ? (
@@ -271,20 +626,12 @@ export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
           ✓ CAPTCHA verified successfully
         </div>
       ) : (
-        <div className="mt-3 p-2 bg-blue-100 border border-blue-400 text-blue-700 rounded text-center text-sm">
-          👆 Drag all 3 pieces to their correct positions to continue
+        <div className="mt-3 p-2 bg-slate-50 border border-slate-200 text-slate-600 rounded text-center text-sm">
+          {HINT[type]}
         </div>
       )}
 
-      <input
-        type="hidden"
-        name="captcha_token"
-        value={
-          isVerified
-            ? `puzzle_${Date.now()}_${Math.random().toString(36).substring(7)}`
-            : ''
-        }
-      />
+      <input type="hidden" name="captcha_token" value={isVerified ? genToken() : ''} />
     </div>
   )
 }
