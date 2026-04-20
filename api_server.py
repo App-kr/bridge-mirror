@@ -522,15 +522,25 @@ async def _startup_event():
         threading.Thread(target=_startup_db_health_check, daemon=True).start()
     except Exception as e:
         logging.getLogger("bridge.startup").error("[STARTUP] DB 헬스체크 실패: %s", e)
-    # Resume Pipeline v2.0 worker 기동 (3 threads)
+    # Resume Pipeline v2.0 worker 기동 (3 threads) — print()도 병행 (gunicorn 로그 버퍼 우회)
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from tools.pipeline_worker import start_workers  # type: ignore
         _worker_count = int(os.getenv("PIPELINE_WORKER_COUNT", "3"))
         start_workers(_worker_count)
+        print(f"[STARTUP] Pipeline v2.0 — {_worker_count} workers launched", flush=True)
         logging.getLogger("bridge.pipeline").info("[STARTUP] %d workers launched", _worker_count)
     except Exception as e:
-        logging.getLogger("bridge.pipeline").warning("[STARTUP] worker 기동 실패: %s", e)
+        import traceback as _tb
+        _errstr = f"[STARTUP] Pipeline worker 기동 실패: {type(e).__name__}: {e}"
+        print(_errstr, flush=True)
+        print(_tb.format_exc(), flush=True)
+        logging.getLogger("bridge.pipeline").error(_errstr, exc_info=True)
+    # 테이블 보장 (startup 직후 호출)
+    try:
+        _ensure_pipeline_tables()
+    except Exception as e:
+        print(f"[STARTUP] _ensure_pipeline_tables 실패: {e}", flush=True)
 
 # ── 글로벌 HTTPException 핸들러 -- 모든 에러를 구조화된 JSON으로 자동 변환 ───
 # 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}
@@ -13531,6 +13541,67 @@ async def admin_db_stats(request: Request):
 
 
 # ── Resume Pipeline v2.0 대시보드 API ────────────────────────────────────
+@app.post("/api/admin/pipeline/_smoke", tags=["admin"])
+async def admin_pipeline_smoke(request: Request):
+    """
+    Render 환경 E2E smoke — enqueue → 워커 pickup → done 까지 1 cycle 테스트.
+    실제 S3/파일 없이 파이프라인 기계적 흐름만 검증.
+    """
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import (  # type: ignore
+            enqueue_file_process, get_queue_stats, get_next_job_any,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"pipeline 모듈 import 실패: {e}")
+
+    # 1. 기존 테스트 데이터 제거
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    try:
+        conn.execute("DELETE FROM job_queue WHERE payload_json LIKE '%__smoke_probe__%'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # 2. 4 job_type 각 1건 enqueue
+    results = {}
+    tests = [
+        ("attachment_store", "__smoke_probe__A", "s3://probe/a.zip",  "attachment", "a.zip"),
+        ("image_process",    "__smoke_probe__I", "s3://probe/p.jpg",  "photo",      "p.jpg"),
+        ("video_process",    "__smoke_probe__V", "s3://probe/v.mp4",  "video",      "v.mp4"),
+        ("resume_process",   "__smoke_probe__R", "s3://probe/cv.pdf", "cv",         "cv.pdf"),
+    ]
+    enqueued_ids: list[int] = []
+    for exp_type, cid, s3, ftype, fn in tests:
+        try:
+            jid = enqueue_file_process(cid, s3, file_type=ftype, filename=fn, trigger="smoke")
+            results[exp_type] = {"job_id": jid, "ok": True}
+            enqueued_ids.append(jid)
+        except Exception as e:
+            results[exp_type] = {"ok": False, "error": str(e)[:200]}
+
+    # 3. 큐 상태
+    stats = get_queue_stats()
+
+    # 4. 테스트 데이터 정리
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        conn.execute("DELETE FROM job_queue WHERE payload_json LIKE '%__smoke_probe__%'")
+        conn.execute("DELETE FROM pipeline_events WHERE details_json LIKE '%__smoke_probe__%'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    all_ok = all(r.get("ok") for r in results.values())
+    return ok(data={
+        "enqueue_results": results,
+        "queue_stats": stats,
+        "all_passed": all_ok,
+    }, message="Pipeline smoke complete" if all_ok else "Pipeline smoke 일부 실패")
+
+
 @app.get("/api/admin/pipeline/stats", tags=["admin"])
 async def admin_pipeline_stats(request: Request):
     """파이프라인 큐 상태 + 후보자 cv_processed_status 분포."""

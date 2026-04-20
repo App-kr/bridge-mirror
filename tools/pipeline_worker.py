@@ -196,6 +196,7 @@ def _run_one_job() -> bool:
 
 
 def _worker_loop(worker_id: int) -> None:
+    print(f"[WORKER {worker_id}] started", flush=True)
     _log.info("[WORKER %d] started", worker_id)
     while not _STOP.is_set():
         try:
@@ -204,6 +205,7 @@ def _worker_loop(worker_id: int) -> None:
                 _STOP.wait(POLL_INTERVAL)
         except Exception as e:
             _log.error("[WORKER %d] loop error: %s", worker_id, e, exc_info=True)
+            print(f"[WORKER {worker_id}] loop error: {e}", flush=True)
             _STOP.wait(POLL_INTERVAL)
     _log.info("[WORKER %d] stopped", worker_id)
 
@@ -213,12 +215,14 @@ def start_workers(n: int = 3) -> None:
     global _WORKER_THREADS
     if _WORKER_THREADS:
         _log.warning("start_workers: already started")
+        print("[PIPELINE] start_workers: already started — skip", flush=True)
         return
     for i in range(n):
         t = threading.Thread(target=_worker_loop, args=(i,), daemon=True, name=f"pipeline-worker-{i}")
         t.start()
         _WORKER_THREADS.append(t)
     _log.info("start_workers: %d threads launched", n)
+    print(f"[PIPELINE] start_workers: {n} threads launched", flush=True)
 
 
 def stop_workers() -> None:
