@@ -59,6 +59,13 @@ PRESETS = [
     ("Gemini Key — airelair00@gmail.com",     "GEMINI_KEY_4",          False),
     ("Render API Token",                      "RENDER_API_TOKEN",      False),
     ("Render Service ID (bridge-api)",        "RENDER_SERVICE_ID",     False),
+    ("Render API Key (통합)",                  "RENDER_API_KEY",        False),
+    ("Vercel Access Token",                   "VERCEL_TOKEN",          False),
+    ("GitHub Personal Access Token",          "GIT_TK",                False),
+    ("Google OAuth Client Secret",            "GOOGLE_CLIENT_SECRET",  False),
+    ("Google OAuth Client ID",                "GOOGLE_CLIENT_ID",      False),
+    ("NextAuth Secret",                       "NEXTAUTH_SECRET",       False),
+    ("Admin Token (legacy)",                  "ADMIN_TOKEN",           False),
     ("직접 입력",                             "",                      False),
 ]
 
@@ -409,7 +416,7 @@ def main():
 
     root = tk.Tk()
     root.title("BX Credential Manager")
-    root.geometry("480x660")
+    root.geometry("520x720")
     root.resizable(False, False)
     root.configure(bg="#1a1a2e")
     root.attributes("-topmost", True)
@@ -453,22 +460,28 @@ def main():
     frame.pack(padx=30, fill="x", pady=(8, 0))
 
     # ── 서비스 선택 ────────────────────────────────────────────────────────
-    tk.Label(frame, text="저장할 서비스 선택", font=("Segoe UI", 10, "bold"),
-             fg="#cccccc", bg="#1a1a2e", anchor="w").pack(fill="x")
+    tk.Label(frame, text="저장할 서비스 선택", font=("Segoe UI", 12, "bold"),
+             fg="white", bg="#1a1a2e", anchor="w").pack(fill="x", pady=(0, 4))
 
     preset_names = [p[0] for p in PRESETS]
+    # ttk Combobox 폰트 — 대형 크기
+    style = ttk.Style()
+    style.configure("Big.TCombobox", padding=6)
     combo = ttk.Combobox(frame, values=preset_names, state="readonly",
-                         font=("Segoe UI", 10), width=38)
+                         font=("Segoe UI", 13, "bold"), width=36,
+                         style="Big.TCombobox")
+    # 드롭다운 리스트 자체 폰트도 크게
+    root.option_add("*TCombobox*Listbox.Font", ("Segoe UI", 12))
     combo.set(preset_names[0])
-    combo.pack(pady=(2, 4), fill="x", ipady=2)
+    combo.pack(pady=(2, 6), fill="x", ipady=6)
 
     # 선택된 서비스명 크게 표시
     selected_svc_var = tk.StringVar(value=preset_names[0])
     selected_svc_lbl = tk.Label(frame, textvariable=selected_svc_var,
-                                font=("Segoe UI", 12, "bold"),
+                                font=("Segoe UI", 14, "bold"),
                                 fg="#4fc3f7", bg="#1a1a2e", anchor="w",
                                 wraplength=380)
-    selected_svc_lbl.pack(fill="x", pady=(0, 6))
+    selected_svc_lbl.pack(fill="x", pady=(0, 8))
 
     custom_frame = tk.Frame(frame, bg="#1a1a2e")
     custom_lbl   = tk.Label(custom_frame, text="BX 키 이름", font=("Segoe UI", 10),
@@ -493,15 +506,31 @@ def main():
 
     combo.bind("<<ComboboxSelected>>", lambda e: (on_combo_change(e), sync_hash_check(e)))
 
-    # ── 해시 체크박스 ──────────────────────────────────────────────────────
+    # ── 해시 체크박스 (눈에 띄게 + 깜박임) ───────────────────────────────
     hash_var = tk.BooleanVar(value=True)
-    hash_chk = tk.Checkbutton(frame,
-                   text="pbkdf2 해시 저장   ← 일반 비밀번호만 체크 / API키·토큰은 체크 해제",
-                   variable=hash_var, font=("Segoe UI", 8),
-                   fg="#ff9800", bg="#1a1a2e", selectcolor="#16213e",
-                   activebackground="#1a1a2e", activeforeground="#ffb74d"
+    hash_frame = tk.Frame(frame, bg="#1a1a2e", pady=4)
+    hash_frame.pack(fill="x", pady=(6, 6))
+    hash_chk = tk.Checkbutton(hash_frame,
+                   text="⚠ pbkdf2 해시 저장 — 비밀번호만 ON / API키·토큰은 반드시 OFF",
+                   variable=hash_var, font=("Segoe UI", 11, "bold"),
+                   fg="white", bg="#ff3366", selectcolor="#16213e",
+                   activebackground="#ff3366", activeforeground="white",
+                   padx=10, pady=6, relief="raised", bd=2,
                    )
-    hash_chk.pack(anchor="w", pady=(5, 5))
+    hash_chk.pack(fill="x")
+
+    # 형광 깜박임 — 700ms 주기로 배경색 토글
+    _blink_state = {"on": True}
+    def _blink_hash():
+        if _blink_state["on"]:
+            hash_chk.config(bg="#ffff00", fg="#000000", activebackground="#ffff00",
+                            activeforeground="#000000")
+        else:
+            hash_chk.config(bg="#ff3366", fg="white", activebackground="#ff3366",
+                            activeforeground="white")
+        _blink_state["on"] = not _blink_state["on"]
+        root.after(700, _blink_hash)
+    root.after(500, _blink_hash)
 
     # ── 비밀번호 / 값 입력 ────────────────────────────────────────────────
     pw1_label = tk.Label(frame, text="비밀번호 / 값 입력", font=("Segoe UI", 10, "bold"),
