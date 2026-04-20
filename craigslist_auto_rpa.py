@@ -36,24 +36,64 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+# ── ad_only 가드 (광고 데이터 유출 차단 레이어) ─────────────────────────────
+# 정책 (2026-04-20 LOCKED):
+#   1) fetch_jobs()가 master.db에서 가져온 row는 ad_only 클린 리스트에 있는
+#      job_code 만 통과시킴 (intersection).
+#   2) 최종 광고 본문(title/body)은 pii_guard.assert_clean 으로 fail-closed 검증.
+#   3) 가드 실패 시 해당 잡 스킵 + 로그만 남기고 프로세스는 계속.
+_PROJECT_ROOT_FOR_AD = Path(__file__).resolve().parent
+if str(_PROJECT_ROOT_FOR_AD) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT_FOR_AD))
+try:
+    from ad_only.loader import load_all_jobs as _ad_load_all_jobs
+    from ad_only.pii_guard import (
+        assert_clean as _ad_assert_clean,
+        scan as _ad_pii_scan,
+        PIIContaminationError as _ad_PIIError,
+    )
+    _AD_GUARD_READY = True
+except Exception as _e:
+    _AD_GUARD_READY = False
+    _AD_GUARD_ERR = str(_e)
+
 class _SafeStdout:
-    """headless/PIPE 모드에서 stdout OSError 무시 래퍼."""
+    """headless/PIPE 모드에서 stdout OSError/BrokenPipe 무시 래퍼."""
+    _IO_ERRORS = (OSError, BrokenPipeError)
+
     def __init__(self, wrapped):
         self._w = wrapped
+
     def write(self, s):
         try:
             return self._w.write(s)
-        except OSError:
+        except self._IO_ERRORS:
             return 0
+
     def flush(self):
         try:
             self._w.flush()
-        except OSError:
+        except self._IO_ERRORS:
             pass
+
+    def fileno(self):
+        try:
+            return self._w.fileno()
+        except Exception:
+            return -1
+
     def __getattr__(self, name):
         return getattr(self._w, name)
 
-sys.stdout = _SafeStdout(io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace"))
+# stdout이 None이거나 buffer가 없는 경우(pythonw 직접 실행 등) 안전하게 처리
+try:
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = _SafeStdout(
+        io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    )
+except Exception:
+    pass  # 이미 래핑됐거나 buffer 없는 환경 -- 그냥 유지
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
 BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
@@ -251,8 +291,8 @@ def wait_for_captcha(driver, timeout: int = 120, headless: bool = False):
     headless=True 이면 즉시 실패 처리 (시각 브라우저 없으므로 해결 불가).
     """
     if headless:
-        print("\n  ⚠️  [HEADLESS] CAPTCHA 감지 — 자동 해결 불가, 해당 건 스킵")
-        _log_event("warn", "—", "captcha", "CAPTCHA detected in headless mode — skipped")
+        print("\n  ⚠️  [HEADLESS] CAPTCHA 감지 -- 자동 해결 불가, 해당 건 스킵")
+        _log_event("warn", "--", "captcha", "CAPTCHA detected in headless mode -- skipped")
         return False
 
     print(f"\n  ⚠️  CAPTCHA 또는 추가 인증 감지")
@@ -323,10 +363,45 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
         ORDER BY content_score DESC, RANDOM()
         LIMIT ?
     """
-    params.append(limit)
+    # 초과 pull: 가드 통과 후 limit 적용하기 위해 넉넉히 가져옴
+    params.append(limit * 4 if limit else 40)
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    all_jobs = [dict(r) for r in rows]
+
+    # ── ad_only 가드: 클린 jobs.txt 에 존재하는 job_code 만 허용 ──────────
+    if not _AD_GUARD_READY:
+        raise RuntimeError(
+            f"[ad_only] 가드 미로드 -- RPA 중단. 원인: {_AD_GUARD_ERR}"
+        )
+    clean_codes = {
+        re.sub(r'[^0-9]', '', j['job_code'])
+        for j in _ad_load_all_jobs()
+    }
+
+    allowed: list[dict] = []
+    for j in all_jobs:
+        code_num = re.sub(r'[^0-9]', '', str(j.get('job_code', '')))
+        if code_num not in clean_codes:
+            _log_event('warn', j.get('job_code', '?'), 'pii_guard',
+                       'ad_only 화이트리스트 미존재 -- 스킵',
+                       {'reason': 'not_in_clean_list'})
+            continue
+        # row의 모든 문자열 필드에 기본 PII 스캔 (한글/이메일/전화/URL)
+        combined = ' '.join(
+            str(v) for v in j.values() if isinstance(v, (str, int, float))
+        )
+        hits = _ad_pii_scan(combined, strict_brand=False)
+        if hits:
+            _log_event('warn', j.get('job_code', '?'), 'pii_guard',
+                       f'DB row 오염 감지 {hits} -- 스킵',
+                       {'hits': hits})
+            continue
+        allowed.append(j)
+        if len(allowed) >= limit:
+            break
+
+    return allowed
 
 
 def save_draft(job: dict, title: str, body: str) -> int:
@@ -446,12 +521,12 @@ def _fix_start_date(start_raw: str, seed_str: str = "") -> str:
         if future_parts:
             return ", ".join(future_parts)
         # 전부 과거 → 랜덤 미래 선택
-        seed = int(hashlib.md5((seed_str + start_raw).encode()).hexdigest(), 16)
+        seed = int(hashlib.md5((seed_str + start_raw).encode(), usedforsecurity=False).hexdigest(), 16)
         return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
 
-    # 단일 달 — 과거면 치환
+    # 단일 달 -- 과거면 치환
     if any(k in sl for k in _PAST_MONTH_KEYS):
-        seed = int(hashlib.md5((seed_str + start_raw).encode()).hexdigest(), 16)
+        seed = int(hashlib.md5((seed_str + start_raw).encode(), usedforsecurity=False).hexdigest(), 16)
         return _FUTURE_START_POOL[seed % len(_FUTURE_START_POOL)]
 
     return start_raw  # 이미 미래 (May 이후)
@@ -473,7 +548,7 @@ def _age_to_level(age_raw: str) -> str:
     return "KINDER-ELEM"
 
 def _start_to_label(start: str) -> tuple[str, str]:
-    """(month_word, suffix) — e.g. ('July', 'July Start') / ('ASAP', 'ASAP')"""
+    """(month_word, suffix) -- e.g. ('July', 'July Start') / ('ASAP', 'ASAP')"""
     s = start.strip().lower()
     if not s or s in ("negotiable","tbd","협의","미정"): return ("Negotiable","Negotiable Start")
     if "asap" in s or "즉시" in s:           return ("ASAP","ASAP Start")
@@ -490,7 +565,7 @@ def _start_to_label(start: str) -> tuple[str, str]:
 def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
     """접두어 다양화 + {CITY}, ... 형식 제목 생성. 67~72자 맞춤."""
     import hashlib as _h
-    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode()).hexdigest(), 16)
+    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode(), usedforsecurity=False).hexdigest(), 16)
 
     city_up = _CITY_UPPER.get(city_raw, city_raw.upper())
     level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"
@@ -524,7 +599,7 @@ def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
         candidates.append(f"{prefix}{city_part}{opener} for {level} Openings Now")
         # 패턴 G: opener for Year-Round LEVEL Classes
         candidates.append(f"{prefix}{city_part}{opener} for Year-Round {level} Classes")
-        # 패턴 H: ASAP 전용 — opener for ASAP LEVEL Study Groups
+        # 패턴 H: ASAP 전용 -- opener for ASAP LEVEL Study Groups
         if is_asap:
             candidates.append(f"{prefix}{city_part}{opener} for ASAP {level} Study Groups")
 
@@ -573,7 +648,7 @@ def _unique_image(seed_str: str) -> Path:
         unique_data = data[:2] + marker + data[2:]
 
         # 로그 폴더에 임시 파일 저장 (job_code 기반 이름)
-        seed_int = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
+        seed_int = int(hashlib.md5(seed_str.encode(), usedforsecurity=False).hexdigest(), 16)
         tmp_path = _LOG_DIR / f"_img_{seed_int % 99999:05d}.jpg"
         tmp_path.write_bytes(unique_data)
         return tmp_path
@@ -610,7 +685,7 @@ _REQ_WARNING = [
     "\u26a0\ufe0fATTENTION: Applications from unlisted nationalities cannot be processed. Verify eligibility before applying.\u26a0\ufe0f",
 ]
 
-# ── 제목 접두어 풀 (이모티콘 제거 — 스팸 필터 회피) ────────────────────────────
+# ── 제목 접두어 풀 (이모티콘 제거 -- 스팸 필터 회피) ────────────────────────────
 _TITLE_PREFIX_POOL = [
     "",   # 접두어 없음 (클린 텍스트 제목)
 ]
@@ -689,7 +764,7 @@ def _extract_housing(housing_col: str, benefits_raw: str) -> tuple[str, str]:
     """
     housing 컬럼 우선. 없으면 benefits 문자열에서 숙소 관련 항목 추출.
     반환: (housing_str, benefits_raw_without_housing)
-    데이터에 없는 내용은 절대 추가하지 않음 — 불명확하면 빈 문자열 반환.
+    데이터에 없는 내용은 절대 추가하지 않음 -- 불명확하면 빈 문자열 반환.
     """
     if housing_col:
         return housing_col.strip(), benefits_raw
@@ -704,7 +779,7 @@ def _extract_housing(housing_col: str, benefits_raw: str) -> tuple[str, str]:
             other_items.append(item)
 
     if housing_items:
-        # Housing 라인으로 이동 — benefits에서 중복 제거
+        # Housing 라인으로 이동 -- benefits에서 중복 제거
         return ", ".join(housing_items), ", ".join(other_items)
 
     # 소스에 없으면 빈 문자열 (임의로 "Not provided" 추가 금지)
@@ -723,8 +798,8 @@ def _parse_raw_extras(raw_text: str) -> tuple[list[str], str]:
     """raw_text 백틱 줄 중 표준 DB 필드에 없는 추가 설명 줄과 raw benefits 반환.
 
     반환: (extra_lines, benefits_from_raw)
-      extra_lines     — body에 직접 추가할 설명 줄 목록
-      benefits_from_raw — DB benefits가 NULL일 때 쓸 혜택 문자열
+      extra_lines     -- body에 직접 추가할 설명 줄 목록
+      benefits_from_raw -- DB benefits가 NULL일 때 쓸 혜택 문자열
     """
     if not raw_text:
         return [], ""
@@ -777,8 +852,8 @@ def generate_ad(job: dict) -> tuple[str, str]:
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
-    # seed — job_code 기반 정수 (같은 job이면 항상 같은 문구 선택)
-    _seed = int(hashlib.md5(jcode.encode()).hexdigest(), 16)
+    # seed -- job_code 기반 정수 (같은 job이면 항상 같은 문구 선택)
+    _seed = int(hashlib.md5(jcode.encode(), usedforsecurity=False).hexdigest(), 16)
 
     # raw_text 추가 줄 파싱 (표준 DB 필드에 없는 설명 항목)
     extra_lines, raw_benefits = _parse_raw_extras(job.get("raw_text") or "")
@@ -838,7 +913,24 @@ def generate_ad(job: dict) -> tuple[str, str]:
     lines.append(_pick(_REQ_WARNING, _seed + 4))
 
     body = "\n".join(lines)
-    return title.strip(), body.strip()
+    title_out = title.strip()
+    body_out  = body.strip()
+
+    # ── ad_only PII 가드: 최종 광고 출력 fail-closed 검증 ──────────────
+    if _AD_GUARD_READY:
+        try:
+            _ad_assert_clean(title_out, context=f'craigslist_title/{jcode}', strict_brand=True)
+            _ad_assert_clean(body_out,  context=f'craigslist_body/{jcode}',  strict_brand=False)
+        except _ad_PIIError as e:
+            _log_event('error', jcode, 'pii_guard',
+                       f'최종 광고 오염 -- 게시 차단: {e}')
+            raise
+    else:
+        _log_event('error', jcode, 'pii_guard',
+                   f'ad_only 가드 미로드 -- 게시 차단: {_AD_GUARD_ERR}')
+        raise RuntimeError(f'[ad_only] 가드 미로드: {_AD_GUARD_ERR}')
+
+    return title_out, body_out
 
 
 # ── Selenium ──────────────────────────────────────────────────────────────────
@@ -863,7 +955,7 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         opts.add_argument("--window-size=1920,1080")
         print("  [DRIVER] Headless 모드로 Chrome 시작")
     else:
-        # 화면 밖으로 이동 — headless 아니라 봇 감지 없고, 사용자 화면에는 안 보임
+        # 화면 밖으로 이동 -- headless 아니라 봇 감지 없고, 사용자 화면에는 안 보임
         opts.add_argument("--window-position=-10000,-10000")
         opts.add_argument("--window-size=1920,1080")
     opts.add_argument("--disable-blink-features=AutomationControlled")
@@ -956,7 +1048,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
     try:
         driver.get(CL_LOGIN_URL)
     except Exception:
-        print("  [TIMEOUT] 로그인 페이지 로드 타임아웃 — 재시도")
+        print("  [TIMEOUT] 로그인 페이지 로드 타임아웃 -- 재시도")
         try:
             driver.get(CL_LOGIN_URL)
         except Exception as e:
@@ -1003,7 +1095,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
         ss_path = SS_DIR / "login_fail.png"
         driver.save_screenshot(str(ss_path))
-        print(f"  [LOGIN] 실패 — 스크린샷: {ss_path}")
+        print(f"  [LOGIN] 실패 -- 스크린샷: {ss_path}")
         return False
 
     except Exception as e:
@@ -1058,7 +1150,7 @@ def _is_category_page(driver) -> bool:
 
 
 def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str | None:
-    """Craigslist 포스팅 — URL ?s= 파라미터로 현재 단계 감지해 처리."""
+    """Craigslist 포스팅 -- URL ?s= 파라미터로 현재 단계 감지해 처리."""
 
     # ── seoul.craigslist.org → "post to classifieds" 클릭 ─
     # accounts.craigslist.org 에서 시작하면 지역이 다르게 잡힘
@@ -1103,7 +1195,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         if _step_count[step] > 3:
             ss = SS_DIR / f"stuck_{step}.png"
             driver.save_screenshot(str(ss))
-            print(f"  [ABORT] ?s={step} 에서 3회 이상 반복 — 스크린샷: {ss}")
+            print(f"  [ABORT] ?s={step} 에서 3회 이상 반복 -- 스크린샷: {ss}")
             break
         print(f"  [?s={step}] ", end="", flush=True)
 
@@ -1131,7 +1223,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             # 포스팅 타입 → "job offered" 선택
             print("타입: job offered 선택")
             selected = False
-            # 방법 1: input[value='jo'] — Craigslist 실제 value 값
+            # 방법 1: input[value='jo'] -- Craigslist 실제 value 값
             try:
                 radio = driver.find_element(By.CSS_SELECTOR, "input[value='jo']")
                 _js_click(driver, radio); selected = True
@@ -1158,7 +1250,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             # ─────────────────────────────────────────────────────────────────
             # 카테고리 선택 페이지: education 강제 선택
             # Craigslist Seoul education category value = '102' (jobs>education)
-            # finance = '110', accounting = '100' 등 — 절대 선택 금지
+            # finance = '110', accounting = '100' 등 -- 절대 선택 금지
             #
             # 4단계 fallback 전략:
             #   1) value='102' XPATH (가장 신뢰)
@@ -1168,7 +1260,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             # ─────────────────────────────────────────────────────────────────
             print("카테고리: education 선택")
 
-            # 현재 페이지 HTML 저장 (디버그 — 카테고리 선택 실패 시 원인 파악용)
+            # 현재 페이지 HTML 저장 (디버그 -- 카테고리 선택 실패 시 원인 파악용)
             cat_debug = _LOG_DIR / "debug_category_page.html"
             try:
                 cat_debug.write_text(driver.page_source, encoding="utf-8")
@@ -1245,8 +1337,8 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
 
             if not selected:
                 _log_event("error", job.get("job_code", "?"), "category",
-                           "education selection failed — check debug_category_page.html")
-                print("    [ERROR] education 선택 실패 — debug_category_page.html 확인 후 value 값 수정 필요")
+                           "education selection failed -- check debug_category_page.html")
+                print("    [ERROR] education 선택 실패 -- debug_category_page.html 확인 후 value 값 수정 필요")
                 # 게시 중단 (잘못된 카테고리에 올라가는 것보다 중단이 안전)
                 return None
             _advance(driver, step)
@@ -1400,7 +1492,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             _advance(driver, step, timeout=12)
 
         elif step in ("img", "editimage"):
-            # 이미지 업로드 — B.jpg 첨부
+            # 이미지 업로드 -- B.jpg 첨부
             # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
             #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
@@ -1424,7 +1516,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                         file_inputs[0].send_keys(abs_path)
                         print(f"    이미지 경로 전송: {abs_path}")
 
-                        # 업로드 진행 대기 — 썸네일 또는 progress 사라질 때까지 최대 30초
+                        # 업로드 진행 대기 -- 썸네일 또는 progress 사라질 때까지 최대 30초
                         for _w in range(30):
                             time.sleep(1)
                             src = driver.page_source.lower()
@@ -1449,11 +1541,11 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                                 print(f"    → 자동 진행됨: ?s={new_step_check}")
                                 continue  # for loop 다음 iteration
                         else:
-                            print("    [INFO] done 버튼 없음 또는 미표시 — continue 버튼으로 진행")
+                            print("    [INFO] done 버튼 없음 또는 미표시 -- continue 버튼으로 진행")
                     else:
-                        print("    [WARN] file input 없음 — 이미지 스킵")
+                        print("    [WARN] file input 없음 -- 이미지 스킵")
                 except Exception as img_err:
-                    print(f"    [WARN] 이미지 업로드 실패: {img_err} — 계속 진행")
+                    print(f"    [WARN] 이미지 업로드 실패: {img_err} -- 계속 진행")
             else:
                 print(f"    [WARN] 이미지 파일 없음: {AD_IMAGE}")
                 print(f"    확인: {_img_path} 가 존재해야 합니다")
@@ -1463,7 +1555,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             # 미리보기 → CAPTCHA 체크 후 publish
             print("미리보기 → publish")
             if _has_captcha(driver):
-                print("    CAPTCHA 감지 — 브라우저에서 해결하세요...")
+                print("    CAPTCHA 감지 -- 브라우저에서 해결하세요...")
                 wait_for_captcha(driver, timeout=120)
             pub = _find(driver, [
                 "button#publish", "button[id*='publish']",
@@ -1488,7 +1580,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             old = step
             new = _advance(driver, step)
             if new == old:   # 진행 없으면 중단
-                print("    [WARN] 페이지 진행 없음 — 중단")
+                print("    [WARN] 페이지 진행 없음 -- 중단")
                 break
 
     # 이메일 인증 페이지 대기
@@ -1517,7 +1609,7 @@ _REDACT_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b'), '[REDACTED-PHONE]'),
     # 국제 전화 (+1 xxx xxx xxxx 등)
     (re.compile(r'\+\d{1,3}[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}'), '[REDACTED-PHONE]'),
-    # 이메일 — CL_CONTACT 이외 전부 치환
+    # 이메일 -- CL_CONTACT 이외 전부 치환
     (re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'), '[REDACTED-EMAIL]'),
     # 카카오톡 ID
     (re.compile(r'(?:kakao(?:talk)?|카[카]?오?톡?|KaTalk|카톡)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-KAKAO]'),
@@ -1531,11 +1623,11 @@ _REDACT_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\d+층|\d+호\b'), '[REDACTED-ADDR]'),
     # 도로명 주소 (xx로, xx길 + 번지)
     (re.compile(r'[가-힣]+(?:로|길)\s*\d+(?:-\d+)?'), '[REDACTED-ADDR]'),
-    # 한국어 이름 — 담당자/성명/이름 컨텍스트 뒤 2-4자 한글
+    # 한국어 이름 -- 담당자/성명/이름 컨텍스트 뒤 2-4자 한글
     (re.compile(r'(?:담당자|성명|이름|문의처|연락처)[:：\s]{0,3}([가-힣]{2,4})'), '[REDACTED-NAME]'),
-    # 영어 이름 — "Name:", "Contact:", "Teacher:", "Director:" 뒤 Title Case 2단어
+    # 영어 이름 -- "Name:", "Contact:", "Teacher:", "Director:" 뒤 Title Case 2단어
     (re.compile(r'(?:Name|Contact|Teacher|Director|Recruiter|Manager):\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)'), '[REDACTED-NAME]'),
-    # 한국어 이름+직책 — "홍길동 원장", "김철수 팀장" 패턴
+    # 한국어 이름+직책 -- "홍길동 원장", "김철수 팀장" 패턴
     (re.compile(r'[가-힣]{2,4}\s*(?:원장|팀장|부장|과장|대리|주임|선생님|교감|교장|원감)\b'), '[REDACTED-NAME+TITLE]'),
     # 웹사이트 URL (http/https/www)
     (re.compile(r'(?:https?://|www\.)\S+', re.I), '[REDACTED-URL]'),
@@ -1547,7 +1639,7 @@ _REDACT_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r'(?:WeChat|위챗|微信)\s*(?:id)?[:：\s]*[\w.\-]{2,30}', re.I), '[REDACTED-WECHAT]'),
     # 텔레그램 ID
     (re.compile(r'(?:Telegram|텔레그램|텔레)\s*(?:id)?[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-TELEGRAM]'),
-    # 인스타그램 / SNS 핸들 (\bIG\b 단어경계 — "Eligible"/"INELIGIBLE" 오치환 방지)
+    # 인스타그램 / SNS 핸들 (\bIG\b 단어경계 -- "Eligible"/"INELIGIBLE" 오치환 방지)
     (re.compile(r'(?:Instagram|인스타(?:그램)?|\bIG\b)\s*[:：\s]*@?[\w.\-]{2,30}', re.I), '[REDACTED-SNS]'),
     # 팩스 번호
     (re.compile(r'(?:팩스|FAX|Fax)\s*[:：\s]*[\d\-\s]{8,}', re.I), '[REDACTED-FAX]'),
@@ -1600,7 +1692,7 @@ def security_check(body: str, job_code: str) -> bool:
         print(f"  [보안 차단] {job_code}: '국제 전화번호' 패턴 감지 → 게시 중단")
         passed = False
 
-    # 이메일 — Bridge 공식 연락처(CL_CONTACT) 이외 이메일 차단
+    # 이메일 -- Bridge 공식 연락처(CL_CONTACT) 이외 이메일 차단
     all_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', body)
     external = [e for e in all_emails if e.lower() != CL_CONTACT.lower()]
     if external:
@@ -1678,13 +1770,15 @@ def main():
                         help="RPAOverlay 창 띄우지 않음 (Admin Board 통합 모드)")
     args = parser.parse_args()
 
-    # ── 워치독: 계정당 최대 25분 실행 (응답없음 방지) ──────────────────────────
+    # ── 워치독: 건수 기반 동적 타임아웃 (응답없음 방지) ─────────────────────────
     import threading as _thr
-    _MAX_RPA_SEC = 25 * 60  # 25분
+    _limit_for_watchdog = getattr(args, "limit", 10) or 10
+    # 건당 최대 4분 + 기본 5분 여유 (최소 15분, 최대 45분)
+    _MAX_RPA_SEC = max(15 * 60, min(45 * 60, _limit_for_watchdog * 4 * 60 + 5 * 60))
     def _watchdog():
         time.sleep(_MAX_RPA_SEC)
         print(f"\n[WATCHDOG] {_MAX_RPA_SEC // 60}분 초과 → 프로세스 강제 종료 (응답없음 방지)")
-        _log_event("error", "—", "watchdog",
+        _log_event("error", "--", "watchdog",
                    f"Force-killed after {_MAX_RPA_SEC}s to prevent hang")
         os._exit(2)
     _thr.Thread(target=_watchdog, daemon=True, name="rpa-watchdog").start()
@@ -1758,9 +1852,9 @@ def main():
                     _advance(driver, step)
                 elif step in ("subarea", "cat", "subcat", "category", "subcatselect",
                               "cattype", "jobcat", "jobtype", "catselect"):
-                    # 카테고리 페이지 도달 — DOM 분석
+                    # 카테고리 페이지 도달 -- DOM 분석
                     print("\n" + "="*55)
-                    print("[DIAGNOSE] 카테고리 페이지 도달 — education 관련 요소 분석:")
+                    print("[DIAGNOSE] 카테고리 페이지 도달 -- education 관련 요소 분석:")
                     result = driver.execute_script("""
                         var out = [];
                         // 모든 라디오 버튼
@@ -1808,7 +1902,7 @@ def main():
                     print("="*55)
                     break
                 elif step in ("attr", "edit", "img", "preview", "done", "manage"):
-                    print(f"  [DIAGNOSE] 카테고리 단계를 건너뜀 (step={step}) — 예상치 못한 흐름")
+                    print(f"  [DIAGNOSE] 카테고리 단계를 건너뜀 (step={step}) -- 예상치 못한 흐름")
                     break
                 else:
                     _advance(driver, step)
@@ -1836,7 +1930,7 @@ def main():
         # ── [REDACTED] 강제 치환 ───────────────────────────────────────────
         body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
         if removed:
-            # 보안: PII 실제 값은 로그에 절대 기록하지 않음 — 카테고리+개수만 기록
+            # 보안: PII 실제 값은 로그에 절대 기록하지 않음 -- 카테고리+개수만 기록
             redact_tags = [r.split("=")[0] for r in removed]
             tag_summary = ", ".join(set(redact_tags))
             print(f"  [REDACT] {job['job_code']}: {len(removed)}개 PII 항목 자동 치환 ({tag_summary})")
@@ -1854,7 +1948,7 @@ def main():
         # ── 최종 보안 검증 (redact 이후 잔류 PII 재확인) ──────────────────
         if not security_check(body, job["job_code"]):
             _log_event("error", job["job_code"], "security_check",
-                       "PII survived redact — post blocked")
+                       "PII survived redact -- post blocked")
             continue
 
         ad_id = save_draft(job, title, body)
@@ -1893,13 +1987,13 @@ def main():
         try:
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
-                _log_event("error", "—", "login", "Login failed — aborting session")
+                _log_event("error", "--", "login", "Login failed -- aborting session")
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
                 if _HAS_OVERLAY and stop_requested():
-                    print("\n[STOP] 사용자 중단 요청 — 게시 루프 종료")
-                    _log_event("info", "—", "user_stop", "User requested stop via overlay")
+                    print("\n[STOP] 사용자 중단 요청 -- 게시 루프 종료")
+                    _log_event("info", "--", "user_stop", "User requested stop via overlay")
                     break
 
                 jcode = job["job_code"]
@@ -1919,10 +2013,10 @@ def main():
                         if _HAS_OVERLAY:
                             update_progress(posted, len(ad_list))
                     elif url is None:
-                        mark_error(ad_id, "카테고리 선택 실패 — education 선택 불가, 게시 중단")
+                        mark_error(ad_id, "카테고리 선택 실패 -- education 선택 불가, 게시 중단")
                         print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
                         _log_event("error", jcode, "category_abort",
-                                   "cl_post returned None — education category not selected")
+                                   "cl_post returned None -- education category not selected")
                     else:
                         mark_error(ad_id, "URL 획득 실패 (게시는 됐을 수 있음)")
                         print(f"  ⚠️  게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
@@ -1947,7 +2041,7 @@ def main():
                         countdown(wait, "다음 게시 대기")
 
         except Exception as session_exc:
-            _log_event("error", "—", "session", f"Session-level exception: {session_exc}")
+            _log_event("error", "--", "session", f"Session-level exception: {session_exc}")
             print(f"[SESSION ERROR] {session_exc}")
         finally:
             driver.quit()
@@ -1963,7 +2057,7 @@ def main():
             from scheduler import stamp_run
             acct_id = args.account or "default"
             stamp_run(acct_id)
-            print(f"  [COOLDOWN] {acct_id} — 4시간 쿨다운 기록 완료")
+            print(f"  [COOLDOWN] {acct_id} -- 4시간 쿨다운 기록 완료")
         except Exception:
             pass
 

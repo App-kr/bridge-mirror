@@ -1,4 +1,9 @@
-"""Teast 포스팅 내용 생성 + 실제 포스팅 스크립트"""
+"""Teast 포스팅 내용 생성 + 실제 포스팅 스크립트
+
+데이터 소스 (LOCKED 2026-04-20):
+- ad_only.loader 만 사용. master.db.jobs 직접 접근 금지 (PII 유출 방지).
+- 원본 갱신: python ad_only/sync_from_source.py
+"""
 import sys, sqlite3, os, time, imaplib, email, re
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -9,8 +14,20 @@ from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime
 
+# ad_only 패키지를 import 가능하게 project root 를 sys.path 에 추가
+_PROJECT_ROOT = Path(__file__).parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from ad_only.loader import (
+    select_jobs as _ad_select_jobs,
+    is_future_start as _ad_is_future_start,
+)
+from ad_only.pii_guard import assert_clean, PIIContaminationError
+
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+# DB_PATH 는 ad_posts 기록 전용 (잡 데이터 읽기 금지)
 DB_PATH = Path(__file__).parent.parent / "master.db"
 TOOLS_DIR = Path(__file__).parent
 SHOTS_DIR = TOOLS_DIR / "logs" / "screenshots"
@@ -77,7 +94,7 @@ A cheerful, responsible teacher who values reliability and shows genuine passion
 Updated résumé (CV) reflecting your latest experience.
 Cover letter that genuinely represents who you are as a teacher.
 Recent, bright photo with a clear front-facing smile.
-1–3 minute self-introduction video (no download links).
+1-3 minute self-introduction video (no download links).
 ``SOUTH AFRICANS MUST CURRENTLY RESIDE IN SOUTH KOREA (There are far too many issues).
 https://tinyurl.com/bridgekr
 """ + DIVIDER
@@ -101,52 +118,31 @@ def format_salary(smin, smax) -> str:
 
 
 def select_jobs(limit: int = 8) -> list[dict]:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("""
-        SELECT job_code, location, city, district, start_date, teaching_age,
-               class_size, working_hours, daily_hours, salary_min, salary_max,
-               teach_hrs_week, vacation, housing, native_count, benefits
-        FROM jobs
-        WHERE is_part_time=0 AND is_deleted=0
-          AND salary_min>=2.4
-          AND location<>'' AND teaching_age IS NOT NULL
-          AND working_hours IS NOT NULL
-        ORDER BY id DESC LIMIT 300
-    """).fetchall()
-    conn.close()
-
-    candidates = [dict(r) for r in rows if is_future_start(r["start_date"])]
-
-    # 지역 다양성 확보
-    seen = set()
-    selected = []
-    for j in candidates:
-        loc_key = (j["city"] or j["location"] or "").split()[0].lower()
-        if loc_key and loc_key not in seen:
-            seen.add(loc_key)
-            selected.append(j)
-        if len(selected) >= limit:
-            break
-    return selected
+    """ad_only 클린 소스에서 선택. master.db 직접 접근 금지."""
+    return _ad_select_jobs(
+        limit=limit,
+        future_only=True,
+        min_salary_m=2.4,
+        diverse_cities=True,
+    )
 
 
 def build_description(jobs: list[dict]) -> str:
+    """ad_only 클린 잡 리스트로 포스팅 본문 생성 -- PII 최종 재검증 포함."""
     blocks = []
     for j in jobs:
         code = j["job_code"].replace("Job.", "Job. ")
-        loc  = (j["location"] or j["city"] or "Korea").strip()
-        sd   = clean_start_date(j["start_date"])
-        age  = j["teaching_age"] or ""
-        cls  = j["class_size"] or ""
-        wh   = j["working_hours"] or ""
-        # teach_hrs_week: DB 컬럼값만 사용 (daily_hours 계산 금지)
-        twh  = j["teach_hrs_week"] or ""
-        sal  = format_salary(j["salary_min"], j["salary_max"])
-        vac  = j["vacation"] or ""
-        house = j["housing"] or ""
-        nat  = j["native_count"] or ""
-        ben  = (j["benefits"] or "").strip()
+        loc  = (j.get("location") or "Korea").strip()
+        sd   = clean_start_date(j.get("start_date", ""))
+        age  = j.get("teaching_age") or ""
+        cls  = j.get("class_size") or ""
+        wh   = j.get("working_hours") or ""
+        twh  = j.get("teach_hrs_week") or ""
+        sal  = (j.get("monthly_salary") or "Negotiable").strip()
+        vac  = j.get("vacation") or ""
+        house = j.get("housing") or ""
+        nat  = j.get("native_count") or ""
+        ben  = (j.get("benefits") or "").strip()
 
         block = [loc, code]
         block.append(f"`Starting Date: {sd}")
@@ -171,7 +167,21 @@ def build_description(jobs: list[dict]) -> str:
         blocks.append("\n".join(block))
 
     jobs_text = "\n".join(blocks)
-    return f"{INTRO_TEXT}\n{jobs_text}\n{FOOTER_TEXT}"
+    full_body = f"{INTRO_TEXT}\n{jobs_text}\n{FOOTER_TEXT}"
+
+    # Fail-closed: 최종 본문에서 PII 1건이라도 감지되면 포스팅 전체 중단
+    try:
+        assert_clean(full_body, context='teast_build_description', strict_brand=True)
+    except PIIContaminationError as e:
+        # URL 감지는 INTRO/FOOTER 의 tinyurl 때문이므로 해당 예외만 허용
+        err_msg = str(e)
+        if 'URL' in err_msg and 'tinyurl.com/bridgekr' in full_body:
+            # URL 제거 후 재검증
+            stripped = full_body.replace('https://tinyurl.com/bridgekr', '')
+            assert_clean(stripped, context='teast_build_description/stripped', strict_brand=True)
+        else:
+            raise
+    return full_body
 
 
 def get_magic_link() -> str:
@@ -205,20 +215,19 @@ def get_magic_link() -> str:
 
 
 def do_login_and_post(description: str, draft: bool = True):
+    import pickle
     import undetected_chromedriver as uc
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
 
-    CHROME_BINARY = r"D:\Google\ProgramFiles\Chrome\Application\chrome.exe"
-    CHROME_PROFILE = str(TOOLS_DIR / ".chrome_rpa_profile")
+    CHROME_BINARY = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    COOKIE_FILE   = TOOLS_DIR / ".teast_cookies.pkl"
 
     opts = uc.ChromeOptions()
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1280,900")
-    os.makedirs(CHROME_PROFILE, exist_ok=True)
-    opts.add_argument(f"--user-data-dir={CHROME_PROFILE}")
 
     driver = uc.Chrome(
         options=opts,
@@ -240,40 +249,62 @@ def do_login_and_post(description: str, draft: bool = True):
             arguments[0].dispatchEvent(new Event('change', {{bubbles: true}}));
         """, el, val)
 
-    try:
-        # ── 세션 확인 또는 로그인 ────────────────────────────────────────────
-        driver.get("https://teast.co/en/job/post")
-        time.sleep(4)
-        print(f"URL: {driver.current_url}")
+    def _is_logged_in():
+        return "teast.co" in driver.current_url and "login" not in driver.current_url.lower()
 
-        if "login" in driver.current_url.lower():
-            print("로그인 필요 — 매직 링크 요청...")
-            # 이메일 입력 후 전송
+    def _save_cookies():
+        cookies = driver.get_cookies()
+        with open(COOKIE_FILE, "wb") as f:
+            pickle.dump(cookies, f)
+        print(f"✓ 쿠키 저장 완료 ({len(cookies)}개) → {COOKIE_FILE}")
+
+    def _load_cookies():
+        if not COOKIE_FILE.exists():
+            return False
+        driver.get("https://teast.co")
+        time.sleep(2)
+        with open(COOKIE_FILE, "rb") as f:
+            cookies = pickle.load(f)
+        for c in cookies:
+            try:
+                driver.add_cookie(c)
+            except Exception:
+                pass
+        print(f"쿠키 로드 완료 ({len(cookies)}개)")
+        return True
+
+    try:
+        # ── 1단계: 쿠키로 세션 복원 시도 ────────────────────────────────────
+        if COOKIE_FILE.exists():
+            print("저장된 세션 쿠키 로드 중...")
+            _load_cookies()
+            driver.get("https://teast.co/en/job/post")
+            time.sleep(4)
+            print(f"URL: {driver.current_url}")
+
+        # ── 2단계: 로그인 필요 시 Google 로그인 ─────────────────────────────
+        if not COOKIE_FILE.exists() or "login" in driver.current_url.lower():
+            print("로그인 필요 -- Chrome 창에서 Google 계정으로 직접 로그인해주세요 (최대 5분)")
             driver.get("https://teast.co/en/login")
             time.sleep(3)
-            inp = driver.find_element(By.CSS_SELECTOR, "input[type=text],input[type=email]")
-            inp.send_keys(GMAIL_USER)
-            time.sleep(1)
-            btns = driver.find_elements(By.TAG_NAME, "button")
-            for b in btns:
-                if b.text.strip() == "CONTINUE WITH EMAIL":
-                    b.click()
-                    print("매직 링크 전송 요청됨")
-                    break
+            driver.save_screenshot(str(SHOTS_DIR / "teast_login_open.png"))
 
-            # 최대 60초 대기
-            magic = ""
-            for _ in range(12):
-                time.sleep(5)
-                magic = get_magic_link()
-                if magic:
+            logged_in = False
+            for i in range(150):
+                time.sleep(2)
+                if _is_logged_in():
+                    logged_in = True
+                    print(f"✓ 로그인 완료 ({(i+1)*2}초 후)")
                     break
-            if not magic:
-                print("❌ 매직 링크 미수신")
+                if i % 15 == 0:
+                    print(f"  ... 대기 중 ({(i+1)*2}초) -- Chrome 창에서 Google 계정 선택하세요")
+
+            if not logged_in:
+                print("❌ 로그인 실패 (5분 초과)")
+                driver.save_screenshot(str(SHOTS_DIR / "teast_login_fail.png"))
                 return
-            driver.get(magic)
-            time.sleep(5)
-            print(f"로그인 후 URL: {driver.current_url}")
+
+            _save_cookies()
             driver.get("https://teast.co/en/job/post")
             time.sleep(4)
 
@@ -317,8 +348,15 @@ def do_login_and_post(description: str, draft: bool = True):
         driver.save_screenshot(str(SHOTS_DIR / "teast_form_filled.png"))
 
         if draft:
-            print("★ DRAFT MODE — 실제 제출 안 함")
+            print("★ DRAFT MODE -- 폼 입력 완료, Chrome 열어둠 (점검 후 닫아주세요)")
             print(f"스크린샷: {SHOTS_DIR / 'teast_form_filled.png'}")
+            # Chrome 창 유지 -- driver.quit() 호출 안 함
+            try:
+                while True:
+                    time.sleep(5)
+                    _ = driver.current_url  # 창 닫히면 예외 발생 → 루프 종료
+            except Exception:
+                pass
             return
 
         # ── 실제 제출 ────────────────────────────────────────────────────────
@@ -346,23 +384,28 @@ def do_login_and_post(description: str, draft: bool = True):
         driver.quit()
 
 
-# ── 실행 ─────────────────────────────────────────────────────────────────────
-import argparse
-ap = argparse.ArgumentParser()
-ap.add_argument("--live", action="store_true")
-ap.add_argument("--show", action="store_true", help="포스팅 내용만 출력")
-args = ap.parse_args()
+# ── 실행 (CLI 전용 -- import 시 자동실행 금지) ────────────────────────────────
+def _cli_main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--live", action="store_true")
+    ap.add_argument("--show", action="store_true", help="포스팅 내용만 출력")
+    args = ap.parse_args()
 
-jobs = select_jobs(8)
-print(f"\n선택된 잡 {len(jobs)}개:")
-for j in jobs:
-    print(f"  {j['job_code']} | {j['location']} | {j['start_date']}")
+    jobs = select_jobs(8)
+    print(f"\n선택된 잡 {len(jobs)}개:")
+    for j in jobs:
+        print(f"  {j['job_code']} | {j['location']} | {j['start_date']}")
 
-description = build_description(jobs)
+    description = build_description(jobs)
 
-if args.show:
-    print("\n─── 포스팅 내용 미리보기 ───\n")
-    print(description)
-else:
-    print("\n포스팅 시작...")
-    do_login_and_post(description, draft=not args.live)
+    if args.show:
+        print("\n─── 포스팅 내용 미리보기 ───\n")
+        print(description)
+    else:
+        print("\n포스팅 시작...")
+        do_login_and_post(description, draft=not args.live)
+
+
+if __name__ == "__main__":
+    _cli_main()
