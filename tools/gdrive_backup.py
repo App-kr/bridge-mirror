@@ -5,6 +5,8 @@ Strategy: Copy files to G:\\BRIDGE_Backups\\ (Google Drive already mounted as G:
 Google Drive Backup & Sync will handle the actual cloud sync automatically.
 No API key or quota issues.
 
+Retention policy: managed entirely by Google Drive settings (no local deletion).
+
 Backup targets:
   1. master.db (SQLite) -- daily full dump
   2. Original resumes/cover letters -- new files only
@@ -33,7 +35,7 @@ import sys
 import json
 import shutil
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 # Force UTF-8 output on Windows CP949 terminals
@@ -89,9 +91,6 @@ CONFIG_FILES = [
     "package.json",
 ]
 
-DB_KEEP_DAYS     = 30
-CONFIG_KEEP_DAYS = 90
-
 
 # ---------------------------------------------------------------------------
 # HELPERS
@@ -145,37 +144,22 @@ def _check_gdrive() -> bool:
 # BACKUP FUNCTIONS
 # ---------------------------------------------------------------------------
 def backup_db() -> None:
-    """master.db -> G:\\BRIDGE_Backups\\db\\  (dated, 30-day cleanup)."""
+    """master.db -> G:\\BRIDGE_Backups\\db\\ (dated, retention managed by Google Drive)."""
     if not DB_PATH.exists():
         logger.warning("master.db not found: %s", DB_PATH)
         return
 
-    dest_dir = _ensure_dir(GDRIVE_ROOT / "db")
-    today    = datetime.now().strftime("%Y%m%d")
+    dest_dir  = _ensure_dir(GDRIVE_ROOT / "db")
+    today     = datetime.now().strftime("%Y%m%d")
     dest_name = f"master_{today}.db"
+    dest      = dest_dir / dest_name
 
-    # Copy (WAL-safe: copy2 on SQLite WAL is safe for read-only backup)
-    dest = dest_dir / dest_name
     if dest.exists():
         logger.info("  skip (exists): %s", dest_name)
     else:
         shutil.copy2(str(DB_PATH), str(dest))
         kb = dest.stat().st_size // 1024
         logger.info("  copied: %s (%d KB)", dest_name, kb)
-
-    # Remove DB backups older than 30 days
-    cutoff = (datetime.now() - timedelta(days=DB_KEEP_DAYS)).strftime("%Y%m%d")
-    deleted = 0
-    for f in dest_dir.glob("master_*.db"):
-        try:
-            date_part = f.stem.replace("master_", "")[:8]
-            if date_part < cutoff:
-                f.unlink()
-                deleted += 1
-        except Exception:
-            pass
-    if deleted:
-        logger.info("  cleaned: %d old DB backups (>%dd)", deleted, DB_KEEP_DAYS)
 
     logger.info("DB backup done: %s", dest_name)
 
@@ -280,7 +264,7 @@ def backup_employers() -> None:
 
 
 def backup_config() -> None:
-    """Config files -> G:\\BRIDGE_Backups\\config\\ (YYYYMMDD_<name>)."""
+    """Config files -> G:\\BRIDGE_Backups\\config\\ (YYYYMMDD_<name>, retention managed by Google Drive)."""
     dest_dir = _ensure_dir(GDRIVE_ROOT / "config")
     today    = datetime.now().strftime("%Y%m%d")
     copied   = 0
@@ -291,22 +275,6 @@ def backup_config() -> None:
             continue
         if _copy_file(src, dest_dir, f"{today}_{fname}"):
             copied += 1
-
-    # Remove config snapshots older than 90 days
-    cutoff = (datetime.now() - timedelta(days=CONFIG_KEEP_DAYS)).strftime("%Y%m%d")
-    deleted = 0
-    for f in dest_dir.iterdir():
-        if not f.is_file():
-            continue
-        try:
-            date_part = f.name[:8]
-            if len(date_part) == 8 and date_part < cutoff:
-                f.unlink()
-                deleted += 1
-        except Exception:
-            pass
-    if deleted:
-        logger.info("  cleaned: %d old config backups (>%dd)", deleted, CONFIG_KEEP_DAYS)
 
     logger.info("Config backup done: %d new", copied)
 
@@ -337,21 +305,33 @@ def main() -> None:
         sys.exit(1)
 
     logger.info("Backup target: %s", GDRIVE_ROOT)
+    errors = []
+
+    def _run(name: str, fn):
+        try:
+            fn()
+        except Exception as e:
+            logger.error("%s failed: %s", name, e)
+            errors.append(name)
 
     if args.all or args.db:
-        backup_db()
+        _run("DB", backup_db)
     if args.all or args.originals:
-        backup_originals()
+        _run("Originals", backup_originals)
     if args.all or args.resumes:
-        backup_resumes()
+        _run("Resumes", backup_resumes)
     if args.all or args.videos:
-        backup_videos()
+        _run("Videos", backup_videos)
     if args.all or args.employers:
-        backup_employers()
+        _run("Employers", backup_employers)
     if args.all or args.config:
-        backup_config()
+        _run("Config", backup_config)
 
-    logger.info("=== Backup complete -> %s", GDRIVE_ROOT)
+    if errors:
+        logger.warning("=== Backup finished with errors: %s", ", ".join(errors))
+        sys.exit(1)
+    else:
+        logger.info("=== Backup complete -> %s", GDRIVE_ROOT)
 
 
 if __name__ == "__main__":

@@ -1743,8 +1743,32 @@
       "git": "50068514",
       "files": 2253,
       "db_hash": "e260a5430b71"
+    },
+    {
+      "dir": "20260420_101245__ad_only_migration_pre",
+      "task": "ad_only_migration_pre",
+      "ts": "2026.04.20 10:13:02",
+      "git": "3efaa5fe",
+      "files": 2475,
+      "db_hash": "e260a5430b71"
+    },
+    {
+      "dir": "20260420_101312__ad_only_migration_pre",
+      "task": "ad_only_migration_pre",
+      "ts": "2026.04.20 10:13:19",
+      "git": "3efaa5fe",
+      "files": 2475,
+      "db_hash": "e260a5430b71"
+    },
+    {
+      "dir": "20260420_111407__ad_only_public_api_pre",
+      "task": "ad_only_public_api_pre",
+      "ts": "2026.04.20 11:14:16",
+      "git": "c7542fcb",
+      "files": 2475,
+      "db_hash": "e260a5430b71"
     }
   ],
-  "last_backup": "2026.04.18 20:47:56",
-  "total_count": 218
+  "last_backup": "2026.04.20 11:14:16",
+  "total_count": 221
 }

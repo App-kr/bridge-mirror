@@ -28,23 +28,6 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .btn-g{background:var(--blue);color:#fff;border-color:var(--blue)}.btn-g:hover{background:var(--blue2);border-color:var(--blue2)}
 /* LAYOUT */
 .lay{display:flex;height:calc(100vh - 52px)}
-/* LEFT */
-.lp{width:268px;min-width:220px;background:var(--g7);border-right:1px solid var(--g6);display:flex;flex-direction:column}
-.lp .sb{padding:10px 12px;border-bottom:1px solid var(--g6)}
-.lp .sb input{width:100%;padding:7px 11px;border:1px solid var(--g5);border-radius:var(--rl);font-size:12px;outline:none;background:var(--white);color:var(--g1)}
-.lp .sb input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,113,227,.1)}
-.lp .fc{display:flex;gap:4px;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid var(--g6)}
-.chip{padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--g5);background:var(--white);transition:.12s;user-select:none;color:var(--g2);font-weight:500}
-.chip:hover{border-color:var(--blue);color:var(--blue)}.chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
-.lp .jl{flex:1;overflow-y:auto;padding:4px 0}
-.sec{font-size:11px;font-weight:600;color:var(--g4);padding:10px 14px 5px;text-transform:uppercase;letter-spacing:.8px}
-.ji{display:flex;align-items:center;padding:10px 14px;cursor:pointer;gap:8px;transition:.1s;border-left:3px solid transparent;font-size:13px}
-.ji:hover{background:rgba(0,0,0,.04)}.ji.sel{background:rgba(0,113,227,.06);border-left-color:var(--blue)}.ji.pm{border-left-color:#7c3aed}
-.ji .jn{font-size:11px;color:var(--blue);font-weight:700;min-width:40px}
-.ji .jl2{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--g1)}
-.ji .js{font-size:11px;color:var(--g4);white-space:nowrap}
-.bd{font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700;white-space:nowrap}
-.bd-h{background:#fff3cd;color:#856404}.bd-on{background:#d1fae5;color:#065f46}.bd-off{background:var(--g6);color:var(--g4)}
 /* CENTER */
 .cp{flex:1;min-width:400px;display:flex;flex-direction:column;overflow:hidden;background:var(--white);border-right:1px solid var(--g6)}
 .tb{display:flex;align-items:center;gap:5px;padding:8px 12px;background:var(--g7);border-bottom:1px solid var(--g6);flex-wrap:wrap}
@@ -84,7 +67,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--g4);gap:12px}
 .ph svg{width:64px;height:64px;stroke:var(--g5)}.ph p{font-size:14px}
 /* RIGHT */
-.rp{width:480px;min-width:360px;flex-shrink:0;background:var(--white);display:flex;flex-direction:column}
+.rp{flex:1;min-width:0;background:var(--white);display:flex;flex-direction:column}
 .rp .rt{display:flex;border-bottom:1px solid var(--g6);padding:0 12px}
 .rp .rx{padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:.12s;color:var(--g3);white-space:nowrap}
 .rp .rx:hover{color:var(--g1)}.rp .rx.on{color:var(--g1);border-bottom-color:var(--g1)}
@@ -205,26 +188,12 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
   </div>
 </div>
 <div id="eslView"><div class="lay">
-  <!-- LEFT -->
-  <div class="lp">
-    <div class="sb"><input type="text" id="sI" placeholder="지역명 / 공고번호 검색..." oninput="renderList()"></div>
-    <div class="fc" id="fB"></div>
-    <div class="jl" id="jL"></div>
-  </div>
   <!-- CENTER -->
   <div class="cp">
     <div class="tb">
-      <button class="btn" onclick="addJob()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>+1</button>
-      <button class="btn" onclick="addBulk(3)" title="빈 직업 3개 추가">+3</button>
-      <button class="btn" onclick="addBulk(5)" title="빈 직업 5개 추가">+5</button>
-      <button class="btn" onclick="addBulk(10)" title="빈 직업 10개 추가">+10</button>
-      <button class="btn" onclick="copyHtml()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>HTML 복사</button>
-      <button class="btn" onclick="openTab()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>새 탭</button>
-      <button class="btn" onclick="dlHtml()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>저장 .html</button>
-      <div class="sep"></div>
-      <button class="btn" onclick="expJ()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>내보내기</button>
-      <button class="btn" onclick="impJ()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>가져오기</button>
-      <button class="btn" onclick="resetJ()" style="color:#ef4444">초기화</button>
+      <button class="btn" onclick="_genCount=Math.max(5,_genCount-5);document.getElementById('adCnt').textContent=_genCount;" style="min-width:44px;font-size:14px">−5</button>
+      <button class="btn btn-g" onclick="generateAd()" style="padding:6px 20px;font-size:13px;font-weight:700">광고 <span id="adCnt">25</span>개 생성</button>
+      <button class="btn" onclick="_genCount+=5;document.getElementById('adCnt').textContent=_genCount;" style="min-width:44px;font-size:14px">+5</button>
     </div>
     <div class="ctabs">
       <button class="ctab on" data-p="style" onclick="setCTab(this)">스타일</button>
@@ -1260,6 +1229,7 @@ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="
 
 /* ── State ── */
 var jobs=[],selIdx=-1,curF='all',urlMode='gform',obsLv=1,lastHtml='',curTheme='classic',curGroup='A',layoutMode='std';
+var _genCount=25;
 
 /* ── smartDate: 현재 월 기준 지난 달 → ASAP ── */
 var MONTHS={'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12,'january':1,'february':2,'march':3,'april':4,'june':6,'july':7,'august':8,'september':9,'october':10,'november':11,'december':12};
@@ -1299,13 +1269,17 @@ function startClock(){var e=document.getElementById('clk');(function t(){var n=n
 var FILTERS=[{k:'all',l:'전체'},{k:'premium',l:'프리미엄'},{k:'hot',l:'HOT'},{k:'seoul',l:'Seoul'},{k:'gg',l:'GG+IC'},{k:'etc',l:'기타'}];
 function setupFilters(){
   var b=document.getElementById('fB');
+  if(!b)return;
   b.innerHTML=FILTERS.map(function(f){return'<span class="chip'+(f.k==='all'?' on':'')+'" data-f="'+f.k+'">'+f.l+'</span>';}).join('');
   b.querySelectorAll('.chip').forEach(function(c){c.addEventListener('click',function(){b.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');});c.classList.add('on');curF=c.dataset.f;renderList();});});
 }
 
 /* ── Job List ── */
 function renderList(){
-  var el=document.getElementById('jL'),q=document.getElementById('sI').value.toLowerCase().trim();
+  var el=document.getElementById('jL');
+  if(!el)return;
+  var si=document.getElementById('sI');
+  var q=si?si.value.toLowerCase().trim():'';
   var fl=jobs.filter(function(j){
     if(q&&j.l.toLowerCase().indexOf(q)<0&&j.id.indexOf(q)<0)return false;
     if(curF==='premium')return j._pinned;if(curF==='hot')return j.h;
@@ -1714,9 +1688,9 @@ function renderSettings(){
   s.innerHTML=
     /* Row 1: 3 independent color sections */
     '<div class="tset-row col3">'
-    +'<div class="tset-sec"><div class="tset-lbl">🎨 히어로 색</div>'+mkPal(acH,'setHeroAc')+'</div>'
-    +'<div class="tset-sec"><div class="tset-lbl">🃏 카드 색</div>'+mkPal(acC,'setCardAc')+'</div>'
-    +'<div class="tset-sec"><div class="tset-lbl">🔲 버튼 색</div>'+mkPal(acB,'setCtaAc')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">히어로 색</div>'+mkPal(acH,'setHeroAc')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">카드 색</div>'+mkPal(acC,'setCardAc')+'</div>'
+    +'<div class="tset-sec"><div class="tset-lbl">버튼 색</div>'+mkPal(acB,'setCtaAc')+'</div>'
     +'</div>'
     /* Row 2: 2 font size controls */
     +'<div class="tset-row col2">'
@@ -2415,6 +2389,11 @@ function generateAd(){
     if(!loc||/^new location/i.test(loc))return false;
     return true;
   });
+  /* _genCount 개수만큼 랜덤 추출 */
+  if(active.length>_genCount){
+    for(var _si=active.length-1;_si>0;_si--){var _sj=Math.floor(Math.random()*(_si+1));var _st=active[_si];active[_si]=active[_sj];active[_sj]=_st;}
+    active=active.slice(0,_genCount);
+  }
   var nowMonth=new Date().getMonth()+1;
   var _ts=TS[curTheme]||{};
   var link=(_ts.link&&_ts.link.trim())||(urlMode==='bridge'?APPLY_BRIDGE:APPLY_GFORM);

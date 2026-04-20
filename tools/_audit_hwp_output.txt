@@ -1,0 +1,209 @@
+=== A) Any .hwp / .hwpx in Startup folders ===
+
+FullName                                                                                               Length LastWrite
+                                                                                                              Time     
+--------                                                                                               ------ ---------
+C:\Users\Scarlett\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\HeadsetHotkey.lnk        1486 26-3-1...
+C:\Users\Scarlett\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\tg_approval_daemon.vbs    190 26-4-1...
+
+
+
+FullName                                                                   Length LastWriteTime      
+--------                                                                   ------ -------------      
+C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\Tailscale.lnk   1942 26-4-3 오후 2:21:00
+
+
+
+=== B) Registry autorun (HKCU + HKLM, Run/RunOnce/RunServices) ===
+--- HKCU:\Software\Microsoft\Windows\CurrentVersion\Run ---
+  GoogleDriveFS = "C:\Program Files\Google\Drive File Stream\123.0.1.0\GoogleDriveFS.exe" --startup_mode
+  MicrosoftEdgeAutoLaunch_22228BD356E50A370BC61FAF80BFB1FE = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --win-session-start
+  KakaoTalk = "C:\Program Files (x86)\Kakao\KakaoTalk\KakaoTalk.exe" -bystartup
+--- HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce ---
+--- HKLM:\Software\Microsoft\Windows\CurrentVersion\Run ---
+  SecurityHealth = C:\WINDOWS\system32\SecurityHealthSystray.exe
+  AhnLab Safe Transaction Application = "C:\Program Files\AhnLab\Safe Transaction\stsess.exe" /tray
+--- HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce ---
+--- HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run ---
+  nxTS = 
+  ipinside-lws = C:\Program Files (x86)\IPinside_LWS\I3GProc.exe
+  Acrobat Assistant 8.0 = "Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\AcroTray.exe"
+  (default) = 
+  MagicLine4NX = C:\Program Files (x86)\DreamSecurity\MagicLine4NX\MagicLine4NX.exe
+  RAONK = C:\ProgramData\RAONWIZ\RAON K\raonk.moni.exe
+--- HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce ---
+
+=== C) Hancom/HWP related autoruns ===
+
+Name                                                                                                                   
+----                                                                                                                   
+HKEY_CURRENT_USER\Software\HNC                                                                                         
+HKEY_CURRENT_USER\Software\HNC\ExCtrl                                                                                  
+HKEY_CURRENT_USER\Software\HNC\ExCtrl\9.6                                                                              
+HKEY_CURRENT_USER\Software\HNC\ExCtrl\9.6\HwpFrame                                                                     
+HKEY_CURRENT_USER\Software\HNC\ExCtrl\9.6\HwpFrame\AppState                                                            
+HKEY_CURRENT_USER\Software\HNC\ExCtrl\Modules                                                                          
+HKEY_CURRENT_USER\Software\HNC\ExplorerStyleFileDlg                                                                    
+HKEY_CURRENT_USER\Software\HNC\HncDRM                                                                                  
+HKEY_CURRENT_USER\Software\HNC\HncDRM\Modules                                                                          
+HKEY_CURRENT_USER\Software\HNC\HncUserDic                                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp                                                                                     
+HKEY_CURRENT_USER\Software\HNC\Hwp\10.2                                                                                
+HKEY_CURRENT_USER\Software\HNC\Hwp\10.2\HwpFrame                                                                       
+HKEY_CURRENT_USER\Software\HNC\Hwp\10.2\HwpFrame\AppState                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\10.2\HwpFrame\ViewInfo                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\10.2\TrackChange                                                                    
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0                                                                                
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him                                                                            
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him\LangEnv                                                                    
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him\LangEnv\{0000-0400}                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him\LangEnv\{0000-0409}                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him\LangEnv\{0000-0411}                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Him\LangEnv\{0000-0412}                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\HwpFrame                                                                       
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\HwpFrame\SkinInfo                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\HwpFrame\ViewInfo                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\HyperLink                                                                      
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\HyperLink\Setting                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Parameters                                                                     
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Parameters\00000207                                                            
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Parameters\0000021A                                                            
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Parameters\00000277                                                            
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Parameters\000002FF                                                            
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\Picture                                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\PrintWatermark                                                                 
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\SearchDictionary                                                               
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\SearchPrivateInfo                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\SearchRecord                                                                   
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject                                                                    
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject\DrawingObject                                                      
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject\DrawingObject\LineAttr                                             
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject\Frame                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject\FramePos                                                           
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\ShapeObject\MouseOption                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\TrackChange                                                                    
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\UserDataFilePaths                                                              
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\UserDefPaper                                                                   
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\UserDefPaper\Paper                                                             
+HKEY_CURRENT_USER\Software\HNC\Hwp\11.0\UserDefPaper\Paper\ko-KR                                                       
+HKEY_CURRENT_USER\Software\HNC\Hwp\6.5                                                                                 
+HKEY_CURRENT_USER\Software\HNC\Hwp\6.5\SameSave                                                                        
+HKEY_CURRENT_USER\Software\HNC\Hwp\8.0                                                                                 
+HKEY_CURRENT_USER\Software\HNC\Hwp\8.0\table                                                                           
+HKEY_CURRENT_USER\Software\HNC\HwpAutomation                                                                           
+HKEY_CURRENT_USER\Software\HNC\HwpAutomation\Modules                                                                   
+HKEY_CURRENT_USER\Software\HNC\HwpCtrl                                                                                 
+HKEY_CURRENT_USER\Software\HNC\HwpCtrl\HwpUserAction                                                                   
+HKEY_CURRENT_USER\Software\HNC\HwpCtrl\HwpUserAction\Modules                                                           
+HKEY_CURRENT_USER\Software\HNC\HwpCtrl\Modules                                                                         
+HKEY_CURRENT_USER\Software\HNC\HwpUserAction                                                                           
+HKEY_CURRENT_USER\Software\HNC\HwpUserAction\Modules                                                                   
+HKEY_CURRENT_USER\Software\HNC\HwpUserWorkspace                                                                        
+HKEY_CURRENT_USER\Software\HNC\HwpUserWorkspace\Modules                                                                
+HKEY_CURRENT_USER\Software\HNC\Path                                                                                    
+HKEY_CURRENT_USER\Software\HNC\Shared                                                                                  
+HKEY_CURRENT_USER\Software\HNC\Shared\10.2                                                                             
+HKEY_CURRENT_USER\Software\HNC\Shared\10.2\Him                                                                         
+HKEY_CURRENT_USER\Software\HNC\Shared\10.2\Him\LangEnv                                                                 
+HKEY_CURRENT_USER\Software\HNC\Shared\10.2\Him\LangEnv\{0000-0412}                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\10.2\Him\LangEnv\{0000-0800}                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0                                                                             
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\DocFilters                                                                  
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\DocFilters\HTMLFilter                                                       
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\DocFilters\TEXTFilter                                                       
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Fonts                                                                       
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Him                                                                         
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Him\LangEnv                                                                 
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Him\LangEnv\{0000-0800}                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\HwpEq5x                                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Print Setting                                                               
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Print Setting\Flags                                                         
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Speller                                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\11.0\Speller\NaraSpellOption                                                     
+HKEY_CURRENT_USER\Software\HNC\Shared\9.6                                                                              
+HKEY_CURRENT_USER\Software\HNC\Shared\9.6\Him                                                                          
+HKEY_CURRENT_USER\Software\HNC\Shared\9.6\Him\GlobalEnv                                                                
+HKEY_CURRENT_USER\Software\HNC\Shared\9.6\Him\LangEnv                                                                  
+HKEY_CURRENT_USER\Software\HNC\Shared\9.6\Him\LangEnv\{0000-0800}                                                      
+HKEY_CURRENT_USER\Software\HNC\Shared\Him                                                                              
+HKEY_CURRENT_USER\Software\HNC\Shared\Him\Toolbar                                                                      
+HKEY_CURRENT_USER\Software\HNC\Shared\Netffice                                                                         
+HKEY_CURRENT_USER\Software\HNC\Shared\Translate                                                                        
+HKEY_CURRENT_USER\Software\HNC\Shared\UFB                                                                              
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Authentication\LogonUI\Notifications\BackgroundCapabilit...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Cloud\{1d37a2af-288a-4a0...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Cloud\{1d37a2af-288a-4a0...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Cloud\{1d37a2af-288a-4a0...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Cloud\{1d37a2af-288a-4a0...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Cloud\{1d37a2af-288a-4a0...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\{1d37a2af-288a-4...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\{1d37a2af-288a-4...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\{1d37a2af-288a-4...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\{1d37a2af-288a-4...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\{1d37a2af-288a-4...
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU\hwp                      
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwp                                     
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwp\OpenWithList                        
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwp\OpenWithProgids                     
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwp\UserChoice                          
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwpx                                    
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwpx\OpenWithList                       
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwpx\OpenWithProgids                    
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.hwpx\UserChoice                         
+HKEY_CURRENT_USER\Software\Classes\Extensions\ContractId\Windows.AppService\PackageId\Microsoft.Windows.ShellExperie...
+HKEY_CURRENT_USER\Software\Classes\Extensions\ContractId\Windows.AppService\PackageId\Microsoft.Windows.ShellExperie...
+HKEY_CURRENT_USER\Software\Classes\Extensions\ContractId\Windows.BackgroundTasks\PackageId\Microsoft.Windows.StartMe...
+HKEY_CURRENT_USER\Software\Classes\Extensions\ContractId\Windows.BackgroundTasks\PackageId\Microsoft.Windows.StartMe...
+
+
+
+
+=== D) Recent document history (HWP recently opened) ===
+
+
+=== E) Scripts referencing hwp / hancom anywhere ===
+
+Path                                                 LineNumber Line                                                   
+----                                                 ---------- ----                                                   
+Q:\Claudework\bridge base\tools\audit_hwp_source.ps1         36             Select-String -Pattern 'hwp|hancom|hncapp|H
+                                                                wp.exe|HncApp' -SimpleMatch -ErrorAction SilentlyContin
+                                                                ue |                                                   
+
+
+
+=== F) Task Scheduler last-run history (last 30) ===
+
+Name                                                                                                  LastRun          
+----                                                                                                  -------          
+\GoogleSystem\GoogleUpdater\GoogleUpdaterTaskSystem148.0.7730.0{480B35AE-50E3-45A4-96AC-4BD419FF564A} 26-4-20 오전 7...
+\ClaudeBlog_AutoBackup                                                                                26-4-20 오전 7...
+\Bridge\AutoBackup5min                                                                                26-4-20 오전 7...
+\MicrosoftEdgeUpdateTaskMachineUA                                                                     26-4-20 오전 7...
+\BRIDGE_Behavior_Check                                                                                26-4-20 오전 7...
+\BRIDGE_DB_Backup                                                                                     26-4-20 오전 6...
+\BRIDGE_Auto_Security_Patch                                                                           26-4-20 오전 6...
+\BRIDGE_ThreatFeed_Sync                                                                               26-4-20 오전 6...
+\BRIDGE_GDrive_Backup_Frequent                                                                        26-4-20 오전 6...
+\BRIDGE_GDrive_Backup                                                                                 26-4-20 오전 6...
+\NvTmRep_CrashReport3_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                          26-4-20 오전 6...
+\NvTmRep_CrashReport4_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                          26-4-20 오전 6...
+\NvBatteryBoostCheckOnLogon_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                    26-4-20 오전 6...
+\NvProfileUpdaterOnLogon_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                       26-4-20 오전 6...
+\SpeakerDefaultOnLogon                                                                                26-4-20 오전 6...
+\Bridge\DBSyncDaemon                                                                                  26-4-20 오전 6...
+\NvNodeLauncher_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                                26-4-20 오전 6...
+\MicrosoftEdgeUpdateTaskMachineCore                                                                   26-4-20 오전 6...
+\NvTmRep_CrashReport2_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                          26-4-19 오후 6...
+\Bridge\Afternoon-Monitor                                                                             26-4-19 오후 2...
+\NvProfileUpdaterDaily_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                         26-4-19 오후 1...
+\NvDriverUpdateCheckDaily_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                      26-4-19 오후 1...
+\NvTmRep_CrashReport1_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                          26-4-19 오후 1...
+\BridgeBlogAuto                                                                                       26-4-19 오전 9...
+\MatjokdoDaily                                                                                        26-4-19 오전 9...
+\Bridge\Final-Backup                                                                                  26-4-19 오전 9...
+\BridgeLogRotation                                                                                    26-4-17 오전 7...
+\ClaudeworkAutoRestore                                                                                26-4-15 오전 9...
+\ChromeCleanSearchEngines                                                                             26-4-15 오전 9...
+\Bridge_DDNS_Watchdog                                                                                 26-4-15 오전 9...
+
+

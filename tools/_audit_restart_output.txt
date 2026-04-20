@@ -1,0 +1,65 @@
+=== A) Windows 'Restart apps' ?§Ï†ï ===
+  HKCU...\Winlogon\RestartApps = 0
+  HKCU\Control Panel\Desktop\AutoRestartShell = 
+  HKCU...\RestartSession\RestartLastSession = 
+
+  HKLM Policy ExplorerRunOnceOverride:
+
+=== B) Hancom Í¥Ä???êÎèô?§Ìñâ ?àÏ??§Ìä∏Î¶?===
+
+=== C) ?ÑÏû¨ ?§Ìñâ Ï§ëÏù∏ HWP Í¥Ä???ÑÎ°ú?∏Ïä§ ===
+
+=== D) HWP ProgID / LastOpenFiles ===
+
+
+PSChildName      
+-----------      
+Him              
+HwpFrame         
+HyperLink        
+Parameters       
+Picture          
+PrintWatermark   
+SearchDictionary 
+SearchPrivateInfo
+SearchRecord     
+ShapeObject      
+TrackChange      
+UserDataFilePaths
+UserDefPaper     
+
+
+
+=== E) Windows 11 StartupApps Í∏∞Î≥∏??===
+
+
+NordVPN                                                  : {3, 0, 0, 0...}
+Discord                                                  : {3, 0, 0, 0...}
+CrossEXService                                           : {2, 0, 0, 0...}
+CCXProcess                                               : {3, 0, 0, 0...}
+GoogleDriveSync                                          : {2, 0, 0, 0...}
+KakaoTalk                                                : {2, 0, 0, 0...}
+Spotify                                                  : {2, 0, 0, 0...}
+Digital Clock                                            : {3, 0, 0, 0...}
+GoogleDriveFS                                            : {2, 0, 0, 0...}
+MagicLine4NPIZ                                           : {3, 0, 0, 0...}
+MicrosoftEdgeAutoLaunch_22228BD356E50A370BC61FAF80BFB1FE : {3, 0, 0, 0...}
+Steam                                                    : {3, 0, 0, 0...}
+MaEPSBroker                                              : {2, 0, 0, 0...}
+RiotClient                                               : {3, 0, 0, 0...}
+Adobe Acrobat Synchronizer                               : {3, 0, 0, 0...}
+electron.app.Notion                                      : {3, 0, 0, 0...}
+Proton VPN                                               : {3, 0, 0, 0...}
+PSPath                                                   : Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Softwa
+                                                           re\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved
+                                                           \Run
+PSParentPath                                             : Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Softwa
+                                                           re\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved
+PSChildName                                              : Run
+PSDrive                                                  : HKCU
+PSProvider                                               : Microsoft.PowerShell.Core\Registry
+
+
+
+
+=== F) ?ÑÏ≤¥ ~$*.hwp ?†Í∏à?åÏùº Í≤Ä??(Q/D ?úÎùº?¥Î∏å) ===
