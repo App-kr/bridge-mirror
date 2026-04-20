@@ -59,8 +59,38 @@ function DashboardContent({ adminFetch }: { adminFetch: AdminFetch }) {
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [toast, setToast] = useState<string>('')
+  const [seenDlqIds, setSeenDlqIds] = useState<Set<number>>(new Set())
+  const [popupJob, setPopupJob] = useState<DlqJob | null>(null)
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default')
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
+
+  // 브라우저 Notification 권한 요청 (최초 1회)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    setNotifPerm(Notification.permission)
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(p => setNotifPerm(p))
+    }
+  }, [])
+
+  const fireDesktopNotification = useCallback((job: DlqJob) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (Notification.permission !== 'granted') return
+    try {
+      let payloadInfo = ''
+      try {
+        const p = JSON.parse(job.payload_json)
+        payloadInfo = `${p.file_type || ''} ${p.filename || ''}`.trim()
+      } catch { /* ignore */ }
+      const n = new Notification('🚨 BRIDGE 파이프라인 실패', {
+        body: `Job #${job.id} [${job.job_type}]\n${payloadInfo}\n${job.last_error?.slice(0, 120) || ''}`,
+        tag: `bridge-dlq-${job.id}`,
+        requireInteraction: true,
+      })
+      n.onclick = () => { window.focus(); setPopupJob(job); n.close() }
+    } catch (e) { console.error('notification', e) }
+  }, [])
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -71,13 +101,33 @@ function DashboardContent({ adminFetch }: { adminFetch: AdminFetch }) {
         adminFetch(`${API_URL}/api/admin/pipeline/events?limit=50`),
       ])
       if (sRes.ok) { const j = await sRes.json(); setStats(j.data || null) }
-      if (dRes.ok) { const j = await dRes.json(); setDlq(j.data?.dlq_jobs || []) }
+      if (dRes.ok) {
+        const j = await dRes.json()
+        const jobs: DlqJob[] = j.data?.dlq_jobs || []
+        setDlq(jobs)
+        // 신규 DLQ 감지 → 알림 + 팝업
+        const currentIds = new Set(jobs.map(x => x.id))
+        const newOnes = jobs.filter(x => !seenDlqIds.has(x.id))
+        if (newOnes.length > 0 && seenDlqIds.size > 0) {
+          // 초기 로드가 아니고 신규 발생 → 알림
+          newOnes.forEach(fireDesktopNotification)
+          setPopupJob(newOnes[0])
+          try {
+            if (typeof Audio !== 'undefined') {
+              // 간단 경고음 (브라우저 제약 있음)
+              const a = new Audio('data:audio/wav;base64,UklGRhwDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YdoCAACBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYE=')
+              a.play().catch(() => {})
+            }
+          } catch { /* ignore */ }
+        }
+        setSeenDlqIds(currentIds)
+      }
       if (eRes.ok) { const j = await eRes.json(); setEvents(j.data?.events || []) }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
-  }, [adminFetch])
+  }, [adminFetch, seenDlqIds, fireDesktopNotification])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadAll() /* eslint-disable-next-line */ }, [])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -211,6 +261,7 @@ function DashboardContent({ adminFetch }: { adminFetch: AdminFetch }) {
                   </td>
                   <td style={TD}>{j.updated_at?.slice(0, 19)}</td>
                   <td style={TD}>
+                    <button onClick={() => setPopupJob(j)} style={{ padding: '3px 10px', background: '#6B7280', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer', marginRight: 4 }}>상세</button>
                     <button onClick={() => requeue(j.id)} style={{ padding: '3px 10px', background: '#1E40AF', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>재큐잉</button>
                   </td>
                 </tr>
@@ -253,12 +304,114 @@ function DashboardContent({ adminFetch }: { adminFetch: AdminFetch }) {
         </div>
       </section>
 
+      {/* 알림 권한 표시 */}
+      {notifPerm !== 'granted' && (
+        <div style={{
+          position: 'fixed', top: 16, right: 16, maxWidth: 320,
+          background: '#FEF3C7', border: '1px solid #F59E0B',
+          borderRadius: 8, padding: '10px 14px', fontSize: 12, zIndex: 90,
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4, color: '#92400E' }}>
+            🔔 데스크톱 알림 {notifPerm === 'denied' ? '차단됨' : '비활성'}
+          </div>
+          <div style={{ color: '#78350F', lineHeight: 1.5 }}>
+            {notifPerm === 'denied'
+              ? '브라우저 주소창 자물쇠 아이콘 → 알림 허용으로 변경'
+              : '알림 허용 시 파이프라인 실패를 즉시 감지'}
+            {notifPerm === 'default' && (
+              <button
+                onClick={() => Notification.requestPermission().then(setNotifPerm)}
+                style={{ marginLeft: 8, padding: '2px 10px', background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}
+              >허용</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 실패 팝업 모달 */}
+      {popupJob && (
+        <div
+          onClick={() => setPopupJob(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 12, maxWidth: 640, width: '100%',
+              padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+              borderTop: '6px solid #DC2626',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 28 }}>🚨</span>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#991B1B', margin: 0 }}>
+                파이프라인 실패 — 관리자 개입 필요
+              </h2>
+            </div>
+            {(() => {
+              let payload: Record<string, string> = {}
+              try { payload = JSON.parse(popupJob.payload_json) } catch {}
+              return (
+                <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+                  <Row k="Job ID" v={`#${popupJob.id}`} />
+                  <Row k="Job Type" v={popupJob.job_type} />
+                  <Row k="Candidate" v={String(payload.candidate_id || '-')} />
+                  <Row k="File Type" v={String(payload.file_type || '-')} />
+                  <Row k="Filename" v={String(payload.filename || '-')} />
+                  <Row k="S3 Key" v={String(payload.s3_key || '-').slice(0, 80)} />
+                  <Row k="Attempts" v={`${popupJob.attempts}/${popupJob.max_attempts}`} />
+                  <div style={{ marginTop: 12, padding: 12, background: '#FEE2E2', borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, color: '#991B1B', fontWeight: 700, marginBottom: 4 }}>에러 메시지</div>
+                    <pre style={{ fontSize: 12, color: '#7F1D1D', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {popupJob.last_error || '(no details)'}
+                    </pre>
+                  </div>
+                  <div style={{ marginTop: 16, padding: 12, background: '#EFF6FF', borderRadius: 6, fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: '#1E40AF', marginBottom: 6 }}>💡 수동 처리 방법</div>
+                    <div style={{ color: '#1E3A8A', lineHeight: 1.8 }}>
+                      1. 로컬 폴더: <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 3 }}>Q:\Claudework\bridge base\failed_files\FAIL_{popupJob.id}_*\</code><br />
+                      2. 원본 파일 + 에러 로그 + metadata.json 자동 생성됨<br />
+                      3. 파일 수정 후 재큐잉 → 자동 재처리<br />
+                      4. 또는 직접 /admin/resume-converter 에서 수동 변환
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+            <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPopupJob(null)} style={{ padding: '8px 18px', background: '#E5E7EB', color: '#374151', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
+                닫기
+              </button>
+              <button
+                onClick={() => { requeue(popupJob.id); setPopupJob(null) }}
+                style={{ padding: '8px 18px', background: '#1E40AF', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+              >
+                재큐잉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 토스트 */}
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '10px 18px', background: '#111', color: '#fff', borderRadius: 6, fontSize: 13, zIndex: 100 }}>
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid #F3F4F6', padding: '4px 0' }}>
+      <div style={{ width: 110, color: '#6B7280', fontSize: 12 }}>{k}</div>
+      <div style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-all' }}>{v}</div>
     </div>
   )
 }

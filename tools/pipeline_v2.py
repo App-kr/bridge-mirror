@@ -90,7 +90,7 @@ def enqueue_resume_process(
     candidate_id: str,
     cv_s3_key: str,
     trigger: str = "unknown",
-    max_attempts: int = 10,
+    max_attempts: int = 3,   # v2.1: 10→3 (빠른 실패 + 즉시 관리자 개입)
 ) -> int:
     """
     이력서 처리 작업 큐 등록. 멱등성 보장: 동일 (candidate_id, cv_s3_key) 중복 호출 시 기존 job_id 반환.
@@ -171,7 +171,7 @@ def enqueue_file_process(
     file_type: str = "",             # 'cv'/'cover_letter'/'photo'/'video'/...
     filename: str = "",
     trigger: str = "unknown",
-    max_attempts: int = 10,
+    max_attempts: int = 3,           # v2.1: 10→3 (빠른 실패 + 즉시 관리자 개입)
 ) -> int:
     """
     v2.0 Universal file enqueue — CV/DOCX/이미지/영상/기타 모두 처리.
@@ -350,15 +350,15 @@ def mark_job_failed(
     candidate_id: Optional[str] = None,
 ) -> str:
     """
-    실패 처리 — attempts/max_attempts 비교하여:
-      - 재시도 가능 → status='queued', next_run_at = now + 2^attempts 분
-      - 최대 도달  → status='dlq' (Dead Letter Queue)
+    실패 처리 — v2.1: 빠른 실패 + 즉시 관리자 개입.
+      - max_attempts 기본 3 (1,2,4분 = 최대 7분 재시도)
+      - 최대 도달 → status='dlq' + 텔레그램 알림 + 실패폴더 다운로드 트리거
     Returns: 'queued' or 'dlq'
     """
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT attempts, max_attempts FROM job_queue WHERE id=?",
+            "SELECT attempts, max_attempts, job_type, payload_json FROM job_queue WHERE id=?",
             (job_id,),
         ).fetchone()
         if not row:
@@ -372,17 +372,40 @@ def mark_job_failed(
                 (str(error)[:500], _now(), _now(), job_id),
             )
             conn.commit()
+            # 페이로드 파싱 (텔레그램 알림용)
+            try:
+                payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+            except Exception:
+                payload = {}
             log_event(
                 "job_dlq",
                 candidate_id=candidate_id,
                 job_id=job_id,
-                details={"error": str(error)[:300], "attempts": attempts},
+                details={
+                    "error": str(error)[:300],
+                    "attempts": attempts,
+                    "job_type": row["job_type"],
+                    "s3_key": payload.get("s3_key", ""),
+                    "filename": payload.get("filename", ""),
+                    "file_type": payload.get("file_type", ""),
+                },
                 severity="critical",
             )
+            # v2.1 — 텔레그램 즉시 알림 + 실패폴더 다운로드 트리거
+            try:
+                _notify_dlq_and_download(
+                    job_id=job_id,
+                    candidate_id=candidate_id or payload.get("candidate_id", ""),
+                    job_type=row["job_type"],
+                    error=str(error),
+                    payload=payload,
+                )
+            except Exception as _n:
+                _log.warning("DLQ notify/download fail: %s", _n)
             return "dlq"
 
-        # Exponential backoff: 2^attempts 분 (1,2,4,8,16,32... 분)
-        backoff_min = min(2 ** attempts, 60)
+        # v2.1: Exponential backoff 단축 (2^(attempts-1) 분) — 1+2+4 = 7분 내 소진
+        backoff_min = min(2 ** max(0, attempts - 1), 8)
         next_at = (datetime.now(tz=timezone.utc) + timedelta(minutes=backoff_min)).isoformat()
         conn.execute(
             """UPDATE job_queue
@@ -395,12 +418,124 @@ def mark_job_failed(
             "job_retry",
             candidate_id=candidate_id,
             job_id=job_id,
-            details={"error": str(error)[:300], "attempts": attempts, "next_run_at": next_at},
+            details={"error": str(error)[:300], "attempts": attempts, "next_run_at": next_at,
+                     "max_attempts": max_attempts},
             severity="warn",
         )
         return "queued"
     finally:
         conn.close()
+
+
+def _notify_dlq_and_download(
+    job_id: int,
+    candidate_id: str,
+    job_type: str,
+    error: str,
+    payload: dict,
+) -> None:
+    """
+    DLQ 진입 시:
+      1) 텔레그램 즉시 알림
+      2) 원본 S3 파일을 로컬 failed_files/ 폴더로 다운로드 (가능 시)
+      3) 실패 상세 JSON 파일 생성
+    로컬 PC 데몬이 우선 처리 (Render 환경에서는 알림만).
+    """
+    s3_key = payload.get("s3_key", "")
+    filename = payload.get("filename", s3_key.rsplit("/", 1)[-1] if s3_key else "unknown")
+    file_type = payload.get("file_type", "")
+
+    # 1) 텔레그램 알림 (항상 시도)
+    try:
+        _send_telegram_alert(
+            f"🚨 <b>이력서 파이프라인 실패</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>job_id:</b> {job_id}\n"
+            f"<b>job_type:</b> {job_type}\n"
+            f"<b>candidate_id:</b> <code>{candidate_id}</code>\n"
+            f"<b>file_type:</b> {file_type}\n"
+            f"<b>filename:</b> {filename}\n"
+            f"<b>s3_key:</b> <code>{s3_key[:80]}</code>\n"
+            f"<b>attempts:</b> max 도달 → 관리자 개입 필요\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>에러:</b>\n<pre>{str(error)[:500]}</pre>\n"
+            f"→ /admin/pipeline 에서 확인/재큐잉"
+        )
+    except Exception as e:
+        _log.warning("telegram alert fail: %s", e)
+
+    # 2) 실패 폴더 다운로드 (로컬 환경에서만 — 환경변수 FAILED_FILES_DIR 설정 필요)
+    failed_dir_env = os.getenv("FAILED_FILES_DIR", "").strip()
+    if not failed_dir_env:
+        # 기본값: 로컬 PC 경로 (Render 에서는 존재하지 않아 스킵됨)
+        failed_dir_env = r"Q:\Claudework\bridge base\failed_files"
+    try:
+        from pathlib import Path as _P
+        failed_dir = _P(failed_dir_env)
+        # 존재 확인 — 없으면 스킵 (Render에서 자동 생성 안 함)
+        if failed_dir.parent.exists():
+            failed_dir.mkdir(parents=True, exist_ok=True)
+            # 실패 메타 JSON
+            ts_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
+            meta_path = failed_dir / f"FAIL_{job_id}_{ts_tag}.json"
+            meta = {
+                "job_id": job_id,
+                "candidate_id": candidate_id,
+                "job_type": job_type,
+                "file_type": file_type,
+                "filename": filename,
+                "s3_key": s3_key,
+                "error": str(error)[:2000],
+                "timestamp": _now(),
+                "instructions": {
+                    "how_to_download": f"S3에서 {s3_key} 다운로드 (또는 /admin/resume-converter 수동 처리)",
+                    "how_to_requeue": f"/admin/pipeline 대시보드 → Job #{job_id} 재큐잉 버튼",
+                    "how_to_manual_process": "tools/doc_processor.py --file <path> --brj <sheet_number>",
+                },
+            }
+            meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+            _log.info("DLQ meta saved: %s", meta_path)
+    except Exception as e:
+        _log.warning("failed_files meta save skip: %s", e)
+
+
+def _send_telegram_alert(html_text: str) -> bool:
+    """텔레그램 알림 전송 (실패 시 silent)."""
+    try:
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        if not token:
+            return False
+        conn = _conn()
+        try:
+            rows = conn.execute(
+                "SELECT chat_id FROM tg_alert_subscribers WHERE active=1"
+            ).fetchall()
+            chat_ids = [r["chat_id"] for r in rows]
+        except Exception:
+            chat_ids = []
+        finally:
+            conn.close()
+        if not chat_ids:
+            return False
+        import urllib.request as _ur
+        for cid in chat_ids:
+            try:
+                data = json.dumps({
+                    "chat_id": cid,
+                    "text": html_text[:4000],
+                    "parse_mode": "HTML",
+                }).encode("utf-8")
+                req = _ur.Request(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                )
+                _ur.urlopen(req, timeout=10)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
 
 
 # ── 후보자 상태 업데이트 (candidates.cv_processed_*) ────────────────────
