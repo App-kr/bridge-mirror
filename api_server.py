@@ -517,11 +517,20 @@ def _startup_db_health_check() -> None:
 
 @app.on_event("startup")
 async def _startup_event():
-    """FastAPI startup hook -- 비블로킹 백그라운드 DB 헬스체크."""
+    """FastAPI startup hook -- 비블로킹 백그라운드 DB 헬스체크 + v2.0 파이프라인 워커."""
     try:
         threading.Thread(target=_startup_db_health_check, daemon=True).start()
     except Exception as e:
-        logging.getLogger("bridge.startup").error("[STARTUP] 스레드 시작 실패: %s", e)
+        logging.getLogger("bridge.startup").error("[STARTUP] DB 헬스체크 실패: %s", e)
+    # Resume Pipeline v2.0 worker 기동 (3 threads)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_worker import start_workers  # type: ignore
+        _worker_count = int(os.getenv("PIPELINE_WORKER_COUNT", "3"))
+        start_workers(_worker_count)
+        logging.getLogger("bridge.pipeline").info("[STARTUP] %d workers launched", _worker_count)
+    except Exception as e:
+        logging.getLogger("bridge.pipeline").warning("[STARTUP] worker 기동 실패: %s", e)
 
 # ── 글로벌 HTTPException 핸들러 -- 모든 에러를 구조화된 JSON으로 자동 변환 ───
 # 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}
@@ -5040,6 +5049,15 @@ def _ensure_candidates_all_cols():
         ("gender", "TEXT", "NULL"),
         ("religion", "TEXT", "NULL"),
         ("health_info", "TEXT", "NULL"),
+        # Resume Pipeline v2.0 — 100% 성공 보장용 상태/무결성 컬럼
+        ("cv_processed_sha256", "TEXT", "NULL"),
+        ("cv_processed_at", "TEXT", "NULL"),
+        ("cv_processed_status", "TEXT", "'pending'"),
+        ("cv_processed_attempts", "INTEGER", "0"),
+        ("cv_processed_last_error", "TEXT", "NULL"),
+        ("cv_original_s3_key", "TEXT", "NULL"),
+        ("cv_original_sha256", "TEXT", "NULL"),
+        ("photo_sha256", "TEXT", "NULL"),
     ]
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -5054,6 +5072,56 @@ def _ensure_candidates_all_cols():
         pass
 
 
+def _ensure_pipeline_tables():
+    """Resume Pipeline v2.0 — durable queue + event log 테이블 자동 생성."""
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        # ── job_queue: 영속 큐 (서버 재시작 생존) ─────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS job_queue (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_type        TEXT NOT NULL,
+                payload_json    TEXT NOT NULL,
+                idempotency_key TEXT UNIQUE NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'queued'
+                    CHECK(status IN ('queued','running','done','failed','dlq')),
+                attempts        INTEGER NOT NULL DEFAULT 0,
+                max_attempts    INTEGER NOT NULL DEFAULT 10,
+                next_run_at     TEXT,
+                last_error      TEXT,
+                created_at      TEXT DEFAULT (datetime('now')),
+                updated_at      TEXT DEFAULT (datetime('now')),
+                started_at      TEXT,
+                finished_at     TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_job_queue_status_next ON job_queue(status, next_run_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_job_queue_type ON job_queue(job_type)")
+
+        # ── pipeline_events: 감사 로그 (append-only) ──────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_events (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts            TEXT DEFAULT (datetime('now')),
+                event_type    TEXT NOT NULL,
+                candidate_id  TEXT,
+                job_id        INTEGER,
+                details_json  TEXT,
+                severity      TEXT DEFAULT 'info'
+                    CHECK(severity IN ('info','warn','error','critical'))
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_events_cid ON pipeline_events(candidate_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_events_ts ON pipeline_events(ts)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_events_type ON pipeline_events(event_type)")
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.getLogger("bridge.pipeline").warning("_ensure_pipeline_tables skip: %s", e)
+
+
 try:
     _ensure_jobs_cols()
 except Exception:
@@ -5061,6 +5129,11 @@ except Exception:
 
 try:
     _ensure_candidates_all_cols()
+except Exception:
+    pass
+
+try:
+    _ensure_pipeline_tables()
 except Exception:
     pass
 
@@ -8369,7 +8442,25 @@ async def upload_file(
         # File is saved locally; metadata failure is non-blocking
 
     # ── Auto-process: CV/커버레터 업로드 시 PII 자동 제거 ──
+    # v2.0: durable queue 멱등 enqueue + 레거시 스레드 직접 실행 병행
+    #       (큐는 워커가 처리, 스레드는 즉시 처리 — 이중 안전망)
     if entity_type == "candidate" and file_type in ("cv", "cover_letter"):
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from tools.pipeline_v2 import enqueue_resume_process  # type: ignore
+            _job_id = enqueue_resume_process(
+                candidate_id=entity_id,
+                cv_s3_key=s3_key,
+                trigger="upload_endpoint",
+            )
+            logging.getLogger("bridge.pipeline").info(
+                "[ENQUEUE] cid=%s job_id=%s key=%s", entity_id, _job_id, s3_key[:60]
+            )
+        except Exception as _enq_err:
+            logging.getLogger("bridge.pipeline").warning(
+                "[ENQUEUE] fail cid=%s err=%s", entity_id, _enq_err
+            )
+        # 레거시 즉시 처리 (큐 워커 미구동 시 안전망)
         threading.Thread(
             target=_auto_process_resume,
             args=(entity_id, s3_key),
@@ -8464,6 +8555,13 @@ async def reprocess_cv(candidate_id: str, request: Request):
         conn.close()
     if not row or not row[0]:
         raise HTTPException(404, "Original CV not found in S3")
+    # v2.0 durable queue enqueue + 즉시 스레드 (이중 안전망)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import enqueue_resume_process  # type: ignore
+        enqueue_resume_process(candidate_id=candidate_id, cv_s3_key=row[0], trigger="reprocess")
+    except Exception as _enq_err:
+        logging.getLogger("bridge.pipeline").warning("[ENQUEUE reprocess] fail: %s", _enq_err)
     threading.Thread(
         target=_auto_process_resume,
         args=(candidate_id, row[0]),
@@ -8533,6 +8631,13 @@ async def reprocess_resume_full(candidate_id: str, request: Request):
     if not row or not row[0]:
         raise HTTPException(404, "Original CV not found")
     _set_resume_status(candidate_id, "pending")
+    # v2.0 durable queue enqueue + 즉시 스레드
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import enqueue_resume_process  # type: ignore
+        enqueue_resume_process(candidate_id=candidate_id, cv_s3_key=row[0], trigger="full_pipeline")
+    except Exception as _enq_err:
+        logging.getLogger("bridge.pipeline").warning("[ENQUEUE full] fail: %s", _enq_err)
     threading.Thread(
         target=_auto_process_resume,
         args=(candidate_id, row[0]),
@@ -13329,7 +13434,8 @@ async def admin_db_stats(request: Request):
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
     conn.execute("PRAGMA busy_timeout = 3000")
     try:
-        tables = ["candidates", "jobs", "client_inquiries", "interviews", "file_uploads"]
+        tables = ["candidates", "jobs", "client_inquiries", "interviews", "file_uploads",
+                  "job_queue", "pipeline_events"]
         stats = {}
         for t in tables:
             try:
@@ -13338,6 +13444,106 @@ async def admin_db_stats(request: Request):
             except Exception:
                 stats[t] = -1  # 테이블 없음
         return ok(data=stats, message="DB 통계")
+    finally:
+        conn.close()
+
+
+# ── Resume Pipeline v2.0 대시보드 API ────────────────────────────────────
+@app.get("/api/admin/pipeline/stats", tags=["admin"])
+async def admin_pipeline_stats(request: Request):
+    """파이프라인 큐 상태 + 후보자 cv_processed_status 분포."""
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import get_queue_stats  # type: ignore
+        q_stats = get_queue_stats()
+    except Exception as e:
+        q_stats = {"error": str(e)}
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    try:
+        try:
+            cand_rows = conn.execute(
+                "SELECT cv_processed_status, COUNT(*) FROM candidates "
+                "WHERE status != 'Deleted' GROUP BY cv_processed_status"
+            ).fetchall()
+            cand_stats = {(r[0] or "null"): r[1] for r in cand_rows}
+        except Exception:
+            cand_stats = {}
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM candidates WHERE status != 'Deleted'").fetchone()[0]
+        except Exception:
+            total = 0
+        try:
+            done = conn.execute(
+                "SELECT COUNT(*) FROM candidates WHERE status != 'Deleted' "
+                "AND cv_processed_status = 'done' AND cv_processed_s3_key IS NOT NULL"
+            ).fetchone()[0]
+        except Exception:
+            done = 0
+    finally:
+        conn.close()
+    success_rate = (done / total * 100) if total else 0
+    return ok(data={
+        "queue": q_stats,
+        "candidates_by_status": cand_stats,
+        "total_candidates": total,
+        "processed_done": done,
+        "success_rate_pct": round(success_rate, 2),
+    })
+
+
+@app.get("/api/admin/pipeline/dlq", tags=["admin"])
+async def admin_pipeline_dlq(request: Request, limit: int = 50):
+    """DLQ 작업 목록 (수동 개입 필요)."""
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import list_dlq_jobs  # type: ignore
+        jobs = list_dlq_jobs(limit=min(max(limit, 1), 200))
+        return ok(data={"dlq_jobs": jobs, "count": len(jobs)})
+    except Exception as e:
+        raise HTTPException(500, f"DLQ 조회 실패: {e}")
+
+
+@app.post("/api/admin/pipeline/dlq/{job_id}/requeue", tags=["admin"])
+async def admin_pipeline_requeue(request: Request, job_id: int):
+    """DLQ 작업 재큐잉."""
+    _check_admin(request)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from tools.pipeline_v2 import requeue_dlq_job  # type: ignore
+        ok_flag = requeue_dlq_job(job_id)
+        if not ok_flag:
+            raise HTTPException(404, f"Job {job_id} not in DLQ")
+        return ok(message=f"Job {job_id} 재큐잉 완료")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"재큐잉 실패: {e}")
+
+
+@app.get("/api/admin/pipeline/events", tags=["admin"])
+async def admin_pipeline_events(request: Request, limit: int = 100, candidate_id: Optional[str] = None):
+    """파이프라인 이벤트 로그 조회."""
+    _check_admin(request)
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 3000")
+    conn.row_factory = sqlite3.Row
+    try:
+        safe_limit = min(max(limit, 1), 500)
+        if candidate_id:
+            rows = conn.execute(
+                "SELECT * FROM pipeline_events WHERE candidate_id = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (candidate_id, safe_limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM pipeline_events ORDER BY id DESC LIMIT ?",
+                (safe_limit,),
+            ).fetchall()
+        return ok(data={"events": [dict(r) for r in rows], "count": len(rows)})
     finally:
         conn.close()
 
