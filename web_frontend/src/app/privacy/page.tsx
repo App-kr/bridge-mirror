@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 export default function PrivacyPage() {
   return (
-    <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-14">
+    <div className="max-w-[860px] mx-auto px-4 sm:px-6 py-12 text-[#1d1d1f]">
 
       {/* Header */}
       <div className="mb-10">
@@ -117,7 +117,9 @@ export default function PrivacyPage() {
         <span>대표: Scarlett</span>
         <span>bridgejob.co.kr</span>
         <span><a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-600">bridgejobkr@gmail.com</a></span>
-        <span><Link href="/terms" className="underline hover:text-gray-600">Terms of Use</Link></span>
+        <span><Link href="/terms" className="underline hover:text-gray-600">이용약관</Link></span>
+        <span><Link href="/fees" className="underline hover:text-gray-600">요금안내</Link></span>
+        <span><Link href="/contact" className="underline hover:text-gray-600">문의하기</Link></span>
       </div>
 
     </div>

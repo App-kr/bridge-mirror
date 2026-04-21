@@ -72,8 +72,10 @@ export default function Footer() {
               </Link>
             ))}
             <span>|</span>
-            <Link href="/terms" className="hover:text-[#1d1d1f] transition-colors">Terms of Use</Link>
-            <Link href="/privacy" className="hover:text-[#1d1d1f] transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-[#1d1d1f] transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-[#1d1d1f] transition-colors">Privacy</Link>
+            <Link href="/fees" className="hover:text-[#1d1d1f] transition-colors">Fees</Link>
+            <Link href="/contact" className="hover:text-[#1d1d1f] transition-colors">Contact</Link>
             <Link href={cta1.href} className="hover:text-[#1d1d1f] transition-colors">{cta1.label}</Link>
             <Link href={cta2.href} className="hover:text-[#1d1d1f] transition-colors">{cta2.label}</Link>
           </div>

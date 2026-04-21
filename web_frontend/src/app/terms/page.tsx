@@ -130,18 +130,17 @@ export default function TermsPage() {
           in the <strong>Supply Contract (인력 공급 계약서)</strong> issued upon hiring confirmation.
         </p>
         <p className="mt-2">
-          Standard payment structure: partial fee advance upon contract execution; balance due on
-          the teacher&rsquo;s employment start date. Details vary by contract.
+          The full fee schedule, payment terms, and refund conditions are publicly disclosed at{' '}
+          <Link href="/fees" className="underline text-blue-700 hover:text-blue-900">
+            /fees (요금안내)
+          </Link>
+          {' '}in accordance with the Korean Employment Security Act (직업안정법) Article 19
+          and Ministry of Employment and Labor Notice No. 2017-22.
         </p>
-
-        <p className="mt-3 text-[13px] text-gray-600 leading-relaxed">
-          Please note that a placement fee applies as soon as a teacher begins work — even for a
-          single day. Our fee represents compensation for the act of matching itself, not for
-          ongoing management. Once employment has commenced, the service is considered rendered
-          and the fee becomes due for any days worked. If a teacher does not meet your expectations,
-          you are of course free to end the arrangement on the day. However, if you choose to
-          continue using the teacher while seeking a replacement without formally ending the
-          contract, we are unfortunately unable to provide further assistance in that situation.
+        <p className="mt-2 text-[13px] text-gray-600 leading-relaxed">
+          A placement fee applies once a teacher begins work — even for a single day — as our
+          fee represents compensation for the matching itself, not ongoing management. See{' '}
+          <Link href="/fees" className="underline hover:text-gray-900">/fees Article 5</Link> for details.
         </p>
       </Article>
 
@@ -252,6 +251,10 @@ export default function TermsPage() {
         <p>
           See also:{' '}
           <Link href="/privacy" className="underline hover:text-gray-600">Privacy Policy</Link>
+          {' · '}
+          <Link href="/fees" className="underline hover:text-gray-600">Fee Disclosure</Link>
+          {' · '}
+          <Link href="/contact" className="underline hover:text-gray-600">Contact</Link>
         </p>
         <p>These Terms are basic service guidelines only. The Supply Contract (인력 공급 계약서) constitutes the binding legal agreement.</p>
       </div>
