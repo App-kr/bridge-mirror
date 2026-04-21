@@ -134,29 +134,15 @@ export default function TermsPage() {
           the teacher&rsquo;s employment start date. Details vary by contract.
         </p>
 
-        <div className="mt-5 p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
-          <p className="font-semibold text-gray-800 text-sm">Fee Obligation — When a Placement Fee Applies</p>
-          <p className="text-sm text-gray-700 leading-relaxed">
-            A placement fee is incurred as soon as the teacher reports for work — even for a single
-            day. Our fee is not a management or supervision charge. It is compensation for the
-            act of matching: identifying a suitable candidate and facilitating the hire. Once
-            employment commences, the service has been rendered.
-          </p>
-          <ul className="text-sm text-gray-700 space-y-2 list-none">
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-0.5 shrink-0">•</span>
-              <span><strong>Right to dismiss:</strong> If the teacher does not meet expectations, you have the right to terminate the contract on that same day. This is entirely your decision as the employer.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-0.5 shrink-0">•</span>
-              <span><strong>Fee still applies:</strong> Any days already worked are subject to the placement fee, regardless of how the employment ends.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-red-400 mt-0.5 shrink-0">•</span>
-              <span><strong>Continued use without formal dismissal:</strong> If you continue using the teacher while simultaneously seeking a replacement — without issuing a formal termination — BRIDGE is unable to assist further, and the full placement fee remains due.</span>
-            </li>
-          </ul>
-        </div>
+        <p className="mt-3 text-[13px] text-gray-600 leading-relaxed">
+          Please note that a placement fee applies as soon as a teacher begins work — even for a
+          single day. Our fee represents compensation for the act of matching itself, not for
+          ongoing management. Once employment has commenced, the service is considered rendered
+          and the fee becomes due for any days worked. If a teacher does not meet your expectations,
+          you are of course free to end the arrangement on the day. However, if you choose to
+          continue using the teacher while seeking a replacement without formally ending the
+          contract, we are unfortunately unable to provide further assistance in that situation.
+        </p>
       </Article>
 
       <Article num="6." title="No Direct Contact Rule (직접 연락 엄금)">
