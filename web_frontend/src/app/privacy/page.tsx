@@ -107,7 +107,7 @@ export default function PrivacyPage() {
       </div>
 
       {/* Closing */}
-      <p className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-400 leading-relaxed">
+      <p className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-600 leading-relaxed">
         BRIDGE는 원어민 강사 채용에 특화된 독자적인 매칭 시스템(특허출원번호 제10-2024-0110155호)을 운영합니다.
       </p>
 
