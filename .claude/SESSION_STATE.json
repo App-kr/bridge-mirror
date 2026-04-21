@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-04-22 08:06:53",
+  "last_updated": "2026-04-22 08:18:59",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base\" && git add \"web_frontend/src/app/community/[board]/page.tsx\" && git commit -m \"fix: community board 빈 결과일 때도 JSON 폴백 작동하도록 수정\" && git push \"https://koreadobby:$(gh auth ",
+  "last_command": "cd \"Q:/Claudework/matjokdo_safe\" && python -c \"\nimport shutil, os\nfrom pathlib import Path\n\nSRC = Path('Q:/Claudework/matjokdo_safe')\nDST = Path('K:/matjokdo_setup/app')\n\n# 제외할 패턴\nSKIP_DIRS  = {'.chro",
   "git_head": "1027cbc",
   "modified_files": [
     "Q:\\Claudework\\bridge base\\api_server.py",
@@ -15,7 +15,10 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\privacy\\page.tsx",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\community\\[board]\\page.tsx"
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\community\\[board]\\page.tsx",
+    "K:\\matjokdo_setup\\requirements.txt",
+    "K:\\matjokdo_setup\\setup.bat",
+    "K:\\matjokdo_setup\\README_설치방법.txt"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-21 기준)",
   "git_changed": [
@@ -598,9 +601,4 @@
     "wealth_manager/src/app/api/reservoir/route.ts",
     "wealth_manager/src/app/api/side-income/route.ts",
     "wealth_manager/src/app/api/transactions/route.ts",
-    "wealth_manager/src/app/layout.tsx",
-    "wealth_manager/src/lib/db.ts",
-    "wealth_manager/wealth.db-shm",
-    "wealth_manager/wealth.db-wal"
-  ]
-}
+    "wealth
