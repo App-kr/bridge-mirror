@@ -254,7 +254,11 @@ function IntroduceMailContent() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || '발송 실패')
       setSendResult(data.data)
-      showToast(`${data.data.sent}건 발송 완료`)
+      const skippedMsg = data.data.skipped_duplicate
+        ? ` (중복 ${data.data.skipped_duplicate}건 제외)` : ''
+      showToast(`${data.data.sent}건 발송 완료${skippedMsg}`)
+      // 발송 성공 후 선택 초기화 — 실수 재발송 방지
+      setSelectedIds(new Set())
       loadLog()
     } catch (e) {
       const msg = e instanceof Error ? e.message : '발송 실패'
@@ -443,14 +447,17 @@ function IntroduceMailContent() {
 
           <FieldLabel>CV 링크 유효기간: {expiryDays}일</FieldLabel>
           <input
-            type="range" min={3} max={30} step={1}
-            value={expiryDays}
+            type="range" min={1} max={7} step={1}
+            value={Math.min(expiryDays, 7)}
             onChange={e => setExpiryDays(Number(e.target.value))}
             style={{ width: '100%', marginBottom: 2 }}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9CA3AF', marginBottom: 12 }}>
-            <span>3일</span><span>30일</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9CA3AF', marginBottom: 4 }}>
+            <span>1일</span><span>7일 (AWS S3 max)</span>
           </div>
+          <p style={{ fontSize: 10, color: '#9CA3AF', margin: '0 0 12px' }}>
+            AWS S3 presigned URL은 최대 7일까지 유효합니다.
+          </p>
 
           <FieldLabel>추가 메시지 (선택)</FieldLabel>
           <textarea

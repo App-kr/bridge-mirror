@@ -11646,28 +11646,45 @@ async def employers_for_mail(
 
 
 def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
-    """강사 1명의 소개 HTML 블록 생성 (PII 없음 -- 번호·국적·조건만)."""
+    """강사 1명의 소개 HTML 블록 생성 (PII 최소화 -- 번호·국적·조건만).
+    v2.2: T3v1 암호화 필드 복호화 + XSS escape (nat/gender/loc 암호문 표시 버그 수정).
+    """
+    import html as _html
+    # 암호화 필드 복호화 — nationality_plain 전부 비어있어 nationality(T3v1) fallback 필요
     snum    = cand.get("sheet_number") or ""
-    nat     = cand.get("nationality_plain") or cand.get("nationality") or ""
-    gender  = cand.get("gender") or ""
-    loc     = (cand.get("current_location") or "").strip()
-    # 국내/해외 이모지
-    emoji   = "😎" if loc and ("한국" in loc or "Korea" in loc.title() or "Seoul" in loc or "서울" in loc) else "✈️"
-    start   = cand.get("start_date") or ""
-    target  = cand.get("target_age") or cand.get("target") or ""
-    exp     = cand.get("experience") or cand.get("korea_experience") or ""
-    area    = cand.get("area_prefs") or ""
-    housing = cand.get("housing") or ""
-    summary = cand.get("talent_summary") or ""
+    nat_raw = cand.get("nationality_plain") or cand.get("nationality") or ""
+    nat     = _safe_decrypt(nat_raw, "nationality") or ""
+    gen_raw = cand.get("gender") or ""
+    gender  = _safe_decrypt(gen_raw, "gender") or ""
+    loc_raw = (cand.get("current_location") or "").strip()
+    loc     = _safe_decrypt(loc_raw, "current_location") or ""
+    # 평문 값 -- escape 적용 (이메일 본문 XSS 방어)
+    snum    = _html.escape(str(snum))
+    nat     = _html.escape(str(nat))
+    gender  = _html.escape(str(gender))
+    # 국내/해외 이모지 -- 한국 도시 키워드 확장
+    _KR_KEYS = ("한국", "Korea", "korea", "KOREA", "Seoul", "서울",
+                "Busan", "부산", "Daegu", "대구", "Incheon", "인천",
+                "Gwangju", "광주", "Daejeon", "대전", "Ulsan", "울산",
+                "Gyeonggi", "경기", "Jeju", "제주", "Suwon", "수원")
+    emoji   = "😎" if loc and any(k in loc for k in _KR_KEYS) else "✈️"
+    start   = _html.escape(str(cand.get("start_date") or ""))
+    target  = _html.escape(str(cand.get("target_age") or cand.get("target") or ""))
+    exp     = _html.escape(str(cand.get("experience") or cand.get("korea_experience") or ""))
+    area    = _html.escape(str(cand.get("area_prefs") or ""))
+    housing = _html.escape(str(cand.get("housing") or ""))
+    summary = _html.escape(str(cand.get("talent_summary") or ""))
     star    = cand.get("talent_reference_star")
     star_str = ("★" * int(star) + "☆" * (5 - int(star)) + f" ({star}점)") if star else ""
 
     # presigned URL -- cv_processed_s3_key 우선, 없으면 원본 file_uploads 폴백
+    # AWS IAM User 방식: ExpiresIn 최대 604800초(7일) -- 초과 설정 시 AWS가 7일로 자동 제한
     cv_key  = cand.get("cv_processed_s3_key") or cand.get("fallback_cv_s3_key") or ""
     cv_link = ""
     if cv_key:
         try:
-            cv_link = s3_presigned_url(cv_key, expires=expiry_days * 86400)
+            _safe_expiry = max(1, min(int(expiry_days), 7))
+            cv_link = s3_presigned_url(cv_key, expires=_safe_expiry * 86400)
         except Exception:
             cv_link = ""
 
@@ -11862,27 +11879,74 @@ async def mail_introduce(request: Request):
         for cr in cand_rows:
             teacher_blocks += _build_teacher_html_block(dict(cr), expiry_days)
 
-        template_subject = "📢 BRIDGE 원어민 강사 소식 -- 국내/해외 프로필 확인하세요"
+        # 제목 -- 이모지 제거 (기업 메일 호환성 ↑) + 사용자 커스텀 지원
+        subj_custom = (data.get("subject") or "").strip()
+        template_subject = subj_custom or "[BRIDGE] 원어민 강사 프로필 소개"
         candidate_ids_str = _json_intro.dumps([str(c) for c in candidate_ids])
+
+        # 이메일 부분 마스킹 (로그 PII 최소화): abc123@domain.com -> abc***@domain.com
+        def _mask_email(e: str) -> str:
+            if not e or "@" not in e: return ""
+            local, dom = e.rsplit("@", 1)
+            if len(local) <= 3: return local[0:1] + "***@" + dom
+            return local[:3] + "***@" + dom
+
+        # 중복 발송 방지 -- 7일 내 같은 (candidate_ids, email_masked) 조합 스킵
+        try:
+            recent_logs = conn.execute(
+                """SELECT to_email FROM mail_introduce_log
+                   WHERE candidate_ids=? AND status='sent'
+                     AND sent_at > datetime('now', '-7 days')""",
+                (candidate_ids_str,),
+            ).fetchall()
+            _recent_emails = {r[0] for r in recent_logs}
+        except Exception:
+            _recent_emails = set()
 
         sent = 0
         failed = 0
+        skipped_dup = 0
         errors: list = []
 
-        for emp in emp_rows:
-            emp_email   = decrypt_field((emp["email"] or "").strip(), "email")
-            emp_name    = decrypt_field(emp["school_name"] or emp["contact_name"] or "", "school_name")
-            emp_contact = decrypt_field(emp["contact_name"] or "", "contact_name")
+        # SMTP 연결 1회 수립 후 루프 내 재사용 (인증/핸드셰이크 비용 최소화)
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        try:
+            srv = smtplib.SMTP(cfg["host"], cfg["port"], timeout=20)
+            srv.ehlo()
+            srv.starttls()
+            srv.login(cfg["user"], cfg["password"])
+        except Exception as _conn_e:
+            raise HTTPException(503, f"SMTP 연결 실패: {type(_conn_e).__name__}")
 
-            if not emp_email or _is_email_blacklisted(emp_email):
-                failed += 1
-                errors.append({"email": emp_email, "error": "블랙리스트 또는 빈 이메일"})
-                continue
+        try:
+            for emp in emp_rows:
+                emp_email   = decrypt_field((emp["email"] or "").strip(), "email")
+                emp_name    = decrypt_field(emp["school_name"] or emp["contact_name"] or "", "school_name")
+                emp_contact = decrypt_field(emp["contact_name"] or "", "contact_name")
 
-            # 본문 조립 (수신자별 이름 치환)
-            greeting = f"<p>안녕하세요, <strong>{emp_name}</strong> 담당자님.</p>" if emp_name else "<p>안녕하세요.</p>"
-            custom_block = f"<p>{custom_msg}</p>" if custom_msg else ""
-            body_html = f"""
+                if not emp_email or _is_email_blacklisted(emp_email):
+                    failed += 1
+                    errors.append({"email": _mask_email(emp_email), "error": "블랙리스트 또는 빈 이메일"})
+                    continue
+
+                # 중복 발송 체크 (마스킹된 이메일로 비교)
+                emp_email_masked = _mask_email(emp_email)
+                if emp_email_masked in _recent_emails:
+                    skipped_dup += 1
+                    continue
+
+                # XSS escape (수신자 메타데이터 + 커스텀 메시지)
+                import html as _html
+                safe_emp_name = _html.escape(emp_name or "")
+                safe_custom   = _html.escape(custom_msg) if custom_msg else ""
+
+                # 본문 조립 (수신자별 이름 치환)
+                greeting = f"<p>안녕하세요, <strong>{safe_emp_name}</strong> 담당자님.</p>" if safe_emp_name else "<p>안녕하세요.</p>"
+                # custom_msg는 줄바꿈만 보존
+                custom_block = f"<p>{safe_custom.replace(chr(10), '<br/>')}</p>" if safe_custom else ""
+                body_html = f"""
 <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto">
 {greeting}
 <p>BRIDGE 원어민 강사 프로필을 공유드립니다.<br/>
@@ -11892,55 +11956,53 @@ Start date and preferences noted. Reference provided for review only.</p>
 {teacher_blocks}
 <hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
 <p style="font-size:11px;color:#999">
-💡 If you are not the intended recipient or no longer in this role,
+If you are not the intended recipient or no longer in this role,
 please notify us and delete this email.
 Additionally, let us know if any contact should be removed due to a change in management.
 </p>
 <p style="font-size:11px;color:#bbb">BRIDGE Recruitment &nbsp;|&nbsp; bridgejob.co.kr</p>
 </div>"""
 
-            try:
-                import smtplib
-                from email.mime.multipart import MIMEMultipart
-                from email.mime.text import MIMEText
-                msg = MIMEMultipart("alternative")
-                msg["From"]    = cfg["user"]
-                msg["To"]      = emp_email
-                msg["Subject"] = template_subject
-
-                msg.attach(MIMEText(body_html, "html", "utf-8"))
-
-                with smtplib.SMTP(cfg["host"], cfg["port"]) as srv:
-                    srv.ehlo()
-                    srv.starttls()
-                    srv.login(cfg["user"], cfg["password"])
+                try:
+                    msg = MIMEMultipart("alternative")
+                    msg["From"]    = cfg["user"]
+                    msg["To"]      = emp_email
+                    msg["Subject"] = template_subject
+                    msg.attach(MIMEText(body_html, "html", "utf-8"))
                     srv.send_message(msg)
 
-                # 발송 로그
-                conn.execute(
-                    """INSERT INTO mail_introduce_log
-                       (candidate_ids, to_email, school_name, contact_name, subject, status, sender_email, link_expiry_days)
-                       VALUES (?,?,?,?,?,?,?,?)""",
-                    (candidate_ids_str, emp_email, emp_name, emp_contact,
-                     template_subject, "sent", cfg["user"], expiry_days),
-                )
-                conn.commit()
-                sent += 1
+                    # 발송 로그 -- to_email 부분 마스킹 저장 (PII 최소화)
+                    conn.execute(
+                        """INSERT INTO mail_introduce_log
+                           (candidate_ids, to_email, school_name, contact_name, subject, status, sender_email, link_expiry_days)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (candidate_ids_str, emp_email_masked, emp_name, emp_contact,
+                         template_subject, "sent", cfg["user"], expiry_days),
+                    )
+                    conn.commit()
+                    sent += 1
 
-            except Exception as _smtp_e:
-                failed += 1
-                errors.append({"email": emp_email, "error": str(_smtp_e)[:120]})
-                conn.execute(
-                    """INSERT INTO mail_introduce_log
-                       (candidate_ids, to_email, school_name, contact_name, subject, status, error, sender_email, link_expiry_days)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (candidate_ids_str, emp_email, emp_name, emp_contact,
-                     template_subject, "failed", str(_smtp_e)[:200], cfg["user"], expiry_days),
-                )
-                conn.commit()
+                except Exception as _smtp_e:
+                    failed += 1
+                    errors.append({"email": emp_email_masked, "error": str(_smtp_e)[:120]})
+                    conn.execute(
+                        """INSERT INTO mail_introduce_log
+                           (candidate_ids, to_email, school_name, contact_name, subject, status, error, sender_email, link_expiry_days)
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (candidate_ids_str, emp_email_masked, emp_name, emp_contact,
+                         template_subject, "failed", str(_smtp_e)[:200], cfg["user"], expiry_days),
+                    )
+                    conn.commit()
+        finally:
+            try: srv.quit()
+            except Exception: pass
 
-        return ok(data={"sent": sent, "failed": failed, "total_employers": len(emp_rows),
-                         "candidate_count": len(cand_rows), "errors": errors[:10]})
+        return ok(data={
+            "sent": sent, "failed": failed, "skipped_duplicate": skipped_dup,
+            "total_employers": len(emp_rows),
+            "candidate_count": len(cand_rows),
+            "errors": errors[:50],
+        })
     finally:
         conn.close()
 
