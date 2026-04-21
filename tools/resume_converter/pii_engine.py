@@ -649,6 +649,16 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         flags=re.IGNORECASE | re.MULTILINE,
     )
 
+    # ── CV 섹터/업종 라벨 제거 ─────────────────────────────────────────────
+    # "Business or sector: English Academy" / "Industry: Education" 등 잔류 라벨
+    cleaned = re.sub(
+        r"^[^\n]*\b(?:Business\s+or\s+sector|Industry|Sector|Field\s+of\s+work|"
+        r"Employment\s+type|Contract\s+type|Job\s+type)\s*:.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
     # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 

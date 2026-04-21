@@ -249,6 +249,18 @@ def text_to_pdf_bytes(
         r"Profile|Career\s+objective|Qualifications?|[A-Z][A-Z\s&/\-]{3,})\s*$"
     )
 
+    # 직업 날짜 범위 감지 패턴 — 새 경력 항목 앞 여백 삽입용
+    # "28 Feb 19 - 28 Feb 20" / "4 Sep 23 - 10 Sep 24" / "2019 - 2022" / "Feb 2019 - Mar 2021"
+    _DATE_RANGE_RE = re.compile(
+        r"^\s*(?:\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{2,4}"
+        r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4}"
+        r"|\d{4})\s*[-–—]\s*"
+        r"(?:\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{2,4}"
+        r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4}"
+        r"|\d{4}|present|current|now)\b",
+        re.IGNORECASE,
+    )
+
     c.setFont(body_font, font_size)
 
     # 1페이지: 사진+ID 삽입
@@ -278,7 +290,25 @@ def text_to_pdf_bytes(
             blank = 0
             lines.append(ln)
 
-    for raw_line in lines:
+    # ── 직업 항목 앞 자동 여백 마킹 ─────────────────────────────────────────
+    # 날짜 범위 줄이 나오면 → 그 앞 1~2줄 (직책/회사명) 앞에 extra_space 표시
+    _extra_space: set[int] = set()
+    for _i, _ln in enumerate(lines):
+        if _DATE_RANGE_RE.match(_ln.strip()):
+            # 날짜 줄 자체에도 마킹 (앞에 공간)
+            _extra_space.add(_i)
+            # 빈 줄 건너뛰며 바로 위 줄들 마킹 (회사명·직책명)
+            _j = _i - 1
+            _steps = 0
+            while _j >= 0 and _steps < 3:
+                if lines[_j].strip():
+                    _extra_space.add(_j)
+                    _steps += 1
+                    if _steps >= 2:
+                        break
+                _j -= 1
+
+    for _idx, raw_line in enumerate(lines):
         stripped = raw_line.strip()
 
         # 빈 줄 처리
@@ -287,6 +317,12 @@ def text_to_pdf_bytes(
             if y < margin:
                 y = _new_page()
             continue
+
+        # 직업 항목 앞 자동 여백 (날짜 범위 앞 1~2줄 포함)
+        if _idx in _extra_space and _idx > 0:
+            y -= line_h * 0.85
+            if y < margin:
+                y = _new_page()
 
         # 헤더 여부 판단
         is_hdr = bool(_HDR_RE.match(stripped))
