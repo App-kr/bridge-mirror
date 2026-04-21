@@ -16,15 +16,14 @@ export default function FeesPage() {
         <h1 className="text-3xl font-bold mb-2">요금안내</h1>
         <p className="text-sm text-gray-500">Fee Disclosure &nbsp;|&nbsp; 시행일: 2021년 06월</p>
         <p className="mt-4 text-sm text-gray-600 leading-relaxed">
-          본 요금표는 <strong>「직업안정법」 제19조</strong> 및{' '}
-          <strong>「고용노동부고시 제2017-22호(국내 유료직업소개요금 등 고시)」</strong>에 근거함.
+          본 요금표는 「직업안정법」 제19조 및 「고용노동부고시 제2017-22호(국내 유료직업소개요금 등 고시)」에 근거함.
           모든 금액은 표준 절차 기준으로 업무에 따라 추가 요금이 발생할 수 있습니다.
         </p>
       </div>
 
       <div className="space-y-10 text-sm text-gray-700 leading-7">
 
-        <Article num="제1조" title="법정 수수료 상한">
+        <Article num="제1조" title="법정 수수료 안내">
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-[13px] border-collapse border border-gray-200 rounded-lg overflow-hidden">
               <thead>
@@ -37,13 +36,13 @@ export default function FeesPage() {
               <tbody className="divide-y divide-gray-100">
                 <tr>
                   <td className="border border-gray-200 px-3 py-2 font-semibold text-gray-800">구인자 부담</td>
-                  <td className="border border-gray-200 px-3 py-2">고용기간 중 지급받기로 한 임금의 <strong>100분의 30 이하</strong></td>
-                  <td className="border border-gray-200 px-3 py-2">3개월간 지급받기로 한 임금의 <strong>100분의 30 이하</strong></td>
+                  <td className="border border-gray-200 px-3 py-2">고용기간 중 지급받기로 한 임금의 100분의 30 이하</strong></td>
+                  <td className="border border-gray-200 px-3 py-2">3개월간 지급받기로 한 임금의 100분의 30 이하</strong></td>
                 </tr>
                 <tr>
                   <td className="border border-gray-200 px-3 py-2 font-semibold text-gray-800">구직자 부담</td>
-                  <td className="border border-gray-200 px-3 py-2">고용기간 중 지급받기로 한 임금의 <strong>100분의 1 이하</strong></td>
-                  <td className="border border-gray-200 px-3 py-2">3개월간 지급받기로 한 임금의 <strong>100분의 1 이하</strong></td>
+                  <td className="border border-gray-200 px-3 py-2">고용기간 중 지급받기로 한 임금의 100분의 1 이하</strong></td>
+                  <td className="border border-gray-200 px-3 py-2">3개월간 지급받기로 한 임금의 100분의 1 이하</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -106,12 +105,11 @@ export default function FeesPage() {
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">학원 · 유치원</td>
                   <td className="border border-gray-200 px-3 py-2">
-                    계약 체결 시 <strong>50%</strong> / 근로개시일(트레이닝 포함) <strong>50%</strong> / 또는 계약 체결 시 <strong>100%</strong>
-                  </td>
+                    계약 체결 시 50%</strong> / 근로개시일(트레이닝 포함) 50%</strong> / 또는 계약 체결 시 100%                  </td>
                 </tr>
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">학교 · 공공기관</td>
-                  <td className="border border-gray-200 px-3 py-2">근로개시일 <strong>100%</strong> 또는 사전 계약 협의</td>
+                  <td className="border border-gray-200 px-3 py-2">근로개시일 100%</strong> 또는 사전 계약 협의</td>
                 </tr>
               </tbody>
             </table>
@@ -120,7 +118,7 @@ export default function FeesPage() {
 
         <Article num="제4조" title="알선 완료의 기준">
           <ol className="list-decimal pl-5 space-y-2">
-            <li>소개요금은 인력 관리 비용이 아니라, 적합한 인력을 <strong>알선한 행위</strong>에 대한 대가이다.</li>
+            <li>소개요금은 인력 관리 비용이 아니라, 적합한 인력을 알선한 행위</strong>에 대한 대가이다.</li>
             <li>인력이 현장에 배치되어 업무를 시작한 순간부터 알선 서비스의 효력이 발생하며, 이에 따른 수수료 지불 의무가 생긴다.</li>
             <li>근무 당일이라도 계약 해지(해고) 권리는 구인기관에 있으나, 이미 근무가 이루어진 일자에 대한 소개요금은 지급 대상이다.</li>
             <li>해고 없이 동일 인력을 계속 사용하면서 대체 인력이나 환불을 별도로 요청하는 경우는 서비스 지원 대상에서 제외된다.</li>
