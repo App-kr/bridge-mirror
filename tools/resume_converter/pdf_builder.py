@@ -119,14 +119,16 @@ def build_filename(
 # ── 사진 오버레이 유틸 ────────────────────────────────────────────────────────
 def _draw_photo_and_id(
     c,
-    candidate_id: str,
-    photo_bytes:  bytes | None,
-    page_w:       float,
-    page_h:       float,
-    margin:       float,
+    candidate_id:  str,
+    photo_bytes:   bytes | None,
+    page_w:        float,
+    page_h:        float,
+    margin:        float,
+    location_hint: str = "",
 ) -> float:
     """
     첫 페이지 우상단에 사진 + 좌상단에 ID 번호를 그린다.
+    location_hint 제공 시 ID 아래에 작게 표시.
     반환값: 사진 하단 y좌표 (본문 시작 y 계산에 사용).
     """
     import os
@@ -163,6 +165,13 @@ def _draw_photo_and_id(
     c.setFont("Helvetica-Bold", 28)
     c.setFillColorRGB(0.2, 0.2, 0.2)
     c.drawString(margin, page_h - margin - 0.9 * cm, f"#{candidate_id}")
+
+    # 위치 힌트 (ID 아래 — 작게)
+    if location_hint:
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.45, 0.45, 0.45)
+        c.drawString(margin, page_h - margin - 1.6 * cm, location_hint)
+
     c.setFillColorRGB(0, 0, 0)
 
     # 구분선 (사진 하단 기준)
@@ -261,12 +270,51 @@ def text_to_pdf_bytes(
         re.IGNORECASE,
     )
 
+    # ── 텍스트 전처리: 이름/아이콘/중복 헤더 제거 + 위치 힌트 추출 ──────────────
+    # 1) 아이콘·기호만 있는 줄 제거 (Europass CV 장식 문자 등)
+    text = re.sub(r"^(?!.*[a-zA-Z가-힣0-9])[^\n]*$", "", text, flags=re.MULTILINE)
+    # 2) "Currently in South Korea" 추출 → ID 아래 표시용, 본문에서 제거
+    _LOC_RE = re.compile(
+        r"^[^\n]*(?:currently\s+(?:in|based\s+in|living\s+in)\s+(?:South\s+)?Korea"
+        r"|(?:South\s+)?Korea[^\n]*currently)[^\n]*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    _location_hint = ""
+    _loc_m = _LOC_RE.search(text)
+    if _loc_m:
+        _raw_loc = _loc_m.group(0).strip()
+        # 짧으면 그대로, 길면 "Currently in South Korea" 로 정규화
+        if len(_raw_loc) <= 40:
+            _location_hint = _raw_loc
+        else:
+            _location_hint = "Currently in South Korea"
+        text = text[:_loc_m.start()] + text[_loc_m.end():]
+    # 3) 문서 첫 15줄 안의 이름 단독 줄 제거
+    #    (영문 1~3단어, 대문자 시작, 문장부호·동사 없음 → 이름으로 판단)
+    _NAME_LINE_RE = re.compile(
+        r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s*$"
+    )
+    _head = text.split("\n")
+    _first_hdr = next(
+        (i for i, l in enumerate(_head) if re.match(
+            r"^\s*(?:Summary|Profile|Professional|Work|Education|Skills|Certifications|"
+            r"Achievements|Languages|References|EXPERIENCE|EDUCATION)", l, re.IGNORECASE
+        )), 15
+    )
+    for _k in range(min(_first_hdr, 15, len(_head))):
+        if _NAME_LINE_RE.match(_head[_k].strip()):
+            _head[_k] = ""
+    text = "\n".join(_head)
+    # 4) 정리 후 연속 빈 줄 3개 이상 → 2개로
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
     c.setFont(body_font, font_size)
 
     # 1페이지: 사진+ID 삽입
     if photo_bytes or candidate_id:
         content_start_y = _draw_photo_and_id(
-            c, candidate_id, photo_bytes, page_w, page_h, margin
+            c, candidate_id, photo_bytes, page_w, page_h, margin,
+            location_hint=_location_hint,
         )
         y = content_start_y - line_h * 0.5
     elif title:

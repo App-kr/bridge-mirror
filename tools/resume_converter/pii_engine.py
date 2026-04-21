@@ -659,6 +659,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         flags=re.IGNORECASE | re.MULTILINE,
     )
 
+    # ── 아이콘/기호 전용 줄 제거 (Europass 등 CV 장식 문자) ──────────────────
+    # 알파벳·한글·숫자가 전혀 없는 줄 → 장식 아이콘으로 판단, 제거
+    cleaned = re.sub(r"^(?!.*[a-zA-Z가-힣0-9])[^\n]*$", "", cleaned, flags=re.MULTILINE)
+
     # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
