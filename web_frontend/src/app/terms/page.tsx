@@ -77,19 +77,18 @@ export default function TermsPage() {
         </ul>
       </Article>
 
-      <Article num="3." title="Hiring Process">
-        <p>The standard BRIDGE placement process is as follows:</p>
+      <Article num="3." title="Job Search Process">
+        <p>The standard BRIDGE placement process for teacher candidates is as follows:</p>
         <ol className="mt-3 space-y-2">
           {[
-            'School submits hiring contract details → Business registration verified',
-            'Teacher profile reviewed using 4-digit Teacher ID',
-            'Interview request issued and teacher's availability confirmed',
-            'Online interview conducted; in-person interview where available',
-            'Contract offer issued and executed → Mutual reference checks conducted',
-            'Employer fee payment (partial or full)',
-            'Placement confirmed and teacher assigned',
-            'Employment start date → Balance payment (if applicable)',
-            'Employment registration and final completion',
+            'Resume and application form submitted → Information verified for accuracy',
+            'Online meeting with your assigned recruiter; reference checks conducted',
+            'Profile introduced to prospective employers; listing posted on the job board',
+            'Online and/or in-person interviews arranged between candidate and employer',
+            'Employer background check; contract offer reviewed; accommodation confirmed',
+            'Contract finalised; training start date coordinated',
+            'Relocation assisted; teacher information registered',
+            'Employment begins',
           ].map((step, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center mt-0.5">
