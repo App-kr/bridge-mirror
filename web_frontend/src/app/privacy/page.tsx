@@ -83,8 +83,7 @@ export default function PrivacyPage() {
             <li>대검찰청 사이버수사과: (국번없이) 1301, www.spo.go.kr</li>
             <li>경찰청 사이버안전국: (국번없이) 182, cyberbureau.police.go.kr</li>
           </ul>
-          <p className="mt-4">개인정보 처리에 관한 문의, 불만, 피해구제 등은 아래 개인정보보호책임자에게 연락하시기 바랍니다.</p>
-          <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-0.5 text-gray-600">
+<div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-0.5 text-gray-600">
             <p>성명: 김혜신 &nbsp;·&nbsp; 직책: BRIDGE 보안관리자</p>
             <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-900">bridgejobkr@gmail.com</a></p>
           </div>
