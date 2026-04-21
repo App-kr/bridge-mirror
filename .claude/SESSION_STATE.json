@@ -1,12 +1,9 @@
 {
-  "last_updated": "2026-04-21 10:23:29",
+  "last_updated": "2026-04-21 14:02:56",
   "last_tool": "Bash",
-  "last_command": "ls \"Q:/Claudework/bridge base/web_frontend/src/app/inquiry/\" 2>&1 | head",
+  "last_command": "cd \"Q:/Claudework/bridge base\" && git status --short 2>&1 | head -20",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\scripts\\_query_task_tmp.bat",
-    "Q:\\Claudework\\bridge base\\scripts\\_test_run_task.bat",
-    "Q:\\Claudework\\bridge base\\tools\\pipeline_failure_watcher.py",
     "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\project_bridge_base.md",
     "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\MEMORY.md",
     "Q:\\Claudework\\matjokdo_safe\\main.py",
@@ -23,7 +20,10 @@
     "Q:\\Claudework\\bridge base\\ad_only\\export_esl_cafe.py",
     "Q:\\Claudework\\bridge base\\tools\\doc_processor.py",
     "Q:\\Claudework\\bridge base\\tools\\resume_converter\\pipeline.py",
-    "Q:\\Claudework\\bridge base\\api_server.py"
+    "Q:\\Claudework\\bridge base\\api_server.py",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\terms\\page.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\privacy\\layout.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\globals.css"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-20 기준)",
   "git_changed": [
