@@ -41,6 +41,19 @@ export default function PrivacyPage() {
         <p className="mt-2">단, 법령에 따라 보존이 필요한 정보에 대한 삭제 요청은 거절될 수 있으며, 이 경우 해당 사유를 안내해 드립니다.</p>
       </Section>
 
+      <Section title="개인정보의 안전성 확보 조치">
+        <p>개인정보를 취급하는 직원을 지정하고 담당자에 한정시켜 최소화하여 개인정보를 관리하는 대책을 시행하고 있습니다.</p>
+        <p className="mt-2">개인정보의 안전한 처리를 위하여 내부관리계획을 수립하고 시행하고 있습니다.</p>
+        <p className="mt-2">해킹이나 컴퓨터 바이러스 등에 의한 개인정보 유출 및 훼손을 막기 위하여 보안프로그램을 설치하고 주기적인 갱신·점검을 하고 있습니다.</p>
+        <p className="mt-2">이용자의 개인정보 중 중요한 데이터는 암호화하여 저장 및 관리되고 있으며, 파일 전송 시에도 별도의 보안 기능을 사용하고 있습니다.</p>
+        <p className="mt-2">개인정보를 처리하는 시스템에 대한 접근권한을 최소화하고 외부로부터의 무단 접근을 통제하고 있습니다.</p>
+      </Section>
+
+      <Section title="쿠키(Cookie) 운용">
+        <p>BRIDGE는 이용자에게 적합한 서비스를 제공하기 위해 쿠키를 사용합니다. 쿠키는 웹사이트 서버가 이용자의 브라우저에 전송하는 소량의 정보로, 로그인 유지 및 보안 목적으로 활용됩니다.</p>
+        <p className="mt-2">이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있습니다. 단, 쿠키를 거부할 경우 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
+      </Section>
+
       <Section title="개인정보보호책임자">
         <p>성명: Scarlett &nbsp;|&nbsp; 직책: 대표 &nbsp;|&nbsp; 이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline">bridgejobkr@gmail.com</a></p>
         <p className="mt-2 text-gray-400 text-xs">개인정보 침해 관련 신고·상담: 개인정보보호위원회 privacy.go.kr &nbsp;|&nbsp; KISA 국번없이 118</p>
