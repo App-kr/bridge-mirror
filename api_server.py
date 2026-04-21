@@ -11655,35 +11655,48 @@ async def employers_for_mail(
 
 def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
     """강사 1명의 소개 HTML 블록 생성 (PII 최소화 -- 번호·국적·조건만).
-    v2.2: T3v1 암호화 필드 복호화 + XSS escape (nat/gender/loc 암호문 표시 버그 수정).
+    v2.3: "None"/"null" 문자열 정화 + decrypt 실패 시 폴백 텍스트.
     """
     import html as _html
+    # "None"/"null"/"NULL" 문자열 (DB 오염 데이터) → 빈 문자열로 정화
+    def _clean(v):
+        s = str(v or "").strip()
+        if s.lower() in ("none", "null", "undefined"): return ""
+        return s
     # 암호화 필드 복호화 — nationality_plain 전부 비어있어 nationality(T3v1) fallback 필요
     snum    = cand.get("sheet_number") or ""
     nat_raw = cand.get("nationality_plain") or cand.get("nationality") or ""
-    nat     = _safe_decrypt(nat_raw, "nationality") or ""
+    nat     = _clean(_safe_decrypt(nat_raw, "nationality"))
     gen_raw = cand.get("gender") or ""
-    gender  = _safe_decrypt(gen_raw, "gender") or ""
+    gender  = _clean(_safe_decrypt(gen_raw, "gender"))
     loc_raw = (cand.get("current_location") or "").strip()
-    loc     = _safe_decrypt(loc_raw, "current_location") or ""
+    loc     = _clean(_safe_decrypt(loc_raw, "current_location"))
     # 평문 값 -- escape 적용 (이메일 본문 XSS 방어)
     snum    = _html.escape(str(snum))
-    nat     = _html.escape(str(nat))
-    gender  = _html.escape(str(gender))
+    nat     = _html.escape(nat)
+    gender  = _html.escape(gender)
     # 국내/해외 이모지 -- 한국 도시 키워드 확장
     _KR_KEYS = ("한국", "Korea", "korea", "KOREA", "Seoul", "서울",
                 "Busan", "부산", "Daegu", "대구", "Incheon", "인천",
                 "Gwangju", "광주", "Daejeon", "대전", "Ulsan", "울산",
                 "Gyeonggi", "경기", "Jeju", "제주", "Suwon", "수원")
     emoji   = "😎" if loc and any(k in loc for k in _KR_KEYS) else "✈️"
-    start   = _html.escape(str(cand.get("start_date") or ""))
-    target  = _html.escape(str(cand.get("target_age") or cand.get("target") or ""))
-    exp     = _html.escape(str(cand.get("experience") or cand.get("korea_experience") or ""))
-    area    = _html.escape(str(cand.get("area_prefs") or ""))
-    housing = _html.escape(str(cand.get("housing") or ""))
-    summary = _html.escape(str(cand.get("talent_summary") or ""))
+    start   = _html.escape(_clean(cand.get("start_date")))
+    target  = _html.escape(_clean(cand.get("target_age") or cand.get("target")))
+    exp     = _html.escape(_clean(cand.get("experience") or cand.get("korea_experience")))
+    area    = _html.escape(_clean(cand.get("area_prefs")))
+    housing = _html.escape(_clean(cand.get("housing")))
+    summary = _html.escape(_clean(cand.get("talent_summary")))
     star    = cand.get("talent_reference_star")
     star_str = ("★" * int(star) + "☆" * (5 - int(star)) + f" ({star}점)") if star else ""
+
+    # 헤더 — nat/gender 모두 빈 경우 폴백 메시지 (decrypt 실패 대응)
+    header_parts = [snum]
+    if nat:    header_parts.append(nat)
+    if gender: header_parts.append(gender)
+    if not nat and not gender:
+        header_parts.append("<span style='font-size:11px;color:#999;font-weight:normal'>(상세 정보는 첨부 이력서 참조)</span>")
+    header_txt = " ".join(header_parts) if len(header_parts) > 1 else header_parts[0]
 
     # presigned URL -- cv_processed_s3_key 우선, 없으면 원본 file_uploads 폴백
     # AWS IAM User 방식: ExpiresIn 최대 604800초(7일) -- 초과 설정 시 AWS가 7일로 자동 제한
@@ -11724,7 +11737,7 @@ def _build_teacher_html_block(cand: dict, expiry_days: int = 10) -> str:
         f"<div style='border-left:4px solid #1d1d1f;padding:10px 14px;margin:12px 0;"
         f"background:#f9f9f9;border-radius:0 4px 4px 0'>"
         f"<p style='margin:0 0 6px;font-weight:bold;font-size:15px'>"
-        f"{emoji} ◼{snum}{nat} {gender}</p>"
+        f"{emoji} ◼{header_txt}</p>"
         f"<table style='border-collapse:collapse;font-size:13px'>{rows_html}</table>"
         f"{cv_btn}</div>"
     )
