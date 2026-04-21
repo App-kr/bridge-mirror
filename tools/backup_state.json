@@ -1823,8 +1823,32 @@
       "git": "3737d2d2",
       "files": 2497,
       "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_084651__pipeline-e2e-test-완료",
+      "task": "pipeline-e2e-test-완료",
+      "ts": "2026.04.22 08:46:59",
+      "git": "bcade722",
+      "files": 2503,
+      "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_084711__pipeline-e2e-test-완료",
+      "task": "pipeline-e2e-test-완료",
+      "ts": "2026.04.22 08:47:20",
+      "git": "bcade722",
+      "files": 2503,
+      "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_084803__Pipeline_E2E_테스트_완료_+_Watcher_자동시작_스크립트",
+      "task": "Pipeline E2E 테스트 완료 + Watcher 자동시작 스크립트",
+      "ts": "2026.04.22 08:48:14",
+      "git": "d6bb84f1",
+      "files": 2501,
+      "db_hash": "ed17e627075c"
     }
   ],
-  "last_backup": "2026.04.22 07:30:11",
-  "total_count": 228
+  "last_backup": "2026.04.22 08:48:14",
+  "total_count": 231
 }
