@@ -213,6 +213,10 @@ _KR_CITIES_LIST = [
     "Songdo", "Bundang", "Ilsan", "Pangyo", "Suji",
     "Haeundae", "Sasang", "Saha", "Yeonje", "Suyeong",
     "Geumjeong", "Dongnae", "Busanjin", "Yeongdo",
+    # 추가 — 학원 소재지로 자주 등장하는 지역 (v2.9)
+    "Dongtan", "Mokdong", "Sangnok", "Ilsan", "Masan", "Gimpo",
+    "Nowon", "Gapyeong", "Namyangju", "Uiwang", "Gunpo",
+    "Gwangyang", "Suncheon", "Yeosu", "Jinju", "Geoje",
 ]
 _KR_CITY_RE = re.compile(
     r"\b(" + "|".join(re.escape(c) for c in sorted(_KR_CITIES_LIST, key=len, reverse=True)) + r")"
@@ -245,9 +249,11 @@ _KR_ACADEMY_LIST = sorted(list(set([
     "S-KIDS", "Toppia", "Plato", "Lexis",
     "Saint Paul", "Hillside", "Worwick",
     "Yoon's English",
+    # v2.9 추가 — 실제 등장 한국 학원명
+    "Oeadea", "Deadea", "Deokso",
     "Poly", "Rise", "YBM", "ECC", "CDI", "GnB", "DYB", "SLP",
     "JLS", "PSA", "LCI", "OHC", "BIE", "IEB", "GEA", "SIE", "DIS",
-    "GCIS", "Sei", "Kaplan",
+    "GCIS", "Sei", "Kaplan", "YEP",
 ])), key=len, reverse=True)
 # 4자 이하 약어(YBM, DIS 등): 대소문자 구분 필수 → 소문자 오탐(dis, sei…) 방지
 _KR_ACADEMY_SHORT = [n for n in _KR_ACADEMY_LIST if len(n) <= 4]
@@ -323,6 +329,14 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     found:   list[PIIMatch] = []
     cleaned: str = text
 
+    # ── 문서 전체 한국 컨텍스트 사전 판단 (원본 텍스트 기준) ──────────────────
+    # addr_kr_en 등이 먼저 치환되면 window 검사에서 context 소실 → 원본으로 먼저 확인
+    _doc_has_korea = bool(
+        re.search(r"\b(?:South\s+Korea|Korea|한국)\b", text, re.IGNORECASE)
+        or _KR_CITY_RE.search(text)
+        or re.search(r"[가-힣]", text)
+    )
+
     # ── 기본 패턴 (전화/이메일/주소/SNS) ──────────────────────────────────
     for ptype, pattern in _PATTERNS.items():
         for m in pattern.finditer(cleaned):
@@ -361,9 +375,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         elif _NON_EDU_HDR_RE.match(line):
             in_edu_section = False
 
-        # 수정 7: 인접 줄(±2) 한국 컨텍스트 확인
+        # 수정 7: 인접 줄(±2) 한국 컨텍스트 확인 + 문서 전체 context 폴백
         window = " ".join(lines[max(0, i - 2):i + 3])
-        has_kr_ctx = bool(
+        has_kr_ctx = _doc_has_korea or bool(
             re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window, re.IGNORECASE)
             or _KR_CITY_RE.search(window)
             or re.search(r"[가-힣]", window)
@@ -425,7 +439,7 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     new_lines3 = []
     for i, line in enumerate(lines3):
         window3 = " ".join(lines3[max(0, i - 2):i + 3])
-        has_kr3 = bool(
+        has_kr3 = _doc_has_korea or bool(
             re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window3, re.IGNORECASE)
             or _KR_CITY_RE.search(window3)
             or re.search(r"[가-힣]", window3)
@@ -492,8 +506,8 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     cleaned = re.sub(r"\s+Campus\b(?!\s+of\b)", "", cleaned, flags=re.IGNORECASE)
 
     # ── 영문 한국 주소 후처리 ─────────────────────────────────────────────
-    # "[ADDR_KR_EN_REMOVED]" → 빈 문자열 (깔끔하게)
-    cleaned = re.sub(r"\[ADDR_KR_EN_REMOVED\]\s*,?", "", cleaned)
+    # "[ADDR_KR_EN_REMOVED]" → 빈 문자열 ([ \t] 만 — \n은 먹지 않음)
+    cleaned = re.sub(r"\[ADDR_KR_EN_REMOVED\][ \t]*,?[ \t]*", "", cleaned)
     # 남은 "{city/dong}, South Korea" 패턴 재검사 (addr_kr_en이 놓친 것)
     cleaned = re.sub(
         r"\b[A-Z][A-Za-z\-]+-(?:dong|gu|si|ro|gil)\b[,\s]*(?:South\s+)?Korea\b",
@@ -531,8 +545,70 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     cleaned = re.sub(r"\s*\((?:the\s+)?Republic\s+of\s+Korea\)", "", cleaned, flags=re.IGNORECASE)
 
     # ── 최종 정리: [TYPE_REMOVED] 마커 제거 ─────────────────────────────────
-    # 이메일/전화/SNS 플레이스홀더가 PDF 본문에 남지 않도록 완전 제거
-    cleaned = re.sub(r"\[[A-Z_]+_REMOVED\][\s,;:]*", "", cleaned)
+    # \s 대신 [ \t] 사용 — \n(줄바꿈)을 삼키면 다음 줄과 합쳐지는 버그 방지
+    cleaned = re.sub(r"\[[A-Z_]+_REMOVED\][ \t,;:]*", "", cleaned)
+
+    # ── 학원명/기관 뒤 파이프 구분자 + 위치명 정리 ──────────────────────────
+    # "English Academy | Dongtan, Mokdong" → "English Academy"
+    # "English Academy | South Korea"      → "English Academy"
+    # "University | South Korea 2"         → "University"
+    # ⚠️ [ \t]* 사용 필수 — \s*는 \n을 넘어 다음 줄 날짜까지 삭제하는 버그 발생
+    cleaned = re.sub(
+        r"[ \t]*\|[ \t]*[A-Za-z0-9][A-Za-z0-9 \t,\-]*(?=[ \t]*(?:\n|$))",
+        "",
+        cleaned,
+        flags=re.MULTILINE,
+    )
+    # 파이프 뒤가 빈 경우도 제거: "English Academy | " → "English Academy"
+    cleaned = re.sub(r"[ \t]*\|[ \t]*(?=[ \t]*(?:\n|$))", "", cleaned, flags=re.MULTILINE)
+
+    # ── 값 없는 PII 레이블 줄 제거 ───────────────────────────────────────────
+    # "Email: " / "Phone: " / "Kakao ID: " 등 값이 제거된 후 레이블만 남은 줄
+    cleaned = re.sub(
+        r"^[^\n]*\b(?:email|e-mail|phone|telephone|tel|mobile|cell(?:ular)?|"
+        r"kakao(?:\s+(?:talk|id))?|카카오|카톡|line\s+id|wechat|"
+        r"linkedin|instagram|facebook|twitter|fax|address|주소)\s*:?\s*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 커버레터 보일러플레이트 헤더 제거 ─────────────────────────────────────
+    # "Application for ESL Teacher Position" / "Cover Letter" 단독 줄
+    cleaned = re.sub(
+        r"^[^\n]*(?:application\s+for\s+(?:esl\s+)?(?:teacher|teaching|english)\s+"
+        r"(?:position|role|post|job)|cover\s+letter\s*:?|curriculum\s+vitae)\s*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 이력서 생성 도구 워터마크 제거 ────────────────────────────────────────
+    # "Resume created by CVpop - www.cvpop.com" / "Created with Canva" 등
+    cleaned = re.sub(
+        r"^[^\n]*(?:resume\s+created\s+by|cv\s+created\s+by|created\s+with|"
+        r"created\s+using|powered\s+by|generated\s+by|made\s+with)\s*"
+        r"[^\n]*(?:cvpop|canva|resume\.io|zety|novoresume|resumegenius|"
+        r"kickresume|livecareer|indeed|enhancv|visualcv|flowcv|"
+        r"resumebuilder|resumelab|www\.[a-z]+\.com)[^\n]*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    # "www.cvpop.com" URL만 단독으로 남은 경우도 제거
+    cleaned = re.sub(
+        r"^[^\n]*www\.[a-z]{3,20}\.com[^\n]*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 주소 제거 후 잔류 쉼표/구두점 정리 ───────────────────────────────────
+    # "Currently in South Korea,  ," → "Currently in South Korea"
+    # "Email: ,  " → already removed by label cleanup above
+    cleaned = re.sub(r",\s*,+", ",", cleaned)          # 연속 쉼표 축소
+    cleaned = re.sub(r",\s*$", "", cleaned, flags=re.MULTILINE)  # 줄 끝 쉼표 제거
+    cleaned = re.sub(r"\s{3,}", "  ", cleaned)          # 과도한 공백 축소
 
     return cleaned, found
 
