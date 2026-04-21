@@ -8,7 +8,6 @@
  */
 
 import { useState, useRef } from 'react'
-import GuidePopup from '@/components/GuidePopup'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
@@ -245,6 +244,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
   const BENEFITS_OPTS       = config.BENEFITS_OPTS       ?? BENEFITS_OPTS_DEFAULT
   const VACATION_INC        = config.VACATION_INC        ?? VACATION_INC_DEFAULT
 
+  const [phase,     setPhase]     = useState<'notice' | 'form'>('notice')
   const [step,      setStep]      = useState(1)
   const [status,    setStatus]    = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMsg,  setErrorMsg]  = useState('')
@@ -349,19 +349,83 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
     )
   }
 
+  // ── Notice 화면 ─────────────────────────────────────────────────────────
+  if (phase === 'notice') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-16">
+        <style>{`
+          @keyframes inq-glow {
+            0%, 100% { box-shadow: 0 0 10px 3px rgba(59,130,246,0.3); }
+            50%       { box-shadow: 0 0 22px 7px rgba(59,130,246,0.55); }
+          }
+          .btn-inq-glow { animation: inq-glow 2.4s ease-in-out infinite; }
+        `}</style>
+
+        <div className="w-full max-w-lg">
+          <div className="text-center mb-8 space-y-2">
+            <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
+                             border border-blue-200 rounded-full px-3 py-1 uppercase tracking-wider">
+              For Schools &amp; Academies
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-black text-gray-900 leading-tight">
+              원어민 구인신청
+            </h1>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
+            <div className="px-6 sm:px-8 pt-7 pb-6 space-y-5">
+              <p className="text-[15px] text-gray-700 leading-relaxed">
+                작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다.
+                허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니
+                정확하게 입력해 주세요.
+              </p>
+
+              <div className="border-t border-gray-100" />
+
+              <div className="space-y-3">
+                <p className="text-[15px] text-gray-700 leading-relaxed">
+                  접수 완료 후{' '}
+                  <span className="font-semibold text-gray-900">사업자 등록증 사본</span>을
+                  이메일로 보내주시기 바랍니다.
+                </p>
+                <a
+                  href="mailto:bridgejobkr@gmail.com?subject=사업자등록증 사본 첨부 - 구인신청"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+                             bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300
+                             text-gray-700 hover:text-blue-700 text-sm font-medium transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                  </svg>
+                  bridgejobkr@gmail.com 으로 보내기
+                </a>
+              </div>
+            </div>
+
+            <div className="px-6 sm:px-8 pb-7 pt-4 border-t border-gray-100 space-y-4">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                계속 진행하시면 위 내용을 확인하고 동의한 것으로 간주됩니다.
+                수집된 정보는 채용 대행 서비스 목적으로만 사용됩니다.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPhase('form')}
+                className="btn-inq-glow w-full py-3.5 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
+                           text-white text-base font-semibold rounded-xl transition-colors"
+              >
+                동의하고 시작하기 →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ── Page ────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16">
-      <GuidePopup
-        storageKey="bridge_inquiry_guide_seen"
-        title="구인신청 안내"
-        items={[
-          '사업자 등록증 사본을 이메일(bridgejobkr@gmail.com)로 보내주세요.',
-          '급여, 복지, 근무 조건을 미리 정리해 두시면 빠르게 진행됩니다.',
-          '* 표시 항목은 필수입니다. 정확한 정보를 입력해 주세요.',
-        ]}
-        cta="시작하기"
-      />
 
       <div className="space-y-2">
         <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
@@ -412,6 +476,10 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
 
             <section className="card space-y-4">
               <Sec title="담당자 정보" subtitle="Contact Person" />
+              <p className="text-xs text-gray-400 leading-relaxed -mt-2">
+                고용주가 아닌 경우, 또는 향후 채용 담당자가 변경될 시 반드시 연락처 변경 사실을 알려 주세요.
+                수신자 명단 업데이트가 이루어지지 않을 경우 중요한 안내를 받지 못할 수 있습니다.
+              </p>
               {/* Honeypot — 봇만 채움, 사용자 안 보임 */}
               <input
                 type="text"
