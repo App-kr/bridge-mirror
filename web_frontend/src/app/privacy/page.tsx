@@ -13,7 +13,6 @@ export default function PrivacyPage() {
 
       {/* Intro */}
       <p className="text-sm text-gray-700 leading-7 mb-10">
-        BRIDGE는 원어민 강사 채용에 특화된 독자적인 매칭 시스템(특허출원번호 제10-2024-0110155호)을 운영합니다.
         본 방침은 「개인정보 보호법」 제30조에 따라 이용자의 개인정보가 어떻게 수집·이용·보관되는지 안내합니다.
       </p>
 
@@ -111,8 +110,13 @@ export default function PrivacyPage() {
 
       </div>
 
+      {/* Patent notice */}
+      <p className="mt-14 text-xs text-gray-400 leading-relaxed">
+        BRIDGE는 원어민 강사 채용에 특화된 독자적인 매칭 시스템(특허출원번호 제10-2024-0110155호)을 운영합니다.
+      </p>
+
       {/* Footer */}
-      <div className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mt-4 pt-5 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
         <span>BRIDGE Recruitment</span>
         <span>대표: Scarlett</span>
         <span>bridgejob.co.kr</span>
