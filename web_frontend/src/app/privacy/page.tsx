@@ -80,20 +80,20 @@ export default function PrivacyPage() {
         </Article>
 
         <Article num="제8조" title="개인정보 처리의 위탁">
-          <p>원활한 서비스 제공을 위하여 서버 운영, 데이터베이스 관리, 파일 저장 등의 업무를 외부 클라우드 인프라 업체에 위탁하여 처리합니다. 수탁업체에 대해서는 개인정보 보호 관련 법규 준수 및 제3자 제공 금지 등을 계약서에 명시하고 있습니다.</p>
+          <p>서비스 제공에 필요한 서버 운영, 데이터베이스 관리, 파일 저장 등의 업무를 인프라 업체에 위탁하여 처리합니다.</p>
         </Article>
 
         <Article num="제9조" title="쿠키(Cookie)의 운용">
-          <p>로그인 유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
+          <p>유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
         </Article>
 
         <Article num="제10조" title="개인정보보호책임자">
           <p>개인정보 처리에 관한 문의, 불만, 피해구제 등은 아래 개인정보보호책임자에게 연락하시기 바랍니다.</p>
           <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-0.5 text-gray-600">
-            <p>성명: Scarlett &nbsp;·&nbsp; 직책: BRIDGE Recruitment 대표</p>
+            <p>성명: 김혜신 &nbsp;·&nbsp; 직책: BRIDGE 보안관리자</p>
             <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-900">bridgejobkr@gmail.com</a></p>
           </div>
-          <p className="mt-3">개인정보 침해에 대한 신고나 상담이 필요하신 경우에는 아래 기관에 문의하시기 바랍니다.</p>
+          <p className="mt-3">개인정보 침해에 대한 신고나 상담이 필요하신 경우 아래 기관에 문의하시기 바랍니다.</p>
           <ul className="mt-2 space-y-1 pl-4 text-gray-500">
             <li>개인정보 침해신고센터 (한국인터넷진흥원): (국번없이) 118, privacy.kisa.or.kr</li>
             <li>개인정보 분쟁조정위원회: (국번없이) 1833-6972, www.kopico.go.kr</li>
@@ -105,7 +105,7 @@ export default function PrivacyPage() {
         <Article num="제11조" title="개인정보 처리방침 변경">
           <div className="pl-4 space-y-2 text-gray-600">
             <p>이 개인정보처리방침은 2021년 06월 21일부터 적용됩니다.</p>
-            <p>내용의 추가·삭제 및 수정이 있을 시에는 시행 최소 7일 전부터 홈페이지를 통해 고지합니다. 정보주체의 권리·의무에 중대한 영향을 미치는 사항은 최소 30일 전부터 고지합니다.</p>
+            <p>내용 변경 시 충분한 일정을 두고 홈페이지를 통해 고지합니다.</p>
           </div>
         </Article>
 
