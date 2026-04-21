@@ -211,9 +211,10 @@ export default function TermsPage() {
 
       <Article num="9." title="Intellectual Property">
         <p>
-          All content on this website — including text, images, logos, and platform design — is the
-          property of BRIDGE Recruitment and may not be reproduced, distributed, or used without
-          prior written consent.
+          All content on this website — including personal data submitted through the platform,
+          employer information, text, images, logos, and platform design — is the property of
+          BRIDGE Recruitment and may not be reproduced, distributed, or used in any form without
+          prior written consent from BRIDGE.
         </p>
       </Article>
 
