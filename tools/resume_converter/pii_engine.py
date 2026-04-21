@@ -401,9 +401,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
             # 수정 7: 해외 기관 보존 (한국 컨텍스트 없으면 스킵)
             if not has_kr_ctx:
                 continue
-            # 모든 학원/학교명 → "English Academy" (University 포함)
+            # 모든 학원/학교명 → "English Academy, South Korea" (University 포함)
             # University는 PRESERVE_INSTITUTION에서 이미 보존됨
-            repl = "English Academy"
+            repl = "English Academy, South Korea"
             found.append(PIIMatch(
                 type="company",
                 original_value=orig,
@@ -467,7 +467,7 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
                 confidence=0.90,
                 color="red",
             ))
-            line = line.replace(orig, "English Academy", 1)
+            line = line.replace(orig, "English Academy, South Korea", 1)
 
         # 일반 KR_WORKPLACE: 한국 컨텍스트 필수 (수정 6/7)
         if has_kr3:
@@ -483,7 +483,7 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
                     confidence=0.90,
                     color="red",
                 ))
-                line = line.replace(orig, "English Academy", 1)
+                line = line.replace(orig, "English Academy, South Korea", 1)
 
         new_lines3.append(line)
     cleaned = "\n".join(new_lines3)
@@ -607,10 +607,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     )
 
     # ── 미등록 업체명 범용 익명화 ──────────────────────────────────────────────
-    # "ABC Academy 2019-2022" → "English Academy 2019-2022"
+    # "ABC Academy 2019-2022" → "English Academy, South Korea 2019-2022"
     # "XYZ English School" / "Greenfield International School" 등
     # 규칙: 1~4개 Title Case 단어 + Academy/School/Institute/College/Kindergarten/Hagwon
-    # 단, 이미 "English Academy"인 경우 유지
+    # 단, 이미 "English Academy, South Korea"인 경우 유지
     _INST_SUFFIX = (
         r"(?:Academy|School|Institute|College|Kindergarten|Hagwon|"
         r"English\s+(?:School|Center|Centre|Institute)|"
@@ -618,9 +618,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         r"Learning\s+(?:Center|Centre)|"
         r"Education(?:\s+(?:Center|Centre|Group|Institute))?)"
     )
+    _already_anon = re.compile(r"^english\s+academy(?:,?\s+south\s+korea)?$", re.IGNORECASE)
     cleaned = re.sub(
         r"\b([A-Z][A-Za-z0-9\-\'&\.]*(?:[ \t]+[A-Za-z0-9\-\'&\.]+){0,3}[ \t]+)" + _INST_SUFFIX + r"\b",
-        lambda m: m.group(0) if m.group(0).strip().lower() == "english academy" else "English Academy",
+        lambda m: m.group(0) if _already_anon.match(m.group(0).strip()) else "English Academy, South Korea",
         cleaned,
         flags=re.IGNORECASE,
     )

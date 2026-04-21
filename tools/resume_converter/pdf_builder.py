@@ -379,7 +379,7 @@ def text_to_pdf_bytes(
         lh = line_h * 1.3 if is_hdr else line_h
 
         if is_hdr:
-            y -= line_h * 0.3  # 헤더 앞 약간 여백
+            y -= line_h * 1.0  # 섹션 헤더 앞 여백 (Summary 뒤 Professional experience 등)
 
         c.setFont(fn, fs)
         for display in _wrap(raw_line.rstrip(), fn, fs):
