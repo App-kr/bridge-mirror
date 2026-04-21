@@ -79,27 +79,27 @@ export default function PrivacyPage() {
           </SubItem>
         </Article>
 
-        <Article num="제8조" title="개인정보 처리의 위탁">
-          <p>서비스 제공에 필요한 서버 운영, 데이터베이스 관리, 파일 저장 등의 업무를 인프라 업체에 위탁하여 처리합니다.</p>
-        </Article>
-
-        <Article num="제9조" title="쿠키(Cookie)의 운용">
-          <p>유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
-        </Article>
-
-        <Article num="제10조" title="개인정보보호책임자">
-          <p>개인정보 처리에 관한 문의, 불만, 피해구제 등은 아래 개인정보보호책임자에게 연락하시기 바랍니다.</p>
-          <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-0.5 text-gray-600">
-            <p>성명: 김혜신 &nbsp;·&nbsp; 직책: BRIDGE 보안관리자</p>
-            <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-900">bridgejobkr@gmail.com</a></p>
-          </div>
-          <p className="mt-3">개인정보 침해에 대한 신고나 상담이 필요하신 경우 아래 기관에 문의하시기 바랍니다.</p>
+        <Article num="제8조" title="개인정보보호책임자">
+          <p>개인정보 침해에 대한 신고나 상담이 필요하신 경우 아래 기관에 문의하시기 바랍니다.</p>
           <ul className="mt-2 space-y-1 pl-4 text-gray-500">
             <li>개인정보 침해신고센터 (한국인터넷진흥원): (국번없이) 118, privacy.kisa.or.kr</li>
             <li>개인정보 분쟁조정위원회: (국번없이) 1833-6972, www.kopico.go.kr</li>
             <li>대검찰청 사이버수사과: (국번없이) 1301, www.spo.go.kr</li>
             <li>경찰청 사이버안전국: (국번없이) 182, cyberbureau.police.go.kr</li>
           </ul>
+          <p className="mt-4">개인정보 처리에 관한 문의, 불만, 피해구제 등은 아래 개인정보보호책임자에게 연락하시기 바랍니다.</p>
+          <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-0.5 text-gray-600">
+            <p>성명: 김혜신 &nbsp;·&nbsp; 직책: BRIDGE 보안관리자</p>
+            <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-900">bridgejobkr@gmail.com</a></p>
+          </div>
+        </Article>
+
+        <Article num="제9조" title="개인정보 처리의 위탁">
+          <p>서비스 제공에 필요한 서버 운영, 데이터베이스 관리, 파일 저장 등의 업무를 인프라 업체에 위탁하여 처리합니다.</p>
+        </Article>
+
+        <Article num="제10조" title="쿠키(Cookie)의 운용">
+          <p>유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
         </Article>
 
         <Article num="제11조" title="개인정보 처리방침 변경">
