@@ -1,12 +1,47 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-20 (세션 36 — ad_only 전체 광고 채널 통합)
+최근 업데이트: 2026-04-21 (세션 37 — Resume Converter 파이프라인 완료)
 
-## ⏭ 다음 세션 우선순위 (2026-04-20 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-21 기준)
 
 1. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
-2. **Render 수동 배포** — Dashboard → bridge-api → Manual Deploy (이전 세션 api_server.py 반영)
-3. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행 (ad_only 일일 자동 전파)
-4. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+2. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행 (ad_only 일일 자동 전파)
+3. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+4. **Resume Converter 실 테스트 검증** — Render 배포 완료 후 /apply 제출 → admin/resume-converter cv_processed_status=done 확인
+
+## ✅ 2026-04-21 완료된 작업 (세션 37 — Resume Converter 파이프라인 완료)
+
+### Resume Converter 전체 완료 (커밋 8acef911, 27243a58, 94446a98, 4d7d0e8a)
+
+#### PII 엔진 (pii_engine.py)
+- phone_kr / phone_intl / phone_us / email / addr_kr / addr_us / kakao / linkedin / name 9종 탐지
+- Google Sheets 이름 매칭 (Layer2 Claude API 완전 제거 → 비용 0)
+- False positive 수정: adapt(KR주소 apt), dis(학원명), 연도범위 전화번호 오인식
+- 한국 학교명 3단어 이상 + 한국어 문맥 시 TITLE_SAFE 예외 적용
+
+#### pdf_builder.py
+- PyMuPDF 우선 추출, pdfplumber 폴백 (CID 인코딩 문제 해결)
+
+#### pipeline.py
+- `run(candidate_meta=...)` 파라미터 추가 → Sheets 조회 없이 DB 메타 직접 사용
+
+#### api_server.py `_auto_process_resume()`
+- DB에서 full_name/nationality/gender/dob 추출 → `candidate_meta` 주입
+- 1차: resume_converter/pipeline.py (PII+얼굴+PDF 전체) / 2차 폴백: doc_processor
+
+#### 검증
+- 로컬 테스트: `6155미국_여성(93born).pdf` 73KB 9페이지 생성 완료 (2026-04-17)
+- PII 7/7 탐지: phone_kr, phone_intl, email, addr_us, kakao, linkedin, name
+- Render pipeline smoke: 4/4 all_passed=true
+- Render 배포: main push → autoDeploy:true 트리거 완료 → 즉시 false 복원
+
+#### /apply → 자동변환 흐름
+```
+POST /api/apply → candidate 생성
+→ uploadQueuedFiles(newId) → POST /api/upload/candidate/{cid}?file_type=cv
+→ threading.Thread(_auto_process_resume)
+→ DB 메타(name/nationality/gender/dob) 추출 → pipeline.run() 주입
+→ PII 제거 → PDF 조립 → S3 업로드 → cv_processed_status='done'
+```
 
 ## ✅ 2026-04-20 완료된 작업 (세션 36 — ad_only 광고 채널 통합)
 
