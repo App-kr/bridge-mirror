@@ -1,12 +1,35 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-21 (세션 37 — Resume Converter 파이프라인 완료)
+최근 업데이트: 2026-04-22 (세션 38 — Pipeline E2E 테스트 + 마무리)
 
-## ⏭ 다음 세션 우선순위 (2026-04-21 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-22 기준)
 
-1. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
-2. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행 (ad_only 일일 자동 전파)
-3. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
-4. **Resume Converter 실 테스트 검증** — Render 배포 완료 후 /apply 제출 → admin/resume-converter cv_processed_status=done 확인
+1. **Render S3 환경변수 등록** (사용자 직접):
+   - Render 대시보드 → bridge-api → Environment
+   - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_BUCKET` 5개 추가
+   - 추가 후 Manual Deploy → 파일 업로드 E2E 완성
+2. **Pipeline Watcher 설치** (사용자 직접):
+   - `powershell -ExecutionPolicy Bypass -File scripts\install_pipeline_watcher.ps1`
+   - 또는 `scripts\start_pipeline_watcher.bat` 바로가기 → 시작 폴더
+3. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
+4. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
+
+## ✅ 2026-04-22 완료된 작업 (세션 38 — Pipeline E2E 테스트 완료)
+
+### Pipeline 로컬 E2E 테스트 검증
+- **DOCX PII 제거**: 이메일/전화/생년월일/국적/주소/성별 → 전부 삭제 확인
+- **한국 도시명/학원명 일반화**: Busan → 삭제, "ABC Language School" → "Language School, Korea"
+- **SSoT 파일명**: `5739영국_남성(92born).docx` 자동 생성 확인
+- **SHA256 무결성**: `550268dc...` 해시값 정상 생성
+- **큐 enqueue**: 3건 (cv/photo/zip) 정상 투입
+- **retry 사이클**: running→fail×3 → DLQ 자동 승격 확인
+- **requeue**: dlq→queued 전환 정상
+- **실패 번들**: `FAIL_{id}/metadata.json + ERROR.txt + 원본파일` 생성 확인
+- **Pipeline Watcher 스크립트**: `scripts/start_pipeline_watcher.bat` + `scripts/install_pipeline_watcher.ps1` 신규 생성
+
+### ⚠️ S3 미연결 상태 (Render 업로드 503)
+- 원인: Render 환경변수에 AWS 크레덴셜 5개 미등록
+- 파이프라인 로직 자체는 100% 정상 확인됨
+- 해결: Render 대시보드에서 AWS_* 환경변수 추가 후 Manual Deploy
 
 ## ✅ 2026-04-21 완료된 작업 (세션 37 — Resume Converter 파이프라인 완료)
 
