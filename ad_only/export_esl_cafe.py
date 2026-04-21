@@ -96,11 +96,8 @@ def _job_id(job_code: str) -> str:
 
 
 def _build_txt(j: dict) -> str:
-    """ESL Cafe txt 필드용 멀티라인 블록."""
-    # start_date 미래 변환 적용
+    """ESL Cafe txt 필드용 멀티라인 블록. 날짜 원본 그대로 사용 (변환 금지)."""
     j = dict(j)
-    if j.get("start_date"):
-        j["start_date"] = _fix_start_date_esl(j["start_date"])
     lines: list[str] = []
     fields = [
         ("start_date",     "Starting Date"),
@@ -129,7 +126,6 @@ def _to_esl_entry(j: dict) -> dict:
     jid = _job_id(j.get("job_code", ""))
     location = (j.get("location") or "").strip()
     raw_date = (j.get("start_date") or "").strip()
-    safe_date = _fix_start_date_esl(raw_date)  # 과거/현재 → 미래 변환
     entry = {
         "id":   jid,
         "l":    location,
@@ -138,7 +134,7 @@ def _to_esl_entry(j: dict) -> dict:
         "h":    False,  # hot: 관리자가 ESL UI 에서 토글
         "a":    True,   # active: 기본 ON
         "sal":  (j.get("monthly_salary") or "").strip(),
-        "date": safe_date,
+        "date": raw_date,  # 원본 그대로 (과거월 변환 금지)
         "hrs":  (j.get("working_hours")  or "").strip(),
         "hsg":  (j.get("housing")        or "").strip(),
         "txt":  _build_txt(j),

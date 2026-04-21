@@ -118,12 +118,17 @@ def format_salary(smin, smax) -> str:
 
 
 def select_jobs(limit: int = 8) -> list[dict]:
-    """ad_only 클린 소스에서 선택. master.db 직접 접근 금지."""
+    """ad_only 클린 소스에서 파일 순서 그대로 선택.
+    규칙:
+    - diverse_cities=False: 도시 중복제거 금지 (도시/잡번호 임의 변경 차단)
+    - min_salary_m=0: 급여 필터 금지 (파일 내용 그대로)
+    - future_only=True: 이미 지난 시작일 잡 제외 (pii_guard april 브랜드 키워드 차단 방지)
+    """
     return _ad_select_jobs(
         limit=limit,
         future_only=True,
-        min_salary_m=2.4,
-        diverse_cities=True,
+        min_salary_m=0.0,
+        diverse_cities=False,
     )
 
 
@@ -131,9 +136,9 @@ def build_description(jobs: list[dict]) -> str:
     """ad_only 클린 잡 리스트로 포스팅 본문 생성 -- PII 최종 재검증 포함."""
     blocks = []
     for j in jobs:
-        code = j["job_code"].replace("Job.", "Job. ")
+        code = j["job_code"]  # 원본 그대로 (Job. XXXX 포맷 유지)
         loc  = (j.get("location") or "Korea").strip()
-        sd   = clean_start_date(j.get("start_date", ""))
+        sd   = (j.get("start_date") or "").strip() or "ASAP"  # 원본 그대로 (변환 금지)
         age  = j.get("teaching_age") or ""
         cls  = j.get("class_size") or ""
         wh   = j.get("working_hours") or ""
