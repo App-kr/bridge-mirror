@@ -1,14 +1,9 @@
 {
-  "last_updated": "2026-04-21 10:10:00",
+  "last_updated": "2026-04-21 10:23:29",
   "last_tool": "Bash",
-  "last_command": "grep -n \"os.startfile\" \"Q:/Claudework/bridge base/tools/resume_converter/main_gui.py\"",
+  "last_command": "ls \"Q:/Claudework/bridge base/web_frontend/src/app/inquiry/\" 2>&1 | head",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\tools\\resume_backfill.py",
-    "Q:\\Claudework\\bridge base\\scripts\\register_ad_only_refresh.bat",
-    "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
-    "Q:\\Claudework\\bridge base\\scripts\\ad_only_refresh_task.xml",
-    "Q:\\Claudework\\bridge base\\scripts\\_register_task_tmp.bat",
     "Q:\\Claudework\\bridge base\\scripts\\_query_task_tmp.bat",
     "Q:\\Claudework\\bridge base\\scripts\\_test_run_task.bat",
     "Q:\\Claudework\\bridge base\\tools\\pipeline_failure_watcher.py",
@@ -23,7 +18,12 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\apply\\ApplyForm.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\Footer.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\inquiry\\InquiryForm.tsx",
-    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\main_gui.py"
+    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\main_gui.py",
+    "Q:\\Claudework\\bridge base\\tools\\_teast_build_post.py",
+    "Q:\\Claudework\\bridge base\\ad_only\\export_esl_cafe.py",
+    "Q:\\Claudework\\bridge base\\tools\\doc_processor.py",
+    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\pipeline.py",
+    "Q:\\Claudework\\bridge base\\api_server.py"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-20 기준)",
   "git_changed": [
