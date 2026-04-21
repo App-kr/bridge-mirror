@@ -43,6 +43,15 @@ export default function TermsPage() {
           management, employer matching, and partial interview support services.
         </p>
         <p className="mt-2">
+          Under Korean employment law, recruitment agencies are permitted to charge fees to job
+          seekers in certain circumstances. However, BRIDGE chooses to provide its services to
+          foreign teacher candidates entirely free of charge as a courtesy. In return, we ask that
+          you use our service — and any Korean work visa obtained through it — solely for the
+          purpose of lawful employment. <strong>Abuse of the visa process, misrepresentation of
+          qualifications, or use of a placement to circumvent immigration rules will result in
+          immediate termination of services and may be reported to the relevant authorities.</strong>
+        </p>
+        <p className="mt-2">
           Placement is not guaranteed. Results depend on your qualifications, availability,
           employer requirements, and your engagement with the recruitment process. BRIDGE acts as
           an intermediary only — the employment contract is between you and the employer directly.
