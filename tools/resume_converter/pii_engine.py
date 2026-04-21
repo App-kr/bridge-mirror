@@ -71,11 +71,12 @@ _PATTERNS = {
     # 대소문자 구분 필수 (IGNORECASE 없음) — "17 with an ave" 오탐 방지
     # 집 번호: 2~5자리 / 도로명: 대문자 시작 1~4 단어 / 도로 접미사: 대/소문자 모두 허용
     "addr_us":    re.compile(
-        r"\b\d{2,5}\s+"
-        r"(?:[A-Z][A-Za-z'\-]+\s+){1,4}"
+        # ⚠️ \s → [ \t] 필수 — \s는 \n을 포함해 다음 줄까지 삼키는 버그 발생
+        r"\b\d{2,5}[ \t]+"
+        r"(?:[A-Z][A-Za-z'\-]+[ \t]+){1,4}"
         r"(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|"
         r"Way|Court|Ct|Place|Pl|Circle|Cir|Mount|Mt|Highway|Hwy)"
-        r"\.?(?:[,\s]+[A-Za-z]{2,20}(?:\s+[A-Z]{2})?)?(?:[,\s]*\d{5}(?:-\d{4})?)?",
+        r"\.?(?:[, \t]+[A-Za-z]{2,20}(?:[ \t]+[A-Z]{2})?)?(?:[, \t]*\d{5}(?:-\d{4})?)?",
     ),
     # kakao ID: "kakao ID kamogelo30" / "KakaoTalk: user123" / "카카오: xxx"
     "kakao":      re.compile(
@@ -400,7 +401,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
             # 수정 7: 해외 기관 보존 (한국 컨텍스트 없으면 스킵)
             if not has_kr_ctx:
                 continue
-            repl = "School" if "school" in orig.lower() else "University"
+            # 모든 학원/학교명 → "English Academy" (University 포함)
+            # University는 PRESERVE_INSTITUTION에서 이미 보존됨
+            repl = "English Academy"
             found.append(PIIMatch(
                 type="company",
                 original_value=orig,
@@ -601,6 +604,25 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         "",
         cleaned,
         flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 미등록 업체명 범용 익명화 ──────────────────────────────────────────────
+    # "ABC Academy 2019-2022" → "English Academy 2019-2022"
+    # "XYZ English School" / "Greenfield International School" 등
+    # 규칙: 1~4개 Title Case 단어 + Academy/School/Institute/College/Kindergarten/Hagwon
+    # 단, 이미 "English Academy"인 경우 유지
+    _INST_SUFFIX = (
+        r"(?:Academy|School|Institute|College|Kindergarten|Hagwon|"
+        r"English\s+(?:School|Center|Centre|Institute)|"
+        r"Language\s+(?:School|Center|Centre|Institute)|"
+        r"Learning\s+(?:Center|Centre)|"
+        r"Education(?:\s+(?:Center|Centre|Group|Institute))?)"
+    )
+    cleaned = re.sub(
+        r"\b([A-Z][A-Za-z0-9\-\'&\.]*(?:[ \t]+[A-Za-z0-9\-\'&\.]+){0,3}[ \t]+)" + _INST_SUFFIX + r"\b",
+        lambda m: m.group(0) if m.group(0).strip().lower() == "english academy" else "English Academy",
+        cleaned,
+        flags=re.IGNORECASE,
     )
 
     # ── 주소 제거 후 잔류 쉼표/구두점 정리 ───────────────────────────────────

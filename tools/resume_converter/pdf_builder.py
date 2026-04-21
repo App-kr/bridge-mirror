@@ -72,9 +72,33 @@ _GENDER_MAP = {
     "남": "남성", "여": "여성", "남성": "남성", "여성": "여성",
 }
 _NAT_MAP = {
-    "usa": "미국", "us": "미국", "canada": "캐나다", "uk": "영국",
-    "australia": "호주", "new zealand": "뉴질랜드", "south africa": "남아공",
-    "ireland": "아일랜드", "philippines": "필리핀",
+    # 국가명 (country name)
+    "usa": "미국", "us": "미국", "united states": "미국", "united states of america": "미국",
+    "canada": "캐나다",
+    "uk": "영국", "united kingdom": "영국", "great britain": "영국", "england": "영국",
+    "australia": "호주",
+    "new zealand": "뉴질랜드", "nz": "뉴질랜드",
+    "south africa": "남아공",
+    "ireland": "아일랜드",
+    "philippines": "필리핀",
+    "zimbabwe": "짐바브웨",
+    "nigeria": "나이지리아",
+    "ghana": "가나",
+    "jamaica": "자메이카",
+    "kenya": "케냐",
+    # 국적 형용사 (nationality adjective)
+    "american": "미국", "canadian": "캐나다",
+    "british": "영국", "english": "영국", "scottish": "영국", "welsh": "영국",
+    "australian": "호주",
+    "new zealander": "뉴질랜드", "kiwi": "뉴질랜드",
+    "south african": "남아공",
+    "irish": "아일랜드",
+    "filipino": "필리핀", "philippine": "필리핀",
+    "zimbabwean": "짐바브웨",
+    "nigerian": "나이지리아",
+    "ghanaian": "가나",
+    "jamaican": "자메이카",
+    "kenyan": "케냐",
 }
 
 def build_filename(
@@ -84,12 +108,12 @@ def build_filename(
     birth_year: str = "",
 ) -> str:
     """
-    예: 3126_미국_여성(99born).pdf
+    예: 3126_영국_여성(99born).pdf
     """
-    nat = _NAT_MAP.get(nationality.lower(), nationality) or "미상"
-    gen = _GENDER_MAP.get(gender.lower(), gender) or "미상"
+    nat = _NAT_MAP.get(nationality.strip().lower(), nationality.strip()) or "미상"
+    gen = _GENDER_MAP.get(gender.strip().lower(), gender.strip()) or "미상"
     yr  = str(birth_year)[-2:] if birth_year else "00"
-    return f"{candidate_id}{nat}_{gen}({yr}born).pdf"
+    return f"{candidate_id}_{nat}_{gen}({yr}born).pdf"
 
 
 # ── 사진 오버레이 유틸 ────────────────────────────────────────────────────────
