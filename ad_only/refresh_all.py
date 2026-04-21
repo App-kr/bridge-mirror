@@ -21,11 +21,13 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE))
 
 PY = sys.executable
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 
 def _run(script: Path, label: str) -> int:
     print(f"\n== {label} ==")
-    r = subprocess.run([PY, "-X", "utf8", str(script)])
+    r = subprocess.run([PY, "-X", "utf8", str(script)],
+                       creationflags=_NO_WINDOW)
     if r.returncode != 0:
         print(f"[FAIL] {label} -- exit {r.returncode}", file=sys.stderr)
     return r.returncode

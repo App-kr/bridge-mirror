@@ -1,0 +1,15 @@
+{
+  "job_id": 30,
+  "candidate_id": "__e2e_real__3059",
+  "job_type": "resume_process",
+  "file_type": "cv",
+  "filename": "cv.pdf",
+  "s3_key": "s3://test/__e2e_real__3059/cv.pdf",
+  "error": "Mock S3 error (attempt 3)",
+  "timestamp": "2026-04-20T13:31:28.620104+00:00",
+  "instructions": {
+    "how_to_download": "S3에서 s3://test/__e2e_real__3059/cv.pdf 다운로드 (또는 /admin/resume-converter 수동 처리)",
+    "how_to_requeue": "/admin/pipeline 대시보드 → Job #30 재큐잉 버튼",
+    "how_to_manual_process": "tools/doc_processor.py --file <path> --brj <sheet_number>"
+  }
+}

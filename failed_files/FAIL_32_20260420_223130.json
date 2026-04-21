@@ -1,0 +1,15 @@
+{
+  "job_id": 32,
+  "candidate_id": "__e2e_real__3059",
+  "job_type": "image_process",
+  "file_type": "photo",
+  "filename": "photo.jpg",
+  "s3_key": "s3://test/__e2e_real__3059/photo.jpg",
+  "error": "Mock S3 error (attempt 3)",
+  "timestamp": "2026-04-20T13:31:30.359680+00:00",
+  "instructions": {
+    "how_to_download": "S3에서 s3://test/__e2e_real__3059/photo.jpg 다운로드 (또는 /admin/resume-converter 수동 처리)",
+    "how_to_requeue": "/admin/pipeline 대시보드 → Job #32 재큐잉 버튼",
+    "how_to_manual_process": "tools/doc_processor.py --file <path> --brj <sheet_number>"
+  }
+}
