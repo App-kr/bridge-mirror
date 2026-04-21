@@ -135,10 +135,10 @@ def _draw_photo_and_id(
         except Exception as e:
             log.warning(f"사진 삽입 실패: {e}")
 
-    # ID 번호 (좌상단 — 작게)
-    c.setFont("Helvetica-Bold", 14)
-    c.setFillColorRGB(0.3, 0.3, 0.3)
-    c.drawString(margin, page_h - margin - 0.5 * cm, f"#{candidate_id}")
+    # ID 번호 (좌상단 — 강조)
+    c.setFont("Helvetica-Bold", 28)
+    c.setFillColorRGB(0.2, 0.2, 0.2)
+    c.drawString(margin, page_h - margin - 0.9 * cm, f"#{candidate_id}")
     c.setFillColorRGB(0, 0, 0)
 
     # 구분선 (사진 하단 기준)
@@ -259,7 +259,7 @@ def text_to_pdf_bytes(
 
         # 빈 줄 처리
         if stripped == "":
-            y -= line_h * 0.4
+            y -= line_h * 0.65
             if y < margin:
                 y = _new_page()
             continue
@@ -339,6 +339,108 @@ def _compress_image(img: Image.Image, max_dpi: int = 150) -> bytes:
     return buf.getvalue()
 
 
+# ── 첫 페이지 자동 줄간격 계산 ────────────────────────────────────────────
+def _auto_line_h(
+    text: str,
+    font_size: int = 10,
+    margin_cm: float = 1.5,
+    has_photo: bool = True,
+) -> float:
+    """텍스트가 첫 페이지의 ~82%를 채우도록 line_h 자동 계산.
+    반환 범위: 16 ~ 26 pt.
+    """
+    page_w, page_h = A4
+    margin = margin_cm * cm
+    max_w = page_w - margin * 2
+
+    body_font = _KOREAN_FONT      if _KOREAN_FONT      else "Helvetica"
+    bold_font = _KOREAN_FONT_BOLD if _KOREAN_FONT_BOLD else "Helvetica-Bold"
+
+    def _sw2(s: str, fn: str, fs: int) -> float:
+        try:
+            return _rl_sw(s, fn, fs)
+        except Exception:
+            return sum(fs * (1.0 if ord(ch) > 0x2E7F else 0.6) for ch in s)
+
+    def _wrap2(line: str, fn: str, fs: int) -> list:
+        if _sw2(line, fn, fs) <= max_w:
+            return [line]
+        words = line.split(" ")
+        result, cur = [], ""
+        for w in words:
+            test = (cur + " " + w).lstrip() if cur else w
+            if _sw2(test, fn, fs) <= max_w:
+                cur = test
+            else:
+                if cur:
+                    result.append(cur)
+                if _sw2(w, fn, fs) > max_w:
+                    while w:
+                        for i in range(len(w), 0, -1):
+                            if _sw2(w[:i], fn, fs) <= max_w:
+                                result.append(w[:i])
+                                w = w[i:]
+                                break
+                        else:
+                            result.append(w)
+                            w = ""
+                else:
+                    cur = w
+        if cur:
+            result.append(cur)
+        return result or [""]
+
+    # 사용 가능 높이 계산
+    if has_photo:
+        PHOTO_H = 4.2 * cm
+        content_start_y = page_h - margin - PHOTO_H - 0.3 * cm - 8.0
+    else:
+        content_start_y = page_h - margin
+    avail_h = content_start_y - margin
+
+    _HDR_RE2 = re.compile(
+        r"^(?:Summary|Professional\s+experience|Education\s+and\s+training|"
+        r"Skills?|Languages?|Certifications?|Achievements?|References?|"
+        r"Profile|Career\s+objective|Qualifications?|[A-Z][A-Z\s&/\-]{3,})\s*$"
+    )
+
+    # 빈 줄 정규화
+    raw_lines = text.split("\n")
+    lines: list = []
+    blank = 0
+    for ln in raw_lines:
+        if ln.strip() == "":
+            blank += 1
+            if blank <= 1:
+                lines.append("")
+        else:
+            blank = 0
+            lines.append(ln)
+
+    # 총 line units 계산 (blank=0.65, header_pre=0.3, header_lh=1.3, normal=1.0)
+    total_units = 0.0
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if stripped == "":
+            total_units += 0.65
+            continue
+        is_hdr = bool(_HDR_RE2.match(stripped))
+        fn = bold_font if is_hdr else body_font
+        fs = font_size + 1 if is_hdr else font_size
+        lh_mult = 1.3 if is_hdr else 1.0
+        if is_hdr:
+            total_units += 0.3
+        wrapped = _wrap2(raw_line.rstrip(), fn, fs)
+        total_units += len(wrapped) * lh_mult
+
+    if total_units <= 0:
+        return 18.0
+
+    target_h = avail_h * 0.82
+    line_h = target_h / total_units
+    return max(16.0, min(26.0, line_h))
+
+
 # ── 메인 빌드 함수 ──────────────────────────────────────────────────────────
 def build_pdf(
     candidate_id:  str,
@@ -366,12 +468,13 @@ def build_pdf(
     _first_added = False
 
     if cover_text and cover_text.strip():
-        # 커버레터 첫 페이지에 사진+ID 삽입
+        # 커버레터 첫 페이지에 사진+ID 삽입 — 줄간격 자동 계산
+        _cover_lh = _auto_line_h(cover_text, font_size=10, margin_cm=1.5, has_photo=True)
         pdf_parts.append(text_to_pdf_bytes(
             cover_text,
             photo_bytes=photo_bytes,
             candidate_id=str(candidate_id),
-            line_h=15,
+            line_h=_cover_lh,
             margin_cm=1.5,
             font_size=10,
         ))
@@ -379,21 +482,22 @@ def build_pdf(
 
     if resume_text and resume_text.strip():
         if not _first_added:
-            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입
+            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입 — 줄간격 자동 계산
+            _resume_lh = _auto_line_h(resume_text, font_size=10, margin_cm=1.5, has_photo=True)
             pdf_parts.append(text_to_pdf_bytes(
                 resume_text,
                 photo_bytes=photo_bytes,
                 candidate_id=str(candidate_id),
-                line_h=15,
+                line_h=_resume_lh,
                 margin_cm=1.5,
                 font_size=10,
             ))
         else:
-            pdf_parts.append(text_to_pdf_bytes(resume_text, line_h=15, font_size=10))
+            pdf_parts.append(text_to_pdf_bytes(resume_text, line_h=16, font_size=10))
         _first_added = True
 
     if rec_text and rec_text.strip():
-        pdf_parts.append(text_to_pdf_bytes(rec_text, line_h=15, font_size=10))
+        pdf_parts.append(text_to_pdf_bytes(rec_text, line_h=16, font_size=10))
 
     # ── 추가 PDF 병합 ──────────────────────────────────────────────────
     for ep in extra_pdfs:
