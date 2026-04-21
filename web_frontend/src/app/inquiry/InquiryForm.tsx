@@ -424,9 +424,9 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                   href="/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-500 hover:text-blue-700 underline underline-offset-2 font-medium"
+                  className="underline hover:text-gray-700"
                 >
-                  정보 확인 →
+                  개인정보처리방침
                 </a>
               </p>
               <button

@@ -560,7 +560,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
             <div className="px-8 sm:px-10 pb-8 pt-5 border-t border-gray-100 space-y-4">
               <p className="text-xs text-gray-400 text-center">
                 By continuing you agree to our{' '}
-                <a href="/privacy" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                <a href="/terms" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Terms of Use</a>.
               </p>
               <button
                 type="button"
