@@ -48,66 +48,17 @@ export default function TermsPage() {
           </p>
         </Article>
 
-        <Article num="2" title="Candidate Responsibilities">
-          <ul className="list-disc pl-5 space-y-2">
-            <li>
-              <strong>Accuracy of information:</strong> All information submitted must be truthful and
-              complete. Submission of false information — including falsified academic credentials —
-              will result in disqualification and may give rise to legal liability.
-            </li>
-            <li>
-              <strong>Document readiness:</strong> Ensure your CV, photograph, and all supporting
-              documents are accurate and up to date prior to submission.
-            </li>
-            <li>
-              <strong>Responsiveness:</strong> You must keep your assigned BRIDGE recruiter informed
-              at all stages — including if you decide not to proceed. Recruiters prepare interview
-              arrangements on your behalf; failure to respond disrupts the process and may affect your
-              access to future services.
-            </li>
-          </ul>
-        </Article>
-
-        <Article num="3" title="Recruitment Process">
-          <p>The standard BRIDGE placement process for teacher candidates proceeds as follows:</p>
-          <ol className="mt-3 space-y-2">
-            {[
-              'CV and application form submitted — information verified for accuracy',
-              'Online consultation with your assigned recruiter; reference checks conducted',
-              'Profile introduced to prospective employers; position listed on the job board',
-              'Online and/or in-person interviews arranged between candidate and employer',
-              'Employer background check conducted; contract terms reviewed; accommodation confirmed',
-              'Contract executed; commencement date coordinated',
-              'Relocation support provided; teacher information registered',
-              'Employment commences',
-            ].map((step, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center mt-0.5">
-                  {i + 1}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-        </Article>
-
-        <Article num="4" title="No Direct Contact">
-          <p>Prior to hiring confirmation, the following are strictly prohibited:</p>
-          <ul className="list-disc pl-5 mt-2 space-y-1">
-            <li>Requesting a direct meeting with a prospective employer without going through your assigned BRIDGE recruiter</li>
-            <li>Accepting or requesting informal verbal agreements without BRIDGE&rsquo;s prior written consent</li>
-            <li>Collecting employer contact details obtained via the BRIDGE platform, or attempting to contact an employer outside the formal process</li>
-          </ul>
-          <p className="mt-3">
-            All communications with prospective employers must be conducted through your assigned
-            BRIDGE recruiter (via messenger or email) until the Supply Contract has been executed.
-            BRIDGE is unable to provide assistance or protection in respect of any terms or
-            arrangements reached through personal contact outside this process. For your own
-            protection, please ensure that all proceedings are managed through the BRIDGE team.
+        <Article num="2" title="Candidate Guidelines">
+          <p>
+            Detailed candidate responsibilities, the step-by-step recruitment process, and our
+            direct contact policy are available on the{' '}
+            <a href="/community/support" className="underline text-blue-700 hover:text-blue-900">
+              Support page
+            </a>.
           </p>
         </Article>
 
-        <Article num="5" title="Intellectual Property">
+        <Article num="3" title="Intellectual Property">
           <p>
             All content on this website — including employer data, contract information, text, images,
             logos, and platform design — is the property of BRIDGE Recruitment and may not be
@@ -115,7 +66,7 @@ export default function TermsPage() {
           </p>
         </Article>
 
-        <Article num="6" title="Prohibited Conduct">
+        <Article num="4" title="Prohibited Conduct">
           <ul className="list-disc pl-5 space-y-1">
             <li>Attempting to gain unauthorised access to any part of this site or its underlying systems</li>
             <li>Using the platform for any unlawful purpose</li>
@@ -125,7 +76,7 @@ export default function TermsPage() {
           </ul>
         </Article>
 
-        <Article num="7" title="Amendments">
+        <Article num="5" title="Amendments">
           <p>
             BRIDGE reserves the right to amend these Terms at any time. For general updates, the
             revised Terms will be published on this page with reasonable prior notice. Continued use
@@ -134,7 +85,7 @@ export default function TermsPage() {
           </p>
         </Article>
 
-        <Article num="8" title="Governing Law &amp; Dispute Resolution">
+        <Article num="6" title="Governing Law &amp; Dispute Resolution">
           <p>
             These Terms are governed by the laws of the <strong>Republic of Korea</strong>. Any
             disputes arising out of or in connection with these Terms or our services shall be
