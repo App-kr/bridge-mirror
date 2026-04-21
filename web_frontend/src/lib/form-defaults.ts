@@ -21,9 +21,9 @@ export const APPLY_DEFAULTS: Record<string, string[]> = {
     'Pacific Islander','Other','Prefer not to disclose',
   ],
   EDUCATION: [
+    'Degree from the US, UK, CA, IE, AU, NZ, or ZA',
+    'Degree from outside the US, UK, CA, IE, AU, NZ, or ZA',
     'Graduated BUT diploma not available',
-    'Standard Degree from one of the 7 eligible countries',
-    'Degree from OTHER country',
     'Master','Doctor','Associate','Online degree','Did not graduate',
     'Degree from Korea',
   ],

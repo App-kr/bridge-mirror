@@ -96,14 +96,14 @@ function Sec({ title, subtitle }: { title: string; subtitle?: string }) {
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="block text-[14px] font-semibold text-[#111] mb-1">
+    <label className="block text-[16px] font-semibold text-[#111] mb-1">
       {children}{required && <span className="text-[#d32f2f] ml-0.5">*</span>}
     </label>
   )
 }
 
 function Desc({ text }: { text: string }) {
-  return <p className="text-[13px] text-[#333] -mt-0.5 mb-2 leading-relaxed">{text}</p>
+  return <p className="text-[15px] text-[#333] -mt-0.5 mb-2 leading-relaxed">{text}</p>
 }
 
 function SingleTog({
