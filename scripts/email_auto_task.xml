@@ -23,7 +23,7 @@
   </Settings>
   <Actions>
     <Exec>
-      <Command>C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\python.exe</Command>
+      <Command>C:\Users\Scarlett\AppData\Local\Programs\Python\Python313\pythonw.exe</Command>
       <Arguments>-X utf8 "Q:\Claudework\bridge base\tools\email_autoresponder.py" --once</Arguments>
     </Exec>
   </Actions>
