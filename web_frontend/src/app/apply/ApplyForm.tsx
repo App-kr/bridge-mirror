@@ -507,7 +507,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   // ── Notice 화면 ─────────────────────────────────────────────────────────
   if (phase === 'notice') {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12">
+      <div className="flex items-center justify-center px-4 py-6" style={{ minHeight: 'calc(100vh - 44px)' }}>
         <style>{`
           @keyframes glow-pulse {
             0%, 100% { box-shadow: 0 0 10px 3px rgba(59,130,246,0.35); }
