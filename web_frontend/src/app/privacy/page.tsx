@@ -19,11 +19,8 @@ export default function PrivacyPage() {
       <div className="space-y-10 text-sm text-gray-700 leading-7">
 
         <Article num="제1조" title="처리하는 개인정보 항목">
-          <SubItem title="구직자 (강사)">
-            성명, 생년월일, 성별, 국적, 현재 거주국, 여권정보, 이메일 주소, 전화번호, 카카오톡 ID, 학력사항, 경력사항, 자격증, 비자정보, 범죄경력조회 결과, 사진, 이력서 및 자기소개서, 기타 채용에 필요한 개인정보
-          </SubItem>
-          <SubItem title="구인자 (학교·기관)">
-            담당자 성명, 연락처, 사업자등록번호, 계약정보, 채용 요건 등 채용에 필요한 정보
+          <SubItem title="구인자 학교·기관 등">
+            업체명, 설립정보, 주소, 고용주 성명, 담당자 성명, 연락처, SNS 연락처, 사업자등록번호, 계약정보, 상세 채용 요건 등 채용에 필요한 정보
           </SubItem>
         </Article>
 
@@ -133,7 +130,7 @@ export default function PrivacyPage() {
 function Article({ num, title, children }: { num: string; title: string; children: React.ReactNode }) {
   return (
     <section className="pt-8 border-t border-gray-100">
-      <h2 className="text-base font-bold text-[#1d1d1f] mb-3">{num} ({title})</h2>
+      <h2 className="text-base font-bold text-[#1d1d1f] mb-3">{num} {title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
   )
