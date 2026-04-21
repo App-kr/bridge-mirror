@@ -1807,8 +1807,16 @@
       "git": "b8fa7980",
       "files": 2490,
       "db_hash": "09e67f832869"
+    },
+    {
+      "dir": "20260422_071727__pii_pdf_fix",
+      "task": "pii_pdf_fix",
+      "ts": "2026.04.22 07:17:35",
+      "git": "393e46e0",
+      "files": 2497,
+      "db_hash": "ed17e627075c"
     }
   ],
-  "last_backup": "2026.04.21 20:57:39",
-  "total_count": 226
+  "last_backup": "2026.04.22 07:17:35",
+  "total_count": 227
 }
