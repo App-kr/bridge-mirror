@@ -43,11 +43,6 @@ export default function PrivacyPage() {
             <td>학교명, 담당자 성명, 이메일, 전화번호, 사업자등록번호, 구인 요건</td>
             <td>계약 종료 후 3년</td>
           </tr>
-          <tr>
-            <td>서비스 부정이용 방지 및 법적 분쟁 대응</td>
-            <td>접속 IP, 접속 일시, 서비스 이용 기록</td>
-            <td>3개월 (통신비밀보호법)</td>
-          </tr>
         </Table>
 
         <Notice>
@@ -80,11 +75,6 @@ export default function PrivacyPage() {
             <td>전자상거래법 제6조</td>
             <td>계약·청약 기록, 대금결제 기록</td>
             <td>5년</td>
-          </tr>
-          <tr>
-            <td>통신비밀보호법 제15조의2</td>
-            <td>접속 로그, IP 기록</td>
-            <td>3개월</td>
           </tr>
           <tr>
             <td>개인정보보호법 제39조의6</td>
@@ -395,10 +385,13 @@ export default function PrivacyPage() {
       <Article num="§18" title="Changes to This Policy">
         <p>
           We may update this Privacy Policy from time to time. The &ldquo;Last updated&rdquo; date at the
-          top reflects the most recent revision. For material changes, we will notify active applicants by
-          email. Continued use of our services after changes are posted constitutes acceptance of the
-          revised policy.
+          top reflects the most recent revision.
         </p>
+        <ul className="list-disc pl-5 mt-2 space-y-1">
+          <li><strong>General updates</strong>: at least <strong>7 days&rsquo; notice</strong> via this page</li>
+          <li><strong>Changes that materially affect your rights</strong>: at least <strong>30 days&rsquo; notice</strong> by email (where we hold your contact information)</li>
+        </ul>
+        <p className="mt-2">Continued use of our services after the effective date constitutes acceptance of the revised policy.</p>
       </Article>
 
       {/* Footer note */}
