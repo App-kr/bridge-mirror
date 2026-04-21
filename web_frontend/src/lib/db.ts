@@ -58,11 +58,12 @@ export async function fetchBoardPostsFromRender(
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (category) params.set('category', category)
     const res = await fetch(`${API_URL}/api/community/${board}?${params}`, {
-      next: { revalidate: 300 },  // 5-minute cache
+      next: { revalidate: 60 },  // 1-minute cache (빠른 반영)
     })
     if (res.ok) {
       const json = await res.json()
-      if (json.success && json.data?.posts?.length > 0) return json
+      // posts.length > 0 체크 제거 — 빈 게시판도 정상 응답으로 반환 (static JSON fallback 방지)
+      if (json.success) return json
     }
   } catch { /* Render unreachable -- fall through to static JSON */ }
 

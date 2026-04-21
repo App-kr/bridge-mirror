@@ -453,12 +453,16 @@ export default function BoardPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
-  // Render(primary) → Vercel JSON(fallback when empty or error)
+  // Render(primary) → Vercel JSON(fallback on network/HTTP error only — NOT on empty board)
   const fetchBoardPosts = useCallback((url: string, fallbackUrl: string) =>
-    fetch(url).then((r) => r.json()).then((j) => {
-      if (j.success && j.data.posts.length > 0) return j
-      return fetch(fallbackUrl).then((r) => r.json())
-    }).catch(() => fetch(fallbackUrl).then((r) => r.json())), [])
+    fetch(url, { signal: AbortSignal.timeout(12000) })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then((j) => { if (!j.success) throw new Error('api_error'); return j })
+      .catch(() =>
+        fetch(fallbackUrl, { signal: AbortSignal.timeout(8000) })
+          .then((r) => r.json())
+          .catch(() => ({ success: true, data: { posts: [], total: 0 } }))
+      ), [])
 
   const refreshPosts = useCallback(() => {
     if (!config) return
@@ -483,7 +487,8 @@ export default function BoardPage() {
             if (post.title) setFaqSectionTitle(post.title)
             const parsed = parseFaqBody(post.body ?? '')
             setFaqItems(parsed.length > 0 ? parsed : defaultFaq)
-          } else {
+          } else if (!j.success) {
+            // API 실패 시에만 하드코딩 기본값으로 대체 (성공+0건은 빈 FAQ 유지)
             setFaqItems(defaultFaq)
           }
         })
