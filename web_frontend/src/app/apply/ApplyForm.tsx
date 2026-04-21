@@ -536,8 +536,11 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
           <div className="px-6 pb-4 pt-2 space-y-3 border-t border-gray-100 mt-2">
             <p className="text-xs text-gray-500 leading-relaxed">
-              By continuing, you consent to the collection and use of your personal data for recruitment purposes,
-              in accordance with our Privacy Policy. All data is AES-256 encrypted and never shared publicly.
+              By continuing, you confirm you are not currently residing in an EU/EEA country (Ireland excepted),
+              and you consent to the collection and retention of your personal data for recruitment and legal
+              compliance purposes in accordance with our{' '}
+              <a href="/privacy" className="underline hover:text-gray-700" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+              All data is AES-256 encrypted and never shared publicly.
             </p>
             <button
               type="button"
@@ -899,7 +902,13 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
             <section className="card space-y-3 !border-blue-100 bg-blue-50/30">
               <div className="text-xs text-gray-600 space-y-3 max-h-48 overflow-y-auto leading-relaxed">
                 <p className="font-semibold text-gray-800">Consent to Data Collection and Use for Recruitment Purposes</p>
-                <p>By submitting your application, you hereby consent to the collection, processing, and use of your personal data as outlined in our Privacy Policy. This information will be utilized solely for recruitment purposes and, when necessary, shared with prospective employers relevant to your application.</p>
+                <p>By submitting your application, you hereby consent to the collection, processing, and use of your personal data as outlined in our{' '}
+                  <a href="/privacy" className="underline text-blue-700 hover:text-blue-900" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                  This information will be utilized solely for recruitment purposes and, when necessary, shared with prospective employers relevant to your application.</p>
+                <p className="font-semibold text-gray-800">Data Retention</p>
+                <p>Your personal data will be retained for a minimum of three (3) years following the conclusion of your recruitment process. Retention may extend beyond this period where required by Korean immigration, visa, or employment law. Deletion requests may be declined where retention is legally required.</p>
+                <p className="font-semibold text-gray-800">Geographic Service Availability</p>
+                <p>This service is available to applicants currently residing in: the United States, United Kingdom, Canada, Australia, Ireland, South Africa, or South Korea. By submitting, you confirm you are currently residing in one of these countries. Due to GDPR compliance requirements, we are unable to process applications from individuals residing in EU/EEA member states (Ireland excepted).</p>
                 <p className="font-semibold text-gray-800">Agreement to Terms of Service</p>
                 <p>You agree to abide by the terms and conditions established by the BRIDGE team. Should you choose to withdraw, email correspondence and associated records will be securely retained for a minimum period of five years.</p>
                 <p className="font-semibold text-gray-800">Responsibility for Accurate Information</p>
