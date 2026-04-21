@@ -1,13 +1,9 @@
 {
-  "last_updated": "2026-04-21 14:02:56",
+  "last_updated": "2026-04-21 14:23:09",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base\" && git status --short 2>&1 | head -20",
+  "last_command": "cd \"Q:/Claudework/bridge base\" && sed -i 's/autoDeploy: true/autoDeploy: false/' render.yaml && git add render.yaml && git commit -m \"chore: autoDeploy false (restore after deploy trigger)\n\nCo-Authore",
   "git_head": "1027cbc",
   "modified_files": [
-    "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\project_bridge_base.md",
-    "C:\\Users\\Scarlett\\.claude\\projects\\Q--Claudework\\memory\\MEMORY.md",
-    "Q:\\Claudework\\matjokdo_safe\\main.py",
-    "Q:\\Claudework\\bridge base\\ad_only\\refresh_all.py",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\app.py",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
@@ -23,7 +19,11 @@
     "Q:\\Claudework\\bridge base\\api_server.py",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\terms\\page.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\privacy\\layout.tsx",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\globals.css"
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\globals.css",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\fees\\page.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\contact\\page.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\MegaMenu.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\community\\school-types\\page.tsx"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-20 기준)",
   "git_changed": [

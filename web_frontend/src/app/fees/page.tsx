@@ -14,7 +14,7 @@ export default function FeesPage() {
       <div className="mb-10 pb-6 border-b border-gray-200">
         <span className="inline-block text-[11px] font-semibold text-gray-500 border border-gray-300 rounded px-2 py-0.5 mb-4">Legal · Fee Disclosure</span>
         <h1 className="text-3xl font-bold mb-2">요금안내</h1>
-        <p className="text-sm text-gray-500">Fee Disclosure &nbsp;|&nbsp; 시행일: 2026년 4월 &nbsp;|&nbsp; BRIDGE Recruitment</p>
+        <p className="text-sm text-gray-500">Fee Disclosure &nbsp;|&nbsp; 시행일: 2021년 06월</p>
         <p className="mt-4 text-sm text-gray-600 leading-relaxed">
           본 요금표는 <strong>「직업안정법」 제19조</strong> 및{' '}
           <strong>「고용노동부고시 제2017-22호(국내 유료직업소개요금 등 고시)」</strong>에 근거하여 공개합니다.
@@ -156,7 +156,7 @@ export default function FeesPage() {
           <div className="pl-4 border-l-2 border-gray-200 space-y-1 text-gray-600">
             <p>상호: BRIDGE Recruitment</p>
             <p>대표자: Scarlett</p>
-            <p>사업자등록번호: <span className="text-gray-400">(등록 정보 준비 중)</span></p>
+            <p>사업자등록번호: 113-94-14997</p>
             <p>유료직업소개사업 등록번호: <span className="text-gray-400">(등록 정보 준비 중)</span></p>
             <p>소재지: <span className="text-gray-400">(공개 주소 준비 중)</span></p>
             <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-900">bridgejobkr@gmail.com</a></p>

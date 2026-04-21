@@ -1791,8 +1791,16 @@
       "git": "66edc20c",
       "files": 2484,
       "db_hash": "09e67f832869"
+    },
+    {
+      "dir": "20260421_142315__Resume_Converter_파이프라인_완료_및_메타_주입_수정",
+      "task": "Resume Converter 파이프라인 완료 및 메타 주입 수정",
+      "ts": "2026.04.21 14:23:25",
+      "git": "94446a98",
+      "files": 2488,
+      "db_hash": "09e67f832869"
     }
   ],
-  "last_backup": "2026.04.21 10:02:58",
-  "total_count": 224
+  "last_backup": "2026.04.21 14:23:25",
+  "total_count": 225
 }
