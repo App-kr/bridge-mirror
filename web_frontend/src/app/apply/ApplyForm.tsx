@@ -531,32 +531,60 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
             <p className="text-base text-gray-500">Please have the following ready.</p>
           </div>
 
-          {/* Checklist card */}
+          {/* Card */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
-            <div className="px-6 sm:px-8 pt-7 pb-6 space-y-5">
-              {[
-                'Prepare your original resume as a Word or PDF file (no screenshots).',
-                'Ensure employment dates and locations are accurate and up to date.',
-                'Attach a clear, recent photo (no hats, sunglasses or photoshop).',
-                'A short self-introduction video.',
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-4">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold
-                                   flex items-center justify-center mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="text-[15px] sm:text-base text-gray-700 leading-relaxed">{item}</span>
-                </div>
-              ))}
+
+            {/* ── Eligibility ── */}
+            <div className="px-6 sm:px-8 pt-6 pb-5">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">
+                Eligibility Requirements
+              </p>
+              <div className="space-y-3.5">
+                {[
+                  'Age 19 or above, and under 60 years old.',
+                  'Citizen of: USA, Canada, UK, Ireland, Australia, New Zealand, South Africa, or South Korea (F-visa holders).',
+                  'Bachelor\'s degree or higher from an approved institution in one of the listed countries.',
+                  'No criminal record (misdemeanors or felonies).',
+                  'Good physical and mental health — must be verifiable by a doctor if required.',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="shrink-0 mt-[3px] text-blue-500">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="7.5" stroke="#3b82f6" strokeWidth="1"/>
+                        <path d="M4.5 8l2.5 2.5 4.5-5" stroke="#3b82f6" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                    <span className="text-[14px] sm:text-[15px] text-gray-700 leading-snug">{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Footer */}
+            {/* ── Documents ── */}
+            <div className="px-6 sm:px-8 pt-5 pb-6 border-t border-gray-100">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">
+                Documents to Prepare
+              </p>
+              <div className="space-y-3">
+                {[
+                  'Original resume as a Word or PDF file — no screenshots.',
+                  'Employment dates and locations must be accurate and up to date.',
+                  'Clear, recent photo — no hats, sunglasses, or photoshop.',
+                  'A short self-introduction video.',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="shrink-0 text-gray-300 mt-[3px] text-base leading-none">—</span>
+                    <span className="text-[14px] sm:text-[15px] text-gray-600 leading-snug">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Footer ── */}
             <div className="px-6 sm:px-8 pb-7 pt-4 border-t border-gray-100 space-y-4">
-              <p className="text-xs text-gray-400 leading-relaxed">
-                By continuing, you confirm you are not currently residing in an EU/EEA country (Ireland excepted)
-                and consent to data collection per our{' '}
+              <p className="text-xs text-gray-400 text-center">
+                By continuing you agree to our{' '}
                 <a href="/privacy" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-                All data is AES-256 encrypted and never shared publicly.
               </p>
               <button
                 type="button"
