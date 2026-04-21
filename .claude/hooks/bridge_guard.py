@@ -500,29 +500,56 @@ GIT_AUTH_CMDS = re.compile(
 )
 
 
-def _detect_git_account(command: str) -> tuple[str, str] | None:
-    """명령어에서 어떤 계정이 필요한지 추론. (account, purpose) 반환."""
-    # 명령어 내 경로 또는 URL에서 힌트 추출
+def _detect_git_account(command: str, cwd: str | None = None) -> tuple[str, str] | None:
+    """명령어/cwd/git remote에서 어떤 계정이 필요한지 추론. (account, purpose) 반환."""
+    search_text = command.lower()
+
+    # 1) cwd 경로에서 힌트
+    if cwd:
+        search_text += " " + cwd.lower()
+
+    # 2) 명령어·cwd 키워드 매핑
     for keyword, account, purpose in GIT_ACCOUNT_MAP:
-        if keyword.lower() in command.lower():
+        if keyword.lower() in search_text:
             return account, purpose
-    # 힌트 없으면 None (알 수 없음)
+
+    # 3) git remote URL 직접 조회 (cwd 있을 때)
+    if cwd:
+        try:
+            import subprocess as _sp
+            r = _sp.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=cwd, capture_output=True, text=True, timeout=4,
+            )
+            remote = r.stdout.strip()
+            if remote:
+                for keyword, account, purpose in GIT_ACCOUNT_MAP:
+                    if keyword.lower() in remote.lower():
+                        return account, purpose
+                # URL에서 직접 계정 추출 (github.com/{owner}/)
+                import re as _re
+                m = _re.search(r"github\.com[:/]([^/]+)/", remote)
+                if m:
+                    owner = m.group(1)
+                    return owner, remote.split("/")[-1].replace(".git", "")
+        except Exception:
+            pass
+
     return None
 
 
-def check_git_account(tool_input: dict):
+def check_git_account(tool_input: dict, cwd: str | None = None):
     """git push/pull/fetch 등 네트워크 git 명령 전 계정 경고."""
     command = tool_input.get("command", "")
     if not GIT_AUTH_CMDS.search(command):
         return
-    result = _detect_git_account(command)
+    result = _detect_git_account(command, cwd)
     if result:
         account, purpose = result
-        warn(f"⚠️  Git 계정 필요 → **{account}** ({purpose})\n"
-             f"로그인 확인: gh auth status | 전환: gh auth login -h github.com --web")
+        warn(f"🔑 Git 계정: {account}  ({purpose})\n"
+             f"   gh auth status 로 로그인 확인 | 전환: gh auth switch")
     else:
-        warn("⚠️  Git 네트워크 명령 감지 — 어떤 계정인지 확인하세요\n"
-             "계정 확인: gh auth status")
+        warn("🔑 Git 네트워크 명령 — 계정 확인: gh auth status")
 
 
 # ── 도구별 검사 ──────────────────────────────────────────────────────────────
@@ -601,8 +628,18 @@ def main():
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
 
+    # cwd 추출 — Claude Code가 제공하면 직접, 없으면 transcript_path 기반 추정
+    cwd = data.get("cwd") or data.get("workdir") or data.get("working_directory")
+    if not cwd:
+        tp = data.get("transcript_path", "")
+        if tp:
+            try:
+                cwd = str(Path(tp).parent.parent)  # transcript 경로 → 프로젝트 루트 근사
+            except Exception:
+                cwd = None
+
     if tool_name == "Bash":
-        check_git_account(tool_input)
+        check_git_account(tool_input, cwd)
         check_bash(tool_input)
     elif tool_name in ("Write", "Edit"):
         check_write_edit(tool_name, tool_input)
