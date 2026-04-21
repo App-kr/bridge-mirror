@@ -77,25 +77,7 @@ export default function TermsPage() {
         </ul>
       </Article>
 
-      <Article num="3." title="No Direct Contact Rule (직접 연락 엄금)">
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 mb-3">
-          Violation of this rule may result in immediate termination of services and legal liability
-          for business interference (업무 방해).
-        </div>
-        <p>Prior to hiring confirmation, the following are <strong>strictly prohibited</strong>:</p>
-        <ul className="list-disc pl-5 mt-2 space-y-1">
-          <li>Asking employers for or sharing personal contact information</li>
-          <li>Arranging direct meetings with employers outside the BRIDGE process</li>
-          <li>Accepting or sending unofficial contracts without BRIDGE&rsquo;s prior written consent</li>
-          <li>Collecting or sharing employer contact details obtained through the BRIDGE platform</li>
-        </ul>
-        <p className="mt-3">
-          All communication with prospective employers must be conducted through your assigned BRIDGE
-          recruiter via KakaoTalk or phone, until hiring is confirmed and the Supply Contract is executed.
-        </p>
-      </Article>
-
-      <Article num="4." title="Hiring Process">
+      <Article num="3." title="Hiring Process">
         <p>The standard BRIDGE placement process is as follows:</p>
         <ol className="mt-3 space-y-2">
           {[
@@ -117,6 +99,24 @@ export default function TermsPage() {
             </li>
           ))}
         </ol>
+      </Article>
+
+      <Article num="4." title="No Direct Contact">
+        <p>Prior to hiring confirmation, the following are prohibited:</p>
+        <ul className="list-disc pl-5 mt-2 space-y-1">
+          <li>Requesting a direct meeting with an employer without going through your assigned BRIDGE recruiter</li>
+          <li>Accepting or requesting unofficial contracts without BRIDGE&rsquo;s prior consent</li>
+          <li>Collecting employer contact information obtained through the BRIDGE platform or attempting to contact them outside the process</li>
+        </ul>
+        <p className="mt-3">
+          All communication with prospective employers must go through your assigned BRIDGE recruiter
+          (via messenger or email) until hiring is confirmed and the Supply Contract is executed.
+          BRIDGE provides no assistance for any terms or arrangements made through personal contact outside this process.
+        </p>
+        <p className="mt-3 text-gray-500">
+          Violation of this rule may result in immediate termination of services and may constitute
+          grounds for legal action for business interference (업무 방해).
+        </p>
       </Article>
 
       {/* ── PART B: FOR EMPLOYERS ── */}
