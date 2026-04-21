@@ -94,20 +94,17 @@ export default function PrivacyPage() {
         </Article>
 
         <Article num="제10조" title="쿠키(Cookie)의 운용">
-          <p>유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용에 어려움이 발생할 수 있습니다.</p>
+          <p>유지 및 보안 목적으로 쿠키를 사용합니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 일부 서비스 이용이 불가할 수 있습니다.</p>
         </Article>
 
         <Article num="제11조" title="개인정보 처리방침 변경">
-          <div className="pl-4 space-y-2 text-gray-600">
-            <p>이 개인정보처리방침은 2021년 06월 21일부터 적용됩니다.</p>
-            <p>내용 변경 시 충분한 일정을 두고 홈페이지를 통해 고지합니다.</p>
-          </div>
+          <p className="pl-4 text-gray-600">개인정보처리방침은 2021년 06월 21일부터 적용됩니다. 내용 변경 시 충분한 일정을 두고 홈페이지를 통해 고지합니다.</p>
         </Article>
 
       </div>
 
       {/* Closing */}
-      <p className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-600 leading-relaxed">
+      <p className="mt-14 text-xs text-gray-700 leading-relaxed">
         BRIDGE는 원어민 강사 채용에 특화된 독자적인 매칭 시스템(특허출원번호 제10-2024-0110155호)을 운영합니다.
       </p>
 

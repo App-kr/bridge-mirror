@@ -194,8 +194,6 @@ export default function FeesPage() {
       <div className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-400 space-y-1">
         <p>
           관련 문서:{' '}
-          <Link href="/terms" className="underline hover:text-gray-600">이용약관</Link>
-          {' · '}
           <Link href="/privacy" className="underline hover:text-gray-600">개인정보처리방침</Link>
           {' · '}
           <Link href="/contact" className="underline hover:text-gray-600">문의하기</Link>
