@@ -263,18 +263,31 @@ class Pipeline:
         return self._pause(PausePoint.SAVE, job)
 
     # ── 메인 실행 ──────────────────────────────────────────────────────────
-    def run(self, candidate_id: str, folder: Path) -> PipelineJob:
+    def run(
+        self,
+        candidate_id: str,
+        folder: Path,
+        candidate_meta: dict | None = None,
+    ) -> PipelineJob:
         """
         파이프라인 전체 실행.
 
         Args:
-            candidate_id: 강사 번호
-            folder:       분류된 파일 폴더 (inbox/{id}_제출_{날짜}/)
+            candidate_id:   강사 번호
+            folder:         분류된 파일 폴더 (inbox/{id}_제출_{날짜}/)
+            candidate_meta: 사전 조회된 후보자 메타 (name/nationality/gender/birth_year).
+                            제공 시 Google Sheets 조회를 건너뜀.
 
         Returns:
             PipelineJob (결과 포함)
         """
         job = PipelineJob(candidate_id=candidate_id)
+        # api_server.py 등에서 DB 메타를 미리 주입할 경우 Sheets 조회 불필요
+        if candidate_meta:
+            job.name       = candidate_meta.get("name", "")       or ""
+            job.nationality = candidate_meta.get("nationality", "") or ""
+            job.gender     = candidate_meta.get("gender", "")     or ""
+            job.birth_year = candidate_meta.get("birth_year", "") or ""
         self._emit(f"\n{'='*40}")
         self._emit(f"파이프라인 시작: {candidate_id}")
 

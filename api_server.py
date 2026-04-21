@@ -8186,8 +8186,16 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                     auto_mode=True,
                     on_progress=lambda msg: _log_upload.info("[Pipeline] %s", msg),
                 )
-                # pipeline에 후보자 메타 주입 (구글시트 조회 대신 DB에서 가져옴)
-                job = pipe.run(str(brj_number), pipe_folder)
+                # pipeline에 후보자 메타 주입 (구글시트 조회 대신 DB 값 사용)
+                _dob = candidate.get("dob") or ""
+                _birth_year = _dob[:4] if len(_dob) >= 4 else ""
+                _meta = {
+                    "name":        candidate.get("full_name", ""),
+                    "nationality": candidate.get("nationality", ""),
+                    "gender":      candidate.get("gender", ""),
+                    "birth_year":  _birth_year,
+                }
+                job = pipe.run(str(brj_number), pipe_folder, candidate_meta=_meta)
 
                 if job.output_path and job.output_path.exists():
                     processed_bytes = job.output_path.read_bytes()
