@@ -10804,6 +10804,86 @@ except Exception as _e:
     logging.getLogger("bridge.api").warning("_ensure_download_links_schema 스킵: %s", _e)
 
 
+def _ensure_page_content_table():
+    """공개 페이지 관리자 인라인 편집 콘텐츠 저장 테이블."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS page_content (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            page TEXT NOT NULL,
+            section_key TEXT NOT NULL,
+            field TEXT NOT NULL DEFAULT 'content',
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(page, section_key, field)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+try:
+    _ensure_page_content_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_page_content_table 스킵: %s", _e)
+
+
+@app.get("/api/page-content/{page}", tags=["public"])
+async def get_page_content(page: str, request: Request):
+    """공개 페이지 커스텀 콘텐츠 조회 (관리자 편집 내용 반영)."""
+    if not re.match(r'^[a-z0-9_-]+$', page):
+        raise HTTPException(status_code=400, detail="Invalid page key")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT section_key, field, value FROM page_content WHERE page = ?",
+        (page,)
+    ).fetchall()
+    conn.close()
+    result: dict = {}
+    for row in rows:
+        sk = row["section_key"]
+        if sk not in result:
+            result[sk] = {}
+        result[sk][row["field"]] = row["value"]
+    return {"success": True, "data": result}
+
+
+class PageContentPatch(BaseModel):
+    page: str
+    section_key: str
+    field: str = "content"
+    value: str
+
+
+@app.patch("/api/admin/page-content", tags=["admin"])
+async def patch_page_content(payload: PageContentPatch, request: Request):
+    """관리자 전용 — 공개 페이지 섹션 콘텐츠 수정."""
+    _check_admin(request)
+    if not re.match(r'^[a-z0-9_-]+$', payload.page):
+        raise HTTPException(status_code=400, detail="Invalid page key")
+    if not re.match(r'^[a-z0-9_-]+$', payload.section_key):
+        raise HTTPException(status_code=400, detail="Invalid section key")
+    if payload.field not in ("content", "title"):
+        raise HTTPException(status_code=400, detail="Invalid field")
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        INSERT INTO page_content (page, section_key, field, value, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(page, section_key, field) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+    """, (payload.page, payload.section_key, payload.field, payload.value))
+    conn.commit()
+    conn.close()
+    logging.getLogger("bridge.api").info(
+        "page_content 업데이트: page=%s section=%s field=%s", payload.page, payload.section_key, payload.field
+    )
+    return {"success": True}
+
+
 @app.post("/api/admin/download-links", tags=["admin"])
 async def admin_create_download_link(request: Request):
     """SECURITY: 보안 다운로드 링크 생성 (UUID, 3회 제한, 14일 만료)."""
