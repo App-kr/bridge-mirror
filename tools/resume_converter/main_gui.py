@@ -2332,23 +2332,64 @@ class BridgeConverterApp:
                                         if run.text:
                                             run.text = _clean_run_text(run.text)
 
-                    # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — docx2pdf/Word COM 사용)
+                    # 3) 수정된 DOCX → PDF 변환 (원본 포맷 보존 — Word COM 직접 사용)
                     import tempfile as _tf
                     import os as _os
+                    import threading as _thr2
                     _tmp = _tf.NamedTemporaryFile(suffix=".docx", delete=False)
                     doc.save(_tmp.name)
                     _tmp.close()
                     _tmp_pdf = _tmp.name[:-5] + ".pdf"
                     docx_pdf_bytes = None
+
+                    def _word_com_convert():
+                        _word = None
+                        try:
+                            import comtypes.client
+                            _word = comtypes.client.CreateObject("Word.Application")
+                            _word.Visible = False
+                            _word.DisplayAlerts = 0
+                            _doc = _word.Documents.Open(
+                                str(Path(_tmp.name).resolve()),
+                                ConfirmConversions=False,
+                                ReadOnly=True,
+                                AddToRecentFiles=False,
+                            )
+                            _doc.SaveAs(str(Path(_tmp_pdf).resolve()), FileFormat=17)
+                            _doc.Close(SaveChanges=False)
+                            return True
+                        except Exception as _e:
+                            log.warning(f"Word COM 실패: {_e}")
+                            return False
+                        finally:
+                            if _word is not None:
+                                try:
+                                    _word.Quit(SaveChanges=False)
+                                except Exception:
+                                    pass
+
+                    _conv_result = [False]
+                    _conv_t = _thr2.Thread(
+                        target=lambda: _conv_result.__setitem__(0, _word_com_convert()),
+                        daemon=True,
+                    )
+                    _conv_t.start()
+                    _conv_t.join(60)  # 60초 타임아웃
+                    if _conv_t.is_alive():
+                        log.warning("Word COM 60초 타임아웃")
+                        try:
+                            subprocess.run(["taskkill", "/F", "/IM", "WINWORD.EXE"],
+                                           capture_output=True)
+                        except Exception:
+                            pass
+
                     try:
-                        from docx2pdf import convert as _d2p
-                        _d2p(_tmp.name, _tmp_pdf)
-                        with open(_tmp_pdf, "rb") as _f:
-                            docx_pdf_bytes = _f.read()
-                        try: _os.unlink(_tmp_pdf)
-                        except: pass
+                        if _conv_result[0] and Path(_tmp_pdf).exists():
+                            with open(_tmp_pdf, "rb") as _f:
+                                docx_pdf_bytes = _f.read()
+                        _os.unlink(_tmp_pdf) if Path(_tmp_pdf).exists() else None
                     except Exception as _conv_e:
-                        log.warning(f"docx2pdf 실패, 평문 폴백 사용: {_conv_e}")
+                        log.warning(f"PDF 읽기 실패, 평문 폴백 사용: {_conv_e}")
                     finally:
                         try: _os.unlink(_tmp.name)
                         except: pass

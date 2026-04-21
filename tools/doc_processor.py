@@ -1908,30 +1908,56 @@ def _build_search_patterns(candidate: dict = None):
 #  6. 파일 저장 + 백업 + 로그
 # ══════════════════════════════════════════════════════
 
-def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> bool:
-    """DOCX → PDF 변환 (Word COM 자동화). 성공 시 True."""
-    try:
-        import comtypes.client
-        word = comtypes.client.CreateObject("Word.Application")
-        word.Visible = False
-        doc = word.Documents.Open(str(docx_path.resolve()))
-        doc.SaveAs(str(pdf_path.resolve()), FileFormat=17)  # 17 = wdFormatPDF
-        doc.Close()
-        word.Quit()
+def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path, timeout: int = 60) -> bool:
+    """DOCX → PDF 변환 (Word COM 자동화). 성공 시 True.
+    timeout: Word COM 최대 대기 초 (기본 60초, 초과 시 강제 종료 후 False)
+    """
+    import threading as _thr
+
+    def _word_com() -> bool:
+        word = None
+        try:
+            import comtypes.client
+            word = comtypes.client.CreateObject("Word.Application")
+            word.Visible = False
+            word.DisplayAlerts = 0   # wdAlertsNone — 보안/업데이트 팝업 차단
+            doc = word.Documents.Open(
+                str(docx_path.resolve()),
+                ConfirmConversions=False,
+                ReadOnly=True,
+                AddToRecentFiles=False,
+            )
+            doc.SaveAs(str(pdf_path.resolve()), FileFormat=17)  # 17 = wdFormatPDF
+            doc.Close(SaveChanges=False)
+            return True
+        except ImportError:
+            return False
+        except Exception as e:
+            print(f"  [PDF WARN] COM 변환 실패: {e}")
+            return False
+        finally:
+            if word is not None:
+                try:
+                    word.Quit(SaveChanges=False)
+                except Exception:
+                    pass
+
+    result = [False]
+    t = _thr.Thread(target=lambda: result.__setitem__(0, _word_com()), daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        print(f"  [PDF WARN] Word COM {timeout}초 타임아웃 — 강제 중단")
+        # Word 프로세스 종료
+        try:
+            import subprocess
+            subprocess.run(["taskkill", "/F", "/IM", "WINWORD.EXE"],
+                           capture_output=True)
+        except Exception:
+            pass
+        return False
+    if result[0]:
         return True
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"  [PDF WARN] COM 변환 실패: {e}")
-    # fallback: docx2pdf
-    try:
-        from docx2pdf import convert
-        convert(str(docx_path), str(pdf_path))
-        return True
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"  [PDF WARN] docx2pdf 실패: {e}")
     # fallback: LibreOffice
     try:
         import subprocess
