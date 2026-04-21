@@ -541,7 +541,8 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
           <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
             <div className="px-8 sm:px-10 pt-8 pb-6 space-y-5">
               {[
-                'Age 19–59. Citizens of USA, UK, Canada, Ireland, Australia, New Zealand, South Africa, or Korea (F-visa).',
+                'Age 19–59.',
+                'Citizens of USA, UK, Canada, Ireland, Australia, New Zealand, South Africa, or Korea (F-visa).',
                 'Bachelor\'s degree or higher, no criminal record, and in good physical and mental health.',
                 'Prepare your original resume as a Word or PDF file (no screenshots).',
                 'Ensure employment dates and locations are accurate and up to date.',
