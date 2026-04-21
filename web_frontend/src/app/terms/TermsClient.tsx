@@ -29,13 +29,12 @@ const DEFAULT_ARTICLES: Article[] = [
   },
   {
     num: '4',
-    key: 'art-4',
+    key: 'art-prohibited',
     title: 'Prohibited Conduct',
     content: `<ul class="list-disc pl-5 space-y-1">
 <li>Attempting to gain unauthorised access to any part of this site or its underlying systems</li>
 <li>Using the platform for any unlawful purpose</li>
 <li>Submitting false, misleading, or fraudulent information</li>
-<li>Circumventing the BRIDGE process to engage directly with any party introduced through our service</li>
 <li>Reverse-engineering, scraping, or otherwise reproducing content or data from this platform</li>
 </ul>`,
   },
