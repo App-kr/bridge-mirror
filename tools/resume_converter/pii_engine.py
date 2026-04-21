@@ -58,6 +58,15 @@ _PATTERNS = {
         r"[가-힣\s\d,.-]{2,40}"
         r"(?:시|구|동|로|길|번길|번지|읍|면|리)(?:\s*\d+)?",
     ),
+    # 영문 한국 주소: Gasan-dong, South Korea / Mapo-gu, Seoul / Gasan-dong Seoul South Korea
+    "addr_kr_en": re.compile(
+        r"\b[A-Z][A-Za-z]+(?:-(?:dong|gu|si|ro|gil|eup|myeon|ri))"
+        r"(?:[,\s]+(?:Seoul|Busan|Incheon|Daegu|Daejeon|Gwangju|Ulsan|Suwon|Seongnam))??"
+        r"(?:[,\s]+(?:South\s+)?Korea)?\b"
+        r"|"
+        r"\b[A-Z][A-Za-z\-]+,\s*(?:Seoul|South\s+Korea|Korea)\b",
+        re.IGNORECASE,
+    ),
     # US/캐나다 거주지 주소: 123 Eagle Mount Dr., Richboro PA 18954
     # 대소문자 구분 필수 (IGNORECASE 없음) — "17 with an ave" 오탐 방지
     # 집 번호: 2~5자리 / 도로명: 대문자 시작 1~4 단어 / 도로 접미사: 대/소문자 모두 허용
@@ -68,7 +77,11 @@ _PATTERNS = {
         r"Way|Court|Ct|Place|Pl|Circle|Cir|Mount|Mt|Highway|Hwy)"
         r"\.?(?:[,\s]+[A-Za-z]{2,20}(?:\s+[A-Z]{2})?)?(?:[,\s]*\d{5}(?:-\d{4})?)?",
     ),
-    "kakao":      re.compile(r"(?:카카오|kakao|카톡)[:\s]?\s*(\S{3,30})", re.IGNORECASE),
+    # kakao ID: "kakao ID kamogelo30" / "KakaoTalk: user123" / "카카오: xxx"
+    "kakao":      re.compile(
+        r"(?:카카오|kakao|카톡)(?:\s*(?:talk|id|아이디|ID))?[:\s]+\S{3,30}",
+        re.IGNORECASE,
+    ),
     "sns":        re.compile(
         r"(?:instagram\.com|fb\.com|facebook\.com|twitter\.com|t\.me|line\.me|wechat|위챗)"
         r"[/\s]?\S{2,30}",
@@ -280,6 +293,25 @@ _PII_LABEL_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# 생년월일 독립행 패턴 (이력서에서 bare date로 적힌 경우)
+_BARE_DOB_RE = re.compile(
+    # "30 Nov 98" / "Nov 30, 1998" / "1998-11-30" / "30/11/1998" / "30.11.1998"
+    r"^\s*(?:\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{2,4}"
+    r"|\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}"
+    r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4})\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# 단독 성별/국적 행 ("Female" / "Male" / "South African" / "American" 등)
+_BARE_PERSONAL_RE = re.compile(
+    r"^\s*(?:Female|Male|Non-?binary"
+    r"|South\s+African|South\s+Korean|Korean|American|British|Canadian|"
+    r"Australian|New\s+Zealander|Irish|Filipino|Zimbabwean|Zambian|"
+    r"Kenyan|Ghanaian|Nigerian|Ugandan|Tanzanian|Senegalese|Namibian"
+    r")\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 def _is_year_range(matched: str) -> bool:
     """전화번호처럼 보이는 연도 범위(2017-2021 등) 여부 판별."""
     digits = re.findall(r"\d+", matched)
@@ -442,8 +474,65 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     # ── PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등) ─────────
     cleaned = _PII_LABEL_RE.sub("", cleaned)
 
+    # ── 생년월일 독립행 삭제 ("30 Nov 98" 등) ─────────────────────────────
+    for m in _BARE_DOB_RE.finditer(cleaned):
+        found.append(PIIMatch(type="dob", original_value=m.group(0).strip(),
+                              position=m.start(), confidence=0.95, color="red"))
+    cleaned = _BARE_DOB_RE.sub("", cleaned)
+
+    # ── 단독 성별/국적 행 삭제 ("Female" / "South African" 등) ──────────────
+    cleaned = _BARE_PERSONAL_RE.sub("", cleaned)
+
     # ── Reference 섹션 전체 삭제 ──────────────────────────────────────────
     cleaned = remove_reference_section(cleaned)
+
+    # ── 학원/기관명 끝 "Campus" 제거 ─────────────────────────────────────
+    # "English Academy South Korea Campus" → "English Academy South Korea"
+    # 단순 제거: "Campus of X" 형태는 유지 (of 뒤에 단어 있으면 제거 안 함)
+    cleaned = re.sub(r"\s+Campus\b(?!\s+of\b)", "", cleaned, flags=re.IGNORECASE)
+
+    # ── 영문 한국 주소 후처리 ─────────────────────────────────────────────
+    # "[ADDR_KR_EN_REMOVED]" → 빈 문자열 (깔끔하게)
+    cleaned = re.sub(r"\[ADDR_KR_EN_REMOVED\]\s*,?", "", cleaned)
+    # 남은 "{city/dong}, South Korea" 패턴 재검사 (addr_kr_en이 놓친 것)
+    cleaned = re.sub(
+        r"\b[A-Z][A-Za-z\-]+-(?:dong|gu|si|ro|gil)\b[,\s]*(?:South\s+)?Korea\b",
+        "South Korea",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # "{동/구명}, Seoul, South Korea" → "South Korea"
+    cleaned = re.sub(
+        r"\b[A-Z][A-Za-z\-]+,\s*Seoul,?\s*South\s+Korea\b",
+        "South Korea",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # ── "South Korea (South Korea...)" / "(Republic of Korea)" 중복 정규화 ──
+    # PDF 추출 시 생기는 다양한 중복 형태 제거
+    # e.g. "South Korea (South Korea (Republic of Korea))"
+    cleaned = re.sub(
+        r"South\s+Korea\s*\([^)]*(?:South\s+Korea|Republic\s+of\s+Korea)[^)]*\)",
+        "South Korea",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # e.g. "(South Korea (Republic of Korea))" — addr_kr_en이 앞부분 삭제 후 잔류
+    cleaned = re.sub(
+        r"\(South\s+Korea\s*\([^)]*Republic\s+of\s+Korea[^)]*\)\)",
+        "South Korea",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # e.g. "(South Korea)" standalone parenthetical → "South Korea"
+    cleaned = re.sub(r"\(South\s+Korea\)", "South Korea", cleaned, flags=re.IGNORECASE)
+    # e.g. "(Republic of Korea)" anywhere
+    cleaned = re.sub(r"\s*\((?:the\s+)?Republic\s+of\s+Korea\)", "", cleaned, flags=re.IGNORECASE)
+
+    # ── 최종 정리: [TYPE_REMOVED] 마커 제거 ─────────────────────────────────
+    # 이메일/전화/SNS 플레이스홀더가 PDF 본문에 남지 않도록 완전 제거
+    cleaned = re.sub(r"\[[A-Z_]+_REMOVED\][\s,;:]*", "", cleaned)
 
     return cleaned, found
 

@@ -91,56 +91,79 @@ def build_filename(
     return f"{candidate_id}{nat}_{gen}({yr}born).pdf"
 
 
-# ── 1페이지: 커버 생성 ─────────────────────────────────────────────────────
-def _build_cover_page(
-    packet:       io.BytesIO,
+# ── 사진 오버레이 유틸 ────────────────────────────────────────────────────────
+def _draw_photo_and_id(
+    c,
     candidate_id: str,
     photo_bytes:  bytes | None,
     page_w:       float,
     page_h:       float,
-) -> None:
-    """reportlab으로 커버 페이지 생성."""
-    c = rl_canvas.Canvas(packet, pagesize=(page_w, page_h))
+    margin:       float,
+) -> float:
+    """
+    첫 페이지 우상단에 사진 + 좌상단에 ID 번호를 그린다.
+    반환값: 사진 하단 y좌표 (본문 시작 y 계산에 사용).
+    """
+    import os
 
-    # 강사 ID (좌상단) — 48~60pt bold
-    c.setFont("Helvetica-Bold", 54)
-    c.drawString(1.5 * cm, page_h - 2.5 * cm, str(candidate_id))
+    # 사진 크기 (증명사진 비율 35mm × 45mm 기준)
+    PHOTO_W = 3.2 * cm
+    PHOTO_H = 4.2 * cm
+    img_x = page_w - margin - PHOTO_W
+    img_y = page_h - margin - PHOTO_H
 
-    c.setFont("Helvetica", 10)
-    c.drawString(1.5 * cm, page_h - 3.3 * cm, "BRIDGE ESL Teacher Application")
-    c.line(1.5 * cm, page_h - 3.6 * cm, page_w - 1.5 * cm, page_h - 3.6 * cm)
-
-    # 증명사진 (우상단) — 약 100~120px (35mm 기준)
     if photo_bytes:
         try:
             img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-            img = img.resize((110, 147), Image.LANCZOS)
+            # portrait crop: 가로가 더 넓으면 중앙 crop
+            w, h = img.size
+            if w > h:
+                delta = (w - h) // 2
+                img = img.crop((delta, 0, w - delta, h))
+            # 증명사진 크기: 200×267 px (35mm×45mm @ 150dpi 근사)
+            img = img.resize((200, 267), Image.LANCZOS)
 
-            tmp_img = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            img.save(tmp_img.name, format="JPEG", quality=85, dpi=(150, 150))
-            tmp_img.close()
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            img.save(tmp.name, format="JPEG", quality=80, dpi=(150, 150))
+            tmp.close()
 
-            img_x = page_w - 1.5 * cm - 3.5 * cm
-            img_y = page_h - 2.5 * cm - 4.7 * cm
-            c.drawImage(tmp_img.name, img_x, img_y, width=3.5 * cm, height=4.7 * cm,
+            c.drawImage(tmp.name, img_x, img_y,
+                        width=PHOTO_W, height=PHOTO_H,
                         preserveAspectRatio=True, mask="auto")
-
-            import os; os.unlink(tmp_img.name)
+            os.unlink(tmp.name)
         except Exception as e:
             log.warning(f"사진 삽입 실패: {e}")
 
-    c.showPage()
-    c.save()
+    # ID 번호 (좌상단 — 작게)
+    c.setFont("Helvetica-Bold", 14)
+    c.setFillColorRGB(0.3, 0.3, 0.3)
+    c.drawString(margin, page_h - margin - 0.5 * cm, f"#{candidate_id}")
+    c.setFillColorRGB(0, 0, 0)
+
+    # 구분선 (사진 하단 기준)
+    line_y = img_y - 0.3 * cm
+    c.setStrokeColorRGB(0.7, 0.7, 0.7)
+    c.setLineWidth(0.5)
+    c.line(margin, line_y, page_w - margin, line_y)
+    c.setStrokeColorRGB(0, 0, 0)
+
+    return line_y
 
 
 # ── 텍스트 → PDF 변환 ──────────────────────────────────────────────────────
-def text_to_pdf_bytes(text: str, title: str = "",
-                      line_h: float = 16, margin_cm: float = 1.5,
-                      font_size: int = 10) -> bytes:
+def text_to_pdf_bytes(
+    text:          str,
+    title:         str = "",
+    line_h:        float = 16,
+    margin_cm:     float = 1.5,
+    font_size:     int   = 10,
+    photo_bytes:   bytes | None = None,
+    candidate_id:  str   = "",
+) -> bytes:
     """plain text → PDF bytes (reportlab, 한글 지원).
 
-    맑은 고딕 TTF가 있으면 한글 렌더링, 없으면 Helvetica 폴백.
-    CJK 글자는 폭을 12px로 계산해 줄바꿈 정확도 향상.
+    photo_bytes/candidate_id 제공 시 1페이지 우상단에 사진 + 좌상단에 ID 표시.
+    별도 커버 페이지 없이 바로 본문 시작.
     """
     buf     = io.BytesIO()
     page_w, page_h = A4
@@ -166,9 +189,15 @@ def text_to_pdf_bytes(text: str, title: str = "",
 
     c.setFont(body_font, font_size)
 
-    title_size = font_size + 2
-    if title:
-        c.setFont(title_font, title_size)
+    # 1페이지: 사진 + ID 삽입 (커버 페이지 없이 바로 본문)
+    if photo_bytes or candidate_id:
+        content_start_y = _draw_photo_and_id(
+            c, candidate_id, photo_bytes, page_w, page_h, margin
+        )
+        y = content_start_y - line_h * 0.5
+    elif title:
+        # title은 작게 (section 구분용, 헤더 과시 불필요)
+        c.setFont(title_font, font_size + 1)
         c.drawString(margin, page_h - margin, title)
         c.setFont(body_font, font_size)
         y = page_h - margin - line_h * 1.5
@@ -279,20 +308,39 @@ def build_pdf(
     page_w, page_h = A4
     pdf_parts: list[bytes] = []
 
-    # ── 1페이지: 커버 ────────────────────────────────────────────────────
-    cover_buf = io.BytesIO()
-    _build_cover_page(cover_buf, candidate_id, photo_bytes, page_w, page_h)
-    pdf_parts.append(cover_buf.getvalue())
+    # ── 1페이지: 커버 없이 바로 본문 시작 (사진+ID는 첫 내용 페이지 우상단) ──
+    # 첫 콘텐츠를 결정: 커버레터 > 이력서 순
+    _first_added = False
 
-    # ── 텍스트 섹션 ──────────────────────────────────────────────────────
     if cover_text and cover_text.strip():
-        pdf_parts.append(_compress_cover_to_1page(cover_text))
+        # 커버레터 첫 페이지에 사진+ID 삽입
+        pdf_parts.append(text_to_pdf_bytes(
+            cover_text,
+            photo_bytes=photo_bytes,
+            candidate_id=str(candidate_id),
+            line_h=15,
+            margin_cm=1.5,
+            font_size=10,
+        ))
+        _first_added = True
 
     if resume_text and resume_text.strip():
-        pdf_parts.append(text_to_pdf_bytes(resume_text, "Curriculum Vitae"))
+        if not _first_added:
+            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입
+            pdf_parts.append(text_to_pdf_bytes(
+                resume_text,
+                photo_bytes=photo_bytes,
+                candidate_id=str(candidate_id),
+                line_h=15,
+                margin_cm=1.5,
+                font_size=10,
+            ))
+        else:
+            pdf_parts.append(text_to_pdf_bytes(resume_text, line_h=15, font_size=10))
+        _first_added = True
 
     if rec_text and rec_text.strip():
-        pdf_parts.append(text_to_pdf_bytes(rec_text, "Recommendation Letter"))
+        pdf_parts.append(text_to_pdf_bytes(rec_text, line_h=15, font_size=10))
 
     # ── 추가 PDF 병합 ──────────────────────────────────────────────────
     for ep in extra_pdfs:
