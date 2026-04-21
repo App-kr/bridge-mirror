@@ -49,7 +49,7 @@ export default function PrivacyPage() {
         </Article>
 
         <Article num="제4조" title="정보주체의 권리·의무 및 행사 방법">
-          <p>이용자는 언제든지 개인정보 열람·정정·삭제·처리정지를 요청할 수 있으며, 이메일로 접수 시 지체 없이 처리합니다. 다만, 법령에 따라 보존이 필요한 정보의 삭제 요청은 거절될 수 있으며 해당 사유를 안내합니다.</p>
+          <p>이용자는 언제든지 개인정보의 열람·정정·삭제·처리정지를 요청할 수 있습니다. 서면 또는 이메일로 요청 시, 당사는 관계 법령(상법, 전자상거래법 등)에 따라 일정 기간 보존해야 할 필요가 있는 경우를 제외하고는 30일 이내에 지체 없이 해당 정보를 삭제합니다. 보존이 필요한 정보는 별도의 DB로 분리하여 안전하게 보관하며, 보존 기간이 경과하면 즉시 파기합니다.</p>
         </Article>
 
         <Article num="제5조" title="개인정보의 제3자 제공">
@@ -106,21 +106,10 @@ export default function PrivacyPage() {
 
       </div>
 
-      {/* Patent notice */}
-      <p className="mt-14 text-xs text-gray-400 leading-relaxed">
+      {/* Closing */}
+      <p className="mt-14 pt-6 border-t border-gray-200 text-xs text-gray-400 leading-relaxed">
         BRIDGE는 원어민 강사 채용에 특화된 독자적인 매칭 시스템(특허출원번호 제10-2024-0110155호)을 운영합니다.
       </p>
-
-      {/* Footer */}
-      <div className="mt-4 pt-5 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
-        <span>BRIDGE Recruitment</span>
-        <span>대표: Scarlett</span>
-        <span>bridgejob.co.kr</span>
-        <span><a href="mailto:bridgejobkr@gmail.com" className="underline hover:text-gray-600">bridgejobkr@gmail.com</a></span>
-        <span><Link href="/terms" className="underline hover:text-gray-600">이용약관</Link></span>
-        <span><Link href="/fees" className="underline hover:text-gray-600">요금안내</Link></span>
-        <span><Link href="/contact" className="underline hover:text-gray-600">문의하기</Link></span>
-      </div>
 
     </div>
   )
