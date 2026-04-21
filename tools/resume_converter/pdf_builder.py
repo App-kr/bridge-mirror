@@ -28,6 +28,7 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import stringWidth as _rl_sw
 import pdfplumber
 
 # ── 한글 폰트 등록 (맑은 고딕 — 윈도우 기본) ──────────────────────────────
@@ -165,75 +166,127 @@ def text_to_pdf_bytes(
     photo_bytes/candidate_id 제공 시 1페이지 우상단에 사진 + 좌상단에 ID 표시.
     별도 커버 페이지 없이 바로 본문 시작.
     """
-    buf     = io.BytesIO()
+    buf    = io.BytesIO()
     page_w, page_h = A4
-    c       = rl_canvas.Canvas(buf, pagesize=A4)
-    margin  = margin_cm * cm
-    max_w   = page_w - margin * 2
+    c      = rl_canvas.Canvas(buf, pagesize=A4)
+    margin = margin_cm * cm
+    max_w  = page_w - margin * 2
 
-    # 폰트 선택
-    body_font  = _KOREAN_FONT      if _KOREAN_FONT      else "Helvetica"
-    title_font = _KOREAN_FONT_BOLD if _KOREAN_FONT_BOLD else "Helvetica-Bold"
+    body_font = _KOREAN_FONT      if _KOREAN_FONT      else "Helvetica"
+    bold_font = _KOREAN_FONT_BOLD if _KOREAN_FONT_BOLD else "Helvetica-Bold"
 
-    def _line_width(s: str) -> float:
-        """글자폭 추정: CJK 12px, ASCII 6px."""
-        return sum(12 if ord(ch) > 0x2E7F else 6 for ch in s)
+    def _sw(s: str, fn: str, fs: int) -> float:
+        """reportlab stringWidth — 실제 렌더 폭(pt) 반환."""
+        try:
+            return _rl_sw(s, fn, fs)
+        except Exception:
+            # 폴백: ASCII 0.6em, CJK 1em
+            return sum(fs * (1.0 if ord(ch) > 0x2E7F else 0.6) for ch in s)
 
-    def _draw_line(canvas_obj, s: str, x: float, y: float) -> None:
-        canvas_obj.drawString(x, y, s)
+    def _wrap(line: str, fn: str, fs: int) -> list[str]:
+        """단어 단위 줄바꿈. max_w 초과 시 여러 줄로 분할."""
+        if _sw(line, fn, fs) <= max_w:
+            return [line]
+        words = line.split(" ")
+        result, cur = [], ""
+        for w in words:
+            test = (cur + " " + w).lstrip() if cur else w
+            if _sw(test, fn, fs) <= max_w:
+                cur = test
+            else:
+                if cur:
+                    result.append(cur)
+                # 단어 자체가 너무 길면 강제 분할
+                if _sw(w, fn, fs) > max_w:
+                    while w:
+                        for i in range(len(w), 0, -1):
+                            if _sw(w[:i], fn, fs) <= max_w:
+                                result.append(w[:i])
+                                w = w[i:]
+                                break
+                        else:
+                            result.append(w)
+                            w = ""
+                else:
+                    cur = w
+        if cur:
+            result.append(cur)
+        return result or [""]
 
     def _new_page() -> float:
         c.showPage()
         c.setFont(body_font, font_size)
         return page_h - margin
 
+    # 섹션 헤더 감지 패턴 (볼드 처리용)
+    _HDR_RE = re.compile(
+        r"^(?:Summary|Professional\s+experience|Education\s+and\s+training|"
+        r"Skills?|Languages?|Certifications?|Achievements?|References?|"
+        r"Profile|Career\s+objective|Qualifications?|[A-Z][A-Z\s&/\-]{3,})\s*$"
+    )
+
     c.setFont(body_font, font_size)
 
-    # 1페이지: 사진 + ID 삽입 (커버 페이지 없이 바로 본문)
+    # 1페이지: 사진+ID 삽입
     if photo_bytes or candidate_id:
         content_start_y = _draw_photo_and_id(
             c, candidate_id, photo_bytes, page_w, page_h, margin
         )
         y = content_start_y - line_h * 0.5
     elif title:
-        # title은 작게 (section 구분용, 헤더 과시 불필요)
-        c.setFont(title_font, font_size + 1)
+        c.setFont(bold_font, font_size + 1)
         c.drawString(margin, page_h - margin, title)
         c.setFont(body_font, font_size)
         y = page_h - margin - line_h * 1.5
     else:
         y = page_h - margin
 
-    for raw_line in text.split("\n"):
-        # 긴 줄 자동 줄바꿈 (CJK 폭 보정)
-        while _line_width(raw_line) > max_w:
-            # 들어갈 수 있는 글자 수 계산
-            acc = 0
-            cut = 0
-            for ch in raw_line:
-                w = 12 if ord(ch) > 0x2E7F else 6
-                if acc + w > max_w:
-                    break
-                acc += w
-                cut += 1
-            chunk    = raw_line[:cut]
-            raw_line = raw_line[cut:]
-            _draw_line(c, chunk, margin, y)
-            y -= line_h
+    # 빈 줄 연속 최대 1개로 제한
+    raw_lines = text.split("\n")
+    lines: list[str] = []
+    blank = 0
+    for ln in raw_lines:
+        if ln.strip() == "":
+            blank += 1
+            if blank <= 1:
+                lines.append("")
+        else:
+            blank = 0
+            lines.append(ln)
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+
+        # 빈 줄 처리
+        if stripped == "":
+            y -= line_h * 0.4
             if y < margin:
                 y = _new_page()
+            continue
 
-        _draw_line(c, raw_line, margin, y)
-        y -= line_h
-        if y < margin:
-            y = _new_page()
+        # 헤더 여부 판단
+        is_hdr = bool(_HDR_RE.match(stripped))
+        fn = bold_font if is_hdr else body_font
+        fs = font_size + 1 if is_hdr else font_size
+        lh = line_h * 1.3 if is_hdr else line_h
+
+        if is_hdr:
+            y -= line_h * 0.3  # 헤더 앞 약간 여백
+
+        c.setFont(fn, fs)
+        for display in _wrap(raw_line.rstrip(), fn, fs):
+            if y < margin:
+                y = _new_page()
+                c.setFont(fn, fs)
+            c.drawString(margin, y, display)
+            y -= lh
 
     c.save()
     return buf.getvalue()
 
 
 # ── 커버레터 1페이지 압축 ───────────────────────────────────────────────────
-def _compress_cover_to_1page(text: str) -> bytes:
+def _compress_cover_to_1page(text: str, photo_bytes: bytes | None = None, candidate_id: str = "") -> bytes:
     """커버레터가 1페이지 초과 시 단계적 압축. 최대 1페이지."""
     attempts = [
         {"line_h": 16,   "margin_cm": 1.5, "font_size": 11},
@@ -242,7 +295,7 @@ def _compress_cover_to_1page(text: str) -> bytes:
         {"line_h": 13.6, "margin_cm": 1.0, "font_size": 10},
     ]
     for kw in attempts:
-        pdf_bytes = text_to_pdf_bytes(text, "Cover Letter", **kw)
+        pdf_bytes = text_to_pdf_bytes(text, photo_bytes=photo_bytes, candidate_id=candidate_id, **kw)
         try:
             with pikepdf.Pdf.open(io.BytesIO(pdf_bytes)) as p:
                 if len(p.pages) <= 1:

@@ -604,11 +604,31 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     )
 
     # ── 주소 제거 후 잔류 쉼표/구두점 정리 ───────────────────────────────────
-    # "Currently in South Korea,  ," → "Currently in South Korea"
-    # "Email: ,  " → already removed by label cleanup above
-    cleaned = re.sub(r",\s*,+", ",", cleaned)          # 연속 쉼표 축소
-    cleaned = re.sub(r",\s*$", "", cleaned, flags=re.MULTILINE)  # 줄 끝 쉼표 제거
-    cleaned = re.sub(r"\s{3,}", "  ", cleaned)          # 과도한 공백 축소
+    cleaned = re.sub(r",\s*,+", ",", cleaned)
+    cleaned = re.sub(r",\s*$", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\s{3,}", "  ", cleaned)
+
+    # ── 고아 괄호 정리 ────────────────────────────────────────────────────────
+    # "South Korea)" → "South Korea"  /  줄 끝 단독 ) 제거
+    cleaned = re.sub(r"(?<=\w)\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
+    # 줄 시작 또는 단독 ")" 제거
+    cleaned = re.sub(r"^\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
+
+    # ── PDF 템플릿 잔류 레이블 제거 ───────────────────────────────────────────
+    # "Personal information" / "ESL teacher" (단독 줄) 같은 CV 템플릿 헤더
+    cleaned = re.sub(
+        r"^(?:Personal\s+information|Contact\s+information|Contact\s+details|"
+        r"Personal\s+details|Basic\s+information|Profile\s+information|"
+        r"ESL\s+(?:teacher|instructor)|English\s+teacher|Native\s+speaker|"
+        r"Desired\s+job\s+type|Job\s+type|Desired\s+position|Position\s+sought|"
+        r"Objective|Career\s+objective|Target\s+role)\s*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
     return cleaned, found
 
