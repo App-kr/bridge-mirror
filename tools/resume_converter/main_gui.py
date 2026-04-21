@@ -13,6 +13,7 @@ import logging
 import os
 import queue as _queue_mod
 import re
+import subprocess
 import threading
 import time
 import webbrowser
@@ -37,6 +38,25 @@ except ImportError:
     _WINDND_AVAILABLE = False
 
 from PIL import Image, ImageTk
+
+
+def _safe_open(path: str) -> None:
+    """os.startfile 폴백: 기본 앱 실패 시 Edge → Chrome 순으로 시도."""
+    p = Path(path)
+    if p.suffix.lower() == ".pdf":
+        for exe in [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        ]:
+            if Path(exe).exists():
+                subprocess.Popen([exe, str(p)])
+                return
+    try:
+        os.startfile(path)
+    except OSError:
+        # 폴더는 탐색기로 직접 열기
+        subprocess.Popen(["explorer", str(p)])
+
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
@@ -2497,18 +2517,18 @@ class BridgeConverterApp:
     def _open_output_dir(self):
         """저장 폴더를 탐색기에서 열기."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        os.startfile(str(self._output_dir))
+        _safe_open(str(self._output_dir))
 
     def _open_last_output(self):
         """최근 생성된 파일 열기."""
         if self._last_output_path and self._last_output_path.exists():
-            os.startfile(str(self._last_output_path))
+            _safe_open(str(self._last_output_path))
         else:
             # 폴더의 가장 최근 PDF 열기
             pdfs = sorted(self._output_dir.glob("*.pdf"),
                           key=lambda p: p.stat().st_mtime, reverse=True)
             if pdfs:
-                os.startfile(str(pdfs[0]))
+                _safe_open(str(pdfs[0]))
             else:
                 messagebox.showinfo("파일 없음", "저장된 파일이 없습니다.")
 
@@ -2586,7 +2606,7 @@ class BridgeConverterApp:
         btn_row = self._reapp_view_btn.master
         btn_row.pack(anchor="w", padx=8, pady=4)
         self._reapp_view_btn.config(
-            command=lambda: os.startfile(str(old_path.parent)))
+            command=lambda: _safe_open(str(old_path.parent)))
         self._reapp_del_btn.config(
             command=lambda: self._confirm_delete_old(old_path))
         self._reapp_keep_btn.config(

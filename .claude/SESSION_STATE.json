@@ -1,11 +1,9 @@
 {
-  "last_updated": "2026-04-21 09:10:24",
+  "last_updated": "2026-04-21 10:10:00",
   "last_tool": "Bash",
-  "last_command": "cd \"Q:/Claudework/bridge base\" && git push 2>&1 | tail -5",
+  "last_command": "grep -n \"os.startfile\" \"Q:/Claudework/bridge base/tools/resume_converter/main_gui.py\"",
   "git_head": "1027cbc",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\pipeline\\page.tsx",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\admin\\AdminSidebar.tsx",
     "Q:\\Claudework\\bridge base\\tools\\resume_backfill.py",
     "Q:\\Claudework\\bridge base\\scripts\\register_ad_only_refresh.bat",
     "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
@@ -23,7 +21,9 @@
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\privacy\\page.tsx",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\apply\\ApplyForm.tsx",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\Footer.tsx"
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\components\\Footer.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\inquiry\\InquiryForm.tsx",
+    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\main_gui.py"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-20 기준)",
   "git_changed": [
@@ -514,6 +514,7 @@
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Session_13420426260994405",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Tabs_13420426010818633",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sessions/Tabs_13420426261214385",
+    "matjokdo_safe/.chrome_matjokdo_profile/Default/SharedStorage-wal",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Site Characteristics Database/LOG",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Site Characteristics Database/LOG.old",
     "matjokdo_safe/.chrome_matjokdo_profile/Default/Sync Data/LevelDB/LOG",
