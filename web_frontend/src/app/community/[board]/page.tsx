@@ -453,11 +453,11 @@ export default function BoardPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
-  // Render(primary) → Vercel JSON(fallback on network/HTTP error only — NOT on empty board)
+  // Render(primary) → Vercel JSON(fallback on network/HTTP error OR empty board)
   const fetchBoardPosts = useCallback((url: string, fallbackUrl: string) =>
     fetch(url, { signal: AbortSignal.timeout(12000) })
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
-      .then((j) => { if (!j.success) throw new Error('api_error'); return j })
+      .then((j) => { if (!j.success || !j.data?.posts?.length) throw new Error('empty_or_error'); return j })
       .catch(() =>
         fetch(fallbackUrl, { signal: AbortSignal.timeout(8000) })
           .then((r) => r.json())
