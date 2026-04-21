@@ -194,6 +194,7 @@ export default function PrivacyPage() {
 
         <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm space-y-1">
           <p><strong>개인정보보호책임자 (Privacy Officer)</strong></p>
+          <p>성명 (Name): Scarlett</p>
           <p>소속/직책: BRIDGE Recruitment 대표</p>
           <p>이메일: <a href="mailto:bridgejobkr@gmail.com" className="text-blue-600 underline">bridgejobkr@gmail.com</a></p>
           <p>처리 기한: 접수 후 10일 이내</p>
