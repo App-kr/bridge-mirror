@@ -507,48 +507,66 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   // ── Notice 화면 ─────────────────────────────────────────────────────────
   if (phase === 'notice') {
     return (
-      <div className="max-w-xl mx-auto py-10 px-4 space-y-6">
-        <div className="space-y-1">
-          <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
-                           border border-blue-200 rounded-full px-3 py-1 uppercase tracking-wider">
-            For Teachers
-          </span>
-          <h1 className="text-2xl font-black text-gray-900 pt-1">Before You Apply</h1>
-        </div>
+      <div className="min-h-screen flex items-center justify-center px-4 py-12">
+        <style>{`
+          @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 10px 3px rgba(59,130,246,0.35); }
+            50%       { box-shadow: 0 0 24px 8px rgba(59,130,246,0.65); }
+          }
+          .btn-glow {
+            animation: glow-pulse 2.2s ease-in-out infinite;
+          }
+        `}</style>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 pt-6 pb-4 space-y-3">
-            {[
-              'Have your passport-style photo ready (JPG/PNG, max 5 MB).',
-              'Prepare your CV/resume and cover letter (PDF or DOC).',
-              'TEFL/TESOL or teaching license certificate, if you have one.',
-              'A short video introduction is recommended but optional (MP4, max 100 MB).',
-              'All fields marked with * are required.',
-            ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3 text-sm text-gray-700 leading-relaxed">
-                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-[11px] font-bold flex items-center justify-center mt-0.5 border border-blue-200">
-                  {i + 1}
-                </span>
-                <span>{item}</span>
-              </div>
-            ))}
+        <div className="w-full max-w-lg">
+          {/* Header */}
+          <div className="text-center mb-8 space-y-2">
+            <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
+                             border border-blue-200 rounded-full px-3 py-1 uppercase tracking-wider">
+              For Teachers
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-black text-gray-900 leading-tight">
+              Before You Apply
+            </h1>
+            <p className="text-base text-gray-500">Please have the following ready.</p>
           </div>
 
-          <div className="px-6 pb-4 pt-2 space-y-3 border-t border-gray-100 mt-2">
-            <p className="text-xs text-gray-500 leading-relaxed">
-              By continuing, you confirm you are not currently residing in an EU/EEA country (Ireland excepted),
-              and you consent to the collection and retention of your personal data for recruitment and legal
-              compliance purposes in accordance with our{' '}
-              <a href="/privacy" className="underline hover:text-gray-700" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-              All data is AES-256 encrypted and never shared publicly.
-            </p>
-            <button
-              type="button"
-              onClick={() => setPhase('captcha')}
-              className="w-full py-3 bg-[#1a1a2e] text-white text-sm font-semibold rounded-xl hover:bg-[#2a2a3e] transition-colors"
-            >
-              I Agree &amp; Continue →
-            </button>
+          {/* Checklist card */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
+            <div className="px-6 sm:px-8 pt-7 pb-6 space-y-5">
+              {[
+                'Prepare your original resume as a Word or PDF file (no screenshots).',
+                'Ensure employment dates and locations are accurate and up to date.',
+                'Attach a clear, recent photo (no hats, sunglasses or photoshop).',
+                'A short self-introduction video.',
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-4">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold
+                                   flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <span className="text-[15px] sm:text-base text-gray-700 leading-relaxed">{item}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 sm:px-8 pb-7 pt-4 border-t border-gray-100 space-y-4">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                By continuing, you confirm you are not currently residing in an EU/EEA country (Ireland excepted)
+                and consent to data collection per our{' '}
+                <a href="/privacy" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+                All data is AES-256 encrypted and never shared publicly.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPhase('captcha')}
+                className="btn-glow w-full py-3.5 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
+                           text-white text-base font-semibold rounded-xl transition-colors"
+              >
+                I Agree &amp; Continue →
+              </button>
+            </div>
           </div>
         </div>
       </div>

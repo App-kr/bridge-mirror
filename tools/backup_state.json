@@ -1767,8 +1767,24 @@
       "git": "c7542fcb",
       "files": 2475,
       "db_hash": "e260a5430b71"
+    },
+    {
+      "dir": "20260421_090717__apply_notice_UX_개선",
+      "task": "apply notice UX 개선",
+      "ts": "2026.04.21 09:07:51",
+      "git": "2253085d",
+      "files": 2484,
+      "db_hash": "09e67f832869"
+    },
+    {
+      "dir": "20260421_090915__educational_background_options_font_size",
+      "task": "educational_background_options_font_size",
+      "ts": "2026.04.21 09:09:24",
+      "git": "2253085d",
+      "files": 2482,
+      "db_hash": "09e67f832869"
     }
   ],
-  "last_backup": "2026.04.20 11:14:16",
-  "total_count": 221
+  "last_backup": "2026.04.21 09:09:24",
+  "total_count": 223
 }
