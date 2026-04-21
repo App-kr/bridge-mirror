@@ -509,16 +509,22 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
     return (
       <div className="flex items-center justify-center px-4 py-6" style={{ minHeight: 'calc(100vh - 44px)' }}>
         <style>{`
-          @keyframes glow-pulse {
-            0%, 100% { box-shadow: 0 0 10px 3px rgba(59,130,246,0.35); }
-            50%       { box-shadow: 0 0 24px 8px rgba(59,130,246,0.65); }
+          @keyframes shimmer {
+            0%   { transform: translateX(-100%) skewX(-12deg); }
+            100% { transform: translateX(250%) skewX(-12deg); }
           }
-          .btn-glow {
-            animation: glow-pulse 2.2s ease-in-out infinite;
+          .btn-shimmer { position: relative; overflow: hidden; }
+          .btn-shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 40%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.38), transparent);
+            animation: shimmer 2.4s ease-in-out infinite;
           }
         `}</style>
 
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           {/* Header */}
           <div className="text-center mb-8 space-y-2">
             <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50
@@ -528,12 +534,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
             <h1 className="text-3xl sm:text-4xl font-black text-gray-900 leading-tight">
               Before You Apply
             </h1>
-            <p className="text-base text-gray-500">Please have the following ready.</p>
+            <p className="text-base text-gray-500">Please read before continuing.</p>
           </div>
 
           {/* Card */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
-            <div className="px-6 sm:px-8 pt-7 pb-5 space-y-4">
+            <div className="px-8 sm:px-10 pt-8 pb-6 space-y-5">
               {[
                 'Age 19–59. Citizens of USA, UK, Canada, Ireland, Australia, New Zealand, South Africa, or Korea (F-visa).',
                 'Bachelor\'s degree or higher, no criminal record, and in good physical and mental health.',
@@ -541,8 +547,8 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
                 'Ensure employment dates and locations are accurate and up to date.',
                 'Attach a clear, recent photo (no hats, sunglasses or photoshop) and a short self-introduction video.',
               ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3 text-sm text-gray-700 leading-relaxed">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-[11px] font-bold flex items-center justify-center mt-0.5 border border-blue-200">
+                <div key={i} className="flex items-start gap-4 text-[15px] sm:text-base text-gray-700 leading-relaxed">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-xs font-bold flex items-center justify-center mt-0.5 border border-blue-200">
                     {i + 1}
                   </span>
                   <span>{item}</span>
@@ -550,7 +556,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               ))}
             </div>
 
-            <div className="px-6 sm:px-8 pb-7 pt-4 border-t border-gray-100 space-y-4">
+            <div className="px-8 sm:px-10 pb-8 pt-5 border-t border-gray-100 space-y-4">
               <p className="text-xs text-gray-400 text-center">
                 By continuing you agree to our{' '}
                 <a href="/privacy" className="underline hover:text-gray-600" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
@@ -558,7 +564,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <button
                 type="button"
                 onClick={() => setPhase('captcha')}
-                className="btn-glow w-full py-3.5 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
+                className="btn-shimmer w-full py-4 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
                            text-white text-base font-semibold rounded-xl transition-colors"
               >
                 I Agree &amp; Continue →
