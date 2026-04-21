@@ -11804,6 +11804,16 @@ async def mail_introduce(request: Request):
     if not employer_ids and not emp_filter:
         raise HTTPException(400, "employer_ids 또는 employer_filter 필수")
 
+    # 네이버 SMTP 1회 발송 한도 100건 (bridgejobkr@naver.com)
+    # Gmail도 유사 한도 존재 → 공통 100건 상한 적용
+    _MAX_RECIPIENTS_PER_SEND = 100
+    if employer_ids and len(employer_ids) > _MAX_RECIPIENTS_PER_SEND:
+        raise HTTPException(
+            400,
+            f"1회 발송은 최대 {_MAX_RECIPIENTS_PER_SEND}개 기관까지 가능합니다 "
+            f"(현재 {len(employer_ids)}개). 나눠서 발송해 주세요."
+        )
+
     cfg = SMTP_CONFIG.get(sender_key)
     if not cfg or not cfg.get("user") or not cfg.get("password"):
         raise HTTPException(503, f"{sender_key} SMTP 미설정")
@@ -11867,12 +11877,15 @@ async def mail_introduce(request: Request):
                 params.append(f"%{emp_filter['teaching_age']}%")
             emp_rows = conn.execute(
                 "SELECT id, school_name, location, contact_name, email FROM client_inquiries"
-                f" WHERE {' AND '.join(conditions)}",
-                params,
+                f" WHERE {' AND '.join(conditions)} LIMIT ?",
+                params + [_MAX_RECIPIENTS_PER_SEND],
             ).fetchall()
 
         if not emp_rows:
             raise HTTPException(404, "수신 구인자 없음")
+        # 필터 경로에서도 최종 상한 강제 (방어적)
+        if len(emp_rows) > _MAX_RECIPIENTS_PER_SEND:
+            emp_rows = emp_rows[:_MAX_RECIPIENTS_PER_SEND]
 
         # ── 3. 메일 본문 생성 ──
         teacher_blocks = ""

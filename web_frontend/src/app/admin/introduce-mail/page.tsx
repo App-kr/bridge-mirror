@@ -229,10 +229,15 @@ function IntroduceMailContent() {
   }
 
   /* ── 발송 ── */
+  const MAX_RECIPIENTS_PER_SEND = 100   // 네이버 SMTP 1회 발송 한도
   async function handleSend() {
     const candidateIds = getCandidateIds()
     if (candidateIds.length === 0) { showToast('강사 번호를 입력해주세요.', false); return }
     if (selectedIds.size === 0) { showToast('구인자를 선택해주세요.', false); return }
+    if (selectedIds.size > MAX_RECIPIENTS_PER_SEND) {
+      showToast(`1회 발송은 최대 ${MAX_RECIPIENTS_PER_SEND}개 기관까지 가능합니다 (현재 ${selectedIds.size}개).`, false)
+      return
+    }
     if (!confirm(`${candidateIds.length}명 강사 프로필을 ${selectedIds.size}개 기관에 발송할까요?`)) return
 
     setSending(true)
@@ -350,8 +355,13 @@ function IntroduceMailContent() {
         <div style={CARD}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <PanelTitle>구인자 선택</PanelTitle>
-            <span style={{ fontSize: 12, color: '#6B7280' }}>
+            <span style={{
+              fontSize: 12,
+              color: selectedIds.size > MAX_RECIPIENTS_PER_SEND ? '#B91C1C' : '#6B7280',
+              fontWeight: selectedIds.size > MAX_RECIPIENTS_PER_SEND ? 700 : 400,
+            }}>
               {selectedIds.size} / {employers.length}명 선택
+              {selectedIds.size > MAX_RECIPIENTS_PER_SEND && ' ⚠ 한도 초과'}
             </span>
           </div>
 
@@ -378,8 +388,12 @@ function IntroduceMailContent() {
             <button onClick={loadEmployers} disabled={loadingEmp} style={BTN_SM}>
               {loadingEmp ? '로딩 중...' : '불러오기'}
             </button>
-            <button onClick={() => setSelectedIds(new Set(employers.map(e => e.id)))} style={BTN_SM}>
-              전체선택
+            <button
+              onClick={() => setSelectedIds(new Set(employers.slice(0, MAX_RECIPIENTS_PER_SEND).map(e => e.id)))}
+              style={BTN_SM}
+              title={employers.length > MAX_RECIPIENTS_PER_SEND ? `상위 ${MAX_RECIPIENTS_PER_SEND}개만 선택됩니다` : undefined}
+            >
+              전체선택{employers.length > MAX_RECIPIENTS_PER_SEND ? ` (상위 ${MAX_RECIPIENTS_PER_SEND})` : ''}
             </button>
             <button onClick={() => setSelectedIds(new Set())} style={BTN_SM}>
               선택해제
@@ -502,12 +516,18 @@ function IntroduceMailContent() {
               const s = cvStatuses[id]
               return !s || !(s.status === 'done' && s.has_cv)
             }).length
-            const blocked = sending || candidateIds.length === 0 || selectedIds.size === 0 || missingCvCount > 0
+            const overLimit = selectedIds.size > MAX_RECIPIENTS_PER_SEND
+            const blocked = sending || candidateIds.length === 0 || selectedIds.size === 0 || missingCvCount > 0 || overLimit
+            const blockReason = overLimit
+              ? `1회 발송 한도 초과 (${selectedIds.size} > ${MAX_RECIPIENTS_PER_SEND})`
+              : missingCvCount > 0
+              ? `이력서 미처리 강사 ${missingCvCount}명 — 재처리 필요`
+              : undefined
             return (
               <button
                 onClick={handleSend}
                 disabled={blocked}
-                title={missingCvCount > 0 ? `이력서 미처리 강사 ${missingCvCount}명 — 재처리 필요` : undefined}
+                title={blockReason}
                 style={{
                   width: '100%', padding: '12px 0',
                   background: missingCvCount > 0 ? '#9CA3AF' : '#111', color: '#fff', border: 'none',
