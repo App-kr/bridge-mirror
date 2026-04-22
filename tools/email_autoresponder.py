@@ -487,18 +487,15 @@ def process_inbox(cfg: dict) -> None:
                             f"→ Gmail 직접 확인 필요")
                     log_email(from_addr, from_name, subject, received_at,
                               None, "RETURNING", "PENDING", uid)
-                    processed.add(uid)
-                    _save_processed(processed)
+                    # 읽음 처리 안 함, processed에도 추가 안 함
+                    # → 사용자가 Gmail에서 직접 확인할 수 있도록 안읽음 유지
                     continue
 
                 # ── STEP C: 신규 지원자 패턴 감지 ───────────────────────────
                 if not is_applicant(subject, body):
-                    log.info(f"[UNKNOWN] 패턴 미해당 → 보류: {from_addr} | {subject}")
-                    log_email(from_addr, from_name, subject, received_at,
-                              None, "UNKNOWN", "SKIPPED", uid)
-                    processed.add(uid)
-                    _save_pending({**_load_pending()})  # 변경 없음, 읽음 처리 안 함
-                    _save_processed(processed)
+                    # 읽음 처리 안 함, processed에도 추가 안 함
+                    # → 사용자가 직접 Gmail에서 읽을 수 있도록 안읽음 유지
+                    log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
                     continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
