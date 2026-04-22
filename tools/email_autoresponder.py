@@ -361,19 +361,27 @@ def log_email(from_email: str, from_name: str, subject: str,
 def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str]:
     subject = f"Re: {orig_subject}"
     body = """Hello,
+This is BRIDGE Agency.
 
-Thank you for reaching out to BRIDGE Agency.
-
+We have received your application!
+For now, as we don't have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:
 \U0001f449 https://tinyurl.com/bridgekr
 
-\u2022 CV (Workplace Name, Location, Dates in YY/MM format)
-\u2022 Cover Letter & Photo taken within 1 year
-\u2022 Scanned Apostilled Documents
-\u2022 Short Video Intro (1-3 mins)
+Please ensure the following are included:
 
-Kind regards,
-BRIDGE
-www.bridgejob.co.kr"""
+CV (Workplace Name, Location, Dates in YY/MM format)
+
+Cover Letter & Photo that taken 1 year
+
+Scanned Apostilled Documents
+
+Short Video Intro (1-3 mins)
+
+This helps us understand your specific needs and find the right match for you. Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.
+
+kind regards,
+
+BRIDGE"""
     return subject, body
 
 
