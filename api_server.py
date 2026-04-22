@@ -13113,30 +13113,49 @@ async def process_resume_files(
                         "error": f"처리 실패: {str(e)}",
                     }
 
-            # PDF 처리
+            # PDF 처리 — resume_converter/pipeline 사용 (축약 없음 + 사진 자동 삽입)
             elif file_ext == '.pdf':
                 try:
                     sys.path.insert(0, str(Path(__file__).resolve().parent))
-                    from tools.doc_processor import process_pdf
+                    from tools.resume_converter.pdf_builder import (
+                        extract_text_from_pdf, text_to_pdf_bytes,
+                    )
+                    from tools.resume_converter.pii_engine import analyze_pii
 
                     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
                         tmp.write(file_bytes)
                         tmp_path = Path(tmp.name)
 
                     try:
-                        doc, log_entries = process_pdf(
-                            tmp_path,
-                            brj_number=_brj_number,
-                            candidate=candidate_dict,
-                            dry=False,
-                            photo_path=photo_tmp_path,
+                        # 원본 텍스트 추출 (2-col 마커 포함)
+                        src_text = extract_text_from_pdf(tmp_path)
+                        known = [candidate_dict["full_name"]] if (candidate_dict and candidate_dict.get("full_name")) else []
+                        pii_result = analyze_pii(src_text, known_names=known)
+
+                        # 사진 bytes 로딩 (photo_tmp_path 있으면)
+                        _photo_bytes = None
+                        if photo_tmp_path and photo_tmp_path.exists():
+                            try:
+                                from tools.resume_converter.face_crop import crop_face_from_bytes, FaceNotFoundError
+                                _raw = photo_tmp_path.read_bytes()
+                                try:
+                                    _photo_bytes = crop_face_from_bytes(_raw)
+                                except FaceNotFoundError:
+                                    _photo_bytes = _raw
+                            except Exception:
+                                _photo_bytes = None
+
+                        # 원본 축약 없이 자연스러운 분량 렌더
+                        processed_bytes = text_to_pdf_bytes(
+                            pii_result.cleaned_text,
+                            photo_bytes=_photo_bytes,
+                            candidate_id=str(_brj_number or ""),
+                            line_h=16,
+                            margin_cm=1.5,
+                            font_size=10,
                         )
 
-                        processed_bytes = doc.write()
-
-                        pii_count = len([l for l in log_entries if any(
-                            kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:"]
-                        )])
+                        pii_count = len(pii_result.pii_found)
 
                         import base64 as _b64
                         return {

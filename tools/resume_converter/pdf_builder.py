@@ -151,7 +151,7 @@ def _draw_photo_and_id(
             img = img.resize((200, 267), Image.LANCZOS)
 
             tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            img.save(tmp.name, format="JPEG", quality=80, dpi=(150, 150))
+            img.save(tmp.name, format="JPEG", quality=72, optimize=True, dpi=(120, 120))
             tmp.close()
 
             c.drawImage(tmp.name, img_x, img_y,
@@ -532,8 +532,8 @@ def text_to_pdf_bytes(
             if is_section and _idx > 0:
                 y_ -= lh_local * 1.0   # 섹션 제목 앞 (PROFESSIONAL EXPERIENCES 등)
             elif is_dateline and _idx > 0:
-                # Company|Date 앞 — 새 직장 구분 (A구역: 적당한 간격)
-                y_ -= lh_local * 0.5
+                # Company|Date 앞 — 새 직장 구분 (A구역: 여유 간격)
+                y_ -= lh_local * 0.85
             elif is_jobtitle and _idx > 0:
                 # Job Title — Company|Date 바로 다음, 추가 여백 없음
                 y_ -= lh_local * 0.05
@@ -1067,21 +1067,18 @@ def build_pdf(
         _first_added = True
 
     if resume_text and resume_text.strip():
-        if not _first_added:
-            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입
-            # _auto_line_h 대신 단계적 압축으로 1페이지 목표
-            pdf_parts.append(_compress_resume_to_1page(
-                resume_text,
-                photo_bytes=photo_bytes,
-                candidate_id=str(candidate_id),
-            ))
-        else:
-            # 커버레터 있을 때는 이력서 페이지를 별도로 압축
-            pdf_parts.append(_compress_resume_to_1page(
-                resume_text,
-                photo_bytes=None,
-                candidate_id="",
-            ))
+        # 이력서: 원본 내용 보존 — 2~3~4페이지 자연스럽게 펼치기
+        # 사진은 이력서 첫 페이지 우상단 (커버레터 없으면 이력서에, 있으면 커버레터에 이미 삽입됨)
+        _resume_photo = None if _first_added else photo_bytes
+        _resume_cid   = "" if _first_added else str(candidate_id)
+        pdf_parts.append(text_to_pdf_bytes(
+            resume_text,
+            photo_bytes=_resume_photo,
+            candidate_id=_resume_cid,
+            line_h=16,
+            margin_cm=1.5,
+            font_size=10,
+        ))
         _first_added = True
 
     if rec_text and rec_text.strip():
