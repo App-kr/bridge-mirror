@@ -5,6 +5,10 @@ PII 탐지 + 삭제 (2레이어 + 집중점검)
 Layer 1: regex (전화/이메일/주소/SNS/학교명/근무처/PII라벨)
 Layer 2: Claude API (이름/업체명/추천서 서명)
 
+v2.9 (2026-04-22):
+- has_kr_ctx 글로벌 폴백 제거 → 인접 ±2줄 직접 증거만 (해외 직장 보존)
+- in_edu_section3 추가 → 교육 섹션 학교명·기관명 절대 보존
+- _INST_SUFFIX 패턴 → 라인별 edu섹션+한국컨텍스트 조건 처리
 v2.7 동기화 (2026-04-02):
 - 아파트/빌라/오피스텔 등 한국 거주지 삭제
 - 학교명 패턴 (RE_SCHOOL_NAMED / RE_UNIV_OF)
@@ -189,8 +193,9 @@ _EDU_HDR_RE = re.compile(
     re.IGNORECASE,
 )
 _NON_EDU_HDR_RE = re.compile(
-    r"^\s*(?:EXPERIENCE|WORK\s*HISTORY|EMPLOYMENT|SKILLS?|REFERENCES?|LANGUAGES?|"
-    r"PERSONAL|PROFILE|SUMMARY|CAREER|PROFESSIONAL)\s*:?\s*$",
+    r"^\s*(?:EXPERIENCE|WORK\s*(?:EXPERIENCE|HISTORY)|EMPLOYMENT(?:\s+HISTORY)?|"
+    r"PROFESSIONAL\s+EXPERIENCE|CAREER\s+HISTORY|JOB\s+HISTORY|"
+    r"SKILLS?|REFERENCES?|LANGUAGES?|PERSONAL|PROFILE|SUMMARY|CAREER|PROFESSIONAL)\s*:?\s*$",
     re.IGNORECASE,
 )
 
@@ -353,7 +358,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
             # 전화번호 False Positive: 연도 범위(2017-2021 등) 차단
             if ptype in ("phone_kr", "phone_intl", "phone_us") and _is_year_range(m.group(0)):
                 continue
-            replacement = f"[{ptype.upper()}_REMOVED]"
+            # addr_kr_en → "South Korea" 직접 대체
+            # (마커→빈문자열 경로를 쓰면 "Bundang, South Korea" 같은 인접 줄에서
+            #  Korean context 증거가 사라져 has_kr3 계산이 실패하는 버그 방지)
+            replacement = "South Korea" if ptype == "addr_kr_en" else f"[{ptype.upper()}_REMOVED]"
             found.append(PIIMatch(
                 type=ptype,
                 original_value=m.group(0),
@@ -385,9 +393,10 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         elif _NON_EDU_HDR_RE.match(line):
             in_edu_section = False
 
-        # 수정 7: 인접 줄(±2) 한국 컨텍스트 확인 + 문서 전체 context 폴백
+        # 수정 7/v2.9: 인접 줄(±2) 직접 증거만 — _doc_has_korea 글로벌 폴백 제거
+        # (이유: SA/해외 직장이 있는 복합 CV에서 한국 미언급 줄까지 익명화되는 버그 방지)
         window = " ".join(lines[max(0, i - 2):i + 3])
-        has_kr_ctx = _doc_has_korea or bool(
+        has_kr_ctx = bool(
             re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window, re.IGNORECASE)
             or _KR_CITY_RE.search(window)
             or re.search(r"[가-힣]", window)
@@ -446,12 +455,23 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         ))
         cleaned = cleaned.replace(orig, "South Korea", 1)
 
-    # ── 수정 5/6/7: 한국 학원/교육기관 (컨텍스트 확인 + 전체 토큰 교체) ──────
+    # ── 수정 5/6/7/v2.9: 한국 학원/교육기관 (컨텍스트 확인 + 전체 토큰 교체) ──────
+    # v2.9 변경:
+    #   - in_edu_section3 추가 → 교육 섹션 내 기관명 보존
+    #   - has_kr3 에서 _doc_has_korea 글로벌 폴백 제거 → 인접 줄 직접 증거만 사용
     lines3 = cleaned.split("\n")
     new_lines3 = []
+    in_edu_section3 = False
     for i, line in enumerate(lines3):
+        # 교육 섹션 헤더 추적 (독립 재추적 — cleaned 기준으로 라인 인덱스 다를 수 있음)
+        if _EDU_HDR_RE.match(line):
+            in_edu_section3 = True
+        elif _NON_EDU_HDR_RE.match(line):
+            in_edu_section3 = False
+
         window3 = " ".join(lines3[max(0, i - 2):i + 3])
-        has_kr3 = _doc_has_korea or bool(
+        # v2.9: _doc_has_korea 글로벌 폴백 제거 — 인접 줄 직접 증거만
+        has_kr3 = bool(
             re.search(r"\b(?:South\s+Korea|Korea|한국)\b", window3, re.IGNORECASE)
             or _KR_CITY_RE.search(window3)
             or re.search(r"[가-힣]", window3)
@@ -463,10 +483,16 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         # KR_ACADEMY_RE: 고유명사 (수정 5/6/7)
         for m in _KR_ACADEMY_RE_finditer(line):
             orig = m.group(0)
-            # 수정 7: 해외 컨텍스트가 명확하고 한국 컨텍스트 없으면 보존
+            # v2.9: 교육 섹션 내 기관명 보존 (졸업한 학교이름 삭제 금지)
+            if in_edu_section3:
+                continue
+            # 수정 7: 한국 컨텍스트 없으면 보존 (해외 직장 보존)
+            if not has_kr3:
+                continue
+            # 해외 컨텍스트가 명확하고 한국 컨텍스트 없으면 보존
             if has_foreign3 and not has_kr3:
                 continue
-            # 수정 3: 직함/스킬 내 TITLE_SAFE 보호 (한국 컨텍스트도 없을 때만)
+            # 수정 3: 직함/스킬 내 TITLE_SAFE 보호
             if _TITLE_SAFE_RE.search(line) and not has_kr3:
                 continue
             found.append(PIIMatch(
@@ -478,8 +504,8 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
             ))
             line = line.replace(orig, "English Academy, South Korea", 1)
 
-        # 일반 KR_WORKPLACE: 한국 컨텍스트 필수 (수정 6/7)
-        if has_kr3:
+        # 일반 KR_WORKPLACE: 한국 컨텍스트 필수 + 교육 섹션 제외 (수정 6/7/v2.9)
+        if has_kr3 and not in_edu_section3:
             for m in _KR_WORKPLACE.finditer(line):
                 orig = m.group(0)
                 # 수정 6: TITLE_SAFE 패턴이면 스킵
@@ -628,13 +654,36 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         r"Education(?:\s+(?:Center|Centre|Group|Institute))?)"
     )
     _already_anon = re.compile(r"^english\s+academy(?:,?\s+south\s+korea)?$", re.IGNORECASE)
-    # 각 단어 Title Case 강제 — "Responsible for teaching Kindergarten" 같은
-    # 일반 문장 오탐 방지. 기관명은 대부분 고유명사라 각 단어 대문자로 시작함.
-    cleaned = re.sub(
+    _inst_suffix_re = re.compile(
         r"\b([A-Z][A-Za-z0-9\-\'&\.]*(?:[ \t]+[A-Z][A-Za-z0-9\-\'&\.]+){0,3}[ \t]+)" + _INST_SUFFIX + r"\b",
-        lambda m: m.group(0) if _already_anon.match(m.group(0).strip()) else "English Academy, South Korea",
-        cleaned,
     )
+    # v2.9: 라인별 처리 — 교육 섹션 및 해외 컨텍스트 줄은 skip
+    # (이유: 글로벌 re.sub는 "CPUT Wellington" 같은 해외 기관도 익명화할 수 있음)
+    _inst_lines = cleaned.split("\n")
+    _inst_new   = []
+    _inst_edu   = False
+    for _ii, _ln in enumerate(_inst_lines):
+        if _EDU_HDR_RE.match(_ln):
+            _inst_edu = True
+        elif _NON_EDU_HDR_RE.match(_ln):
+            _inst_edu = False
+        if _inst_edu:
+            _inst_new.append(_ln)
+            continue
+        # 인접 줄 한국 컨텍스트 필수
+        _win = " ".join(_inst_lines[max(0, _ii - 2):_ii + 3])
+        _has_kr = bool(
+            re.search(r"\b(?:South\s+Korea|Korea|한국)\b", _win, re.IGNORECASE)
+            or _KR_CITY_RE.search(_win)
+            or re.search(r"[가-힣]", _win)
+        )
+        if _has_kr:
+            _ln = _inst_suffix_re.sub(
+                lambda m: m.group(0) if _already_anon.match(m.group(0).strip()) else "English Academy, South Korea",
+                _ln,
+            )
+        _inst_new.append(_ln)
+    cleaned = "\n".join(_inst_new)
 
     # ── 주소 제거 후 잔류 쉼표/구두점 정리 ───────────────────────────────────
     cleaned = re.sub(r",\s*,+", ",", cleaned)
@@ -643,7 +692,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
 
     # ── 고아 괄호 정리 ────────────────────────────────────────────────────────
     # "South Korea)" → "South Korea"  /  줄 끝 단독 ) 제거
-    cleaned = re.sub(r"(?<=\w)\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
+    # 단, 줄에 여는 괄호 "("가 있으면 쌍이 맞으므로 제거 금지
+    # 예: "(Majored in Geography & Technology)" → 보존 / "South Korea)" → 제거
+    cleaned = re.sub(r"^([^(\n]*)\)\s*$", r"\1", cleaned, flags=re.MULTILINE)
     # 줄 시작 또는 단독 ")" 제거
     cleaned = re.sub(r"^\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
 
@@ -713,6 +764,23 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         "",
         cleaned,
         flags=re.MULTILINE,
+    )
+
+    # ── "South Korea" 중복 줄 정리 ──────────────────────────────────────────
+    # "English Academy, South Korea\nSouth Korea" → 중복 제거
+    # (addr_kr_en 치환 후 city 줄이 "South Korea"로 남아 중복 발생)
+    cleaned = re.sub(
+        r"(English Academy, South Korea)[ \t]*\n[ \t]*South Korea\b[ \t]*(?=\n|$)",
+        r"\1",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # 독립 "South Korea" 단독 줄이 앞 줄에 이미 "South Korea"가 있으면 제거
+    cleaned = re.sub(
+        r"(?<=South Korea)\n[ \t]*South Korea[ \t]*(?=\n|$)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
     )
 
     # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
