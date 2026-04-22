@@ -3,7 +3,7 @@
   <Triggers>
     <TimeTrigger>
       <Repetition>
-        <Interval>PT5M</Interval>
+        <Interval>PT1H30M</Interval>
         <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
       <StartBoundary>2026-04-21T10:00:00</StartBoundary>

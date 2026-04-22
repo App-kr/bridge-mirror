@@ -105,7 +105,7 @@ def load_config() -> dict:
     gmail_pass = gmail_pass.replace(" ", "").strip()  # 앱 비밀번호 공백 제거
     form_url   = os.getenv("FORM_URL", "https://bridgejob.co.kr/apply")
     tg_token   = _get_cred("TELEGRAM_BOT_TOKEN")
-    auto_mode  = os.getenv("EMAIL_AUTO_MODE", "false").lower() == "true"
+    auto_mode  = os.getenv("EMAIL_AUTO_MODE", "true").lower() == "true"
 
     # TELEGRAM_CHAT_ID: env → DB
     tg_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
