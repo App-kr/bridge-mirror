@@ -357,42 +357,62 @@ def log_email(from_email: str, from_name: str, subject: str,
         log.error(f"[DB] email_logs 기록 실패: {e}")
 
 
+_APPLY_URL = "https://tinyurl.com/bridgekr"
+
 # ── 답장 초안 생성 ───────────────────────────────────────────────────────────
-def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str]:
+def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str, str]:
+    """(subject, plain_text, html) 반환"""
     subject = f"Re: {orig_subject}"
-    body = """Hello,
-This is BRIDGE Agency.
 
-We have received your application!
-For now, as we don't have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:
-\U0001f449 https://tinyurl.com/bridgekr
+    plain = (
+        "Hello,\n"
+        "This is BRIDGE Agency.\n\n"
+        "We have received your application!\n"
+        "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:\n"
+        f"\U0001f449 {_APPLY_URL}\n\n"
+        "Please ensure the following are included:\n\n"
+        "\u2022 CV (Workplace Name, Location, Dates in YY/MM format)\n"
+        "\u2022 Cover Letter & Photo that taken 1 year\n"
+        "\u2022 Scanned Apostilled Documents\n"
+        "\u2022 Short Video Intro (1-3 mins)\n\n"
+        "This helps us understand your specific needs and find the right match for you. "
+        "Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.\n\n"
+        "kind regards,\n\nBRIDGE"
+    )
 
-Please ensure the following are included:
+    html = (
+        "<div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6'>"
+        "<p>Hello,<br>This is BRIDGE Agency.</p>"
+        "<p>We have received your application!<br>"
+        "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:<br>"
+        f"\U0001f449 <a href='{_APPLY_URL}'>Apply</a></p>"
+        "<p>Please ensure the following are included:</p>"
+        "<ul style='margin:0;padding-left:20px'>"
+        "<li>CV (Workplace Name, Location, Dates in YY/MM format)</li>"
+        "<li>Cover Letter &amp; Photo that taken 1 year</li>"
+        "<li>Scanned Apostilled Documents</li>"
+        "<li>Short Video Intro (1-3 mins)</li>"
+        "</ul>"
+        "<p>This helps us understand your specific needs and find the right match for you. "
+        "Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.</p>"
+        "<p>kind regards,<br><br><strong>BRIDGE</strong></p>"
+        "</div>"
+    )
 
-CV (Workplace Name, Location, Dates in YY/MM format)
-
-Cover Letter & Photo that taken 1 year
-
-Scanned Apostilled Documents
-
-Short Video Intro (1-3 mins)
-
-This helps us understand your specific needs and find the right match for you. Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.
-
-kind regards,
-
-BRIDGE"""
-    return subject, body
+    return subject, plain, html
 
 
 # ── SMTP 발송 ─────────────────────────────────────────────────────────────────
 def send_reply(cfg: dict, to_addr: str, to_name: str,
-               subject: str, body: str, retries: int = 3) -> bool:
+               subject: str, body: str, retries: int = 3,
+               html: str | None = None) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = f"BRIDGE Agency <{cfg['gmail_addr']}>"
     msg["To"]      = f"{to_name} <{to_addr}>" if to_name else to_addr
     msg.attach(MIMEText(body, "plain", "utf-8"))
+    if html:
+        msg.attach(MIMEText(html, "html", "utf-8"))
 
     for attempt in range(1, retries + 1):
         try:
@@ -534,11 +554,11 @@ def process_inbox(cfg: dict) -> None:
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
-                subj, body_reply = build_reply(first_name, subject, cfg["form_url"])
+                subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
 
                 if cfg["auto_mode"]:
                     # 즉시 자동 발송
-                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply)
+                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply)
                     status_val = "SENT" if ok else "FAILED"
                     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
 
@@ -572,6 +592,7 @@ def process_inbox(cfg: dict) -> None:
                         "received_at": received_at,
                         "reply_subj":  subj,
                         "reply_body":  body_reply,
+                        "reply_html":  html_reply,
                         "imap_uid":    uid,
                     }
                     _save_pending(pending)
@@ -620,7 +641,8 @@ def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
                     if uid in pending:
                         item = pending[uid]
                         ok = send_reply(cfg, item["from_addr"], item["from_name"],
-                                        item["reply_subj"], item["reply_body"])
+                                        item["reply_subj"], item["reply_body"],
+                                        html=item.get("reply_html"))
                         if ok:
                             sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             log_email(item["from_addr"], item["from_name"], item["subject"],
@@ -723,9 +745,9 @@ def run_tests(cfg: dict) -> None:
 
     # 답장 초안 생성
     print("\n[4] 답장 초안 생성 테스트")
-    subj, body = build_reply("John", "I want to apply", cfg["form_url"])
-    ok = "tinyurl.com/bridgekr" in body and "Hello," in body and subj.startswith("Re:")
-    print(f"  {'OK' if ok else 'FAIL'} 초안 생성 (tinyurl 포함: {'tinyurl.com/bridgekr' in body})")
+    subj, body, html = build_reply("John", "I want to apply", cfg["form_url"])
+    ok = "tinyurl.com/bridgekr" in body and "Hello," in body and subj.startswith("Re:") and "<a href=" in html
+    print(f"  {'OK' if ok else 'FAIL'} 초안 생성 (tinyurl 포함: {'tinyurl.com/bridgekr' in body}, HTML링크: {'<a href=' in html})")
     if not ok:
         errors += 1
 
