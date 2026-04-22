@@ -252,10 +252,10 @@ def is_spam(from_addr: str, subject: str, body: str, headers: dict,
 # ── 신규 지원자 패턴 감지 ────────────────────────────────────────────────────
 _APPLICANT_KW = [
     "apply", "application", "teaching position", "teacher",
-    "craigslist", "teast", "koreabridge", "eslcafe",
+    "craigslist", "teast", "korea", "eslcafe",
     "resume", "cv", "curriculum vitae",
     "interested in", "opening", "reaching out",
-    "cover letter", "looking forward", "full-time",
+    "please find", "looking forward", "full-time",
     "part-time", "position", "job posting", "vacancy",
 ]
 
@@ -340,24 +340,19 @@ def log_email(from_email: str, from_name: str, subject: str,
 # ── 답장 초안 생성 ───────────────────────────────────────────────────────────
 def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str]:
     subject = f"Re: {orig_subject}"
-    body = f"""Hello {first_name},
+    body = """Hello,
 
 Thank you for reaching out to BRIDGE Agency.
 
-We have received your inquiry. To get started, please complete our quick registration form (approx. 2-5 mins):
+\U0001f449 https://tinyurl.com/bridgekr
 
-{form_url}
-
-Please ensure the following are included:
-- CV (Workplace Name, Location, Dates in YY/MM format)
-- Cover Letter & Photo taken within 1 year
-- Scanned Apostilled Documents
-- Short Video Intro (1-3 mins)
-
-Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.
+\u2022 CV (Workplace Name, Location, Dates in YY/MM format)
+\u2022 Cover Letter & Photo taken within 1 year
+\u2022 Scanned Apostilled Documents
+\u2022 Short Video Intro (1-3 mins)
 
 Kind regards,
-BRIDGE Agency
+BRIDGE
 www.bridgejob.co.kr"""
     return subject, body
 
@@ -695,8 +690,8 @@ def run_tests(cfg: dict) -> None:
     # 답장 초안 생성
     print("\n[4] 답장 초안 생성 테스트")
     subj, body = build_reply("John", "I want to apply", cfg["form_url"])
-    ok = "John" in body and cfg["form_url"] in body and subj.startswith("Re:")
-    print(f"  {'OK' if ok else 'FAIL'} 초안 생성 (form_url 포함: {cfg['form_url'] in body})")
+    ok = "tinyurl.com/bridgekr" in body and "Hello," in body and subj.startswith("Re:")
+    print(f"  {'OK' if ok else 'FAIL'} 초안 생성 (tinyurl 포함: {'tinyurl.com/bridgekr' in body})")
     if not ok:
         errors += 1
 
