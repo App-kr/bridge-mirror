@@ -1847,8 +1847,32 @@
       "git": "d6bb84f1",
       "files": 2501,
       "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_093807__resume-converter-bullet-overreplace-fix",
+      "task": "resume-converter-bullet-overreplace-fix",
+      "ts": "2026.04.22 09:38:17",
+      "git": "31474b8e",
+      "files": 2512,
+      "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_093834__resume-converter-bullet-overreplace-fix",
+      "task": "resume-converter-bullet-overreplace-fix",
+      "ts": "2026.04.22 09:38:42",
+      "git": "31474b8e",
+      "files": 2512,
+      "db_hash": "ed17e627075c"
+    },
+    {
+      "dir": "20260422_170226__converter_직업여백+두컬럼_개선",
+      "task": "converter 직업여백+두컬럼 개선",
+      "ts": "2026.04.22 17:02:52",
+      "git": "3bbbdb9c",
+      "files": 2517,
+      "db_hash": "ed17e627075c"
     }
   ],
-  "last_backup": "2026.04.22 08:48:14",
-  "total_count": 231
+  "last_backup": "2026.04.22 17:02:52",
+  "total_count": 234
 }
