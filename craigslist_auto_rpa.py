@@ -337,7 +337,6 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     posted_rows = conn.execute(
         "SELECT job_code FROM ad_posts WHERE platform='craigslist' AND status='posted'"
     ).fetchall()
-    conn.close()
     posted_nums = {_norm(r[0]) for r in posted_rows}
 
     # ── 3. 미게시 필터링 + 내용 풍부도 점수 계산 ─────────────────────────
@@ -347,10 +346,19 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     def _content_score(j: dict) -> int:
         return sum(1 for f in _SCORE_FIELDS if j.get(f) and str(j[f]).strip())
 
-    candidates = [
-        j for j in all_clean
-        if _norm(j['job_code']) not in posted_nums and _content_score(j) >= 2
-    ]
+    eligible = [j for j in all_clean if _content_score(j) >= 2]
+    candidates = [j for j in eligible if _norm(j['job_code']) not in posted_nums]
+
+    # ── 순환 처리: 모두 게시됐으면 ad_posts 초기화 후 재시작 ──────────────
+    if not candidates:
+        print(f"  [CYCLE] 전체 {len(eligible)}건 게시 완료 → ad_posts 초기화 후 재순환")
+        conn.execute(
+            "DELETE FROM ad_posts WHERE platform='craigslist' AND status='posted'"
+        )
+        conn.commit()
+        candidates = list(eligible)
+
+    conn.close()
 
     # 동일 점수 내 랜덤 → 매 실행마다 다른 포지션 선택
     random.shuffle(candidates)
