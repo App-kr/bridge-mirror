@@ -168,15 +168,13 @@ def touch_activity():
 
 
 def save_to_bx(key: str, value: str) -> bool:
-    sys.path.insert(0, str(BASE_DIR))
+    sys.path.insert(0, str(BASE_DIR / "tools"))
     try:
-        from tools.bx import _store_v2, _store, has_master_pin
-        if has_master_pin() and _session_pin_key is not None:
-            _store_v2(key, value, _session_pin_key)
-        else:
-            _store(key, value)  # PIN 미설정 시 기존 v1
+        from bx import _store
+        _store(key, value)
         return True
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         return False
 
 
@@ -310,10 +308,10 @@ def sync_to_render(changed_key: str = "", changed_value: str = "") -> tuple[bool
 
 
 def read_from_bx(key: str) -> str:
-    sys.path.insert(0, str(BASE_DIR))
+    sys.path.insert(0, str(BASE_DIR / "tools"))
     try:
-        from tools.bx import _read_auto, has_master_pin
-        return _read_auto(key, _session_pin_key if has_master_pin() else None) or ""
+        from bx import _read
+        return _read(key) or ""
     except Exception:
         return ""
 
