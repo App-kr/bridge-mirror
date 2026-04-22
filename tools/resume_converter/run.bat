@@ -1,13 +1,4 @@
 @echo off
-chcp 65001 >nul
-:: BRIDGE Resume Converter 실행
-
-set PYTHON="Q:/Phtyon 3/python.exe"
-if not exist %PYTHON% set PYTHON=python
-
-cd /d "%~dp0.."
-%PYTHON% -X utf8 -m resume_converter.main_gui
-if %errorlevel% neq 0 (
-  echo [오류] 실행 실패. setup.bat 을 먼저 실행하세요.
-  pause
-)
+:: BRIDGE Resume Converter — CMD 창 없이 실행
+:: run.vbs 를 통해 pythonw.exe 로 실행 (콘솔 숨김)
+wscript "%~dp0run.vbs"
