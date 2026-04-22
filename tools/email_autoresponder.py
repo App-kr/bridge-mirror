@@ -203,6 +203,12 @@ _SPAM_DOMAINS = {
     "noreply", "no-reply", "mailer-daemon", "postmaster",
     "bounce", "bounces", "notifications", "donotreply",
 }
+
+# 특정 발신 도메인 전체 차단 (광고 확인 메일 등)
+_SPAM_SENDER_DOMAINS = {
+    "craigslist.org",   # RPA 광고 게시 확인 메일
+    "reply.craigslist.org",
+}
 _SPAM_SUBJECT_KW = [
     "unsubscribe", "newsletter", "promotion", "offer", "discount",
     "make money", "crypto", "investment", "casino", "lottery", "winner",
@@ -215,7 +221,12 @@ def is_spam(from_addr: str, subject: str, body: str, headers: dict,
     # 자기 자신
     if from_addr.lower() == self_addr.lower():
         return True
-    # 발신 도메인 체크
+    # 특정 발신 도메인 전체 차단
+    if "@" in from_addr:
+        sender_domain = from_addr.split("@")[1].lower()
+        if sender_domain in _SPAM_SENDER_DOMAINS:
+            return True
+    # 발신 로컬파트 도메인 체크
     domain_local = from_addr.split("@")[0].lower() if "@" in from_addr else from_addr.lower()
     if any(sp in domain_local for sp in _SPAM_DOMAINS):
         return True
