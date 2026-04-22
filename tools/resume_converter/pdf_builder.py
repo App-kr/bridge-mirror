@@ -416,45 +416,27 @@ def _compress_cover_to_1page(text: str, photo_bytes: bytes | None = None, candid
 
 # ── PDF 에서 텍스트 추출 ───────────────────────────────────────────────────
 def _extract_page_column_aware(page) -> str:
-    """PyMuPDF page → text (두 컬럼 레이아웃 감지 후 좌→우 순서로 정렬).
+    """PyMuPDF block-based extraction — y-밴드 정렬 (reading order 보장).
 
-    두 컬럼 PDF (예: ABOUT ME | WORK EXPERIENCE 나란히 배치) 에서
-    PyMuPDF get_text("text")는 좌/우 줄이 인터리브 되는 문제가 있음.
-    block 좌표 기반으로 좌 컬럼 전체 → 우 컬럼 전체 순서로 재정렬.
+    CVpop/Europass 등 날짜가 우측 정렬된 PDF에서 날짜 블록이
+    페이지 끝에 몰려오는 문제 방지.
+
+    핵심: 5pt y-밴드 양자화 → 같은 시각적 행 안에서 x(좌→우) 정렬
+    결과: "ESL Teacher" + "28 Feb 23 – 3 Sep 23" 가 같은 행이면 올바른 순서 유지.
+    이전 방식(좌/우 컬럼 전체 분리)은 CVpop 날짜를 모두 뒤로 밀어버리는 부작용.
     """
     blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
-    text_blocks = [b for b in blocks if b[6] == 0 and b[4].strip()]
+    text_blocks = [(b[0], b[1], b[2], b[3], b[4])
+                   for b in blocks if b[6] == 0 and b[4].strip()]
 
     if not text_blocks:
         return page.get_text("text")
 
-    page_width = page.rect.width
-    page_mid   = page_width / 2
+    # y-밴드(5pt) + x 순서 정렬 — 같은 행 좌→우, 위→아래 순서 보장
+    BAND = 5
+    text_blocks.sort(key=lambda b: (round(b[1] / BAND) * BAND, b[0]))
 
-    def _cx(b: tuple) -> float:
-        return (b[0] + b[2]) / 2  # block center-x
-
-    # 컬럼 분류: center-x 기준 ±15% 여유
-    left_blocks  = [b for b in text_blocks if _cx(b) < page_mid * 0.85]
-    right_blocks = [b for b in text_blocks if _cx(b) > page_mid * 1.15]
-    full_blocks  = [b for b in text_blocks
-                    if b not in left_blocks and b not in right_blocks]
-
-    is_two_col = len(left_blocks) >= 3 and len(right_blocks) >= 3
-
-    if is_two_col:
-        # 각 그룹을 y 순서(위→아래)로 정렬
-        full_blocks.sort(key=lambda b: b[1])
-        left_blocks.sort(key=lambda b: b[1])
-        right_blocks.sort(key=lambda b: b[1])
-        # 전체폭 헤더 → 좌 컬럼 → 우 컬럼 순서로 출력
-        ordered = full_blocks + left_blocks + right_blocks
-    else:
-        # 단일 컬럼: y → x 순서
-        text_blocks.sort(key=lambda b: (b[1], b[0]))
-        ordered = text_blocks
-
-    return "\n".join(b[4].strip() for b in ordered if b[4].strip())
+    return "\n".join(b[4].strip() for b in text_blocks if b[4].strip())
 
 
 def extract_text_from_pdf(pdf_path: Path) -> str:

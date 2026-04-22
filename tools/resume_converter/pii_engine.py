@@ -328,6 +328,15 @@ def _is_year_range(matched: str) -> bool:
 def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     """regex 패턴으로 PII 감지 + 마스킹."""
     found:   list[PIIMatch] = []
+
+    # ── 제로폭/불가시 유니코드 문자 제거 (CVpop PDF 등에서 발생) ──────────────
+    # \u200b(ZERO WIDTH SPACE), \u200c/d(ZW NON-JOINER/JOINER), \u200e/f(LTR/RTL MARK),
+    # \ufeff(BOM), \u00ad(SOFT HYPHEN), \u2028/9(LINE/PARA SEP)
+    # 이 문자들이 있으면 "Business or sector:", "RISE" 등 정규식 매칭 실패
+    _INVIS_RE = re.compile(
+        r"[\u200b\u200c\u200d\u200e\u200f\u00ad\ufeff\u2028\u2029]"
+    )
+    text    = _INVIS_RE.sub("", text)
     cleaned: str = text
 
     # ── 문서 전체 한국 컨텍스트 사전 판단 (원본 텍스트 기준) ──────────────────
@@ -665,6 +674,46 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     # 알파벳·한글·숫자·불릿이 전혀 없는 줄 → 장식 아이콘으로 판단, 제거
     # 불릿(•●▪◦‣⁃∙·) 단독 줄은 목록 구조이므로 보존
     cleaned = re.sub(r"^(?!.*[a-zA-Z가-힣0-9•●▪◦‣⁃∙·])[^\n]*$", "", cleaned, flags=re.MULTILINE)
+
+    # ── 한국 행정구역 접미사 잔류 정리 (-si / -gu / -dong 등) ──────────────────
+    # 도시명 제거 후 남은 찌꺼기: "Currently in South Korea, -si," / ", Suwon-si" 등
+    cleaned = re.sub(
+        r",?\s*-?(?:si|gu|dong|ro|gil|eup|myeon|ri)\b[,.]?\s*",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    # 쉼표 + 공백만 남은 경우 정리: "South Korea, " → "South Korea"
+    cleaned = re.sub(r",\s*$", "", cleaned, flags=re.MULTILINE)
+
+    # ── 커버레터 서명 이름 제거 ────────────────────────────────────────────────
+    # "Kamo T." / "John D." / "T. Smith" — 이름+이니셜 형태 서명 (문서 끝 부분)
+    # 패턴: 대문자 시작 1~2 단어 + 단일 이니셜(대문자+점) 단독 줄
+    cleaned = re.sub(
+        r"^[A-Z][a-z]{2,12}(?:\s+[A-Z][a-z]{2,12})?\s+[A-Z]\.\s*$",
+        "",
+        cleaned,
+        flags=re.MULTILINE,
+    )
+    # "Yours truly;" / "Yours sincerely," 이후 단독 이름 줄도 제거
+    cleaned = re.sub(
+        r"^(?:Yours\s+(?:truly|sincerely|faithfully)|Kind\s+regards?|Best\s+regards?|"
+        r"Warm\s+regards?|Sincerely)[,;.]?\s*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    # ── 외국 도시+파이프 조합 제거 ─────────────────────────────────────────────
+    # "University of Limpopo | Polokwane" / "Debate Society | Turfloop" 등
+    # 파이프 뒤 단어가 남아있는 경우 (파이프 제거 regex가 앞에서 이미 처리하지만
+    # 이름 치환 이후 새로 생긴 경우 재처리)
+    cleaned = re.sub(
+        r"[ \t]*\|[ \t]*[A-Z][A-Za-z\-\s]{2,30}(?=[ \t]*(?:\n|$))",
+        "",
+        cleaned,
+        flags=re.MULTILINE,
+    )
 
     # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
