@@ -315,93 +315,77 @@ def get_conn() -> sqlite3.Connection:
 
 
 def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
-    conn = get_conn()
-    params: list = []
-    where_clauses = [
-        "j.city IS NOT NULL AND j.city != ''",
-        "j.salary_raw IS NOT NULL AND j.salary_raw != ''",
-        "j.teaching_age IS NOT NULL AND j.teaching_age != ''",
-        """NOT EXISTS (
-            SELECT 1 FROM ad_posts ap
-            WHERE ap.job_code = j.job_code
-              AND ap.seq = j.seq
-              AND ap.platform = 'craigslist'
-              AND ap.status = 'posted'
-        )""",
-    ]
-    if job_code:
-        where_clauses.append("j.job_code = ?")
-        params.append(job_code)
-
-    where = "WHERE " + " AND ".join(where_clauses)
-
-    # 내용 풍부도 점수: 필드가 많이 채워진 직업을 우선
-    # 동점이면 RANDOM() → 매 실행마다 다른 직업이 선택됨
-    content_score = """(
-        CASE WHEN j.working_hours  IS NOT NULL AND j.working_hours  != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.teach_hrs_week IS NOT NULL AND j.teach_hrs_week != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.vacation       IS NOT NULL AND j.vacation       != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.native_count   IS NOT NULL AND j.native_count   != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.class_size     IS NOT NULL AND j.class_size     != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.housing        IS NOT NULL AND j.housing        != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.district       IS NOT NULL AND j.district       != '' THEN 1 ELSE 0 END +
-        CASE WHEN j.benefits       IS NOT NULL AND j.benefits       != '' THEN 1 ELSE 0 END
-    )"""
-
-    sql = f"""
-        SELECT * FROM (
-            SELECT j.id, j.job_code, j.seq, j.city, j.district,
-                   j.teaching_age, j.salary_raw, j.salary_min, j.salary_max,
-                   j.working_hours, j.daily_hours, j.teach_hrs_week,
-                   j.housing, j.benefits, j.vacation, j.native_count,
-                   j.start_date, j.class_size, j.raw_text,
-                   {content_score} AS content_score
-            FROM jobs j
-            {where}
-        )
-        WHERE content_score >= 2
-        ORDER BY content_score DESC, RANDOM()
-        LIMIT ?
-    """
-    # 초과 pull: 가드 통과 후 limit 적용하기 위해 넉넉히 가져옴
-    params.append(limit * 4 if limit else 40)
-    rows = conn.execute(sql, params).fetchall()
-    conn.close()
-    all_jobs = [dict(r) for r in rows]
-
-    # ── ad_only 가드: 클린 jobs.txt 에 존재하는 job_code 만 허용 ──────────
+    """ad_only 클린 파일에서만 포지션 로드 — master.db raw 데이터 미사용."""
     if not _AD_GUARD_READY:
         raise RuntimeError(
             f"[ad_only] 가드 미로드 -- RPA 중단. 원인: {_AD_GUARD_ERR}"
         )
-    clean_codes = {
-        re.sub(r'[^0-9]', '', j['job_code'])
-        for j in _ad_load_all_jobs()
-    }
 
-    allowed: list[dict] = []
-    for j in all_jobs:
-        code_num = re.sub(r'[^0-9]', '', str(j.get('job_code', '')))
-        if code_num not in clean_codes:
-            _log_event('warn', j.get('job_code', '?'), 'pii_guard',
-                       'ad_only 화이트리스트 미존재 -- 스킵',
-                       {'reason': 'not_in_clean_list'})
-            continue
-        # 광고 출력 필드만 PII 스캔 (internal_notes, raw_text는 내부 메모라 제외)
-        _PII_SKIP_FIELDS = {'internal_notes', 'raw_text', 'source_file', 'loaded_at', 'created_at'}
-        combined = ' '.join(
-            str(v) for k, v in j.items()
-            if isinstance(v, (str, int, float)) and k not in _PII_SKIP_FIELDS
-        )
-        hits = _ad_pii_scan(combined, strict_brand=False)
-        if hits:
-            _log_event('warn', j.get('job_code', '?'), 'pii_guard',
-                       f'DB row 오염 감지 {hits} -- 스킵',
-                       {'hits': hits})
-            continue
-        allowed.append(j)
-        if len(allowed) >= limit:
-            break
+    # ── 1. ad_only 클린 데이터 로드 ──────────────────────────────────────
+    all_clean = _ad_load_all_jobs()  # 이미 PII 제거 완료된 878건
+
+    def _norm(jc: str) -> str:
+        return re.sub(r'[^0-9]', '', str(jc))
+
+    # job_code 필터 (--job-code 옵션 사용 시)
+    if job_code:
+        tgt = _norm(job_code)
+        all_clean = [j for j in all_clean if _norm(j['job_code']) == tgt]
+
+    # ── 2. ad_posts 에서 이미 게시된 코드 집합 조회 (master.db) ─────────
+    conn = get_conn()
+    posted_rows = conn.execute(
+        "SELECT job_code FROM ad_posts WHERE platform='craigslist' AND status='posted'"
+    ).fetchall()
+    conn.close()
+    posted_nums = {_norm(r[0]) for r in posted_rows}
+
+    # ── 3. 미게시 필터링 + 내용 풍부도 점수 계산 ─────────────────────────
+    _SCORE_FIELDS = ['working_hours', 'teach_hrs_week', 'vacation', 'native_count',
+                     'class_size', 'housing', 'benefits', 'extra_lines']
+
+    def _content_score(j: dict) -> int:
+        return sum(1 for f in _SCORE_FIELDS if j.get(f) and str(j[f]).strip())
+
+    candidates = [
+        j for j in all_clean
+        if _norm(j['job_code']) not in posted_nums and _content_score(j) >= 2
+    ]
+
+    # 동일 점수 내 랜덤 → 매 실행마다 다른 포지션 선택
+    random.shuffle(candidates)
+    candidates.sort(key=_content_score, reverse=True)
+
+    # ── 4. ad_only 필드 → generate_ad/save_draft 기대 필드명으로 매핑 ───
+    def _to_rpa(j: dict) -> dict:
+        jcode = "Job." + _norm(j['job_code'])
+        extra = j.get('extra_lines') or []
+        if isinstance(extra, str):
+            extra = [extra] if extra else []
+        return {
+            'job_code':      jcode,
+            'seq':           1,
+            'city':          (j.get('location') or '').strip(),
+            'district':      '',
+            'teaching_age':  j.get('teaching_age', ''),
+            'salary_raw':    j.get('monthly_salary', ''),
+            'salary_min':    None,
+            'salary_max':    None,
+            'working_hours': j.get('working_hours', ''),
+            'daily_hours':   None,
+            'teach_hrs_week': j.get('teach_hrs_week', ''),
+            'housing':       j.get('housing', ''),
+            'benefits':      j.get('benefits', ''),
+            'vacation':      j.get('vacation', ''),
+            'native_count':  j.get('native_count', ''),
+            'start_date':    j.get('start_date', ''),
+            'class_size':    j.get('class_size', ''),
+            'raw_text':      '',          # 내부 메모 제외 — extra_lines로 대체
+            '_extra_lines':  extra,       # generate_ad에서 직접 사용
+            'content_score': _content_score(j),
+        }
+
+    allowed = [_to_rpa(j) for j in candidates[:limit]]
 
     return allowed
 
@@ -869,8 +853,13 @@ def generate_ad(job: dict) -> tuple[str, str]:
     # seed -- job_code 기반 정수 (같은 job이면 항상 같은 문구 선택)
     _seed = int(hashlib.md5(jcode.encode(), usedforsecurity=False).hexdigest(), 16)
 
-    # raw_text 추가 줄 파싱 (표준 DB 필드에 없는 설명 항목)
-    extra_lines, raw_benefits = _parse_raw_extras(job.get("raw_text") or "")
+    # extra_lines: ad_only 로더가 미리 파싱한 값 우선, 없으면 raw_text 파싱
+    _pre_extra = job.get("_extra_lines")
+    if _pre_extra is not None:
+        extra_lines = list(_pre_extra)
+        raw_benefits = ""
+    else:
+        extra_lines, raw_benefits = _parse_raw_extras(job.get("raw_text") or "")
 
     # Housing: housing 컬럼 → benefits 파생 → raw_text 폴백 → 없으면 빈 문자열
     raw_ben_src = job.get("benefits") or raw_benefits or ""
