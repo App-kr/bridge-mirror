@@ -215,6 +215,11 @@ _SPAM_SUBJECT_KW = [
     "click here", "limited time", "act now", "free gift",
 ]
 
+# 제목 prefix 차단 — 향후 로직 추가 예정
+_SPAM_SUBJECT_PREFIX = [
+    "cl posting:",   # Craigslist 시스템 메시지 (추후 별도 로직으로 교체 예정)
+]
+
 
 def is_spam(from_addr: str, subject: str, body: str, headers: dict,
             self_addr: str) -> bool:
@@ -234,8 +239,11 @@ def is_spam(from_addr: str, subject: str, body: str, headers: dict,
         domain = from_addr.split("@")[1].lower()
         if any(sp in domain for sp in _SPAM_DOMAINS):
             return True
+    # 제목 prefix 차단
+    subj_low = subject.lower().strip()
+    if any(subj_low.startswith(p) for p in _SPAM_SUBJECT_PREFIX):
+        return True
     # 제목 키워드
-    subj_low = subject.lower()
     if any(kw in subj_low for kw in _SPAM_SUBJECT_KW):
         return True
     # 본문 링크 10개 이상
