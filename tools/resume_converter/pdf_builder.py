@@ -339,22 +339,22 @@ def text_to_pdf_bytes(
             lines.append(ln)
 
     # ── 직업 항목 앞 자동 여백 마킹 ─────────────────────────────────────────
-    # 날짜 범위 줄이 나오면 → 그 앞 1~2줄 (직책/회사명) 앞에 extra_space 표시
+    # 날짜 범위 줄 위에서 가장 높은(첫 번째) 비어있지 않은 줄(직책명)에만 마킹.
+    # 이전 방식(3줄 모두 마킹)은 직업 내부에 불필요한 간격이 생기는 부작용이 있었음.
     _extra_space: set[int] = set()
     for _i, _ln in enumerate(lines):
         if _DATE_RANGE_RE.match(_ln.strip()):
-            # 날짜 줄 자체에도 마킹 (앞에 공간)
-            _extra_space.add(_i)
-            # 빈 줄 건너뛰며 바로 위 줄들 마킹 (회사명·직책명)
+            # 날짜 줄 위로 최대 3개 비어있지 않은 줄을 탐색 → 가장 위 줄만 마킹
             _j = _i - 1
+            _last_non_empty = -1
             _steps = 0
-            while _j >= 0 and _steps < 3:
+            while _j >= 0 and _steps < 2:
                 if lines[_j].strip():
-                    _extra_space.add(_j)
+                    _last_non_empty = _j   # 계속 갱신 → 2번째 비어있지 않은 줄 = 직책명
                     _steps += 1
-                    if _steps >= 2:
-                        break
                 _j -= 1
+            if _last_non_empty >= 0:
+                _extra_space.add(_last_non_empty)
 
     for _idx, raw_line in enumerate(lines):
         stripped = raw_line.strip()
@@ -368,7 +368,7 @@ def text_to_pdf_bytes(
 
         # 직업 항목 앞 자동 여백 (날짜 범위 앞 1~2줄 포함)
         if _idx in _extra_space and _idx > 0:
-            y -= line_h * 0.85
+            y -= line_h * 1.5   # ← 직업간 구분 여백 (0.85 → 1.5)
             if y < margin:
                 y = _new_page()
 
@@ -414,15 +414,59 @@ def _compress_cover_to_1page(text: str, photo_bytes: bytes | None = None, candid
 
 
 # ── PDF 에서 텍스트 추출 ───────────────────────────────────────────────────
+def _extract_page_column_aware(page) -> str:
+    """PyMuPDF page → text (두 컬럼 레이아웃 감지 후 좌→우 순서로 정렬).
+
+    두 컬럼 PDF (예: ABOUT ME | WORK EXPERIENCE 나란히 배치) 에서
+    PyMuPDF get_text("text")는 좌/우 줄이 인터리브 되는 문제가 있음.
+    block 좌표 기반으로 좌 컬럼 전체 → 우 컬럼 전체 순서로 재정렬.
+    """
+    blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
+    text_blocks = [b for b in blocks if b[6] == 0 and b[4].strip()]
+
+    if not text_blocks:
+        return page.get_text("text")
+
+    page_width = page.rect.width
+    page_mid   = page_width / 2
+
+    def _cx(b: tuple) -> float:
+        return (b[0] + b[2]) / 2  # block center-x
+
+    # 컬럼 분류: center-x 기준 ±15% 여유
+    left_blocks  = [b for b in text_blocks if _cx(b) < page_mid * 0.85]
+    right_blocks = [b for b in text_blocks if _cx(b) > page_mid * 1.15]
+    full_blocks  = [b for b in text_blocks
+                    if b not in left_blocks and b not in right_blocks]
+
+    is_two_col = len(left_blocks) >= 3 and len(right_blocks) >= 3
+
+    if is_two_col:
+        # 각 그룹을 y 순서(위→아래)로 정렬
+        full_blocks.sort(key=lambda b: b[1])
+        left_blocks.sort(key=lambda b: b[1])
+        right_blocks.sort(key=lambda b: b[1])
+        # 전체폭 헤더 → 좌 컬럼 → 우 컬럼 순서로 출력
+        ordered = full_blocks + left_blocks + right_blocks
+    else:
+        # 단일 컬럼: y → x 순서
+        text_blocks.sort(key=lambda b: (b[1], b[0]))
+        ordered = text_blocks
+
+    return "\n".join(b[4].strip() for b in ordered if b[4].strip())
+
+
 def extract_text_from_pdf(pdf_path: Path) -> str:
-    """PyMuPDF 우선 텍스트 추출 (CID 인코딩 처리), pdfplumber 폴백."""
-    # PyMuPDF — 대부분의 임베디드 폰트 CID 인코딩을 유니코드로 변환
+    """PyMuPDF 우선 텍스트 추출 (두 컬럼 레이아웃 지원 + CID 처리), pdfplumber 폴백."""
     try:
         import fitz
         doc = fitz.open(str(pdf_path))
         pages = []
         for p in doc:
-            pages.append(p.get_text("text"))
+            page_text = _extract_page_column_aware(p)
+            if not page_text:
+                page_text = p.get_text("text")
+            pages.append(page_text)
         doc.close()
         text = "\n".join(pages)
         if text.strip():
