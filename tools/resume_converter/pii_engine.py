@@ -619,11 +619,12 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         r"Education(?:\s+(?:Center|Centre|Group|Institute))?)"
     )
     _already_anon = re.compile(r"^english\s+academy(?:,?\s+south\s+korea)?$", re.IGNORECASE)
+    # 각 단어 Title Case 강제 — "Responsible for teaching Kindergarten" 같은
+    # 일반 문장 오탐 방지. 기관명은 대부분 고유명사라 각 단어 대문자로 시작함.
     cleaned = re.sub(
-        r"\b([A-Z][A-Za-z0-9\-\'&\.]*(?:[ \t]+[A-Za-z0-9\-\'&\.]+){0,3}[ \t]+)" + _INST_SUFFIX + r"\b",
+        r"\b([A-Z][A-Za-z0-9\-\'&\.]*(?:[ \t]+[A-Z][A-Za-z0-9\-\'&\.]+){0,3}[ \t]+)" + _INST_SUFFIX + r"\b",
         lambda m: m.group(0) if _already_anon.match(m.group(0).strip()) else "English Academy, South Korea",
         cleaned,
-        flags=re.IGNORECASE,
     )
 
     # ── 주소 제거 후 잔류 쉼표/구두점 정리 ───────────────────────────────────
@@ -661,8 +662,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     )
 
     # ── 아이콘/기호 전용 줄 제거 (Europass 등 CV 장식 문자) ──────────────────
-    # 알파벳·한글·숫자가 전혀 없는 줄 → 장식 아이콘으로 판단, 제거
-    cleaned = re.sub(r"^(?!.*[a-zA-Z가-힣0-9])[^\n]*$", "", cleaned, flags=re.MULTILINE)
+    # 알파벳·한글·숫자·불릿이 전혀 없는 줄 → 장식 아이콘으로 판단, 제거
+    # 불릿(•●▪◦‣⁃∙·) 단독 줄은 목록 구조이므로 보존
+    cleaned = re.sub(r"^(?!.*[a-zA-Z가-힣0-9•●▪◦‣⁃∙·])[^\n]*$", "", cleaned, flags=re.MULTILINE)
 
     # ── 연속 빈 줄 정리 (최대 2줄) ───────────────────────────────────────────
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)

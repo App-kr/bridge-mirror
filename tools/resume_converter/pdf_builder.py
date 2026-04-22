@@ -272,7 +272,8 @@ def text_to_pdf_bytes(
 
     # ── 텍스트 전처리: 이름/아이콘/중복 헤더 제거 + 위치 힌트 추출 ──────────────
     # 1) 아이콘·기호만 있는 줄 제거 (Europass CV 장식 문자 등)
-    text = re.sub(r"^(?!.*[a-zA-Z가-힣0-9])[^\n]*$", "", text, flags=re.MULTILINE)
+    #    불릿(•●▪◦‣⁃∙·) 단독 줄은 목록 구조이므로 보존
+    text = re.sub(r"^(?!.*[a-zA-Z가-힣0-9•●▪◦‣⁃∙·])[^\n]*$", "", text, flags=re.MULTILINE)
     # 2) "Currently in South Korea" 추출 → ID 아래 표시용, 본문에서 제거
     _LOC_RE = re.compile(
         r"^[^\n]*(?:currently\s+(?:in|based\s+in|living\s+in)\s+(?:South\s+)?Korea"
