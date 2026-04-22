@@ -3,17 +3,25 @@
 
 ## ⏭ 다음 세션 우선순위 (2026-04-22 기준)
 
-1. **Render S3 환경변수 등록** (사용자 직접):
+1. **Render S3 환경변수 등록** (사용자 직접 — 유일한 미완):
    - Render 대시보드 → bridge-api → Environment
    - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_BUCKET` 5개 추가
    - 추가 후 Manual Deploy → 파일 업로드 E2E 완성
-2. **Pipeline Watcher 설치** (사용자 직접):
-   - `powershell -ExecutionPolicy Bypass -File scripts\install_pipeline_watcher.ps1`
-   - 또는 `scripts\start_pipeline_watcher.bat` 바로가기 → 시작 폴더
-3. **encrypt_migrate.py PII 필드 확장** — candidates + client_inquiries 전체
-4. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
+2. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
+3. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
 
 ## ✅ 2026-04-22 완료된 작업 (세션 38 — Pipeline E2E 테스트 완료)
+
+### Pipeline Watcher 작업 스케줄러 자동 등록 완료
+- `BRIDGE_PipelineWatcher` Task Scheduler 등록 (State: Ready → Running)
+- 트리거: 로그온 시 자동시작 / 비정상종료 시 1분마다 3회 재시도
+- Python 직접 실행: `pipeline_failure_watcher.py --daemon` (60초 주기)
+
+### encrypt_migrate.py PII 마이그레이션 완료
+- candidates 3059건 × 12필드: 전부 이미 암호화됨 (신규 0건)
+- client_inquiries 1239건 × 6필드: school_name 12건 신규 암호화 완료
+- DB 무결성: ok / 체크섬: 35fcabefa4ee359c...
+- 백업: master.db.backup_encrypt_migrate_20260422_191231
 
 ### Pipeline 로컬 E2E 테스트 검증
 - **DOCX PII 제거**: 이메일/전화/생년월일/국적/주소/성별 → 전부 삭제 확인
