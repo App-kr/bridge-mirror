@@ -5,6 +5,15 @@ PII 탐지 + 삭제 (2레이어 + 집중점검)
 Layer 1: regex (전화/이메일/주소/SNS/학교명/근무처/PII라벨)
 Layer 2: Claude API (이름/업체명/추천서 서명)
 
+v3.0 (2026-04-22):
+- _KR_ACADEMY_SHORT 기준 변경: ≤4자 → <4자 (Knox 등 4자 브랜드 LONG 처리)
+- LONG 큐레이션 브랜드: Korea 컨텍스트 없어도 항상 익명화 (큐레이션 = 확실한 한국 브랜드)
+- _NON_EDU_HDR_RE: PROFESSIONAL EXPERIENCES(복수형) 추가
+- 커버레터 서명: "Yours sincerely,\n풀네임" → "Yours sincerely,\n첫이름" (결별인사 보존)
+- _preserve_closing_firstname + 마커 시스템 (Layer 2 생존 보장)
+- phone_bare 패턴: 구분자 없는 국제번호 +27670216180 등 처리
+- addr_kr_en → "South Korea" 직접 대체 (마커 경유 맥락 소실 방지)
+- _BARE_PERSONAL_RE: 국가명 단독 줄 삭제 확장
 v2.9 (2026-04-22):
 - has_kr_ctx 글로벌 폴백 제거 → 인접 ±2줄 직접 증거만 (해외 직장 보존)
 - in_edu_section3 추가 → 교육 섹션 학교명·기관명 절대 보존
@@ -51,6 +60,11 @@ class PIIResult:
 _PATTERNS = {
     "phone_kr":   re.compile(r"(?:010|011|016|017|018|019)[-.\s]?\d{3,4}[-.\s]?\d{4}"),
     "phone_intl": re.compile(r"\+?\d{1,3}[-.\s]\(?\d{1,4}\)?[-.\s]\d{3,4}[-.\s]\d{3,4}"),
+    # 구분자 없는 국제 전화: +27670216180 / +821012345678 / +447XXXXXXXXX
+    # \b 사용 불가 (+ 앞은 word boundary 아님) — 앞뒤가 digit이 아닌 경우만 매칭
+    "phone_bare": re.compile(
+        r"(?<!\d)\+\d{7,15}(?!\d)",
+    ),
     # US 국내 형식: NXX-NXX-XXXX (예: 445-900-3414 / (215) 555-1234)
     "phone_us":   re.compile(
         r"\b(?:\(?\d{3}\)?[-.\s])?\d{3}[-.\s]\d{4}\b"
@@ -194,7 +208,7 @@ _EDU_HDR_RE = re.compile(
 )
 _NON_EDU_HDR_RE = re.compile(
     r"^\s*(?:EXPERIENCE|WORK\s*(?:EXPERIENCE|HISTORY)|EMPLOYMENT(?:\s+HISTORY)?|"
-    r"PROFESSIONAL\s+EXPERIENCE|CAREER\s+HISTORY|JOB\s+HISTORY|"
+    r"PROFESSIONAL\s+EXPERIENCES?|CAREER\s+HISTORY|JOB\s+HISTORY|"
     r"SKILLS?|REFERENCES?|LANGUAGES?|PERSONAL|PROFILE|SUMMARY|CAREER|PROFESSIONAL)\s*:?\s*$",
     re.IGNORECASE,
 )
@@ -260,10 +274,19 @@ _KR_ACADEMY_LIST = sorted(list(set([
     "Poly", "Rise", "YBM", "ECC", "CDI", "GnB", "DYB", "SLP",
     "JLS", "PSA", "LCI", "OHC", "BIE", "IEB", "GEA", "SIE", "DIS",
     "GCIS", "Sei", "Kaplan", "YEP",
+    # v3.0 추가 — 자주 등장하는 한국 학원/교육기관 브랜드명
+    # (SA/해외에도 같은 이름 존재할 수 있으므로 _doc_has_korea 컨텍스트 필요)
+    "Knox", "Avalon", "Poly School", "Chungdahm Learning",
+    "Wall Street", "Jungchul", "Kangaroo",
+    "JungAng", "Modeun", "Winkers", "Stepping Stones",
+    "Cocoa", "Maple", "Ivy", "Rainbow", "Sunshine", "Cosmos",
+    "Wonderkids", "Little Stars", "Bright Stars",
+    "Eduplex", "Edu Bridge",
 ])), key=len, reverse=True)
-# 4자 이하 약어(YBM, DIS 등): 대소문자 구분 필수 → 소문자 오탐(dis, sei…) 방지
-_KR_ACADEMY_SHORT = [n for n in _KR_ACADEMY_LIST if len(n) <= 4]
-_KR_ACADEMY_LONG  = [n for n in _KR_ACADEMY_LIST if len(n) > 4]
+# 3자 이하 약어(YBM, DIS, SLP 등): 대소문자 구분 필수 → 소문자 오탐(dis, sei…) 방지
+# 4자 이상은 LONG으로 처리 — Knox(4), Poly(4), Rise(4) 등은 한국 컨텍스트 없어도 익명화
+_KR_ACADEMY_SHORT = [n for n in _KR_ACADEMY_LIST if len(n) < 4]
+_KR_ACADEMY_LONG  = [n for n in _KR_ACADEMY_LIST if len(n) >= 4]
 
 _KR_ACADEMY_RE_LONG = re.compile(
     r"\b(" + "|".join(re.escape(n) for n in _KR_ACADEMY_LONG) + r")"
@@ -314,12 +337,15 @@ _BARE_DOB_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-# 단독 성별/국적 행 ("Female" / "Male" / "South African" / "American" 등)
+# 단독 성별/국적/주소 행 — v2.9 확장: 국가명 단독 줄도 삭제 (이력서 주소 헤더)
 _BARE_PERSONAL_RE = re.compile(
     r"^\s*(?:Female|Male|Non-?binary"
     r"|South\s+African|South\s+Korean|Korean|American|British|Canadian|"
     r"Australian|New\s+Zealander|Irish|Filipino|Zimbabwean|Zambian|"
     r"Kenyan|Ghanaian|Nigerian|Ugandan|Tanzanian|Senegalese|Namibian"
+    # 국가명 단독 줄 (이력서 주소 필드에서 국가만 표시된 경우)
+    r"|South\s+Africa|South\s+Korea|New\s+Zealand|United\s+Kingdom|"
+    r"United\s+States(?:\s+of\s+America)?|United\s+Arab\s+Emirates"
     r")\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -481,28 +507,53 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         )
 
         # KR_ACADEMY_RE: 고유명사 (수정 5/6/7)
-        for m in _KR_ACADEMY_RE_finditer(line):
-            orig = m.group(0)
-            # v2.9: 교육 섹션 내 기관명 보존 (졸업한 학교이름 삭제 금지)
-            if in_edu_section3:
-                continue
-            # 수정 7: 한국 컨텍스트 없으면 보존 (해외 직장 보존)
-            if not has_kr3:
-                continue
-            # 해외 컨텍스트가 명확하고 한국 컨텍스트 없으면 보존
-            if has_foreign3 and not has_kr3:
-                continue
-            # 수정 3: 직함/스킬 내 TITLE_SAFE 보호
-            if _TITLE_SAFE_RE.search(line) and not has_kr3:
-                continue
-            found.append(PIIMatch(
-                type="company",
-                original_value=orig,
-                position=0,
-                confidence=0.90,
-                color="red",
-            ))
-            line = line.replace(orig, "English Academy, South Korea", 1)
+        # v3.0 분리 처리:
+        #   LONG 브랜드 (4자 초과): 큐레이션된 한국 브랜드 → Korea 컨텍스트 없어도 익명화
+        #     (Knox, Chungdahm 등은 한국 외 맥락 없으면 항상 익명화)
+        #     예외: 명확한 해외 컨텍스트(해외도시+한국 없음) → 보존
+        #   SHORT 약어 (4자 이하): 오탐 위험 → _doc_has_korea 폴백 필요
+        _has_kr3_or_doc = has_kr3 or _doc_has_korea
+
+        # LONG 큐레이션 브랜드: 한국 컨텍스트 없어도 익명화 (항상)
+        if _KR_ACADEMY_RE_LONG:
+            for m in _KR_ACADEMY_RE_LONG.finditer(line):
+                orig = m.group(0)
+                if in_edu_section3:
+                    continue
+                # 해외 컨텍스트 명확 + 한국 없음 → 보존 (해외 동명 기관일 수 있음)
+                if has_foreign3 and not has_kr3:
+                    continue
+                if _TITLE_SAFE_RE.search(line) and not has_kr3:
+                    continue
+                found.append(PIIMatch(
+                    type="company",
+                    original_value=orig,
+                    position=0,
+                    confidence=0.90,
+                    color="red",
+                ))
+                line = line.replace(orig, "English Academy, South Korea", 1)
+
+        # SHORT 약어: Korea 컨텍스트 필수 (일반 영어 단어 오탐 방지)
+        if _KR_ACADEMY_RE_SHORT:
+            for m in _KR_ACADEMY_RE_SHORT.finditer(line):
+                orig = m.group(0)
+                if in_edu_section3:
+                    continue
+                if not _has_kr3_or_doc:
+                    continue
+                if has_foreign3 and not has_kr3:
+                    continue
+                if _TITLE_SAFE_RE.search(line) and not has_kr3:
+                    continue
+                found.append(PIIMatch(
+                    type="company",
+                    original_value=orig,
+                    position=0,
+                    confidence=0.90,
+                    color="red",
+                ))
+                line = line.replace(orig, "English Academy, South Korea", 1)
 
         # 일반 KR_WORKPLACE: 한국 컨텍스트 필수 + 교육 섹션 제외 (수정 6/7/v2.9)
         if has_kr3 and not in_edu_section3:
@@ -590,9 +641,11 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     # "English Academy | Dongtan, Mokdong" → "English Academy"
     # "English Academy | South Korea"      → "English Academy"
     # "University | South Korea 2"         → "University"
+    # ⚠️ 날짜 범위 보호: "Academy | 2023-2025" → 파이프 뒤가 연도면 제거 금지
     # ⚠️ [ \t]* 사용 필수 — \s*는 \n을 넘어 다음 줄 날짜까지 삭제하는 버그 발생
     cleaned = re.sub(
-        r"[ \t]*\|[ \t]*[A-Za-z0-9][A-Za-z0-9 \t,\-]*(?=[ \t]*(?:\n|$))",
+        # 파이프 뒤가 날짜(19xx-20xx 또는 단독 연도)면 제거 금지
+        r"[ \t]*\|[ \t]*(?!\s*(?:19|20)\d{2})[A-Za-z][A-Za-z0-9 \t,\-]*(?=[ \t]*(?:\n|$))",
         "",
         cleaned,
         flags=re.MULTILINE,
@@ -691,10 +744,12 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     cleaned = re.sub(r"\s{3,}", "  ", cleaned)
 
     # ── 고아 괄호 정리 ────────────────────────────────────────────────────────
-    # "South Korea)" → "South Korea"  /  줄 끝 단독 ) 제거
-    # 단, 줄에 여는 괄호 "("가 있으면 쌍이 맞으므로 제거 금지
-    # 예: "(Majored in Geography & Technology)" → 보존 / "South Korea)" → 제거
-    cleaned = re.sub(r"^([^(\n]*)\)\s*$", r"\1", cleaned, flags=re.MULTILINE)
+    # 단독 ")" 줄만 제거 (다음 줄에서 이어지는 괄호 오인 방지)
+    # v3.0: 이전 regex는 "Foreign Language)" 같은 다음줄 이어 괄호도 제거하는 버그
+    #   → 변경: ONLY remove if line is JUST ")" (standalone orphan)
+    #   → "South Korea)" 같은 짧은 잔류는 South Korea 뒤의 ) 만 제거
+    cleaned = re.sub(r"^\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"(?<=South Korea)\s*\)(?=\s*$)", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
     # 줄 시작 또는 단독 ")" 제거
     cleaned = re.sub(r"^\s*\)\s*$", "", cleaned, flags=re.MULTILINE)
 
@@ -746,21 +801,17 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
         cleaned,
         flags=re.MULTILINE,
     )
-    # "Yours truly;" / "Yours sincerely," 이후 단독 이름 줄도 제거
-    cleaned = re.sub(
-        r"^(?:Yours\s+(?:truly|sincerely|faithfully)|Kind\s+regards?|Best\s+regards?|"
-        r"Warm\s+regards?|Sincerely)[,;.]?\s*$",
-        "",
-        cleaned,
-        flags=re.IGNORECASE | re.MULTILINE,
-    )
+    # NOTE: "Yours sincerely," / "Kind regards," 등 결별 인사는 삭제하지 않음
+    # → Layer 2(_apply_known_names) 전에 _preserve_closing_firstname 처리로
+    #   서명 이름만 첫이름으로 교체됨 (analyze_pii 참조)
 
     # ── 외국 도시+파이프 조합 제거 ─────────────────────────────────────────────
     # "University of Limpopo | Polokwane" / "Debate Society | Turfloop" 등
     # 파이프 뒤 단어가 남아있는 경우 (파이프 제거 regex가 앞에서 이미 처리하지만
     # 이름 치환 이후 새로 생긴 경우 재처리)
+    # ⚠️ 날짜 범위 보호: "Academy | 2023-2025" 제거 금지
     cleaned = re.sub(
-        r"[ \t]*\|[ \t]*[A-Z][A-Za-z\-\s]{2,30}(?=[ \t]*(?:\n|$))",
+        r"[ \t]*\|[ \t]*(?!(?:19|20)\d{2})[A-Z][A-Za-z\-\s]{2,30}(?=[ \t]*(?:\n|$))",
         "",
         cleaned,
         flags=re.MULTILINE,
@@ -834,6 +885,48 @@ def _apply_known_names(text: str, known_names: list[str]) -> tuple[str, list[PII
     return cleaned, found
 
 
+# ── 커버레터 서명 첫이름 보존 ──────────────────────────────────────────────
+_CLOSING_LINE_RE = re.compile(
+    r"^(?:Yours\s+(?:truly|sincerely|faithfully)|Kind\s+regards?|Best\s+regards?|"
+    r"Warm\s+regards?|Sincerely)[,;.]?\s*$",
+    re.IGNORECASE,
+)
+# Layer 2 이름 삭제에서 살아남기 위한 마커 (Layer 2 regex가 이 문자열을 이름으로 오인하지 않음)
+_FIRSTNAME_MARKER = "__BRIDGE_FIRSTNAME__"
+
+def _preserve_closing_firstname(text: str, known_names: list[str]) -> str:
+    """커버레터 결별 인사 다음 줄의 풀네임 → 마커로 대체.
+
+    Layer 2(_apply_known_names)가 이름을 삭제하기 전에 마커로 치환.
+    Layer 2 이후 analyze_pii에서 마커를 첫이름으로 복원.
+    예: "Yours sincerely,\nMichelle Sinikiwe Sibanda" → "Yours sincerely,\n__BRIDGE_FIRSTNAME__"
+    """
+    lines = text.split("\n")
+    prev_was_closing = False
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if _CLOSING_LINE_RE.match(stripped):
+            prev_was_closing = True
+            new_lines.append(line)
+            continue
+        if prev_was_closing:
+            for full_name in known_names:
+                full_name = full_name.strip()
+                if not full_name:
+                    continue
+                # 이 줄이 풀네임과 정확히 일치하면 → 마커로 대체 (Layer 2 생존)
+                if re.fullmatch(re.escape(full_name), stripped, re.IGNORECASE):
+                    leading = len(line) - len(line.lstrip())
+                    line = line[:leading] + _FIRSTNAME_MARKER
+                    break
+            prev_was_closing = False
+        else:
+            prev_was_closing = False
+        new_lines.append(line)
+    return "\n".join(new_lines)
+
+
 # ── 메인 함수 ──────────────────────────────────────────────────────────────
 def analyze_pii(
     text:        str,
@@ -859,11 +952,28 @@ def analyze_pii(
     # Layer 1: regex
     cleaned1, found1 = _apply_regex(text)
 
+    # Layer 1.5: 커버레터 서명 풀네임 → 마커로 치환 (Layer 2 이름 삭제 생존용)
+    if known_names:
+        cleaned1 = _preserve_closing_firstname(cleaned1, known_names)
+
     # Layer 2: 구글시트 이름 정확 매칭
     if known_names:
         cleaned2, found2 = _apply_known_names(cleaned1, known_names)
     else:
         cleaned2, found2 = cleaned1, []
+
+    # Layer 2.5: 마커 → 실제 첫이름으로 복원
+    if known_names and _FIRSTNAME_MARKER in cleaned2:
+        first_name = ""
+        for n in known_names:
+            parts = n.strip().split()
+            if parts:
+                first_name = parts[0]
+                break
+        if first_name:
+            cleaned2 = cleaned2.replace(_FIRSTNAME_MARKER, first_name, 1)
+        # 혹시 남은 마커 제거
+        cleaned2 = cleaned2.replace(_FIRSTNAME_MARKER, "")
 
     return PIIResult(
         cleaned_text=cleaned2,
