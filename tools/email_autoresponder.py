@@ -364,12 +364,14 @@ def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str,
     """(subject, plain_text, html) 반환"""
     subject = f"Re: {orig_subject}"
 
+    _link_text = "\U0001f449 \U0001f517 Apply [Link: English Teacher Application(Google form)]"
+
     plain = (
         "Hello,\n"
         "This is BRIDGE Agency.\n\n"
         "We have received your application!\n"
         "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:\n"
-        f"\U0001f449 {_APPLY_URL}\n\n"
+        f"{_link_text}: {_APPLY_URL}\n\n"
         "Please ensure the following are included:\n\n"
         "\u2022 CV (Workplace Name, Location, Dates in YY/MM format)\n"
         "\u2022 Cover Letter & Photo that taken 1 year\n"
@@ -385,7 +387,7 @@ def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str,
         "<p>Hello,<br>This is BRIDGE Agency.</p>"
         "<p>We have received your application!<br>"
         "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:<br>"
-        f"\U0001f449 <a href='{_APPLY_URL}'>Apply</a></p>"
+        f"\U0001f449 \U0001f517 <a href='{_APPLY_URL}'>Apply [Link: English Teacher Application(Google form)]</a></p>"
         "<p>Please ensure the following are included:</p>"
         "<ul style='margin:0;padding-left:20px'>"
         "<li>CV (Workplace Name, Location, Dates in YY/MM format)</li>"
