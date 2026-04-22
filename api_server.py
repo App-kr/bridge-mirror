@@ -2367,7 +2367,7 @@ try:
 except OSError as _mkdir_err:
     logging.getLogger("bridge.api").warning("[STARTUP] DB 경로 디렉터리 생성 실패 (계속 진행): %s", _mkdir_err)
 _ADMIN_KEY              = os.getenv("ADMIN_API_KEY", "")
-_ADMIN_PW               = os.getenv("ADMIN_PASSWORD", "")
+_ADMIN_PW               = os.getenv("BRIDGE_ADMIN_LOGIN_PW", os.getenv("ADMIN_PASSWORD", ""))
 _FORM_CONFIG_READ_KEY   = os.getenv("FORM_CONFIG_READ_KEY", "")  # 서버-to-서버 전용 (브라우저 미노출)
 
 # ── Supabase (community_posts 영구 저장) ─────────────────────────────────────
@@ -4298,7 +4298,7 @@ from email import encoders as _email_encoders
 _SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 _SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 _SMTP_USER = os.getenv("BRIDGE_SMTP_USER", os.getenv("SMTP_USER", os.getenv("GMAIL_USER", "")))
-_SMTP_PASS = os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", "")))
+_SMTP_PASS = os.getenv("BRIDGE_GMAIL_SMTP_APPKEY", os.getenv("BRIDGE_SMTP_PASS", os.getenv("SMTP_PASS", os.getenv("GMAIL_APP_PASSWORD", ""))))
 _log_email = logging.getLogger("bridge.email_send")
 
 
@@ -4354,7 +4354,7 @@ SMTP_CONFIG = {
         "host": "smtp.gmail.com",
         "port": 587,
         "user": os.getenv("GMAIL_SMTP_USER", os.getenv("BRIDGE_SMTP_USER", "")),
-        "password": os.getenv("GMAIL_SMTP_PASS", os.getenv("BRIDGE_SMTP_PASS", "")),
+        "password": os.getenv("BRIDGE_GMAIL_SMTP_APPKEY", os.getenv("GMAIL_SMTP_PASS", os.getenv("BRIDGE_SMTP_PASS", ""))),
         "limit": 100,
     },
 }

@@ -32,23 +32,26 @@ import ctypes.wintypes
 _BX_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".bx")
 
 MANAGED = [
-    "ADMIN_PASSWORD",
-    "ADMIN_API_KEY",
-    "JWT_SECRET",
-    "CRAIGSLIST_PASSWORD",
-    "WEBHOOK_SECRET",
-    "GMAIL_APP_PASSWORD",
-    "NAVER_APP_PASSWORD",
-    "NAVER_SMTP_PASS",
-    "TELEGRAM_BOT_TOKEN",
-    "BRIDGE_FIELD_KEY",
-    "ANTHROPIC_API_KEY",
-    "BRIDGE_SMTP_PASS",
-    "UPLOAD_SIGN_KEY",
-    "BRIDGE_WEBHOOK_SECRET",
-    "GEMINI_KEYS_JSON",
-    "RENDER_API_KEY",
-    # bridge_ads 광고 포털
+    # ── BRIDGE 핵심 ────────────────────────────────────────
+    "BRIDGE_ADMIN_LOGIN_PW",          # 관리자 페이지 로그인
+    "ADMIN_API_KEY",                  # 관리자 API 키
+    "JWT_SECRET",                     # JWT 서명 키
+    "BRIDGE_FIELD_KEY",               # DB PII 암호화 키
+    "WEBHOOK_SECRET",                 # Webhook 서명
+    "BRIDGE_WEBHOOK_SECRET",          # BRIDGE Webhook 서명 (보조)
+    "UPLOAD_SIGN_KEY",                # 파일 업로드 서명 키
+    # ── 이메일 ────────────────────────────────────────────
+    "BRIDGEJOBKR_GMAIL_APPKEY",       # bridgejobkr@gmail.com 이메일 자동화 앱 비밀번호
+    "BRIDGE_GMAIL_SMTP_APPKEY",       # BRIDGE 발신 Gmail SMTP 앱 비밀번호
+    "BRIDGE_NAVER_SMTP_APPKEY",       # 네이버 메일 SMTP 앱 비밀번호
+    "NAVER_SMTP_PASS",                # 네이버 SMTP 보조
+    # ── 외부 서비스 ───────────────────────────────────────
+    "TELEGRAM_BOT_TOKEN",             # 텔레그램 알림 봇
+    "ANTHROPIC_API_KEY",              # Claude API
+    "GEMINI_KEYS_JSON",               # Gemini API 키 목록
+    "RENDER_API_KEY",                 # Render 배포 API
+    "CRAIGSLIST_GRAY_ACCOUNT_PW",     # Craigslist gray 계정 비밀번호
+    # ── bridge_ads 광고 포털 ──────────────────────────────
     "ADS_SMTP_PASS",
     "ADS_GOOGLE_CLIENT_ID",
     "ADS_GOOGLE_CLIENT_SECRET",

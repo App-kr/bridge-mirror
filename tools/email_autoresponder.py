@@ -101,7 +101,7 @@ def load_config() -> dict:
         or os.getenv("GMAIL_ADDRESS")
         or "bridgejobkr@gmail.com"
     )
-    gmail_pass = _get_cred("GMAIL_APP_PASSWORD", ["BRIDGE_SMTP_PASS", "SMTP_PASS"])
+    gmail_pass = _get_cred("BRIDGEJOBKR_GMAIL_APPKEY", ["GMAIL_APP_PASSWORD", "BRIDGE_SMTP_PASS"])
     gmail_pass = gmail_pass.replace(" ", "").strip()  # 앱 비밀번호 공백 제거
     form_url   = os.getenv("FORM_URL", "https://bridgejob.co.kr/apply")
     tg_token   = _get_cred("TELEGRAM_BOT_TOKEN")
