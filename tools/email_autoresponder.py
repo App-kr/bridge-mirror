@@ -206,8 +206,8 @@ _SPAM_DOMAINS = {
 
 # 특정 발신 도메인 전체 차단 (광고 확인 메일 등)
 _SPAM_SENDER_DOMAINS = {
-    "craigslist.org",   # RPA 광고 게시 확인 메일
-    "reply.craigslist.org",
+    "craigslist.org",   # robot@craigslist.org — RPA 광고 게시 확인 메일 (스팸)
+    # reply.craigslist.org는 실제 지원자 → 차단 금지
 }
 _SPAM_SUBJECT_KW = [
     "unsubscribe", "newsletter", "promotion", "offer", "discount",
@@ -261,8 +261,20 @@ _APPLICANT_KW = [
 
 
 def is_applicant(subject: str, body: str) -> bool:
-    """제목+본문 합쳐서 키워드 2개 이상 포함 시 True."""
-    text = (subject + " " + body).lower()
+    """제목+본문 합쳐서 키워드 2개 이상 포함 시 True.
+    단, 다음 패턴은 명시적으로 제외:
+    - "online" 포지션 (온라인 강의, 한국 근무 아님)
+    - 이미 지원 완료된 재응답 ("has been received successfully")
+    """
+    subj_low = subject.lower()
+    # 이미 지원한 사람의 재응답 — 폼 링크 재발송 불필요
+    if "has been received successfully" in subj_low:
+        return False
+    # 온라인 전용 포지션 — 한국 근무 아님
+    if re.search(r"\bonline\b.*\b(teach|tutor|esl|english)\b", subj_low) or \
+       re.search(r"\b(teach|tutor|esl|english)\b.*\bonline\b", subj_low):
+        return False
+    text = (subj_low + " " + body.lower())
     matched = sum(1 for kw in _APPLICANT_KW if kw in text)
     return matched >= 2
 
@@ -531,6 +543,12 @@ def process_inbox(cfg: dict) -> None:
                 else:
                     # 확인 후 발송 모드 — pending에 저장
                     pending = _load_pending()
+                    # 같은 발신자가 이미 pending에 있으면 중복 추가 금지
+                    already = [v for v in pending.values()
+                               if v.get("from_addr", "").lower() == from_addr.lower()]
+                    if already:
+                        log.info(f"[PENDING] 중복 스킵: {from_addr} 이미 대기 중")
+                        continue
                     pending[uid] = {
                         "from_addr":   from_addr,
                         "from_name":   from_name,
