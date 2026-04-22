@@ -308,6 +308,10 @@ def text_to_pdf_bytes(
     text = "\n".join(_head)
     # 4) 정리 후 연속 빈 줄 3개 이상 → 2개로
     text = re.sub(r"\n{3,}", "\n\n", text)
+    # 4-b) 2-col 마커가 같은 줄에 붙었거나 공백과 섞였을 경우 전용 줄로 분리
+    for _marker in (COL_START, COL_BREAK, COL_END):
+        text = text.replace(_marker, f"\n{_marker}\n")
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     c.setFont(body_font, font_size)
 
@@ -339,56 +343,284 @@ def text_to_pdf_bytes(
             blank = 0
             lines.append(ln)
 
-    # ── 직업 항목 앞 자동 여백 마킹 ─────────────────────────────────────────
-    # 날짜 범위 줄 위에서 가장 높은(첫 번째) 비어있지 않은 줄(직책명)에만 마킹.
-    # 이전 방식(3줄 모두 마킹)은 직업 내부에 불필요한 간격이 생기는 부작용이 있었음.
-    _extra_space: set[int] = set()
-    for _i, _ln in enumerate(lines):
-        if _DATE_RANGE_RE.match(_ln.strip()):
-            # 날짜 줄 위로 최대 3개 비어있지 않은 줄을 탐색 → 가장 위 줄만 마킹
-            _j = _i - 1
-            _last_non_empty = -1
-            _steps = 0
-            while _j >= 0 and _steps < 2:
-                if lines[_j].strip():
-                    _last_non_empty = _j   # 계속 갱신 → 2번째 비어있지 않은 줄 = 직책명
-                    _steps += 1
-                _j -= 1
-            if _last_non_empty >= 0:
-                _extra_space.add(_last_non_empty)
-
-    for _idx, raw_line in enumerate(lines):
-        stripped = raw_line.strip()
-
-        # 빈 줄 처리
-        if stripped == "":
-            y -= line_h * 0.65
-            if y < margin:
-                y = _new_page()
+    # ── 2-column 섹션 분할 ─────────────────────────────────────────────────
+    # 마커로 감싼 구간을 {"type":"2col", "L":[...], "R":[...]}, 그 외는 {"type":"full", "lines":[...]}
+    sections: list[dict] = []
+    cur: list[str] = []
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        if ln.strip() == COL_START:
+            # FULL 섹션 flush
+            if cur:
+                sections.append({"type": "full", "lines": cur})
+                cur = []
+            L: list[str] = []
+            R: list[str] = []
+            bucket = L
+            i += 1
+            while i < len(lines):
+                t = lines[i]
+                if t.strip() == COL_BREAK:
+                    bucket = R
+                    i += 1
+                    continue
+                if t.strip() == COL_END:
+                    i += 1
+                    break
+                bucket.append(t)
+                i += 1
+            sections.append({"type": "2col", "L": L, "R": R})
             continue
+        cur.append(ln)
+        i += 1
+    if cur:
+        sections.append({"type": "full", "lines": cur})
 
-        # 직업 항목 앞 자동 여백 (날짜 범위 앞 1~2줄 포함)
-        if _idx in _extra_space and _idx > 0:
-            y -= line_h * 1.5   # ← 직업간 구분 여백 (0.85 → 1.5)
-            if y < margin:
-                y = _new_page()
+    # "Knox Academy | 2023-2025" 형식 (이름 뒤 파이프 + 날짜)
+    _PIPED_DATE_RE = re.compile(
+        r"\|\s*(?:\d{4}\s*[-–—]\s*(?:\d{4}|present|current|now)|"
+        r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})",
+        re.IGNORECASE,
+    )
 
-        # 헤더 여부 판단
-        is_hdr = bool(_HDR_RE.match(stripped))
-        fn = bold_font if is_hdr else body_font
-        fs = font_size + 1 if is_hdr else font_size
-        lh = line_h * 1.3 if is_hdr else line_h
+    # ── 렌더 헬퍼 ───────────────────────────────────────────────────────────
+    def _reorder_jobtitle(ls: list[str]) -> list[str]:
+        """JobTitle\\nCompany|Date 패턴 → Company|Date\\nJobTitle 로 교정.
 
-        if is_hdr:
-            y -= line_h * 1.0  # 섹션 헤더 앞 여백 (Summary 뒤 Professional experience 등)
+        재정렬 조건 (is_jobtitle_candidate):
+          - 짧은 줄 (단어 7개 이하)
+          - 날짜 형식 아님
+          - 섹션 타이틀 아님
+          - 문장부호(.,;:!) 미종료
+          - 다음 비-빈 줄이 날짜 형식
+        """
+        out: list[str] = []
+        i = 0
+        while i < len(ls):
+            stripped = ls[i].strip()
+            nj = i + 1
+            while nj < len(ls) and not ls[nj].strip():
+                nj += 1
+            is_cand = (
+                stripped
+                and not _SECTION_TITLE_RE.match(stripped)
+                and not _DATE_RANGE_RE.match(stripped)
+                and not _PIPED_DATE_RE.search(stripped)
+                and not stripped.endswith((".", ",", ";", ":", "!"))
+                and len(stripped.split()) <= 7
+                and nj < len(ls)
+                and (
+                    _PIPED_DATE_RE.search(ls[nj].strip())
+                    or _DATE_RANGE_RE.match(ls[nj].strip())
+                )
+            )
+            if is_cand:
+                out.append(ls[nj])   # Company|Date 먼저
+                out.append(ls[i])    # Job Title 다음
+                i = nj + 1
+            else:
+                out.append(ls[i])
+                i += 1
+        return out
 
-        c.setFont(fn, fs)
-        for display in _wrap(raw_line.rstrip(), fn, fs):
-            if y < margin:
-                y = _new_page()
-                c.setFont(fn, fs)
-            c.drawString(margin, y, display)
-            y -= lh
+    def _compute_extra_space(ls: list[str]) -> set[int]:
+        """날짜 줄 바로 다음(line+1)의 짧은 직책명을 jobtitle로 마킹.
+
+        _reorder_jobtitle() 이후 기준:
+          Company|Date  ← is_dateline (볼드)
+          JobTitle      ← is_jobtitle (일반 폰트, 이 함수로 마킹)
+          bullets...
+
+        제외 조건:
+          - 섹션 타이틀, 날짜, 문장부호 종료, 8단어 초과
+        """
+        s: set[int] = set()
+        for _i, _ln in enumerate(ls):
+            st = _ln.strip()
+            is_date = bool(_DATE_RANGE_RE.match(st) or _PIPED_DATE_RE.search(st))
+            if not is_date:
+                continue
+            nj = _i + 1
+            while nj < len(ls) and not ls[nj].strip():
+                nj += 1
+            if nj >= len(ls):
+                continue
+            nxt = ls[nj].strip()
+            if (
+                _SECTION_TITLE_RE.match(nxt)
+                or _DATE_RANGE_RE.match(nxt)
+                or _PIPED_DATE_RE.search(nxt)
+                or nxt.endswith((".", ",", ";", ":", "!"))
+                or len(nxt.split()) > 7
+            ):
+                continue
+            s.add(nj)
+        return s
+
+    def _wrap_w(line: str, fn: str, fs: int, width: float) -> list[str]:
+        """단어 단위 줄바꿈 (임의 폭 지원)."""
+        if _sw(line, fn, fs) <= width:
+            return [line]
+        words = line.split(" ")
+        result, cur_ = [], ""
+        for w in words:
+            test = (cur_ + " " + w).lstrip() if cur_ else w
+            if _sw(test, fn, fs) <= width:
+                cur_ = test
+            else:
+                if cur_:
+                    result.append(cur_)
+                if _sw(w, fn, fs) > width:
+                    while w:
+                        for k in range(len(w), 0, -1):
+                            if _sw(w[:k], fn, fs) <= width:
+                                result.append(w[:k])
+                                w = w[k:]
+                                break
+                        else:
+                            result.append(w)
+                            w = ""
+                else:
+                    cur_ = w
+        if cur_:
+            result.append(cur_)
+        return result or [""]
+
+    # ALL CAPS 섹션 타이틀 (PROFESSIONAL EXPERIENCES, EDUCATION, SKILLS 등)
+    _SECTION_TITLE_RE = re.compile(
+        r"^(?:Summary|Professional\s+experience|Education\s+and\s+training|"
+        r"Skills?|Languages?|Certifications?|Achievements?|References?|"
+        r"Profile|Career\s+objective|Qualifications?|[A-Z][A-Z\s&/\-]{3,})\s*$"
+    )
+    # 날짜 범위가 포함된 줄 (Knox Academy | 2023-2025 등)
+    _JOB_DATELINE_RE = re.compile(
+        r"(?:\d{4}\s*[-–—]\s*(?:\d{4}|present|current|now)|"
+        r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})",
+        re.IGNORECASE,
+    )
+
+    def _render_lines(
+        ls: list[str],
+        x0: float,
+        width: float,
+        y_start: float,
+        lh_local: float,
+        allow_page_break: bool = True,
+    ) -> float:
+        """주어진 column 영역(x0, width)에 lines 렌더. 최종 y 반환."""
+        y_ = y_start
+        ls = _reorder_jobtitle(ls)        # Company|Date → JobTitle 순서 교정
+        extra = _compute_extra_space(ls)  # 교정 후 기준으로 jobtitle 마킹
+        for _idx, raw_line in enumerate(ls):
+            stripped = raw_line.strip()
+            if stripped == "":
+                # A구역: job 사이 빈줄 여백 0.65→0.35 (절반 압축)
+                y_ -= lh_local * 0.35
+                if allow_page_break and y_ < margin:
+                    c.showPage()
+                    c.setFont(body_font, font_size)
+                    y_ = page_h - margin
+                continue
+
+            # 타이틀 분류
+            is_section  = bool(_SECTION_TITLE_RE.match(stripped))
+            is_jobtitle = (_idx in extra)         # 날짜 줄 위 직책명
+            is_dateline = bool(_DATE_RANGE_RE.match(stripped)) or bool(_PIPED_DATE_RE.search(stripped))
+
+            # 여백 먼저
+            if is_section and _idx > 0:
+                y_ -= lh_local * 1.0   # 섹션 제목 앞 (PROFESSIONAL EXPERIENCES 등)
+            elif is_dateline and _idx > 0:
+                # Company|Date 앞 — 새 직장 구분 (A구역: 적당한 간격)
+                y_ -= lh_local * 0.5
+            elif is_jobtitle and _idx > 0:
+                # Job Title — Company|Date 바로 다음, 추가 여백 없음
+                y_ -= lh_local * 0.05
+            if allow_page_break and y_ < margin:
+                c.showPage()
+                c.setFont(body_font, font_size)
+                y_ = page_h - margin
+
+            # 폰트/크기 결정
+            if is_section:
+                fn, fs, lh2 = bold_font, font_size + 3, lh_local * 1.3
+            elif is_dateline:
+                fn, fs, lh2 = bold_font, font_size + 1, lh_local * 1.1  # Company|Date: 볼드
+            elif is_jobtitle:
+                fn, fs, lh2 = body_font, font_size, lh_local * 1.0      # Job Title: 일반 폰트
+            else:
+                fn, fs, lh2 = body_font, font_size, lh_local
+
+            c.setFont(fn, fs)
+            for display in _wrap_w(raw_line.rstrip(), fn, fs, width):
+                if allow_page_break and y_ < margin:
+                    c.showPage()
+                    c.setFont(fn, fs)
+                    y_ = page_h - margin
+                if y_ < margin:
+                    break
+                c.drawString(x0, y_, display)
+                y_ -= lh2
+        return y_
+
+    # ── 각 섹션 렌더 ───────────────────────────────────────────────────────
+    COL_GAP = 0.8 * cm
+    col_w   = (max_w - COL_GAP) / 2
+
+    for sec in sections:
+        if sec["type"] == "full":
+            y = _render_lines(sec["lines"], margin, max_w, y, line_h, allow_page_break=True)
+        else:
+            # 한쪽이 비었으면 full 로 다운그레이드
+            has_L_content = any(s.strip() for s in sec["L"])
+            has_R_content = any(s.strip() for s in sec["R"])
+            if not (has_L_content and has_R_content):
+                merged = [s for s in sec["L"] + sec["R"] if s.strip()]
+                y = _render_lines(merged, margin, max_w, y, line_h, allow_page_break=True)
+                continue
+            # 2-col: 좌/우 동일 y_start 부터 병렬 렌더. 페이지 break 없이 한 페이지에 맞춤.
+            # 남은 페이지 공간이 부족하면 먼저 새 페이지로.
+            y_top = y
+
+            # 필요 높이 추정 (간이): 각 컬럼의 wrapped 라인 수 × lh
+            def _estimate_h(ls, width):
+                total = 0.0
+                for ln in ls:
+                    s = ln.strip()
+                    if not s:
+                        total += line_h * 0.65
+                        continue
+                    is_hdr = bool(_HDR_RE.match(s))
+                    fn = bold_font if is_hdr else body_font
+                    fs = font_size + 1 if is_hdr else font_size
+                    lhm = line_h * 1.3 if is_hdr else line_h
+                    if is_hdr:
+                        total += line_h * 1.0
+                    total += len(_wrap_w(ln.rstrip(), fn, fs, width)) * lhm
+                return total
+
+            hL = _estimate_h(sec["L"], col_w)
+            hR = _estimate_h(sec["R"], col_w)
+            needed = max(hL, hR)
+
+            # 필요 높이가 남은 페이지보다 크고 y가 페이지 상단 근처가 아니면 새 페이지
+            avail = y_top - margin
+            if needed > avail and y_top < page_h - margin - 10:
+                c.showPage()
+                c.setFont(body_font, font_size)
+                y_top = page_h - margin
+
+            # 남은 공간에 맞게 line_h 스케일 (최소 0.75배까지 축소)
+            lh_local = line_h
+            avail = y_top - margin
+            if needed > avail:
+                scale = max(0.75, avail / needed)
+                lh_local = line_h * scale
+
+            y_L = _render_lines(sec["L"], margin, col_w, y_top, lh_local, allow_page_break=False)
+            y_R = _render_lines(sec["R"], margin + col_w + COL_GAP, col_w, y_top, lh_local, allow_page_break=False)
+            y = min(y_L, y_R) - line_h * 0.5
 
     c.save()
     return buf.getvalue()
@@ -414,16 +646,64 @@ def _compress_cover_to_1page(text: str, photo_bytes: bytes | None = None, candid
     return pdf_bytes  # 최소 설정으로 그냥 반환
 
 
+def _compress_resume_to_1page(
+    text: str,
+    photo_bytes: bytes | None = None,
+    candidate_id: str = "",
+) -> bytes:
+    """이력서를 가능하면 1페이지로 압축. 단계적 line_h/margin/font 조정.
+
+    커버레터와 별도로 처리 — 이력서는 내용이 많아 더 적극적으로 압축.
+    """
+    attempts = [
+        {"line_h": 16.0, "margin_cm": 1.5, "font_size": 10},
+        {"line_h": 15.0, "margin_cm": 1.3, "font_size": 10},
+        {"line_h": 14.5, "margin_cm": 1.2, "font_size": 10},
+        {"line_h": 14.0, "margin_cm": 1.2, "font_size": 10},
+        {"line_h": 13.5, "margin_cm": 1.0, "font_size": 10},
+        {"line_h": 13.0, "margin_cm": 1.0, "font_size": 9},
+    ]
+    best = None
+    for kw in attempts:
+        pdf_bytes = text_to_pdf_bytes(
+            text,
+            photo_bytes=photo_bytes,
+            candidate_id=candidate_id,
+            **kw,
+        )
+        try:
+            with pikepdf.Pdf.open(io.BytesIO(pdf_bytes)) as p:
+                pages = len(p.pages)
+        except Exception:
+            pages = 99
+        if best is None:
+            best = pdf_bytes
+        if pages <= 1:
+            return pdf_bytes
+        best = pdf_bytes  # 가장 적은 페이지 옵션 저장
+    return best  # 1페이지 불가능 시 최소 압축본 반환
+
+
+# ── 2-column 섹션 마커 ────────────────────────────────────────────────────
+# PII 엔진 regex를 통과하되 다른 텍스트와 충돌하지 않는 고유 마커
+COL_START = "__BRIDGE_COL_START__"
+COL_BREAK = "__BRIDGE_COL_BREAK__"
+COL_END   = "__BRIDGE_COL_END__"
+
+
 # ── PDF 에서 텍스트 추출 ───────────────────────────────────────────────────
 def _extract_page_column_aware(page) -> str:
-    """PyMuPDF block-based extraction — y-밴드 정렬 (reading order 보장).
+    """PyMuPDF block-based extraction — 2-column 자동 감지 + 마커 삽입.
 
-    CVpop/Europass 등 날짜가 우측 정렬된 PDF에서 날짜 블록이
-    페이지 끝에 몰려오는 문제 방지.
+    페이지를 세 zone 으로 분류:
+      - FULL: 블록 폭이 페이지 폭의 55% 이상 (헤더·서머리)
+      - L   : 중심 x < 페이지 중앙
+      - R   : 중심 x > 페이지 중앙
 
-    핵심: 5pt y-밴드 양자화 → 같은 시각적 행 안에서 x(좌→우) 정렬
-    결과: "ESL Teacher" + "28 Feb 23 – 3 Sep 23" 가 같은 행이면 올바른 순서 유지.
-    이전 방식(좌/우 컬럼 전체 분리)은 CVpop 날짜를 모두 뒤로 밀어버리는 부작용.
+    연속된 L+R 블록 구간은 2-column 영역으로 간주 → 마커 래핑.
+    단일 컬럼 구간(L만 또는 R만)은 y 순서로 평범하게 emit.
+    2-column 영역은 COL_START ... COL_BREAK ... COL_END 로 감싸서
+    나중에 text_to_pdf_bytes 가 2-column 으로 렌더링할 수 있게 함.
     """
     blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
     text_blocks = [(b[0], b[1], b[2], b[3], b[4])
@@ -432,11 +712,106 @@ def _extract_page_column_aware(page) -> str:
     if not text_blocks:
         return page.get_text("text")
 
-    # y-밴드(5pt) + x 순서 정렬 — 같은 행 좌→우, 위→아래 순서 보장
-    BAND = 5
-    text_blocks.sort(key=lambda b: (round(b[1] / BAND) * BAND, b[0]))
+    page_w = page.rect.width
+    mid    = page_w / 2
 
-    return "\n".join(b[4].strip() for b in text_blocks if b[4].strip())
+    def classify(b):
+        x0, y0, x1, y1, _ = b
+        w = x1 - x0
+        if w > page_w * 0.55:
+            return "FULL"
+        cx = (x0 + x1) / 2
+        return "L" if cx < mid else "R"
+
+    # y 순서로 정렬 (안정 정렬)
+    text_blocks.sort(key=lambda b: (b[1], b[0]))
+
+    out: list[str] = []
+    i = 0
+    n = len(text_blocks)
+
+    # 2-col 감지 임계값 — L/R 한 쌍 이상이 y 차이 ≤ Y_OVERLAP 이어야 "실제 2단"
+    Y_OVERLAP = 30.0
+
+    def _has_real_2col(L_items, R_items) -> bool:
+        """L·R 에 y가 근접한 블록 쌍이 존재하면 True."""
+        if not L_items or not R_items:
+            return False
+        for y_l, _ in L_items:
+            for y_r, _ in R_items:
+                if abs(y_l - y_r) <= Y_OVERLAP:
+                    return True
+        return False
+
+    def _split_at_gap(items, full_items_y):
+        """연속 블록에서 큰 세로 간격이 있으면 분할. full_items_y = 인접 FULL 블록의 y 경계."""
+        return items  # 단순 구현 — 미사용
+
+    while i < n:
+        b = text_blocks[i]
+        z = classify(b)
+
+        if z == "FULL":
+            out.append(b[4].strip())
+            i += 1
+            continue
+
+        # 다음 FULL 블록까지 = 2-col 후보 구간
+        j = i
+        section_L: list[tuple[float, str]] = []
+        section_R: list[tuple[float, str]] = []
+        while j < n:
+            nb = text_blocks[j]
+            nz = classify(nb)
+            if nz == "FULL":
+                break
+            if nz == "L":
+                section_L.append((nb[1], nb[4].strip()))
+            else:
+                section_R.append((nb[1], nb[4].strip()))
+            j += 1
+
+        real_2col = _has_real_2col(section_L, section_R)
+
+        if real_2col:
+            # 각 L 은 가까운 R 이 있을 때만 core_L; 나머지는 header/footer 로 분리
+            def _has_match(y, others):
+                return any(abs(y - y2) <= Y_OVERLAP for y2, _ in others)
+
+            core_L = [(y, t) for (y, t) in section_L if _has_match(y, section_R)]
+            core_R = [(y, t) for (y, t) in section_R if _has_match(y, section_L)]
+            outside = [(y, t) for (y, t) in (section_L + section_R)
+                       if (y, t) not in core_L and (y, t) not in core_R]
+
+            if not core_L or not core_R:
+                # 쌍이 없으면 단일 컬럼으로
+                for _, t in sorted(section_L + section_R, key=lambda x: x[0]):
+                    out.append(t)
+                i = j
+                continue
+
+            core_y_min = min(y for y, _ in core_L + core_R)
+            core_y_max = max(y for y, _ in core_L + core_R)
+            pre  = [(y, t) for (y, t) in outside if y < core_y_min]
+            post = [(y, t) for (y, t) in outside if y > core_y_max]
+
+            for _, t in sorted(pre, key=lambda x: x[0]):
+                out.append(t)
+            out.append(COL_START)
+            out.extend(t for _, t in sorted(core_L, key=lambda x: x[0]))
+            out.append(COL_BREAK)
+            out.extend(t for _, t in sorted(core_R, key=lambda x: x[0]))
+            out.append(COL_END)
+            for _, t in sorted(post, key=lambda x: x[0]):
+                out.append(t)
+        else:
+            # y-overlap 없음 → 단순 narrow 블록 나열 (section header 등). 단일 컬럼.
+            merged = sorted(section_L + section_R, key=lambda x: x[0])
+            out.extend(t for _, t in merged)
+
+        i = j
+
+    return "\n".join(out)
 
 
 def extract_text_from_pdf(pdf_path: Path) -> str:
@@ -553,28 +928,79 @@ def _auto_line_h(
             blank = 0
             lines.append(ln)
 
-    # 총 line units 계산 (blank=0.65, header_pre=0.3, header_lh=1.3, normal=1.0)
+    # 2-column 섹션 분리 (L+R을 max(L,R)으로 계산 — 이중계산 방지)
+    _COL_START = COL_START
+    _COL_BREAK = COL_BREAK
+    _COL_END   = COL_END
+
+    def _count_units(ls: list[str], col_w_ratio: float = 1.0) -> float:
+        """lines → 세로 유닛 합산. col_w_ratio < 1이면 2-col 폭으로 줄바꿈."""
+        units = 0.0
+        effective_w = max_w * col_w_ratio
+        for raw_line in ls:
+            stripped = raw_line.strip()
+            if stripped in (_COL_START, _COL_BREAK, _COL_END):
+                continue
+            if stripped == "":
+                units += 0.35
+                continue
+            is_hdr = bool(_HDR_RE2.match(stripped))
+            fn = bold_font if is_hdr else body_font
+            fs = font_size + 1 if is_hdr else font_size
+            lh_mult = 1.2 if is_hdr else 1.0
+            if is_hdr:
+                units += 0.2
+            # 2-col 폭으로 실제 줄 수 계산
+            if _sw2(raw_line.rstrip(), fn, fs) <= effective_w:
+                wrapped_cnt = 1
+            else:
+                wrapped_cnt = len(_wrap2(raw_line.rstrip(), fn, fs))
+            units += wrapped_cnt * lh_mult
+        return units
+
+    # 2-column 구간 분리하여 max(L_units, R_units) 사용
+    COL_W_RATIO = 0.47   # 2-col 한 컬럼 폭 ≒ 전체의 47%
     total_units = 0.0
-    for raw_line in lines:
-        stripped = raw_line.strip()
-        if stripped == "":
-            total_units += 0.65
-            continue
-        is_hdr = bool(_HDR_RE2.match(stripped))
-        fn = bold_font if is_hdr else body_font
-        fs = font_size + 1 if is_hdr else font_size
-        lh_mult = 1.3 if is_hdr else 1.0
-        if is_hdr:
-            total_units += 0.3
-        wrapped = _wrap2(raw_line.rstrip(), fn, fs)
-        total_units += len(wrapped) * lh_mult
+    in_col = False
+    L_lines: list[str] = []
+    R_lines: list[str] = []
+    cur_bucket = None
+    full_lines: list[str] = []
+
+    for ln in lines:
+        st = ln.strip()
+        if st == _COL_START:
+            if full_lines:
+                total_units += _count_units(full_lines)
+                full_lines = []
+            in_col = True
+            cur_bucket = L_lines
+        elif st == _COL_BREAK and in_col:
+            cur_bucket = R_lines
+        elif st == _COL_END and in_col:
+            lu = _count_units(L_lines, COL_W_RATIO)
+            ru = _count_units(R_lines, COL_W_RATIO)
+            total_units += max(lu, ru)
+            L_lines, R_lines = [], []
+            in_col = False
+            cur_bucket = None
+        elif in_col:
+            cur_bucket.append(ln)
+        else:
+            full_lines.append(ln)
+
+    if full_lines:
+        total_units += _count_units(full_lines)
+    if in_col:  # 닫힘 없는 2-col
+        lu = _count_units(L_lines, COL_W_RATIO)
+        ru = _count_units(R_lines, COL_W_RATIO)
+        total_units += max(lu, ru)
 
     if total_units <= 0:
         return 18.0
 
-    # 렌더링 시 줄바꿈·헤더 전/후 여백·직업간 여백으로 인한 실제 세로 높이 증가 보정
-    # (헤더 +30%, 직업간 간격 등으로 체감 15~25% 팽창)
-    total_units *= 1.2
+    # 팽창 보정 (A구역 압축 반영, 1.1)
+    total_units *= 1.1
 
     # 일반 페이지(사진 없음) 사용 가능 높이
     page_avail_h = page_h - margin * 2
@@ -642,18 +1068,20 @@ def build_pdf(
 
     if resume_text and resume_text.strip():
         if not _first_added:
-            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입 — 줄간격 자동 계산
-            _resume_lh = _auto_line_h(resume_text, font_size=10, margin_cm=1.5, has_photo=True)
-            pdf_parts.append(text_to_pdf_bytes(
+            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입
+            # _auto_line_h 대신 단계적 압축으로 1페이지 목표
+            pdf_parts.append(_compress_resume_to_1page(
                 resume_text,
                 photo_bytes=photo_bytes,
                 candidate_id=str(candidate_id),
-                line_h=_resume_lh,
-                margin_cm=1.5,
-                font_size=10,
             ))
         else:
-            pdf_parts.append(text_to_pdf_bytes(resume_text, line_h=16, font_size=10))
+            # 커버레터 있을 때는 이력서 페이지를 별도로 압축
+            pdf_parts.append(_compress_resume_to_1page(
+                resume_text,
+                photo_bytes=None,
+                candidate_id="",
+            ))
         _first_added = True
 
     if rec_text and rec_text.strip():
