@@ -15,6 +15,7 @@ DST = Path(f"K:/bridge_rpa_backup_{DATE}")
 COPY_FILES = [
     # 핵심 RPA
     "craigslist_auto_rpa.py",
+    "rpa_select_launcher.py",
     "rpa_overlay.py",
     "rpa_console_monitor.py",
     "cl_manual_login.py",
@@ -53,6 +54,7 @@ COPY_FILES = [
 # ── 복사할 폴더 목록 ─────────────────────────────────────────────────────────
 COPY_DIRS = [
     "images",
+    "ad_only",               # 클린 광고 소스 (RPA 단일 소스)
     ".chrome_rpa_profile",   # 로그인 세션 유지 (핵심!)
 ]
 

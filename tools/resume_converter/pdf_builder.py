@@ -474,15 +474,16 @@ def _compress_image(img: Image.Image, max_dpi: int = 150) -> bytes:
     return buf.getvalue()
 
 
-# ── 첫 페이지 자동 줄간격 계산 ────────────────────────────────────────────
+# ── 전체 페이지 자동 줄간격 계산 ────────────────────────────────────────────
 def _auto_line_h(
     text: str,
     font_size: int = 10,
     margin_cm: float = 1.5,
     has_photo: bool = True,
 ) -> float:
-    """텍스트가 첫 페이지의 ~82%를 채우도록 line_h 자동 계산.
-    반환 범위: 16 ~ 26 pt.
+    """텍스트가 사용하는 모든 페이지를 ~90% 채우도록 line_h 자동 계산.
+    마지막 페이지의 빈 여백이 절반 이상 남지 않도록 전 페이지 합산으로 분배.
+    반환 범위: 16 ~ 30 pt.
     """
     page_w, page_h = A4
     margin = margin_cm * cm
@@ -571,9 +572,33 @@ def _auto_line_h(
     if total_units <= 0:
         return 18.0
 
-    target_h = avail_h * 0.82
-    line_h = target_h / total_units
-    return max(16.0, min(26.0, line_h))
+    # 렌더링 시 줄바꿈·헤더 전/후 여백·직업간 여백으로 인한 실제 세로 높이 증가 보정
+    # (헤더 +30%, 직업간 간격 등으로 체감 15~25% 팽창)
+    total_units *= 1.2
+
+    # 일반 페이지(사진 없음) 사용 가능 높이
+    page_avail_h = page_h - margin * 2
+
+    # 1) 최소 line_h 기준으로 필요한 페이지 수 계산
+    MIN_LH = 16.0
+    first_page_units = avail_h / MIN_LH       # 첫 페이지가 담을 수 있는 유닛 (최소 간격 기준)
+    rest_units       = max(0.0, total_units - first_page_units)
+    rest_pages       = max(0, int((rest_units * MIN_LH) / page_avail_h) + (1 if rest_units > 0 else 0))
+    pages_needed     = 1 + rest_pages
+
+    # 2) 전체 페이지 합산 사용 가능 높이
+    total_avail_h = avail_h + (pages_needed - 1) * page_avail_h
+
+    # 3) 마지막 페이지가 비지 않도록 line_h 를 최대화
+    #    3페이지가 필요한 내용이면 line_h 를 3페이지 한계까지 늘려 마지막 페이지도 ~80% 채움.
+    #    공식: line_h = total_avail / total_units  (해당 페이지 수에서 최대치)
+    def _max_lh_for_pages(pages: int) -> float:
+        avail = avail_h + (pages - 1) * page_avail_h
+        return avail / total_units          # 이 line_h 이하에서는 pages 에 반드시 들어감
+
+    # N페이지에 딱 맞는 최대 line_h (경계값) 의 95%를 사용 → 안전 여유
+    best_lh = _max_lh_for_pages(pages_needed) * 0.95
+    return max(16.0, min(26.0, best_lh))
 
 
 # ── 메인 빌드 함수 ──────────────────────────────────────────────────────────
