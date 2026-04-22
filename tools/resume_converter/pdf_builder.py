@@ -1067,18 +1067,20 @@ def build_pdf(
         _first_added = True
 
     if resume_text and resume_text.strip():
-        # 이력서: 원본 내용 보존 — 2~3~4페이지 자연스럽게 펼치기
-        # 사진은 이력서 첫 페이지 우상단 (커버레터 없으면 이력서에, 있으면 커버레터에 이미 삽입됨)
-        _resume_photo = None if _first_added else photo_bytes
-        _resume_cid   = "" if _first_added else str(candidate_id)
-        pdf_parts.append(text_to_pdf_bytes(
-            resume_text,
-            photo_bytes=_resume_photo,
-            candidate_id=_resume_cid,
-            line_h=16,
-            margin_cm=1.5,
-            font_size=10,
-        ))
+        if not _first_added:
+            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입 (1페이지 압축 목표)
+            pdf_parts.append(_compress_resume_to_1page(
+                resume_text,
+                photo_bytes=photo_bytes,
+                candidate_id=str(candidate_id),
+            ))
+        else:
+            # 커버레터 있을 때는 이력서만 별도 압축
+            pdf_parts.append(_compress_resume_to_1page(
+                resume_text,
+                photo_bytes=None,
+                candidate_id="",
+            ))
         _first_added = True
 
     if rec_text and rec_text.strip():

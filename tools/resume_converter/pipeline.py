@@ -389,6 +389,22 @@ def _extract_photo_from_pdf(pdf_path: Path) -> bytes | None:
                 except Exception as e:
                     log.debug(f"이미지 처리 실패 (xref={xref}): {e}")
                     continue
+
+        # 폴백: 임베디드 이미지 실패 시 페이지 전체를 raster 렌더하여 얼굴 스캔
+        # (벡터 기반 이력서 / 플랫 이미지 PDF / Ghostscript 출력 대응)
+        for page_num in range(min(2, len(doc))):
+            try:
+                page = doc[page_num]
+                pix = page.get_pixmap(dpi=200, alpha=False)
+                raster_bytes = pix.tobytes("png")
+                result = crop_face_from_bytes(raster_bytes)
+                if result:
+                    return result
+            except FaceNotFoundError:
+                continue
+            except Exception as e:
+                log.debug(f"raster 폴백 실패 (p{page_num+1}): {e}")
+                continue
     finally:
         doc.close()
 
