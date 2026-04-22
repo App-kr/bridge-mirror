@@ -97,11 +97,11 @@ except Exception:
 
 # ── 경로 설정 (cross-platform) ───────────────────────────────────────────────
 BASE_DIR = Path(os.getenv("BRIDGE_APP_DIR", str(Path(__file__).resolve().parent)))
-DB_PATH  = Path(os.getenv("BRIDGE_DB_PATH", str(BASE_DIR / "data" / "master.db")))
+DB_PATH  = Path(os.getenv("BRIDGE_DB_PATH", str(BASE_DIR / "master.db")))
 
-# DB fallback: data/master.db 없으면 루트의 master.db (기존 Windows 구조 호환)
-if not DB_PATH.exists() and (BASE_DIR / "master.db").exists():
-    DB_PATH = BASE_DIR / "master.db"
+# DB fallback: 루트 master.db 없으면 data/master.db (구 구조 호환)
+if not DB_PATH.exists() and (BASE_DIR / "data" / "master.db").exists():
+    DB_PATH = BASE_DIR / "data" / "master.db"
 
 SS_DIR   = BASE_DIR / "screenshots" / "craigslist"
 SS_DIR.mkdir(parents=True, exist_ok=True)
@@ -387,9 +387,11 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
                        'ad_only 화이트리스트 미존재 -- 스킵',
                        {'reason': 'not_in_clean_list'})
             continue
-        # row의 모든 문자열 필드에 기본 PII 스캔 (한글/이메일/전화/URL)
+        # 광고 출력 필드만 PII 스캔 (internal_notes, raw_text는 내부 메모라 제외)
+        _PII_SKIP_FIELDS = {'internal_notes', 'raw_text', 'source_file', 'loaded_at', 'created_at'}
         combined = ' '.join(
-            str(v) for v in j.values() if isinstance(v, (str, int, float))
+            str(v) for k, v in j.items()
+            if isinstance(v, (str, int, float)) and k not in _PII_SKIP_FIELDS
         )
         hits = _ad_pii_scan(combined, strict_brand=False)
         if hits:
