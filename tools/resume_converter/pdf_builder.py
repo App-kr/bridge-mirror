@@ -934,19 +934,35 @@ def redact_pdf_preserve_layout(
 
     for page in doc:
         # ── Pass 1: PII + 회사명 치환 ──────────────────────────────────
-        for text, repl in redactions.items():
+        # 중복 방지를 위해 긴 키부터 처리 → 이미 덮인 영역 skip
+        applied_rects: list = []  # 페이지 내 이미 redact된 rect 누적
+        sorted_items = sorted(redactions.items(), key=lambda kv: -len(kv[0]))
+        for text, repl in sorted_items:
             try:
                 rects = page.search_for(text, quads=False)
             except Exception:
                 continue
             for rect in rects:
                 try:
+                    # 기존 redact rect와 겹치면 skip (중복 치환 방지)
+                    overlapped = False
+                    for ex in applied_rects:
+                        try:
+                            if rect.intersects(ex):
+                                overlapped = True
+                                break
+                        except Exception:
+                            pass
+                    if overlapped:
+                        continue
+
                     if repl:
-                        # 치환 텍스트 삽입 (fill=white로 깔끔하게)
+                        # 치환 텍스트 삽입 — 폰트 사이즈 상향 (최소 10, rect 높이 기준)
+                        fs = max(10, int(rect.height * 0.9))
                         page.add_redact_annot(
                             rect,
                             text=repl,
-                            fontsize=max(8, int(rect.height * 0.7)),
+                            fontsize=fs,
                             fill=(1, 1, 1),
                             text_color=(0, 0, 0),
                             align=0,
@@ -954,6 +970,7 @@ def redact_pdf_preserve_layout(
                     else:
                         # 단순 제거 (fill=None → 원래 배경 유지)
                         page.add_redact_annot(rect, fill=None)
+                    applied_rects.append(rect)
                     total_hits += 1
                 except Exception:
                     pass
@@ -1005,6 +1022,199 @@ def redact_pdf_preserve_layout(
                     pass
             except Exception:
                 pass
+
+        # ── Pass 2.5: CONTACT/연락처 섹션 전체 덮기 (템플릿 사이드바) ──────
+        # 꾸며진 사이드바에 있는 "CONTACT ME", "CONTACT", "연락처" 등 헤딩 감지
+        # → 그 아래부터 다음 헤딩 전까지 사이드바 배경색으로 덮기
+        try:
+            _CONTACT_HEADING = re.compile(
+                r"^\s*(contact(\s*(me|info|us|details))?|get\s*in\s*touch|"
+                r"personal(\s*(info|details))?|details|info|\uc5f0\ub77d\ucc98)\s*$",
+                re.IGNORECASE,
+            )
+            page_h = page.rect.height
+            page_w = page.rect.width
+            td25 = page.get_text("dict")
+
+            contact_region = None
+            for block in td25.get("blocks", []):
+                for line in block.get("lines", []):
+                    spans = line.get("spans", [])
+                    text = "".join(s.get("text", "") for s in spans).strip()
+                    if not text or not _CONTACT_HEADING.match(text):
+                        continue
+                    bb = line.get("bbox")
+                    if not bb:
+                        continue
+                    # 사이드바 여부: 좌측 35% 또는 우측 65% 이후
+                    left_side  = bb[2] <= page_w * 0.38
+                    right_side = bb[0] >= page_w * 0.62
+                    if not (left_side or right_side):
+                        continue
+                    if left_side:
+                        contact_region = {
+                            "y_start": bb[1] - 3,
+                            "x_min": 0,
+                            "x_max": page_w * 0.38,
+                        }
+                    else:
+                        contact_region = {
+                            "y_start": bb[1] - 3,
+                            "x_min": page_w * 0.62,
+                            "x_max": page_w,
+                        }
+                    break
+                if contact_region:
+                    break
+
+            if contact_region:
+                # 다음 헤딩 탐색 (같은 x 범위 내)
+                y_end = None
+                for block in td25.get("blocks", []):
+                    for line in block.get("lines", []):
+                        bb = line.get("bbox")
+                        if not bb or bb[1] <= contact_region["y_start"] + 5:
+                            continue
+                        if bb[0] < contact_region["x_min"] - 2 or bb[2] > contact_region["x_max"] + 2:
+                            continue
+                        spans = line.get("spans", [])
+                        text = "".join(s.get("text", "") for s in spans).strip()
+                        if len(text) < 3 or len(text) > 30:
+                            continue
+                        is_bold = any(int(s.get("flags", 0)) & 16 for s in spans)
+                        is_upper = text.isupper() or (text.replace(" ", "").isalpha() and text == text.upper())
+                        if is_bold or is_upper:
+                            y_end = bb[1] - 2
+                            break
+                    if y_end:
+                        break
+                if y_end is None:
+                    y_end = min(contact_region["y_start"] + 220, page_h)
+
+                # 배경색 샘플링 (헤딩 바로 위)
+                try:
+                    sample_clip = fitz.Rect(
+                        contact_region["x_min"] + 5,
+                        max(0, contact_region["y_start"] - 10),
+                        contact_region["x_min"] + 15,
+                        max(5, contact_region["y_start"] - 2),
+                    )
+                    sp = page.get_pixmap(clip=sample_clip)
+                    if sp.n >= 3 and sp.samples:
+                        idx = (sp.h // 2) * sp.stride + (sp.w // 2) * sp.n
+                        bg25 = (
+                            sp.samples[idx] / 255.0,
+                            sp.samples[idx + 1] / 255.0,
+                            sp.samples[idx + 2] / 255.0,
+                        )
+                    else:
+                        bg25 = (1, 1, 1)
+                except Exception:
+                    bg25 = (1, 1, 1)
+
+                cover = fitz.Rect(
+                    contact_region["x_min"],
+                    contact_region["y_start"],
+                    contact_region["x_max"],
+                    y_end,
+                )
+                try:
+                    page.draw_rect(cover, color=bg25, fill=bg25, width=0)
+                    total_hits += 1
+                except Exception:
+                    pass
+        except Exception as e:
+            log.warning(f"CONTACT 섹션 삭제 Pass2.5 실패 p{page.number}: {e}")
+
+        # ── Pass 2.6: Dangling preposition 정리 ──────────────────────────
+        # PyMuPDF apply_redactions는 redact 경계에서 라인을 분리함.
+        # 같은 y-좌표에 여러 라인 프래그먼트가 있으면 원래 한 문장이었다는 의미.
+        # 첫 프래그먼트가 전치사로 끝나면 → 해당 전치사 redact (공백 제거)
+        try:
+            _DANGLE_WORDS = {
+                "in", "at", "on", "from", "to", "of", "with", "by", "for",
+                "and", "or", "as", "the", "a", "an", "into", "onto", "upon",
+                "into", "over", "under", "near",
+            }
+            td26 = page.get_text("dict")
+            # get_text("words") → 각 단어의 정확한 bbox
+            word_tuples = page.get_text("words")
+            # [(x0,y0,x1,y1,word,block_no,line_no,word_no), ...]
+
+            # y-band bucket (같은 시각적 라인)
+            lines_by_y: dict = {}
+            for block in td26.get("blocks", []):
+                for line in block.get("lines", []):
+                    bb = line.get("bbox")
+                    spans = line.get("spans", [])
+                    if not bb or not spans:
+                        continue
+                    y_key = round(bb[1] / 2) * 2
+                    lines_by_y.setdefault(y_key, []).append((bb, line))
+
+            dangle_redacts: list = []
+            for y_key, items in lines_by_y.items():
+                if len(items) < 2:
+                    continue
+                items.sort(key=lambda t: t[0][0])
+                for i in range(len(items) - 1):
+                    bb_a, line_a = items[i]
+                    bb_b, _ = items[i + 1]
+                    gap = bb_b[0] - bb_a[2]
+                    if gap < 15:
+                        continue
+                    spans_a = line_a.get("spans", [])
+                    text_a = "".join(s.get("text", "") for s in spans_a).rstrip()
+                    if not text_a:
+                        continue
+                    words = text_a.split()
+                    if not words:
+                        continue
+                    last_w = words[-1].strip(",.;:!?()\"'").lower()
+                    if last_w not in _DANGLE_WORDS:
+                        continue
+                    # get_text("words") 에서 bb_a 내부의 마지막 단어 bbox 찾기
+                    cand = None
+                    for wt in word_tuples:
+                        wx0, wy0, wx1, wy1, wtext = wt[0], wt[1], wt[2], wt[3], wt[4]
+                        # 같은 라인 범위 (y 중간값이 bb_a 내부)
+                        wy_mid = (wy0 + wy1) / 2
+                        if not (bb_a[1] - 1 <= wy_mid <= bb_a[3] + 1):
+                            continue
+                        if wx0 < bb_a[0] - 1 or wx1 > bb_a[2] + 1:
+                            continue
+                        # 단어 match (전치사)
+                        if wtext.strip(",.;:!?()\"'").lower() != last_w:
+                            continue
+                        # 가장 오른쪽(끝) 후보
+                        if cand is None or wx1 > cand[2]:
+                            cand = (wx0, wy0, wx1, wy1)
+                    if cand is None:
+                        continue
+                    cut_rect = fitz.Rect(
+                        cand[0] - 1, cand[1] - 1,
+                        cand[2] + 2, cand[3] + 1,
+                    )
+                    dangle_redacts.append(cut_rect)
+
+            for rect in dangle_redacts:
+                try:
+                    page.add_redact_annot(rect, fill=None)
+                    total_hits += 1
+                except Exception:
+                    pass
+            if dangle_redacts:
+                try:
+                    page.apply_redactions(images=0, graphics=0)
+                except TypeError:
+                    try:
+                        page.apply_redactions()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+        except Exception as e:
+            log.warning(f"Dangling preposition Pass2.6 실패 p{page.number}: {e}")
 
         # ── Pass 3: 연락처 아이콘 덮기 (소형 벡터 드로잉) ─────────────────
         # Canva 템플릿의 좌측 사이드바 phone/email/location 아이콘 등
@@ -1083,7 +1293,7 @@ def redact_pdf_preserve_layout(
     out_bytes = doc.tobytes(deflate=True, garbage=4, clean=True)
     total_pages = len(doc)
     doc.close()
-    log.info(f"redact v3.3: {total_hits}건 처리 / {total_pages}페이지 / {len(out_bytes)//1024}KB")
+    log.info(f"redact v3.4: {total_hits}건 처리 / {total_pages}페이지 / {len(out_bytes)//1024}KB")
     return out_bytes
 
 
