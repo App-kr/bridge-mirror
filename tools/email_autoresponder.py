@@ -244,9 +244,49 @@ _SPAM_SENDER_DOMAINS = {
 
     # ESL 구인 광고 사이트 (지원자는 개인 메일로만 연락)
     "eslgorilla.com", "eslcafe.com", "waygook.org",
-    "koreabridge.net", "teast.com",
+    "koreabridge.net",
+    # teast.com 제외 — Teast Admin 알림 메일은 국적 필터 후 자동응답 대상
 }
 # reply.craigslist.org는 실제 지원자 → 차단 금지
+
+# ── Teast Admin 전용 설정 ──────────────────────────────────────────────────────
+_TEAST_DOMAINS = {"teast.com", "teast.co.kr"}
+
+# 허용 국적 키워드 (미국·영국·캐나다·호주·아일랜드·뉴질랜드)
+_ALLOWED_NATIONALITIES = {
+    # 미국
+    "american", "usa", "u.s.a", "u.s", "united states",
+    # 영국
+    "british", "uk", "u.k", "united kingdom",
+    "english", "england", "scottish", "scotland", "welsh", "wales",
+    # 캐나다
+    "canadian", "canada",
+    # 호주
+    "australian", "australia",
+    # 아일랜드
+    "irish", "ireland",
+    # 뉴질랜드
+    "new zealand", "new zealander", "nz",
+}
+
+
+def is_teast_admin(from_addr: str) -> bool:
+    """Teast Admin 발신 메일 여부."""
+    if "@" not in from_addr:
+        return False
+    domain = from_addr.split("@")[1].lower()
+    return domain in _TEAST_DOMAINS
+
+
+def teast_allowed_nationality(body: str) -> str | None:
+    """Teast 본문에서 허용 국적 키워드 감지 → 감지된 키워드 반환, 없으면 None."""
+    body_low = body.lower()
+    for nat in _ALLOWED_NATIONALITIES:
+        if nat in body_low:
+            return nat
+    return None
+
+
 _SPAM_SUBJECT_KW = [
     "unsubscribe", "newsletter", "promotion", "offer", "discount",
     "make money", "crypto", "investment", "casino", "lottery", "winner",
@@ -666,6 +706,49 @@ def process_inbox(cfg: dict) -> None:
                     processed.add(uid)
                     _save_processed(processed)
                     continue
+
+                # ── STEP A-1: Teast Admin 메일 — 국적 필터 전용 처리 ─────────
+                if is_teast_admin(from_addr):
+                    # Teast는 시스템 발신이므로 연락이력 체크 생략, 본문 국적만 확인
+                    _teast_buf: list = []
+                    def _do_teast_body(u=uid_b):
+                        try:
+                            r = imap.fetch(u, "(BODY.PEEK[1]<0.4096>)")
+                            _teast_buf.append(r)
+                        except Exception as e:
+                            _teast_buf.append(e)
+                    _tt = threading.Thread(target=_do_teast_body, daemon=True)
+                    _tt.start(); _tt.join(timeout=15)
+                    teast_body = ""
+                    if _teast_buf and not isinstance(_teast_buf[0], Exception):
+                        try:
+                            teast_body = _teast_buf[0][1][0][1].decode("utf-8", errors="ignore")
+                        except Exception:
+                            teast_body = ""
+                    found_nat = teast_allowed_nationality(teast_body)
+                    if not found_nat:
+                        log.info(f"[TEAST] 허용 국적 없음 → 스킵: {from_addr} | {subject}")
+                        processed.add(uid)
+                        _save_processed(processed)
+                        continue
+                    log.info(f"[TEAST] 허용 국적 감지({found_nat}) → 자동발송 진행: {from_addr} | {subject}")
+                    first_name = from_name.split()[0] if from_name else "there"
+                    subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
+                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply)
+                    sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
+                    status_val = "SENT" if ok else "FAILED"
+                    if ok:
+                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                                f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    else:
+                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                                f"🚨 Teast 발송 실패: {from_addr}")
+                    log_email(from_addr, from_name, subject, received_at,
+                              sent_at, "TEAST", status_val, uid)
+                    processed.add(uid)
+                    _save_processed(processed)
+                    continue  # Teast 처리 완료 — 일반 로직 건너뜀
 
                 # ── STEP B-0: 이미 발송한 주소 → 대화 중, 안읽음 유지 ────────
                 # DB 기록(자동발송) + Gmail 보낸편지함(수동발송 포함 전체) 이중 체크
