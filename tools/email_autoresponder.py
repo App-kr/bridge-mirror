@@ -184,7 +184,7 @@ def tg_send(token: str, chat_id: str, text: str) -> bool:
         data = json.dumps({
             "chat_id": chat_id,
             "text": text[:4096],
-            "parse_mode": "HTML",
+            # parse_mode 제거 — 특수문자 포함 시 HTML 파싱 오류 방지
         }).encode("utf-8")
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{token}/sendMessage",
@@ -192,6 +192,7 @@ def tg_send(token: str, chat_id: str, text: str) -> bool:
             headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=10)
+        log.info(f"[TG] 발송 완료: {text[:60]}")
         return True
     except Exception as e:
         log.error(f"[TG] 발송 실패: {e}")
