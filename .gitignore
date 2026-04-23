@@ -39,14 +39,35 @@ master.db.*
 *.sqlite3
 data/
 
-# ── Resume Converter 임시 폴더 (PII 포함) ─────────────────────
-tools/resume_converter/inbox/*/
+# ── Resume Converter 임시 폴더 (PII 포함 — ABSOLUTE) ─────────
+tools/resume_converter/inbox/
+tools/resume_converter/testdata/
+tools/resume_converter/samples/
 tools/resume_converter/processing/
 tools/resume_converter/output/
 tools/resume_converter/originals/
 tools/resume_converter/logs/
 tools/resume_converter/.rc_key
 tools/resume_converter/.api_key
+tools/processed_docs/
+
+# ── Email autoresponder state (PII: candidate emails) ───────
+.claude/email_pending.json
+.claude/email_processed.json
+.claude/SESSION_STATE.json
+.claude/hook_counter.json
+
+# ── 모든 이력서/커버레터 문서 (ABSOLUTE) ──────────────────────
+**/resume*.pdf
+**/resume*.docx
+**/cv*.pdf
+**/cv*.docx
+**/cover*.pdf
+**/cover*.docx
+**/CV*.pdf
+**/Resume*.pdf
+**/*_resume.pdf
+**/*_cover.pdf
 
 # ── Legacy data / CSV dumps ───────────────────────────────────
 *.csv
