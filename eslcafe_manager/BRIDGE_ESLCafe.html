@@ -112,7 +112,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .tdesc{font-size:12px;color:var(--g3);margin-top:3px;line-height:1.35}
 .tchk{display:flex;align-items:center;gap:3px;margin-top:5px;font-size:11px;font-weight:700;color:var(--blue);opacity:0;transition:.15s}
 .tcard.sel .tchk{opacity:1}
-.tswrow{display:flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100px;flex-shrink:0}
+.tswrow{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:6px}
 /* Settings panel */
 .tset{width:100%;background:var(--g7);border:1px solid var(--g6);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
 .tset-sec{display:flex;flex-direction:column;gap:7px}
@@ -1414,7 +1414,8 @@ var THEMES=[
   {id:'esllist',   name:'ESLCafe List',   desc:'ESLCafe 게시판 스타일 · 텍스트 리스트 · 태그칩'},
   {id:'daves',     name:'Dave\'s Grid',   desc:'원형 로고 · 회사명+날짜 카드 · 클래식 구직 포털'},
   {id:'jkpro',     name:'잡코리아 Pro',    desc:'급여 배지 · 마감일 · 압축형 정보 그리드'},
-  {id:'wantedgrid',name:'Wanted Grid',    desc:'다크 썸네일 카드 · 이미지 블록 · 모던 구직'}
+  {id:'wantedgrid', name:'Wanted Grid',    desc:'다크 썸네일 카드 · 이미지 블록 · 모던 구직'},
+  {id:'photoclean', name:'사람인 Clean',   desc:'채용공고 스타일 · 로고 카드 · 흰 배경 깔끔 리스트'}
 ];
 
 /* Per-theme settings */
@@ -1437,7 +1438,8 @@ var TS={
   esllist:    {fs:14,accent:'#1a73e8',link:'',presets:['#1a73e8','#1557b0','#0d47a1','#1565C0','#0288D1','#00897B','#388E3C','#5E35B1','#8E24AA','#D32F2F']},
   daves:      {fs:14,accent:'#003399',link:'',presets:['#003399','#0050c8','#003b7a','#0066cc','#2255aa','#1a3a8f','#334d99','#003366','#0a3d91','#1e40af']},
   jkpro:      {fs:13,accent:'#c0392b',link:'',presets:['#c0392b','#e74c3c','#e53935','#b71c1c','#FF5A00','#f57c00','#1565c0','#1a237e','#27ae60','#2c3e50']},
-  wantedgrid: {fs:14,accent:'#258bf7',link:'',presets:['#258bf7','#1a73e8','#0d47a1','#007bff','#00b0d8','#0091ea','#6c63ff','#7c4dff','#00c8aa','#29b6f6']}
+  wantedgrid:  {fs:14,accent:'#258bf7', link:'',presets:['#258bf7','#1a73e8','#0d47a1','#007bff','#00b0d8','#0091ea','#6c63ff','#7c4dff','#00c8aa','#29b6f6']},
+  photoclean:  {fs:14,accent:'#0066cc', link:'',presets:['#0066cc','#1a5ff8','#0055b3','#2563eb','#0099cc','#00897b','#2e7d32','#c0392b','#e65100','#7b1fa2']}
 };
 
 function _tp(bg,rows){return '<div style="background:'+bg+';height:100%;padding:8px 10px;box-sizing:border-box">'+rows+'</div>';}
@@ -1572,6 +1574,16 @@ var TPREV={
       +'<div style="background:#f0f4ff;color:#1565c0;font-size:6px;padding:1px 4px;border-radius:3px;border:1px solid #c8d8ff">ESL</div>'
       +'</div>');
   },
+  photoclean:function(){
+    function _card(logoClr,w){
+      return '<div style="background:#fff;border-radius:7px;border:1px solid #e8e8e8;padding:6px 8px;margin-bottom:4px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;gap:6px;align-items:center">'
+        +'<div style="width:24px;height:24px;background:'+logoClr+';border-radius:5px;flex-shrink:0"></div>'
+        +'<div style="flex:1">'+_bar('#222',w,4)+'<div style="display:flex;gap:3px;margin-top:3px"><div style="background:#e6f0ff;border-radius:8px;height:5px;width:22px"></div><div style="background:#f0f0f0;border-radius:8px;height:5px;width:30px"></div></div></div>'
+        +'<div style="background:#0066cc;border-radius:4px;padding:2px 4px;font-size:5px;color:#fff;font-weight:700;flex-shrink:0">지원</div>'
+      +'</div>';
+    }
+    return _tp('#f4f5f7',_card('#ff6b35',58)+_card('#1a5ff8',52)+_card('#2e7d32',62));
+  },
   wantedgrid:function(){
     return _tp('#1a1d27',
       _trow(
@@ -1588,7 +1600,7 @@ var TPREV={
 
 /* ── ABC 세트 그룹 정의 ── */
 var THEME_GROUPS={
-  A:['classic','cleanwhite','apple','mono','editorial'],
+  A:['classic','cleanwhite','apple','mono','editorial','photoclean'],
   B:['amber','jobkorea','passionedu','sunset','boldtype'],
   C:['darkpro','neonnight','violetpop','emerald','corporate'],
   D:['esllist','daves','jkpro','wantedgrid']
@@ -1604,7 +1616,8 @@ var _HERO_TYPE={
   classic:'grad', cleanwhite:'split', apple:'split', mono:'typo',  editorial:'typo',
   amber:'grad',   jobkorea:'board',   passionedu:'grad', sunset:'grad', boldtype:'typo',
   darkpro:'grad', neonnight:'grad',   violetpop:'grad',  emerald:'grad', corporate:'split',
-  esllist:'board',daves:'split',      jkpro:'board',     wantedgrid:'grad'
+  esllist:'board',daves:'split',      jkpro:'board',     wantedgrid:'grad',
+  photoclean:'split'
 };
 
 function setCurGroup(el,g){
@@ -1648,13 +1661,34 @@ function buildThemePicker(){
         +'<div class="tinfo-left">'
           +'<div class="tname">'+t.name+'</div>'
           +'<div class="tdesc">'+t.desc+'</div>'
+          +'<div class="tswrow">'+swatches+'</div>'
           +'<div class="tchk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg> 선택됨</div>'
         +'</div>'
-        +'<div class="tswrow">'+swatches+'</div>'
       +'</div>'
     +'</div>';
   }).join('');
   renderSettings();
+}
+
+var _palOpen=false;
+function togglePalette(){
+  _palOpen=!_palOpen;
+  var p=document.getElementById('tSetPal');
+  var ch=document.getElementById('tSetChv');
+  if(p)p.style.display=_palOpen?'flex':'none';
+  if(ch)ch.textContent=_palOpen?'▴':'▾';
+}
+function autoDistribute(){
+  var ts=TS[curTheme];if(!ts)return;
+  var prs=(ts.presets||[]).filter(function(c){return c!=='#ffffff'&&c!=='#000000';});
+  if(!prs.length)return;
+  var n=prs.length;
+  ts.ac_hero=prs[0];
+  ts.ac_card=prs[Math.floor(n/3)%n];
+  ts.ac_cta =prs[Math.floor(n*2/3)%n];
+  _palOpen=true;
+  renderSettings();
+  if(lastHtml)generateAd();
 }
 
 function renderSettings(){
@@ -1665,17 +1699,14 @@ function renderSettings(){
   var fsUi=ts.fs||14, fsB=ts.fs_body||fsUi;
   var prs=ts.presets||[];
 
+  function dot(c,fn,cur){
+    var brd=(c==='#ffffff')?';border:1.5px solid var(--g5)':'';
+    return '<div class="tswatch'+(cur===c?' on':'')+'" style="background:'+c+brd+'" title="'+c+'" onclick="'+fn+'(\''+c+'\')"></div>';
+  }
   function mkPal(cur,fn){
-    /* 흰/검 항상 고정 + 테마 프리셋 8개 */
-    var fixed=['#ffffff','#000000'];
-    var sw=fixed.map(function(c){
-      var brd=(c==='#ffffff')?';border:2px solid var(--g5)':'';
-      return '<div class="tswatch'+(cur===c?' on':'')+'" style="background:'+c+brd+'" title="'+c+'" onclick="'+fn+'(\''+c+'\')"></div>';
-    }).join('');
-    sw+=prs.slice(0,8).map(function(c){
-      return '<div class="tswatch'+(cur===c?' on':'')+'" style="background:'+c+'" title="'+c+'" onclick="'+fn+'(\''+c+'\')"></div>';
-    }).join('');
-    sw+='<input type="color" value="'+cur+'" oninput="'+fn+'(this.value)" style="width:24px;height:24px;padding:1px;border:1px solid var(--g5);border-radius:50%;cursor:pointer;flex-shrink:0">';
+    var sw=['#ffffff','#000000'].map(function(c){return dot(c,fn,cur);}).join('');
+    sw+=prs.slice(0,8).map(function(c){return dot(c,fn,cur);}).join('');
+    sw+='<input type="color" value="'+cur+'" oninput="'+fn+'(this.value)" style="width:22px;height:22px;padding:1px;border:1px solid var(--g5);border-radius:50%;cursor:pointer;flex-shrink:0">';
     return '<div class="tswatches">'+sw+'</div>';
   }
   function mkFs(cur,fn){
@@ -1684,26 +1715,51 @@ function renderSettings(){
       return '<button class="tsb'+(cur===parseInt(p[0])?' on':'')+'" onclick="'+fn+'('+p[0]+')">'+p[1]+'</button>';
     }).join('')+'</div>';
   }
+  function clrDot(c){
+    return '<div style="width:13px;height:13px;border-radius:50%;background:'+c+';border:1.5px solid rgba(0,0,0,.12);flex-shrink:0"></div>';
+  }
 
   s.innerHTML=
-    /* Row 1: 3 independent color sections */
-    '<div class="tset-row col3">'
-    +'<div class="tset-sec"><div class="tset-lbl">히어로 색</div>'+mkPal(acH,'setHeroAc')+'</div>'
-    +'<div class="tset-sec"><div class="tset-lbl">카드 색</div>'+mkPal(acC,'setCardAc')+'</div>'
-    +'<div class="tset-sec"><div class="tset-lbl">버튼 색</div>'+mkPal(acB,'setCtaAc')+'</div>'
+    /* ── 컴팩트 상단 바 ── */
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+
+    /* 색상 토글 버튼 */
+    +'<button onclick="togglePalette()" style="display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--g5);border-radius:8px;background:var(--white);cursor:pointer;font-size:12px;font-weight:600;color:var(--g2);transition:.12s" onmouseover="this.style.borderColor=\'var(--g4)\'" onmouseout="this.style.borderColor=\'var(--g5)\'">'
+      +'<div style="display:flex;gap:3px;align-items:center">'+clrDot(acH)+clrDot(acC)+clrDot(acB)+'</div>'
+      +'<span style="color:var(--g3)">색상</span>'
+      +'<span id="tSetChv" style="font-size:10px;color:var(--g4)">'+(_palOpen?'▴':'▾')+'</span>'
+    +'</button>'
+
+    /* 자동 분배 버튼 */
+    +'<button onclick="autoDistribute()" style="padding:5px 11px;border:1px solid rgba(26,188,156,.35);border-radius:8px;background:rgba(26,188,156,.08);color:#1ABC9C;font-size:12px;font-weight:700;cursor:pointer;transition:.12s;white-space:nowrap" onmouseover="this.style.background=\'rgba(26,188,156,.16)\'" onmouseout="this.style.background=\'rgba(26,188,156,.08)\'">색 분배</button>'
+
+    /* 폰트 사이즈 */
+    +'<div style="display:flex;align-items:center;gap:5px;margin-left:auto">'
+      +'<span style="font-size:11px;font-weight:600;color:var(--g4)">Aa</span>'
+      +mkFs(fsUi,'setFs')
     +'</div>'
-    /* Row 2: 2 font size controls */
-    +'<div class="tset-row col2">'
-    +'<div class="tset-sec"><div class="tset-lbl">Aa UI 폰트</div>'+mkFs(fsUi,'setFs')+'</div>'
-    +'<div class="tset-sec"><div class="tset-lbl">Aa 본문 폰트</div>'+mkFs(fsB,'setBodyFs')+'</div>'
+
+    /* 링크 버튼 */
+    +'<div style="display:flex;gap:4px">'
+      +'<button class="tub'+(urlMode==='gform'?' on':'')+'" onclick="setUrlMode(\'gform\')" style="font-size:11px;padding:4px 9px">Form</button>'
+      +'<button class="tub'+(urlMode==='bridge'?' on':'')+'" onclick="setUrlMode(\'bridge\')" style="font-size:11px;padding:4px 9px">Bridge</button>'
     +'</div>'
-    /* Row 3: link + URL mode */
-    +'<div class="tset-sec"><div class="tset-lbl">Apply Now 링크</div>'
-    +'<div class="tset-link"><input type="text" id="tLinkI" placeholder="직접 입력하거나 아래 버튼 선택..." value="'+(ts.link||'')+'" oninput="setTLink(this.value)"></div>'
-    +'<div class="tset-url-btns">'
-    +'<button class="tub'+(urlMode==='gform'?' on':'')+'" onclick="setUrlMode(\'gform\')">Google Form</button>'
-    +'<button class="tub'+(urlMode==='bridge'?' on':'')+'" onclick="setUrlMode(\'bridge\')">bridgejob.co.kr</button>'
-    +'</div></div>';
+    +'</div>'
+
+    /* ── 펼쳐지는 팔레트 ── */
+    +'<div id="tSetPal" style="display:'+(_palOpen?'flex':'none')+';flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--g6);margin-top:10px">'
+      +'<div class="tset-row col3">'
+        +'<div class="tset-sec"><div class="tset-lbl">히어로</div>'+mkPal(acH,'setHeroAc')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">카드</div>'+mkPal(acC,'setCardAc')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">버튼</div>'+mkPal(acB,'setCtaAc')+'</div>'
+      +'</div>'
+      +'<div class="tset-row col2">'
+        +'<div class="tset-sec"><div class="tset-lbl">Aa 본문 폰트</div>'+mkFs(fsB,'setBodyFs')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Apply Now 링크</div>'
+          +'<div class="tset-link"><input type="text" id="tLinkI" placeholder="URL 직접 입력..." value="'+(ts.link||'')+'" oninput="setTLink(this.value)"></div>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
 }
 
 function setTheme(el,t){
@@ -2270,6 +2326,39 @@ var _OV={
     +'.hbd-elig{background:#fff8f8;border-top-color:#fcc}.hbd-lbl{color:#8b0000}.hbd-chip{border-color:#f5b8b8;background:#fff5f5;color:#7a1010}.hbd-warn{color:#7a1010;background:rgba(255,150,0,.1);border-color:rgba(180,100,0,.2)}'
   ),
   /* ── Wanted Grid — 다크 썸네일 카드 · 이미지 블록 ── */
+  photoclean:(
+    /* 사람인 스타일: 흰 카드 · 연한 배지 · 파란 지원버튼 */
+    'body{background:#f4f5f7}'
+    +'.hero{border-radius:10px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.07)}'
+    +'.hbg{background:#fff}'
+    +'.heyebrow{background:#e8f5e9;color:#1b7a3e;border-color:#c8e6c9;border-radius:20px}'
+    +'.hh1{color:#111;font-weight:700;letter-spacing:-0.5px}'
+    +'.hh2{color:#666;font-weight:400}'
+    +'.hcta{background:#0066cc;color:#fff!important;border-radius:6px;font-weight:700;box-shadow:0 2px 10px rgba(0,102,204,.25)}'
+    +'.hdiv{background:rgba(0,0,0,.08)}.hql{color:#aaa}'
+    +'.hbadge{background:#f5f5f5;border-color:#e0e0e0;color:#666;border-radius:20px}'
+    +'.hbadge.full{background:#e6f0ff;border-color:#b8d0f5;color:#0055cc;border-radius:20px}'
+    +'.hbadge.sawarn{background:#fff8e1;border-color:#ffe57f;color:#7a5500;border-radius:20px}'
+    +'.hbico{color:#0066cc}.htag{background:#f0f0f0;color:#666;border-color:#e0e0e0;border-radius:20px}'
+    +'.hsp-r{background:#f4f5f7;border-left:1px solid #e0e0e0}.hsp-li{color:#444}.hsp-lb{color:#0066cc}.hsp-ico{color:#0066cc}'
+    +'.hty-h1{color:#111}.hty-chip{border-color:#b8d0f5;background:#e6f0ff;color:#0055cc}.hty-sub{color:#666}'
+    /* Cards */
+    +'.card{background:#fff;border:1px solid #e8e8e8;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.06);overflow:hidden}'
+    +'.ctop{border-top:none;border-bottom:1px solid #f0f0f0;background:#fff}'
+    +'.ctop::before{background:#0066cc}'
+    +'.ctop.prem::before{background:linear-gradient(90deg,#0066cc,#0099dd)}'
+    +'.cjobid{color:#0055cc;background:#e6f0ff;border-color:#b8d0f5;border-radius:20px}'
+    +'.hot{background:#fff3e0;color:#b34700;border-color:#ffcc80;border-radius:20px}'
+    +'.iico{color:#aaa}.itxt{color:#555}'
+    +'.bar{background:#f8f9fa;border-color:#e8e8e8}'
+    +'.bar p{color:#111;font-weight:600}.barbtn{background:#0066cc;border-radius:6px}'
+    +'.pcta{background:#0066cc;border-radius:6px}'
+    +'.picon{background:#e6f0ff;color:#0066cc;border-color:#b8d0f5}'
+    +'.footer{background:#2c2c2c}.ftitle em{color:#6aa8ff}.fsub{color:rgba(255,255,255,.45)}'
+    +'.wnote{border-left-color:#0066cc;background:#f0f6ff}.wico{color:#0066cc}'
+    +'.witem{background:#f8f9fa;border-color:#e8e8e8}'
+    +'.welfare{background:#fff;border-color:#e8e8e8}'
+  ),
   wantedgrid:(
     'body{background:#13151f}'
     +'.hbg{background:linear-gradient(135deg,#0a0d1a 0%,#111526 55%,#1a2240 100%)}'
