@@ -311,6 +311,43 @@ def already_replied(email_addr: str) -> bool:
     return False
 
 
+def has_sent_to(imap_conn: imaplib.IMAP4_SSL, addr: str) -> bool:
+    """Gmail 보낸편지함에서 해당 주소로 발송된 메일이 있으면 True.
+    수동 발송 포함 모든 이력을 커버한다.
+    """
+    _result: list = []
+
+    def _do_search():
+        for folder in ('"[Gmail]/Sent Mail"', 'Sent', '"Sent"'):
+            try:
+                typ, _ = imap_conn.select(folder, readonly=True)
+                if typ != "OK":
+                    continue
+                _, data = imap_conn.search(None, f'TO "{addr}"')
+                found = bool(data and data[0])
+                _result.append(found)
+                return
+            except Exception:
+                continue
+        _result.append(False)
+
+    t = threading.Thread(target=_do_search, daemon=True)
+    t.start()
+    t.join(timeout=10)
+
+    # 반드시 INBOX로 복귀
+    try:
+        imap_conn.select("INBOX")
+    except Exception:
+        pass
+
+    if not _result:
+        # 타임아웃 — 안전하게 False 반환 (발송 허용 쪽으로 실패)
+        log.warning(f"[IMAP] 보낸편지함 조회 10초 타임아웃 addr={addr} → 발송 진행")
+        return False
+    return _result[0]
+
+
 # ── 기존 지원자 DB 조회 ──────────────────────────────────────────────────────
 def lookup_candidate(email_addr: str) -> dict | None:
     try:
@@ -575,8 +612,12 @@ def process_inbox(cfg: dict) -> None:
                     continue
 
                 # ── STEP B-0: 이미 발송한 주소 → 대화 중, 안읽음 유지 ────────
+                # DB 기록(자동발송) + Gmail 보낸편지함(수동발송 포함 전체) 이중 체크
                 if already_replied(from_addr):
-                    log.info(f"[CONV] 이미 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
+                    log.info(f"[CONV] DB 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
+                    continue
+                if has_sent_to(imap, from_addr):
+                    log.info(f"[CONV] 보낸편지함 이력 있음 → 대화 중, 안읽음 유지: {from_addr} | {subject}")
                     continue
 
                 # ── STEP B: 기존 지원자 중복 체크 (헤더만으로 충분) ────────
