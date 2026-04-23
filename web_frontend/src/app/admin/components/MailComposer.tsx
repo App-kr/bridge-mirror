@@ -182,7 +182,7 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
   const [templateIdx, setTemplateIdx] = useState(0)
   const [subject, setSubject] = useState(TEMPLATES[0].subject)
   const [attachments, setAttachments] = useState<File[]>([])
-  const [autoResumes, setAutoResumes] = useState<{ num: string; url: string | null; loading: boolean }[]>([])
+  const [autoResumes, setAutoResumes] = useState<{ num: string; url: string | null; videoUrl: string | null; loading: boolean }[]>([])
   const [previewHtml, setPreviewHtml] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -427,21 +427,29 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
     editorRef.current.style.lineHeight = value
   }
 
-  /* 본문 ■번호 이력서 자동 스캔 */
+  /* 본문 ■/# 번호 이력서+동영상 자동 스캔 (4~5자리) */
   const scanAutoResumes = useCallback(async () => {
     const html = editorRef.current?.innerHTML || ''
-    const matches = [...html.matchAll(/■(\d{4,5})/g)]
+    const matches = [...html.matchAll(/[■#](\d{4,5})(?!\d)/g)]
     const nums = [...new Set(matches.map(m => m[1]))]
     if (nums.length === 0) { setAutoResumes([]); return }
-    setAutoResumes(nums.map(num => ({ num, url: null, loading: true })))
+    setAutoResumes(nums.map(num => ({ num, url: null, videoUrl: null, loading: true })))
     const adminKey = typeof window !== 'undefined' ? (sessionStorage.getItem('bridge_admin_key') || '') : ''
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
     const results = await Promise.all(nums.map(async (num) => {
       try {
         const r = await fetch(`${apiUrl}/api/admin/resume/find/${num}`, { headers: { 'x-admin-key': adminKey } })
         const j = await r.json()
-        return { num, url: (j.success && j.data?.presigned_url) ? j.data.presigned_url as string : null, loading: false }
-      } catch { return { num, url: null, loading: false } }
+        if (j.success && j.data) {
+          return {
+            num,
+            url: (j.data.presigned_url as string) || null,
+            videoUrl: (j.data.video_url as string) || null,
+            loading: false,
+          }
+        }
+        return { num, url: null, videoUrl: null, loading: false }
+      } catch { return { num, url: null, videoUrl: null, loading: false } }
     }))
     setAutoResumes(results)
   }, [])
@@ -488,7 +496,10 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
         city: '',
         teachingAge: '',
       }))
-      const autoAttachPaths = autoResumes.filter(a => a.url).map(a => a.url!)
+      const autoAttachPaths = [
+        ...autoResumes.filter(a => a.url).map(a => a.url!),
+        ...autoResumes.filter(a => a.videoUrl).map(a => a.videoUrl!),
+      ]
       const payload = {
         sender,
         subject,
@@ -699,12 +710,18 @@ export default function MailComposer({ recipients, extractProvince, extractCity,
                   {autoResumes.map(a => (
                     <span key={a.num} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-[11px] text-blue-600 rounded border border-blue-200">
                       [자동] ■{a.num}
-                      {a.loading
-                        ? <span className="text-gray-400 animate-pulse">로딩…</span>
-                        : a.url
-                          ? <span className="text-green-600 font-bold">✓</span>
-                          : <span className="text-red-400">미발견</span>
-                      }
+                      {a.loading ? (
+                        <span className="text-gray-400 animate-pulse">로딩…</span>
+                      ) : (
+                        <>
+                          <span className={a.url ? 'text-green-600 font-bold' : 'text-red-400'}>
+                            {a.url ? '이력서✓' : '이력서✗'}
+                          </span>
+                          <span className={a.videoUrl ? 'text-green-600 font-bold' : 'text-gray-400'}>
+                            {a.videoUrl ? '영상✓' : '영상-'}
+                          </span>
+                        </>
+                      )}
                     </span>
                   ))}
                 </div>

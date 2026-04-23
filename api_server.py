@@ -13397,8 +13397,13 @@ async def admin_reset_form_config(form_name: str, field_key: str, request: Reque
 @app.get("/api/admin/resume/find/{candidate_number}", tags=["admin"])
 async def find_resume_by_candidate_number(candidate_number: int, request: Request):
     """
-    Sprint B B-1 -- sheet_number(=candidate_number)로 PII 제거 이력서 presigned URL 반환.
-    MailComposer 자동첨부용. 없으면 404.
+    sheet_number(=candidate_number)로 변환이력서 + 동영상 presigned URL 반환.
+    MailComposer 자동첨부용.
+
+    응답:
+        presigned_url:   변환이력서 (cv_processed) — 없으면 원본 CV 폴백
+        video_url:       최신 동영상 (있을 때만)
+        video_filename:  동영상 파일명 (이메일 표시용)
     """
     _check_admin(request)
     conn = sqlite3.connect(str(_ADMIN_DB_PATH))
@@ -13409,15 +13414,33 @@ async def find_resume_by_candidate_number(candidate_number: int, request: Reques
             "FROM candidates WHERE sheet_number = ? AND COALESCE(is_deleted,0) != 1 LIMIT 1",
             (candidate_number,),
         ).fetchone()
+        if not row:
+            raise HTTPException(404, f"candidate_number={candidate_number} 후보자 없음")
+        candidate_id, s3_key, full_name = row
+
+        # 변환이력서 없으면 원본 cv 폴백
+        if not s3_key:
+            cv_row = conn.execute(
+                "SELECT s3_key FROM file_uploads "
+                "WHERE entity_id = ? AND file_type = 'cv' AND is_deleted = 0 "
+                "AND s3_key IS NOT NULL ORDER BY rowid DESC LIMIT 1",
+                (candidate_id,),
+            ).fetchone()
+            if cv_row and cv_row[0]:
+                s3_key = cv_row[0]
+
+        # 동영상 최신본 조회
+        video_row = conn.execute(
+            "SELECT s3_key, file_url FROM file_uploads "
+            "WHERE entity_id = ? AND file_type = 'video' AND is_deleted = 0 "
+            "AND s3_key IS NOT NULL ORDER BY rowid DESC LIMIT 1",
+            (candidate_id,),
+        ).fetchone()
     finally:
         conn.close()
 
-    if not row:
-        raise HTTPException(404, f"candidate_number={candidate_number} 후보자 없음")
-
-    candidate_id, s3_key, full_name = row
     if not s3_key:
-        raise HTTPException(404, "처리된 이력서 없음 -- resume_converter로 처리 필요")
+        raise HTTPException(404, "이력서 없음 -- 업로드 또는 변환 필요")
 
     try:
         presigned = s3_presigned_url(s3_key, expires=3600)
@@ -13425,12 +13448,23 @@ async def find_resume_by_candidate_number(candidate_number: int, request: Reques
         logging.getLogger("bridge.resume").error("[find_resume] presigned 실패: %s", _e_s3)
         raise HTTPException(500, "이력서 URL 생성 실패")
 
+    video_url = None
+    video_filename = None
+    if video_row and video_row[0]:
+        try:
+            video_url = s3_presigned_url(video_row[0], expires=3600)
+            video_filename = Path(video_row[0]).name
+        except Exception as _e_v:
+            logging.getLogger("bridge.resume").warning("[find_resume] 동영상 URL 실패: %s", _e_v)
+
     return ok(data={
         "candidate_id": candidate_id,
         "candidate_number": candidate_number,
         "full_name": full_name,
         "s3_key": s3_key,
         "presigned_url": presigned,
+        "video_url": video_url,
+        "video_filename": video_filename,
         "expires_in": 3600,
     })
 
