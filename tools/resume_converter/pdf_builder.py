@@ -814,6 +814,81 @@ def _extract_page_column_aware(page) -> str:
     return "\n".join(out)
 
 
+def redact_pdf_preserve_layout(
+    src_pdf_path: Path,
+    pii_strings: list[str],
+    min_len: int = 3,
+) -> bytes:
+    """
+    원본 PDF 레이아웃을 유지한 채 PII 문자열만 서지컬 제거.
+
+    핵심: PyMuPDF add_redact_annot + apply_redactions
+      - 텍스트만 제거 (images=0, graphics=0) — 사진/배경/테두리 보존
+      - 원본 Canva 템플릿 색상·구조 그대로 유지
+      - 각 PII 문자열을 페이지 내에서 검색 후 해당 rect만 덮어씀
+
+    Args:
+        src_pdf_path: 원본 PDF 경로 (Canva-style 등 레이아웃 유지 대상)
+        pii_strings: 삭제할 PII 원문 리스트 (PIIResult.pii_found의 original_value)
+        min_len: 이보다 짧은 문자열은 스킵 (오탐 방지)
+
+    Returns:
+        redacted PDF bytes
+    """
+    import fitz
+
+    # 중복 제거 + 너무 짧은 문자열 필터
+    pii_set: set[str] = set()
+    for s in pii_strings or []:
+        if s and isinstance(s, str):
+            t = s.strip()
+            if len(t) >= min_len:
+                pii_set.add(t)
+
+    doc = fitz.open(str(src_pdf_path))
+    total_hits = 0
+
+    for page in doc:
+        for pii in pii_set:
+            try:
+                rects = page.search_for(pii, quads=False)
+            except Exception:
+                continue
+            for rect in rects:
+                # fill=None → 원래 배경 유지 (teal sidebar 등 보존)
+                try:
+                    page.add_redact_annot(rect, fill=None)
+                    total_hits += 1
+                except Exception:
+                    pass
+
+        try:
+            # images=0, graphics=0 → 사진·배경·벡터 그래픽 미건드림
+            page.apply_redactions(images=0, graphics=0)
+        except TypeError:
+            # 구버전 호환
+            try:
+                page.apply_redactions()
+            except Exception as e:
+                log.warning(f"apply_redactions 실패 page {page.number}: {e}")
+        except Exception as e:
+            log.warning(f"apply_redactions 실패 page {page.number}: {e}")
+
+    try:
+        doc.set_metadata({
+            "author": "", "title": "", "subject": "",
+            "keywords": "", "creator": "", "producer": "",
+        })
+    except Exception:
+        pass
+
+    out_bytes = doc.tobytes(deflate=True, garbage=4, clean=True)
+    total_pages = len(doc)
+    doc.close()
+    log.info(f"redact: {total_hits}건 제거 / {total_pages}페이지 / {len(out_bytes)//1024}KB")
+    return out_bytes
+
+
 def extract_text_from_pdf(pdf_path: Path) -> str:
     """PyMuPDF 우선 텍스트 추출 (두 컬럼 레이아웃 지원 + CID 처리), pdfplumber 폴백."""
     try:
@@ -1039,9 +1114,18 @@ def build_pdf(
     rec_text:      str | None   = None,
     extra_pdfs:    list[Path]   = [],
     out_dir:       Path | None  = None,
+    # v3.0 (2026-04-23): 레이아웃 보존 모드 — 원본 PDF + PII 서지컬 제거
+    cover_pdf_path:  Path | None = None,
+    resume_pdf_path: Path | None = None,
+    cover_pii_strings:  list[str] | None = None,
+    resume_pii_strings: list[str] | None = None,
 ) -> tuple[Path, int]:
     """
     PDF 조립 + 압축.
+
+    v3.0 우선 경로: cover_pdf_path / resume_pdf_path 제공 시 원본 레이아웃 유지
+                   (PyMuPDF 서지컬 redaction — Canva 템플릿 색상·사진·배치 보존)
+    fallback 경로: pdf_path 없으면 cleaned_text로 재조립 (레이아웃 파괴)
 
     Returns:
         (output_path, file_size_bytes)
@@ -1049,26 +1133,56 @@ def build_pdf(
     page_w, page_h = A4
     pdf_parts: list[bytes] = []
 
-    # ── 레이아웃 v2.9.2 (6159 편집 버전 기준) ───────────────────────────────
-    #   page 1:      커버레터 단독 (있을 때만, 사진 없음)
-    #   page 2~N:    이력서 — 사진+ID 상단, 가능하면 1페이지로 압축
-    #   compress:    불필요하게 2~3페이지로 늘어진 이력서 → 1페이지 축약 시도
+    # ── 레이아웃 v3.0: 원본 PDF 우선 사용 (Canva 템플릿 보존) ─────────────────
+    #   cover/resume PDF 경로 제공 시 → redact_pdf_preserve_layout (layout 유지)
+    #   경로 없을 때만 → 기존 text→PDF 재조립 (fallback)
     _first_added = False
 
-    if cover_text and cover_text.strip():
+    if cover_pdf_path and Path(cover_pdf_path).exists():
+        try:
+            pdf_parts.append(redact_pdf_preserve_layout(
+                Path(cover_pdf_path),
+                cover_pii_strings or [],
+            ))
+            _first_added = True
+        except Exception as e:
+            log.warning(f"커버 redact 실패 → text fallback: {e}")
+            if cover_text and cover_text.strip():
+                _cover_lh = _auto_line_h(cover_text, font_size=10, margin_cm=1.5, has_photo=False)
+                pdf_parts.append(text_to_pdf_bytes(
+                    cover_text, photo_bytes=None, candidate_id="",
+                    line_h=_cover_lh, margin_cm=1.5, font_size=10,
+                ))
+                _first_added = True
+    elif cover_text and cover_text.strip():
         _cover_lh = _auto_line_h(cover_text, font_size=10, margin_cm=1.5, has_photo=False)
         pdf_parts.append(text_to_pdf_bytes(
             cover_text,
-            photo_bytes=None,          # 커버레터는 사진 없이 흐름
-            candidate_id="",           # ID는 이력서 페이지로
+            photo_bytes=None,
+            candidate_id="",
             line_h=_cover_lh,
             margin_cm=1.5,
             font_size=10,
         ))
         _first_added = True
 
-    if resume_text and resume_text.strip():
-        # 이력서: 1페이지 압축 시도 — 실패 시 최소 압축본 반환
+    if resume_pdf_path and Path(resume_pdf_path).exists():
+        try:
+            pdf_parts.append(redact_pdf_preserve_layout(
+                Path(resume_pdf_path),
+                resume_pii_strings or [],
+            ))
+            _first_added = True
+        except Exception as e:
+            log.warning(f"이력서 redact 실패 → text fallback: {e}")
+            if resume_text and resume_text.strip():
+                pdf_parts.append(_compress_resume_to_1page(
+                    resume_text,
+                    photo_bytes=photo_bytes,
+                    candidate_id=str(candidate_id),
+                ))
+                _first_added = True
+    elif resume_text and resume_text.strip():
         pdf_parts.append(_compress_resume_to_1page(
             resume_text,
             photo_bytes=photo_bytes,

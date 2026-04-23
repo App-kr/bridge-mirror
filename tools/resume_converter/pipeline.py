@@ -202,6 +202,12 @@ class Pipeline:
             except Exception as e:
                 job.warnings.append(f"시트 조회 실패: {e}")
 
+        # v3.0: 원본 PDF 경로 + PII 원문 리스트 전달 (레이아웃 보존 redaction)
+        cover_path  = job.files.get("cover")
+        resume_path = job.files.get("resume")
+        cover_pii_strs  = [m.original_value for m in job.cover_pii.pii_found]  if job.cover_pii  else []
+        resume_pii_strs = [m.original_value for m in job.resume_pii.pii_found] if job.resume_pii else []
+
         out_path, size = build_pdf(
             candidate_id = job.candidate_id,
             nationality  = job.nationality,
@@ -211,6 +217,10 @@ class Pipeline:
             cover_text   = job.cover_pii.cleaned_text  if job.cover_pii  else None,
             resume_text  = job.resume_pii.cleaned_text if job.resume_pii else None,
             rec_text     = job.rec_pii.cleaned_text    if job.rec_pii    else None,
+            cover_pdf_path    = cover_path  if cover_path  and cover_path.suffix.lower()  == ".pdf" else None,
+            resume_pdf_path   = resume_path if resume_path and resume_path.suffix.lower() == ".pdf" else None,
+            cover_pii_strings  = cover_pii_strs,
+            resume_pii_strings = resume_pii_strs,
             out_dir      = OUTPUT_DIR,
         )
         job.output_path = out_path
