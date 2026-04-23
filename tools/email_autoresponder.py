@@ -454,6 +454,7 @@ def imap_connect(cfg: dict, retries: int = 3) -> imaplib.IMAP4_SSL | None:
     for attempt in range(1, retries + 1):
         try:
             m = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+            m.sock.settimeout(30)  # 소켓 타임아웃 30초
             m.login(cfg["gmail_addr"], cfg["gmail_pass"])
             return m
         except Exception as e:
@@ -524,6 +525,16 @@ def process_inbox(cfg: dict) -> None:
                 continue
 
             try:
+                # 헤더만 먼저 받아서 크기 체크 (10MB 초과 메일 스킵)
+                _, size_data = imap.fetch(uid_b, "(RFC822.SIZE)")
+                try:
+                    mail_size = int(size_data[0].decode().split("RFC822.SIZE")[1].strip(" )"))
+                except Exception:
+                    mail_size = 0
+                if mail_size > 10 * 1024 * 1024:
+                    log.info(f"[SKIP] 메일 크기 초과 ({mail_size//1024}KB) → 안읽음 유지: uid={uid}")
+                    continue
+
                 _, msg_data = imap.fetch(uid_b, "(RFC822)")
                 raw = msg_data[0][1]
                 msg = email.message_from_bytes(raw)
