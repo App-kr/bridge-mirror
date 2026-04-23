@@ -207,9 +207,15 @@ _SPAM_DOMAINS = {
 
 # 특정 발신 도메인 전체 차단 (광고 확인 메일 등)
 _SPAM_SENDER_DOMAINS = {
-    "craigslist.org",   # robot@craigslist.org — RPA 광고 게시 확인 메일 (스팸)
-    # reply.craigslist.org는 실제 지원자 → 차단 금지
+    "craigslist.org",        # robot@craigslist.org — RPA 광고 게시 확인 메일
+    "render.com",            # Render 서비스 알림
+    "github.com",            # GitHub 알림
+    "vercel.com",            # Vercel 알림
+    "google.com",            # Google 자동 알림
+    "linkedin.com",          # LinkedIn 알림
+    "accounts.google.com",   # Google 계정 알림
 }
+# reply.craigslist.org는 실제 지원자 → 차단 금지
 _SPAM_SUBJECT_KW = [
     "unsubscribe", "newsletter", "promotion", "offer", "discount",
     "make money", "crypto", "investment", "casino", "lottery", "winner",
@@ -526,15 +532,28 @@ def process_inbox(cfg: dict) -> None:
             if uid in processed:
                 continue
 
-            try:
-                # ── 1단계: 헤더만 fetch (본문/첨부 다운로드 없음) ────────────
+            # 메일 1건 처리 최대 20초 제한
+            _fetch_result: list = []
+            def _do_fetch(u=uid_b):
                 try:
-                    _, hdr_data = imap.fetch(uid_b, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-                    raw_hdr = hdr_data[0][1] if hdr_data and hdr_data[0] else b""
-                except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
-                    log.warning(f"[IMAP] 헤더 fetch 실패 uid={uid}: {fe} → 재연결 후 스킵")
-                    imap = imap_connect(cfg) or imap
-                    continue
+                    r = imap.fetch(u, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+                    _fetch_result.append(r)
+                except Exception as e:
+                    _fetch_result.append(e)
+            _t = threading.Thread(target=_do_fetch, daemon=True)
+            _t.start(); _t.join(timeout=20)
+            if not _fetch_result:
+                log.warning(f"[IMAP] 헤더 fetch 20초 타임아웃 uid={uid} → 재연결")
+                imap = imap_connect(cfg) or imap
+                continue
+            _r = _fetch_result[0]
+            if isinstance(_r, Exception):
+                log.warning(f"[IMAP] 헤더 fetch 오류 uid={uid}: {_r}")
+                continue
+
+            try:
+                _, hdr_data = _r
+                raw_hdr = hdr_data[0][1] if hdr_data and hdr_data[0] else b""
                 hdr_msg = email.message_from_bytes(raw_hdr)
 
                 subject     = _decode_header(hdr_msg.get("Subject", "(no subject)"))
