@@ -223,6 +223,7 @@ const INIT = {
   /* Step 3 — 개인정보 동의 */
   privacy_policy: '',
   _url: '',   // honeypot — 봇 방어용, 비어있어야 함
+  captcha_token: '',   // PuzzleCaptcha 토큰 — onVerified 에서 주입
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -310,6 +311,12 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
         privacy_policy: form.privacy_policy,
         location: form.school_location,
         source: 'web_form',
+        captcha_token: form.captcha_token,  // PuzzleCaptcha 토큰 (백엔드 필수)
+      }
+      if (!form.captcha_token) {
+        setStatus('error')
+        setErrorMsg('CAPTCHA 퍼즐을 먼저 완료해 주세요. (Please complete the CAPTCHA puzzle.)')
+        return
       }
       const res  = await fetch(`${API}/api/inquiry`, {
         method: 'POST',
