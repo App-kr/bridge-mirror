@@ -47,7 +47,15 @@ PROCESSED_FILE = PROJECT_ROOT / ".claude" / "email_processed.json"
 PENDING_FILE   = PROJECT_ROOT / ".claude" / "email_pending.json"
 DB_PATH        = PROJECT_ROOT / "master.db"
 LOG_PATH       = Path(r"Q:\Claudework\logs\email_autoresponder.log")
-POLL_INTERVAL  = 300  # 5분
+POLL_INTERVAL  = 600  # 10분 (Task Scheduler --once 방식이므로 루프 모드 전용)
+_KST = timezone(timedelta(hours=9))
+_BIZ_START = 9   # KST 09:00
+_BIZ_END   = 18  # KST 18:00
+
+
+def _is_business_hours() -> bool:
+    """KST 기준 업무시간(09:00~18:00)이면 True."""
+    return _BIZ_START <= datetime.now(_KST).hour < _BIZ_END
 
 # ── 로깅 ─────────────────────────────────────────────────────────────────────
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -591,6 +599,12 @@ def _get_headers(msg: email.message.Message) -> dict:
 
 # ── 메인 처리 루프 ────────────────────────────────────────────────────────────
 def process_inbox(cfg: dict) -> None:
+    # KST 09:00~18:00 외에는 실행 안 함
+    if not _is_business_hours():
+        now_kst = datetime.now(_KST).strftime("%H:%M")
+        log.info(f"[SKIP] 업무시간 외 (KST {now_kst}) — 폴링 건너뜀")
+        return
+
     processed = _load_processed()
 
     imap = imap_connect(cfg)
