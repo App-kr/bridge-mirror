@@ -541,8 +541,15 @@ def process_inbox(cfg: dict) -> None:
             _t = threading.Thread(target=_do_fetch, daemon=True)
             _t.start(); _t.join(timeout=20)
             if not _fetch_result:
-                log.warning(f"[IMAP] 헤더 fetch 20초 타임아웃 uid={uid} → 재연결")
-                imap = imap_connect(cfg) or imap
+                log.warning(f"[IMAP] 헤더 fetch 20초 타임아웃 uid={uid} → 강제 재연결")
+                try:
+                    imap.socket().close()
+                except Exception:
+                    pass
+                _t.join(timeout=3)
+                imap = imap_connect(cfg)
+                if imap:
+                    imap.select("INBOX")
                 continue
             _r = _fetch_result[0]
             if isinstance(_r, Exception):
@@ -591,31 +598,54 @@ def process_inbox(cfg: dict) -> None:
                               None, "RETURNING", "PENDING", uid)
                     continue
 
-                # ── STEP C: 신규 지원자 패턴 감지 ───────────────────────────
-                # 1차: 제목만 빠르게 체크
-                if is_applicant(subject, ""):
-                    body = ""  # 제목만으로 충분
-                else:
-                    # 2차: 본문 첫 4KB 확인 (thread 15초 타임아웃)
-                    _body_buf: list = []
-                    def _do_body(u=uid_b):
-                        try:
-                            r = imap.fetch(u, "(BODY.PEEK[1]<0.4096>)")
-                            _body_buf.append(r)
-                        except Exception as e:
-                            _body_buf.append(e)
-                    _bt = threading.Thread(target=_do_body, daemon=True)
-                    _bt.start(); _bt.join(timeout=15)
-                    if _body_buf and not isinstance(_body_buf[0], Exception):
-                        try:
-                            body = _body_buf[0][1][0][1].decode("utf-8", errors="ignore")
-                        except Exception:
-                            body = ""
-                    else:
+                # ── STEP C: 본문 4KB 패치 + BRIDGE 인용 마커 체크 + 지원자 패턴 감지 ─
+                # 항상 본문을 가져와 ① BRIDGE 인용(대화중) ② 지원자 패턴 순으로 확인
+                body = ""
+                _body_buf2: list = []
+
+                def _do_body(u=uid_b):
+                    try:
+                        r = imap.fetch(u, "(BODY.PEEK[1]<0.4096>)")
+                        _body_buf2.append(r)
+                    except Exception as e:
+                        _body_buf2.append(e)
+
+                _bt = threading.Thread(target=_do_body, daemon=True)
+                _bt.start()
+                _bt.join(timeout=15)
+
+                if not _body_buf2:
+                    # 타임아웃 — 소켓 강제 종료 후 재연결
+                    log.warning(f"[IMAP] body fetch 15초 타임아웃 uid={uid} — 강제 재연결")
+                    try:
+                        imap.socket().close()
+                    except Exception:
+                        pass
+                    _bt.join(timeout=3)  # 스레드 정리 대기
+                    imap = imap_connect(cfg)
+                    if imap:
+                        imap.select("INBOX")
+                    continue  # 이 UID는 다음 폴링에서 재시도
+                elif not isinstance(_body_buf2[0], Exception):
+                    try:
+                        body = _body_buf2[0][1][0][1].decode("utf-8", errors="ignore")
+                    except Exception:
                         body = ""
-                    if not is_applicant(subject, body):
-                        log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
-                        continue
+
+                # BRIDGE 자신의 메일이 인용된 경우 → 대화 진행 중, 발송 금지
+                _BRIDGE_MARKERS = [
+                    "this is bridge agency",
+                    "tinyurl.com/bridgekr",
+                    "we have received your application",
+                    "english teacher application(google form)",
+                ]
+                if any(m in body.lower() for m in _BRIDGE_MARKERS):
+                    log.info(f"[CONV] BRIDGE 회신 인용 감지 → 대화 중, 안읽음 유지: {from_addr} | {subject}")
+                    continue
+
+                if not is_applicant(subject, body):
+                    log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
+                    continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
