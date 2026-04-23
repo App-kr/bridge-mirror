@@ -205,16 +205,38 @@ _SPAM_DOMAINS = {
     "bounce", "bounces", "notifications", "donotreply",
 }
 
-# 특정 발신 도메인 전체 차단 (광고 확인 메일 등)
+# 특정 발신 도메인 전체 차단 (서비스 알림 / 광고성 메일)
 _SPAM_SENDER_DOMAINS = {
-    "craigslist.org",        # robot@craigslist.org — RPA 광고 게시 확인 메일
-    "render.com",            # Render 서비스 알림
-    "github.com",            # GitHub 알림
-    "vercel.com",            # Vercel 알림
-    "google.com",            # Google 자동 알림
-    "linkedin.com",          # LinkedIn 알림
-    "accounts.google.com",   # Google 계정 알림
-    "eslgorilla.com",        # ESL 구인 광고 사이트 알림
+    # Craigslist 시스템 (RPA 게시 확인)
+    "craigslist.org",
+
+    # 개발/호스팅 서비스
+    "render.com", "github.com", "vercel.com", "netlify.com",
+    "heroku.com", "fly.io", "railway.app", "digitalocean.com",
+    "cloudflare.com", "amazonaws.com", "aws.amazon.com",
+    "supabase.com", "supabase.io",
+    "planetscale.com", "neon.tech", "prisma.io",
+    "gitlab.com", "bitbucket.org",
+
+    # Google / 계정 서비스
+    "google.com", "accounts.google.com", "googlegroups.com",
+
+    # 이메일·마케팅 서비스 (자동 발송)
+    "sendgrid.net", "sendgrid.com", "mailchimp.com",
+    "mailgun.org", "mg.mail.com", "sendpulse.com",
+    "klaviyo.com", "constantcontact.com",
+
+    # 업무 도구
+    "linkedin.com", "notion.so", "slack.com",
+    "zoom.us", "dropbox.com", "atlassian.com",
+    "trello.com", "asana.com", "monday.com",
+    "stripe.com", "paypal.com", "payoneer.com",
+    "namecheap.com", "godaddy.com",
+    "twilio.com", "intercom.io",
+
+    # ESL 구인 광고 사이트 (지원자는 개인 메일로만 연락)
+    "eslgorilla.com", "eslcafe.com", "waygook.org",
+    "koreabridge.net", "teast.com",
 }
 # reply.craigslist.org는 실제 지원자 → 차단 금지
 _SPAM_SUBJECT_KW = [
@@ -312,39 +334,58 @@ def already_replied(email_addr: str) -> bool:
     return False
 
 
-def has_sent_to(imap_conn: imaplib.IMAP4_SSL, addr: str) -> bool:
-    """Gmail 보낸편지함에서 해당 주소로 발송된 메일이 있으면 True.
-    수동 발송 포함 모든 이력을 커버한다.
+def has_prior_contact(imap_conn: imaplib.IMAP4_SSL, addr: str,
+                      current_uid: str, days: int = 365) -> bool:
+    """1년이내 해당 주소와 메일을 주고받은 이력이 있으면 True.
+
+    ① 보낸편지함(TO addr) — 수동 발송 포함 전체
+    ② 받은편지함(FROM addr, 현재 UID 제외) — 이전에 먼저 연락 온 경우
     """
+    from datetime import timedelta
+    since_str = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
     _result: list = []
 
-    def _do_search():
-        for folder in ('"[Gmail]/Sent Mail"', 'Sent', '"Sent"'):
+    def _do_check():
+        # ① 보낸편지함 확인
+        for folder in ('"[Gmail]/Sent Mail"', '"[Gmail]/Sent"', "Sent"):
             try:
                 typ, _ = imap_conn.select(folder, readonly=True)
                 if typ != "OK":
                     continue
-                _, data = imap_conn.search(None, f'TO "{addr}"')
-                found = bool(data and data[0])
-                _result.append(found)
-                return
+                _, data = imap_conn.search(None, f'TO "{addr}" SINCE {since_str}')
+                if data and data[0]:
+                    _result.append(True)
+                    return
+                break
             except Exception:
                 continue
+
+        # ② 받은편지함 확인 (현재 처리 중인 UID 제외)
+        try:
+            imap_conn.select("INBOX")
+            _, data = imap_conn.search(None, f'FROM "{addr}" SINCE {since_str}')
+            if data and data[0]:
+                others = [u for u in data[0].split()
+                          if u.decode() != current_uid]
+                if others:
+                    _result.append(True)
+                    return
+        except Exception:
+            pass
+
         _result.append(False)
 
-    t = threading.Thread(target=_do_search, daemon=True)
+    t = threading.Thread(target=_do_check, daemon=True)
     t.start()
     t.join(timeout=10)
 
-    # 반드시 INBOX로 복귀
     try:
         imap_conn.select("INBOX")
     except Exception:
         pass
 
     if not _result:
-        # 타임아웃 — 안전하게 False 반환 (발송 허용 쪽으로 실패)
-        log.warning(f"[IMAP] 보낸편지함 조회 10초 타임아웃 addr={addr} → 발송 진행")
+        log.warning(f"[IMAP] 연락이력 조회 10초 타임아웃 addr={addr} → 발송 진행")
         return False
     return _result[0]
 
@@ -617,8 +658,8 @@ def process_inbox(cfg: dict) -> None:
                 if already_replied(from_addr):
                     log.info(f"[CONV] DB 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
                     continue
-                if has_sent_to(imap, from_addr):
-                    log.info(f"[CONV] 보낸편지함 이력 있음 → 대화 중, 안읽음 유지: {from_addr} | {subject}")
+                if has_prior_contact(imap, from_addr, uid):
+                    log.info(f"[CONV] 1년이내 연락 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
                     continue
 
                 # ── STEP B: 기존 지원자 중복 체크 (헤더만으로 충분) ────────
