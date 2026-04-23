@@ -66,13 +66,21 @@ def set_skip():
 
 # ── Telegram ───────────────────────────────────────────────────────────────
 
-def tg_send(chat_id: int, text: str, token: str) -> bool:
+def tg_send(chat_id: int, text: str, token: str, buttons: bool = False) -> bool:
     if not token:
         return False
+    payload: dict = {"chat_id": chat_id, "text": text[:4000], "parse_mode": "HTML"}
+    if buttons:
+        payload["reply_markup"] = {
+            "inline_keyboard": [[
+                {"text": "✅ 승인", "callback_data": "gate_yes"},
+                {"text": "❌ 취소", "callback_data": "gate_no"},
+            ]]
+        }
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": text[:4000], "parse_mode": "HTML"},
+            json=payload,
             timeout=10,
         )
         return r.status_code == 200
@@ -282,7 +290,7 @@ def main():
 
     if token and subscribers:
         msg  = build_tg_msg(info)
-        sent = sum(1 for cid in subscribers if tg_send(cid, msg, token))
+        sent = sum(1 for cid in subscribers if tg_send(cid, msg, token, buttons=True))
         tg_sent = sent > 0
         if tg_sent:
             print(f"[deploy_gate] 📱 텔레그램 알림 발송 완료 — yes/no 로 응답하세요")

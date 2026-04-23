@@ -402,6 +402,24 @@ COMMANDS = {
 
 # ── 업데이트 처리 ──────────────────────────────────────────────
 def handle_update(update: dict):
+    # InlineKeyboard 버튼 콜백 처리 (deploy_gate 승인/취소 버튼)
+    cb = update.get("callback_query")
+    if cb:
+        cb_id   = cb["id"]
+        chat_id = cb["from"]["id"]
+        data    = cb.get("data", "")
+        # 스피너 제거
+        tg_post("answerCallbackQuery", {"callback_query_id": cb_id})
+        if chat_id not in get_subscribers():
+            return
+        if data == "gate_yes":
+            _write_gate_response("yes")
+            send(chat_id, "✅ 배포 승인됨")
+        elif data == "gate_no":
+            _write_gate_response("no")
+            send(chat_id, "❌ 배포 취소됨")
+        return
+
     msg = update.get("message") or update.get("edited_message")
     if not msg:
         return
