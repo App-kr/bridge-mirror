@@ -929,6 +929,30 @@ def redact_pdf_preserve_layout(
     for city in _KR_CITIES_STANDALONE:
         redactions.setdefault(city, "")
 
+    # ── Substring 치환 키 제거 (긴 키에 포함된 짧은 회사명 키 skip) ────────
+    # 예: "Avalon Langcon Seosan" + "Avalon Langcon" → 긴 것만 유지
+    #     짧은 키 단독 치환으로 인한 중복 박스 방지
+    _keys_desc = sorted(redactions.keys(), key=len, reverse=True)
+    _filtered: dict[str, str] = {}
+    for _k in _keys_desc:
+        # 이미 들어온 긴 키의 substring이면 skip (단, 치환 텍스트가 동일한 경우에 한함)
+        is_sub = False
+        for _longer in _filtered.keys():
+            if len(_k) >= len(_longer):
+                continue
+            if _k in _longer:
+                # 동일 카테고리(company 치환 or 공백)일 때만 skip
+                if _filtered[_longer] == redactions[_k]:
+                    is_sub = True
+                    break
+                # 긴 쪽이 company 치환이고 짧은 쪽도 같은 회사 조각이면 skip
+                if redactions[_k] and _filtered[_longer]:
+                    is_sub = True
+                    break
+        if not is_sub:
+            _filtered[_k] = redactions[_k]
+    redactions = _filtered
+
     doc = fitz.open(str(src_pdf_path))
     total_hits = 0
 
@@ -1091,13 +1115,39 @@ def redact_pdf_preserve_layout(
                 if y_end is None:
                     y_end = min(contact_region["y_start"] + 220, page_h)
 
-                # 배경색 샘플링 (헤딩 바로 위)
+                # 덮기 y_start 확장: 사이드바 상단 사진 바로 아래부터 덮기
+                # (헤딩 위의 장식 선/빈 박스까지 포함)
                 try:
+                    sidebar_photo_y1 = None
+                    for img in page.get_images(full=True):
+                        xref = img[0]
+                        try:
+                            rects_img = page.get_image_rects(xref)
+                        except Exception:
+                            continue
+                        for r in rects_img:
+                            # 사이드바 x 범위 내 + 상단 1/3 영역의 이미지만
+                            if r.x0 < contact_region["x_min"] - 2 or r.x1 > contact_region["x_max"] + 2:
+                                continue
+                            if r.y0 > page_h * 0.35:
+                                continue
+                            if r.y1 < contact_region["y_start"]:
+                                if sidebar_photo_y1 is None or r.y1 > sidebar_photo_y1:
+                                    sidebar_photo_y1 = r.y1
+                    if sidebar_photo_y1 is not None and sidebar_photo_y1 < contact_region["y_start"]:
+                        # 사진 하단 2px 아래부터 덮기
+                        contact_region["y_start"] = sidebar_photo_y1 + 2
+                except Exception:
+                    pass
+
+                # 배경색 샘플링 (헤딩 라인 중간부 — 장식선 회피)
+                try:
+                    heading_center_y = (contact_region["y_start"] + y_end) / 2
                     sample_clip = fitz.Rect(
                         contact_region["x_min"] + 5,
-                        max(0, contact_region["y_start"] - 10),
+                        max(0, heading_center_y - 2),
                         contact_region["x_min"] + 15,
-                        max(5, contact_region["y_start"] - 2),
+                        heading_center_y + 2,
                     )
                     sp = page.get_pixmap(clip=sample_clip)
                     if sp.n >= 3 and sp.samples:
