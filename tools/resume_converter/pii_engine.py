@@ -328,6 +328,14 @@ _PII_LABEL_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# 이름 라벨 줄 삭제 — v2.9.1 (Lorena 케이스: "Name: Lorena Laniti" 전체 삭제)
+# 줄 시작이 "Name:" / "Full name:" / "Surname:" 등인 경우만 (오탐 방지)
+_NAME_LABEL_RE = re.compile(
+    r"^\s*(?:first\s+name|last\s+name|full\s+name|given\s+name|"
+    r"family\s+name|surname|name)\s*[:=].*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 # 생년월일 독립행 패턴 (이력서에서 bare date로 적힌 경우)
 _BARE_DOB_RE = re.compile(
     # "30 Nov 98" / "Nov 30, 1998" / "1998-11-30" / "30/11/1998" / "30.11.1998"
@@ -577,6 +585,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
     # ── PII 라벨 줄 삭제 (nationality/race/religion/gender/dob 등) ─────────
     cleaned = _PII_LABEL_RE.sub("", cleaned)
 
+    # ── 이름 라벨 줄 삭제 ("Name: Lorena Laniti" 등) — v2.9.1 ──────────────
+    cleaned = _NAME_LABEL_RE.sub("", cleaned)
+
     # ── 생년월일 독립행 삭제 ("30 Nov 98" 등) ─────────────────────────────
     for m in _BARE_DOB_RE.finditer(cleaned):
         found.append(PIIMatch(type="dob", original_value=m.group(0).strip(),
@@ -783,8 +794,9 @@ def _apply_regex(text: str) -> tuple[str, list[PIIMatch]]:
 
     # ── 한국 행정구역 접미사 잔류 정리 (-si / -gu / -dong 등) ──────────────────
     # 도시명 제거 후 남은 찌꺼기: "Currently in South Korea, -si," / ", Suwon-si" 등
+    # v2.9.1: 하이픈 필수로 변경 — "eToro" 의 "ro" 오탐 차단
     cleaned = re.sub(
-        r",?\s*-?(?:si|gu|dong|ro|gil|eup|myeon|ri)\b[,.]?\s*",
+        r",?\s*-(?:si|gu|dong|ro|gil|eup|myeon|ri)\b[,.]?\s*",
         " ",
         cleaned,
         flags=re.IGNORECASE,

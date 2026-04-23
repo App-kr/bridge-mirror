@@ -1049,17 +1049,18 @@ def build_pdf(
     page_w, page_h = A4
     pdf_parts: list[bytes] = []
 
-    # ── 1페이지: 커버 없이 바로 본문 시작 (사진+ID는 첫 내용 페이지 우상단) ──
-    # 첫 콘텐츠를 결정: 커버레터 > 이력서 순
+    # ── 레이아웃 v2.9.1 (6129 편집 버전 기준) ───────────────────────────────
+    #   page 1:     커버레터 단독 (사진 없음, 자연 흐름)
+    #   page 2~N:   이력서 — 첫 페이지 상단 사진+ID, 자연스러운 페이지 흐름
+    #   압축 없음 — 지원자가 적은 본문 원형 유지 (2~4페이지 허용)
     _first_added = False
 
     if cover_text and cover_text.strip():
-        # 커버레터 첫 페이지에 사진+ID 삽입 — 줄간격 자동 계산
-        _cover_lh = _auto_line_h(cover_text, font_size=10, margin_cm=1.5, has_photo=True)
+        _cover_lh = _auto_line_h(cover_text, font_size=10, margin_cm=1.5, has_photo=False)
         pdf_parts.append(text_to_pdf_bytes(
             cover_text,
-            photo_bytes=photo_bytes,
-            candidate_id=str(candidate_id),
+            photo_bytes=None,          # 커버레터는 사진 없이 흐름
+            candidate_id="",           # ID는 이력서 페이지로
             line_h=_cover_lh,
             margin_cm=1.5,
             font_size=10,
@@ -1067,20 +1068,15 @@ def build_pdf(
         _first_added = True
 
     if resume_text and resume_text.strip():
-        if not _first_added:
-            # 커버레터 없을 때 이력서 첫 페이지에 사진+ID 삽입 (1페이지 압축 목표)
-            pdf_parts.append(_compress_resume_to_1page(
-                resume_text,
-                photo_bytes=photo_bytes,
-                candidate_id=str(candidate_id),
-            ))
-        else:
-            # 커버레터 있을 때는 이력서만 별도 압축
-            pdf_parts.append(_compress_resume_to_1page(
-                resume_text,
-                photo_bytes=None,
-                candidate_id="",
-            ))
+        # 이력서: 사진+ID는 이력서 첫 페이지에, 본문은 자연스럽게 흐름
+        pdf_parts.append(text_to_pdf_bytes(
+            resume_text,
+            photo_bytes=photo_bytes,
+            candidate_id=str(candidate_id),
+            line_h=16,
+            margin_cm=1.5,
+            font_size=10,
+        ))
         _first_added = True
 
     if rec_text and rec_text.strip():
