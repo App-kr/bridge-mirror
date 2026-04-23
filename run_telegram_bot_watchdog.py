@@ -9,7 +9,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 PY   = str(BASE.parent.parent / "Phtyon 3" / "python.exe")
-BOT  = str(BASE / "run_telegram_bot.py")
+BOT  = str(BASE / "tools" / "tg_commander.py")
 LOG  = BASE / "logs" / "watchdog.log"
 
 logging.basicConfig(

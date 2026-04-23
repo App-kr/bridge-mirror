@@ -93,56 +93,35 @@ def get_subscribers() -> list[int]:
         return []
 
 
+GATE_IPC_FILE = PROJECT_ROOT / ".claude" / "tg_gate_response.json"
+
+
 def tg_poll_response(token: str, subs: list[int], since_ts: float, deadline: float) -> str | None:
     """
-    Telegram getUpdates 롱폴링으로 yes/no 응답 대기.
-    since_ts 이후 메시지만 처리. 'yes'|'no'|None 반환.
+    tg_commander.py가 IPC 파일에 기록한 yes/no 응답을 폴링.
+    (직접 getUpdates 대신 파일 기반 IPC — 409 Conflict 방지)
     """
-    offset = 0
-    # offset 초기화: 기존 메시지 건너뜀
+    # 기존 파일 삭제 (이전 응답 오인 방지)
     try:
-        r = requests.get(
-            f"https://api.telegram.org/bot{token}/getUpdates",
-            params={"offset": -1},
-            timeout=5,
-        )
-        if r.status_code == 200:
-            results = r.json().get("result", [])
-            if results:
-                offset = results[-1]["update_id"] + 1
+        if GATE_IPC_FILE.exists():
+            data = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
+            if data.get("ts", 0) < since_ts:
+                GATE_IPC_FILE.unlink()
     except Exception:
         pass
 
     while time.time() < deadline:
-        remaining = deadline - time.time()
-        poll_timeout = min(30, max(1, int(remaining)))
         try:
-            r = requests.get(
-                f"https://api.telegram.org/bot{token}/getUpdates",
-                params={"offset": offset, "timeout": poll_timeout, "allowed_updates": ["message"]},
-                timeout=poll_timeout + 5,
-            )
-            if r.status_code != 200:
-                time.sleep(2)
-                continue
-            for update in r.json().get("result", []):
-                offset = update["update_id"] + 1
-                msg = update.get("message", {})
-                chat_id = msg.get("chat", {}).get("id")
-                date = msg.get("date", 0)
-                text = msg.get("text", "").strip().lower()
-
-                if chat_id not in subs:
-                    continue
-                if date < since_ts:
-                    continue
-
-                if text in ("yes", "/yes", "y", "1"):
-                    return "yes"
-                elif text in ("no", "/no", "n", "0"):
-                    return "no"
+            if GATE_IPC_FILE.exists():
+                data = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
+                answer = data.get("answer", "")
+                ts = data.get("ts", 0)
+                if ts >= since_ts and answer in ("yes", "no"):
+                    GATE_IPC_FILE.unlink(missing_ok=True)
+                    return answer
         except Exception:
-            time.sleep(2)
+            pass
+        time.sleep(2)
 
     return None
 
