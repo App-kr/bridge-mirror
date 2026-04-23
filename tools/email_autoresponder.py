@@ -555,28 +555,7 @@ def process_inbox(cfg: dict) -> None:
                     log.info(f"[CONV] 이미 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
                     continue
 
-                # ── 2단계: 본문 fetch (10MB 초과 스킵) ───────────────────────
-                _, size_data = imap.fetch(uid_b, "(RFC822.SIZE)")
-                try:
-                    mail_size = int(size_data[0].decode().split("RFC822.SIZE")[1].strip(" )"))
-                except Exception:
-                    mail_size = 0
-                if mail_size > 10 * 1024 * 1024:
-                    log.info(f"[SKIP] 크기 초과 {mail_size//1024}KB → 안읽음 유지: {from_addr}")
-                    continue
-
-                try:
-                    _, msg_data = imap.fetch(uid_b, "(RFC822)")
-                    raw = msg_data[0][1]
-                except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
-                    log.warning(f"[IMAP] 본문 fetch 실패 uid={uid}: {fe} → 재연결 후 스킵")
-                    imap = imap_connect(cfg) or imap
-                    continue
-                msg     = email.message_from_bytes(raw)
-                body    = _get_body(msg)
-                headers = _get_headers(msg)
-
-                # ── STEP B: 기존 지원자 중복 체크 ───────────────────────────
+                # ── STEP B: 기존 지원자 중복 체크 (헤더만으로 충분) ────────
                 existing = lookup_candidate(from_addr)
                 if existing:
                     teacher_id  = existing.get("sheet_number", "?")
@@ -593,16 +572,25 @@ def process_inbox(cfg: dict) -> None:
                             f"→ Gmail 직접 확인 필요")
                     log_email(from_addr, from_name, subject, received_at,
                               None, "RETURNING", "PENDING", uid)
-                    # 읽음 처리 안 함, processed에도 추가 안 함
-                    # → 사용자가 Gmail에서 직접 확인할 수 있도록 안읽음 유지
                     continue
 
                 # ── STEP C: 신규 지원자 패턴 감지 ───────────────────────────
-                if not is_applicant(subject, body):
-                    # 읽음 처리 안 함, processed에도 추가 안 함
-                    # → 사용자가 직접 Gmail에서 읽을 수 있도록 안읽음 유지
-                    log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
-                    continue
+                # 제목만으로 2개 이상 → 본문 불필요
+                subject_only_match = is_applicant(subject, "")
+                body = ""
+                headers = {}
+                if not subject_only_match:
+                    # 제목 미달 → 본문 첫 8KB만 가져와서 재확인
+                    try:
+                        _, bd = imap.fetch(uid_b, "(BODY.PEEK[TEXT]<0.8192>)")
+                        body = bd[0][1].decode("utf-8", errors="ignore") if bd and bd[0] else ""
+                    except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
+                        log.warning(f"[IMAP] 본문 fetch 실패 uid={uid}: {fe} → 스킵")
+                        imap = imap_connect(cfg) or imap
+                        continue
+                    if not is_applicant(subject, body):
+                        log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
+                        continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
