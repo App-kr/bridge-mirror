@@ -1,0 +1,9 @@
+tools/resume_converter/testdata
+tools/resume_converter/samples
+tools/resume_converter/inbox
+tools/resume_converter/output
+tools/resume_converter/originals
+tools/resume_converter/processing
+tools/processed_docs
+.claude/email_pending.json
+.claude/email_processed.json

@@ -756,7 +756,7 @@ def process_inbox(cfg: dict) -> None:
 
                     if ok:
                         tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                f"✅ 자동발송 완료\n👤 {from_name} &lt;{from_addr}&gt;")
+                                f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
                         # 읽음 처리
                         imap.store(uid_b, "+FLAGS", "\\Seen")
                     else:
