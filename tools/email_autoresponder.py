@@ -460,9 +460,7 @@ def send_reply(cfg: dict, to_addr: str, to_name: str,
 def imap_connect(cfg: dict, retries: int = 3) -> imaplib.IMAP4_SSL | None:
     for attempt in range(1, retries + 1):
         try:
-            import socket as _socket
-            _socket.setdefaulttimeout(30)  # 전역 소켓 타임아웃 30초
-            m = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+            m = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=30)
             m.login(cfg["gmail_addr"], cfg["gmail_pass"])
             return m
         except Exception as e:
@@ -593,11 +591,31 @@ def process_inbox(cfg: dict) -> None:
                               None, "RETURNING", "PENDING", uid)
                     continue
 
-                # ── STEP C: 신규 지원자 패턴 감지 (제목만 사용) ─────────────
-                if not is_applicant(subject, ""):
-                    log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
-                    continue
-                body = ""
+                # ── STEP C: 신규 지원자 패턴 감지 ───────────────────────────
+                # 1차: 제목만 빠르게 체크
+                if is_applicant(subject, ""):
+                    body = ""  # 제목만으로 충분
+                else:
+                    # 2차: 본문 첫 4KB 확인 (thread 15초 타임아웃)
+                    _body_buf: list = []
+                    def _do_body(u=uid_b):
+                        try:
+                            r = imap.fetch(u, "(BODY.PEEK[1]<0.4096>)")
+                            _body_buf.append(r)
+                        except Exception as e:
+                            _body_buf.append(e)
+                    _bt = threading.Thread(target=_do_body, daemon=True)
+                    _bt.start(); _bt.join(timeout=15)
+                    if _body_buf and not isinstance(_body_buf[0], Exception):
+                        try:
+                            body = _body_buf[0][1][0][1].decode("utf-8", errors="ignore")
+                        except Exception:
+                            body = ""
+                    else:
+                        body = ""
+                    if not is_applicant(subject, body):
+                        log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
+                        continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
