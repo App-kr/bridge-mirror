@@ -1049,10 +1049,10 @@ def build_pdf(
     page_w, page_h = A4
     pdf_parts: list[bytes] = []
 
-    # ── 레이아웃 v2.9.1 (6129 편집 버전 기준) ───────────────────────────────
-    #   page 1:     커버레터 단독 (사진 없음, 자연 흐름)
-    #   page 2~N:   이력서 — 첫 페이지 상단 사진+ID, 자연스러운 페이지 흐름
-    #   압축 없음 — 지원자가 적은 본문 원형 유지 (2~4페이지 허용)
+    # ── 레이아웃 v2.9.2 (6159 편집 버전 기준) ───────────────────────────────
+    #   page 1:      커버레터 단독 (있을 때만, 사진 없음)
+    #   page 2~N:    이력서 — 사진+ID 상단, 가능하면 1페이지로 압축
+    #   compress:    불필요하게 2~3페이지로 늘어진 이력서 → 1페이지 축약 시도
     _first_added = False
 
     if cover_text and cover_text.strip():
@@ -1068,14 +1068,11 @@ def build_pdf(
         _first_added = True
 
     if resume_text and resume_text.strip():
-        # 이력서: 사진+ID는 이력서 첫 페이지에, 본문은 자연스럽게 흐름
-        pdf_parts.append(text_to_pdf_bytes(
+        # 이력서: 1페이지 압축 시도 — 실패 시 최소 압축본 반환
+        pdf_parts.append(_compress_resume_to_1page(
             resume_text,
             photo_bytes=photo_bytes,
             candidate_id=str(candidate_id),
-            line_h=16,
-            margin_cm=1.5,
-            font_size=10,
         ))
         _first_added = True
 
