@@ -23,6 +23,7 @@ from __future__ import annotations
 import email
 import email.header
 import email.utils
+import socket
 import imaplib
 import json
 import logging
@@ -527,8 +528,13 @@ def process_inbox(cfg: dict) -> None:
 
             try:
                 # ── 1단계: 헤더만 fetch (본문/첨부 다운로드 없음) ────────────
-                _, hdr_data = imap.fetch(uid_b, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-                raw_hdr = hdr_data[0][1] if hdr_data and hdr_data[0] else b""
+                try:
+                    _, hdr_data = imap.fetch(uid_b, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+                    raw_hdr = hdr_data[0][1] if hdr_data and hdr_data[0] else b""
+                except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
+                    log.warning(f"[IMAP] 헤더 fetch 실패 uid={uid}: {fe} → 재연결 후 스킵")
+                    imap = imap_connect(cfg) or imap
+                    continue
                 hdr_msg = email.message_from_bytes(raw_hdr)
 
                 subject     = _decode_header(hdr_msg.get("Subject", "(no subject)"))
@@ -559,9 +565,14 @@ def process_inbox(cfg: dict) -> None:
                     log.info(f"[SKIP] 크기 초과 {mail_size//1024}KB → 안읽음 유지: {from_addr}")
                     continue
 
-                _, msg_data = imap.fetch(uid_b, "(RFC822)")
-                raw = msg_data[0][1]
-                msg = email.message_from_bytes(raw)
+                try:
+                    _, msg_data = imap.fetch(uid_b, "(RFC822)")
+                    raw = msg_data[0][1]
+                except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
+                    log.warning(f"[IMAP] 본문 fetch 실패 uid={uid}: {fe} → 재연결 후 스킵")
+                    imap = imap_connect(cfg) or imap
+                    continue
+                msg     = email.message_from_bytes(raw)
                 body    = _get_body(msg)
                 headers = _get_headers(msg)
 
