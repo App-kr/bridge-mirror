@@ -453,8 +453,9 @@ def send_reply(cfg: dict, to_addr: str, to_name: str,
 def imap_connect(cfg: dict, retries: int = 3) -> imaplib.IMAP4_SSL | None:
     for attempt in range(1, retries + 1):
         try:
+            import socket as _socket
+            _socket.setdefaulttimeout(30)  # 전역 소켓 타임아웃 30초
             m = imaplib.IMAP4_SSL("imap.gmail.com", 993)
-            m.sock.settimeout(30)  # 소켓 타임아웃 30초
             m.login(cfg["gmail_addr"], cfg["gmail_pass"])
             return m
         except Exception as e:
