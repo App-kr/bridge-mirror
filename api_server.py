@@ -6528,8 +6528,11 @@ async def admin_list_applications(
                 })
 
             # 구인자 -- client_inquiries 테이블 (이메일/폼 접수 데이터)
+            # school_name_plain/location_plain 우선 사용 (plain 컬럼 100% 존재)
+            # 실패 시 _safe_decrypt로 암호화 값 복호화 폴백
             inq_rows = conn.execute(
-                "SELECT id, school_name, email, contact_name, phone, location, "
+                "SELECT id, school_name, school_name_plain, email, contact_name, phone, "
+                "location, location_plain, "
                 "start_date, vacancies, teaching_age, schedule, working_hours, "
                 "salary_raw, housing_type, housing_detail, travel_support, benefits, vacation, "
                 "sick_leave, meal, memo, notes, assigned_to, submitted_at, raw_email_body, "
@@ -6542,14 +6545,26 @@ async def admin_list_applications(
                 dec_phone   = _safe_decrypt(inq["phone"], "phone")
                 dec_contact = _safe_decrypt(inq["contact_name"], "contact_name")
                 dec_memo    = _safe_decrypt(inq["memo"], "memo")
+                # school_name: plain 우선 → 암호화값 복호화 폴백 (100% 암호화 대응)
+                school_display = (
+                    inq["school_name_plain"]
+                    or _safe_decrypt(inq["school_name"], "school_name")
+                    or ""
+                )
+                # location: plain 우선 → 암호화값 복호화 폴백
+                location_display = (
+                    inq["location_plain"]
+                    or _safe_decrypt(inq["location"], "location")
+                    or ""
+                )
                 apps.append({
                     "id": f"inq_{inq['id']}", "type": "employer",
-                    "name": inq["school_name"] or "",
+                    "name": school_display,
                     "email": dec_email or "",
-                    "school_name": inq["school_name"],
+                    "school_name": school_display,
                     "contact_name": dec_contact,
                     "phone": dec_phone,
-                    "location": inq["location"],
+                    "location": location_display,
                     "start_date": inq["start_date"],
                     "vacancies": inq["vacancies"],
                     "teaching_age": inq["teaching_age"],
