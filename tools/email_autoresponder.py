@@ -214,6 +214,7 @@ _SPAM_SENDER_DOMAINS = {
     "google.com",            # Google 자동 알림
     "linkedin.com",          # LinkedIn 알림
     "accounts.google.com",   # Google 계정 알림
+    "eslgorilla.com",        # ESL 구인 광고 사이트 알림
 }
 # reply.craigslist.org는 실제 지원자 → 차단 금지
 _SPAM_SUBJECT_KW = [
