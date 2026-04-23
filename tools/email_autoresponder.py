@@ -287,6 +287,23 @@ def is_applicant(subject: str, body: str) -> bool:
     return matched >= 2
 
 
+# ── 이미 자동응답 발송 여부 확인 ─────────────────────────────────────────────
+def already_replied(email_addr: str) -> bool:
+    """email_logs에 해당 주소로 SENT 기록이 있으면 True (대화 중)."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        _ensure_email_logs(conn)
+        row = conn.execute(
+            "SELECT 1 FROM email_logs WHERE from_email=? AND status='SENT' LIMIT 1",
+            (email_addr,),
+        ).fetchone()
+        conn.close()
+        return row is not None
+    except Exception as e:
+        log.error(f"[DB] email_logs 조회 실패: {e}")
+    return False
+
+
 # ── 기존 지원자 DB 조회 ──────────────────────────────────────────────────────
 def lookup_candidate(email_addr: str) -> dict | None:
     try:
@@ -524,6 +541,11 @@ def process_inbox(cfg: dict) -> None:
                     log.info(f"[SPAM] {from_addr} | {subject}")
                     processed.add(uid)
                     _save_processed(processed)
+                    continue
+
+                # ── STEP B-0: 이미 자동응답 발송한 주소 → 대화 중, 안읽음 유지 ──
+                if already_replied(from_addr):
+                    log.info(f"[CONV] 이미 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
                     continue
 
                 # ── STEP B: 기존 지원자 중복 체크 ───────────────────────────
