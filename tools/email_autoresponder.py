@@ -526,39 +526,44 @@ def process_inbox(cfg: dict) -> None:
                 continue
 
             try:
-                # 헤더만 먼저 받아서 크기 체크 (10MB 초과 메일 스킵)
+                # ── 1단계: 헤더만 fetch (본문/첨부 다운로드 없음) ────────────
+                _, hdr_data = imap.fetch(uid_b, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+                raw_hdr = hdr_data[0][1] if hdr_data and hdr_data[0] else b""
+                hdr_msg = email.message_from_bytes(raw_hdr)
+
+                subject     = _decode_header(hdr_msg.get("Subject", "(no subject)"))
+                from_raw    = _decode_header(hdr_msg.get("From", ""))
+                from_name, from_addr = email.utils.parseaddr(from_raw)
+                from_addr   = from_addr.lower().strip()
+                received_at = hdr_msg.get("Date", "")
+
+                # ── STEP A: 스팸 필터 (헤더 기반) ────────────────────────────
+                if is_spam(from_addr, subject, "", {}, cfg["gmail_addr"]):
+                    log.info(f"[SPAM] {from_addr} | {subject}")
+                    processed.add(uid)
+                    _save_processed(processed)
+                    continue
+
+                # ── STEP B-0: 이미 발송한 주소 → 대화 중, 안읽음 유지 ────────
+                if already_replied(from_addr):
+                    log.info(f"[CONV] 이미 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
+                    continue
+
+                # ── 2단계: 본문 fetch (10MB 초과 스킵) ───────────────────────
                 _, size_data = imap.fetch(uid_b, "(RFC822.SIZE)")
                 try:
                     mail_size = int(size_data[0].decode().split("RFC822.SIZE")[1].strip(" )"))
                 except Exception:
                     mail_size = 0
                 if mail_size > 10 * 1024 * 1024:
-                    log.info(f"[SKIP] 메일 크기 초과 ({mail_size//1024}KB) → 안읽음 유지: uid={uid}")
+                    log.info(f"[SKIP] 크기 초과 {mail_size//1024}KB → 안읽음 유지: {from_addr}")
                     continue
 
                 _, msg_data = imap.fetch(uid_b, "(RFC822)")
                 raw = msg_data[0][1]
                 msg = email.message_from_bytes(raw)
-
-                subject     = _decode_header(msg.get("Subject", "(no subject)"))
-                from_raw    = _decode_header(msg.get("From", ""))
-                from_name, from_addr = email.utils.parseaddr(from_raw)
-                from_addr   = from_addr.lower().strip()
-                received_at = msg.get("Date", "")
-                body        = _get_body(msg)
-                headers     = _get_headers(msg)
-
-                # ── STEP A: 스팸 필터 ────────────────────────────────────────
-                if is_spam(from_addr, subject, body, headers, cfg["gmail_addr"]):
-                    log.info(f"[SPAM] {from_addr} | {subject}")
-                    processed.add(uid)
-                    _save_processed(processed)
-                    continue
-
-                # ── STEP B-0: 이미 자동응답 발송한 주소 → 대화 중, 안읽음 유지 ──
-                if already_replied(from_addr):
-                    log.info(f"[CONV] 이미 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
-                    continue
+                body    = _get_body(msg)
+                headers = _get_headers(msg)
 
                 # ── STEP B: 기존 지원자 중복 체크 ───────────────────────────
                 existing = lookup_candidate(from_addr)
