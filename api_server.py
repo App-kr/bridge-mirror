@@ -5790,19 +5790,25 @@ async def admin_matching_send_profile(request: Request, body: ProfileBroadcastBo
 
         for emp_id in body.employer_ids:
             emp = conn.execute(
-                "SELECT id, email, school_name, contact_name FROM client_inquiries WHERE id = ?",
+                "SELECT id, email, school_name, school_name_plain, contact_name FROM client_inquiries WHERE id = ?",
                 (emp_id,)
             ).fetchone()
-            if not emp or not emp["email"]:
+            if not emp:
                 continue
 
-            school = emp["school_name"] or "School"
-            to_email = emp["email"]
+            # PII 복호화 -- email/contact_name 은 T3v1 암호화, school_name_plain 우선
+            to_email   = _safe_decrypt(emp["email"], "email") or ""
+            school     = (emp["school_name_plain"]
+                          or _safe_decrypt(emp["school_name"], "school_name")
+                          or "School")
+            contact    = _safe_decrypt(emp["contact_name"], "contact_name") or ""
+            if not to_email or "@" not in to_email:
+                continue  # 복호화 실패/빈값이면 스킵
 
             # 템플릿 변수 치환
             html = base_body.replace("{{profile_cards}}", card_html)
             html = html.replace("{{school_name}}", school)
-            html = html.replace("{{contact_name}}", emp["contact_name"] or "")
+            html = html.replace("{{contact_name}}", contact)
             html = re.sub(r"\{\{\w+\}\}", "", html)
 
             subject = f"{base_subject} - {school}" if school != "School" else base_subject
@@ -5814,14 +5820,13 @@ async def admin_matching_send_profile(request: Request, body: ProfileBroadcastBo
             else:
                 fail_count += 1
 
-            # 발송 로그 기록
+            # 발송 로그 -- to_email 마스킹 저장 (PII 최소화)
+            masked_email = to_email[:3] + "***" + to_email[to_email.index("@"):] if "@" in to_email else "***"
             conn.execute(
                 """INSERT INTO profile_sends (candidate_id, employer_id, school_name, to_email, status)
                    VALUES (?, ?, ?, ?, ?)""",
-                (body.candidate_id, emp_id, school, to_email, status_val)
+                (body.candidate_id, emp_id, school, masked_email, status_val)
             )
-            # SECURITY: email 마스킹 후 응답 (PII 최소화)
-            masked_email = to_email[:3] + "***" + to_email[to_email.index("@"):] if "@" in to_email else "***"
             results.append({"employer_id": emp_id, "school": school, "email": masked_email, "status": status_val})
 
         conn.commit()
@@ -11081,19 +11086,25 @@ async def admin_matching_send_profile_secure(request: Request, body: SecureProfi
 
         for emp_id in body.employer_ids:
             emp = conn.execute(
-                "SELECT id, email, school_name, contact_name FROM client_inquiries WHERE id = ?",
+                "SELECT id, email, school_name, school_name_plain, contact_name FROM client_inquiries WHERE id = ?",
                 (emp_id,),
             ).fetchone()
-            if not emp or not emp["email"]:
+            if not emp:
                 continue
 
-            school = emp["school_name"] or "School"
-            to_email = emp["email"]
+            # PII 복호화
+            to_email = _safe_decrypt(emp["email"], "email") or ""
+            school   = (emp["school_name_plain"]
+                        or _safe_decrypt(emp["school_name"], "school_name")
+                        or "School")
+            contact  = _safe_decrypt(emp["contact_name"], "contact_name") or ""
+            if not to_email or "@" not in to_email:
+                continue  # 복호화 실패/빈값이면 스킵
 
             # 개별 템플릿 치환
             html = base_body.replace("{{profile_cards}}", card_html)
             html = html.replace("{{school_name}}", school)
-            html = html.replace("{{contact_name}}", emp["contact_name"] or "")
+            html = html.replace("{{contact_name}}", contact)
             html = html.replace("{{download_link}}", dl_html)
             html = re.sub(r"\{\{\w+\}\}", "", html)
 
