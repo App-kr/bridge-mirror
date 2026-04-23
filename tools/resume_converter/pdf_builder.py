@@ -814,65 +814,263 @@ def _extract_page_column_aware(page) -> str:
     return "\n".join(out)
 
 
+# ── 한국 도시명 (이력서 경력 섹션에서 위치 노출 방지) ────────────────────────
+_KR_CITIES_STANDALONE = [
+    "Seoul", "Busan", "Incheon", "Daegu", "Gwangju", "Daejeon", "Ulsan",
+    "Suwon", "Seongnam", "Goyang", "Yongin", "Bucheon", "Ansan", "Anyang",
+    "Cheonan", "Jeonju", "Cheongju", "Jeju", "Seosan", "Pohang", "Changwon",
+    "Gumi", "Chuncheon", "Wonju", "Gangneung", "Mokpo", "Gwangmyeong",
+    "Hwaseong", "Uijeongbu", "Dongducheon", "Paju", "Gimpo", "Gwangmyeong",
+    "Gimhae", "Jinju", "Namyangju", "Asan", "Iksan", "Gunsan", "Pyeongtaek",
+]
+
+
+# ── 오펀 라벨 패턴 (내용 없는 라벨 라인 → 삭제) ──────────────────────────────
+_ORPHAN_LINE_PATTERNS = [
+    re.compile(r"^ü?\s*Your\s+current\s+location\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^ü?\s*Preferred\s+Location\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^ü?\s*Tel\s*&\s*(?:We\s+can\s+reach\s+you)?\s*:?\s*$", re.IGNORECASE),
+    re.compile(r"^We\s+can\s+reach\s+you\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^\(?\+\s*\d{1,3}\)?\s*$"),                    # "(+82)" 단독
+    re.compile(r"^ü?\s*Current\s+City\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^ü?\s*Address\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^ü?\s*Email\s*:\s*$", re.IGNORECASE),
+    re.compile(r"^ü?\s*Phone\s*:\s*$", re.IGNORECASE),
+]
+
+
+def _is_orphan_line(text: str) -> bool:
+    """블랭크/라벨만 남은 줄 감지 (연락처 아이콘·빈 라벨 등)."""
+    t = text.strip()
+    if not t or len(t) > 80:
+        return False
+    for pat in _ORPHAN_LINE_PATTERNS:
+        if pat.match(t):
+            return True
+    return False
+
+
+def _company_replacement(original: str) -> str:
+    """회사명 → 일반화 치환."""
+    low = original.lower()
+    if "academy" in low:
+        return "English Academy, Korea"
+    if "school" in low and "language" not in low:
+        return "English School, Korea"
+    if "institute" in low or "language" in low or "hagwon" in low or "학원" in low:
+        return "Language Institute, Korea"
+    if "kindergarten" in low or "nursery" in low or "유치원" in low:
+        return "Kindergarten, Korea"
+    return "Language Institute, Korea"
+
+
 def redact_pdf_preserve_layout(
     src_pdf_path: Path,
-    pii_strings: list[str],
+    pii_matches: list,
+    candidate_name: str = "",
     min_len: int = 3,
 ) -> bytes:
     """
-    원본 PDF 레이아웃을 유지한 채 PII 문자열만 서지컬 제거.
+    원본 PDF 레이아웃 유지 + PII 제거 + 회사명 치환 + 오펀 라인 삭제.
 
-    핵심: PyMuPDF add_redact_annot + apply_redactions
-      - 텍스트만 제거 (images=0, graphics=0) — 사진/배경/테두리 보존
-      - 원본 Canva 템플릿 색상·구조 그대로 유지
-      - 각 PII 문자열을 페이지 내에서 검색 후 해당 rect만 덮어씀
+    3-Pass 처리:
+      Pass 1: 명시적 PII 문자열 redaction (+ 회사명 치환 텍스트 삽입)
+      Pass 2: 이름 포함 문장 프리픽스 삭제 ("My name is {name}, and" 등)
+      Pass 3: 오펀 라벨 라인 삭제 (내용 없는 연락처 라벨·잔존 국가코드)
+
+    images=0, graphics=0 → 사진/벡터 배경 보존.
 
     Args:
-        src_pdf_path: 원본 PDF 경로 (Canva-style 등 레이아웃 유지 대상)
-        pii_strings: 삭제할 PII 원문 리스트 (PIIResult.pii_found의 original_value)
-        min_len: 이보다 짧은 문자열은 스킵 (오탐 방지)
+        src_pdf_path: 원본 PDF 경로
+        pii_matches: PIIMatch 객체 리스트 또는 (original, type) 튜플
+                     type == 'company' → 일반화 치환 (Language Institute, Korea 등)
+                     기타 → 공백 처리
+        candidate_name: 이름 포함 문장 프리픽스 삭제용 (선택)
 
     Returns:
         redacted PDF bytes
     """
     import fitz
 
-    # 중복 제거 + 너무 짧은 문자열 필터
-    pii_set: set[str] = set()
-    for s in pii_strings or []:
-        if s and isinstance(s, str):
-            t = s.strip()
-            if len(t) >= min_len:
-                pii_set.add(t)
+    # ── 입력 정규화: [(original, type), ...] ─────────────────────────────
+    normalized: list[tuple[str, str]] = []
+    for m in pii_matches or []:
+        if hasattr(m, "original_value"):
+            normalized.append((m.original_value, getattr(m, "type", "") or ""))
+        elif isinstance(m, tuple) and len(m) >= 2:
+            normalized.append((m[0], m[1]))
+        elif isinstance(m, str):
+            normalized.append((m, ""))
+
+    # ── 치환 맵 구성: {검색문자열: 치환텍스트 or ""} ────────────────────
+    redactions: dict[str, str] = {}
+    for orig, ptype in normalized:
+        if not orig or not isinstance(orig, str):
+            continue
+        key = orig.strip()
+        if len(key) < min_len:
+            continue
+        if ptype == "company":
+            redactions[key] = _company_replacement(key)
+        else:
+            redactions.setdefault(key, "")
+
+    # ── 이름 포함 커버레터 프리픽스 (문장 복구용) ────────────────────────
+    if candidate_name:
+        nm = candidate_name.strip()
+        # "My name is {name}, and" → 전체 삭제 (뒤의 "I am" 부터 시작)
+        for variant in [nm, nm.upper(), nm.title()]:
+            redactions[f"My name is {variant}, and"] = ""
+            redactions[f"My name is {variant},"] = ""
+            redactions[f"I am {variant},"] = ""
+
+    # ── 한국 도시명 standalone 삭제 (업체명 redact 후 남은 도시 흔적) ─────
+    # "Avalon Langcon Seosan" → "Avalon Langcon" 제거 후 "Seosan" 잔존 → 여기서 삭제
+    for city in _KR_CITIES_STANDALONE:
+        redactions.setdefault(city, "")
 
     doc = fitz.open(str(src_pdf_path))
     total_hits = 0
 
     for page in doc:
-        for pii in pii_set:
+        # ── Pass 1: PII + 회사명 치환 ──────────────────────────────────
+        for text, repl in redactions.items():
             try:
-                rects = page.search_for(pii, quads=False)
+                rects = page.search_for(text, quads=False)
             except Exception:
                 continue
             for rect in rects:
-                # fill=None → 원래 배경 유지 (teal sidebar 등 보존)
                 try:
-                    page.add_redact_annot(rect, fill=None)
+                    if repl:
+                        # 치환 텍스트 삽입 (fill=white로 깔끔하게)
+                        page.add_redact_annot(
+                            rect,
+                            text=repl,
+                            fontsize=max(8, int(rect.height * 0.7)),
+                            fill=(1, 1, 1),
+                            text_color=(0, 0, 0),
+                            align=0,
+                        )
+                    else:
+                        # 단순 제거 (fill=None → 원래 배경 유지)
+                        page.add_redact_annot(rect, fill=None)
                     total_hits += 1
                 except Exception:
                     pass
 
         try:
-            # images=0, graphics=0 → 사진·배경·벡터 그래픽 미건드림
             page.apply_redactions(images=0, graphics=0)
         except TypeError:
-            # 구버전 호환
             try:
                 page.apply_redactions()
             except Exception as e:
-                log.warning(f"apply_redactions 실패 page {page.number}: {e}")
+                log.warning(f"apply_redactions Pass1 실패 p{page.number}: {e}")
         except Exception as e:
-            log.warning(f"apply_redactions 실패 page {page.number}: {e}")
+            log.warning(f"apply_redactions Pass1 실패 p{page.number}: {e}")
+
+        # ── Pass 2: 오펀 라벨 라인 삭제 ────────────────────────────────
+        try:
+            td = page.get_text("dict")
+        except Exception:
+            td = {"blocks": []}
+
+        orphan_rects: list = []
+        for block in td.get("blocks", []):
+            for line in block.get("lines", []):
+                spans = line.get("spans", [])
+                line_text = "".join(s.get("text", "") for s in spans)
+                if _is_orphan_line(line_text):
+                    bb = line.get("bbox")
+                    if bb:
+                        # 라인 bbox에 약간 여유 (좌우 아이콘까지 포함)
+                        r = fitz.Rect(bb)
+                        r.x0 = max(0, r.x0 - 20)  # 아이콘 영역까지 확장
+                        r.x1 = r.x1 + 10
+                        orphan_rects.append(r)
+
+        for rect in orphan_rects:
+            try:
+                page.add_redact_annot(rect, fill=None)
+                total_hits += 1
+            except Exception:
+                pass
+
+        if orphan_rects:
+            try:
+                page.apply_redactions(images=0, graphics=0)
+            except TypeError:
+                try:
+                    page.apply_redactions()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # ── Pass 3: 연락처 아이콘 덮기 (소형 벡터 드로잉) ─────────────────
+        # Canva 템플릿의 좌측 사이드바 phone/email/location 아이콘 등
+        # graphics redaction은 불안정 → 사이드바 배경색으로 직접 페인트
+        try:
+            page_h = page.rect.height
+            page_w = page.rect.width
+            drawings = page.get_drawings()
+            icon_rects: list = []
+            for d in drawings:
+                try:
+                    rr = d.get("rect")
+                    if rr is None:
+                        continue
+                    r = fitz.Rect(rr)
+                    w, h = r.width, r.height
+                    if not (3 <= w <= 28 and 3 <= h <= 28):
+                        continue
+                    if max(w, h) / max(min(w, h), 0.1) > 3.5:
+                        continue
+                    in_left = r.x1 <= page_w * 0.28
+                    in_top  = r.y1 <= page_h * 0.55
+                    if in_left and in_top:
+                        icon_rects.append(r)
+                except Exception:
+                    continue
+
+            if icon_rects:
+                # 사이드바 배경색 샘플링 (아이콘 사이 빈 공간)
+                bg_color = None
+                try:
+                    # 아이콘들의 평균 y 위치 근처에서 왼쪽 끝 사이드바 색상 샘플
+                    avg_y = sum((r.y0 + r.y1) / 2 for r in icon_rects) / len(icon_rects)
+                    # 페이지 좌측 끝 (x=5) 근처에서 샘플 (아이콘 바깥)
+                    sample_rect = fitz.Rect(2, max(0, avg_y - 2), 8, min(page_h, avg_y + 2))
+                    pix = page.get_pixmap(clip=sample_rect)
+                    if pix.n >= 3 and pix.samples:
+                        # 중앙 픽셀 RGB
+                        idx = (pix.h // 2) * pix.stride + (pix.w // 2) * pix.n
+                        r_c = pix.samples[idx] / 255.0
+                        g_c = pix.samples[idx + 1] / 255.0
+                        b_c = pix.samples[idx + 2] / 255.0
+                        bg_color = (r_c, g_c, b_c)
+                except Exception:
+                    bg_color = None
+
+                # 배경색 위에 덮어쓰기 (draw_rect with fill)
+                for rect in icon_rects:
+                    try:
+                        # 아이콘보다 약간 크게 덮기 (1px 여유)
+                        cover = fitz.Rect(
+                            max(0, rect.x0 - 1),
+                            max(0, rect.y0 - 1),
+                            rect.x1 + 1,
+                            rect.y1 + 1,
+                        )
+                        if bg_color:
+                            page.draw_rect(cover, color=bg_color, fill=bg_color, width=0)
+                        else:
+                            # 배경색 미검출 → 흰색 폴백
+                            page.draw_rect(cover, color=(1, 1, 1), fill=(1, 1, 1), width=0)
+                        total_hits += 1
+                    except Exception:
+                        pass
+        except Exception as e:
+            log.warning(f"icon removal Pass3 실패 p{page.number}: {e}")
 
     try:
         doc.set_metadata({
@@ -885,7 +1083,7 @@ def redact_pdf_preserve_layout(
     out_bytes = doc.tobytes(deflate=True, garbage=4, clean=True)
     total_pages = len(doc)
     doc.close()
-    log.info(f"redact: {total_hits}건 제거 / {total_pages}페이지 / {len(out_bytes)//1024}KB")
+    log.info(f"redact v3.3: {total_hits}건 처리 / {total_pages}페이지 / {len(out_bytes)//1024}KB")
     return out_bytes
 
 
@@ -1117,8 +1315,10 @@ def build_pdf(
     # v3.0 (2026-04-23): 레이아웃 보존 모드 — 원본 PDF + PII 서지컬 제거
     cover_pdf_path:  Path | None = None,
     resume_pdf_path: Path | None = None,
-    cover_pii_strings:  list[str] | None = None,
-    resume_pii_strings: list[str] | None = None,
+    cover_pii_strings:  list | None = None,  # PIIMatch 객체 또는 (str, type) 또는 str
+    resume_pii_strings: list | None = None,
+    # v3.1 (2026-04-23): 회사명 치환 + 오펀 라벨 삭제 + 이름 프리픽스 삭제
+    candidate_name: str = "",
 ) -> tuple[Path, int]:
     """
     PDF 조립 + 압축.
@@ -1143,6 +1343,7 @@ def build_pdf(
             pdf_parts.append(redact_pdf_preserve_layout(
                 Path(cover_pdf_path),
                 cover_pii_strings or [],
+                candidate_name=candidate_name,
             ))
             _first_added = True
         except Exception as e:
@@ -1171,6 +1372,7 @@ def build_pdf(
             pdf_parts.append(redact_pdf_preserve_layout(
                 Path(resume_pdf_path),
                 resume_pii_strings or [],
+                candidate_name=candidate_name,
             ))
             _first_added = True
         except Exception as e:
