@@ -593,23 +593,11 @@ def process_inbox(cfg: dict) -> None:
                               None, "RETURNING", "PENDING", uid)
                     continue
 
-                # ── STEP C: 신규 지원자 패턴 감지 ───────────────────────────
-                # 제목만으로 2개 이상 → 본문 불필요
-                subject_only_match = is_applicant(subject, "")
+                # ── STEP C: 신규 지원자 패턴 감지 (제목만 사용) ─────────────
+                if not is_applicant(subject, ""):
+                    log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
+                    continue
                 body = ""
-                headers = {}
-                if not subject_only_match:
-                    # 제목 미달 → 본문 첫 8KB만 가져와서 재확인
-                    try:
-                        _, bd = imap.fetch(uid_b, "(BODY.PEEK[TEXT]<0.8192>)")
-                        body = bd[0][1].decode("utf-8", errors="ignore") if bd and bd[0] else ""
-                    except (socket.timeout, imaplib.IMAP4.abort, OSError) as fe:
-                        log.warning(f"[IMAP] 본문 fetch 실패 uid={uid}: {fe} → 스킵")
-                        imap = imap_connect(cfg) or imap
-                        continue
-                    if not is_applicant(subject, body):
-                        log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
-                        continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
