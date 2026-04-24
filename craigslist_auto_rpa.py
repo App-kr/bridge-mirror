@@ -1015,9 +1015,9 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
                     return
                 if _wg2.GetClassName(hwnd) == "Chrome_WidgetWin_1":
                     ex = _wg2.GetWindowLong(hwnd, _wc2.GWL_EXSTYLE)
+                    # WS_EX_TOOLWINDOW: 작업표시줄에서만 제거 (SW_HIDE 금지 — 세션 끊김 유발)
                     _wg2.SetWindowLong(hwnd, _wc2.GWL_EXSTYLE,
                         (ex | _wc2.WS_EX_TOOLWINDOW) & ~_wc2.WS_EX_APPWINDOW)
-                    _wg2.ShowWindow(hwnd, _wc2.SW_HIDE)
             _wg2.EnumWindows(_hide, None)
         except Exception:
             pass
