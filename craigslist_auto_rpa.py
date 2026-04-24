@@ -280,7 +280,7 @@ NOW = datetime.now(timezone.utc).isoformat(timespec="seconds")
 def countdown(seconds: int, label: str = ""):
     """CMD 에 카운트다운을 출력하며 대기. 블로킹 없음."""
     for remaining in range(seconds, 0, -1):
-        print(f"  ⏳ {label} {remaining}s...", end="\r", flush=True)
+        print(f"  ... {label} {remaining}s...", end="\r", flush=True)
         time.sleep(1)
     print(" " * 60, end="\r")
 
@@ -291,19 +291,19 @@ def wait_for_captcha(driver, timeout: int = 120, headless: bool = False):
     headless=True 이면 즉시 실패 처리 (시각 브라우저 없으므로 해결 불가).
     """
     if headless:
-        print("\n  ⚠️  [HEADLESS] CAPTCHA 감지 -- 자동 해결 불가, 해당 건 스킵")
+        print("\n  [WARN] [HEADLESS] CAPTCHA 감지 -- 자동 해결 불가, 해당 건 스킵")
         _log_event("warn", "--", "captcha", "CAPTCHA detected in headless mode -- skipped")
         return False
 
-    print(f"\n  ⚠️  CAPTCHA 또는 추가 인증 감지")
+    print(f"\n  [WARN] CAPTCHA 또는 추가 인증 감지")
     print(f"  브라우저에서 직접 풀어주세요. {timeout}초 자동 대기합니다.")
     for remaining in range(timeout, 0, -5):
         time.sleep(5)
-        print(f"  ⏳ CAPTCHA 대기 중... {remaining-5}s 남음", end="\r", flush=True)
+        print(f"  [WAIT] CAPTCHA 대기 중... {remaining-5}s 남음", end="\r", flush=True)
         if "login" not in driver.current_url.lower():
-            print("\n  ✅ CAPTCHA 해결 감지, 계속 진행합니다.")
+            print("\n  [OK] CAPTCHA 해결 감지, 계속 진행합니다.")
             return True
-    print(f"\n  ❌ {timeout}초 내 해결되지 않음.")
+    print(f"\n  [FAIL] {timeout}초 내 해결되지 않음.")
     return False
 
 
@@ -966,9 +966,14 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         opts.add_argument("--window-size=1920,1080")
         print("  [DRIVER] Headless 모드로 Chrome 시작")
     else:
-        # 화면 밖으로 이동 -- headless 아니라 봇 감지 없고, 사용자 화면에는 안 보임
-        opts.add_argument("--window-position=-10000,-10000")
+        # 화면 밖 + 작업표시줄 비표시 조합
+        # --window-position: 화면 밖으로 이동 (봇 감지 없는 비headless)
+        # --silent-launch: 포커스/활성화 없이 시작
+        # --noerrdialogs: 에러 다이얼로그 팝업 차단
+        opts.add_argument("--window-position=-32000,-32000")
         opts.add_argument("--window-size=1920,1080")
+        opts.add_argument("--silent-launch")
+        opts.add_argument("--noerrdialogs")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--log-level=3")              # FATAL 만 출력 (DevTools/TF 메시지 제거)
     opts.add_argument("--disable-logging")
@@ -1005,20 +1010,32 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
     )
 
     # 새로 생긴 Chrome 창만 작업표시줄에서 숨김 (기존 창 보존)
-    try:
-        import win32gui as _wg, win32con as _wc, time as _t
-        _t.sleep(1.5)
-        def _hide_new(hwnd, _):
-            if hwnd in _existing_hwnds:
-                return
-            if _wg.GetClassName(hwnd) == "Chrome_WidgetWin_1":
-                ex = _wg.GetWindowLong(hwnd, _wc.GWL_EXSTYLE)
-                _wg.SetWindowLong(hwnd, _wc.GWL_EXSTYLE,
-                    (ex | _wc.WS_EX_TOOLWINDOW) & ~_wc.WS_EX_APPWINDOW)
-                _wg.ShowWindow(hwnd, _wc.SW_HIDE)
-        _wg.EnumWindows(_hide_new, None)
-    except Exception:
-        pass
+    # 1.5 / 3 / 6초 3회 스윕 — Chrome 늦게 뜨는 창 포함
+    def _sweep_hide():
+        try:
+            import win32gui as _wg2, win32con as _wc2
+            def _hide(hwnd, _):
+                if hwnd in _existing_hwnds:
+                    return
+                if _wg2.GetClassName(hwnd) == "Chrome_WidgetWin_1":
+                    ex = _wg2.GetWindowLong(hwnd, _wc2.GWL_EXSTYLE)
+                    _wg2.SetWindowLong(hwnd, _wc2.GWL_EXSTYLE,
+                        (ex | _wc2.WS_EX_TOOLWINDOW) & ~_wc2.WS_EX_APPWINDOW)
+                    _wg2.ShowWindow(hwnd, _wc2.SW_HIDE)
+            _wg2.EnumWindows(_hide, None)
+        except Exception:
+            pass
+
+    import threading as _thr, time as _t
+    def _hide_worker():
+        # Chrome 창은 ~0.5초 내에 생성됨 → 초기 스윕을 0.1초부터 촘촘히
+        for delay in (0.1, 0.2, 0.3, 0.5, 0.8, 1.5, 3.0):
+            _t.sleep(delay)
+            _sweep_hide()
+        while True:
+            _t.sleep(3)
+            _sweep_hide()
+    _thr.Thread(target=_hide_worker, daemon=True).start()
     return driver
 
 
@@ -1033,10 +1050,10 @@ def _find(driver, selectors: list[str]):
     return None
 
 
-def _click_next(driver, timeout=8):
+def _click_next(driver, timeout=2):
     for sel in [
-        "button#go", "button[id*='continue']", "input[value*='continue']",
-        "button[type='submit']", "input[type='submit']",
+        "button#go", "button.continue", "button[id*='continue']",
+        "input[value*='continue']", "button[type='submit']", "input[type='submit']",
     ]:
         try:
             el = WebDriverWait(driver, timeout).until(
@@ -1046,6 +1063,15 @@ def _click_next(driver, timeout=8):
             return True
         except Exception:
             pass
+    # 폴백: 폼 내 첫 번째 버튼
+    try:
+        btns = driver.find_elements(By.CSS_SELECTOR, "form button, form input[type='submit']")
+        for btn in btns:
+            if btn.is_displayed() and btn.is_enabled():
+                btn.click()
+                return True
+    except Exception:
+        pass
     return False
 
 
@@ -1087,7 +1113,7 @@ def cl_login(driver: webdriver.Chrome) -> bool:
 
         try:
             WebDriverWait(driver, 12).until(_is_logged_in)
-            print(f"  [LOGIN] 성공 ✅")
+            print(f"  [LOGIN] 성공")
             return True
         except Exception:
             pass
@@ -1216,19 +1242,18 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             _advance(driver, step)
 
         elif step == "area":
-            # 지역 선택 (Seoul 선택 또는 기본값 유지 후 continue)
+            # 지역 선택 (Seoul 기본 선택 후 즉시 continue)
             print("지역 선택")
             try:
-                # Seoul 또는 korea 옵션 찾기
                 opts = driver.find_elements(By.CSS_SELECTOR, "input[type='radio'], option")
                 for opt in opts:
                     val = (opt.get_attribute("value") or "").lower()
                     txt = (opt.text or "").lower()
                     if "seoul" in val or "seoul" in txt or "korea" in val:
-                        _js_click(driver, opt); _delay(0.5, 1); break
+                        _js_click(driver, opt); _delay(0.3, 0.5); break
             except Exception:
                 pass
-            _advance(driver, step)
+            _advance(driver, step, timeout=5)
 
         elif step == "type":
             # 포스팅 타입 → "job offered" 선택
@@ -1786,8 +1811,8 @@ def main():
     # ── 워치독: 건수 기반 동적 타임아웃 (응답없음 방지) ─────────────────────────
     import threading as _thr
     _limit_for_watchdog = getattr(args, "limit", 10) or 10
-    # 건당 최대 4분 + 기본 5분 여유 (최소 15분, 최대 45분)
-    _MAX_RPA_SEC = max(15 * 60, min(45 * 60, _limit_for_watchdog * 4 * 60 + 5 * 60))
+    # 건당 최대 5분 + 기본 10분 여유 (최소 15분, 상한 없음)
+    _MAX_RPA_SEC = max(15 * 60, _limit_for_watchdog * 5 * 60 + 10 * 60)
     def _watchdog():
         time.sleep(_MAX_RPA_SEC)
         print(f"\n[WATCHDOG] {_MAX_RPA_SEC // 60}분 초과 → 프로세스 강제 종료 (응답없음 방지)")
@@ -2019,20 +2044,20 @@ def main():
 
                     if url and url not in ("", "None", None):
                         mark_posted(ad_id, url, ss)
-                        print(f"  ✅ 게시 완료: {url}")
-                        print(f"  📸 스크린샷 : {ss}")
+                        print(f"  [OK] 게시 완료: {url}")
+                        print(f"  [SS] 스크린샷: {ss}")
                         _log_event("info", jcode, "posted", "Post successful", {"url": url})
                         posted += 1
                         if _HAS_OVERLAY:
                             update_progress(posted, len(ad_list))
                     elif url is None:
                         mark_error(ad_id, "카테고리 선택 실패 -- education 선택 불가, 게시 중단")
-                        print(f"  ❌ 카테고리 선택 실패 → debug_category_page.html 확인")
+                        print(f"  [FAIL] 카테고리 선택 실패 → debug_category_page.html 확인")
                         _log_event("error", jcode, "category_abort",
                                    "cl_post returned None -- education category not selected")
                     else:
                         mark_error(ad_id, "URL 획득 실패 (게시는 됐을 수 있음)")
-                        print(f"  ⚠️  게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
+                        print(f"  [WARN] 게시 URL 획득 실패 (이메일 인증 대기 중일 수 있음)")
                         _log_event("error", jcode, "post", "Posted URL not captured")
 
                 except Exception as exc:
@@ -2041,8 +2066,41 @@ def main():
                     tb_str = _tb.format_exc()
                     mark_error(ad_id, err_msg)
                     _log_event("error", jcode, "post_exception", err_msg, {"traceback": tb_str[-500:]})
-                    print(f"  ❌ 예외 발생 → 다음 건으로 이동: {exc}")
+                    print(f"  [ERR] 예외 발생 → 다음 건으로 이동: {exc}")
                     print(tb_str[-300:])
+                    # 세션 사망 감지 (Chrome 크래시 / ChromeDriver 연결 끊김) → 재시작
+                    _dead_keywords = (
+                        "invalid session id",
+                        "winerror 10061",
+                        "max retries exceeded",
+                        "failed to establish a new connection",
+                        "connection refused",
+                    )
+                    if any(k in str(exc).lower() for k in _dead_keywords):
+                        _log_event("error", "--", "session_dead",
+                                   "Chrome session dead -- attempting restart")
+                        print("[SESSION DEAD] Chrome 세션 사망 → 재시작 시도...")
+                        try:
+                            driver.quit()
+                        except Exception:
+                            pass
+                        import time as _t_restart
+                        _t_restart.sleep(5)
+                        try:
+                            driver = build_driver(headless=hl_flag)
+                            if cl_login(driver):
+                                print("[RESTART] Chrome 재시작 + 재로그인 완료 → 게시 재개")
+                                _log_event("info", "--", "session_restart",
+                                           "Chrome restarted and logged in OK")
+                            else:
+                                print("[RESTART] 재로그인 실패 → 세션 종료")
+                                _log_event("error", "--", "session_restart",
+                                           "Login failed after restart -- aborting")
+                                break
+                        except Exception as _re:
+                            print(f"[RESTART] Chrome 재시작 실패: {_re}")
+                            _log_event("error", "--", "session_restart_fail", str(_re)[:200])
+                            break
                     continue
 
                 if i < len(ad_list):
