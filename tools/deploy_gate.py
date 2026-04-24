@@ -106,30 +106,81 @@ GATE_IPC_FILE = PROJECT_ROOT / ".claude" / "tg_gate_response.json"
 
 def tg_poll_response(token: str, subs: list[int], since_ts: float, deadline: float) -> str | None:
     """
-    tg_commander.py가 IPC 파일에 기록한 yes/no 응답을 폴링.
-    (직접 getUpdates 대신 파일 기반 IPC — 409 Conflict 방지)
+    두 가지 방식 병행:
+    1) 직접 getUpdates 폴링 (tg_commander가 꺼져 있을 때 작동)
+    2) IPC 파일 폴링 (tg_commander가 실행 중일 때 작동)
+    409 Conflict 발생 시 → tg_commander 실행 중으로 판단, IPC만 의존
     """
-    # 기존 파일 삭제 (이전 응답 오인 방지)
+    # 기존 IPC 파일 삭제 (이전 응답 오인 방지)
     try:
         if GATE_IPC_FILE.exists():
-            data = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
-            if data.get("ts", 0) < since_ts:
+            d = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
+            if d.get("ts", 0) < since_ts:
                 GATE_IPC_FILE.unlink()
     except Exception:
         pass
 
+    offset = 0
+    retry_delay = 2.0
+    use_direct_poll = True  # 409 받으면 False로 전환
+
     while time.time() < deadline:
+        # ── IPC 파일 확인 (fast path) ─────────────────────
         try:
             if GATE_IPC_FILE.exists():
-                data = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
-                answer = data.get("answer", "")
-                ts = data.get("ts", 0)
+                d = json.loads(GATE_IPC_FILE.read_text(encoding="utf-8"))
+                answer = d.get("answer", "")
+                ts = d.get("ts", 0)
                 if ts >= since_ts and answer in ("yes", "no"):
                     GATE_IPC_FILE.unlink(missing_ok=True)
                     return answer
         except Exception:
             pass
-        time.sleep(2)
+
+        # ── 직접 getUpdates 폴링 ──────────────────────────
+        if use_direct_poll:
+            try:
+                remaining = max(1, int(deadline - time.time()))
+                tg_timeout = min(5, remaining)
+                r = requests.get(
+                    f"https://api.telegram.org/bot{token}/getUpdates",
+                    params={"offset": offset, "timeout": tg_timeout, "limit": 10},
+                    timeout=tg_timeout + 5,
+                )
+                if r.status_code == 409:
+                    # tg_commander가 실행 중 → 직접 폴링 중단, IPC만 사용
+                    print("[deploy_gate] tg_commander 감지 → IPC 모드로 전환")
+                    use_direct_poll = False
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, 10)
+                    continue
+
+                retry_delay = 2.0
+                updates = r.json().get("result", [])
+                for upd in updates:
+                    uid = upd["update_id"]
+                    offset = uid + 1
+                    cb = upd.get("callback_query", {})
+                    if not cb:
+                        continue
+                    data = cb.get("data", "")
+                    chat_id = cb.get("from", {}).get("id")
+                    if data in ("gate_yes", "gate_no") and chat_id in subs:
+                        # 스피너 제거
+                        try:
+                            requests.post(
+                                f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                                json={"callback_query_id": cb["id"]},
+                                timeout=5,
+                            )
+                        except Exception:
+                            pass
+                        return "yes" if data == "gate_yes" else "no"
+            except Exception:
+                time.sleep(2)
+                continue
+        else:
+            time.sleep(2)
 
     return None
 
