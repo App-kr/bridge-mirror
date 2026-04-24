@@ -1023,13 +1023,17 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
             pass
 
     import threading as _thr, time as _t
+    # ── 동기 숨김: driver 반환 전에 바로 실행 (비동기 스레드보다 먼저) ──────
+    _t.sleep(0.4)   # Chrome 창 생성 대기
+    _sweep_hide()   # 메인 스레드에서 즉시 숨김
+
     def _hide_worker():
-        # Chrome 창은 ~0.5초 내에 생성됨 → 초기 스윕을 0.1초부터 촘촘히
-        for delay in (0.1, 0.2, 0.3, 0.5, 0.8, 1.5, 3.0):
+        # 뒤늦게 뜨는 Chrome 팝업/서브창 대비 추가 스윕
+        for delay in (0.3, 0.5, 1.0, 2.0, 4.0):
             _t.sleep(delay)
             _sweep_hide()
         while True:
-            _t.sleep(3)
+            _t.sleep(5)
             _sweep_hide()
     _thr.Thread(target=_hide_worker, daemon=True).start()
     return driver
