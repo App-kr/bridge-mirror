@@ -850,7 +850,8 @@ class AdminBoard:
         self.root.title("Bridge RPA Admin")
         self.root.configure(bg=BG)
         self.root.geometry(f"{self.W}x760")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
+        self.root.minsize(300, 60)
         self.root.wm_attributes("-toolwindow", True)
 
         _ico = _DIR / "rpa_icon.ico"
@@ -874,8 +875,11 @@ class AdminBoard:
         self._gauge_start   = 0.0
         self._gauge_blink   = False
         self._gauge: "_ProgressGauge | None" = None
+        self._compact_mode  = False
+        self._idle_drawn    = False
 
         self._build()
+        self.root.bind("<Configure>", self._on_resize)
         self.root.after(200, self._tick)
         self.root.after(100, self._flush_log_queue)   # 로그 배치 처리 시작
         self.root.after(400, self._save_hwnd)
@@ -887,9 +891,26 @@ class AdminBoard:
     def _build(self):
         p = self.PAD
 
+        # ── 최소화 컴팩트 바 (기본 숨김) ─────────────────
+        self._compact_bar = tk.Frame(self.root, bg=SURFACE)
+        self._cb_dot = tk.Label(self._compact_bar, text="●",
+                                font=("Consolas", 13), bg=SURFACE, fg=TEXT3)
+        self._cb_dot.pack(side="left", padx=(14, 6))
+        self._cb_lbl = tk.Label(self._compact_bar,
+                                text="진행 중인 작업이 없습니다.",
+                                font=("Malgun Gothic", 10), bg=SURFACE, fg=TEXT3,
+                                anchor="w")
+        self._cb_lbl.pack(side="left", fill="x", expand=True)
+        RoundCanvas(self._compact_bar, h=36, width=110, fill="#991b1b",
+                    text="즉시 중단", text_color="#ffffff",
+                    command=self._on_stop,
+                    font=("Malgun Gothic", 11, "bold"),
+                    ).pack(side="right", padx=12, pady=7)
+
         # ── 전체 폭 헤더 ─────────────────────────────────
-        hdr = tk.Frame(self.root, bg=SURFACE)
-        hdr.pack(fill="x")
+        self._hdr_frame = tk.Frame(self.root, bg=SURFACE)
+        self._hdr_frame.pack(fill="x")
+        hdr = self._hdr_frame
         tk.Label(hdr, text="BRIDGE  RPA Admin",
                  font=("Malgun Gothic", 15, "bold"),
                  bg=SURFACE, fg=TEXT1).pack(side="left", padx=p, pady=14)
@@ -903,8 +924,9 @@ class AdminBoard:
                   ).pack(side="right", padx=(0, 8))
 
         # ── 좌우 분할 영역 ────────────────────────────────
-        body = tk.Frame(self.root, bg=BG)
-        body.pack(fill="both", expand=True)
+        self._body_frame = tk.Frame(self.root, bg=BG)
+        self._body_frame.pack(fill="both", expand=True)
+        body = self._body_frame
 
         # ── 왼쪽 패널 (고정 420px) ────────────────────────
         left = tk.Frame(body, bg=BG, width=self.LW)
@@ -1184,14 +1206,13 @@ class AdminBoard:
 
     # ── 상태 깜박임 ───────────────────────────────────────────────────────────
 
-    def _flush_log_queue(self):
-        """100ms마다 로그 큐 드레인 — 배치 처리로 응답없음 방지.
+    _flush_count = 0  # see("end") / 줄수 체크 빈도 조절용
 
-        state toggle을 배치당 1회로 줄여 Text 위젯 부하 최소화.
-        """
+    def _flush_log_queue(self):
+        """200ms마다 로그 큐 드레인 — 배치 25줄로 메인스레드 부하 최소화."""
         batch: list[tuple[str, str]] = []
         try:
-            while len(batch) < 80:
+            while len(batch) < 25:
                 batch.append(self._log_queue.get_nowait())
         except queue.Empty:
             pass
@@ -1218,34 +1239,45 @@ class AdminBoard:
                 self._log_widget.insert("end", f"[{ts}] ", "ts")
                 self._log_widget.insert("end", line + "\n", tag)
 
-            # 로그 2000줄 초과 시 앞부분 정리 (메모리 보호)
-            try:
-                total_lines = int(self._log_widget.index("end-1c").split(".")[0])
-                if total_lines > 2000:
-                    self._log_widget.delete("1.0", f"{total_lines - 1500}.0")
-            except Exception:
-                pass
+            self.__class__._flush_count += 1
+
+            # 10번째 flush마다 줄수 초과 정리 (index() 호출 빈도 줄임)
+            if self._flush_count % 10 == 0:
+                try:
+                    total_lines = int(self._log_widget.index("end-1c").split(".")[0])
+                    if total_lines > 1500:
+                        self._log_widget.delete("1.0", f"{total_lines - 1000}.0")
+                except Exception:
+                    pass
 
             self._log_widget.see("end")
             self._log_widget.configure(state="disabled")
 
-        self.root.after(100, self._flush_log_queue)
+        self.root.after(200, self._flush_log_queue)
 
     def _tick(self):
         if self._running:
+            self._idle_drawn = False
             self._blink = not self._blink
-            # 점 깜박 (초록 ↔ 어두운 초록)
-            self._dot.configure(fg=GREEN if self._blink else GREEN_D)
-            # 상태 텍스트: 현재 액션 실시간 표시
+            dot_fg = GREEN if self._blink else GREEN_D
             action_text = self._gauge_action if self._gauge_action and self._gauge_action != "준비 중..." else "작업이 진행 중입니다."
             lbl_fg = "#22c55e" if self._blink else "#15803d"
+            cnt_txt = f"  ({self._gauge_done}/{self._gauge_total}건)" if self._gauge_total else ""
+            self._dot.configure(fg=dot_fg)
             self._st_lbl.configure(text=action_text, fg=lbl_fg)
+            # 컴팩트 바 동기화
+            self._cb_dot.configure(fg=dot_fg)
+            self._cb_lbl.configure(text=action_text + cnt_txt, fg=lbl_fg)
         else:
-            self._dot.configure(fg=TEXT3)
-            self._st_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
-            self._start_btn.update_text("시작하기")
-            self._start_btn.update_fill(GREEN, "#ffffff")
-        self.root.after(600, self._tick)
+            if not self._idle_drawn:
+                self._dot.configure(fg=TEXT3)
+                self._st_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
+                self._start_btn.update_text("시작하기")
+                self._start_btn.update_fill(GREEN, "#ffffff")
+                self._cb_dot.configure(fg=TEXT3)
+                self._cb_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
+                self._idle_drawn = True
+        self.root.after(1000, self._tick)
 
     # ── 일반 실행 게이지 제어 ────────────────────────────────────────────────
 
@@ -1287,7 +1319,7 @@ class AdminBoard:
         pct = done / total if total > 0 else 0.0
         self._start_gauge.refresh(
             pct, self._gauge_action, done, total, eta, self._gauge_blink)
-        self.root.after(600, self._start_gauge_tick)
+        self.root.after(1500, self._start_gauge_tick)
 
     # ── 배치 게이지 제어 ──────────────────────────────────────────────────────
 
@@ -1333,7 +1365,7 @@ class AdminBoard:
         pct = done / total if total > 0 else 0.0
         self._gauge.refresh(
             pct, self._gauge_action, done, total, eta, self._gauge_blink)
-        self.root.after(600, self._gauge_tick)
+        self.root.after(1500, self._gauge_tick)
 
     def _set_gauge_action(self, action: str):
         """메인 스레드에서 게이지 액션 텍스트 갱신."""
@@ -1433,16 +1465,19 @@ class AdminBoard:
                     PID_FILE.write_text(str(self._proc.pid))
 
                 # stdout 실시간 읽기 + 액션 감지 + 완료 건수 추적
+                _last_action = ""
                 for line in self._proc.stdout:
                     line = line.rstrip("\r\n")
                     if not line:
                         continue
                     self._log_queue.put((line, ""))
                     action = self._detect_action(line)
-                    if action:
+                    # 액션이 바뀔 때만 after() 호출 — 매 줄 호출 시 Tk 큐 과적으로 응답없음 발생
+                    if action and action != _last_action:
+                        _last_action = action
                         self.root.after(0, self._set_gauge_action, action)
                     # 게시 완료 1건 감지
-                    if ("✅" in line or "게시 완료" in line or
+                    if ("[OK] 게시 완료" in line or "게시 완료" in line or
                             '"posted"' in line or "Post successful" in line):
                         self.root.after(0, self._inc_gauge_done, 1)
 
@@ -1631,12 +1666,15 @@ class AdminBoard:
             LOGS_DIR.mkdir(exist_ok=True)
             PID_FILE.write_text(str(self._proc.pid))
 
+        _last_action = ""
         for line in self._proc.stdout:
             line = line.rstrip("\r\n")
             if line:
                 self._log_queue.put((line, ""))
                 action = self._detect_action(line)
-                if action:
+                # 액션 변경 시만 after() 호출
+                if action and action != _last_action:
+                    _last_action = action
                     self.root.after(0, self._set_gauge_action, action)
 
         self._proc.wait()
@@ -1661,6 +1699,30 @@ class AdminBoard:
         else:
             # 정상 종료도 2초 대기 (DLL 해제 시간 확보)
             _time.sleep(2)
+
+    # ── 반응형 리사이즈 ──────────────────────────────────────────────────────────
+
+    _COMPACT_H = 140   # 이 높이 미만이면 컴팩트 모드
+
+    def _on_resize(self, event):
+        if event.widget is not self.root:
+            return
+        if event.height < self._COMPACT_H and not self._compact_mode:
+            self._enter_compact()
+        elif event.height >= self._COMPACT_H and self._compact_mode:
+            self._exit_compact()
+
+    def _enter_compact(self):
+        self._compact_mode = True
+        self._hdr_frame.pack_forget()
+        self._body_frame.pack_forget()
+        self._compact_bar.pack(fill="both", expand=True)
+
+    def _exit_compact(self):
+        self._compact_mode = False
+        self._compact_bar.pack_forget()
+        self._hdr_frame.pack(fill="x")
+        self._body_frame.pack(fill="both", expand=True)
 
     def _on_hide(self):
         self.root.withdraw()
