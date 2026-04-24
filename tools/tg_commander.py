@@ -7,9 +7,11 @@ BRIDGE Telegram Commander v2 -- 대화형 인터랙티브 봇
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
@@ -71,6 +73,16 @@ def tg_get(method, params=None):
     try:
         with urllib.request.urlopen(url, timeout=35) as r:
             return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = {}
+        try:
+            body = json.loads(e.read())
+        except Exception:
+            pass
+        body["error_code"] = e.code
+        if e.code != 409:
+            print(f"[tg] GET {method} HTTP {e.code}")
+        return body
     except Exception as e:
         print(f"[tg] GET {method} 실패: {e}")
         return {}
@@ -122,16 +134,27 @@ def keyboard(*rows):
 
 # -- 구독자 --------------------------------------------------------------------
 
-def get_subscribers():
+_subscribers_cache: list = []
+_subscribers_ts: float = 0.0
+_SUBS_TTL = 60.0  # 60초마다 갱신
+
+
+def get_subscribers() -> list:
+    global _subscribers_cache, _subscribers_ts
+    now = time.time()
+    if now - _subscribers_ts < _SUBS_TTL and _subscribers_cache:
+        return _subscribers_cache
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = sqlite3.connect(str(DB_PATH), timeout=3)
         rows = conn.execute(
             "SELECT chat_id FROM tg_alert_subscribers WHERE active=1"
         ).fetchall()
         conn.close()
-        return [r[0] for r in rows]
-    except Exception:
-        return []
+        _subscribers_cache = [r[0] for r in rows]
+        _subscribers_ts = now
+    except Exception as e:
+        print(f"[tg] get_subscribers 실패 (캐시 사용): {e}")
+    return _subscribers_cache
 
 
 def broadcast(text, markup=None):
@@ -602,7 +625,8 @@ def handle_text(chat_id, text):
         _handle_legacy_as_new_msg(chat_id, _LEGACY[cmd_key])
         return
 
-    show_main_menu(chat_id)
+    # 자연어 대화 → Claude Haiku
+    _ask_claude(chat_id, text)
 
 
 def _handle_legacy_as_new_msg(chat_id, action):
@@ -619,6 +643,689 @@ def _handle_legacy_as_new_msg(chat_id, action):
     }
     if action in dispatch:
         dispatch[action](chat_id, msg_id)
+
+
+# -- 대화형 Claude 처리 --------------------------------------------------------
+
+_conv_history: dict = {}   # {chat_id: [{"role": ..., "content": ...}, ...]}
+_MAX_HIST = 10
+
+_SYSTEM = """\
+당신은 BRIDGE 텔레그램 봇입니다. 구인 플랫폼 운영자 Scarlett과 자연스러운 한국어로 대화합니다.
+짧고 친근하게 답하세요. 이모지 쓰지 마세요.
+
+[가능한 액션]
+- status          : BRIDGE 현황
+- pipeline        : 파이프라인 큐
+- git             : 최근 커밋
+- db              : DB 통계
+- watcher         : Pipeline Watcher 상태
+- rpa             : Craigslist RPA (계정/건수 물어보고 실행)
+- blog_dry        : 블로그 테스트
+- blog_now        : 블로그 실제 발행
+- matjokdo        : 맛족도 실행
+- resume          : 이력서 변환 (ID 필요)
+- restore         : 최근 백업 목록
+- cancel          : 현재 작업 취소
+- terminal        : 에이전트 터미널 — bash/read/write 도구 쓰는 자율 에이전트
+                   params: {"tid":"1", "task":"...", "workdir":"선택"}
+- terminal_stop   : 터미널 중지  params: {"tid":"1"}
+- terminal_status : 전체 터미널 현황
+- null            : 대화만
+
+[응답 형식] JSON만 출력. 다른 텍스트 금지.
+{"action": "액션명 또는 null", "params": {}, "reply": "자연어 답변"}
+
+[예시]
+사용자: "터미널 1에서 재밌는 앱 개발해봐"
+응답: {"action": "terminal", "params": {"tid": "1", "task": "창의적인 Python 앱을 개발해줘. 아이디어를 스스로 정하고 구현해봐."}, "reply": "터미널 1에서 앱 개발 시작할게요!"}
+
+사용자: "터미널 2에서 bridge base 분석해"
+응답: {"action": "terminal", "params": {"tid": "2", "task": "bridge base 프로젝트 구조와 현황을 분석하고 요약해줘.", "workdir": "Q:/Claudework/bridge base"}, "reply": "터미널 2에서 분석 시작."}
+
+사용자: "터미널 1 멈춰"
+응답: {"action": "terminal_stop", "params": {"tid": "1"}, "reply": "터미널 1 중지할게요."}
+
+사용자: "터미널 현황"
+응답: {"action": "terminal_status", "params": {}, "reply": "확인할게요."}
+
+사용자: "RPA 돌릴까?"
+응답: {"action": null, "params": {}, "reply": "돌릴게요. gray 계정으로 몇 건 할까요?"}
+
+사용자: "하지마"
+응답: {"action": "cancel", "params": {}, "reply": "알겠어요, 취소했어요."}
+"""
+
+
+def _hist_add(chat_id, role, content):
+    h = _conv_history.setdefault(chat_id, [])
+    h.append({"role": role, "content": content})
+    if len(h) > _MAX_HIST * 2:
+        _conv_history[chat_id] = h[-(_MAX_HIST * 2):]
+
+
+def _gemini_key_works(k: str) -> bool:
+    """Gemini 키 유효성 빠른 확인 (timeout=5s)."""
+    try:
+        payload = {"contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+                   "generationConfig": {"maxOutputTokens": 5}}
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"gemini-2.0-flash:generateContent?key={k}")
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def _get_llm_key():
+    """사용 가능한 LLM API 키 반환. (provider, key) 튜플.
+    우선순위: Anthropic sk-ant → GOOGLE_API_KEY → GEMINI_KEYS_JSON 순환
+    """
+    # 1. Anthropic
+    try:
+        k = bx_read("ANTHROPIC_API_KEY")
+        if k and k.startswith("sk-ant-"):
+            return ("anthropic", k)
+    except Exception:
+        pass
+
+    # 2. GOOGLE_API_KEY (bx set GOOGLE_API_KEY 로 등록한 신규 키)
+    try:
+        k = bx_read("GOOGLE_API_KEY")
+        if k and k.startswith("AIza"):
+            return ("gemini", k)
+    except Exception:
+        pass
+
+    # 3. GEMINI_KEYS_JSON 목록에서 유효한 것 탐색
+    try:
+        from bx import get_gemini_keys
+        for entry in get_gemini_keys():
+            k = entry.get("key", "")
+            if k and k.startswith("AIza") and _gemini_key_works(k):
+                return ("gemini", k)
+    except Exception:
+        pass
+
+    return (None, None)
+
+
+def _call_llm(provider, api_key, prompt, history):
+    """provider에 따라 Anthropic 또는 Gemini API 호출. 텍스트 반환."""
+    if provider == "anthropic":
+        payload = {
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 400,
+            "system": _SYSTEM,
+            "messages": history,
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=25) as r:
+            resp = json.loads(r.read())
+        return resp["content"][0]["text"].strip()
+
+    elif provider == "gemini":
+        # Gemini Flash (무료)
+        # system + history를 하나의 프롬프트로 합침
+        turns = []
+        for m in history:
+            role = "user" if m["role"] == "user" else "model"
+            turns.append({"role": role, "parts": [{"text": m["content"]}]})
+        # system을 첫 user 턴에 주입
+        if turns and turns[0]["role"] == "user":
+            turns[0]["parts"][0]["text"] = _SYSTEM + "\n\n" + turns[0]["parts"][0]["text"]
+        payload = {"contents": turns, "generationConfig": {"maxOutputTokens": 400}}
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"gemini-2.0-flash:generateContent?key={api_key}")
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=25) as r:
+            resp = json.loads(r.read())
+        return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    raise ValueError(f"unknown provider: {provider}")
+
+
+def _parse_llm_json(raw: str) -> dict:
+    """LLM 응답에서 JSON 추출."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else raw
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return json.loads(raw.strip())
+
+
+def _ask_claude(chat_id, user_text):
+    """LLM(Anthropic 또는 Gemini) 호출 → 의도 파악 + 실행."""
+    provider, api_key = _get_llm_key()
+
+    if not provider:
+        send(chat_id, "AI 키 없음. 버튼 메뉴를 사용하세요.",
+             markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+
+    _hist_add(chat_id, "user", user_text)
+
+    try:
+        raw = _call_llm(provider, api_key, user_text, _conv_history[chat_id][:])
+        parsed = _parse_llm_json(raw)
+    except Exception as e:
+        send(chat_id, f"AI 오류: {e}\n\n메뉴를 사용하세요.",
+             markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+
+    action = (parsed.get("action") or "").strip()
+    params = parsed.get("params") or {}
+    reply  = parsed.get("reply", "")
+
+    _hist_add(chat_id, "assistant", reply)
+
+    # ── 액션 분기 ──────────────────────────────────────────────
+    if action == "cancel":
+        clear_state(chat_id)
+        send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+
+    if action == "restore":
+        _do_restore_list(chat_id, reply)
+        return
+
+    if action in ("status", "pipeline", "git", "db", "watcher"):
+        send(chat_id, reply)
+        _handle_legacy_as_new_msg(chat_id, action)
+        return
+
+    if action == "rpa":
+        account = params.get("account", "gray")
+        limit   = int(params.get("limit", 5))
+        send(chat_id, reply)
+        _run_rpa_direct(chat_id, account, limit)
+        return
+
+    if action == "blog_dry":
+        send(chat_id, reply)
+        _run_blog(chat_id, "--dry")
+        return
+
+    if action == "blog_now":
+        send(chat_id, reply)
+        _run_blog(chat_id, "--now")
+        return
+
+    if action == "matjokdo":
+        send(chat_id, reply)
+        mat = Path(r"Q:\Claudework\matjokdo_safe\main.py")
+        if not mat.exists():
+            send(chat_id, "맛족도 스크립트 없음.", markup=keyboard([btn("메인 메뉴", "menu")]))
+        else:
+            def _run_mat():
+                try:
+                    proc = subprocess.run(
+                        [PYTHON, "-X", "utf8", str(mat)],
+                        capture_output=True, text=True, encoding="utf-8",
+                        errors="replace", timeout=120, cwd=str(mat.parent),
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+                    out = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
+                    icon = "[완료]" if proc.returncode == 0 else "[경고]"
+                    send(chat_id, f"{icon} {out}", markup=keyboard([btn("메인 메뉴", "menu")]))
+                except Exception as e:
+                    send(chat_id, f"[오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+            threading.Thread(target=_run_mat, daemon=True).start()
+        return
+
+    if action == "resume":
+        cid = str(params.get("candidate_id", "")).strip()
+        if cid.isdigit():
+            send(chat_id, reply)
+            run_resume(chat_id, cid)
+        else:
+            set_state(chat_id, "resume_input")
+            send(chat_id, reply + "\n후보자 ID를 숫자로 입력해주세요:")
+        return
+
+    if action == "terminal":
+        tid     = str(params.get("tid", "1"))
+        task    = params.get("task", "").strip()
+        workdir = params.get("workdir") or None
+        if not task:
+            send(chat_id, "어떤 작업을 할까요?")
+        else:
+            send(chat_id, reply)
+            _launch_terminal(chat_id, tid, task, provider, api_key, workdir)
+        return
+
+    if action == "terminal_stop":
+        tid = str(params.get("tid", "1"))
+        send(chat_id, reply)
+        _stop_terminal(chat_id, tid)
+        return
+
+    if action == "terminal_status":
+        send(chat_id, reply)
+        _terminal_status_all(chat_id)
+        return
+
+    # null or unknown → 대화 답변만
+    send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _run_rpa_direct(chat_id, account, limit):
+    """msg_id 없이 RPA 실행 (대화 흐름용)."""
+    send(chat_id, f"[RPA 실행 중] 계정: {account} | {limit}건")
+    cmd = [PYTHON, "-X", "utf8",
+           str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
+           "--headless", "--account", account, "--limit", str(limit)]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=180, cwd=str(PROJECT_ROOT),
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        out  = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
+        icon = "[완료]" if proc.returncode == 0 else "[경고]"
+        send(chat_id, f"{icon} {out}", markup=keyboard([btn("메인 메뉴", "menu")]))
+    except subprocess.TimeoutExpired:
+        send(chat_id, "[타임아웃] 180초 초과", markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _do_restore_list(chat_id, reply):
+    """최근 백업 목록 표시."""
+    backup_dir = PROJECT_ROOT / "backups"
+    if not backup_dir.exists():
+        send(chat_id, "백업 폴더가 없어요.", markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+    backups = sorted(
+        (p for p in backup_dir.iterdir() if p.is_dir() or p.suffix in (".zip", ".tar", ".db")),
+        key=lambda p: p.stat().st_mtime, reverse=True
+    )[:6]
+    if not backups:
+        send(chat_id, "백업 파일이 없어요.", markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+    lines = [reply, "", "최근 백업:"]
+    for b in backups:
+        mtime = datetime.fromtimestamp(b.stat().st_mtime).strftime("%m/%d %H:%M")
+        lines.append(f"  {mtime}  {b.name}")
+    send(chat_id, "\n".join(lines), markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 에이전트 터미널 — Claude Sonnet + tool_use 기반 자율 실행
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_AGENT_TOOLS = [
+    {
+        "name": "bash",
+        "description": "셸 명령 실행. 파일 생성·수정·조회·패키지 설치·빌드 등.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "실행할 명령어"},
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "read_file",
+        "description": "파일 내용 읽기.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "파일 경로"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "write_file",
+        "description": "파일 생성/덮어쓰기.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path":    {"type": "string"},
+                "content": {"type": "string"},
+            },
+            "required": ["path", "content"],
+        },
+    },
+    {
+        "name": "list_files",
+        "description": "디렉토리 목록 조회.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "경로 (기본: 현재)"}},
+            "required": [],
+        },
+    },
+]
+
+_AGENT_SYS = """\
+당신은 BRIDGE 서버의 자율 개발/실행 에이전트입니다.
+운영자 Scarlett의 지시를 받아 실제 작업을 완수하세요.
+
+규칙:
+- 도구를 적극적으로 사용해 직접 파일을 만들고, 코드를 작성하고, 명령을 실행하세요.
+- 각 단계 완료 후 간략히 진행 상황을 설명하는 텍스트를 함께 출력하세요 (한국어, 1~2줄).
+- 마지막에 완료 요약을 출력하세요.
+- 보안: rm -rf /, DROP TABLE, git push --force 금지.
+- 작업 디렉토리 외부 쓰기 금지.
+"""
+
+_BLOCKED_BASH = re.compile(
+    r"(rm\s+-rf\s+/|DROP\s+TABLE|git\s+push\s+--force|format\s+[a-z]:)",
+    re.IGNORECASE,
+)
+
+# {f"{chat_id}_{tid}": AgentTerminal}
+_terminals: dict = {}
+_t_lock = threading.Lock()
+
+
+class AgentTerminal:
+    MAX_STEPS = 40   # 무한루프 방지
+
+    def __init__(self, tid: str, chat_id: int, task: str,
+                 provider: str, api_key: str, workdir: str | None = None):
+        self.tid      = tid
+        self.chat_id  = chat_id
+        self.task     = task
+        self.provider = provider
+        self.api_key  = api_key
+        self.workdir  = workdir or str(PROJECT_ROOT)
+        self.status   = "running"
+        self.messages: list = []
+        self._stop    = False
+        self._thread  = threading.Thread(target=self._run, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop = True
+        self.status = "stopped"
+
+    # ── 내부 ──────────────────────────────────────────────────
+    def _tag(self, text: str) -> str:
+        return f"[T{self.tid}] {text}"
+
+    def _send(self, text: str, markup=None):
+        send(self.chat_id, self._tag(text)[:4000], markup=markup)
+
+    def _run(self):
+        try:
+            self._loop()
+        except Exception as e:
+            self.status = "error"
+            self._send(f"에이전트 오류: {e}")
+
+    def _loop(self):
+        self.messages = [{"role": "user", "content": self.task}]
+        self._send(f"시작: {self.task[:80]}")
+        step = 0
+
+        while not self._stop and step < self.MAX_STEPS:
+            step += 1
+            resp = self._call_api()
+            if not resp:
+                break
+
+            stop_reason = resp.get("stop_reason", "")
+            content     = resp.get("content", [])
+            self.messages.append({"role": "assistant", "content": content})
+
+            # 텍스트 출력
+            texts = [b["text"] for b in content if b.get("type") == "text" and b.get("text","").strip()]
+            if texts:
+                self._send("\n".join(texts))
+
+            if stop_reason == "end_turn":
+                self.status = "done"
+                self._send("완료.", markup=keyboard([btn("메인 메뉴", "menu")]))
+                break
+
+            if stop_reason == "tool_use":
+                tool_blocks = [b for b in content if b.get("type") == "tool_use"]
+                results = []
+                for tb in tool_blocks:
+                    result_text = self._exec_tool(tb["name"], tb.get("input", {}))
+                    results.append({
+                        "type":        "tool_result",
+                        "tool_use_id": tb["id"],
+                        "content":     result_text[:8000],
+                    })
+                self.messages.append({"role": "user", "content": results})
+            else:
+                break
+
+        if step >= self.MAX_STEPS:
+            self._send(f"최대 스텝({self.MAX_STEPS}) 도달, 중단.")
+            self.status = "done"
+
+    def _call_api(self) -> dict | None:
+        try:
+            if self.provider == "anthropic":
+                return self._call_anthropic()
+            else:
+                return self._call_gemini()
+        except Exception as e:
+            self._send(f"API 오류: {e}")
+            return None
+
+    def _call_anthropic(self) -> dict:
+        payload = {
+            "model":      "claude-sonnet-4-6",
+            "max_tokens": 4096,
+            "system":     _AGENT_SYS,
+            "tools":      _AGENT_TOOLS,
+            "messages":   self.messages,
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type":      "application/json",
+                "x-api-key":         self.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+
+    def _call_gemini(self) -> dict:
+        """Gemini function calling → Anthropic 형식으로 정규화."""
+        # Gemini tool 선언 변환
+        fn_decls = []
+        for t in _AGENT_TOOLS:
+            fn_decls.append({
+                "name":        t["name"],
+                "description": t["description"],
+                "parameters":  t["input_schema"],
+            })
+
+        # messages → Gemini contents 변환
+        contents = []
+        for m in self.messages:
+            if isinstance(m["content"], str):
+                contents.append({"role": "user" if m["role"] == "user" else "model",
+                                  "parts": [{"text": m["content"]}]})
+            elif isinstance(m["content"], list):
+                # tool_result 형식
+                parts = []
+                for block in m["content"]:
+                    if block.get("type") == "tool_result":
+                        parts.append({"functionResponse": {
+                            "name":     block.get("tool_use_id", "tool"),
+                            "response": {"output": block.get("content", "")},
+                        }})
+                    elif block.get("type") == "tool_use":
+                        parts.append({"functionCall": {
+                            "name": block["name"],
+                            "args": block.get("input", {}),
+                        }})
+                    elif block.get("type") == "text":
+                        parts.append({"text": block.get("text", "")})
+                if parts:
+                    contents.append({"role": "user" if m["role"] == "user" else "model",
+                                      "parts": parts})
+
+        # system을 첫 user 메시지에 prefix
+        if contents and contents[0]["role"] == "user":
+            first_text = contents[0]["parts"][0].get("text", "")
+            contents[0]["parts"][0]["text"] = _AGENT_SYS + "\n\n" + first_text
+
+        payload = {
+            "contents": contents,
+            "tools": [{"functionDeclarations": fn_decls}],
+            "generationConfig": {"maxOutputTokens": 4096},
+        }
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"gemini-2.0-flash:generateContent?key={self.api_key}")
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=120) as r:
+            raw = json.loads(r.read())
+
+        # Gemini 응답 → Anthropic 형식으로 정규화
+        candidate = raw["candidates"][0]
+        parts     = candidate["content"]["parts"]
+        finish    = candidate.get("finishReason", "STOP")
+
+        content_blocks = []
+        has_fn = False
+        for p in parts:
+            if "text" in p and p["text"].strip():
+                content_blocks.append({"type": "text", "text": p["text"]})
+            if "functionCall" in p:
+                has_fn = True
+                fc = p["functionCall"]
+                content_blocks.append({
+                    "type":  "tool_use",
+                    "id":    f"call_{fc['name']}_{int(time.time())}",
+                    "name":  fc["name"],
+                    "input": fc.get("args", {}),
+                })
+
+        return {
+            "stop_reason": "tool_use" if has_fn else "end_turn",
+            "content":     content_blocks,
+        }
+
+    def _exec_tool(self, name: str, inp: dict) -> str:
+        if name == "bash":
+            return self._bash(inp.get("command", ""))
+        if name == "read_file":
+            return self._read(inp.get("path", ""))
+        if name == "write_file":
+            return self._write(inp.get("path", ""), inp.get("content", ""))
+        if name == "list_files":
+            return self._ls(inp.get("path", "."))
+        return f"unknown tool: {name}"
+
+    def _bash(self, cmd: str) -> str:
+        if _BLOCKED_BASH.search(cmd):
+            return "BLOCKED: 위험한 명령어"
+        self._send(f"> {cmd[:100]}")
+        try:
+            r = subprocess.run(  # nosec B602 -- allowlist validated by _BLOCKED_BASH before exec
+                cmd, shell=True, capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=60, cwd=self.workdir,
+            )
+            out = (r.stdout + r.stderr)[-4000:] or "(출력 없음)"
+            return f"exit={r.returncode}\n{out}"
+        except subprocess.TimeoutExpired:
+            return "timeout (60s)"
+        except Exception as e:
+            return f"error: {e}"
+
+    def _read(self, path: str) -> str:
+        try:
+            p = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
+            return p.read_text(encoding="utf-8", errors="replace")[:8000]
+        except Exception as e:
+            return f"error: {e}"
+
+    def _write(self, path: str, content: str) -> str:
+        try:
+            p = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+            return f"written: {p} ({len(content)} chars)"
+        except Exception as e:
+            return f"error: {e}"
+
+    def _ls(self, path: str) -> str:
+        try:
+            p = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
+            items = sorted(p.iterdir(), key=lambda x: (x.is_file(), x.name))
+            return "\n".join(
+                (x.name + "/" if x.is_dir() else x.name) for x in items[:60]
+            )
+        except Exception as e:
+            return f"error: {e}"
+
+
+def _terminal_key(chat_id: int, tid: str) -> str:
+    return f"{chat_id}_{tid}"
+
+
+def _launch_terminal(chat_id: int, tid: str, task: str,
+                     provider: str, api_key: str, workdir: str | None = None):
+    """터미널 생성 또는 재사용."""
+    key = _terminal_key(chat_id, tid)
+    with _t_lock:
+        old = _terminals.get(key)
+        if old and old.status == "running":
+            send(chat_id, f"[T{tid}] 이미 실행 중이에요. 먼저 '터미널 {tid} 중지'해주세요.")
+            return
+        t = AgentTerminal(tid, chat_id, task, provider, api_key, workdir)
+        _terminals[key] = t
+    t.start()
+
+
+def _stop_terminal(chat_id: int, tid: str):
+    key = _terminal_key(chat_id, tid)
+    with _t_lock:
+        t = _terminals.get(key)
+    if not t:
+        send(chat_id, f"[T{tid}] 없는 터미널이에요.")
+        return
+    t.stop()
+    send(chat_id, f"[T{tid}] 중지했어요.")
+
+
+def _terminal_status_all(chat_id: int):
+    with _t_lock:
+        items = [(k, v) for k, v in _terminals.items()
+                 if k.startswith(f"{chat_id}_")]
+    if not items:
+        send(chat_id, "실행 중인 터미널이 없어요.",
+             markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+    lines = ["[터미널 현황]"]
+    for k, t in sorted(items):
+        lines.append(f"  T{t.tid}: {t.status}  ({t.task[:40]})")
+    send(chat_id, "\n".join(lines),
+         markup=keyboard([btn("메인 메뉴", "menu")]))
 
 
 # -- 업데이트 처리 -------------------------------------------------------------
@@ -669,7 +1376,47 @@ def save_offset(val):
 
 # -- 메인 루프 -----------------------------------------------------------------
 
+PID_FILE = PROJECT_ROOT / ".claude" / "tg_commander.pid"
+
+
+def _pid_alive(pid: int) -> bool:
+    """Windows: tasklist로 PID가 python 프로세스인지 확인."""
+    try:
+        r = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5,
+        )
+        # 결과에 "python" 포함 여부로 판단
+        return "python" in r.stdout.lower()
+    except Exception:
+        return False
+
+
+def _acquire_lock():
+    """단일 인스턴스 잠금 — 이미 실행 중이면 종료."""
+    if PID_FILE.exists():
+        try:
+            old_pid = int(PID_FILE.read_text().strip())
+            if _pid_alive(old_pid):
+                print(f"[tg_commander] 이미 실행 중 (PID {old_pid}) — 종료합니다.")
+                sys.exit(0)
+            else:
+                print(f"[tg_commander] stale PID {old_pid} 무시, 재시작.")
+        except Exception:
+            pass
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(str(os.getpid()))
+
+
+def _release_lock():
+    try:
+        PID_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def main():
+    _acquire_lock()
     print(f"[tg_commander v2] 시작 -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     broadcast(
         "BRIDGE Commander v2 시작\n"
@@ -680,9 +1427,17 @@ def main():
     )
 
     offset = load_offset()
+    _conflict_backoff = 0
     while True:
         try:
             resp = tg_get("getUpdates", {"offset": offset, "timeout": 30, "limit": 20})
+            if "error_code" in resp and resp.get("error_code") == 409:
+                _conflict_backoff = min(_conflict_backoff + 1, 4)
+                wait = 15 * _conflict_backoff
+                print(f"[tg] 409 Conflict — {wait}초 대기")
+                time.sleep(wait)
+                continue
+            _conflict_backoff = 0
             for upd in resp.get("result", []):
                 uid = upd["update_id"]
                 handle_update(upd)
@@ -690,6 +1445,7 @@ def main():
                 save_offset(offset)
         except KeyboardInterrupt:
             print("\n[tg_commander] 종료")
+            _release_lock()
             break
         except Exception as e:
             print(f"[tg_commander] 루프 에러: {e}")

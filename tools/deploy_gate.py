@@ -102,14 +102,29 @@ def get_subscribers() -> list[int]:
 
 
 GATE_IPC_FILE = PROJECT_ROOT / ".claude" / "tg_gate_response.json"
+TG_COMMANDER_PID = PROJECT_ROOT / ".claude" / "tg_commander.pid"
+
+
+def _tg_commander_running() -> bool:
+    """tg_commander가 현재 살아있는지 PID 파일로 확인."""
+    try:
+        pid = int(TG_COMMANDER_PID.read_text().strip())
+        import subprocess as _sp
+        r = _sp.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return "python" in r.stdout.lower()
+    except Exception:
+        return False
 
 
 def tg_poll_response(token: str, subs: list[int], since_ts: float, deadline: float) -> str | None:
     """
-    두 가지 방식 병행:
-    1) 직접 getUpdates 폴링 (tg_commander가 꺼져 있을 때 작동)
-    2) IPC 파일 폴링 (tg_commander가 실행 중일 때 작동)
-    409 Conflict 발생 시 → tg_commander 실행 중으로 판단, IPC만 의존
+    두 가지 방식:
+    1) IPC 파일 폴링 (tg_commander가 실행 중일 때 — PID 파일 선확인)
+    2) 직접 getUpdates 폴링 (tg_commander가 꺼져 있을 때)
+    PID 파일로 먼저 판단 → getUpdates 충돌로 인한 콜백 유실 방지
     """
     # 기존 IPC 파일 삭제 (이전 응답 오인 방지)
     try:
@@ -122,7 +137,10 @@ def tg_poll_response(token: str, subs: list[int], since_ts: float, deadline: flo
 
     offset = 0
     retry_delay = 2.0
-    use_direct_poll = True  # 409 받으면 False로 전환
+    # tg_commander가 실행 중이면 처음부터 IPC 모드 (getUpdates 충돌 방지)
+    use_direct_poll = not _tg_commander_running()
+    if not use_direct_poll:
+        print("[deploy_gate] tg_commander 감지 → IPC 전용 모드로 시작")
 
     while time.time() < deadline:
         # ── IPC 파일 확인 (fast path) ─────────────────────
