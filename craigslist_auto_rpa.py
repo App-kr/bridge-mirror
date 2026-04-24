@@ -979,58 +979,72 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
     opts.add_argument("--disable-background-networking")  # GCM/DEPRECATED_ENDPOINT 제거
     opts.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     opts.add_experimental_option("useAutomationExtension", False)
-    # 드라이버 시작 전 기존 Chrome 창 hwnd 목록 저장
-    _existing_hwnds: set = set()
-    try:
-        import win32gui as _wg
-        def _collect(hwnd, _):
-            if _wg.GetClassName(hwnd) == "Chrome_WidgetWin_1":
-                _existing_hwnds.add(hwnd)
-        _wg.EnumWindows(_collect, None)
-    except Exception:
-        pass
-
     import subprocess as _sp, os as _os
     svc = Service(
         ChromeDriverManager().install(),
-        log_output=_sp.DEVNULL,         # ChromeDriver 로그 완전 억제
+        log_output=_sp.DEVNULL,
     )
-    svc.creation_flags = _sp.CREATE_NO_WINDOW   # 검은 CMD 창 숨김
+    svc.creation_flags = _sp.CREATE_NO_WINDOW
     driver = webdriver.Chrome(service=svc, options=opts)
-    # ── 타임아웃 설정 (응답없음 방지) ────────────────────────────────────────
-    driver.set_page_load_timeout(50)   # 50초 초과 시 TimeoutException (무한 대기 방지)
-    driver.set_script_timeout(25)      # JS 실행 25초 제한
+    driver.set_page_load_timeout(50)
+    driver.set_script_timeout(25)
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"}
     )
 
-    # 새로 생긴 Chrome 창만 작업표시줄에서 숨김 (기존 창 보존)
-    # 1.5 / 3 / 6초 3회 스윕 — Chrome 늦게 뜨는 창 포함
+    # ── RPA 전용 Chrome PID 수집 → 해당 PID 창만 작업표시줄 제거 ──────────
+    # 기존 방식(hwnd 스냅샷)은 이후 사용자가 연 Chrome까지 건드리는 문제 있음
+    _rpa_pids: set[int] = set()
+    try:
+        import psutil as _psu
+        cd_pid = svc.process.pid          # ChromeDriver PID
+        _rpa_pids.add(cd_pid)
+        for _c in _psu.Process(cd_pid).children(recursive=True):
+            _rpa_pids.add(_c.pid)
+    except Exception:
+        pass
+
     def _sweep_hide():
         try:
-            import win32gui as _wg2, win32con as _wc2
+            import win32gui as _wg2, win32con as _wc2, win32process as _wp2
             def _hide(hwnd, _):
-                if hwnd in _existing_hwnds:
+                if _wg2.GetClassName(hwnd) != "Chrome_WidgetWin_1":
                     return
-                if _wg2.GetClassName(hwnd) == "Chrome_WidgetWin_1":
-                    ex = _wg2.GetWindowLong(hwnd, _wc2.GWL_EXSTYLE)
-                    # WS_EX_TOOLWINDOW: 작업표시줄에서만 제거 (SW_HIDE 금지 — 세션 끊김 유발)
-                    _wg2.SetWindowLong(hwnd, _wc2.GWL_EXSTYLE,
-                        (ex | _wc2.WS_EX_TOOLWINDOW) & ~_wc2.WS_EX_APPWINDOW)
+                if _rpa_pids:
+                    try:
+                        _, pid = _wp2.GetWindowThreadProcessId(hwnd)
+                        if pid not in _rpa_pids:
+                            return   # 사용자 Chrome — 절대 건드리지 않음
+                    except Exception:
+                        return
+                ex = _wg2.GetWindowLong(hwnd, _wc2.GWL_EXSTYLE)
+                _wg2.SetWindowLong(hwnd, _wc2.GWL_EXSTYLE,
+                    (ex | _wc2.WS_EX_TOOLWINDOW) & ~_wc2.WS_EX_APPWINDOW)
             _wg2.EnumWindows(_hide, None)
         except Exception:
             pass
 
     import threading as _thr, time as _t
-    # ── 동기 숨김: driver 반환 전에 바로 실행 (비동기 스레드보다 먼저) ──────
-    _t.sleep(0.4)   # Chrome 창 생성 대기
-    _sweep_hide()   # 메인 스레드에서 즉시 숨김
+
+    # Chrome 자식 PID 추가 수집 (드라이버 시작 직후 아직 생성 중인 프로세스 포함)
+    def _collect_chrome_pids():
+        try:
+            import psutil as _psu
+            cd_pid = svc.process.pid
+            for _c in _psu.Process(cd_pid).children(recursive=True):
+                _rpa_pids.add(_c.pid)
+        except Exception:
+            pass
+
+    _t.sleep(0.4)
+    _collect_chrome_pids()
+    _sweep_hide()
 
     def _hide_worker():
-        # 뒤늦게 뜨는 Chrome 팝업/서브창 대비 추가 스윕
         for delay in (0.3, 0.5, 1.0, 2.0, 4.0):
             _t.sleep(delay)
+            _collect_chrome_pids()
             _sweep_hide()
         while True:
             _t.sleep(5)
