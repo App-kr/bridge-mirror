@@ -966,14 +966,10 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         opts.add_argument("--window-size=1920,1080")
         print("  [DRIVER] Headless 모드로 Chrome 시작")
     else:
-        # 화면 밖 + 작업표시줄 비표시 조합
-        # --window-position: 화면 밖으로 이동 (봇 감지 없는 비headless)
-        # --silent-launch: 포커스/활성화 없이 시작
-        # --noerrdialogs: 에러 다이얼로그 팝업 차단
-        opts.add_argument("--window-position=-32000,-32000")
+        # 화면 밖으로 이동 -- headless 아니라 봇 감지 없고, 사용자 화면에는 안 보임
+        # (작업표시줄 숨김은 _sweep_hide 스레드가 담당)
+        opts.add_argument("--window-position=-10000,-10000")
         opts.add_argument("--window-size=1920,1080")
-        opts.add_argument("--silent-launch")
-        opts.add_argument("--noerrdialogs")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--log-level=3")              # FATAL 만 출력 (DevTools/TF 메시지 제거)
     opts.add_argument("--disable-logging")
