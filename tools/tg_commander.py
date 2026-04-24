@@ -7,6 +7,7 @@ BRIDGE Telegram Commander v2 -- 대화형 인터랙티브 봇
 
 import json
 import os
+import queue
 import re
 import sqlite3
 import subprocess
@@ -584,15 +585,69 @@ def route_callback(chat_id, cb_id, data, msg_id):
     elif data == "gate_no":
         write_gate_response("no")
         send(chat_id, "[배포 취소됨]")
+    elif data.startswith("term_reply_"):
+        # ask_user 버튼 → 텍스트 입력 모드로 전환
+        tid = data[len("term_reply_"):]
+        set_state(chat_id, f"term_ask_{tid}", tid=tid)
+        edit_msg(chat_id, msg_id,
+                 f"[T{tid}] 에이전트 질문에 답변을 입력하세요:",
+                 markup=keyboard([btn("취소", "menu")]))
     else:
         answer_cb(cb_id, f"알 수 없는 액션: {data}")
 
 
 # -- 텍스트 메시지 처리 --------------------------------------------------------
 
+_TERM_TARGET_RE = re.compile(r"^[Tt](\d+)[:：]\s*(.+)$", re.DOTALL)
+
 def handle_text(chat_id, text):
     st = get_state(chat_id)
 
+    # ── [1] ask_user 대기 중인 터미널 답변 처리 ───────────────
+    awaiting = _find_awaiting_ask(chat_id)
+    if awaiting:
+        awaiting.reply_ask(text.strip())
+        send(chat_id, f"[T{awaiting.tid}] 답변 전달됨.")
+        return
+
+    # ── [2] term_ask_* 상태 (버튼으로 열린 답장 모드) ─────────
+    if st.state.startswith("term_ask_"):
+        tid = st.data.get("tid", "1")
+        clear_state(chat_id)
+        key = _terminal_key(chat_id, tid)
+        with _t_lock:
+            t = _terminals.get(key)
+        if t and t.status == "running":
+            t.reply_ask(text.strip())
+            send(chat_id, f"[T{tid}] 답변 전달됨.")
+        else:
+            send(chat_id, f"[T{tid}] 터미널이 없거나 종료됨.")
+        return
+
+    # ── [3] 특정 터미널 지정 주입 "T1: 메시지" ────────────────
+    m = _TERM_TARGET_RE.match(text.strip())
+    if m:
+        tid_target, msg_body = m.group(1), m.group(2)
+        key = _terminal_key(chat_id, tid_target)
+        with _t_lock:
+            t = _terminals.get(key)
+        if t and t.status == "running":
+            t.inject_message(msg_body.strip())
+            send(chat_id, f"[T{tid_target}] 메시지 전달됨.")
+            return
+
+    # ── [4] 실행 중 터미널에 자동 주입 (stop 키워드 처리 포함) ─
+    running = _find_running_terminal(chat_id)
+    lower_t = text.strip().lower()
+    if running and lower_t in ("stop", "중지", "멈춰", "cancel", "스탑"):
+        _stop_terminal(chat_id, running.tid)
+        return
+    if running and not text.strip().startswith("/"):
+        running.inject_message(text.strip())
+        send(chat_id, f"[T{running.tid}] 메시지 전달됨. ('/menu' 입력 시 메인 메뉴)")
+        return
+
+    # ── 기존 처리 ────────────────────────────────────────────
     if st.state == "resume_input":
         run_resume(chat_id, text.strip())
         return
@@ -601,7 +656,7 @@ def handle_text(chat_id, text):
         run_cmd(chat_id, text.strip())
         return
 
-    lower = text.strip().lower()
+    lower = lower_t
 
     if lower in ("yes", "/yes", "y", "1", "승인"):
         write_gate_response("yes")
@@ -1013,6 +1068,49 @@ _AGENT_TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "ask_user",
+        "description": "작업 중 사용자에게 질문하고 답변을 받는다. 방향 결정이 꼭 필요할 때만 사용.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"question": {"type": "string", "description": "사용자에게 할 질문"}},
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "search_files",
+        "description": "디렉토리에서 텍스트 패턴 검색 (grep). 코드 탐색, 함수 위치 확인에 사용.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "검색 패턴 (정규식 가능)"},
+                "path":    {"type": "string", "description": "검색 경로 (기본: workdir)"},
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "git",
+        "description": "Git 명령 실행. status/diff/log/add/commit/branch/show/stash 허용.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"args": {"type": "string", "description": "예: 'add tools/foo.py' / 'commit -m 메시지'"}},
+            "required": ["args"],
+        },
+    },
+    {
+        "name": "sub_task",
+        "description": "독립적인 서브태스크를 다른 터미널 ID에 위임하고 결과를 받는다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tid":     {"type": "string", "description": "서브 터미널 ID (예: '2')"},
+                "task":    {"type": "string", "description": "서브태스크 내용"},
+                "workdir": {"type": "string", "description": "작업 디렉토리 (선택)"},
+            },
+            "required": ["tid", "task"],
+        },
+    },
 ]
 
 _AGENT_SYS = """\
@@ -1025,6 +1123,11 @@ _AGENT_SYS = """\
 - 마지막에 완료 요약을 출력하세요.
 - 보안: rm -rf /, DROP TABLE, git push --force 금지.
 - 작업 디렉토리 외부 쓰기 금지.
+- ask_user: 반드시 필요한 결정만. 빈번한 질문 금지.
+- sub_task: 독립적으로 실행 가능한 단위만 위임. 순환 호출 금지.
+- search_files: 코드 탐색 시 bash grep 대신 사용 권장.
+- git: add/commit 전 반드시 status와 diff로 변경사항 확인.
+- 사용자가 실행 중 메시지를 보내면 [사용자 개입] 태그로 전달됨. 즉시 반영.
 """
 
 _BLOCKED_BASH = re.compile(
@@ -1041,17 +1144,38 @@ class AgentTerminal:
     MAX_STEPS = 40   # 무한루프 방지
 
     def __init__(self, tid: str, chat_id: int, task: str,
-                 provider: str, api_key: str, workdir: str | None = None):
-        self.tid      = tid
-        self.chat_id  = chat_id
-        self.task     = task
-        self.provider = provider
-        self.api_key  = api_key
-        self.workdir  = workdir or str(PROJECT_ROOT)
-        self.status   = "running"
+                 provider: str, api_key: str, workdir: str | None = None,
+                 parent_tid: str | None = None):
+        self.tid        = tid
+        self.chat_id    = chat_id
+        self.task       = task
+        self.provider   = provider
+        self.api_key    = api_key
+        self.workdir    = workdir or str(PROJECT_ROOT)
+        self.parent_tid = parent_tid          # 순환 sub_task 방지
+        self.status     = "running"
         self.messages: list = []
-        self._stop    = False
-        self._thread  = threading.Thread(target=self._run, daemon=True)
+        self._stop      = False
+        self._thread    = threading.Thread(target=self._run, daemon=True)
+        # ── 대화형 개입 ─────────────────────────────────
+        self._inbox     = queue.Queue()       # 사용자 → 에이전트 메시지 주입
+        self._is_asking = False               # ask_user 대기 중 플래그
+        self._ask_event = threading.Event()   # ask_user 응답 신호
+        self._ask_reply = ""                  # ask_user 답변 저장
+        self._ask_lock  = threading.Lock()
+        # ── PATH 환경변수 ────────────────────────────────
+        self.env        = self._build_env()
+
+    @staticmethod
+    def _build_env() -> dict:
+        """Q:\\Phtyon 3 를 PATH 앞에 추가한 환경변수 딕셔너리."""
+        e = os.environ.copy()
+        py_dir = str(Path(r"Q:\Phtyon 3"))
+        paths = e.get("PATH", "").split(os.pathsep)
+        if py_dir not in paths:
+            paths.insert(0, py_dir)
+        e["PATH"] = os.pathsep.join(paths)
+        return e
 
     def start(self):
         self._thread.start()
@@ -1059,6 +1183,21 @@ class AgentTerminal:
     def stop(self):
         self._stop = True
         self.status = "stopped"
+        # ask_user 대기 중이면 깨워서 종료
+        with self._ask_lock:
+            self._ask_reply = "[중단됨]"
+            self._ask_event.set()
+
+    # ── 외부 API (inject_message / reply_ask) ─────────────
+    def inject_message(self, text: str):
+        """실행 중 사용자가 보낸 텍스트를 inbox에 넣는다."""
+        self._inbox.put(text)
+
+    def reply_ask(self, text: str):
+        """ask_user 대기 중인 에이전트에 답변 전달."""
+        with self._ask_lock:
+            self._ask_reply = text
+            self._ask_event.set()
 
     # ── 내부 ──────────────────────────────────────────────────
     def _tag(self, text: str) -> str:
@@ -1074,12 +1213,26 @@ class AgentTerminal:
             self.status = "error"
             self._send(f"에이전트 오류: {e}")
 
+    def _drain_inbox(self):
+        """inbox 메시지를 꺼내 에이전트 messages에 주입."""
+        msgs = []
+        while True:
+            try:
+                msgs.append(self._inbox.get_nowait())
+            except queue.Empty:
+                break
+        if msgs:
+            combined = "\n".join(f"[사용자 개입] {m}" for m in msgs)
+            self.messages.append({"role": "user", "content": combined})
+            self._send(f"사용자 메시지 반영: {combined[:200]}")
+
     def _loop(self):
         self.messages = [{"role": "user", "content": self.task}]
         self._send(f"시작: {self.task[:80]}")
         step = 0
 
         while not self._stop and step < self.MAX_STEPS:
+            self._drain_inbox()   # 매 스텝 전 inbox 확인
             step += 1
             resp = self._call_api()
             if not resp:
@@ -1238,6 +1391,14 @@ class AgentTerminal:
             return self._write(inp.get("path", ""), inp.get("content", ""))
         if name == "list_files":
             return self._ls(inp.get("path", "."))
+        if name == "ask_user":
+            return self._ask_user(inp.get("question", ""))
+        if name == "search_files":
+            return self._search_files(inp.get("pattern", ""), inp.get("path", "."))
+        if name == "git":
+            return self._git(inp.get("args", ""))
+        if name == "sub_task":
+            return self._sub_task(inp.get("tid", ""), inp.get("task", ""), inp.get("workdir"))
         return f"unknown tool: {name}"
 
     def _bash(self, cmd: str) -> str:
@@ -1249,6 +1410,7 @@ class AgentTerminal:
                 cmd, shell=True, capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
                 timeout=60, cwd=self.workdir,
+                env=self.env,
             )
             out = (r.stdout + r.stderr)[-4000:] or "(출력 없음)"
             return f"exit={r.returncode}\n{out}"
@@ -1256,6 +1418,79 @@ class AgentTerminal:
             return "timeout (60s)"
         except Exception as e:
             return f"error: {e}"
+
+    def _ask_user(self, question: str) -> str:
+        """사용자에게 질문하고 최대 5분 대기."""
+        with self._ask_lock:
+            self._ask_event.clear()
+            self._ask_reply = ""
+            self._is_asking = True
+        kb = keyboard([btn(f"T{self.tid} 답장", f"term_reply_{self.tid}")])
+        self._send(f"질문: {question[:3500]}", markup=kb)
+        answered = self._ask_event.wait(timeout=300)
+        with self._ask_lock:
+            self._is_asking = False
+            reply = self._ask_reply
+        if not answered or reply == "[중단됨]":
+            return "[타임아웃 또는 중단] 사용자 응답 없음"
+        return reply
+
+    def _search_files(self, pattern: str, path: str) -> str:
+        """grep으로 파일 내 패턴 검색."""
+        base = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
+        cmd = f'grep -rn --include="*.py" --include="*.js" --include="*.ts" --include="*.json" "{pattern}" "{base}" 2>&1 | head -80'
+        return self._bash(cmd)
+
+    _GIT_ALLOWED = re.compile(
+        r"^(status|diff|log|add|commit|branch|show|stash|reset\s+HEAD)(\s|$)",
+        re.IGNORECASE,
+    )
+
+    def _git(self, args: str) -> str:
+        """허용된 git 명령만 실행."""
+        args = args.strip()
+        if not self._GIT_ALLOWED.match(args):
+            return f"BLOCKED: 허용 git 명령 — status/diff/log/add/commit/branch/show/stash"
+        cmd = f'git -C "{self.workdir}" {args}'
+        return self._bash(cmd)
+
+    def _sub_task(self, tid: str, task: str, workdir: str | None) -> str:
+        """서브에이전트를 생성하고 완료까지 대기 (최대 10분)."""
+        if not tid or not task:
+            return "BLOCKED: tid와 task 필수"
+        # 순환 호출 방지
+        if tid == self.tid or tid == self.parent_tid:
+            return "BLOCKED: 순환 sub_task 금지"
+        sub_key = _terminal_key(self.chat_id, f"{self.tid}s{tid}")
+        with _t_lock:
+            if sub_key in _terminals and _terminals[sub_key].status == "running":
+                return f"[T{tid}] 서브터미널 이미 실행 중"
+            sub = AgentTerminal(
+                tid=f"{self.tid}s{tid}",
+                chat_id=self.chat_id,
+                task=task,
+                provider=self.provider,
+                api_key=self.api_key,
+                workdir=workdir or self.workdir,
+                parent_tid=self.tid,
+            )
+            _terminals[sub_key] = sub
+        sub.start()
+        self._send(f"서브태스크 T{tid} 시작: {task[:60]}")
+        sub._thread.join(timeout=600)
+        if sub.status == "running":
+            sub.stop()
+            return "[서브태스크 타임아웃] 10분 초과"
+        # 마지막 assistant 텍스트 수집
+        last_texts = []
+        for m in sub.messages[-5:]:
+            if m.get("role") == "assistant":
+                blocks = m.get("content", [])
+                if isinstance(blocks, list):
+                    for b in blocks:
+                        if b.get("type") == "text" and b.get("text", "").strip():
+                            last_texts.append(b["text"])
+        return f"[서브태스크 완료]\n" + "\n".join(last_texts)[-3000:]
 
     def _read(self, path: str) -> str:
         try:
@@ -1286,6 +1521,26 @@ class AgentTerminal:
 
 def _terminal_key(chat_id: int, tid: str) -> str:
     return f"{chat_id}_{tid}"
+
+
+def _find_awaiting_ask(chat_id: int):
+    """ask_user 대기 중인 터미널 반환."""
+    with _t_lock:
+        for t in list(_terminals.values()):
+            if t.chat_id == chat_id and t.status == "running" and t._is_asking:
+                return t
+    return None
+
+
+def _find_running_terminal(chat_id: int):
+    """실행 중인 터미널 중 tid 가장 짧은 것 반환 (서브터미널 'XsY' 제외)."""
+    with _t_lock:
+        running = [t for t in _terminals.values()
+                   if t.chat_id == chat_id and t.status == "running"
+                   and "s" not in t.tid]   # 서브터미널 키 제외
+    if not running:
+        return None
+    return sorted(running, key=lambda t: t.tid)[0]
 
 
 def _launch_terminal(chat_id: int, tid: str, task: str,
