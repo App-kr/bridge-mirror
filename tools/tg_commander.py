@@ -626,6 +626,195 @@ def route_callback(chat_id, cb_id, data, msg_id):
         answer_cb(cb_id, f"알 수 없는 액션: {data}")
 
 
+# -- 직접 키워드 실행 (LLM 없이 즉시 처리) ------------------------------------
+
+_RPA_DIRECT_RE  = re.compile(r'(?:rpa|광고|크레이그|craig)\s*(\d+)\s*건', re.IGNORECASE)
+# 숫자 없는 RPA 직접 실행 키워드 (기본 5건, gray 계정)
+_RPA_NOW_KEYS   = ("rpa 실행", "rpa 돌려", "rpa 돌려줘", "rpa해", "rpa 해줘", "rpa 해",
+                   "광고 올려", "광고 올려줘", "광고 실행", "광고 돌려", "광고 돌려줘",
+                   "크레이그 올려", "크레이그 실행", "크레이그 돌려",
+                   "craig 실행", "craig 올려", "크레이그리스트 실행")
+# 댓글 답방 (matjokdo main.py --run)
+_DAEBANG_KEYS   = ("블로그 작업 시작", "블로그 작업시작", "답방 시작", "답방시작", "댓글 답방",
+                   "댓글답방", "블로그 답방", "댓글 확인", "댓글확인", "답방 해", "답방해줘",
+                   "블로그 댓글", "댓글 달린거 확인", "댓글달린거")
+# 블로그 포스팅 (ClaudeBlog main.py --now)
+_BLOG_NOW_KEYS  = ("블로그 포스팅 시작", "블로그 포스팅", "블로그 발행", "새 글 발행", "블로그 글 써", "블로그 올려", "블로그 새글")
+_BLOG_DRY_KEYS  = ("블로그 테스트", "블로그 드라이", "블로그 dry", "blog dry")
+_NEW_APP_KEYS   = ("신규접수확인", "신규 접수확인", "신규접수 확인", "새 접수", "신규 후보", "새 후보", "신규접수")
+_MAIL_STAT_KEYS = ("자동메일 몇건", "메일답장 몇건", "자동 메일 몇건", "메일 몇건", "자동답장 몇건", "메일답장 오늘")
+
+
+def _run_daebang(chat_id):
+    """matjokdo main.py --run : 댓글 확인 + 답방 실제 실행."""
+    mat = Path(r"Q:\Claudework\matjokdo_safe\main.py")
+    if not mat.exists():
+        send(chat_id, "[답방] 스크립트 없음: matjokdo_safe/main.py",
+             markup=keyboard([btn("메인 메뉴", "menu")]))
+        return
+    send(chat_id, "[답방] 댓글 확인 + 답방 작업 시작...\n(완료까지 수 분 소요)")
+    try:
+        proc = subprocess.run(
+            [PYTHON, "-X", "utf8", str(mat), "--run"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=600, cwd=str(mat.parent),
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        out  = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
+        icon = "[완료]" if proc.returncode == 0 else "[경고]"
+        send(chat_id, f"{icon} 답방 완료\n{out}", markup=keyboard([btn("메인 메뉴", "menu")]))
+    except subprocess.TimeoutExpired:
+        send(chat_id, "[타임아웃] 600초 초과", markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _quick_bridge_new(chat_id):
+    """브릿지 신규 접수 현황 DB 직접 조회."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cur  = conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        cur.execute(
+            "SELECT COUNT(*) FROM candidates WHERE DATE(created_at)=? AND (is_deleted IS NULL OR is_deleted=0)",
+            (today,)
+        )
+        cand_today = cur.fetchone()[0]
+
+        cur.execute(
+            "SELECT COUNT(*) FROM candidates WHERE DATE(created_at)>=date('now','-7 days') AND (is_deleted IS NULL OR is_deleted=0)"
+        )
+        cand_week = cur.fetchone()[0]
+
+        try:
+            cur.execute("SELECT COUNT(*) FROM client_inquiries WHERE DATE(created_at)=?", (today,))
+            inq_today = cur.fetchone()[0]
+        except Exception:
+            inq_today = 0
+
+        # 가장 최근 후보자 3명
+        cur.execute(
+            "SELECT sheet_number, full_name, nationality, created_at FROM candidates "
+            "WHERE (is_deleted IS NULL OR is_deleted=0) ORDER BY id DESC LIMIT 3"
+        )
+        recent = cur.fetchall()
+        conn.close()
+
+        lines = [
+            "[브릿지 신규접수 현황]",
+            f"오늘 신규 후보자: {cand_today}명",
+            f"이번 주 신규 후보자: {cand_week}명",
+            f"오늘 신규 문의: {inq_today}건",
+        ]
+        if recent:
+            lines.append("\n최근 후보자:")
+            for row in recent:
+                sn, name, nat, cat = row
+                cat_str = cat[:10] if cat else "?"
+                # name은 암호화된 경우 가림 처리
+                name_disp = f"#{sn}" if (name and (name.startswith("T3v1") or len(name) > 60)) else (name or f"#{sn}")
+                lines.append(f"  {name_disp} / {nat or '?'} / {cat_str}")
+
+        send(chat_id, "\n".join(lines), markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[오류] DB 조회 실패: {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _quick_mail_stats(chat_id):
+    """자동메일 발송 통계 DB 직접 조회."""
+    try:
+        conn  = sqlite3.connect(str(DB_PATH))
+        cur   = conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        today_count = total_count = 0
+        week_count  = 0
+        try:
+            cur.execute("SELECT COUNT(*) FROM mail_introduce_log WHERE DATE(sent_at)=?", (today,))
+            today_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM mail_introduce_log WHERE DATE(sent_at)>=date('now','-7 days')")
+            week_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM mail_introduce_log")
+            total_count = cur.fetchone()[0]
+        except Exception:
+            pass
+
+        conn.close()
+        msg = (
+            f"[자동메일 발송 통계]\n"
+            f"오늘 발송: {today_count}건\n"
+            f"이번 주: {week_count}건\n"
+            f"총 누적: {total_count}건"
+        )
+        send(chat_id, msg, markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[오류] DB 조회 실패: {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _try_direct_cmd(chat_id, text: str) -> bool:
+    """한국어 키워드 직접 매칭 → LLM 없이 즉시 실행. 처리되면 True 반환."""
+    t  = text.strip()
+    tl = t.lower()
+
+    # 블로그 댓글 답방 (matjokdo --run)
+    if any(k in tl for k in _DAEBANG_KEYS):
+        threading.Thread(target=_run_daebang, args=(chat_id,), daemon=True).start()
+        return True
+
+    # 블로그 포스팅 발행 (ClaudeBlog --now)
+    if any(k in tl for k in _BLOG_NOW_KEYS):
+        send(chat_id, "[블로그] 실제 발행 시작...")
+        threading.Thread(target=_run_blog, args=(chat_id, "--now"), daemon=True).start()
+        return True
+
+    # 블로그 테스트
+    if any(k in tl for k in _BLOG_DRY_KEYS):
+        send(chat_id, "[블로그] 테스트 모드 시작...")
+        threading.Thread(target=_run_blog, args=(chat_id, "--dry"), daemon=True).start()
+        return True
+
+    # RPA 광고 N건 (예: "광고 20건 해", "RPA 10건")
+    m = _RPA_DIRECT_RE.search(t)
+    if m:
+        limit = max(1, min(int(m.group(1)), 50))
+        threading.Thread(target=_run_rpa_direct, args=(chat_id, "gray", limit), daemon=True).start()
+        return True
+
+    # RPA 숫자 없는 직접 실행 키워드 (기본 5건)
+    if any(k in tl for k in _RPA_NOW_KEYS):
+        send(chat_id, "[RPA] gray 계정으로 5건 실행 중...")
+        threading.Thread(target=_run_rpa_direct, args=(chat_id, "gray", 5), daemon=True).start()
+        return True
+
+    # 브릿지 신규접수 확인
+    if any(k in tl for k in _NEW_APP_KEYS):
+        _quick_bridge_new(chat_id)
+        return True
+    if "신규" in tl and ("확인" in tl or "접수" in tl):
+        _quick_bridge_new(chat_id)
+        return True
+    if "홈페이지" in tl and ("신규" in tl or "접수" in tl):
+        _quick_bridge_new(chat_id)
+        return True
+    if "브릿지" in tl and ("신규" in tl or "접수" in tl or "확인" in tl):
+        _quick_bridge_new(chat_id)
+        return True
+
+    # 자동메일 답장 통계
+    if any(k in tl for k in _MAIL_STAT_KEYS):
+        _quick_mail_stats(chat_id)
+        return True
+    if "자동" in tl and "메일" in tl and ("몇" in tl or "통계" in tl or "얼마" in tl or "오늘" in tl):
+        _quick_mail_stats(chat_id)
+        return True
+    if "메일답장" in tl and ("오늘" in tl or "몇" in tl):
+        _quick_mail_stats(chat_id)
+        return True
+
+    return False
+
+
 # -- 텍스트 메시지 처리 --------------------------------------------------------
 
 _TERM_TARGET_RE = re.compile(r"^[Tt](\d+)[:：]\s*(.+)$", re.DOTALL)
@@ -716,6 +905,10 @@ def handle_text(chat_id, text):
         _handle_legacy_as_new_msg(chat_id, _LEGACY[cmd_key])
         return
 
+    # ── 직접 키워드 매칭 (LLM 없이 즉시 실행) ────────────────────
+    if _try_direct_cmd(chat_id, text):
+        return
+
     # 자연어 대화 → Claude Haiku
     _ask_claude(chat_id, text)
 
@@ -742,49 +935,62 @@ _conv_history: dict = {}   # {chat_id: [{"role": ..., "content": ...}, ...]}
 _MAX_HIST = 10
 
 _SYSTEM = """\
-당신은 BRIDGE 텔레그램 봇입니다. 구인 플랫폼 운영자 Scarlett과 자연스러운 한국어로 대화합니다.
-짧고 친근하게 답하세요. 이모지 쓰지 마세요.
+당신은 BRIDGE 텔레그램 봇입니다. 구인 플랫폼 운영자 Scarlett과 한국어로 대화합니다.
+짧고 친근하게 답하세요. 이모지 금지.
 
-[가능한 액션]
-- status          : BRIDGE 현황
-- pipeline        : 파이프라인 큐
-- git             : 최근 커밋
-- db              : DB 통계
-- watcher         : Pipeline Watcher 상태
-- rpa             : Craigslist RPA (계정/건수 물어보고 실행)
-- blog_dry        : 블로그 테스트
-- blog_now        : 블로그 실제 발행
-- matjokdo        : 맛족도 실행
-- resume          : 이력서 변환 (ID 필요)
-- restore         : 최근 백업 목록
-- cancel          : 현재 작업 취소
-- terminal        : 에이전트 터미널 — bash/read/write 도구 쓰는 자율 에이전트
-                   params: {"tid":"1", "task":"...", "workdir":"선택"}
-- terminal_stop   : 터미널 중지  params: {"tid":"1"}
-- terminal_status : 전체 터미널 현황
-- null            : 대화만
+[중요 원칙 — 반드시 지킬 것]
+1. 사용자 메시지에 아래 [액션 트리거 키워드]가 명시적으로 있을 때만 action 선택.
+2. 키워드가 없으면 무조건 action=null (단순 대화).
+3. 절대 임의로 action="cancel" 선택 금지. "취소", "멈춰", "stop", "그만"이 있을 때만.
+4. 모호하면 action=null + 질문하는 reply.
 
-[응답 형식] JSON만 출력. 다른 텍스트 금지.
+[액션 트리거 키워드 사전 — 이 단어들이 메시지에 있을 때만 해당 action]
+- status     : "현황", "상태", "status"
+- pipeline   : "파이프라인", "큐", "queue"
+- git        : "커밋", "git"
+- db         : "DB", "디비", "통계"
+- watcher    : "watcher", "워처"
+- rpa        : "RPA", "광고", "Craigslist", "크레이그"
+- blog_dry   : "블로그 테스트", "blog dry"
+- blog_now   : "블로그 발행", "블로그 올려"
+- daebang    : "답방", "댓글 답방", "블로그 댓글"
+- matjokdo   : "맛족도"
+- resume     : "이력서 변환"
+- restore    : "복원", "백업 목록"
+- bridge_new : "신규 접수", "신규 후보자", "신규 문의"
+- mail_stats : "메일 통계", "자동메일", "메일 몇건"
+- cancel     : "취소", "멈춰", "그만", "stop"
+- terminal   : "터미널", "에이전트 시작", "agent"
+- terminal_stop  : "터미널 멈춰", "터미널 중지", "terminal stop"
+- terminal_status: "터미널 현황", "터미널 상태"
+
+[응답 형식] JSON만 출력. 마크다운 코드블록 금지. 다른 텍스트 금지.
 {"action": "액션명 또는 null", "params": {}, "reply": "자연어 답변"}
 
 [예시]
-사용자: "터미널 1에서 재밌는 앱 개발해봐"
-응답: {"action": "terminal", "params": {"tid": "1", "task": "창의적인 Python 앱을 개발해줘. 아이디어를 스스로 정하고 구현해봐."}, "reply": "터미널 1에서 앱 개발 시작할게요!"}
+사용자: "안녕"
+응답: {"action": null, "params": {}, "reply": "안녕하세요. 무엇을 도와드릴까요?"}
 
-사용자: "터미널 2에서 bridge base 분석해"
-응답: {"action": "terminal", "params": {"tid": "2", "task": "bridge base 프로젝트 구조와 현황을 분석하고 요약해줘.", "workdir": "Q:/Claudework/bridge base"}, "reply": "터미널 2에서 분석 시작."}
+사용자: "밀린 작업해"
+응답: {"action": null, "params": {}, "reply": "어떤 작업 말씀이세요? RPA, 블로그 답방, 신규 접수 확인 등 구체적으로 알려주세요."}
 
-사용자: "터미널 1 멈춰"
-응답: {"action": "terminal_stop", "params": {"tid": "1"}, "reply": "터미널 1 중지할게요."}
+사용자: "현황 알려줘"
+응답: {"action": "status", "params": {}, "reply": "BRIDGE 현황 확인할게요."}
 
-사용자: "터미널 현황"
-응답: {"action": "terminal_status", "params": {}, "reply": "확인할게요."}
-
-사용자: "RPA 돌릴까?"
-응답: {"action": null, "params": {}, "reply": "돌릴게요. gray 계정으로 몇 건 할까요?"}
-
-사용자: "하지마"
+사용자: "취소해"
 응답: {"action": "cancel", "params": {}, "reply": "알겠어요, 취소했어요."}
+
+사용자: "RPA 광고 20건"
+응답: {"action": "rpa", "params": {"account": "gray", "limit": 20}, "reply": "RPA 광고 20건 실행할게요."}
+
+사용자: "터미널 1에서 bridge base 분석"
+응답: {"action": "terminal", "params": {"tid": "1", "task": "bridge base 분석", "workdir": "Q:/Claudework/bridge base"}, "reply": "터미널 1에서 분석 시작."}
+
+사용자: "댓글 답방해"
+응답: {"action": "daebang", "params": {}, "reply": "댓글 확인 + 답방 시작할게요."}
+
+사용자: "신규 접수 확인"
+응답: {"action": "bridge_new", "params": {}, "reply": "신규 접수 현황 확인할게요."}
 """
 
 
@@ -802,6 +1008,38 @@ def _ollama_works() -> bool:
             return r.status == 200
     except Exception:
         return False
+
+
+# Ollama 우선순위: 큰 모델일수록 명령 이해도 ↑
+_OLLAMA_PREFERENCE = [
+    "qwen2.5:14b", "qwen2.5:7b", "llama3.1:8b",
+    "qwen2.5:3b", "llama3.2:3b",
+]
+_ollama_model_cache: dict = {"name": None, "ts": 0.0}
+
+
+def _best_ollama_model() -> str:
+    """현재 설치된 Ollama 모델 중 가장 큰(정확한) 것 반환. 5분 캐시."""
+    now = time.time()
+    if _ollama_model_cache["name"] and now - _ollama_model_cache["ts"] < 300:
+        return _ollama_model_cache["name"]
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as r:
+            data = json.loads(r.read())
+        installed = {m["name"] for m in data.get("models", [])}
+        for cand in _OLLAMA_PREFERENCE:
+            if cand in installed:
+                _ollama_model_cache.update({"name": cand, "ts": now})
+                _log(f"[ollama] using model: {cand}")
+                return cand
+        # 설치된 첫 번째라도 사용
+        if installed:
+            first = sorted(installed)[0]
+            _ollama_model_cache.update({"name": first, "ts": now})
+            return first
+    except Exception as e:
+        _log(f"[ollama] _best_ollama_model err: {e}")
+    return "qwen2.5:3b"
 
 
 def _anthropic_key_works(k: str) -> bool:
@@ -922,7 +1160,10 @@ def _list_llm_keys(prefer: str = "auto"):
     try:
         ak = bx_read("ANTHROPIC_API_KEY")
         if ak and ak.startswith("sk-ant-"):
-            if _cached_check("anthropic:" + ak[:20], _anthropic_key_works, ak):
+            # prefer="agent" 모드: 검증 없이 직접 추가 (타임아웃 이슈 방지)
+            if prefer == "agent":
+                pool.append(("anthropic", ak))
+            elif _cached_check("anthropic:" + ak[:20], _anthropic_key_works, ak):
                 pool.append(("anthropic", ak))
     except Exception:
         pass
@@ -1002,16 +1243,17 @@ def _call_llm(provider, api_key, prompt, history):
         return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     elif provider == "ollama":
-        # Ollama qwen2.5:3b — 로컬 무료 모델
+        # Ollama 로컬 무료 모델 — 설치된 최선 선택 (qwen2.5:7b > 3b 등)
+        ollama_model = _best_ollama_model()
         msgs = [{"role": "system", "content": _SYSTEM}]
         for m in history:
             msgs.append({"role": m["role"], "content": m["content"]})
         payload = {
-            "model": "qwen2.5:3b",
+            "model": ollama_model,
             "messages": msgs,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.3, "num_predict": 400},
+            "options": {"temperature": 0.2, "num_predict": 400},
         }
         req = urllib.request.Request(
             "http://127.0.0.1:11434/api/chat",
@@ -1036,9 +1278,87 @@ def _parse_llm_json(raw: str) -> dict:
     return json.loads(raw.strip())
 
 
+def _deterministic_route(text: str) -> dict | None:
+    """LLM 부르기 전 결정론적 키워드 매칭. 작은 모델이 멍청해도 이건 정확함.
+    매칭되면 {action, params, reply} 반환, 안 되면 None."""
+    t = text.strip().lower()
+    # 취소/중단 — 가장 위험하니 먼저
+    for kw in ("취소", "그만", "멈춰", "하지마", "stop", "cancel"):
+        if kw in t:
+            # "터미널 X 멈춰" 는 terminal_stop으로 가야 함
+            if "터미널" in t or "terminal" in t:
+                m = re.search(r"(?:터미널|terminal)\s*(\d+)", t)
+                tid = m.group(1) if m else "1"
+                return {"action": "terminal_stop", "params": {"tid": tid},
+                        "reply": f"터미널 {tid} 중지할게요."}
+            return {"action": "cancel", "params": {}, "reply": "알겠어요, 취소했어요."}
+
+    # 터미널 명령
+    if "터미널" in t or "terminal" in t:
+        # 현황
+        if "현황" in t or "상태" in t or "status" in t:
+            return {"action": "terminal_status", "params": {}, "reply": "터미널 현황 확인할게요."}
+        # 새 작업: "터미널 1에서 ..." 또는 "터미널 1 ..." 형식
+        m = re.search(r"(?:터미널|terminal)\s*(\d+)\s*(?:에서|에)?\s*(.+)", text, re.IGNORECASE)
+        if m:
+            tid = m.group(1)
+            task = m.group(2).strip()
+            if task and len(task) > 3:
+                return {"action": "terminal", "params": {"tid": tid, "task": task},
+                        "reply": f"터미널 {tid}에서 시작할게요."}
+
+    # RPA — "RPA 광고 N건" 패턴
+    if "rpa" in t or "광고" in t or "craigslist" in t or "크레이그" in t:
+        m = re.search(r"(\d+)\s*건", text)
+        limit = int(m.group(1)) if m else 5
+        # 계정 추론: 사용자가 명시했으면 사용
+        account = "gray"
+        for a in ("gray", "green", "brown", "purple"):
+            if a in t:
+                account = a
+                break
+        return {"action": "rpa", "params": {"account": account, "limit": limit},
+                "reply": f"RPA 광고 {limit}건 ({account}) 실행할게요."}
+
+    # 단일 키워드 매칭
+    SIMPLE = [
+        (("현황", "상태"),                           "status",     "BRIDGE 현황 확인할게요."),
+        (("파이프라인", "큐", "queue"),              "pipeline",   "파이프라인 큐 확인."),
+        (("커밋", "git log"),                       "git",        "최근 커밋 확인."),
+        (("디비 통계", "db 통계", "db통계"),         "db",         "DB 통계 확인."),
+        (("watcher", "워처", "워치독"),              "watcher",    "Watcher 상태 확인."),
+        (("블로그 테스트", "블로그테스트"),          "blog_dry",   "블로그 테스트 시작."),
+        (("블로그 발행", "블로그 올려"),             "blog_now",   "블로그 발행."),
+        (("답방", "댓글 답방", "블로그 댓글"),       "daebang",    "댓글 확인 + 답방 시작."),
+        (("맛족도",),                                "matjokdo",   "맛족도 실행."),
+        (("이력서 변환",),                           "resume",     "이력서 변환."),
+        (("백업 목록", "백업목록", "복원"),          "restore",    "백업 목록 확인."),
+        (("신규 접수", "신규접수", "신규 후보자"),   "bridge_new", "신규 접수 확인."),
+        (("자동메일", "메일 통계", "메일통계", "메일 몇건"), "mail_stats", "자동메일 통계 확인."),
+    ]
+    for kws, action, reply in SIMPLE:
+        if any(kw in t for kw in kws):
+            return {"action": action, "params": {}, "reply": reply}
+
+    return None
+
+
 def _ask_claude(chat_id, user_text):
-    """LLM(Ollama 우선 → Anthropic → Gemini) 호출 → 의도 파악 + 실행. 모든 백엔드 실패 시에만 에러 표시."""
-    candidates = _list_llm_keys(prefer="conversation")
+    """LLM(Anthropic → Gemini → Ollama) 호출 → 의도 파악 + 실행. 모든 백엔드 실패 시에만 에러 표시.
+
+    먼저 결정론적 키워드 매칭 시도 → 매칭되면 LLM 건너뛰고 즉시 실행 (작은 Ollama 모델 보호)."""
+    # 1) 결정론적 라우팅 — 명백한 명령어는 LLM 건너뛰기
+    det = _deterministic_route(user_text)
+    if det:
+        _log(f"[det] action={det['action']} for {user_text[:50]!r}")
+        _hist_add(chat_id, "user", user_text)
+        _hist_add(chat_id, "assistant", det.get("reply", ""))
+        _dispatch_action(chat_id, det.get("action", ""), det.get("params", {}),
+                         det.get("reply", ""), provider=None, api_key=None)
+        return
+
+    # 2) LLM 폴백
+    candidates = _list_llm_keys(prefer="agent")
 
     if not candidates:
         send(chat_id, "AI 백엔드 모두 다운(키 무효+Ollama 불가). 버튼 메뉴를 사용하세요.",
@@ -1078,9 +1398,45 @@ def _ask_claude(chat_id, user_text):
     params = parsed.get("params") or {}
     reply  = parsed.get("reply", "")
 
-    _hist_add(chat_id, "assistant", reply)
+    # ── 안전장치: 작은 모델(qwen2.5:3b 등)이 키워드 없는데 임의로 action 선택하는 것 차단 ──
+    # 사용자 메시지에 해당 action의 키워드가 실제로 있는지 검증
+    _ACTION_KEYWORDS = {
+        "cancel":          ["취소", "멈춰", "그만", "stop", "cancel", "하지마"],
+        "status":          ["현황", "상태", "status"],
+        "pipeline":        ["파이프라인", "큐", "queue", "pipeline"],
+        "git":             ["커밋", "git"],
+        "db":              ["DB", "디비", "통계", "데이터베이스"],
+        "watcher":         ["watcher", "워처", "워치독", "watchdog"],
+        "rpa":             ["RPA", "광고", "Craigslist", "크레이그", "포스팅", "게시"],
+        "blog_dry":        ["블로그 테스트", "블로그테스트", "blog dry", "dry"],
+        "blog_now":        ["블로그 발행", "블로그발행", "블로그 올려", "블로그 작성"],
+        "daebang":         ["답방", "댓글"],
+        "matjokdo":        ["맛족도"],
+        "resume":          ["이력서"],
+        "restore":         ["복원", "백업"],
+        "bridge_new":      ["신규", "접수", "새로", "오늘", "이번주"],
+        "mail_stats":      ["메일", "발송", "자동메일"],
+        "terminal":        ["터미널", "terminal", "에이전트", "agent"],
+        "terminal_stop":   ["터미널", "terminal", "에이전트"],
+        "terminal_status": ["터미널", "terminal", "에이전트"],
+    }
+    if action and action != "null":
+        kws = _ACTION_KEYWORDS.get(action, [])
+        text_lower = user_text.lower()
+        if kws and not any(kw.lower() in text_lower for kw in kws):
+            _log(f"[guard] action={action} dropped — no keyword in user_text={user_text[:50]!r}")
+            # 키워드 없이 action 선택 → 안전하게 null로 강제
+            action = ""
+            if not reply or len(reply) < 5:
+                reply = "어떤 작업 말씀이세요? 구체적으로 알려주세요. (예: RPA 광고 10건, 블로그 답방, 신규 접수 확인)"
 
-    # ── 액션 분기 ──────────────────────────────────────────────
+    _hist_add(chat_id, "assistant", reply)
+    _dispatch_action(chat_id, action, params, reply, provider, api_key)
+
+
+def _dispatch_action(chat_id, action: str, params: dict, reply: str,
+                     provider: str | None, api_key: str | None):
+    """액션 분기 (deterministic/LLM 양쪽에서 사용)."""
     if action == "cancel":
         clear_state(chat_id)
         send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
@@ -1088,6 +1444,16 @@ def _ask_claude(chat_id, user_text):
 
     if action == "restore":
         _do_restore_list(chat_id, reply)
+        return
+
+    if action == "bridge_new":
+        send(chat_id, reply)
+        _quick_bridge_new(chat_id)
+        return
+
+    if action == "mail_stats":
+        send(chat_id, reply)
+        _quick_mail_stats(chat_id)
         return
 
     if action in ("status", "pipeline", "git", "db", "watcher"):
@@ -1100,6 +1466,11 @@ def _ask_claude(chat_id, user_text):
         limit   = int(params.get("limit", 5))
         send(chat_id, reply)
         _run_rpa_direct(chat_id, account, limit)
+        return
+
+    if action == "daebang":
+        send(chat_id, reply)
+        threading.Thread(target=_run_daebang, args=(chat_id,), daemon=True).start()
         return
 
     if action == "blog_dry":
@@ -1152,7 +1523,13 @@ def _ask_claude(chat_id, user_text):
             send(chat_id, "어떤 작업을 할까요?")
         else:
             send(chat_id, reply)
-            _launch_terminal(chat_id, tid, task, provider, api_key, workdir)
+            # provider/key 없으면 agent용 키 자동 선택 (deterministic 경로)
+            if not provider or provider == "ollama":
+                cands = _list_llm_keys(prefer="agent")
+                if cands:
+                    provider, api_key = cands[0]
+            _launch_terminal(chat_id, tid, task, provider or "ollama",
+                             api_key, workdir)
         return
 
     if action == "terminal_stop":
@@ -1642,7 +2019,7 @@ class AgentTerminal:
                             msgs.append({"role": "user", "content": block.get("text", "")})
 
         payload = {
-            "model":    "qwen2.5:3b",
+            "model":    _best_ollama_model(),
             "messages": msgs,
             "tools":    tools,
             "stream":   False,
