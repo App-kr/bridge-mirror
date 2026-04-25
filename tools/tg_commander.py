@@ -1550,24 +1550,33 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
 
 
 def _run_rpa_direct(chat_id, account, limit):
-    """msg_id 없이 RPA 실행 (대화 흐름용)."""
-    send(chat_id, f"[RPA 실행 중] 계정: {account} | {limit}건")
-    cmd = [PYTHON, "-X", "utf8",
-           str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
-           "--headless", "--account", account, "--limit", str(limit)]
-    try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=180, cwd=str(PROJECT_ROOT),
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-        out  = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
-        icon = "[완료]" if proc.returncode == 0 else "[경고]"
-        send(chat_id, f"{icon} {out}", markup=keyboard([btn("메인 메뉴", "menu")]))
-    except subprocess.TimeoutExpired:
-        send(chat_id, "[타임아웃] 180초 초과", markup=keyboard([btn("메인 메뉴", "menu")]))
-    except Exception as e:
-        send(chat_id, f"[오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+    """RPA 실행을 백그라운드 스레드로 — 봇 폴링 차단 방지."""
+    send(chat_id, f"[RPA 실행 중] 계정: {account} | {limit}건 — 완료까지 최대 10분")
+
+    def _rpa_worker():
+        cmd = [PYTHON, "-X", "utf8",
+               str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
+               "--headless", "--account", account, "--limit", str(limit)]
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=600, cwd=str(PROJECT_ROOT),
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            out  = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
+            icon = "[완료]" if proc.returncode == 0 else "[경고]"
+            send(chat_id, f"{icon} RPA {limit}건 ({account})\n{out}",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[rpa] done account={account} limit={limit} rc={proc.returncode}")
+        except subprocess.TimeoutExpired:
+            send(chat_id, "[타임아웃] 10분 초과 — RPA 강제 종료",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[rpa] TIMEOUT account={account} limit={limit}")
+        except Exception as e:
+            send(chat_id, f"[오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[rpa] ERR account={account} limit={limit}: {e}")
+
+    threading.Thread(target=_rpa_worker, daemon=True).start()
 
 
 def _do_restore_list(chat_id, reply):
