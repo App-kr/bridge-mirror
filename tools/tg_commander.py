@@ -1506,7 +1506,9 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
         return
 
     if action == "resume":
-        cid = str(params.get("candidate_id", "")).strip()
+        # params 키 호환: candidate_id / id / cid
+        cid_raw = params.get("candidate_id") or params.get("id") or params.get("cid") or ""
+        cid = str(cid_raw).strip()
         if cid.isdigit():
             send(chat_id, reply)
             run_resume(chat_id, cid)
