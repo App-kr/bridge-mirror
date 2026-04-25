@@ -795,6 +795,37 @@ def _hist_add(chat_id, role, content):
         _conv_history[chat_id] = h[-(_MAX_HIST * 2):]
 
 
+def _ollama_works() -> bool:
+    """Ollama 로컬 서버 동작 확인."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def _anthropic_key_works(k: str) -> bool:
+    """Anthropic 키 유효성 빠른 확인 (timeout=5s)."""
+    try:
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps({
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 5,
+                "messages": [{"role": "user", "content": "hi"}],
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": k,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def _gemini_key_works(k: str) -> bool:
     """Gemini 키 유효성 빠른 확인 (timeout=5s)."""
     try:
@@ -811,41 +842,126 @@ def _gemini_key_works(k: str) -> bool:
         return False
 
 
-def _get_llm_key():
-    """사용 가능한 LLM API 키 반환. (provider, key) 튜플.
-    우선순위: Anthropic sk-ant → GOOGLE_API_KEY → GEMINI_KEYS_JSON 순환
+# 키 검증 결과 캐시 (provider → (works, ts))
+_key_cache: dict = {}
+_KEY_CACHE_TTL = 300.0   # 5분
+
+
+def _cached_check(name: str, fn, *args) -> bool:
+    """키 검증 결과 캐싱 (5분)."""
+    now = time.time()
+    cached = _key_cache.get(name)
+    if cached and now - cached[1] < _KEY_CACHE_TTL:
+        return cached[0]
+    ok = fn(*args)
+    _key_cache[name] = (ok, now)
+    return ok
+
+
+def _get_llm_key(prefer: str = "auto"):
+    """사용 가능한 LLM 반환. (provider, key_or_None) 튜플.
+
+    prefer="conversation": Ollama 우선 (빠름, 무료, 로컬)
+    prefer="agent": Anthropic → Gemini → Ollama (도구사용 강력순)
+    prefer="auto" (default): conversation과 동일
     """
+    candidates = []
+
     # 1. Anthropic
     try:
-        k = bx_read("ANTHROPIC_API_KEY")
-        if k and k.startswith("sk-ant-"):
-            return ("anthropic", k)
+        ak = bx_read("ANTHROPIC_API_KEY")
+        if ak and ak.startswith("sk-ant-"):
+            if _cached_check("anthropic:" + ak[:20], _anthropic_key_works, ak):
+                candidates.append(("anthropic", ak))
     except Exception:
         pass
 
-    # 2. GOOGLE_API_KEY (bx set GOOGLE_API_KEY 로 등록한 신규 키)
+    # 2. GOOGLE_API_KEY
     try:
-        k = bx_read("GOOGLE_API_KEY")
-        if k and k.startswith("AIza"):
-            return ("gemini", k)
+        gk = bx_read("GOOGLE_API_KEY")
+        if gk and gk.startswith("AIza"):
+            if _cached_check("gemini:" + gk[:20], _gemini_key_works, gk):
+                candidates.append(("gemini", gk))
     except Exception:
         pass
 
-    # 3. GEMINI_KEYS_JSON 목록에서 유효한 것 탐색
+    # 3. GEMINI_KEYS_JSON
     try:
         from bx import get_gemini_keys
         for entry in get_gemini_keys():
-            k = entry.get("key", "")
-            if k and k.startswith("AIza") and _gemini_key_works(k):
-                return ("gemini", k)
+            gk = entry.get("key", "")
+            if gk and gk.startswith("AIza"):
+                if _cached_check("gemini:" + gk[:20], _gemini_key_works, gk):
+                    candidates.append(("gemini", gk))
     except Exception:
         pass
 
-    return (None, None)
+    # 4. Ollama (항상 시도)
+    if _cached_check("ollama", _ollama_works):
+        candidates.append(("ollama", None))
+
+    if not candidates:
+        return (None, None)
+
+    # 우선순위 적용
+    if prefer == "agent":
+        order = ["anthropic", "gemini", "ollama"]
+    else:
+        order = ["ollama", "anthropic", "gemini"]
+    candidates.sort(key=lambda c: order.index(c[0]) if c[0] in order else 99)
+    return candidates[0]
+
+
+def _list_llm_keys(prefer: str = "auto"):
+    """폴백용 — 사용 가능한 모든 (provider, key) 리스트 반환."""
+    seen = set()
+    out = []
+
+    # 모든 후보 수집
+    pool = []
+    try:
+        ak = bx_read("ANTHROPIC_API_KEY")
+        if ak and ak.startswith("sk-ant-"):
+            if _cached_check("anthropic:" + ak[:20], _anthropic_key_works, ak):
+                pool.append(("anthropic", ak))
+    except Exception:
+        pass
+    try:
+        gk = bx_read("GOOGLE_API_KEY")
+        if gk and gk.startswith("AIza"):
+            if _cached_check("gemini:" + gk[:20], _gemini_key_works, gk):
+                pool.append(("gemini", gk))
+    except Exception:
+        pass
+    try:
+        from bx import get_gemini_keys
+        for entry in get_gemini_keys():
+            gk = entry.get("key", "")
+            if gk and gk.startswith("AIza"):
+                if _cached_check("gemini:" + gk[:20], _gemini_key_works, gk):
+                    pool.append(("gemini", gk))
+    except Exception:
+        pass
+    if _cached_check("ollama", _ollama_works):
+        pool.append(("ollama", None))
+
+    if prefer == "agent":
+        order = ["anthropic", "gemini", "ollama"]
+    else:
+        order = ["ollama", "anthropic", "gemini"]
+    pool.sort(key=lambda c: order.index(c[0]) if c[0] in order else 99)
+
+    for prov, key in pool:
+        ident = (prov, key[:20] if key else "")
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append((prov, key))
+    return out
 
 
 def _call_llm(provider, api_key, prompt, history):
-    """provider에 따라 Anthropic 또는 Gemini API 호출. 텍스트 반환."""
+    """provider에 따라 LLM API 호출. 텍스트 반환."""
     if provider == "anthropic":
         payload = {
             "model": "claude-haiku-4-5-20251001",
@@ -867,13 +983,10 @@ def _call_llm(provider, api_key, prompt, history):
         return resp["content"][0]["text"].strip()
 
     elif provider == "gemini":
-        # Gemini Flash (무료)
-        # system + history를 하나의 프롬프트로 합침
         turns = []
         for m in history:
             role = "user" if m["role"] == "user" else "model"
             turns.append({"role": role, "parts": [{"text": m["content"]}]})
-        # system을 첫 user 턴에 주입
         if turns and turns[0]["role"] == "user":
             turns[0]["parts"][0]["text"] = _SYSTEM + "\n\n" + turns[0]["parts"][0]["text"]
         payload = {"contents": turns, "generationConfig": {"maxOutputTokens": 400}}
@@ -887,6 +1000,27 @@ def _call_llm(provider, api_key, prompt, history):
         with urllib.request.urlopen(req, timeout=25) as r:
             resp = json.loads(r.read())
         return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    elif provider == "ollama":
+        # Ollama qwen2.5:3b — 로컬 무료 모델
+        msgs = [{"role": "system", "content": _SYSTEM}]
+        for m in history:
+            msgs.append({"role": m["role"], "content": m["content"]})
+        payload = {
+            "model": "qwen2.5:3b",
+            "messages": msgs,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.3, "num_predict": 400},
+        }
+        req = urllib.request.Request(
+            "http://127.0.0.1:11434/api/chat",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            resp = json.loads(r.read())
+        return resp.get("message", {}).get("content", "").strip()
 
     raise ValueError(f"unknown provider: {provider}")
 
@@ -903,23 +1037,42 @@ def _parse_llm_json(raw: str) -> dict:
 
 
 def _ask_claude(chat_id, user_text):
-    """LLM(Anthropic 또는 Gemini) 호출 → 의도 파악 + 실행."""
-    provider, api_key = _get_llm_key()
+    """LLM(Ollama 우선 → Anthropic → Gemini) 호출 → 의도 파악 + 실행. 모든 백엔드 실패 시에만 에러 표시."""
+    candidates = _list_llm_keys(prefer="conversation")
 
-    if not provider:
-        send(chat_id, "AI 키 없음. 버튼 메뉴를 사용하세요.",
+    if not candidates:
+        send(chat_id, "AI 백엔드 모두 다운(키 무효+Ollama 불가). 버튼 메뉴를 사용하세요.",
              markup=keyboard([btn("메인 메뉴", "menu")]))
         return
 
     _hist_add(chat_id, "user", user_text)
 
-    try:
-        raw = _call_llm(provider, api_key, user_text, _conv_history[chat_id][:])
-        parsed = _parse_llm_json(raw)
-    except Exception as e:
-        send(chat_id, f"AI 오류: {e}\n\n메뉴를 사용하세요.",
+    raw = None
+    last_err = None
+    used_provider, used_key = None, None
+    for prov, key in candidates:
+        try:
+            raw = _call_llm(prov, key, user_text, _conv_history[chat_id][:])
+            used_provider, used_key = prov, key
+            _log(f"[llm] OK provider={prov}")
+            break
+        except Exception as e:
+            last_err = f"{prov}: {str(e)[:120]}"
+            _log(f"[llm] FAIL {prov}: {str(e)[:120]}")
+            continue
+
+    if raw is None:
+        send(chat_id, f"AI 모든 백엔드 실패: {last_err}\n\n메뉴를 사용하세요.",
              markup=keyboard([btn("메인 메뉴", "menu")]))
         return
+
+    try:
+        parsed = _parse_llm_json(raw)
+    except Exception as e:
+        # JSON 파싱 실패 → 그냥 raw 텍스트를 답변으로
+        parsed = {"action": "", "params": {}, "reply": raw[:1500]}
+
+    provider, api_key = used_provider, used_key
 
     action = (parsed.get("action") or "").strip()
     params = parsed.get("params") or {}
@@ -1307,14 +1460,32 @@ class AgentTerminal:
             self.status = "done"
 
     def _call_api(self) -> dict | None:
-        try:
-            if self.provider == "anthropic":
-                return self._call_anthropic()
-            else:
-                return self._call_gemini()
-        except Exception as e:
-            self._send(f"API 오류: {e}")
-            return None
+        """현재 provider 시도 → 실패 시 다른 provider로 폴백 (agent: anthropic > gemini > ollama)."""
+        # 매 호출마다 최신 가용 백엔드 목록 — 키 만료/할당량 변동 대응
+        candidates = _list_llm_keys(prefer="agent")
+        # 현재 self.provider를 우선
+        ordered = [(self.provider, self.api_key)]
+        for prov, key in candidates:
+            if (prov, key) not in ordered:
+                ordered.append((prov, key))
+
+        last_err = None
+        for prov, key in ordered:
+            try:
+                self.provider = prov
+                self.api_key  = key
+                if prov == "anthropic":
+                    return self._call_anthropic()
+                if prov == "gemini":
+                    return self._call_gemini()
+                if prov == "ollama":
+                    return self._call_ollama()
+            except Exception as e:
+                last_err = f"{prov}: {str(e)[:120]}"
+                _log(f"[agent T{self.tid}] {prov} fail: {str(e)[:120]}")
+                continue
+        self._send(f"API 모든 백엔드 실패: {last_err}")
+        return None
 
     def _call_anthropic(self) -> dict:
         payload = {
@@ -1415,6 +1586,103 @@ class AgentTerminal:
 
         return {
             "stop_reason": "tool_use" if has_fn else "end_turn",
+            "content":     content_blocks,
+        }
+
+    def _call_ollama(self) -> dict:
+        """Ollama qwen2.5:3b function calling → Anthropic 형식으로 정규화."""
+        # Ollama tools 선언 (OpenAI 형식)
+        tools = []
+        for t in _AGENT_TOOLS:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name":        t["name"],
+                    "description": t["description"],
+                    "parameters":  t["input_schema"],
+                },
+            })
+
+        # messages → Ollama chat 형식
+        msgs = [{"role": "system", "content": _AGENT_SYS}]
+        for m in self.messages:
+            if isinstance(m["content"], str):
+                msgs.append({"role": m["role"], "content": m["content"]})
+            elif isinstance(m["content"], list):
+                # tool_use / tool_result 블록 변환
+                if m["role"] == "assistant":
+                    text_parts = []
+                    tool_calls = []
+                    for block in m["content"]:
+                        if block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                        elif block.get("type") == "tool_use":
+                            tool_calls.append({
+                                "id":   block.get("id", ""),
+                                "type": "function",
+                                "function": {
+                                    "name":      block["name"],
+                                    "arguments": block.get("input", {}),
+                                },
+                            })
+                    a_msg = {"role": "assistant", "content": "\n".join(text_parts)}
+                    if tool_calls:
+                        a_msg["tool_calls"] = tool_calls
+                    msgs.append(a_msg)
+                else:
+                    # user role with tool_result blocks
+                    for block in m["content"]:
+                        if block.get("type") == "tool_result":
+                            msgs.append({
+                                "role":         "tool",
+                                "content":      block.get("content", ""),
+                                "tool_call_id": block.get("tool_use_id", ""),
+                            })
+                        elif block.get("type") == "text":
+                            msgs.append({"role": "user", "content": block.get("text", "")})
+
+        payload = {
+            "model":    "qwen2.5:3b",
+            "messages": msgs,
+            "tools":    tools,
+            "stream":   False,
+            "options":  {"temperature": 0.2, "num_predict": 1024},
+        }
+        req = urllib.request.Request(
+            "http://127.0.0.1:11434/api/chat",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=120) as r:
+            raw = json.loads(r.read())
+
+        msg = raw.get("message", {})
+        text = (msg.get("content") or "").strip()
+        tool_calls = msg.get("tool_calls") or []
+
+        content_blocks = []
+        if text:
+            content_blocks.append({"type": "text", "text": text})
+        has_tool = False
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            args = fn.get("arguments", {})
+            # Ollama는 args를 dict 또는 str로 줌
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {"_raw": args}
+            has_tool = True
+            content_blocks.append({
+                "type":  "tool_use",
+                "id":    tc.get("id") or f"call_{fn.get('name','tool')}_{int(time.time()*1000)}",
+                "name":  fn.get("name", ""),
+                "input": args,
+            })
+
+        return {
+            "stop_reason": "tool_use" if has_tool else "end_turn",
             "content":     content_blocks,
         }
 
