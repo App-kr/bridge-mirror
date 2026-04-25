@@ -40,6 +40,20 @@ API_BASE = f"https://api.telegram.org/bot{TOKEN}"
 
 offset_file   = PROJECT_ROOT / ".claude" / "tg_offset.txt"
 GATE_IPC_FILE = PROJECT_ROOT / ".claude" / "tg_gate_response.json"
+_LOG_PATH     = PROJECT_ROOT / "logs" / "tg_commander.log"
+_START_TIME   = time.time()
+
+
+def _log(msg: str):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(line, flush=True)
+    try:
+        _LOG_PATH.parent.mkdir(exist_ok=True)
+        with open(str(_LOG_PATH), "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 # -- 상태 머신 -----------------------------------------------------------------
@@ -99,8 +113,17 @@ def tg_post(method, data):
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = {"ok": False}
+        try:
+            body.update(json.loads(e.read()))
+        except Exception:
+            pass
+        if method not in ("answerCallbackQuery",):
+            _log(f"[tg] POST {method} HTTP {e.code}: {body.get('description','')[:120]}")
+        return body
     except Exception as e:
-        print(f"[tg] POST {method} 실패: {e}")
+        _log(f"[tg] POST {method} 실패: {e}")
         return {}
 
 
@@ -114,11 +137,17 @@ def send(chat_id, text, parse_mode="HTML", markup=None):
 
 
 def edit_msg(chat_id, message_id, text, markup=None, parse_mode="HTML"):
+    if not message_id:
+        send(chat_id, text, markup=markup, parse_mode=parse_mode)
+        return
     body = {"chat_id": chat_id, "message_id": message_id,
             "text": text[:4000], "parse_mode": parse_mode}
     if markup:
         body["reply_markup"] = markup
-    tg_post("editMessageText", body)
+    r = tg_post("editMessageText", body)
+    if not r.get("ok"):
+        # edit 실패(메시지 오래됨 등) → 새 메시지로 폴백
+        send(chat_id, text, markup=markup, parse_mode=parse_mode)
 
 
 def answer_cb(cb_id, text=""):
@@ -557,6 +586,7 @@ def write_gate_response(answer):
 # -- 콜백 라우터 ---------------------------------------------------------------
 
 def route_callback(chat_id, cb_id, data, msg_id):
+    _log(f"[cb] chat={chat_id} data={data} msg={msg_id}")
     answer_cb(cb_id)
 
     if data == "menu":
@@ -669,6 +699,12 @@ def handle_text(chat_id, text):
 
     if lower in ("/start", "/help", "/menu", "메뉴", "menu"):
         show_main_menu(chat_id)
+        return
+
+    if lower in ("/ping", "ping", "핑"):
+        uptime = int(time.time() - _START_TIME)
+        send(chat_id, f"[pong] 봇 살아있음\nuptime={uptime}s\npid={os.getpid()}",
+             markup=keyboard([btn("메인 메뉴", "menu")]))
         return
 
     _LEGACY = {
@@ -1611,7 +1647,7 @@ def handle_update(update):
     if not text:
         return
 
-    print(f"[tg] 수신: chat_id={chat_id} text={text[:60]}")
+    _log(f"[msg] chat={chat_id} text={text[:60]}")
     handle_text(chat_id, text)
 
 
@@ -1672,7 +1708,7 @@ def _release_lock():
 
 def main():
     _acquire_lock()
-    print(f"[tg_commander v2] 시작 -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    _log(f"[tg_commander v2] 시작 -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}")
     broadcast(
         "BRIDGE Commander v2 시작\n"
         "========================\n"
@@ -1699,11 +1735,11 @@ def main():
                 offset = uid + 1
                 save_offset(offset)
         except KeyboardInterrupt:
-            print("\n[tg_commander] 종료")
+            _log("[tg_commander] 종료")
             _release_lock()
             break
         except Exception as e:
-            print(f"[tg_commander] 루프 에러: {e}")
+            _log(f"[tg_commander] 루프 에러: {e}")
             time.sleep(5)
 
 
