@@ -71,13 +71,25 @@ Q:\Claudework\bridge base\scripts\register_daily_backup.bat
 ```
 확인: `Q:/Claudework/bridge base/master.db.enc` 갱신 + `logs/daily_backup/YYYYMMDD.log`
 
-### 4-3. GitHub Actions 활성화
-GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret:
-- `BRIDGE_ADMIN_KEY` — Render `/api/admin/db/dump` 호출 키
-- `BRIDGE_FIELD_KEY` — AES 암호화 키 (db_backup_enc.py와 동일)
-- `RENDER_API_URL` — (선택) 기본값 `https://bridge-n7hk.onrender.com`
+### 4-3. GitHub Actions 활성화 — ⚠ 사용자 수동 업로드 필요
 
-확인: Actions 탭 → "Weekly Encrypted DB Backup" → Run workflow (수동 1회)
+**왜 수동인가**: 현재 PAT(.git remote 인증)는 `workflow` scope 가 없어 pre-commit
+hook이 `.github/` 파일을 자동 unstage 합니다. 워크플로우 파일은 직접 GitHub 웹에서
+업로드해야 합니다.
+
+**파일 위치 (로컬 미커밋 상태로 존재)**: `.github/workflows/weekly-encrypted-backup.yml`
+
+**업로드 방법**:
+1. GitHub 저장소 → Code → "Add file" → "Upload files"
+2. 위 파일을 `.github/workflows/` 경로로 드래그
+3. Commit message: "ci: weekly encrypted DB backup workflow"
+4. Settings → Secrets and variables → Actions → New repository secret:
+   - `BRIDGE_ADMIN_KEY` — Render `/api/admin/db/dump` 호출 키
+   - `BRIDGE_FIELD_KEY` — AES 암호화 키 (db_backup_enc.py와 동일)
+   - `RENDER_API_URL` — (선택) 기본값 `https://bridge-n7hk.onrender.com`
+5. Actions 탭 → "Weekly Encrypted DB Backup" → Run workflow (수동 1회 검증)
+
+**대안**: PAT 재발급 시 `workflow` scope 추가 → 이후 자동 push 가능.
 
 ### 4-4. Render Cold Start 차단 (cron-job.org)
 `docs/cron_job_org_setup.md` 참조 — 5분 작업.
