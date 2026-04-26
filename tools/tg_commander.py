@@ -2532,19 +2532,32 @@ def main():
     _conflict_close_count = 0   # 409 누적 → 다시 close() 호출 트리거
     while True:
         try:
-            resp = tg_get("getUpdates", {"offset": offset, "timeout": 30, "limit": 20})
+            # 짧은 long-poll(8초) — 외부 다른 poller와 빈번히 경쟁할 때 더 자주 재시도해서 우리가 잡는 확률↑
+            resp = tg_get("getUpdates", {"offset": offset, "timeout": 8, "limit": 20})
             if "error_code" in resp and resp.get("error_code") == 409:
-                _conflict_backoff = min(_conflict_backoff + 1, 4)
+                # 짧은 백오프 (1~5초) — 빨리 재시도해야 외부 poller 사이 틈 잡음
+                _conflict_backoff = min(_conflict_backoff + 1, 5)
                 _conflict_close_count += 1
-                wait = 15 * _conflict_backoff
-                _log(f"[tg] 409 Conflict — {wait}초 대기 (누적 {_conflict_close_count}회)")
-                # 409가 3회 연속이면 close() 다시 호출 — 다른 poller 강제 종료
-                if _conflict_close_count >= 3:
-                    _log("[tg] 409 3회 — close() 재호출")
-                    try: tg_post("close", {})
-                    except Exception: pass
+                wait = _conflict_backoff   # 1, 2, 3, 4, 5 초
+                _log(f"[tg] 409 Conflict — {wait}초 (누적 {_conflict_close_count}회)")
+                # 409가 5회 누적되면 close() 호출 — 외부 poller 강제 종료
+                if _conflict_close_count >= 5:
+                    _log("[tg] 409 5회 누적 — close() 호출")
+                    try:
+                        cr = tg_post("close", {})
+                        if not cr.get("ok"):
+                            # rate-limited면 setWebhook 트릭 시도
+                            _log("[tg] close() rate-limited → setWebhook 트릭")
+                            try:
+                                tg_post("setWebhook", {"url": "https://httpbin.org/post"})
+                                time.sleep(3)
+                                tg_post("deleteWebhook", {})
+                            except Exception as e:
+                                _log(f"[tg] webhook trick err: {e}")
+                    except Exception as e:
+                        _log(f"[tg] close err: {e}")
                     _conflict_close_count = 0
-                    time.sleep(12)
+                    time.sleep(2)
                 else:
                     time.sleep(wait)
                 continue

@@ -541,6 +541,13 @@ async def _startup_event():
         _ensure_pipeline_tables()
     except Exception as e:
         print(f"[STARTUP] _ensure_pipeline_tables 실패: {e}", flush=True)
+    # Gmail 자동 동기화 루프 시작 (GMAIL_SYNC_ENABLED=true 일 때만)
+    try:
+        from gmail_collector import start_auto_sync
+        start_auto_sync()
+        print("[STARTUP] Gmail 자동 동기화 루프 시작됨", flush=True)
+    except Exception as e:
+        print(f"[STARTUP] Gmail 자동 동기화 시작 실패: {e}", flush=True)
 
 # ── 글로벌 HTTPException 핸들러 -- 모든 에러를 구조화된 JSON으로 자동 변환 ───
 # 기존 raise HTTPException(400, "msg") → {isError, errorCategory, isRetryable, context}

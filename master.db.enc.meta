@@ -1,0 +1,7 @@
+{
+  "created": "2026-04-26T12:30:57.058080",
+  "db_size": 13279232,
+  "enc_size": 13279313,
+  "sha256_hex": "d93210ca8fc9ef48177b646b576860ec1d172fbf7c6ea25cc885d3d01d040fc2",
+  "format": "BRGE-v1-AES256GCM-PBKDF2-600k"
+}

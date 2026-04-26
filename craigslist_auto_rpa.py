@@ -655,12 +655,18 @@ def _start_to_label(start: str) -> tuple[str, str]:
         if key in s: return (name, f"{name} Start")
     return ("Negotiable","Negotiable Start")
 
-def _build_title(city_raw: str, age_raw: str, start_raw: str, cycle: int = 0) -> str:
+def _build_title(city_raw: str, age_raw: str, start_raw: str, cycle: int = 0,
+                 job_code: str = "") -> str:
     """접두어 다양화 + {CITY}, ... 형식 제목 생성. 67~72자 맞춤.
     cycle: 게시 횟수 (동일 job이 재게시될 때마다 다른 opener 선택)
+    job_code: 잡코드 — 같은 city/age/start 라도 잡마다 고유 제목 강제 (중복 방지 핵심)
     """
     import hashlib as _h
-    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}{cycle}".encode(), usedforsecurity=False).hexdigest(), 16)
+    # job_code 포함 → 다른 잡코드는 무조건 다른 제목
+    seed = int(_h.md5(
+        f"{city_raw}|{age_raw}|{start_raw}|{cycle}|{job_code}".encode(),
+        usedforsecurity=False
+    ).hexdigest(), 16)
 
     city_up = _CITY_UPPER.get(city_raw, city_raw.upper())
     level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"

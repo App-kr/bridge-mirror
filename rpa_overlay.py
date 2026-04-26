@@ -8,6 +8,7 @@ Pill 프로그레스 바. 상태 블링크.
 
 import json
 import math
+import sys
 import threading
 import tkinter as tk
 import traceback
@@ -322,8 +323,12 @@ class RPAOverlay:
     @staticmethod
     def _play_complete_sound():
         try:
-            for freq, dur in [(523, 120), (659, 120), (784, 120), (1047, 200)]:
-                winsound.Beep(freq, dur)
+            wav = Path(__file__).resolve().parent / "archive" / "test-sweep.wav"
+            if wav.exists():
+                winsound.PlaySound(str(wav), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                for freq, dur in [(523, 120), (659, 120), (784, 120), (1047, 200)]:
+                    winsound.Beep(freq, dur)
         except Exception:
             pass
 
@@ -422,6 +427,31 @@ class RPAOverlay:
         xb.bind("<Enter>", lambda e: xb.configure(fg=self.TEXT1))
         xb.bind("<Leave>", lambda e: xb.configure(fg=self.X_GRAY))
         xb.bind("<Button-1>", lambda e: self._dismiss_and_remind())
+
+        # ── 툴바: 투명도 슬라이더 (header 아래 별도 행) ──────────
+        toolbar = tk.Frame(header, bg=CC)
+        toolbar.pack(fill="x", pady=(0, 2))
+
+        tk.Label(toolbar, text="투명도", font=self._fn(9),
+                 bg=CC, fg=self.TEXT2).pack(side="left", padx=(12, 4))
+
+        _alpha_var = tk.DoubleVar(value=_load_prefs().get("alpha", 1.0))
+        root.attributes("-alpha", _alpha_var.get())
+
+        def _on_alpha(val):
+            try:
+                root.attributes("-alpha", float(val))
+                p = _load_prefs(); p["alpha"] = float(val); _save_prefs(p)
+            except Exception:
+                pass
+
+        alpha_sl = tk.Scale(toolbar, from_=0.3, to=1.0, resolution=0.05,
+                            orient="horizontal", variable=_alpha_var,
+                            command=_on_alpha, length=90,
+                            bg=CC, fg=self.TEXT2, highlightthickness=0,
+                            sliderrelief="flat", bd=0,
+                            troughcolor=self.BAR_BG, showvalue=False)
+        alpha_sl.pack(side="left")
 
         # 스피너(32px) + 타이틀 + 계정명 — 2026 style
         bot_row = tk.Frame(header, bg=CC)
@@ -578,6 +608,29 @@ class RPAOverlay:
         self._start_status_blink(root)
         self._start_pulse_bar(root)
         self._start_bear_anim(root)
+
+        # 크기 조정 그립 (우하단) — 더 눈에 잘 띄게
+        grip_row = tk.Frame(card, bg=self.BG, height=18)
+        grip_row.pack(fill="x", side="bottom")
+        grip_row.pack_propagate(False)
+        grip = tk.Canvas(grip_row, width=18, height=18, bg=self.BG,
+                         highlightthickness=0, cursor="size_nw_se")
+        # 대각선 점선 3개 (grip 느낌)
+        for offset in (6, 10, 14):
+            grip.create_line(offset, 17, 17, offset, fill=self.TEXT2, width=2)
+        grip.pack(side="right", padx=2, pady=1)
+
+        def _grip_press(e):
+            root._rx, root._ry = e.x_root, e.y_root
+            root._rw, root._rh = root.winfo_width(), root.winfo_height()
+
+        def _grip_move(e):
+            nw = max(260, root._rw + e.x_root - root._rx)
+            nh = max(180, root._rh + e.y_root - root._ry)
+            root.geometry(f"{nw}x{nh}+{root.winfo_x()}+{root.winfo_y()}")
+
+        grip.bind("<ButtonPress-1>", _grip_press)
+        grip.bind("<B1-Motion>",     _grip_move)
 
         self._drag(root, header, bar, bot_row, spin_c, info_col, warn_row, warn_icon, warn_lbl)
         _log_overlay("_build_working: ready.set() 직전 — UI 완성")
@@ -1115,7 +1168,7 @@ class RPAOverlay:
         except Exception:
             pass
         root.overrideredirect(True)
-        root.attributes("-topmost", True)
+        root.attributes("-topmost", False)   # 포커스 강탈 없이 뒤에서 뜸
         root.configure(bg=_SEP)
 
         w, h = 380, 360
@@ -1147,6 +1200,20 @@ class RPAOverlay:
             except Exception:
                 pass
 
+        # 완료창 — 뒤에서 표시 (현재 포그라운드 창 뒤로)
+        def _place_behind():
+            try:
+                import ctypes as _ct
+                HWND_BOTTOM  = 1
+                SWP_NOMOVE   = 0x0002
+                SWP_NOSIZE   = 0x0001
+                SWP_NOACTIVATE = 0x0010
+                _ct.windll.user32.SetWindowPos(
+                    root.winfo_id(), HWND_BOTTOM, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            except Exception:
+                pass
+
         # fade-in 애니메이션
         def _fade(a=0.0):
             if not root.winfo_exists():
@@ -1156,9 +1223,8 @@ class RPAOverlay:
                 root.after(16, lambda: _fade(round(a + 0.08, 2)))
             else:
                 root.attributes("-alpha", 1.0)
-                root.after(2000, lambda: root.attributes("-topmost", False)
-                           if root.winfo_exists() else None)
         root.after(10, _fade)
+        root.after(50, _place_behind)
 
         # ── 상단 바 (X 버튼) ──────────────────────────────────
         bar = tk.Frame(card, bg=_CARD, height=32)
@@ -1277,14 +1343,39 @@ class RPAOverlay:
         # ── 구분선 ─────────────────────────────────────────────
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")
 
-        # ── 종료하기 버튼 ──────────────────────────────────────
-        exit_btn = tk.Label(card, text="종료하기",
-                            font=self._fn(13, "bold"),
+        # ── 작업 종료하기 | 추가 작업하기 ──────────────────────
+        action_row = tk.Frame(card, bg=_CARD)
+        action_row.pack(fill="x")
+
+        exit_btn = tk.Label(action_row, text="작업 종료하기",
+                            font=self._fn(12, "bold"),
                             bg=_CARD, fg=_RED, cursor="hand2", pady=11)
-        exit_btn.pack(fill="x")
+        exit_btn.pack(side="left", expand=True, fill="both")
         exit_btn.bind("<Button-1>", lambda e: _set_result("EXIT"))
         exit_btn.bind("<Enter>", lambda e: exit_btn.configure(bg=_HOV_R))
         exit_btn.bind("<Leave>", lambda e: exit_btn.configure(bg=_CARD))
+
+        tk.Frame(action_row, bg=_SEP, width=1).pack(side="left", fill="y")
+
+        def _do_more_work():
+            """메인 런처 재실행 후 종료."""
+            try:
+                import subprocess as _sp
+                _sp.Popen(
+                    [sys.executable, str(Path(__file__).resolve().parent / "rpa_select_launcher.py")],
+                    creationflags=_sp.CREATE_NO_WINDOW if hasattr(_sp, "CREATE_NO_WINDOW") else 0,
+                )
+            except Exception:
+                pass
+            _set_result("EXIT")
+
+        more_work_btn = tk.Label(action_row, text="추가 작업하기",
+                                 font=self._fn(12, "bold"),
+                                 bg=_CARD, fg=_BLUE, cursor="hand2", pady=11)
+        more_work_btn.pack(side="left", expand=True, fill="both")
+        more_work_btn.bind("<Button-1>", lambda e: _do_more_work())
+        more_work_btn.bind("<Enter>", lambda e: more_work_btn.configure(bg=_HOV_B))
+        more_work_btn.bind("<Leave>", lambda e: more_work_btn.configure(bg=_CARD))
 
         # ── 구분선 + 카운트다운 ────────────────────────────────
         tk.Frame(card, bg=_SEP, height=1).pack(fill="x")

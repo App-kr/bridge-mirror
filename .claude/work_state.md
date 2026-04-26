@@ -1,14 +1,50 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-22 (세션 38 — Pipeline E2E 테스트 + 마무리)
+최근 업데이트: 2026-04-26 (세션 39 — 이메일 자동응답 하드닝 + 보고 시스템)
 
-## ⏭ 다음 세션 우선순위 (2026-04-22 기준)
+## ⏭ 다음 세션 우선순위 (2026-04-26 기준)
 
-1. **Render S3 환경변수 등록** (사용자 직접 — 유일한 미완):
-   - Render 대시보드 → bridge-api → Environment
+1. **카카오톡 알림 설정** (사용자 직접):
+   - `! "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/kakao_notify.py" setup`
+   - REST API 키 입력 → 브라우저 OAuth → 완료 시 카카오 알림 활성화
+2. **Render 환경변수** (사용자 직접):
+   - `GMAIL_SYNC_ENABLED=true` 추가 → 서버사이드 Gmail 자동 동기화
    - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_BUCKET` 5개 추가
-   - 추가 후 Manual Deploy → 파일 업로드 E2E 완성
-2. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
-3. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+3. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
+4. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+
+## ✅ 2026-04-26 완료된 작업 (세션 39 — 이메일 자동응답 하드닝 + 보고체계)
+
+### Craigslist RPA 도배 버그 수정 (커밋 포함)
+- `fetch_jobs()`: draft 3시간 / error 1일 제외 → 동일 계정 중복 게시 차단
+- 3일 내 동일 제목 set(`_posted_titles_3d`) 빌드 → 여러 계정에서 같은 제목 차단
+- 사이클 리셋: `DELETE ... AND posted_at < datetime('now', '-3 days')` (3일 이내 삭제 금지)
+
+### 이메일 자동응답 시스템 복구 (커밋 06421cab)
+- `email_auto_task.xml`: pythonw 경로 수정 → `BRIDGE_EmailAutoResponder` Task Scheduler 등록
+- `--force` 플래그 추가: 업무시간 외 강제 실행 (백로그 처리용)
+- `_TEAST_DOMAINS`에 `teast.co` 추가 → William Newkirk 미발송 버그 수정
+- Teast body fetch: 4096 → 16384 바이트 확장
+- `dual_notify()` 함수: Telegram + KakaoTalk 동시 발송 (카카오 미설정 시 조용히 스킵)
+- 4월 24일 미처리 메일 5건 강제 처리 완료 (William Newkirk 포함)
+
+### 이메일 자동응답 에러 하드닝 (커밋 06421cab)
+- `_body_buf2` 본문 파싱: `[0][1][0][1]` → `isinstance` 체크 방어 파싱
+- Teast 본문 파싱도 동일 방식 적용 (세션 앞부분 완료)
+- `imap.store()` 두 곳 `try/except` 래핑 (IMAP 연결 끊김 대비)
+- `RETURNING` 경로: `processed.add(uid)` 추가 → 10분마다 TG 중복 알림 방지
+
+### 일일 보고 시스템 구축 (커밋 06421cab)
+- `tools/email_reporter.py`: DB `email_logs` 조회 → TG 보고 (daily/3h 모드)
+- `scripts/email_reporter_task.xml`: 매일 20:00 KST 실행
+- `BRIDGE_EmailReporter` Task Scheduler 등록 완료 (상태: 준비됨)
+- 테스트 실행 → `chat_id=7057194111` 정상 발송 확인 ✅
+
+### 현재 자동화 Task Scheduler 전체 목록
+| 태스크명 | 주기 | 역할 |
+|---------|------|------|
+| `BRIDGE_EmailAutoResponder` | 10분 | IMAP 폴링 + 자동 답장 |
+| `BRIDGE_EmailReporter` | 매일 20:00 | 일일 메일 처리 현황 TG 보고 |
+| `BRIDGE_PipelineWatcher` | 로그온 시 데몬 | 파이프라인 실패 감시 |
 
 ## ✅ 2026-04-22 완료된 작업 (세션 38 — Pipeline E2E 테스트 완료)
 

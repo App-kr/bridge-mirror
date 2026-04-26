@@ -43,21 +43,28 @@ _ACCOUNT_DEFS = [
     {"file": "account2.env", "color": "#a855f7", "tag": "PURPLE", "fallback": "airelair"},
 ]
 
-# ── 팔레트 ───────────────────────────────────────────────────────────────────
-BG      = "#111111"
-SURFACE = "#1c1c1e"
-CARD    = "#242426"
-BORDER  = "#2c2c2e"
-TEXT1   = "#f5f5f7"
-TEXT2   = "#aeaeb2"
-TEXT3   = "#636366"
-GREEN   = "#22c55e"
-GREEN_D = "#166534"
+# ── 팔레트 (목업 모던 다크) ──────────────────────────────────────────────────
+BG      = "#0d1017"   # 메인 배경 (가장 어두움)
+SURFACE = "#161a23"   # 헤더/패널 배경
+CARD    = "#1e2230"   # 카드 배경
+CARD_HI = "#252a3a"   # 카드 호버
+BORDER  = "#2a2f3d"   # 외곽선
+BORDER_LI = "#3a4055" # 강조 외곽선
+TEXT1   = "#f1f5f9"   # 제1 텍스트
+TEXT2   = "#94a3b8"   # 제2 텍스트
+TEXT3   = "#64748b"   # 제3 텍스트 (placeholder)
+GREEN   = "#22c55e"   # 단일계정 액션
+GREEN_D = "#15803d"
+BLUE    = "#3b82f6"   # 배치 액션
+BLUE_D  = "#1e40af"
+RED     = "#ef4444"   # 위험/중단
+RED_D   = "#991b1b"
 RED_BG  = "#2d0a0a"
 RED_FG  = "#f87171"
-HIDE_BG = "#0a1f12"
-HIDE_FG = "#6ee7b7"
-DIM     = "#1e1e20"
+HIDE_BG = "#1e2230"
+HIDE_FG = "#94a3b8"
+DIM     = "#1a1e2a"
+ACCENT  = "#6366f1"   # 브랜드 인디고
 
 # ── 폰트 (+2pt, 자간 넓힘) ───────────────────────────────────────────────────
 FN_HEAD = ("Malgun Gothic", 15, "bold")
@@ -892,82 +899,159 @@ class AdminBoard:
         p = self.PAD
 
         # ── 최소화 컴팩트 바 (기본 숨김) ─────────────────
-        self._compact_bar = tk.Frame(self.root, bg=SURFACE)
+        self._compact_bar = tk.Frame(self.root, bg=SURFACE, height=44)
         self._cb_dot = tk.Label(self._compact_bar, text="●",
-                                font=("Consolas", 13), bg=SURFACE, fg=TEXT3)
-        self._cb_dot.pack(side="left", padx=(14, 6))
+                                font=("Consolas", 12), bg=SURFACE, fg=TEXT3)
+        self._cb_dot.pack(side="left", padx=(16, 8))
         self._cb_lbl = tk.Label(self._compact_bar,
-                                text="진행 중인 작업이 없습니다.",
-                                font=("Malgun Gothic", 10), bg=SURFACE, fg=TEXT3,
+                                text="대기 중",
+                                font=("Malgun Gothic", 10), bg=SURFACE, fg=TEXT2,
                                 anchor="w")
         self._cb_lbl.pack(side="left", fill="x", expand=True)
-        RoundCanvas(self._compact_bar, h=36, width=110, fill="#991b1b",
+        RoundCanvas(self._compact_bar, h=30, width=92, fill=RED_D,
                     text="즉시 중단", text_color="#ffffff",
                     command=self._on_stop,
-                    font=("Malgun Gothic", 11, "bold"),
-                    ).pack(side="right", padx=12, pady=7)
+                    font=("Malgun Gothic", 10, "bold"),
+                    ).pack(side="right", padx=10, pady=7)
 
-        # ── 전체 폭 헤더 ─────────────────────────────────
-        self._hdr_frame = tk.Frame(self.root, bg=SURFACE)
+        # ─────────────────────────────────────────────────────────────
+        # ❶  헤더 (슬림 + 타이틀 + 상태 칩 + 도구 버튼)
+        # ─────────────────────────────────────────────────────────────
+        self._hdr_frame = tk.Frame(self.root, bg=SURFACE, height=58)
         self._hdr_frame.pack(fill="x")
+        self._hdr_frame.pack_propagate(False)
         hdr = self._hdr_frame
-        tk.Label(hdr, text="BRIDGE  RPA Admin",
-                 font=("Malgun Gothic", 15, "bold"),
-                 bg=SURFACE, fg=TEXT1).pack(side="left", padx=p, pady=14)
-        tk.Button(hdr, text="숨기기",
-                  command=self._on_hide,
-                  bg=HIDE_BG, fg="#ffffff",
-                  font=("Malgun Gothic", 10),
-                  relief="flat", cursor="hand2",
-                  padx=12, pady=6,
-                  activebackground=HIDE_BG, activeforeground="#ffffff",
-                  ).pack(side="right", padx=(0, 8))
 
-        # ── 좌우 분할 영역 ────────────────────────────────
+        # 좌측: 브랜드 마크 + 타이틀
+        brand = tk.Frame(hdr, bg=SURFACE)
+        brand.pack(side="left", padx=(p, 0), pady=12)
+        tk.Label(brand, text="◆", font=("Consolas", 16, "bold"),
+                 bg=SURFACE, fg=ACCENT).pack(side="left", padx=(0, 8))
+        tk.Label(brand, text="BRIDGE", font=("Malgun Gothic", 14, "bold"),
+                 bg=SURFACE, fg=TEXT1).pack(side="left")
+        tk.Label(brand, text="RPA Admin", font=("Malgun Gothic", 11),
+                 bg=SURFACE, fg=TEXT3).pack(side="left", padx=(8, 0))
+
+        # 우측: 도구 버튼 그룹
+        tools = tk.Frame(hdr, bg=SURFACE)
+        tools.pack(side="right", padx=(0, p), pady=10)
+
+        def _tool_btn(parent, text, cmd, fg=TEXT2, hover_bg=CARD_HI):
+            b = tk.Label(parent, text=text, bg=SURFACE, fg=fg,
+                         font=("Malgun Gothic", 10),
+                         padx=12, pady=8, cursor="hand2")
+            b.bind("<Button-1>", lambda e: cmd())
+            b.bind("<Enter>", lambda e: b.configure(bg=hover_bg, fg=TEXT1))
+            b.bind("<Leave>", lambda e: b.configure(bg=SURFACE, fg=fg))
+            return b
+
+        _tool_btn(tools, "✕  종료", self._on_exit, fg=RED_FG, hover_bg=RED_BG).pack(side="right", padx=(2, 0))
+        _tool_btn(tools, "▼  숨기기", self._on_hide, fg=HIDE_FG).pack(side="right", padx=(2, 0))
+
+        # ─────────────────────────────────────────────────────────────
+        # ❷  서브 헤더: 상태 칩(좌) + 투명도 슬라이더(우)
+        # ─────────────────────────────────────────────────────────────
+        sub = tk.Frame(self.root, bg=BG, height=44)
+        sub.pack(fill="x")
+        sub.pack_propagate(False)
+        # 헤더-서브 사이 미세 라인
+        tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
+
+        # 상태 칩 (둥근 박스 형태)
+        chip = tk.Frame(sub, bg=CARD, highlightbackground=BORDER,
+                        highlightthickness=1)
+        chip.pack(side="left", padx=p, pady=8)
+        self._dot = tk.Label(chip, text="●", font=("Consolas", 11),
+                             bg=CARD, fg=TEXT3)
+        self._dot.pack(side="left", padx=(10, 6), pady=4)
+        self._st_lbl = tk.Label(chip, text="대기 중 — 작업이 없습니다",
+                                font=("Malgun Gothic", 10),
+                                bg=CARD, fg=TEXT2)
+        self._st_lbl.pack(side="left", padx=(0, 12), pady=4)
+
+        # 투명도 — 숨기기 아래 (서브 헤더 우측)
+        _alpha_prefs_file = LOGS_DIR / ".admin_prefs.json"
+        def _load_alpha():
+            try:
+                import json as _j
+                return float(_j.loads(_alpha_prefs_file.read_text()).get("alpha", 1.0))
+            except Exception:
+                return 1.0
+        def _save_alpha(v):
+            try:
+                import json as _j
+                _alpha_prefs_file.parent.mkdir(exist_ok=True)
+                _alpha_prefs_file.write_text(_j.dumps({"alpha": float(v)}))
+            except Exception:
+                pass
+
+        _av = tk.DoubleVar(value=_load_alpha())
+        self.root.attributes("-alpha", _av.get())
+
+        def _on_alpha_change(val):
+            try:
+                self.root.attributes("-alpha", float(val))
+                _save_alpha(val)
+            except Exception:
+                pass
+
+        alpha_box = tk.Frame(sub, bg=BG)
+        alpha_box.pack(side="right", padx=p, pady=8)
+        tk.Label(alpha_box, text="투명도", font=("Malgun Gothic", 9),
+                 bg=BG, fg=TEXT3).pack(side="left", padx=(0, 6))
+        tk.Scale(alpha_box, from_=0.3, to=1.0, resolution=0.05,
+                 orient="horizontal", variable=_av, command=_on_alpha_change,
+                 length=120, bg=BG, fg=TEXT2, highlightthickness=0,
+                 sliderrelief="flat", bd=0, troughcolor=BORDER, showvalue=False,
+                 ).pack(side="left")
+
+        # ─────────────────────────────────────────────────────────────
+        # ❸  본문: 좌측 작업 패널 + 우측 로그 패널
+        # ─────────────────────────────────────────────────────────────
         self._body_frame = tk.Frame(self.root, bg=BG)
         self._body_frame.pack(fill="both", expand=True)
         body = self._body_frame
 
-        # ── 왼쪽 패널 (고정 420px) ────────────────────────
         left = tk.Frame(body, bg=BG, width=self.LW)
         left.pack(side="left", fill="y")
         left.pack_propagate(False)
+        self._left_panel = left
 
-        # 수직 구분선
         tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
 
-        # ── 오른쪽 로그 패널 ──────────────────────────────
-        right = tk.Frame(body, bg="#0d0d0f")
+        right = tk.Frame(body, bg="#0a0d13")
         right.pack(side="left", fill="both", expand=True)
         self._build_log_panel(right)
 
-        # ── 왼쪽: 상태 표시줄 ────────────────────────────
-        st = tk.Frame(left, bg=BG)
-        st.pack(fill="x", padx=p, pady=(12, 6))
-        self._dot = tk.Label(st, text="●", font=("Consolas", 13), bg=BG, fg=TEXT3)
-        self._dot.pack(side="left", padx=(0, 8))
-        self._st_lbl = tk.Label(st, text="진행 중인 작업이 없습니다.",
-                                font=("Malgun Gothic", 11), bg=BG, fg=TEXT3)
-        self._st_lbl.pack(side="left")
-
-        _div(left, padx=p, pady=3)
-
-        # ── 왼쪽: 계정 섹션 헤더 ─────────────────────────
+        # ─────────────────────────────────────────────────────────────
+        # ❹  계정 선택 섹션
+        # ─────────────────────────────────────────────────────────────
         sh = tk.Frame(left, bg=BG)
-        sh.pack(fill="x", padx=p, pady=(10, 6))
+        sh.pack(fill="x", padx=p, pady=(14, 8))
         tk.Label(sh, text="계정 선택",
-                 font=("Malgun Gothic", 12, "bold"),
+                 font=("Malgun Gothic", 11, "bold"),
                  bg=BG, fg=TEXT1).pack(side="left")
+        tk.Label(sh, text=f"{len(self._accounts)}개",
+                 font=("Malgun Gothic", 9),
+                 bg=BG, fg=TEXT3).pack(side="left", padx=(8, 0))
+
         tf = tk.Frame(sh, bg=BG)
         tf.pack(side="right")
-        for txt, fn in [("전체 선택", self._sel_all), ("전체 해제", self._desel_all)]:
-            tk.Button(tf, text=txt, command=fn,
-                      bg=CARD, fg=TEXT2,
-                      font=("Malgun Gothic", 10),
-                      relief="flat", cursor="hand2",
-                      padx=10, pady=3).pack(side="left", padx=(0, 4))
 
-        # ── 왼쪽: 계정 카드 ──────────────────────────────
+        def _ghost_btn(parent, text, cmd):
+            b = tk.Label(parent, text=text, bg=BG, fg=TEXT2,
+                         font=("Malgun Gothic", 9),
+                         padx=10, pady=4, cursor="hand2",
+                         highlightbackground=BORDER, highlightthickness=1)
+            b.bind("<Button-1>", lambda e: cmd())
+            b.bind("<Enter>", lambda e: b.configure(bg=CARD, fg=TEXT1))
+            b.bind("<Leave>", lambda e: b.configure(bg=BG, fg=TEXT2))
+            return b
+
+        _ghost_btn(tf, "전체 선택", self._sel_all).pack(side="left", padx=(0, 4))
+        _ghost_btn(tf, "전체 해제", self._desel_all).pack(side="left")
+
+        # 계정 카드 리스트
         cf = tk.Frame(left, bg=BG)
         cf.pack(fill="x", padx=p)
         for i, acct in enumerate(self._accounts):
@@ -975,81 +1059,110 @@ class AdminBoard:
             card.pack(fill="x", pady=3)
             self._cards.append(card)
 
-        # ── 왼쪽: 계정 관리 + 건수 ───────────────────────
+        # ─────────────────────────────────────────────────────────────
+        # ❺  계정 관리 + 카운트 (한 줄)
+        # ─────────────────────────────────────────────────────────────
         mf = tk.Frame(left, bg=BG)
-        mf.pack(fill="x", padx=p, pady=(8, 8))
-        for txt, fn in [("+ 계정 추가", self._on_add), ("계정 관리", self._on_manage)]:
-            tk.Button(mf, text=txt, command=fn,
-                      bg=CARD, fg="#ffffff",
-                      font=("Malgun Gothic", 10),
-                      relief="flat", cursor="hand2",
-                      padx=12, pady=5).pack(side="left", padx=(0, 8))
+        mf.pack(fill="x", padx=p, pady=(10, 6))
+        _ghost_btn(mf, "+ 계정 추가", self._on_add).pack(side="left", padx=(0, 6))
+        _ghost_btn(mf, "계정 관리", self._on_manage).pack(side="left")
 
         self._cnt = tk.IntVar(value=10)
-        tk.Label(mf, text="건",  font=("Malgun Gothic", 11), bg=BG, fg="#ffffff").pack(side="right")
+        tk.Label(mf, text="건",  font=("Malgun Gothic", 10), bg=BG, fg=TEXT2).pack(side="right")
         tk.Spinbox(mf, from_=1, to=30, textvariable=self._cnt,
-                   width=4, font=("Malgun Gothic", 12),
+                   width=4, font=("Malgun Gothic", 11, "bold"),
                    bg=CARD, fg=TEXT1, buttonbackground=BORDER,
                    relief="flat", highlightthickness=1,
                    highlightbackground=BORDER,
-                   ).pack(side="right", padx=(4, 6))
-        tk.Label(mf, text="계정당", font=("Malgun Gothic", 11), bg=BG, fg="#ffffff").pack(side="right", padx=(0, 2))
+                   ).pack(side="right", padx=(6, 8))
+        tk.Label(mf, text="계정당", font=("Malgun Gothic", 10), bg=BG, fg=TEXT2).pack(side="right", padx=(0, 2))
 
-        _div(left, padx=p, pady=2)
-
-        # ── 왼쪽: 메시지 + 버튼 ──────────────────────────
-        self._msg_lbl = tk.Label(left, text="", font=("Malgun Gothic", 10), bg=BG, fg=TEXT3)
-        self._msg_lbl.pack(pady=(2, 2))
+        # 메시지
+        self._msg_lbl = tk.Label(left, text="", font=("Malgun Gothic", 9),
+                                 bg=BG, fg=TEXT3)
+        self._msg_lbl.pack(pady=(0, 4))
 
         GAP = 8
-        BW  = (self.LW - p * 2 - GAP) // 2
+        SBW = (self.LW - p * 2 - 24 - GAP) // 2
 
-        btn_row = tk.Frame(left, bg=BG)
-        btn_row.pack(fill="x", padx=p, pady=(0, 0))
+        # ─────────────────────────────────────────────────────────────
+        # ❻  ① 단일계정 모드 카드
+        # ─────────────────────────────────────────────────────────────
+        single_card = tk.Frame(left, bg=CARD, highlightbackground=BORDER,
+                               highlightthickness=1)
+        single_card.pack(fill="x", padx=p, pady=(8, 6))
+        self._single_card = single_card
+
+        # 카드 헤더
+        sh1 = tk.Frame(single_card, bg=CARD)
+        sh1.pack(fill="x", padx=12, pady=(10, 4))
+        tk.Label(sh1, text="●", font=("Consolas", 10),
+                 bg=CARD, fg=GREEN).pack(side="left", padx=(0, 6))
+        tk.Label(sh1, text="단일계정 모드",
+                 font=("Malgun Gothic", 10, "bold"),
+                 bg=CARD, fg=TEXT1).pack(side="left")
+        tk.Label(sh1, text="선택 계정으로 즉시 게시",
+                 font=("Malgun Gothic", 9),
+                 bg=CARD, fg=TEXT3).pack(side="left", padx=(8, 0))
+
+        # 액션 버튼 행
+        single_btn_row = tk.Frame(single_card, bg=CARD)
+        single_btn_row.pack(fill="x", padx=12, pady=(2, 12))
+        self._single_btn_row = single_btn_row
 
         self._start_btn = RoundCanvas(
-            btn_row, h=54, width=BW, fill=GREEN,
-            text="시작하기", text_color="#ffffff",
+            single_btn_row, h=46, width=SBW, fill=GREEN,
+            text="단일계정 포스팅하기", text_color="#ffffff",
             command=self._on_start,
-            font=("Malgun Gothic", 14, "bold"),
+            font=("Malgun Gothic", 11, "bold"),
         )
         self._start_btn.pack(side="left", padx=(0, GAP))
 
         self._stop_btn = RoundCanvas(
-            btn_row, h=54, width=BW, fill="#991b1b",
+            single_btn_row, h=46, width=SBW, fill=RED_D,
             text="즉시 중단", text_color="#ffffff",
             command=self._on_stop,
-            font=("Malgun Gothic", 13, "bold"),
+            font=("Malgun Gothic", 11, "bold"),
         )
         self._stop_btn.pack(side="left")
 
-        # ── 일반 실행 게이지 (시작하기 아래, 실행 중에만 표시) ───
-        self._start_gauge = _ProgressGauge(left)
-        # 초기엔 숨김 — _show_start_gauge() 호출 시 pack
+        # 단일계정 게이지 (실행 중에만 표시)
+        self._start_gauge = _ProgressGauge(single_card)
 
-        # ── 왼쪽: 배치 모드 ──────────────────────────────
-        _div(left, padx=p, pady=(8, 0))
+        # ─────────────────────────────────────────────────────────────
+        # ❼  ② 계정스와이프 모드 카드
+        # ─────────────────────────────────────────────────────────────
+        batch_card = tk.Frame(left, bg=CARD, highlightbackground=BORDER,
+                              highlightthickness=1)
+        batch_card.pack(fill="x", padx=p, pady=(2, 8))
+        self._batch_card = batch_card
 
-        bh = tk.Frame(left, bg=BG)
-        bh.pack(fill="x", padx=p, pady=(6, 4))
-        tk.Label(bh, text="배치 모드",
+        # 카드 헤더
+        bh1 = tk.Frame(batch_card, bg=CARD)
+        bh1.pack(fill="x", padx=12, pady=(10, 4))
+        tk.Label(bh1, text="●", font=("Consolas", 10),
+                 bg=CARD, fg=BLUE).pack(side="left", padx=(0, 6))
+        tk.Label(bh1, text="계정스와이프 모드",
                  font=("Malgun Gothic", 10, "bold"),
-                 bg=BG, fg=TEXT2).pack(side="left")
+                 bg=CARD, fg=TEXT1).pack(side="left")
+        tk.Label(bh1, text="배치 — 계정 순환 + 휴식",
+                 font=("Malgun Gothic", 9),
+                 bg=CARD, fg=TEXT3).pack(side="left", padx=(8, 0))
 
-        # 스핀박스 행
-        sf = tk.Frame(left, bg=BG)
-        sf.pack(fill="x", padx=p, pady=(0, 6))
+        # 스피너 행
+        sf = tk.Frame(batch_card, bg=CARD)
+        sf.pack(fill="x", padx=12, pady=(4, 8))
 
         def _spin(parent, var, lo=1, hi=30, w=3):
             return tk.Spinbox(parent, from_=lo, to=hi, textvariable=var,
-                              width=w, font=("Malgun Gothic", 11),
-                              bg=CARD, fg=TEXT1, buttonbackground=BORDER,
+                              width=w, font=("Malgun Gothic", 10, "bold"),
+                              bg=DIM, fg=TEXT1, buttonbackground=BORDER,
                               relief="flat", highlightthickness=1,
                               highlightbackground=BORDER)
 
         def _lbl(parent, text):
-            tk.Label(parent, text=text,
-                     font=("Malgun Gothic", 10), bg=BG, fg=TEXT2).pack(side="left", padx=(2, 2))
+            tk.Label(parent, text=text, font=("Malgun Gothic", 9),
+                     bg=CARD, fg=TEXT2).pack(side="left", padx=(3, 3))
 
         self._b_cnt1  = tk.IntVar(value=3)
         self._b_rest  = tk.IntVar(value=5)
@@ -1065,38 +1178,61 @@ class AdminBoard:
         _spin(sf, self._b_reps, lo=1, hi=20, w=2).pack(side="left")
         _lbl(sf, "회")
 
-        # 배치 시작 버튼 (전체 폭)
-        BATCH_C = "#1e3a5f"
-        self._batch_btn = RoundCanvas(
-            left, h=44, fill=BATCH_C,
-            text="배치 시작", text_color="#ffffff",
-            command=self._on_batch_start,
-            font=("Malgun Gothic", 12, "bold"),
-        )
-        self._batch_btn.pack(fill="x", padx=p, pady=(0, 6))
+        # 계정스와이프 액션 버튼
+        batch_btn_row = tk.Frame(batch_card, bg=CARD)
+        batch_btn_row.pack(fill="x", padx=12, pady=(0, 12))
+        self._batch_btn_row = batch_btn_row
 
-        # 게이지 바 (배치 실행 중에만 표시, 평소엔 숨김)
-        self._gauge = _ProgressGauge(left)
-        # 초기엔 숨김 — _show_gauge() 호출 시 pack
+        BBW = (self.LW - p * 2 - 24 - GAP) // 2
+
+        self._batch_btn = RoundCanvas(
+            batch_btn_row, h=42, width=BBW, fill=BLUE,
+            text="계정스와이프 포스팅시작", text_color="#ffffff",
+            command=self._on_batch_start,
+            font=("Malgun Gothic", 10, "bold"),
+        )
+        self._batch_btn.pack(side="left", padx=(0, GAP))
+
+        self._batch_stop_btn = RoundCanvas(
+            batch_btn_row, h=42, width=BBW, fill=RED_D,
+            text="즉시 중단", text_color="#ffffff",
+            command=self._on_stop,
+            font=("Malgun Gothic", 10, "bold"),
+        )
+        self._batch_stop_btn.pack(side="left")
+
+        # 배치 게이지 (실행 중에만 표시)
+        self._gauge = _ProgressGauge(batch_card)
 
     def _build_log_panel(self, parent):
-        """오른쪽 실시간 로그 패널."""
-        LOG_BG = "#0d0d0f"
+        """오른쪽 실시간 로그 패널 (모던 다크)."""
+        LOG_BG = "#0a0d13"
 
-        # 로그 헤더
-        lh = tk.Frame(parent, bg=SURFACE)
+        # 로그 헤더 (서브헤더와 동일 높이 정렬)
+        lh = tk.Frame(parent, bg=SURFACE, height=58)
         lh.pack(fill="x")
-        tk.Label(lh, text="실시간 로그",
+        lh.pack_propagate(False)
+        # 헤더 좌측 라벨
+        lhead = tk.Frame(lh, bg=SURFACE)
+        lhead.pack(side="left", padx=16, pady=14)
+        tk.Label(lhead, text="▤", font=("Consolas", 12),
+                 bg=SURFACE, fg=ACCENT).pack(side="left", padx=(0, 8))
+        tk.Label(lhead, text="실시간 로그",
                  font=("Malgun Gothic", 11, "bold"),
-                 bg=SURFACE, fg=TEXT1).pack(side="left", padx=14, pady=10)
-        tk.Button(lh, text="지우기",
-                  command=self._clear_log,
-                  bg=CARD, fg=TEXT2,
-                  font=("Malgun Gothic", 9),
-                  relief="flat", cursor="hand2",
-                  padx=8, pady=4,
-                  activebackground=CARD, activeforeground=TEXT1,
-                  ).pack(side="right", padx=10, pady=8)
+                 bg=SURFACE, fg=TEXT1).pack(side="left")
+
+        # 우측 지우기 버튼 (고스트 스타일)
+        clear_btn = tk.Label(lh, text="지우기", bg=SURFACE, fg=TEXT2,
+                             font=("Malgun Gothic", 9),
+                             padx=10, pady=4, cursor="hand2",
+                             highlightbackground=BORDER, highlightthickness=1)
+        clear_btn.pack(side="right", padx=14, pady=14)
+        clear_btn.bind("<Button-1>", lambda e: self._clear_log())
+        clear_btn.bind("<Enter>", lambda e: clear_btn.configure(bg=CARD, fg=TEXT1))
+        clear_btn.bind("<Leave>", lambda e: clear_btn.configure(bg=SURFACE, fg=TEXT2))
+
+        # 헤더 아래 미세 라인
+        tk.Frame(parent, bg=BORDER, height=1).pack(fill="x")
 
         # 로그 텍스트 + 스크롤바
         frame = tk.Frame(parent, bg=LOG_BG)
@@ -1256,41 +1392,71 @@ class AdminBoard:
         self.root.after(200, self._flush_log_queue)
 
     def _tick(self):
-        if self._running:
+        # 단일/배치 어느 쪽이든 실행 중이면 busy
+        busy = self._running or self._batch_running
+        if busy:
             self._idle_drawn = False
             self._blink = not self._blink
-            dot_fg = GREEN if self._blink else GREEN_D
-            action_text = self._gauge_action if self._gauge_action and self._gauge_action != "준비 중..." else "작업이 진행 중입니다."
-            lbl_fg = "#22c55e" if self._blink else "#15803d"
-            cnt_txt = f"  ({self._gauge_done}/{self._gauge_total}건)" if self._gauge_total else ""
+            # 모드별 색상: 배치=BLUE, 단일=GREEN
+            on_color  = BLUE  if self._batch_running else GREEN
+            off_color = BLUE_D if self._batch_running else GREEN_D
+            dot_fg = on_color if self._blink else off_color
+            action = self._gauge_action if self._gauge_action and self._gauge_action != "준비 중..." else "작업 진행 중"
+            done, total = self._gauge_done, self._gauge_total
+            # 게이지 막대 (12칸 유니코드 블록)
+            BARS = 12
+            if total > 0:
+                filled = max(0, min(BARS, int(BARS * done / total + 0.5)))
+                pct    = int(done / total * 100)
+                gauge  = "▰" * filled + "▱" * (BARS - filled)
+                meter  = f"  {gauge}  {done}/{total} ({pct}%)"
+            else:
+                # total 미정 — 바운싱 점 표시 (살아있음 표시)
+                pos = int(_time.time() * 2) % BARS
+                gauge = "▱" * pos + "▰" + "▱" * (BARS - pos - 1)
+                meter = f"  {gauge}"
+            text = f"{action}{meter}"
             self._dot.configure(fg=dot_fg)
-            self._st_lbl.configure(text=action_text, fg=lbl_fg)
+            self._st_lbl.configure(text=text, fg=TEXT1)
             # 컴팩트 바 동기화
             self._cb_dot.configure(fg=dot_fg)
-            self._cb_lbl.configure(text=action_text + cnt_txt, fg=lbl_fg)
+            self._cb_lbl.configure(text=text, fg=TEXT1)
         else:
             if not self._idle_drawn:
                 self._dot.configure(fg=TEXT3)
-                self._st_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
-                self._start_btn.update_text("시작하기")
+                self._st_lbl.configure(text="대기 중 — 작업이 없습니다", fg=TEXT2)
+                self._start_btn.update_text("단일계정 포스팅하기")
                 self._start_btn.update_fill(GREEN, "#ffffff")
                 self._cb_dot.configure(fg=TEXT3)
-                self._cb_lbl.configure(text="진행 중인 작업이 없습니다.", fg=TEXT3)
+                self._cb_lbl.configure(text="대기 중", fg=TEXT2)
                 self._idle_drawn = True
-        self.root.after(1000, self._tick)
+        # 깜박임 부드럽게 — 600ms
+        self.root.after(600, self._tick)
 
     # ── 일반 실행 게이지 제어 ────────────────────────────────────────────────
 
     def _show_start_gauge(self):
-        """시작하기 버튼 아래 게이지 표시."""
+        """단일계정 카드 내부에 게이지 표시 (시작/즉시중단 버튼은 유지)."""
         if self._start_gauge:
-            self._start_gauge.pack(fill="x", padx=self.PAD, pady=(4, 2))
+            self._start_gauge.pack(in_=self._single_card, fill="x",
+                                   padx=12, pady=(0, 12))
+        # 시작 버튼만 비활성화, 라벨로 진행 표시
+        try:
+            self._start_btn.set_enabled(False)
+            self._start_btn.update_text("실행 중...")
+        except Exception:
+            pass
         self._start_gauge_tick()
 
     def _hide_start_gauge(self):
-        """일반 실행 게이지 숨김."""
+        """일반 실행 게이지 숨김 + 시작 버튼 복원."""
         if self._start_gauge:
             self._start_gauge.pack_forget()
+        try:
+            self._start_btn.set_enabled(True)
+            self._start_btn.update_text("단일계정 포스팅하기")
+        except Exception:
+            pass
 
     def _start_gauge_tick(self):
         """600ms마다 일반 실행 게이지 갱신."""
@@ -1324,19 +1490,27 @@ class AdminBoard:
     # ── 배치 게이지 제어 ──────────────────────────────────────────────────────
 
     def _show_gauge(self):
-        """배치 버튼 숨기고 게이지 바 표시."""
-        self._batch_btn.pack_forget()
+        """배치 카드 내부에 게이지 바 표시 (액션버튼 행은 그대로 유지 — 즉시중단 보존)."""
         if self._gauge:
-            self._gauge.pack(fill="x",
-                             padx=self.PAD, pady=(0, 6))
+            self._gauge.pack(in_=self._batch_card, fill="x",
+                             padx=12, pady=(0, 12))
+        # 시작 버튼만 비활성화 (실행 중 표시) — 즉시중단은 그대로 활성
+        try:
+            self._batch_btn.set_enabled(False)
+            self._batch_btn.update_text("실행 중...")
+        except Exception:
+            pass
         self._gauge_tick()
 
     def _hide_gauge(self):
-        """게이지 바 숨기고 배치 버튼 복원."""
+        """게이지 숨기고 시작 버튼 라벨/활성 복원."""
         if self._gauge:
             self._gauge.pack_forget()
-        self._batch_btn.pack(fill="x",
-                             padx=self.PAD, pady=(0, 6))
+        try:
+            self._batch_btn.set_enabled(True)
+            self._batch_btn.update_text("계정스와이프 포스팅시작")
+        except Exception:
+            pass
 
     def _gauge_tick(self):
         """600ms마다 게이지 갱신 (깜박 + ETA)."""
@@ -1501,9 +1675,10 @@ class AdminBoard:
             self.root.after(0, self._msg, f"완료  ({total}개 계정)", GREEN)
             self.root.after(0, self._append_log,
                             f"--- 전체 완료: {total}개 계정 ---", "success")
-            self.root.after(0, self._start_btn.update_text, "시작하기")
+            self.root.after(0, self._start_btn.update_text, "단일계정 포스팅하기")
             self.root.after(0, self._start_btn.update_fill, GREEN, "#ffffff")
             self.root.after(0, self._start_btn.set_enabled, True)
+            self.root.after(0, self._show_post_run_dialog, total)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1523,10 +1698,10 @@ class AdminBoard:
             self._proc = None
         _kill_rpa()
         self._running = False
-        self._start_btn.update_text("시작하기")
+        self._start_btn.update_text("단일계정 포스팅하기")
         self._start_btn.update_fill(GREEN, BG)
         self._start_btn.set_enabled(True)
-        self._batch_btn.update_text("배치 시작")
+        self._batch_btn.update_text("계정스와이프 포스팅시작")
         self._batch_btn.set_enabled(True)
         self._msg("중단되었습니다.", RED_FG)
 
@@ -1616,7 +1791,7 @@ class AdminBoard:
             self.root.after(0, self._hide_gauge)
             self.root.after(0, self._batch_btn.set_enabled, True)
             self.root.after(0, self._start_btn.set_enabled, True)
-            self.root.after(0, self._batch_btn.update_text, "배치 시작")
+            self.root.after(0, self._batch_btn.update_text, "계정스와이프 포스팅시작")
             self.root.after(0, self._msg, f"배치 완료 ({reps}회)", GREEN)
             self.root.after(0, self._append_log,
                             f"=== 배치 전체 완료: {reps}회 ===", "success")
@@ -1724,6 +1899,65 @@ class AdminBoard:
         self._hdr_frame.pack(fill="x")
         self._body_frame.pack(fill="both", expand=True)
 
+    def _show_post_run_dialog(self, total: int):
+        """RPA 완료 후 추가 작업 여부 묻는 팝업."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("RPA 완료")
+        dlg.configure(bg=SURFACE)
+        dlg.attributes("-topmost", True)
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        # 창 중앙 배치
+        dlg.update_idletasks()
+        w, h = 300, 160
+        rx = self.root.winfo_x() + (self.root.winfo_width()  - w) // 2
+        ry = self.root.winfo_y() + (self.root.winfo_height() - h) // 2
+        dlg.geometry(f"{w}x{h}+{rx}+{ry}")
+
+        tk.Label(dlg, text=f"완료  ({total}개 계정)",
+                 font=("Malgun Gothic", 13, "bold"),
+                 bg=SURFACE, fg=GREEN).pack(pady=(18, 6))
+        tk.Label(dlg, text="추가 작업을 하시겠습니까?",
+                 font=("Malgun Gothic", 11),
+                 bg=SURFACE, fg=TEXT2).pack()
+
+        btn_row = tk.Frame(dlg, bg=SURFACE)
+        btn_row.pack(pady=16, fill="x", padx=20)
+
+        def _do_more():
+            dlg.destroy()
+            # 선택된 계정으로 바로 재실행
+            self._on_start()
+
+        def _do_exit():
+            dlg.destroy()
+            self._on_exit()
+
+        def _do_close():
+            dlg.destroy()
+
+        tk.Button(btn_row, text="추가 작업하기",
+                  command=_do_more,
+                  bg="#0a2a1a", fg=GREEN,
+                  font=("Malgun Gothic", 11, "bold"),
+                  relief="flat", cursor="hand2",
+                  padx=10, pady=7,
+                  activebackground="#0d3a20", activeforeground=GREEN,
+                  ).pack(side="left", expand=True, fill="x", padx=(0, 4))
+
+        tk.Button(btn_row, text="종료하기",
+                  command=_do_exit,
+                  bg="#3a0a0a", fg="#f87171",
+                  font=("Malgun Gothic", 11, "bold"),
+                  relief="flat", cursor="hand2",
+                  padx=10, pady=7,
+                  activebackground="#5a1010", activeforeground="#ffffff",
+                  ).pack(side="left", expand=True, fill="x", padx=(4, 0))
+
+        # 닫기(X) → 그냥 닫기만 (창 유지)
+        dlg.protocol("WM_DELETE_WINDOW", _do_close)
+
     def _on_hide(self):
         self.root.withdraw()
 
@@ -1753,6 +1987,8 @@ if __name__ == "__main__":
             sys.exit(0)
 
     # 단일 인스턴스 — 이미 실행 중이면 창 복원
+    # ⚠️ 좀비 pythonw 가 hidden 상태로 살아있으면 ShowWindow 가 화면에 안 뜨고
+    #    sys.exit(0) 만 호출되어 사용자에게 "반응 없음" 으로 보임 → 재발 방지 가드
     LOGS_DIR.mkdir(exist_ok=True)
     if ADMIN_HWND_FILE.exists():
         try:
@@ -1781,10 +2017,45 @@ if __name__ == "__main__":
                     except OSError:
                         pid_alive = False
 
-            if hwnd and ctypes.windll.user32.IsWindow(hwnd) and pid_alive:
+            # PID 가 살아있어도 그 프로세스가 실제 launcher 창을 띄우고 있는지 검증
+            # (좀비 pythonw 또는 다른 무관한 pythonw 가 PID 재사용한 경우 감지)
+            proc_is_launcher = False
+            if pid_alive and pid is not None:
+                try:
+                    import psutil as _psu
+                    _proc = _psu.Process(pid)
+                    _cmdline = " ".join(_proc.cmdline()).lower()
+                    proc_is_launcher = "rpa_select_launcher" in _cmdline
+                except Exception:
+                    proc_is_launcher = True   # psutil 실패 시 보수적으로 신뢰
+
+            if (hwnd and ctypes.windll.user32.IsWindow(hwnd)
+                    and pid_alive and proc_is_launcher):
                 ctypes.windll.user32.ShowWindow(hwnd, 5)
                 _bring_hwnd_to_front(hwnd)
-                sys.exit(0)
+                # 창이 실제 visible 상태가 됐는지 확인 (hidden/minimized 잔존 방지)
+                try:
+                    import time as _t
+                    _t.sleep(0.3)
+                    if ctypes.windll.user32.IsWindowVisible(hwnd):
+                        sys.exit(0)
+                    # visible 안 됨 → 좀비로 간주, kill 후 새 인스턴스
+                    print(f"[stale] hwnd {hwnd} not visible → killing PID {pid}")
+                    try:
+                        import psutil as _psu
+                        _psu.Process(pid).terminate()
+                        _psu.Process(pid).wait(timeout=2)
+                    except Exception:
+                        try:
+                            os.kill(pid, 9)
+                        except Exception:
+                            pass
+                except Exception:
+                    sys.exit(0)
+            else:
+                # stale: PID/HWND 죽었거나 다른 프로세스가 PID 재사용
+                if pid_alive and not proc_is_launcher:
+                    print(f"[stale] PID {pid} alive but not launcher → ignoring")
         except Exception:
             pass
         ADMIN_HWND_FILE.unlink(missing_ok=True)

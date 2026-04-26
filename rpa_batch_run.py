@@ -22,6 +22,7 @@ ROUNDS = [
     {"limit": 2, "label": "라운드 2 (2건씩)"},
 ]
 REST_BETWEEN_ROUNDS = 300   # 5분
+REST_BETWEEN_ACCOUNTS = 10  # 계정 간 대기 (Chrome 정리 + DLL 초기화 시간)
 
 
 def ts():
@@ -46,6 +47,7 @@ def run_account(account_id: str, limit: int):
         cwd=str(Path(SCRIPT).parent),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        # CREATE_NO_WINDOW: 창 없이 실행. 단, Chrome DLL 초기화에 시간 필요 → 계정 간 딜레이 필수
         creationflags=subprocess.CREATE_NO_WINDOW,
         text=True, encoding="utf-8", errors="replace",
         bufsize=1,
@@ -57,7 +59,16 @@ def run_account(account_id: str, limit: int):
             log(f"  [{tag}] {line}")
 
     proc.wait()
-    log(f"■ {tag} 완료 (exit {proc.returncode})")
+    rc = proc.returncode
+    if rc != 0:
+        # 0xC0000142 = DLL 초기화 실패 (Chrome 잔류 프로세스 충돌)
+        # 0x40010004 = Ctrl+C / 비정상 종료
+        hex_rc = f"0x{rc & 0xFFFFFFFF:08X}" if rc < 0 else f"0x{rc:08X}"
+        log(f"■ {tag} 완료 (exit {rc} / {hex_rc}) ← 비정상 종료")
+    else:
+        log(f"■ {tag} 완료 (exit 0)")
+    # Chrome cleanup 대기 — DLL 해제 후 다음 계정 안전 시작
+    time.sleep(REST_BETWEEN_ACCOUNTS)
 
 
 def countdown(seconds: int, label: str):
@@ -86,8 +97,11 @@ def main():
         log(f"  {rnd['label']} 시작")
         log(f"{'─'*40}")
 
-        for acct in ACCOUNTS:
+        for a_idx, acct in enumerate(ACCOUNTS):
             run_account(acct, rnd["limit"])
+            # 마지막 계정은 불필요한 대기 생략
+            if a_idx == len(ACCOUNTS) - 1:
+                time.sleep(0)  # 루프 내 sleep은 run_account 끝에서 이미 처리됨
 
     log(f"\n{'='*50}")
     log("전체 완료")
