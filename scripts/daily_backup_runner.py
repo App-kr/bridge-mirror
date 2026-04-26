@@ -156,6 +156,18 @@ def main() -> int:
         if code != 0:
             fails.append(("bridge_backup", code))
 
+    # 4) GitHub Releases 클라우드 이중화 (gh CLI repo scope만 필요)
+    if os.environ.get("BRIDGE_FIELD_KEY"):
+        code = run(
+            "github_release_backup",
+            [PYTHON, "-X", "utf8", str(BASE / "scripts" / "github_release_backup.py")],
+            timeout_s=300,
+        )
+        if code != 0:
+            fails.append(("github_release_backup", code))
+    else:
+        skipped.append("github_release_backup (no key)")
+
     log("-" * 60)
     for s in skipped:
         log(f"⏭ skipped: {s}")

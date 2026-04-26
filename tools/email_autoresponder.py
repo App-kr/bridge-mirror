@@ -175,6 +175,23 @@ def _remove_pending(mail_id: str) -> None:
     _save_pending(p)
 
 
+# ── 카카오 알림 (선택적 로드 — 미설정이면 조용히 스킵) ────────────────────────
+def _kakao_send(text: str) -> None:
+    try:
+        from tools.kakao_notify import send as _ksend
+        _ksend(text)
+    except Exception:
+        pass  # 카카오 미설정이면 무시
+
+
+# ── 텔레그램 + 카카오 동시 알림 ──────────────────────────────────────────────
+def dual_notify(cfg: dict, text: str) -> bool:
+    """텔레그램 발송 후 카카오도 동시 전송. TG 결과를 반환."""
+    ok = tg_send(cfg["tg_token"], cfg["tg_chat_id"], text)
+    _kakao_send(text)
+    return ok
+
+
 # ── 텔레그램 ──────────────────────────────────────────────────────────────────
 def tg_send(token: str, chat_id: str, text: str) -> bool:
     if not token or not chat_id:
@@ -251,7 +268,7 @@ _SPAM_SENDER_DOMAINS = {
 # reply.craigslist.org는 실제 지원자 → 차단 금지
 
 # ── Teast Admin 전용 설정 ──────────────────────────────────────────────────────
-_TEAST_DOMAINS = {"teast.com", "teast.co.kr"}
+_TEAST_DOMAINS = {"teast.com", "teast.co.kr", "teast.co"}
 
 # 허용 국적 키워드 (미국·영국·캐나다·호주·아일랜드·뉴질랜드)
 _ALLOWED_NATIONALITIES = {
@@ -385,17 +402,17 @@ def already_replied(email_addr: str) -> bool:
 
 def has_prior_contact(imap_conn: imaplib.IMAP4_SSL, addr: str,
                       current_uid: str, days: int = 365) -> bool:
-    """1년이내 해당 주소와 메일을 주고받은 이력이 있으면 True.
+    """1년이내 우리가 해당 주소로 보낸 이력이 있으면 True.
 
     ① 보낸편지함(TO addr) — 수동 발송 포함 전체
-    ② 받은편지함(FROM addr, 현재 UID 제외) — 이전에 먼저 연락 온 경우
+    (동일인이 여러 메일을 보내도 우리가 답장 보내기 전까지는 첫 메일에만 회신)
     """
     from datetime import timedelta
     since_str = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
     _result: list = []
 
     def _do_check():
-        # ① 보낸편지함 확인
+        # ① 보낸편지함 확인 (우리가 이 주소로 보낸 메일이 있으면 이미 대화 중)
         for folder in ('"[Gmail]/Sent Mail"', '"[Gmail]/Sent"', "Sent"):
             try:
                 typ, _ = imap_conn.select(folder, readonly=True)
@@ -408,19 +425,6 @@ def has_prior_contact(imap_conn: imaplib.IMAP4_SSL, addr: str,
                 break
             except Exception:
                 continue
-
-        # ② 받은편지함 확인 (현재 처리 중인 UID 제외)
-        try:
-            imap_conn.select("INBOX")
-            _, data = imap_conn.search(None, f'FROM "{addr}" SINCE {since_str}')
-            if data and data[0]:
-                others = [u for u in data[0].split()
-                          if u.decode() != current_uid]
-                if others:
-                    _result.append(True)
-                    return
-        except Exception:
-            pass
 
         _result.append(False)
 
@@ -559,11 +563,15 @@ def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str,
 # ── SMTP 발송 ─────────────────────────────────────────────────────────────────
 def send_reply(cfg: dict, to_addr: str, to_name: str,
                subject: str, body: str, retries: int = 3,
-               html: str | None = None) -> bool:
+               html: str | None = None,
+               in_reply_to: str | None = None) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = f"BRIDGE Agency <{cfg['gmail_addr']}>"
     msg["To"]      = f"{to_name} <{to_addr}>" if to_name else to_addr
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"]  = in_reply_to
     msg.attach(MIMEText(body, "plain", "utf-8"))
     if html:
         msg.attach(MIMEText(html, "html", "utf-8"))
@@ -639,9 +647,9 @@ def _get_headers(msg: email.message.Message) -> dict:
 
 
 # ── 메인 처리 루프 ────────────────────────────────────────────────────────────
-def process_inbox(cfg: dict) -> None:
-    # KST 09:00~18:00 외에는 실행 안 함
-    if not _is_business_hours():
+def process_inbox(cfg: dict, force: bool = False) -> None:
+    # KST 09:00~18:00 외에는 실행 안 함 (--force 시 생략)
+    if not force and not _is_business_hours():
         now_kst = datetime.now(_KST).strftime("%H:%M")
         log.info(f"[SKIP] 업무시간 외 (KST {now_kst}) — 폴링 건너뜀")
         return
@@ -668,7 +676,7 @@ def process_inbox(cfg: dict) -> None:
             _fetch_result: list = []
             def _do_fetch(u=uid_b):
                 try:
-                    r = imap.fetch(u, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+                    r = imap.fetch(u, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)])")
                     _fetch_result.append(r)
                 except Exception as e:
                     _fetch_result.append(e)
@@ -700,10 +708,15 @@ def process_inbox(cfg: dict) -> None:
                 from_name, from_addr = email.utils.parseaddr(from_raw)
                 from_addr   = from_addr.lower().strip()
                 received_at = hdr_msg.get("Date", "")
+                message_id  = hdr_msg.get("Message-ID", "").strip()
 
                 # ── STEP A: 스팸 필터 (헤더 기반) ────────────────────────────
                 if is_spam(from_addr, subject, "", {}, cfg["gmail_addr"]):
                     log.info(f"[SPAM] {from_addr} | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
                     processed.add(uid)
                     _save_processed(processed)
                     continue
@@ -714,7 +727,7 @@ def process_inbox(cfg: dict) -> None:
                     _teast_buf: list = []
                     def _do_teast_body(u=uid_b):
                         try:
-                            r = imap.fetch(u, "(BODY.PEEK[1]<0.4096>)")
+                            r = imap.fetch(u, "(BODY.PEEK[1]<0.16384>)")
                             _teast_buf.append(r)
                         except Exception as e:
                             _teast_buf.append(e)
@@ -723,8 +736,16 @@ def process_inbox(cfg: dict) -> None:
                     teast_body = ""
                     if _teast_buf and not isinstance(_teast_buf[0], Exception):
                         try:
-                            teast_body = _teast_buf[0][1][0][1].decode("utf-8", errors="ignore")
-                        except Exception:
+                            raw_fetch = _teast_buf[0]
+                            # imaplib fetch 응답: (status, data_list)
+                            # data_list[0]은 tuple(header_bytes, body_bytes) 또는 bytes
+                            raw_data = raw_fetch[1] if isinstance(raw_fetch, tuple) and len(raw_fetch) > 1 else []
+                            if raw_data and isinstance(raw_data[0], tuple) and len(raw_data[0]) > 1:
+                                teast_body = raw_data[0][1].decode("utf-8", errors="ignore")
+                            elif raw_data and isinstance(raw_data[0], bytes):
+                                teast_body = raw_data[0].decode("utf-8", errors="ignore")
+                        except Exception as _te:
+                            log.warning(f"[TEAST] 본문 파싱 오류 uid={uid}: {_te}")
                             teast_body = ""
                     found_nat = teast_allowed_nationality(teast_body)
                     if not found_nat:
@@ -735,16 +756,18 @@ def process_inbox(cfg: dict) -> None:
                     log.info(f"[TEAST] 허용 국적 감지({found_nat}) → 자동발송 진행: {from_addr} | {subject}")
                     first_name = from_name.split()[0] if from_name else "there"
                     subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
-                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply)
+                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply,
+                                   in_reply_to=message_id)
                     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
                     status_val = "SENT" if ok else "FAILED"
                     if ok:
-                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                        dual_notify(cfg, f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
+                        try:
+                            imap.store(uid_b, "+FLAGS", "\\Seen")
+                        except Exception:
+                            pass
                     else:
-                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                f"🚨 Teast 발송 실패: {from_addr}")
+                        dual_notify(cfg, f"🚨 Teast 발송 실패: {from_addr}")
                     log_email(from_addr, from_name, subject, received_at,
                               sent_at, "TEAST", status_val, uid)
                     processed.add(uid)
@@ -777,6 +800,8 @@ def process_inbox(cfg: dict) -> None:
                             f"→ Gmail 직접 확인 필요")
                     log_email(from_addr, from_name, subject, received_at,
                               None, "RETURNING", "PENDING", uid)
+                    processed.add(uid)
+                    _save_processed(processed)
                     continue
 
                 # ── STEP C: 본문 4KB 패치 + BRIDGE 인용 마커 체크 + 지원자 패턴 감지 ─
@@ -809,7 +834,12 @@ def process_inbox(cfg: dict) -> None:
                     continue  # 이 UID는 다음 폴링에서 재시도
                 elif not isinstance(_body_buf2[0], Exception):
                     try:
-                        body = _body_buf2[0][1][0][1].decode("utf-8", errors="ignore")
+                        raw_fetch2 = _body_buf2[0]
+                        raw_data2 = raw_fetch2[1] if isinstance(raw_fetch2, tuple) and len(raw_fetch2) > 1 else []
+                        if raw_data2 and isinstance(raw_data2[0], tuple) and len(raw_data2[0]) > 1:
+                            body = raw_data2[0][1].decode("utf-8", errors="ignore")
+                        elif raw_data2 and isinstance(raw_data2[0], bytes):
+                            body = raw_data2[0].decode("utf-8", errors="ignore")
                     except Exception:
                         body = ""
 
@@ -834,18 +864,20 @@ def process_inbox(cfg: dict) -> None:
 
                 if cfg["auto_mode"]:
                     # 즉시 자동 발송
-                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply)
+                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply,
+                                    in_reply_to=message_id)
                     status_val = "SENT" if ok else "FAILED"
                     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
 
                     if ok:
-                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
+                        dual_notify(cfg, f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
                         # 읽음 처리
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                        try:
+                            imap.store(uid_b, "+FLAGS", "\\Seen")
+                        except Exception:
+                            pass
                     else:
-                        tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                f"🚨 발송 실패: {from_addr} — 수동 발송 필요")
+                        dual_notify(cfg, f"🚨 발송 실패: {from_addr} — 수동 발송 필요")
 
                     log_email(from_addr, from_name, subject, received_at,
                               sent_at, "NEW_APPLICANT", status_val, uid)
@@ -870,10 +902,11 @@ def process_inbox(cfg: dict) -> None:
                         "reply_body":  body_reply,
                         "reply_html":  html_reply,
                         "imap_uid":    uid,
+                        "message_id":  message_id,
                     }
                     _save_pending(pending)
 
-                    tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                    dual_notify(cfg,
                             f"📧 새 지원자 메일\n"
                             f"👤 발신: {from_name} &lt;{from_addr}&gt;\n"
                             f"💬 제목: {subject}\n"
@@ -918,7 +951,8 @@ def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
                         item = pending[uid]
                         ok = send_reply(cfg, item["from_addr"], item["from_name"],
                                         item["reply_subj"], item["reply_body"],
-                                        html=item.get("reply_html"))
+                                        html=item.get("reply_html"),
+                                        in_reply_to=item.get("message_id", ""))
                         if ok:
                             sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             log_email(item["from_addr"], item["from_name"], item["subject"],
@@ -928,10 +962,10 @@ def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
                             processed = _load_processed()
                             processed.add(uid)
                             _save_processed(processed)
-                            tg_send(cfg["tg_token"], cfg["tg_chat_id"],
-                                    f"✅ 발송 완료\n👤 {item['from_name']} &lt;{item['from_addr']}&gt;")
+                            dual_notify(cfg,
+                                    f"✅ 발송 완료\n👤 {item['from_name']} <{item['from_addr']}>")
                         else:
-                            tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                            dual_notify(cfg,
                                     f"🚨 발송 실패: {item['from_addr']} — 재시도 또는 수동 발송 필요")
                     else:
                         tg_send(cfg["tg_token"], cfg["tg_chat_id"],
@@ -1077,12 +1111,13 @@ def main() -> None:
     tg_thread.start()
 
     once = "--once" in args
+    force = "--force" in args  # 업무시간 무관 강제 실행
 
     try:
         while True:
             log.info("[LOOP] inbox 폴링 시작")
             try:
-                process_inbox(cfg)
+                process_inbox(cfg, force=force)
             except Exception as e:
                 log.error(f"[LOOP] 예외: {e}", exc_info=True)
 

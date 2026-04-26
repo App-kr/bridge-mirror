@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Triggers>
-    <TimeTrigger>
-      <Repetition>
-        <Interval>PT10M</Interval>
-        <StopAtDurationEnd>false</StopAtDurationEnd>
-      </Repetition>
-      <StartBoundary>2026-04-21T10:00:00</StartBoundary>
+    <!-- 매일 20:00 KST 일일 보고 -->
+    <CalendarTrigger>
+      <StartBoundary>2026-04-26T20:00:00</StartBoundary>
       <Enabled>true</Enabled>
-    </TimeTrigger>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
   </Triggers>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <RestartOnFailure>
-      <Interval>PT1M</Interval>
-      <Count>3</Count>
+      <Interval>PT2M</Interval>
+      <Count>2</Count>
     </RestartOnFailure>
-    <ExecutionTimeLimit>PT8M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT3M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
   </Settings>
   <Actions>
     <Exec>
       <Command>Q:\Phtyon 3\pythonw.exe</Command>
-      <Arguments>-X utf8 "Q:\Claudework\bridge base\tools\email_autoresponder.py" --once</Arguments>
+      <Arguments>-X utf8 "Q:\Claudework\bridge base\tools\email_reporter.py"</Arguments>
     </Exec>
   </Actions>
 </Task>
