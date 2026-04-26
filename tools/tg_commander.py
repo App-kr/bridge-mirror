@@ -1319,18 +1319,23 @@ def _deterministic_route(text: str) -> dict | None:
         return {"action": "team", "params": {"task": task},
                 "reply": f"팀 회의 시작 — 과업: {task[:80]}\n6개 팀 (Architect/Designer/Backend/Security/Payment/QA) 자율 토론 → SPEC.md 까지 자동 생성."}
 
-    # RPA — "RPA 광고 N건" 패턴
-    if "rpa" in t or "광고" in t or "craigslist" in t or "크레이그" in t:
-        m = re.search(r"(\d+)\s*건", text)
+    # RPA — "RPA 광고 N건/개/번/회/포스팅/포스트" 패턴
+    if "rpa" in t or "광고" in t or "craigslist" in t or "크레이그" in t or "포스팅" in t:
+        # 숫자 + (건|개|번|회|포스팅|포스트|건수) — 어떤 단위든 매칭
+        m = re.search(r"(\d+)\s*(?:건|개|번|회|포스팅|포스트|건수|times|posts)", text, re.IGNORECASE)
+        if not m:
+            # 순수 숫자만 나와도 매칭 (예: "rpa 20")
+            m = re.search(r"(?:rpa|광고|포스팅)\D*(\d+)", text, re.IGNORECASE)
         limit = int(m.group(1)) if m else 5
+        limit = max(1, min(limit, 100))  # 안전 범위
         # 계정 추론: 사용자가 명시했으면 사용
         account = "gray"
-        for a in ("gray", "green", "brown", "purple"):
+        for a in ("gray", "green", "brown", "purple", "account1", "account2", "account3", "account4"):
             if a in t:
                 account = a
                 break
         return {"action": "rpa", "params": {"account": account, "limit": limit},
-                "reply": f"RPA 광고 {limit}건 ({account}) 실행할게요."}
+                "reply": f"RPA 포스팅 {limit}건 ({account}) 실행 — 동일직업 자동 제외."}
 
     # 단일 키워드 매칭
     SIMPLE = [

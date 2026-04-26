@@ -145,19 +145,43 @@ def _log_event(level: str, job_code: str, stage: str, message: str, extra: dict 
 # --account account1 → account1.env 로딩
 # 미지정 시 기본 .env 사용
 def _load_account_env(account_id: str | None = None):
-    """계정별 .env 파일 로딩. account_id 없으면 기본 .env."""
+    """계정별 .env 파일 로딩. account_id 없으면 기본 .env.
+
+    색상 별칭(gray/green/brown/purple) → 실제 account_N 자동 변환.
+    매핑 누락된 색상은 account1로 fallback.
+    """
     try:
         from dotenv import load_dotenv
     except ImportError:
         return
 
+    # 색상 별칭 → 실제 계정명 매핑
+    _COLOR_TO_ACCOUNT = {
+        "gray":   "account1",
+        "grey":   "account1",
+        "green":  "account2",
+        "brown":  "account3",
+        "purple": "account4",
+    }
     if account_id:
+        # 색상이면 변환
+        normalized = _COLOR_TO_ACCOUNT.get(account_id.strip().lower(), account_id)
+        if normalized != account_id:
+            print(f"  [MAP] {account_id} → {normalized}")
+        account_id = normalized
+
         acct_env = Path(__file__).resolve().parent / f"{account_id}.env"
         if acct_env.exists():
             load_dotenv(acct_env, override=True)
             print(f"  [ENV] {account_id}.env 로딩 완료")
             return
         else:
+            # 마지막 fallback: account1
+            fallback = Path(__file__).resolve().parent / "account1.env"
+            if fallback.exists():
+                load_dotenv(fallback, override=True)
+                print(f"  [WARN] {acct_env} 없음 → account1.env 로딩 (fallback)")
+                return
             print(f"  [WARN] {acct_env} 없음 → 기본 .env 사용")
 
     for _env_candidate in [
@@ -332,12 +356,26 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
         tgt = _norm(job_code)
         all_clean = [j for j in all_clean if _norm(j['job_code']) == tgt]
 
-    # ── 2. ad_posts 에서 이미 게시된 코드 집합 조회 (master.db) ─────────
+    # ── 2. ad_posts 에서 이미 게시된/오류/진행중 코드 집합 조회 (master.db) ───
+    # posted: 영구 제외 / draft(3시간): 다른 계정이 진행중인 건 제외 / error: 24시간 쿨다운
     conn = get_conn()
     posted_rows = conn.execute(
-        "SELECT job_code FROM ad_posts WHERE platform='craigslist' AND status='posted'"
+        """SELECT job_code FROM ad_posts
+           WHERE platform='craigslist' AND (
+               status='posted'
+               OR (status='draft' AND draft_at > datetime('now', '-3 hours'))
+               OR (status='error' AND draft_at > datetime('now', '-1 day'))
+           )"""
     ).fetchall()
     posted_nums = {_norm(r[0]) for r in posted_rows}
+
+    # 최근 3일 내 게시된 제목 집합 (제목 중복 방지용)
+    recent_title_rows = conn.execute(
+        """SELECT ad_title FROM ad_posts
+           WHERE platform='craigslist' AND status='posted'
+             AND posted_at > datetime('now', '-3 days')"""
+    ).fetchall()
+    recent_titles = {r[0] for r in recent_title_rows if r[0]}
 
     # ── 3. 미게시 필터링 + 내용 풍부도 점수 계산 ─────────────────────────
     _SCORE_FIELDS = ['working_hours', 'teach_hrs_week', 'vacation', 'native_count',
@@ -349,20 +387,64 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     eligible = [j for j in all_clean if _content_score(j) >= 2]
     candidates = [j for j in eligible if _norm(j['job_code']) not in posted_nums]
 
-    # ── 순환 처리: 모두 게시됐으면 ad_posts 초기화 후 재시작 ──────────────
+    # ── 순환 처리: 모두 게시됐으면 3일 이상 된 게시물만 초기화 후 재시작 ──────
     if not candidates:
-        print(f"  [CYCLE] 전체 {len(eligible)}건 게시 완료 → ad_posts 초기화 후 재순환")
+        print(f"  [CYCLE] 전체 {len(eligible)}건 게시 완료 → 3일 이상 된 ad_posts 초기화")
         conn.execute(
             "DELETE FROM ad_posts WHERE platform='craigslist' AND status='posted'"
+            " AND posted_at < datetime('now', '-3 days')"
         )
         conn.commit()
-        candidates = list(eligible)
+        # 초기화 후 다시 계산
+        posted_rows2 = conn.execute(
+            """SELECT job_code FROM ad_posts
+               WHERE platform='craigslist' AND status='posted'"""
+        ).fetchall()
+        posted_nums = {_norm(r[0]) for r in posted_rows2}
+        candidates = [j for j in eligible if _norm(j['job_code']) not in posted_nums]
+        if not candidates:
+            # 3일 내 게시물이 전부인 경우 (매우 드문 경우) → 강제 전체 초기화
+            print(f"  [CYCLE] 3일 내 게시물만 존재 → 불가피한 전체 초기화")
+            conn.execute("DELETE FROM ad_posts WHERE platform='craigslist' AND status='posted'")
+            conn.commit()
+            candidates = list(eligible)
+
+    # ── 마지막 게시 도시 조회 (같은 도시 연속 방지) ─────────────────────────
+    def _extract_city(title: str) -> str:
+        """'HANAM, Korea, ...' → 'HANAM'  (앞부분 도시명 정규화)"""
+        if not title:
+            return ""
+        # ", Korea," 앞의 첫 번째 토큰이 도시명
+        m = re.match(r'^([^,]+),\s*Korea', title, re.I)
+        if m:
+            return m.group(1).strip().upper()
+        return title.split(",")[0].strip().upper()
+
+    recent_posted = conn.execute(
+        """SELECT ad_title FROM ad_posts
+           WHERE platform='craigslist' AND status='posted'
+           ORDER BY posted_at DESC LIMIT 3"""
+    ).fetchall()
+    recent_cities = [_extract_city(r[0]) for r in recent_posted if r[0]]
 
     conn.close()
 
     # 동일 점수 내 랜덤 → 매 실행마다 다른 포지션 선택
     random.shuffle(candidates)
     candidates.sort(key=_content_score, reverse=True)
+
+    # ── 같은 도시 연속 방지: 최근 3건과 동일 도시는 순위 뒤로 이동 ───────────
+    if recent_cities:
+        def _city_penalty(j: dict) -> int:
+            """최근 게시 도시와 같으면 페널티(1=같음, 0=다름) → 다른 도시 우선"""
+            jcity = (j.get('location') or '').strip().upper()
+            # 세부 지역명 포함 비교 (예: 'SEOUL GANGNAM' vs 'SEOUL')
+            for rc in recent_cities:
+                if jcity == rc or jcity.startswith(rc) or rc.startswith(jcity):
+                    return 1
+            return 0
+        # content_score 내림차순 유지하면서, 같은 점수 내 다른 도시 우선 배치
+        candidates.sort(key=lambda j: (-_content_score(j), _city_penalty(j)))
 
     # ── 4. ad_only 필드 → generate_ad/save_draft 기대 필드명으로 매핑 ───
     def _to_rpa(j: dict) -> dict:
@@ -401,16 +483,21 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
 def save_draft(job: dict, title: str, body: str) -> int:
     conn = get_conn()
     existing = conn.execute(
-        "SELECT id FROM ad_posts WHERE job_code=? AND seq=? AND platform='craigslist'",
+        "SELECT id, status FROM ad_posts WHERE job_code=? AND seq=? AND platform='craigslist'",
         (job["job_code"], job["seq"])
     ).fetchone()
     if existing:
+        existing_id, existing_status = existing[0], existing[1]
+        # posted 상태는 절대 덮어쓰지 않음 — 중복 게시 방지의 핵심
+        if existing_status == 'posted':
+            conn.close()
+            return existing_id
         conn.execute(
             "UPDATE ad_posts SET ad_title=?, ad_body=?, status='draft', draft_at=? WHERE id=?",
-            (title, body, NOW, existing[0])
+            (title, body, NOW, existing_id)
         )
         conn.commit(); conn.close()
-        return existing[0]
+        return existing_id
     cur = conn.execute(
         "INSERT INTO ad_posts (job_code,seq,platform,status,ad_title,ad_body,draft_at) "
         "VALUES (?,?,'craigslist','draft',?,?,?)",
@@ -568,10 +655,12 @@ def _start_to_label(start: str) -> tuple[str, str]:
         if key in s: return (name, f"{name} Start")
     return ("Negotiable","Negotiable Start")
 
-def _build_title(city_raw: str, age_raw: str, start_raw: str) -> str:
-    """접두어 다양화 + {CITY}, ... 형식 제목 생성. 67~72자 맞춤."""
+def _build_title(city_raw: str, age_raw: str, start_raw: str, cycle: int = 0) -> str:
+    """접두어 다양화 + {CITY}, ... 형식 제목 생성. 67~72자 맞춤.
+    cycle: 게시 횟수 (동일 job이 재게시될 때마다 다른 opener 선택)
+    """
     import hashlib as _h
-    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}".encode(), usedforsecurity=False).hexdigest(), 16)
+    seed = int(_h.md5(f"{city_raw}{age_raw}{start_raw}{cycle}".encode(), usedforsecurity=False).hexdigest(), 16)
 
     city_up = _CITY_UPPER.get(city_raw, city_raw.upper())
     level   = _age_to_level(age_raw) if age_raw else "KINDER-ELEM"
@@ -858,8 +947,19 @@ def generate_ad(job: dict) -> tuple[str, str]:
     class_size = (job.get("class_size")    or "").strip()
     jcode      = (job.get("job_code")      or "").strip()
 
-    # seed -- job_code 기반 정수 (같은 job이면 항상 같은 문구 선택)
-    _seed = int(hashlib.md5(jcode.encode(), usedforsecurity=False).hexdigest(), 16)
+    # seed -- job_code + 게시 횟수 기반 (재게시마다 다른 문구 선택)
+    _post_count = 0
+    try:
+        _pc_conn = get_conn()
+        _pc_row = _pc_conn.execute(
+            "SELECT COUNT(*) FROM ad_posts WHERE job_code=? AND platform='craigslist'",
+            (jcode,)
+        ).fetchone()
+        _post_count = _pc_row[0] if _pc_row else 0
+        _pc_conn.close()
+    except Exception:
+        pass
+    _seed = int(hashlib.md5(f"{jcode}{_post_count}".encode(), usedforsecurity=False).hexdigest(), 16)
 
     # extra_lines: ad_only 로더가 미리 파싱한 값 우선, 없으면 raw_text 파싱
     _pre_extra = job.get("_extra_lines")
@@ -883,7 +983,7 @@ def generate_ad(job: dict) -> tuple[str, str]:
     ben_str    = ", ".join(benefits)
 
     # ── 제목: 샘플 포맷 ◾◾◾◾ {CITY}, ... (67~72자)
-    title = _build_title(city, age_raw, start)
+    title = _build_title(city, age_raw, start, cycle=_post_count)
 
     # ── 본문 필드 구성 (있는 필드 전부 출력, 개인정보만 제외)
     job_num = jcode.replace("Job.", "").strip()
@@ -1239,7 +1339,9 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         _delay(2, 3)
 
     # ── 단계별 처리 루프 (최대 15 스텝, 동일 step 3회 연속 시 중단) ──
+    # _img_uploaded: 이번 포스트에서 이미지가 이미 업로드됐는지 (중복 업로드 방지)
     _step_count: dict = {}
+    _img_uploaded = False
     for _ in range(15):
         step = _step(driver.current_url)
         _step_count[step] = _step_count.get(step, 0) + 1
@@ -1542,10 +1644,15 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             _advance(driver, step, timeout=12)
 
         elif step in ("img", "editimage"):
-            # 이미지 업로드 -- B.jpg 첨부
+            # 이미지 업로드 -- B.jpg 첨부 (포스트당 1회만)
             # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
             #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
+            # ⚠️ 가드: img/editimage 재진입 시 재업로드 금지 (수십장 중복 사진 방지)
+            if _img_uploaded:
+                print("이미지 이미 업로드됨 → continue 클릭만")
+                _advance(driver, step)
+                continue
             print("이미지 업로드")
             img_step_before = step
             _img_path = _unique_image(job.get("job_code") or "")
@@ -1564,6 +1671,7 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                     if file_inputs:
                         abs_path = str(_img_path.resolve())
                         file_inputs[0].send_keys(abs_path)
+                        _img_uploaded = True   # 업로드 시도 즉시 가드 ON (재진입 방지)
                         print(f"    이미지 경로 전송: {abs_path}")
 
                         # 업로드 진행 대기 -- 썸네일 또는 progress 사라질 때까지 최대 30초
@@ -1974,10 +2082,27 @@ def main():
         print("게시할 포지션 없음 (이미 전부 posted 또는 조건 없음)")
         return
 
+    # 최근 3일 내 게시된 제목 집합 (제목 중복 최종 방어선)
+    _dup_conn = get_conn()
+    _dup_rows = _dup_conn.execute(
+        """SELECT ad_title FROM ad_posts
+           WHERE platform='craigslist' AND status='posted'
+             AND posted_at > datetime('now', '-3 days')"""
+    ).fetchall()
+    _dup_conn.close()
+    _posted_titles_3d: set[str] = {r[0] for r in _dup_rows if r[0]}
+
     # 광고 생성 + PII 강제 치환 + 보안 검증
     ads: list[tuple[dict, str, str, int]] = []
     for job in jobs:
         title, body = generate_ad(job)
+
+        # ── 제목 중복 체크 (3일 내 동일 제목 게시 차단) ──────────────────────
+        if title in _posted_titles_3d:
+            print(f"  [SKIP-DUP] {job['job_code']}: 동일 제목 3일 내 게시됨 → 스킵")
+            _log_event("warn", job["job_code"], "dup_title", "Same title posted within 3 days -- skipped")
+            continue
+        _posted_titles_3d.add(title)  # 이번 배치 내 중복도 차단
 
         # ── [REDACTED] 강제 치환 ───────────────────────────────────────────
         body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)
@@ -2012,9 +2137,53 @@ def main():
             print(f"\n완료: {len(ads)}건 draft 저장")
         return
 
-    # ── 잠금 파일 (중복 실행 방지) ──
+    # ── 도시 연속 방지 인터리빙 ────────────────────────────────────────────────
+    # 같은 도시가 연속되지 않도록 재정렬 (라운드 로빈 방식)
+    def _interleave_by_city(items):
+        """같은 도시가 연속되지 않도록 재정렬."""
+        from collections import deque
+        city_buckets: dict[str, deque] = {}
+        for item in items:
+            city = (item[0].get("city") or "").strip().upper()
+            city_buckets.setdefault(city, deque()).append(item)
+        # 가장 많은 도시부터 꺼내며 라운드 로빈
+        result = []
+        while any(city_buckets.values()):
+            used_this_round = set()
+            last_city = result[-1][0].get("city","").strip().upper() if result else ""
+            # 이전 도시와 다른 것 우선 선택
+            for city in sorted(city_buckets, key=lambda c: (-len(city_buckets[c]), c)):
+                if city not in used_this_round and city != last_city and city_buckets[city]:
+                    result.append(city_buckets[city].popleft())
+                    used_this_round.add(city)
+                    last_city = city
+                    break
+            else:
+                # 같은 도시만 남으면 그냥 추가
+                for city, bucket in city_buckets.items():
+                    if bucket:
+                        result.append(bucket.popleft())
+                        break
+            # 빈 버킷 제거
+            city_buckets = {c: q for c, q in city_buckets.items() if q}
+        return result
+
+    if len(ads) > 1:
+        ads = _interleave_by_city(ads)
+
+    # ── 잠금 파일 (중복 실행 방지) ── 이미 실행 중이면 즉시 종료
     import atexit
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if LOCK_FILE.exists():
+        try:
+            existing_pid = int(LOCK_FILE.read_text().strip())
+            import psutil as _psu2
+            if _psu2.pid_exists(existing_pid):
+                print(f"[LOCK] 이미 RPA 실행 중 (PID {existing_pid}) -- 중복 실행 방지로 종료합니다.")
+                _log_event("warn", "--", "lock_abort", f"Duplicate run prevented (PID {existing_pid})")
+                return
+        except Exception:
+            pass  # PID 파싱 실패 시 잠금 무시하고 계속
     LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
     atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
 
