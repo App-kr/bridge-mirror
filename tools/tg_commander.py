@@ -1337,6 +1337,13 @@ def _deterministic_route(text: str) -> dict | None:
         return {"action": "rpa", "params": {"account": account, "limit": limit},
                 "reply": f"RPA 포스팅 {limit}건 ({account}) 실행 — 동일직업 자동 제외."}
 
+    # 실시간 작업현황 — 이 구체적 패턴이 단순 "현황"보다 우선
+    LIVE_KW = ("작업현황", "작업 현황", "작업중", "작업 중", "실시간",
+               "지금 뭐", "지금뭐", "뭐하고", "진행중", "진행 중",
+               "돌아가는", "돌고있", "돌고 있", "live")
+    if any(kw in t for kw in LIVE_KW):
+        return {"action": "live_status", "params": {}, "reply": "지금 돌아가는 작업 모두 확인할게요."}
+
     # 단일 키워드 매칭
     SIMPLE = [
         (("현황", "상태"),                           "status",     "BRIDGE 현황 확인할게요."),
@@ -1568,8 +1575,81 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
         _run_team_council(chat_id, task_str)
         return
 
+    if action == "live_status":
+        send(chat_id, reply)
+        _live_status_all(chat_id)
+        return
+
     # null or unknown → 대화 답변만
     send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _live_status_all(chat_id):
+    """현재 돌아가는 모든 작업 실시간 보고 — 터미널/RPA/팀회의/봇 자체."""
+    import os as _os, time as _time
+    lines = ["[실시간 작업현황]\n"]
+    # 1) AgentTerminal
+    with _t_lock:
+        running_terms = [t for t in _terminals.values() if t.status == "running"]
+    if running_terms:
+        lines.append("[터미널]")
+        for t in sorted(running_terms, key=lambda x: x.tid):
+            ask_mark = " (질문대기)" if t._is_asking else ""
+            steps = len(t.messages)
+            lines.append(f"  T{t.tid}: {t.task[:60]}  steps={steps}{ask_mark}")
+    else:
+        lines.append("[터미널] 실행 중 없음")
+
+    # 2) 외부 RPA 프로세스 (craigslist_auto_rpa.py)
+    try:
+        r = subprocess.run(
+            ["wmic", "process", "where", "name='python.exe'",
+             "get", "processid,commandline", "/format:csv"],
+            capture_output=True, text=True, timeout=8,
+        )
+        rpa_lines, council_lines = [], []
+        for line in r.stdout.splitlines():
+            if "craigslist_auto_rpa" in line:
+                # parse account/limit
+                acct, lim = "?", "?"
+                m = re.search(r"--account\s+(\S+)", line)
+                if m: acct = m.group(1)
+                m = re.search(r"--limit\s+(\d+)", line)
+                if m: lim = m.group(1)
+                pid = line.rsplit(",", 1)[-1].strip()
+                rpa_lines.append(f"  RPA pid={pid} acct={acct} limit={lim}")
+            elif "team_council" in line:
+                pid = line.rsplit(",", 1)[-1].strip()
+                council_lines.append(f"  팀회의 pid={pid}")
+        if rpa_lines:
+            lines.append("\n[RPA 진행 중]")
+            lines.extend(rpa_lines)
+        else:
+            lines.append("\n[RPA] 실행 중 없음")
+        if council_lines:
+            lines.append("\n[팀 회의 진행 중]")
+            lines.extend(council_lines)
+    except Exception as e:
+        lines.append(f"\n[프로세스 조회 오류] {e}")
+
+    # 3) 봇 자신
+    uptime = int(_time.time() - _START_TIME)
+    h, rem = divmod(uptime, 3600); m, s = divmod(rem, 60)
+    lines.append(f"\n[봇] pid={_os.getpid()} uptime={h}h{m:02d}m{s:02d}s")
+
+    # 4) 최근 5개 이벤트 (로그 tail)
+    try:
+        log_path = PROJECT_ROOT / "logs" / "tg_commander.log"
+        if log_path.exists():
+            with open(str(log_path), "r", encoding="utf-8") as f:
+                tail_lines = f.readlines()[-5:]
+            lines.append("\n[최근 로그]")
+            for ln in tail_lines:
+                lines.append("  " + ln.rstrip()[:120])
+    except Exception:
+        pass
+
+    send(chat_id, "\n".join(lines), markup=keyboard([btn("메인 메뉴", "menu")]))
 
 
 def _run_team_council(chat_id, task_str: str):
