@@ -4,7 +4,7 @@
 # 응답코드/지연 무시, 절대 실패 안 함 (catch all)
 $ErrorActionPreference = "SilentlyContinue"
 try {
-    $null = Invoke-WebRequest -Uri 'https://bridge-n7hk.onrender.com/api/health' `
+    $null = Invoke-WebRequest -Uri 'https://bridge-n7hk.onrender.com/health' `
         -UseBasicParsing -TimeoutSec 30 -ErrorAction SilentlyContinue
 } catch {
     # 일시적 네트워크 오류 무시 (cron 다음 슬롯에서 재시도)

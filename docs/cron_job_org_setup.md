@@ -26,7 +26,7 @@ https://cron-job.org/ → Sign up (이메일만)
 | 필드 | 값 |
 |------|----|
 | Title | `BRIDGE Render Keepalive` |
-| URL | `https://bridge-n7hk.onrender.com/api/health` |
+| URL | `https://bridge-n7hk.onrender.com/health` |
 | Schedule | Every 20 minutes |
 | Enabled | ✅ |
 | Save responses | (선택) Last 10 |

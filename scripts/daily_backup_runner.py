@@ -54,6 +54,17 @@ def _ensure_field_key() -> bool:
     return bool(os.environ.get("BRIDGE_FIELD_KEY"))
 
 
+def _ensure_admin_key() -> bool:
+    """ADMIN_API_KEY (BX) → BRIDGE_ADMIN_KEY (render_db_backup가 기대하는 이름) 별칭."""
+    if os.environ.get("BRIDGE_ADMIN_KEY"):
+        return True
+    src = os.environ.get("ADMIN_API_KEY") or os.environ.get("BRIDGE_ADMIN_KEY")
+    if src:
+        os.environ["BRIDGE_ADMIN_KEY"] = src
+        return True
+    return False
+
+
 def run(label: str, cmd: list[str], timeout_s: int = 600) -> int:
     log(f"▶ {label}")
     log(f"  cmd: {' '.join(cmd)}")
@@ -129,13 +140,17 @@ def main() -> int:
 
     # 2) Render DB SQL dump (BRIDGE_ADMIN_KEY 필요 — 미설정 시 자체 스킵)
     if not skip_render:
-        code = run(
-            "render_db_backup",
-            [PYTHON, "-X", "utf8", str(BASE / "tools" / "render_db_backup.py")],
-            timeout_s=180,
-        )
-        if code != 0:
-            fails.append(("render_db_backup", code))
+        if not _ensure_admin_key():
+            log("⚠ ADMIN_API_KEY 없음 → render_db_backup 단계 skip")
+            skipped.append("render_db_backup (no admin key)")
+        else:
+            code = run(
+                "render_db_backup",
+                [PYTHON, "-X", "utf8", str(BASE / "tools" / "render_db_backup.py")],
+                timeout_s=180,
+            )
+            if code != 0:
+                fails.append(("render_db_backup", code))
 
     # 3) bridge_backup 전체 스냅샷 (선택)
     if not quick:
