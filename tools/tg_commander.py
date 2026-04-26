@@ -1307,6 +1307,19 @@ def _deterministic_route(text: str) -> dict | None:
                 return {"action": "terminal", "params": {"tid": tid, "task": task},
                         "reply": f"터미널 {tid}에서 시작할게요."}
 
+    # Jarvis — "데일리 브리핑", "/jarvis <agent>", "오늘의 카드", "아침 브리핑"
+    if (re.match(r"^\s*/jarvis\b", text, re.IGNORECASE) or
+        any(kw in t for kw in ("데일리 브리핑", "데일리브리핑", "아침 브리핑", "아침브리핑",
+                                "오늘 뉴스", "오늘의 카드", "뉴스 카드", "시황 카드",
+                                "morning brief", "daily brief", "jarvis"))):
+        # /jarvis 형식이면 명시 호출, 아니면 데일리 브리핑 가정
+        agent_name = "daily_brief"
+        m = re.match(r"^\s*/jarvis\s+([a-z0-9_-]+)", text, re.IGNORECASE)
+        if m:
+            agent_name = m.group(1).lower()
+        return {"action": "jarvis", "params": {"agent": agent_name, "input": text},
+                "reply": f"Jarvis {agent_name} 실행 — 결과 도착까지 1~2분."}
+
     # 팀 회의 — "팀회의 윷놀이" / "팀에서 ... 만들어" / "팀 토론 ..."
     if ("팀회의" in t or "팀 회의" in t or "팀토론" in t or "팀 토론" in t
         or "팀 의논" in t or "팀의논" in t or "team council" in t):
@@ -1580,8 +1593,46 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
         _live_status_all(chat_id)
         return
 
+    if action == "jarvis":
+        agent_name = params.get("agent", "daily_brief")
+        inp = params.get("input", "")
+        send(chat_id, reply)
+        _run_jarvis(chat_id, agent_name, inp)
+        return
+
     # null or unknown → 대화 답변만
     send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _run_jarvis(chat_id, agent_name: str, input_text: str):
+    """Jarvis agent 백그라운드 실행 + 텔레그램 결과 보고."""
+    def _worker():
+        try:
+            sys.path.insert(0, str(Path(r"Q:/Claudework/agentic_os")))
+            from jarvis import run_agent
+            from jarvis.cards import to_markdown
+            res = run_agent(agent_name, input_text, {"trigger": "telegram", "chat_id": chat_id})
+            if not res.get("ok"):
+                send(chat_id, f"[Jarvis 오류] {res.get('error') or res}",
+                     markup=keyboard([btn("메인 메뉴", "menu")]))
+                return
+            out = res.get("output") or {}
+            preview = out.get("preview") or out.get("preview_markdown") or ""
+            delivery = out.get("delivery", {})
+            msg = (
+                f"[Jarvis: {agent_name}] 완료 ({res.get('duration_sec')}s)\n"
+                f"카톡 발송: {delivery.get('sent','?')}/{delivery.get('total','?')} "
+                f"({'OK' if delivery.get('ok') else delivery.get('error', '?')})\n\n"
+                f"{preview[:1500]}"
+            )
+            send(chat_id, msg, markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[jarvis] {agent_name} done dur={res.get('duration_sec')}s")
+        except Exception as e:
+            send(chat_id, f"[Jarvis 예외] {e}",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[jarvis] ERR {agent_name}: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def _live_status_all(chat_id):
@@ -2535,13 +2586,13 @@ def main():
             # 짧은 long-poll(8초) — 외부 다른 poller와 빈번히 경쟁할 때 더 자주 재시도해서 우리가 잡는 확률↑
             resp = tg_get("getUpdates", {"offset": offset, "timeout": 8, "limit": 20})
             if "error_code" in resp and resp.get("error_code") == 409:
-                # 짧은 백오프 (1~5초) — 빨리 재시도해야 외부 poller 사이 틈 잡음
-                _conflict_backoff = min(_conflict_backoff + 1, 5)
+                # 0초 백오프 — 외부 poller 사이 틈을 즉시 잡음 (race-to-poll)
                 _conflict_close_count += 1
-                wait = _conflict_backoff   # 1, 2, 3, 4, 5 초
-                _log(f"[tg] 409 Conflict — {wait}초 (누적 {_conflict_close_count}회)")
-                # 409가 5회 누적되면 close() 호출 — 외부 poller 강제 종료
-                if _conflict_close_count >= 5:
+                # 매 50회마다만 로그 (스팸 방지)
+                if _conflict_close_count % 50 == 1:
+                    _log(f"[tg] 409 외부 polling — 즉시 재시도 (누적 {_conflict_close_count}회)")
+                # 409가 200회 누적되면 close() 호출 (rate limit 풀렸을 때)
+                if _conflict_close_count >= 200:
                     _log("[tg] 409 5회 누적 — close() 호출")
                     try:
                         cr = tg_post("close", {})
@@ -2557,9 +2608,8 @@ def main():
                     except Exception as e:
                         _log(f"[tg] close err: {e}")
                     _conflict_close_count = 0
-                    time.sleep(2)
-                else:
-                    time.sleep(wait)
+                    time.sleep(1)
+                # 0초 backoff — 즉시 재시도 (공격적 race)
                 continue
             _conflict_close_count = 0
             _conflict_backoff = 0
