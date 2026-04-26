@@ -1307,6 +1307,18 @@ def _deterministic_route(text: str) -> dict | None:
                 return {"action": "terminal", "params": {"tid": tid, "task": task},
                         "reply": f"터미널 {tid}에서 시작할게요."}
 
+    # 팀 회의 — "팀회의 윷놀이" / "팀에서 ... 만들어" / "팀 토론 ..."
+    if ("팀회의" in t or "팀 회의" in t or "팀토론" in t or "팀 토론" in t
+        or "팀 의논" in t or "팀의논" in t or "team council" in t):
+        # task: 키워드 뒤 본문
+        m = re.search(r"(?:팀\s*(?:회의|토론|의논)|team\s*council)\s*[:은는을를에서]?\s*(.+)",
+                      text, re.IGNORECASE)
+        task = (m.group(1).strip() if m else text.strip())
+        if not task or len(task) < 3:
+            task = text.strip()
+        return {"action": "team", "params": {"task": task},
+                "reply": f"팀 회의 시작 — 과업: {task[:80]}\n6개 팀 (Architect/Designer/Backend/Security/Payment/QA) 자율 토론 → SPEC.md 까지 자동 생성."}
+
     # RPA — "RPA 광고 N건" 패턴
     if "rpa" in t or "광고" in t or "craigslist" in t or "크레이그" in t:
         m = re.search(r"(\d+)\s*건", text)
@@ -1545,8 +1557,46 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
         _terminal_status_all(chat_id)
         return
 
+    if action == "team":
+        task_str = params.get("task", "").strip() or "(empty)"
+        send(chat_id, reply)
+        _run_team_council(chat_id, task_str)
+        return
+
     # null or unknown → 대화 답변만
     send(chat_id, reply, markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _run_team_council(chat_id, task_str: str):
+    """6팀 자율 토론 → SPEC.md 생성. 백그라운드 스레드 (5~15분 소요)."""
+    send(chat_id, f"[팀회의 시작] {task_str[:120]}\n예상 5~15분. 매 팀 발언마다 즉시 보고합니다.")
+
+    def _worker():
+        try:
+            sys.path.insert(0, str(Path(r"Q:/Claudework/agentic_os")))
+            from agents.team_council import run_council, save_council_result
+
+            # 팀 발언이 나올 때마다 텔레그램에 실시간 보고
+            def _cb(role, msg):
+                try:
+                    send(chat_id, f"[{role}]\n{msg[:1500]}")
+                except Exception:
+                    pass
+
+            result = run_council(task_str, callback=_cb, parallel=True)
+            base = save_council_result(result)
+            spec = result["spec"]
+            send(chat_id,
+                 f"[회의 완료] {result['duration_sec']}초 소요\n\n"
+                 f"--- SPEC.md (요약) ---\n{spec[:2500]}",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+            send(chat_id, f"전체 토론 + SPEC 저장: {base}.SPEC.md")
+            _log(f"[council] done task={task_str[:60]} dur={result['duration_sec']}s")
+        except Exception as e:
+            send(chat_id, f"[회의 오류] {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+            _log(f"[council] ERR: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def _run_rpa_direct(chat_id, account, limit):
