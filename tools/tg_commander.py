@@ -2417,9 +2417,28 @@ def _release_lock():
         pass
 
 
+def _force_close_other_pollers():
+    """startup 시 텔레그램 close() 호출 — 다른 곳(Termux, 다른 PC)에서 polling 중이면 강제 종료시켜서 우리가 잡음.
+    실패해도 무시 (이미 닫혀 있을 수 있음)."""
+    try:
+        r = tg_post("close", {})
+        if r.get("ok"):
+            _log("[tg] close() OK — 다른 polling 인스턴스 모두 종료시킴")
+        else:
+            _log(f"[tg] close() 응답: {r}")
+        # close() 후 ~10초 대기 권장 (텔레그램이 connection cleanup)
+        time.sleep(10)
+    except Exception as e:
+        _log(f"[tg] close() err: {e}")
+
+
 def main():
     _acquire_lock()
     _log(f"[tg_commander v2] 시작 -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}")
+
+    # 다른 곳(Termux/원격)에서 같은 토큰으로 polling 중이면 강제 종료
+    _force_close_other_pollers()
+
     broadcast(
         "BRIDGE Commander v2 시작\n"
         "========================\n"
@@ -2430,15 +2449,26 @@ def main():
 
     offset = load_offset()
     _conflict_backoff = 0
+    _conflict_close_count = 0   # 409 누적 → 다시 close() 호출 트리거
     while True:
         try:
             resp = tg_get("getUpdates", {"offset": offset, "timeout": 30, "limit": 20})
             if "error_code" in resp and resp.get("error_code") == 409:
                 _conflict_backoff = min(_conflict_backoff + 1, 4)
+                _conflict_close_count += 1
                 wait = 15 * _conflict_backoff
-                print(f"[tg] 409 Conflict — {wait}초 대기")
-                time.sleep(wait)
+                _log(f"[tg] 409 Conflict — {wait}초 대기 (누적 {_conflict_close_count}회)")
+                # 409가 3회 연속이면 close() 다시 호출 — 다른 poller 강제 종료
+                if _conflict_close_count >= 3:
+                    _log("[tg] 409 3회 — close() 재호출")
+                    try: tg_post("close", {})
+                    except Exception: pass
+                    _conflict_close_count = 0
+                    time.sleep(12)
+                else:
+                    time.sleep(wait)
                 continue
+            _conflict_close_count = 0
             _conflict_backoff = 0
             for upd in resp.get("result", []):
                 uid = upd["update_id"]
