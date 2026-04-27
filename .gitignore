@@ -49,6 +49,8 @@ tools/resume_converter/originals/
 tools/resume_converter/logs/
 tools/resume_converter/.rc_key
 tools/resume_converter/.api_key
+tools/resume_converter/form_watcher_token.json
+tools/resume_converter/form_watcher_state.json
 tools/processed_docs/
 
 # ── Email autoresponder state (PII: candidate emails) ───────

@@ -364,6 +364,15 @@ class BridgeConverterApp:
             relief="flat", padx=8, cursor="hand2")
         self._watcher_btn.pack(side="left", padx=4)
 
+        # 구글폼 자동 수신 버튼
+        self._form_watcher_active = False
+        self._form_watcher_btn = tk.Button(
+            bar, text="● G폼 수신",
+            command=self._toggle_form_watcher,
+            bg=C_BORDER, fg=C_TEXT, font=(F, 11),
+            relief="flat", padx=8, cursor="hand2")
+        self._form_watcher_btn.pack(side="left", padx=4)
+
         # 시트 상태 (우측)
         self._sheet_label = tk.Label(
             bar, text="● 시트 미연결",
@@ -1971,6 +1980,51 @@ class BridgeConverterApp:
                 text="● 인박스 감시", bg=C_BORDER, fg=C_TEXT)
             self._status_var.set("인박스 감시 중지됨")
             self._status_lbl.config(fg=C_SUB)
+
+    def _toggle_form_watcher(self):
+        """구글폼 자동 수신 시작/중지."""
+        if not self._form_watcher_active:
+            try:
+                from .form_watcher import start_background, TOKEN_FILE, setup_oauth
+                # 토큰 없으면 OAuth 설정 안내
+                if not TOKEN_FILE.exists():
+                    import tkinter.messagebox as mb
+                    if mb.askyesno("G폼 OAuth 인증",
+                                   "Google 계정 인증이 필요합니다.\n"
+                                   "브라우저가 열리면 계정을 선택하고 허용을 눌러주세요.\n\n"
+                                   "지금 인증하시겠습니까?"):
+                        import threading
+                        def _do_oauth():
+                            ok = setup_oauth()
+                            if ok:
+                                self.root.after(0, lambda: self._start_form_watcher_thread())
+                            else:
+                                self.root.after(0, lambda: mb.showerror("인증 실패", "OAuth 인증에 실패했습니다."))
+                        threading.Thread(target=_do_oauth, daemon=True).start()
+                    return
+                self._start_form_watcher_thread()
+            except Exception as e:
+                import tkinter.messagebox as mb
+                mb.showerror("G폼 오류", f"구글폼 감시 시작 실패:\n{e}")
+        else:
+            try:
+                from .form_watcher import stop_background
+                stop_background()
+            except Exception:
+                pass
+            self._form_watcher_active = False
+            self._form_watcher_btn.config(text="● G폼 수신", bg=C_BORDER, fg=C_TEXT)
+            self._status_var.set("G폼 수신 중지")
+            self._status_lbl.config(fg=C_SUB)
+
+    def _start_form_watcher_thread(self):
+        """폼 감시 백그라운드 스레드 시작 (OAuth 완료 후 호출)."""
+        from .form_watcher import start_background
+        start_background(interval_sec=300)
+        self._form_watcher_active = True
+        self._form_watcher_btn.config(text="● G폼 ON", bg="#2196F3", fg="white")
+        self._status_var.set("[G폼 수신 시작] 5분 간격으로 새 이력서 자동 다운로드")
+        self._status_lbl.config(fg="#2196F3")
 
     # ══════════════════════════════════════════════════════════════════
     # 시트 / 미처리 목록

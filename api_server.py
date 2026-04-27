@@ -14112,6 +14112,108 @@ async def admin_db_restore(request: Request):
               message=f"복원 완료: 후보자 {cand_count}명, 구인 {jobs_count}건, 문의 {inq_count}건")
 
 
+# ── Google Forms 자동 수신 API ────────────────────────────────────────────────
+import threading as _threading
+
+_form_watcher_thread = None
+_form_watcher_lock = _threading.Lock()
+
+def _get_form_watcher_state() -> dict:
+    """form_watcher_state.json 읽기."""
+    try:
+        state_path = _os.path.join(_os.path.dirname(__file__), "tools", "resume_converter", "form_watcher_state.json")
+        if _os.path.exists(state_path):
+            import json as _json2
+            with open(state_path, encoding="utf-8") as f:
+                return _json2.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+@app.get("/api/admin/form-watch/status", tags=["admin"])
+async def form_watch_status(req: Request):
+    """구글폼 자동 수신 상태 조회."""
+    _check_admin(req)
+    global _form_watcher_thread
+    state = _get_form_watcher_state()
+    running = bool(_form_watcher_thread and _form_watcher_thread.is_alive())
+    return ok(data={
+        "running":        running,
+        "last_check":     state.get("last_check"),
+        "download_count": state.get("download_count", 0),
+        "processed_ids":  len(state.get("processed_file_ids", [])),
+        "folder_ids":     state.get("folder_ids", []),
+        "form_id":        state.get("form_id"),
+    })
+
+
+@app.post("/api/admin/form-watch/start", tags=["admin"])
+async def form_watch_start(req: Request):
+    """구글폼 자동 수신 시작 (백그라운드 폴링)."""
+    _check_admin(req)
+    global _form_watcher_thread
+    with _form_watcher_lock:
+        if _form_watcher_thread and _form_watcher_thread.is_alive():
+            return ok(message="이미 실행 중")
+        try:
+            sys_path_base = _os.path.join(_os.path.dirname(__file__), "tools")
+            if sys_path_base not in _sys.path:
+                _sys.path.insert(0, sys_path_base)
+            from resume_converter.form_watcher import start_background
+            _form_watcher_thread = start_background(interval_sec=300)
+            return ok(message="구글폼 수신 시작")
+        except Exception as e:
+            raise HTTPException(500, f"폼 감시 시작 실패: {e}")
+
+
+@app.post("/api/admin/form-watch/stop", tags=["admin"])
+async def form_watch_stop(req: Request):
+    """구글폼 자동 수신 중지."""
+    _check_admin(req)
+    try:
+        from resume_converter.form_watcher import stop_background
+        stop_background()
+        return ok(message="구글폼 수신 중지")
+    except Exception as e:
+        raise HTTPException(500, f"폼 감시 중지 실패: {e}")
+
+
+@app.post("/api/admin/form-watch/poll-now", tags=["admin"])
+async def form_watch_poll_now(req: Request):
+    """즉시 1회 폴링 (새 이력서 확인)."""
+    _check_admin(req)
+    try:
+        sys_path_base = _os.path.join(_os.path.dirname(__file__), "tools")
+        if sys_path_base not in _sys.path:
+            _sys.path.insert(0, sys_path_base)
+        from resume_converter.form_watcher import run_once
+        n = run_once()
+        return ok(data={"downloaded": n}, message=f"새 파일 {n}개 다운로드")
+    except Exception as e:
+        raise HTTPException(500, f"폴링 실패: {e}")
+
+
+@app.post("/api/admin/form-watch/set-folder", tags=["admin"])
+async def form_watch_set_folder(req: Request):
+    """폼 업로드 Drive 폴더 ID 설정."""
+    _check_admin(req)
+    body = await req.json()
+    folder_id = body.get("folder_id", "").strip()
+    form_id   = body.get("form_id", "1vFwznyCWqFtqVomKIU1V9R8_kzMGIqH1QM4TiKs-o6Q").strip()
+    if not folder_id:
+        raise HTTPException(400, "folder_id 필요")
+    try:
+        sys_path_base = _os.path.join(_os.path.dirname(__file__), "tools")
+        if sys_path_base not in _sys.path:
+            _sys.path.insert(0, sys_path_base)
+        from resume_converter.form_watcher import set_form_config
+        set_form_config(form_id, [folder_id])
+        return ok(message=f"폴더 설정 완료: {folder_id}")
+    except Exception as e:
+        raise HTTPException(500, f"설정 실패: {e}")
+
+
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn

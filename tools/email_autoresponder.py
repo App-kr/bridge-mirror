@@ -513,47 +513,43 @@ def log_email(from_email: str, from_name: str, subject: str,
         log.error(f"[DB] email_logs 기록 실패: {e}")
 
 
-_APPLY_URL = "https://tinyurl.com/bridgekr"
+_APPLY_URL = "https://forms.gle/Y5SuTe6253QLBR5v8"
 
 # ── 답장 초안 생성 ───────────────────────────────────────────────────────────
 def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str, str]:
     """(subject, plain_text, html) 반환"""
     subject = f"Re: {orig_subject}"
 
-    _link_text = "\U0001f449 \U0001f517 Apply [Link: English Teacher Application(Google form)]"
-
     plain = (
         "Hello,\n"
         "This is BRIDGE Agency.\n\n"
-        "We have received your application!\n"
-        "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:\n"
-        f"{_link_text}: {_APPLY_URL}\n\n"
-        "Please ensure the following are included:\n\n"
-        "\u2022 CV (Workplace Name, Location, Dates in YY/MM format)\n"
-        "\u2022 Cover Letter & Photo that taken 1 year\n"
-        "\u2022 Scanned Apostilled Documents\n"
-        "\u2022 Short Video Intro (1-3 mins)\n\n"
-        "This helps us understand your specific needs and find the right match for you. "
+        "Great! We\u2019ve got your application. :) Since we don\u2019t have your info on file yet, "
+        "please take 3\u20135 minutes to fill out our registration form so we can get started:\n\n"
+        f"\U0001f449\U0001f3fc\U0001f517 Apply [Link: English Teacher Application(Google form)]: {_APPLY_URL}\n\n"
+        "Please ensure the following are included:\n"
+        "`CV (Workplace Name, Location, Dates in YY/MM format)\n"
+        "`Cover Letter & Photo that taken 1 year\n"
+        "`Scanned Apostilled Documents\n"
+        "`Short Video Intro (1-3 mins)\n\n"
         "Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.\n\n"
-        "kind regards,\n\nBRIDGE"
+        "kind regards,\n"
+        "\u26a0IF you are not a citizen of the US, UK, CA, IE, AU, NZ, or ZA, please do NOT apply."
     )
 
     html = (
         "<div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6'>"
         "<p>Hello,<br>This is BRIDGE Agency.</p>"
-        "<p>We have received your application!<br>"
-        "For now, as we don\u2019t have your application on file, please complete our quick registration form (approx. 2-5 mins) to get started:<br>"
-        f"\U0001f449 \U0001f517 <a href='{_APPLY_URL}'>Apply [Link: English Teacher Application(Google form)]</a></p>"
-        "<p>Please ensure the following are included:</p>"
-        "<ul style='margin:0;padding-left:20px'>"
-        "<li>CV (Workplace Name, Location, Dates in YY/MM format)</li>"
-        "<li>Cover Letter &amp; Photo that taken 1 year</li>"
-        "<li>Scanned Apostilled Documents</li>"
-        "<li>Short Video Intro (1-3 mins)</li>"
-        "</ul>"
-        "<p>This helps us understand your specific needs and find the right match for you. "
-        "Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.</p>"
-        "<p>kind regards,<br><br><strong>BRIDGE</strong></p>"
+        "<p>Great! We\u2019ve got your application. :) Since we don\u2019t have your info on file yet, "
+        "please take 3\u20135 minutes to fill out our registration form so we can get started:</p>"
+        f"<p>\U0001f449\U0001f3fc\U0001f517 <a href='{_APPLY_URL}'>Apply [Link: English Teacher Application(Google form)]</a></p>"
+        "<p>Please ensure the following are included:<br>"
+        "`CV (Workplace Name, Location, Dates in YY/MM format)<br>"
+        "`Cover Letter &amp; Photo that taken 1 year<br>"
+        "`Scanned Apostilled Documents<br>"
+        "`Short Video Intro (1-3 mins)</p>"
+        "<p>Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.</p>"
+        "<p>kind regards,<br>"
+        "<strong>\u26a0IF you are not a citizen of the US, UK, CA, IE, AU, NZ, or ZA, please do NOT apply.</strong></p>"
         "</div>"
     )
 
