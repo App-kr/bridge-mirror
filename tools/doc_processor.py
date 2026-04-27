@@ -611,6 +611,13 @@ RE_FOREIGN_CITY = re.compile(
     re.I
 )
 
+# 한국 도시+국가 주소 패턴: "Gwangmyeong, South Korea", "Suwon, Korea"
+# → 통째로 redact (주소줄 전체 삭제)
+RE_KR_CITY_COUNTRY = re.compile(
+    r'\b[A-Za-z][A-Za-z\s\-]{2,30},\s*(?:South\s+Korea|Korea|Republic\s+of\s+Korea)\b',
+    re.I
+)
+
 # 나이 언급: "I am a 33 year old", "I'm a 34-year-old"
 RE_AGE_MENTION = re.compile(
     r"\bI(?:'m|\s+am)\s+(?:a\s+)?\d{1,2}[\s\-]?year[\s\-]?old\b",
@@ -645,6 +652,11 @@ KR_KEYWORDS = frozenset([
     "itaewon", "gangnam", "hongdae", "sinchon", "mapo",
     "jamsil", "songpa", "yongsan", "nowon", "bundang",
     "ilsan", "dongtan", "pangyo",
+    # 경기도 주요 도시 (추가)
+    "gwangmyeong", "uijeongbu", "gapyeong", "yeoju",
+    "anseong", "pyeongtaek", "dongducheon", "gapyeong",
+    # 기타 주요 시
+    "mokpo", "chungju", "jecheon", "boryeong",
 ])
 
 # PII 라벨 → 해당 줄 전체 삭제
@@ -1546,7 +1558,14 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if line.strip().lower() in _RESUME_SECTION_HEADERS:
                     continue
                 # ALL-CAPS 2+단어 → 섹션 제목으로 간주 (이름은 보통 Mixed Case)
+                # 단, 2단어이고 각 단어가 짧으면(≤8자) 성씨일 가능성 → 개별 추가
                 if line.isupper() and len(line.split()) >= 2:
+                    _caps_words = line.split()
+                    if len(_caps_words) == 2 and all(len(w) <= 8 for w in _caps_words):
+                        _pdf_extracted_names.append(line)  # "VAN ZYL" 전체
+                        for _cw in _caps_words:
+                            if len(_cw) >= 3:
+                                _pdf_extracted_names.append(_cw)  # "VAN", "ZYL" 개별
                     continue
                 words = line.split()
                 if 2 <= len(words) <= 5 and all(
@@ -1557,6 +1576,36 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     for w in words:
                         if len(w) >= 3 and w[0].isupper():
                             _pdf_extracted_names.append(w)
+
+    # ── 헤더 페이지 자동 감지 (More About Me 인트로 페이지 스킵) ──
+    # "More About Me" / "About Me" 같은 자기소개 페이지는 Page 0이지만
+    # 실제 이력서 헤더(이름+연락처)는 다른 페이지일 수 있음
+    _header_page_num = 0
+    _MORE_ABOUT_RE = re.compile(
+        r'^\s*(more\s+about|about\s+me|personal\s+profile|personal\s+statement'
+        r'|my\s+profile|profile\s+summary)',
+        re.I,
+    )
+    for _hpi, _hpg in enumerate(doc):
+        _top_txt = _hpg.get_text("text", clip=fitz.Rect(0, 0, _hpg.rect.width, 280))
+        _top_lower = _top_txt.lower().strip()
+        if _MORE_ABOUT_RE.match(_top_lower):
+            continue  # About Me 페이지 스킵
+        # 이메일/전화 패턴이 상단에 있으면 이력서 헤더 페이지
+        if re.search(r'@[a-zA-Z]|(?:\+?\d{1,3}[\s\-]?\(?\d{2,4}\)?[\s\-]?\d{3})', _top_txt):
+            _header_page_num = _hpi
+            break
+        # 컬러 헤더 사각형(베이지 등)이 상단에 있으면 이력서 헤더 페이지
+        for _drw in _hpg.get_drawings():
+            _dfill = _drw.get("fill")
+            _dr = _drw.get("rect", fitz.Rect())
+            if (_dfill and _dfill not in ((1, 1, 1), (0, 0, 0))
+                    and _dr.y0 < 30 and _dr.width > _hpg.rect.width * 0.4):
+                _header_page_num = _hpi
+                break
+        else:
+            continue
+        break
 
     for page_num, page in enumerate(doc):
         text = page.get_text()
@@ -1601,7 +1650,6 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 first_name = " ".join(words[:-1])
                 text_lower = text.lower()
                 # 풀네임 → 이름만 남기기 (replacement redact)
-                # page.search_for() 는 대소문자 무시 — 원본 케이스 그대로 전달
                 if name.lower() in text_lower:
                     replacement_redacts.append((name, first_name))
                     all_logs.append(f"[page{page_num}] FULLNAME→{first_name}: {name}")
@@ -1609,8 +1657,18 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if len(last_name) >= 2 and last_name.lower() in text_lower:
                     redact_texts.add(last_name)
                     all_logs.append(f"[page{page_num}] LASTNAME: {last_name}")
+                # ── CamelCase 성 분리: "VanZyl" → "Van Zyl" / "VAN ZYL" 대응 ──
+                _cc_parts = re.findall(r'[A-Z][a-z]+|[A-Z]{2,}', last_name)
+                if len(_cc_parts) > 1:
+                    _spaced_ln = " ".join(_cc_parts)
+                    if _spaced_ln.lower() in text_lower:
+                        redact_texts.add(_spaced_ln)
+                        all_logs.append(f"[page{page_num}] LASTNAME_SPACE: {_spaced_ln}")
+                    for _cp in _cc_parts:
+                        if len(_cp) >= 3 and _cp.lower() in text_lower:
+                            redact_texts.add(_cp)
+                            all_logs.append(f"[page{page_num}] LASTNAME_PART: {_cp}")
                 # PDF가 이름을 \n으로 분리 저장하는 경우 대비
-                # → 풀네임 미검출 시 줄 단위로 재시도
                 if name.lower() not in text_lower:
                     for _line in text.split("\n"):
                         _ls = _line.strip()
@@ -1619,6 +1677,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             all_logs.append(f"[page{page_num}] FULLNAME_LINE→{first_name}: {_ls[:50]}")
 
         # 파일명 기반 이름: 성만 redact (이름 유지)
+        # 단일 단어 이름 중 다중 단어 이름의 첫 번째 단어(이름)는 redact 제외
+        _fn_first_names = {
+            fn_n.split()[0].lower()
+            for fn_n in filename_names
+            if len(fn_n.split()) >= 2
+        }
         for fn_name in filename_names:
             fn_words = fn_name.split()
             if len(fn_words) >= 2:
@@ -1629,7 +1693,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     all_logs.append(f"[page{page_num}] FILENAME_NAME→{fn_first}: {fn_name}")
                 if fn_last.lower() in text.lower():
                     redact_texts.add(fn_last)
-            elif fn_name.lower() in text.lower():
+            elif fn_name.lower() not in _fn_first_names and fn_name.lower() in text.lower():
+                # 단일 단어가 이름(first name)이면 redact 금지 — 성(last name)만 허용
                 redact_texts.add(fn_name)
                 all_logs.append(f"[page{page_num}] FILENAME_NAME: {fn_name}")
 
@@ -1703,7 +1768,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
 
             # 한국 도시명 redact (korea 자체는 유지) — page_has_korea일 때만
-            if page_has_korea and has_kr:
+            # !! 학원/학교명 포함 줄은 도시명 유지
+            #    "English Academy, Seoul" → Seoul 살림 (사용자 요구)
+            #    독립 주소줄 "Gwangmyeong, South Korea" → RE_KR_CITY_COUNTRY로 처리
+            if page_has_korea and has_kr and not has_kr_work:
                 for city in KR_KEYWORDS:
                     if len(city) <= 2 or city.lower() in keep_keywords:
                         continue
@@ -1742,6 +1810,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             for m in RE_VISA_STATUS.finditer(_ls):
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
+            # 한국 도시+국가 주소줄: "Gwangmyeong, South Korea" → blank redact
+            for m in RE_KR_CITY_COUNTRY.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
@@ -1814,6 +1886,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     all_logs.append(f"[page{page_num}] LINE_BBOX: {_lstripped[:60]}")
                     continue
                 # 스팬 단위 이메일/전화 (사이드바/컬럼 레이아웃에서 search_for 실패 보완)
+                _ltxt_lower = _lstripped.lower()
+                _line_has_kr = any(kw in _ltxt_lower for kw in KR_KEYWORDS)
+                _line_has_kr_work = any(kw in _ltxt_lower for kw in KR_WORKPLACE_KEYWORDS
+                                        if kw not in _GENERIC_TYPES_SET)
                 for _span in _lspans:
                     _st = _span.get("text", "")
                     if not _st or len(_st) < 4:
@@ -1828,41 +1904,131 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         page.add_redact_annot(_sr, fill=(1, 1, 1))
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
+                    # 아이콘 폰트 글리프 삭제 (FontAwesome/icomoon — U+E000~U+F8FF Private Use Area)
+                    # 헤더 상단 300px 이내 아이콘 심볼만 처리 (연락처 섹션)
+                    if any(0xE000 <= ord(c) <= 0xF8FF for c in _st):
+                        _span_y0 = _span["bbox"][1]
+                        if _span_y0 < 300:
+                            page.add_redact_annot(_sr, fill=(1, 1, 1))
+                            _has_extra = True
+                            all_logs.append(f"[page{page_num}] ICON_GLYPH y={_span_y0:.0f}: {repr(_st[:8])}")
+                # 한국 학원명 라인 보충 bbox 처리 (search_for Bold/Normal 혼합 실패 보완)
+                # 전체 라인에 학원 키워드 + 한국 키워드 있을 때 → 브랜드 접두어 스팬 whiteout
+                if _line_has_kr_work and (_line_has_kr or len(_lstripped) < 60):
+                    for _m in _RE_KR_SCHOOL_PREFIX.finditer(_lstripped):
+                        # prefix 부분(match 에서 capture group 1 앞부분) 을 span 단위로 삭제
+                        _prefix_txt = _lstripped[:_m.start(1)].strip()  # "JLS " 부분
+                        if _prefix_txt:
+                            for _sp2 in _lspans:
+                                _sp2_t = _sp2.get("text", "").strip()
+                                if not _sp2_t:
+                                    continue
+                                # 멀티스팬: "JLS" 스팬이 prefix에 포함되는 경우 (Bold/Normal 분리)
+                                if _sp2_t.lower() in _prefix_txt.lower():
+                                    page.add_redact_annot(fitz.Rect(_sp2["bbox"]), fill=(1, 1, 1))
+                                    _has_extra = True
+                                    all_logs.append(f"[page{page_num}] KR_BRAND_BBOX: {_sp2_t[:30]}")
+                                # 싱글스팬: 스팬 안에 prefix가 포함된 경우 → search_for로 정밀 위치
+                                elif (len(_lspans) == 1 and _prefix_txt.lower() in _sp2_t.lower()):
+                                    for _prf_rect in page.search_for(
+                                            _prefix_txt, clip=fitz.Rect(_sp2["bbox"])):
+                                        page.add_redact_annot(_prf_rect, fill=(1, 1, 1))
+                                        _has_extra = True
+                                        all_logs.append(
+                                            f"[page{page_num}] KR_BRAND_SINGLE: {_prefix_txt[:30]}"
+                                        )
+                    # 한국 도시명 스팬 삭제 — 학원명 포함 줄은 도시명 유지
+                    # "English Academy, Seoul" → Seoul 살림 (사용자 요구)
+                    # (도시 삭제는 독립 주소줄에만 적용)
+                # 주소줄 bbox: "Gwangmyeong, South Korea" → 라인 전체 삭제
+                if RE_KR_CITY_COUNTRY.search(_lstripped):
+                    page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
+                    _has_extra = True
+                    all_logs.append(f"[page{page_num}] KR_ADDR_BBOX: {_lstripped[:50]}")
         if _has_extra:
             page.apply_redactions()
 
-    # 첫 페이지 상단 화이트아웃 + 번호/사진 삽입
+    # ── 헤더 페이지 연락처 스트립 정리 + 번호/사진 삽입 ──
+    # _header_page_num: 위에서 자동 감지된 실제 이력서 헤더 페이지 번호
+    # 전략: 베이지 헤더 배경색 감지 → 연락처 스트립을 같은 색으로 덮어 아이콘/PII 흔적 제거
+    #       → 번호(왼쪽) + 사진(오른쪽) 삽입
     if not dry and len(doc) > 0:
-        first_page = doc[0]
-        pw = first_page.rect.width
+        hdr_page = doc[_header_page_num]
+        pw = hdr_page.rect.width
 
-        # 상단 영역 화이트아웃 (이름/연락처 블록 통째로 덮기)
-        # 높이 90px 정도가 일반적 이름+연락처 블록
-        header_rect = fitz.Rect(0, 0, pw, 100)
-        first_page.draw_rect(header_rect, color=None, fill=(1, 1, 1))
-        all_logs.append("[page0] HEADER_WHITEOUT: 상단 100px 화이트아웃")
+        # 베이지 헤더 배경색 + 헤더 높이 감지
+        # 예: fill=(0.835, 0.714, 0.565) 같은 컬러 사각형이 페이지 상단 전체를 덮음
+        _hdr_fill_color = (0.93, 0.87, 0.78)  # fallback 베이지
+        _hdr_bottom = 0
+        for _drw in hdr_page.get_drawings():
+            _dfill = _drw.get("fill")
+            _dr = _drw.get("rect", fitz.Rect())
+            if (_dfill and _dfill not in ((1, 1, 1), (0, 0, 0))
+                    and _dr.y0 < 50 and _dr.width > pw * 0.4
+                    and _dr.y1 > _hdr_bottom):
+                _hdr_fill_color = _dfill
+                _hdr_bottom = _dr.y1
+        if _hdr_bottom < 60:
+            _hdr_bottom = 120  # fallback
 
-        # 번호 삽입 (왼쪽 상단, 크고 굵게)
-        first_page.insert_text(
-            fitz.Point(50, 55),
-            str(brj_number),
-            fontsize=28,
-            fontname="helv",
-            color=(0, 0, 0),
+        # 구분선 Y 위치 감지 (베이지 헤더 아래 얇은 수평선)
+        # 연락처 스트립 하단 경계 = 이 구분선
+        _divider_y = _hdr_bottom + 110  # fallback
+        for _drw in hdr_page.get_drawings():
+            _dr = _drw.get("rect", fitz.Rect())
+            if (_dr.y0 > _hdr_bottom and (_dr.y1 - _dr.y0) < 3
+                    and _dr.width > pw * 0.5 and _dr.y0 < _divider_y):
+                _divider_y = _dr.y0
+
+        # ① 왼쪽 사진 자리 표시(흰색 박스)를 베이지로 덮기
+        # 원본 PDF의 왼쪽 사진 플레이스홀더(흰색)와 코너 장식을 베이지로 복원
+        # pw*0.34 = 이름 텍스트 시작 위치(약 x=231) 왼쪽까지만 덮기 (이름 보존)
+        _left_cover = pw * 0.34
+        hdr_page.draw_rect(
+            fitz.Rect(0, 0, _left_cover, _hdr_bottom),
+            color=None, fill=_hdr_fill_color,
+        )
+        all_logs.append(
+            f"[page{_header_page_num}] LEFT_BEIGE: 0-{_left_cover:.0f} / 0-{_hdr_bottom:.0f}"
         )
 
-        # 사진 삽입 (오른쪽 상단)
+        # ② 연락처 스트립 화이트아웃 (베이지 하단 ~ 구분선)
+        # 이 구간의 아이콘 박스(벡터 드로잉) + 남은 PII 텍스트를 흰색으로 완전 덮기
+        hdr_page.draw_rect(
+            fitz.Rect(0, _hdr_bottom - 2, pw, _divider_y + 1),
+            color=None, fill=(1, 1, 1),
+        )
+        all_logs.append(
+            f"[page{_header_page_num}] STRIP_WHITE: y={_hdr_bottom:.0f}~{_divider_y:.0f}"
+        )
+
+        # ③ 강사 번호 삽입 (왼쪽 베이지, 수직 중하단)
+        _num_y = _hdr_bottom * 0.70
+        hdr_page.insert_text(
+            fitz.Point(12, _num_y),
+            str(brj_number),
+            fontsize=24,
+            fontname="helv",
+            color=(0.20, 0.14, 0.06),
+        )
+        all_logs.append(f"[page{_header_page_num}] BRJNUM: {brj_number}")
+
+        # ④ 사진 삽입 (오른쪽 베이지, 헤더 전체 높이)
         photo = photo_path or _find_photo_for_candidate(filepath)
         if photo and photo.exists():
-            # 사진 크기: 높이 80px, 오른쪽 정렬
-            photo_rect = fitz.Rect(pw - 110, 5, pw - 30, 85)
+            _img_margin = 5
+            _img_h = int(_hdr_bottom - _img_margin * 2)
+            photo_rect = fitz.Rect(
+                pw - _img_h - _img_margin, _img_margin,
+                pw - _img_margin, _hdr_bottom - _img_margin,
+            )
             try:
-                first_page.insert_image(photo_rect, filename=str(photo))
-                all_logs.append(f"[photo] PDF 삽입: {photo.name}")
+                hdr_page.insert_image(photo_rect, filename=str(photo))
+                all_logs.append(f"[photo] {_header_page_num}p {_img_h}px: {photo.name}")
             except Exception as e:
-                all_logs.append(f"[photo] PDF 삽입 실패: {e}")
+                all_logs.append(f"[photo] 삽입 실패: {e}")
         else:
-            all_logs.append("[photo] 사진 없음 (스킵)")
+            all_logs.append("[photo] 없음 (스킵)")
 
     # PDF 메타데이터 클리어 (이름/제목 제거)
     if not dry:
