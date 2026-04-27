@@ -145,12 +145,18 @@ export function useAdminAuth() {
       if (res.status === 429) return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'
       if (!res.ok) return '서버 오류가 발생했습니다.'
 
-      // 쿠키는 브라우저가 자동 저장 (HttpOnly) — JSON session_token 무시
+      // 쿠키는 브라우저가 자동 저장 (HttpOnly) — session_token은 키 요청 헤더용으로도 사용
       const json = await res.json()
       if (!json?.success) return '서버 응답이 올바르지 않습니다.'
+      const sessionToken: string = json?.data?.session_token ?? ''
 
-      // api_key 별도 요청 (HMAC 서명용) — 쿠키로 인증
-      const keyRes = await fetch(`${API_URL}/api/admin/key`, { credentials: CREDS })
+      // api_key 별도 요청 (HMAC 서명용) — 쿠키 + x-admin-token 헤더 이중 인증
+      const keyHeaders: Record<string, string> = {}
+      if (sessionToken) keyHeaders['x-admin-token'] = sessionToken
+      const keyRes = await fetch(`${API_URL}/api/admin/key`, {
+        credentials: CREDS,
+        headers: keyHeaders,
+      })
       if (!keyRes.ok) return 'API 키 로드 실패. 다시 로그인해주세요.'
       const keyJson = await keyRes.json()
       const key = keyJson?.data?.api_key
