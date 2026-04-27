@@ -1935,8 +1935,16 @@
       "git": "3e0c67ad",
       "files": 2451,
       "db_hash": "975cb42a811f"
+    },
+    {
+      "dir": "20260427_152746__form_sheet_integration",
+      "task": "form_sheet_integration",
+      "ts": "2026.04.27 15:27:53",
+      "git": "207fc3bb",
+      "files": 2629,
+      "db_hash": "4d885862be17"
     }
   ],
-  "last_backup": "2026.04.26 14:02:15",
-  "total_count": 242
+  "last_backup": "2026.04.27 15:27:53",
+  "total_count": 243
 }

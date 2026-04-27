@@ -1,13 +1,9 @@
 {
-  "last_updated": "2026-04-27 14:51:13",
+  "last_updated": "2026-04-27 15:28:03",
   "last_tool": "Bash",
-  "last_command": "grep -n \"^def build_pdf\" \"Q:/Claudework/bridge base/tools/resume_converter/pdf_builder.py\"",
-  "git_head": "d10880e8",
+  "last_command": "python \"Q:/Claudework/bridge base/tools/bridge_backup.py\" backup \"form_sheet_integration\" --type pre-task 2>&1 | tail -3",
+  "git_head": "6cdc8483",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\rpa_select_launcher.py",
-    "Q:\\Claudework\\bridge base\\scripts\\email_reporter_task.xml",
-    "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
-    "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
     "Q:\\Claudework\\bridge base\\scripts\\github_release_backup.py",
     "Q:\\Claudework\\bridge base\\scripts\\render_keepalive_ping.ps1",
     "Q:\\Claudework\\bridge base\\docs\\cron_job_org_setup.md",
@@ -23,7 +19,11 @@
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\hooks\\useAdminAuth.ts",
     "Q:\\Claudework\\bridge base\\tools\\resume_converter\\main_gui.py",
     "Q:\\Claudework\\bridge base\\api_server.py",
-    "Q:\\Claudework\\bridge base\\tools\\email_autoresponder.py"
+    "Q:\\Claudework\\bridge base\\tools\\email_autoresponder.py",
+    "Q:\\Claudework\\bridge base\\tools\\resume_converter\\batch_process_forms.py",
+    "Q:\\Claudework\\ClaudeBlog\\config.json",
+    "Q:\\Claudework\\ClaudeBlog\\tools\\monthly_keyword_refresh.py",
+    "Q:\\Claudework\\ClaudeBlog\\_register_kw_monthly.cmd"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-26 기준)",
   "git_changed": [
