@@ -768,50 +768,23 @@ def _write_intake_csv_fallback(row: list) -> None:
 
 def batch_push_pending_to_sheet() -> int:
     """
-    intake_pending.csv의 미전송 행을 Google Sheet에 일괄 업로드.
-    성공 시 CSV 삭제. 반환값: 업로드된 행 수.
+    ⚠️ INSERT_ROWS 방식은 시트 데이터 파괴 위험 — 완전 비활성화.
+    intake_pending.csv는 수동 검토용으로만 보존.
+    반환: 0 (항상)
     """
     csv_path = Path(__file__).parent / "logs" / "intake_pending.csv"
-    if not csv_path.exists():
-        return 0
-
-    import csv
-    rows = []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        next(reader, None)   # 헤더 건너뜀
-        rows = list(reader)
-
-    if not rows:
-        csv_path.unlink(missing_ok=True)
-        return 0
-
-    sid = _get_sheet_id()
-    gid = _get_sheet_gid()
-    if not sid:
-        return 0
-
-    svc = _get_sheets_service_oauth()
-    if not svc:
-        log.warning("[일괄업로드] Sheets API 사용 불가 — 나중에 재시도")
-        return 0
-
-    try:
-        tab = _get_sheet_tab_name_by_gid(svc, sid, gid)
-        _ensure_intake_headers(svc, sid, tab)
-        svc.spreadsheets().values().append(
-            spreadsheetId=sid,
-            range=f"'{tab}'!A:H",
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": rows},
-        ).execute()
-        csv_path.unlink(missing_ok=True)
-        log.info("[일괄업로드] %d행 업로드 완료 → CSV 삭제", len(rows))
-        return len(rows)
-    except Exception as e:
-        log.error("[일괄업로드] 실패: %s", e)
-        return 0
+    if csv_path.exists():
+        # 파일 내용 확인 후 로그만 남기고 건너뜀
+        try:
+            import csv as _csv
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                pending = list(_csv.reader(f))
+            count = max(0, len(pending) - 1)  # 헤더 제외
+            if count > 0:
+                log.info("[일괄업로드] pending %d행 — 수동 검토 필요 (자동 업로드 비활성화)", count)
+        except Exception:
+            pass
+    return 0
 
 
 # ══════════════════════════════════════════════════════════════════════════

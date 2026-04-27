@@ -351,6 +351,19 @@ def _process_one(app: dict, fallback_id: str,
         log.warning(f"  [SKIP] 텍스트 없음 (스캔 이미지만?)")
         return False
 
+    # ── 이미 처리됐는지 meta.json processed 플래그 확인 ──────────────
+    for src_file in files.values():
+        meta_path = INBOX_DIR / (src_file.stem.replace("(", "_").replace(")", "_").replace(" ", "_") + ".meta.json")
+        # 간단히 같은 디렉토리의 *.meta.json 중 original_name 매칭
+        for mp in INBOX_DIR.glob("*.meta.json"):
+            try:
+                mdata = json.loads(mp.read_text(encoding="utf-8"))
+                if mdata.get("original_name", "") == src_file.name and mdata.get("processed"):
+                    log.info(f"  [SKIP] 이미 처리됨 (meta: {mp.name})")
+                    return True
+            except Exception:
+                continue
+
     # ── 메타 결정: 시트 1차, PDF 파싱 폴백 ────────────────────────────
     pdf_nat, pdf_gen, pdf_yr = _extract_meta(combined)
 
@@ -407,6 +420,19 @@ def _process_one(app: dict, fallback_id: str,
         )
         log.info(f"  [OK] {out_path.name} ({size//1024}KB)")
 
+        # ── inbox 소스 파일 meta.json에 processed 마커 기록 ──────────
+        for src_file in files.values():
+            for mp in INBOX_DIR.glob("*.meta.json"):
+                try:
+                    mdata = json.loads(mp.read_text(encoding="utf-8"))
+                    if mdata.get("original_name", "") == src_file.name:
+                        mdata["processed"]        = True
+                        mdata["processed_output"] = out_path.name
+                        mdata["processed_at"]     = datetime.now().isoformat()
+                        mp.write_text(json.dumps(mdata, indent=2, ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+
         # ── Google Sheet 접수 기록 ───────────────────────────────────
         if not DRY and not NO_SHEET:
             pii_total = (
@@ -442,16 +468,7 @@ def main():
     log.info(f"BRIDGE Forms 배치 변환 v3.0: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info(f"모드: {'DRY RUN' if DRY else '실제 변환'}")
 
-    # 미전송 행 일괄 업로드 시도 (Sheets API 재활성화 후)
-    if not DRY and not NO_SHEET:
-        try:
-            sys.path.insert(0, str(BASE_DIR))
-            from sheets_connector import batch_push_pending_to_sheet
-            pushed = batch_push_pending_to_sheet()
-            if pushed:
-                log.info(f"[시트] 미전송 {pushed}행 일괄 업로드 완료")
-        except Exception:
-            pass
+    # (batch_push_pending_to_sheet 제거 — INSERT_ROWS 시트 파괴 위험)
 
     # ── Sheet 메타 1회 로드 ──────────────────────────────────────────
     sheet_meta = _load_sheet_meta()
