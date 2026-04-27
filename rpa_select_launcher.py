@@ -220,6 +220,14 @@ def _load_accounts() -> list[dict]:
 # ══════════════════════════════════════════ ctypes 유틸 ═══════════════════════
 
 def _bring_hwnd_to_front(hwnd: int) -> bool:
+    # 2026-04-26 정책: 사용자 작업창 위로 강제 띄우기 금지 (BRIDGE_FORCE_FOREGROUND=1 만 예외)
+    if os.getenv("BRIDGE_FORCE_FOREGROUND", "0") != "1":
+        # 보이긴 하되 포커스/topmost 강탈 안 함 (ShowWindow=SW_SHOWNOACTIVATE만)
+        try:
+            ctypes.windll.user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE
+            return True
+        except Exception:
+            return False
     try:
         u = ctypes.windll.user32
         fg    = u.GetForegroundWindow()
@@ -1622,7 +1630,7 @@ class AdminBoard:
                     self._proc = subprocess.Popen(
                         [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
                          "--account", acct["id"],
-                         "--limit", str(count), "--no-overlay"],
+                         "--limit", str(count), "--no-overlay", "--manual"],
                         cwd=str(_DIR),
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
@@ -1825,7 +1833,7 @@ class AdminBoard:
             self._proc = subprocess.Popen(
                 [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
                  "--account", acct["id"],
-                 "--limit", str(count), "--no-overlay"],
+                 "--limit", str(count), "--no-overlay", "--manual"],
                 cwd=str(_DIR),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -1904,7 +1912,9 @@ class AdminBoard:
         dlg = tk.Toplevel(self.root)
         dlg.title("RPA 완료")
         dlg.configure(bg=SURFACE)
-        dlg.attributes("-topmost", True)
+        # 2026-04-26 정책: 사용자 작업창 위로 강제 띄우지 않음
+        if os.getenv("BRIDGE_FORCE_FOREGROUND", "0") == "1":
+            dlg.attributes("-topmost", True)
         dlg.resizable(False, False)
         dlg.grab_set()
 

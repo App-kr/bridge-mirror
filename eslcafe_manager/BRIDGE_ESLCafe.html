@@ -27,7 +27,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .btn-y{background:#ff9500;color:#fff;border-color:#ff9500}.btn-y:hover{background:#ffaa33;border-color:#ffaa33}
 .btn-g{background:var(--blue);color:#fff;border-color:var(--blue)}.btn-g:hover{background:var(--blue2);border-color:var(--blue2)}
 /* LAYOUT */
-.lay{display:flex;height:calc(100vh - 52px)}
+.lay{display:flex;height:calc(100vh - 112px)}
 /* CENTER */
 .cp{flex:1;min-width:400px;display:flex;flex-direction:column;overflow:hidden;background:var(--white);border-right:1px solid var(--g6)}
 .tb{display:flex;align-items:center;gap:5px;padding:8px 12px;background:var(--g7);border-bottom:1px solid var(--g6);flex-wrap:wrap}
@@ -82,6 +82,18 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .toast-ok{background:#f0fdf4;color:#166534;border:1px solid #86efac}
 .toast-er{background:#fff5f5;color:#b91c1c;border:1px solid #fca5a5}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--g5);border-radius:3px}
+/* 관리 보드 */
+.mgmt-bar{display:flex;align-items:center;gap:3px;padding:5px 16px;background:#f5f7fc;border-bottom:1px solid #e4eaf7;flex-wrap:wrap;flex-shrink:0;min-height:44px}
+.mgmt-lbl{font-size:10px;font-weight:700;color:#9aabd0;white-space:nowrap;margin-right:6px;text-transform:uppercase;letter-spacing:.7px}
+.mchk{display:none}
+.mchk-lbl{padding:4px 11px;font-size:12px;font-weight:600;color:#6b80ae;border-radius:12px;cursor:pointer;transition:.1s;user-select:none;background:#eaeff8;white-space:nowrap;line-height:1.3}
+.mchk:checked+.mchk-lbl{background:#0071e3;color:#fff;box-shadow:0 1px 5px rgba(0,113,227,.25)}
+.mchk-lbl:hover{background:#dce6f5;color:#0071e3}
+.mchk:checked+.mchk-lbl:hover{background:#005bb9}
+.mgmt-sep{width:1px;height:16px;background:#d4deef;margin:0 5px;flex-shrink:0}
+.mgmt-clr{padding:4px 10px;font-size:11px;font-weight:600;color:#a8b8d8;border:none;border-radius:10px;cursor:pointer;background:transparent;transition:.1s;margin-left:2px}
+.mgmt-clr:hover{color:#0071e3;background:#e4ecf8}
+.mgmt-info{font-size:11px;color:#0071e3;font-weight:600;margin-left:6px;opacity:.85}
 /* MODE TABS */
 .mtabs{display:flex;gap:3px;padding:3px;background:var(--g6);border-radius:10px;margin-left:14px}
 .mtab{padding:8px 30px;font-size:15px;font-weight:600;cursor:pointer;border-radius:8px;border:none;background:transparent;color:var(--g3);transition:.12s;white-space:nowrap}
@@ -93,8 +105,8 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .teast-sel:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,113,227,.1)}
 /* THEME PICKER */
 .phwrap{display:flex;flex-direction:column;align-items:center;width:100%;padding:16px;overflow-y:auto;gap:14px}
-.phttl{font-size:20px;font-weight:700;color:var(--g1);margin:0}
-.phsub{font-size:14px;color:var(--g4);margin:2px 0 0;text-align:center}
+.phttl{font-size:24px;font-weight:700;color:var(--g1);margin:0;letter-spacing:-.3px}
+.phsub{font-size:15px;color:var(--g3);margin:4px 0 0;text-align:center}
 /* ABC 세트 탭 */
 .ttabs{display:flex;gap:0;margin-top:12px;background:var(--g6);border-radius:10px;padding:3px;width:100%}
 .ttab{flex:1;padding:8px 0;font-size:14px;font-weight:600;cursor:pointer;border-radius:8px;background:transparent;color:var(--g3);border:none;transition:.12s;text-align:center}
@@ -108,8 +120,8 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
 .tprev{width:160px;flex-shrink:0;min-height:88px;position:relative;overflow:hidden}
 .tinfo{flex:1;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;min-width:0}
 .tinfo-left{flex:1;min-width:0}
-.tname{font-size:15px;font-weight:700;color:var(--g1)}
-.tdesc{font-size:12px;color:var(--g3);margin-top:3px;line-height:1.35}
+.tname{font-size:17px;font-weight:700;color:var(--g1);letter-spacing:-.2px}
+.tdesc{font-size:14px;color:var(--g2);margin-top:4px;line-height:1.45}
 .tchk{display:flex;align-items:center;gap:3px;margin-top:5px;font-size:11px;font-weight:700;color:var(--blue);opacity:0;transition:.15s}
 .tcard.sel .tchk{opacity:1}
 .tswrow{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:6px}
@@ -176,28 +188,50 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
   </div>
   <div class="sp"></div>
   <div class="ck" id="clk"></div>
-  <div id="eslBtns" style="display:flex;gap:6px;align-items:center">
-    <button class="btn btn-y" onclick="doShuffle()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>랜덤</button>
-    <button class="btn btn-g" onclick="generateAd()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>광고 생성</button>
+  <div id="eslBtns" style="display:flex;gap:8px;align-items:center">
+    <button class="btn" onclick="doShuffle()" style="font-size:13px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
+    <button class="btn btn-g" onclick="generateAd()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate Ads</button>
   </div>
-  <div id="teastBtns" style="display:none;gap:6px;align-items:center">
-    <button class="btn btn-g" onclick="doGenTeast()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>광고생성</button>
-    <button class="btn" onclick="copyTeast()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>복사</button>
-    <button class="btn btn-y" onclick="publishTeast()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>발행하기</button>
+  <div id="teastBtns" style="display:none;gap:8px;align-items:center">
+    <button class="btn btn-g" onclick="doGenTeast()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
+    <button class="btn" onclick="copyTeast()" style="font-size:13px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy</button>
+    <button class="btn btn-y" onclick="publishTeast()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>Publish</button>
     <span id="tLogLast" style="font-size:11px;color:var(--g4);margin-left:2px"></span>
   </div>
 </div>
-<div id="eslView"><div class="lay">
+<div id="eslView" style="display:flex;flex-direction:column">
+<div id="mgmtBar" class="mgmt-bar">
+  <span class="mgmt-lbl">시작월 선택</span>
+  <input type="checkbox" class="mchk" id="mck-jan" value="January" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-jan">1월</label>
+  <input type="checkbox" class="mchk" id="mck-feb" value="February" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-feb">2월</label>
+  <input type="checkbox" class="mchk" id="mck-mar" value="March" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-mar">3월</label>
+  <input type="checkbox" class="mchk" id="mck-apr" value="April" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-apr">4월</label>
+  <input type="checkbox" class="mchk" id="mck-may" value="May" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-may">5월</label>
+  <input type="checkbox" class="mchk" id="mck-jun" value="June" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-jun">6월</label>
+  <input type="checkbox" class="mchk" id="mck-jul" value="July" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-jul">7월</label>
+  <input type="checkbox" class="mchk" id="mck-aug" value="August" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-aug">8월</label>
+  <input type="checkbox" class="mchk" id="mck-sep" value="September" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-sep">9월</label>
+  <input type="checkbox" class="mchk" id="mck-oct" value="October" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-oct">10월</label>
+  <input type="checkbox" class="mchk" id="mck-nov" value="November" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-nov">11월</label>
+  <input type="checkbox" class="mchk" id="mck-dec" value="December" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-dec">12월</label>
+  <div class="mgmt-sep"></div>
+  <input type="checkbox" class="mchk" id="mck-asap" value="ASAP" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-asap">ASAP</label>
+  <input type="checkbox" class="mchk" id="mck-open" value="Opening" onchange="updateMgmtInfo()"><label class="mchk-lbl" for="mck-open">Opening</label>
+  <div class="mgmt-sep"></div>
+  <button class="mgmt-clr" onclick="clearMgmtMonths()">초기화</button>
+  <span class="mgmt-info" id="mgmtInfo"></span>
+</div>
+<div class="lay">
   <!-- CENTER -->
   <div class="cp">
     <div class="tb">
-      <button class="btn" onclick="_genCount=Math.max(5,_genCount-5);document.getElementById('adCnt').textContent=_genCount;" style="min-width:44px;font-size:14px">−5</button>
-      <button class="btn btn-g" onclick="generateAd()" style="padding:6px 20px;font-size:13px;font-weight:700">광고 <span id="adCnt">25</span>개 생성</button>
-      <button class="btn" onclick="_genCount+=5;document.getElementById('adCnt').textContent=_genCount;" style="min-width:44px;font-size:14px">+5</button>
+      <button class="btn" onclick="_genCount=Math.max(5,_genCount-5);document.getElementById('adCnt').textContent=_genCount;" style="min-width:40px;font-size:14px">-5</button>
+      <button class="btn btn-g" onclick="generateAd()" style="padding:7px 20px;font-size:13px;font-weight:700">Generate <span id="adCnt">25</span> Ads</button>
+      <button class="btn" onclick="_genCount+=5;document.getElementById('adCnt').textContent=_genCount;" style="min-width:40px;font-size:14px">+5</button>
     </div>
     <div class="ctabs">
-      <button class="ctab on" data-p="style" onclick="setCTab(this)">스타일</button>
-      <button class="ctab" data-p="post" onclick="setCTab(this)">게시 정보</button>
+      <button class="ctab on" data-p="style" onclick="setCTab(this)">Styles</button>
+      <button class="ctab" data-p="post" onclick="setCTab(this)">Post Info</button>
       <div style="flex:1"></div>
       <div class="obs">
         <button class="ol on" data-o="1" onclick="setObs(this)">L1</button>
@@ -213,13 +247,13 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
       <div class="phwrap" id="ePh">
         <div class="tset" id="tSet"></div>
         <div style="width:100%">
-          <div class="phttl">광고 스타일 선택</div>
-          <div class="phsub">세트를 선택 &rarr; 스타일을 고르세요 &rarr; 광고 생성</div>
+          <div class="phttl">Choose Ad Style</div>
+          <div class="phsub">Pick a set &rarr; select a template &rarr; generate your listing</div>
           <div class="ttabs" id="tTabs">
-            <button class="ttab on" onclick="setCurGroup(this,'A')">A &mdash; 라이트</button>
-            <button class="ttab" onclick="setCurGroup(this,'B')">B &mdash; 웜·볼드</button>
-            <button class="ttab" onclick="setCurGroup(this,'C')">C &mdash; 다크·비비드</button>
-            <button class="ttab" onclick="setCurGroup(this,'D')">D &mdash; 포털 스타일</button>
+            <button class="ttab on" onclick="setCurGroup(this,'A')">A &mdash; Light</button>
+            <button class="ttab" onclick="setCurGroup(this,'B')">B &mdash; Warm &amp; Bold</button>
+            <button class="ttab" onclick="setCurGroup(this,'C')">C &mdash; Dark &amp; Vivid</button>
+            <button class="ttab" onclick="setCurGroup(this,'D')">D &mdash; Portal Style</button>
           </div>
         </div>
         <div class="tgrid" id="tG"></div>
@@ -227,7 +261,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
       <div class="ef" id="eF" style="display:none">
         <h3 id="eT">공고 편집</h3>
         <div class="r2"><div><label>공고번호</label><input id="eId"></div><div><label>지역명</label><input id="eLo"></div></div>
-        <div class="r3"><div><label>지역구분</label><select id="eRg"><option value="seoul">Seoul</option><option value="gg">GG+Incheon</option><option value="etc">Others</option></select></div><div><label>급여</label><input id="eSa"></div><div><label>시작일</label><input id="eDt"></div></div>
+        <div class="r3"><div><label>지역구분</label><select id="eRg"><option value="seoul">Seoul</option><option value="gg">GG+Incheon</option><option value="etc">Others</option></select></div><div><label>급여</label><input id="eSa"></div><div><label>시작일</label><div style="display:flex;gap:5px;align-items:center"><input id="eDt" style="flex:1"><button type="button" class="cpbtn sm" onclick="applyBoardDate()" title="관리 보드 선택 적용" style="flex-shrink:0;white-space:nowrap">보드↓</button></div></div></div>
         <div class="r2"><div><label>근무시간</label><input id="eHr"></div><div><label>숙소</label><input id="eHs"></div></div>
         <div class="chks"><label><input type="checkbox" id="ePm"> 프리미엄</label><label><input type="checkbox" id="eHo"> HOT</label><label><input type="checkbox" id="eAc"> 활성</label></div>
         <label>상세내용</label><textarea id="eTx"></textarea>
@@ -239,8 +273,8 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
   <!-- RIGHT -->
   <div class="rp">
     <div class="rt">
-      <div class="rx on" data-p="pv" onclick="sRT(this)">미리보기</div>
-      <div class="rx" data-p="sc" onclick="sRT(this)">소스</div>
+      <div class="rx on" data-p="pv" onclick="sRT(this)">Preview</div>
+      <div class="rx" data-p="sc" onclick="sRT(this)">Source</div>
     </div>
     <div class="rn on" id="rpv"><iframe class="pf" id="pvF"></iframe></div>
     <div class="rn" id="rsc"><div class="sa"><textarea id="srcT" placeholder="생성된 HTML 소스..."></textarea><button class="ba" onclick="applySrc()">적용</button></div></div>
@@ -281,7 +315,46 @@ var _FUTURE_POOL=(function(){
 })();
 
 /* 미래 2개월 랜덤 조합 반환 */
+/* ── 관리 보드 월선택 헬퍼 ── */
+function getMgmtMonths(){
+  var sel=[];
+  document.querySelectorAll('.mchk:checked').forEach(function(cb){sel.push(cb.value);});
+  return sel;
+}
+function clearMgmtMonths(){
+  document.querySelectorAll('.mchk').forEach(function(cb){cb.checked=false;});
+  updateMgmtInfo();
+}
+function updateMgmtInfo(){
+  var sel=getMgmtMonths();
+  var info=document.getElementById('mgmtInfo');
+  if(info)info.textContent=sel.length?'→ '+sel.join(', '):'';
+  if(typeof lastHtml!=='undefined'&&lastHtml)generateAd();
+}
+function applyBoardDate(){
+  var sel=getMgmtMonths();
+  if(!sel.length){toast('시작월을 먼저 선택하세요','er');return;}
+  document.getElementById('eDt').value=_pickMgmtDate(sel);
+}
+/* 선택된 월들 중 1~2개 랜덤 조합 반환 */
+function _pickMgmtDate(sel){
+  if(!sel||!sel.length)return null;
+  if(sel.length===1)return sel[0];
+  /* 2개 이상이면 1개(30%) 또는 2개(70%) 랜덤 선택 */
+  if(Math.random()<0.3){
+    return sel[Math.floor(Math.random()*sel.length)];
+  }
+  var a=Math.floor(Math.random()*sel.length);
+  var b;do{b=Math.floor(Math.random()*sel.length);}while(b===a);
+  var i1=Math.min(a,b),i2=Math.max(a,b);
+  return sel[i1]+', '+sel[i2];
+}
+
 function _randFuture(){
+  var sel=getMgmtMonths();
+  if(sel.length){
+    return _pickMgmtDate(sel);
+  }
   if(_FUTURE_POOL.length===1)return _FUTURE_POOL[0];
   var a=Math.floor(Math.random()*_FUTURE_POOL.length);
   var b;do{b=Math.floor(Math.random()*_FUTURE_POOL.length);}while(b===a);
@@ -1396,26 +1469,26 @@ function obfCls(base){
    THEME PICKER
    ══════════════════════════ */
 var THEMES=[
-  {id:'classic',    name:'Bridge Classic', desc:'파란 그라데이션 히어로 · 카드 그리드'},
-  {id:'cleanwhite', name:'Clean White',    desc:'흰 배경 · 왼쪽 액센트 · 에디토리얼'},
-  {id:'amber',      name:'Warm Amber',     desc:'따뜻한 황금빛 · 친근한 분위기'},
-  {id:'mono',       name:'Mono Edge',      desc:'흑백 · 박스 없음 · 신문 레이아웃'},
-  {id:'emerald',    name:'Emerald Fresh',  desc:'초록 그라데이션 · 활기차고 모던'},
-  {id:'darkpro',    name:'Dark Pro',       desc:'다크모드 · 골드 액센트 · 프리미엄'},
-  {id:'violetpop',  name:'Violet Pop',     desc:'보라 그라데이션 · 사이드 액센트 라인'},
-  {id:'corporate',  name:'Slate Corporate',desc:'딥 슬레이트 · 기업형 · 3컬럼 아이템 그리드'},
-  {id:'sunset',     name:'Sunset Warm',    desc:'붉은 일몰 그라데이션 · 강렬한 대비'},
-  {id:'neonnight',  name:'Neon Night',     desc:'딥 다크 · 청록 네온 글로우 · 사이버'},
-  {id:'apple',      name:'Apple Clean',    desc:'순백 미니멀 · 대형 타이포 · SF스타일 에디토리얼'},
-  {id:'jobkorea',   name:'잡코리아',        desc:'오렌지 포인트 · 구조화 정보 · 한국 채용 스타일'},
-  {id:'boldtype',   name:'Bold Type',      desc:'강한 대비 · 굵은 서체 · 브랜드 타이포 임팩트'},
-  {id:'editorial',  name:'Editorial',      desc:'매거진풍 · 딥 네이비+레드 · 정제된 레이아웃'},
-  {id:'passionedu', name:'Passion Edu',    desc:'열정적 교육 · 그린 커뮤니티 · 선생님 환영'},
-  {id:'esllist',   name:'ESLCafe List',   desc:'ESLCafe 게시판 스타일 · 텍스트 리스트 · 태그칩'},
-  {id:'daves',     name:'Dave\'s Grid',   desc:'원형 로고 · 회사명+날짜 카드 · 클래식 구직 포털'},
-  {id:'jkpro',     name:'잡코리아 Pro',    desc:'급여 배지 · 마감일 · 압축형 정보 그리드'},
-  {id:'wantedgrid', name:'Wanted Grid',    desc:'다크 썸네일 카드 · 이미지 블록 · 모던 구직'},
-  {id:'photoclean', name:'사람인 Clean',   desc:'채용공고 스타일 · 로고 카드 · 흰 배경 깔끔 리스트'}
+  {id:'classic',    name:'Bridge Classic', desc:'Bold hero banner with gradient cards — eye-catching first impression'},
+  {id:'cleanwhite', name:'Clean White',    desc:'Minimal white layout with left accent — editorial readability'},
+  {id:'amber',      name:'Warm Amber',     desc:'Golden warm tones — approachable and friendly for teachers'},
+  {id:'mono',       name:'Mono Edge',      desc:'Black & white newsprint style — distraction-free, text-focused'},
+  {id:'emerald',    name:'Emerald Fresh',  desc:'Green gradient — energetic and modern teaching vibe'},
+  {id:'darkpro',    name:'Dark Pro',       desc:'Dark mode with gold accents — premium recruiter look'},
+  {id:'violetpop',  name:'Violet Pop',     desc:'Purple gradient with side accent — creative and vibrant'},
+  {id:'corporate',  name:'Slate Corporate',desc:'Deep slate with 3-column grid — professional agency style'},
+  {id:'sunset',     name:'Sunset Warm',    desc:'Red-orange gradient — bold and high-energy listing'},
+  {id:'neonnight',  name:'Neon Night',     desc:'Deep dark with teal glow — standout in crowded boards'},
+  {id:'apple',      name:'Apple Clean',    desc:'Pure white minimal — large typography, Apple-inspired editorial'},
+  {id:'jobkorea',   name:'Job Board',      desc:'Orange highlight, structured info — Korean job portal format'},
+  {id:'boldtype',   name:'Bold Type',      desc:'Heavy contrast typography — instant brand impact'},
+  {id:'editorial',  name:'Editorial',      desc:'Magazine-style navy & red — refined and authoritative'},
+  {id:'passionedu', name:'Passion Edu',    desc:'Green community feel — warm welcome for new teachers'},
+  {id:'esllist',   name:'ESLCafe List',   desc:'Classic forum list style — tag chips and quick scan layout'},
+  {id:'daves',     name:'Dave\'s Grid',   desc:'Rounded logos with date cards — trusted job board aesthetic'},
+  {id:'jkpro',     name:'Compact Pro',    desc:'Salary badges, deadlines — dense info grid for quick browsing'},
+  {id:'wantedgrid', name:'Wanted Grid',    desc:'Dark thumbnail cards — modern job marketplace look'},
+  {id:'photoclean', name:'Clean Cards',    desc:'White background card list — clean and scannable layout'}
 ];
 
 /* Per-theme settings */
@@ -1814,9 +1887,9 @@ var _B=(
   +'.cjobid{font-size:13px;font-weight:700;color:#2563eb;white-space:nowrap;background:#eff6ff;padding:3px 10px;border-radius:20px;border:1px solid #dbeafe}'
   +'.hot{font-size:11px;font-weight:800;color:#92400e;background:#fef3c7;padding:3px 10px;border-radius:20px;border:1px solid #fcd34d}'
   +'.items{padding:16px 26px 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px}'
-  +'.irow{display:flex;gap:9px;align-items:flex-start}'
+  +'.irow{display:flex;gap:10px;align-items:flex-start}'
   +'.iico{width:16px;height:16px;flex-shrink:0;color:#60a5fa;margin-top:3px;display:flex}'
-  +'.itxt{font-size:14px;color:var(--g3);line-height:1.55}'
+  +'.itxt{font-size:15px;color:var(--g3);line-height:1.55}'
   /* Bar (apply now strip between cards) */
   +'.bar{margin:22px 0;padding:24px 28px;background:linear-gradient(135deg,#eff6ff,#eef2ff);border-radius:14px;border:1px solid #e0e7ff;text-align:center}'
   +'.bar p{font-size:15px;font-weight:600;color:#1e3a8a;margin:0 0 14px}'
@@ -2487,16 +2560,18 @@ function generateAd(){
   var _ts=TS[curTheme]||{};
   var link=(_ts.link&&_ts.link.trim())||(urlMode==='bridge'?APPLY_BRIDGE:APPLY_GFORM);
 
+  var _mgmtSel=getMgmtMonths();
   active.forEach(function(j){
-    j._dd=smartDate(j.date,nowMonth);
-    j._dt=j.txt.replace(/(Starting Date:\s*)(.+)/,function(_,pre,ds){return pre+smartDate(ds,nowMonth);});
+    var dateToUse=_mgmtSel.length?_pickMgmtDate(_mgmtSel):null;
+    j._dd=dateToUse||smartDate(j.date,nowMonth);
+    j._dt=j.txt.replace(/(Starting Date:\s*)(.+)/,function(_,pre,ds){return pre+(dateToUse||smartDate(ds,nowMonth));});
   });
 
   /* ── CSS (theme) ── */
   var css=getThemeCss();
 
   /* ── SVG 헬퍼 ── */
-  function iSvg(d){return'<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">'+d+'</svg>';}
+  function iSvg(d){return'<svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">'+d+'</svg>';}
   function pickI(ll){
     if(ll.indexOf('date')>=0||ll.indexOf('start')>=0)return iSvg('<rect height="18" rx="2" width="18" x="3" y="4"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>');
     if(ll.indexOf('salary')>=0||ll.indexOf('month')>=0)return iSvg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>');
@@ -2508,7 +2583,7 @@ function generateAd(){
     if(ll.indexOf('visa')>=0)return iSvg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>');
     return iSvg('<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/>');
   }
-  function hSvg(d){return'<svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewbox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">'+d+'</svg>';}
+  function hSvg(d){return'<svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">'+d+'</svg>';}
 
   /* ── HERO ── */
   var _ht=_HERO_TYPE[curTheme]||'grad';
@@ -2808,12 +2883,15 @@ function setMode(el){
   var teastV=document.getElementById('teastView');
   var eslB=document.getElementById('eslBtns');
   var teastB=document.getElementById('teastBtns');
+  var mgmtB=document.getElementById('mgmtBar');
   if(mode==='esl'){
     eslV.style.display='flex';teastV.style.display='none';
     eslB.style.display='flex';teastB.style.display='none';
+    if(mgmtB)mgmtB.style.display='flex';
   }else{
     eslV.style.display='none';teastV.style.display='flex';
     eslB.style.display='none';teastB.style.display='flex';
+    if(mgmtB)mgmtB.style.display='none';
   }
 }
 

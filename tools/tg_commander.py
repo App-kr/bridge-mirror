@@ -336,7 +336,8 @@ def cb_rpa_run(chat_id, msg_id, limit):
 
     cmd = [PYTHON, "-X", "utf8",
            str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
-           "--headless", "--account", account, "--limit", str(limit)]
+           "--headless", "--account", account, "--limit", str(limit),
+           "--user-confirmed"]
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8",
@@ -1742,7 +1743,8 @@ def _run_rpa_direct(chat_id, account, limit):
     def _rpa_worker():
         cmd = [PYTHON, "-X", "utf8",
                str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
-               "--headless", "--account", account, "--limit", str(limit)]
+               "--headless", "--account", account, "--limit", str(limit),
+               "--user-confirmed"]
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, encoding="utf-8",

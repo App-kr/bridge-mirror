@@ -1143,17 +1143,24 @@ def build_driver(headless: bool = False) -> webdriver.Chrome:
         except Exception:
             pass
 
-    _t.sleep(0.4)
-    _collect_chrome_pids()
-    _sweep_hide()
+    # ── 작업표시줄 숨김 강화 (사용자 요청 2026-04-27) ─────────────────────
+    # 첫 1초 동안 0.05초 간격으로 즉시 숨김 (chrome window 생성 시점 캐치)
+    # 이후 0.5초 간격 유지 → 새 탭/창 열려도 즉시 숨김
+    for _ in range(20):     # 1초 동안 20번 시도 = 0.05초 간격
+        _collect_chrome_pids()
+        _sweep_hide()
+        _t.sleep(0.05)
 
     def _hide_worker():
-        for delay in (0.3, 0.5, 1.0, 2.0, 4.0):
-            _t.sleep(delay)
+        # 처음 5초는 매우 자주
+        for _ in range(50):    # 5초간 0.1초 간격
+            _t.sleep(0.1)
             _collect_chrome_pids()
             _sweep_hide()
+        # 이후 0.5초 간격 (주기 단축)
         while True:
-            _t.sleep(5)
+            _t.sleep(0.5)
+            _collect_chrome_pids()
             _sweep_hide()
     _thr.Thread(target=_hide_worker, daemon=True).start()
     return driver
@@ -1314,9 +1321,18 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
     # seoul.craigslist.org 에서 시작해야 Seoul 이 자동 선택됨
     print("  [POST] seoul.craigslist.org → post to classifieds...")
     # 이전 ABORT 후 Chrome 세션 초기화 (about:blank로 상태 리셋)
+    # ⚠️ 추가 안전: chrome storage 의 이전 업로드 흔적까지 정리 (이미지 누적 방지)
     try:
         driver.get("about:blank")
         _delay(0.5, 1)
+        # craigslist storage / sessionStorage 정리 — 이전 게시 잔존 데이터 차단
+        try:
+            driver.execute_script("""
+                try { localStorage.clear(); } catch(e) {}
+                try { sessionStorage.clear(); } catch(e) {}
+            """)
+        except Exception:
+            pass
     except Exception:
         pass
     try:
@@ -1359,9 +1375,60 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         print(f"  [?s={step}] ", end="", flush=True)
 
         if step == "copyfromanother":
-            # "copy from another posting?" → 그냥 continue (skip)
-            print("이전 게시물 복사 스킵")
-            _advance(driver, step)
+            # ⚠️⚠️⚠️ 절대 규칙 (2026-04-27 사용자 발견): "re-use selected data" 클릭 금지!
+            # 이 페이지에는 두 버튼: [skip] / [re-use selected data]
+            # _advance() 가 first submit 누르면 "re-use selected data" 클릭됨
+            # → 이전 게시의 제목/본문/이미지(B 사진) 모두 재사용되어 누적
+            # → 같은 제목 반복 + 이미지 22장+ 누적 = AI 차단 원인
+            # 반드시 "skip" 버튼만 명시적 클릭해야 NEW POST 생성됨
+            print("이전 게시물 복사 페이지 → SKIP 버튼만 명시 클릭 (re-use 절대 금지)")
+            skipped = False
+            # 방법 1: value='skip' 속성 직접
+            try:
+                for el in driver.find_elements(By.CSS_SELECTOR,
+                        "input[value='skip'], input[value='SKIP'], button[value='skip']"):
+                    if el.is_displayed():
+                        _js_click(driver, el)
+                        skipped = True
+                        print("    [OK] input/button[value='skip'] 클릭")
+                        break
+            except Exception:
+                pass
+            # 방법 2: <button> 태그의 text가 정확히 'skip'
+            if not skipped:
+                try:
+                    for btn in driver.find_elements(By.TAG_NAME, "button"):
+                        t = (btn.text or "").strip().lower()
+                        if t == "skip" and btn.is_displayed():
+                            _js_click(driver, btn)
+                            skipped = True
+                            print("    [OK] <button>skip</button> 클릭")
+                            break
+                except Exception:
+                    pass
+            # 방법 3: XPath 로 'skip' 텍스트 정확히 매칭 (input/button/a/label)
+            if not skipped:
+                try:
+                    for el in driver.find_elements(By.XPATH,
+                            "//*[normalize-space(translate(text(),'SKIP','skip'))='skip']"):
+                        if el.is_displayed() and el.tag_name in ("button", "input", "a", "label"):
+                            _js_click(driver, el)
+                            skipped = True
+                            print(f"    [OK] xpath 'skip' {el.tag_name} 클릭")
+                            break
+                except Exception:
+                    pass
+            # ⚠️ skip 못 찾으면 게시 중단 — re-use 클릭 절대 금지
+            if not skipped:
+                print("    [CRITICAL] skip 버튼 못 찾음 → 이 게시 중단 (re-use 절대 안 누름)")
+                ss = SS_DIR / f"copyfromanother_no_skip_{job.get('job_code','x')}.png"
+                try: driver.save_screenshot(str(ss))
+                except Exception: pass
+                _log_event("error", job.get("job_code", "?"), "copyfromanother_skip_failed",
+                           "skip button not found, aborting to prevent re-use accumulation")
+                return None
+            _delay(1.5, 2.5)
+            # _advance 호출 금지 — skip 클릭이 자동으로 다음 step 으로 navigate 함
 
         elif step == "area":
             # 지역 선택 (Seoul 기본 선택 후 즉시 continue)
@@ -1650,35 +1717,58 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             _advance(driver, step, timeout=12)
 
         elif step in ("img", "editimage"):
-            # 이미지 업로드 -- B.jpg 첨부 (포스트당 1회만)
+            # 이미지 업로드 -- B.jpg 첨부 (포스트당 절대 1회만)
             # ※ Craigslist 이미지 업로드 후 "done" 버튼 클릭 시
             #    자동으로 다음 단계로 넘어가지 않는 경우가 있음
             #    → done 클릭 후 step 변화 없으면 _advance() 로 수동 진행
-            # ⚠️ 가드: img/editimage 재진입 시 재업로드 금지 (수십장 중복 사진 방지)
+            # ⚠️ 강화 가드: img/editimage 재진입 시 모든 file input 강제 비활성화
             if _img_uploaded:
-                print("이미지 이미 업로드됨 → continue 클릭만")
+                print("이미지 이미 업로드됨 → 모든 file input 차단 + continue")
+                try:
+                    driver.execute_script("""
+                        document.querySelectorAll('input[type=file]').forEach(function(el){
+                            el.disabled = true;
+                            try { el.value = ''; } catch(e) {}
+                            el.style.pointerEvents = 'none';
+                        });
+                    """)
+                except Exception:
+                    pass
                 _advance(driver, step)
                 continue
-            print("이미지 업로드")
+            # ⚠️⚠️ 가드 ON 을 try 진입 전 최우선으로 set — 어떤 예외/경로에서도 재업로드 차단
+            _img_uploaded = True
+            print("이미지 업로드 (포스트당 1회만)")
             img_step_before = step
             _img_path = _unique_image(job.get("job_code") or "")
             if _img_path.exists():
                 try:
-                    # file input 은 보통 숨겨져 있음 → visibility 무시하고 send_keys
+                    # ── multi-file 업로드 방지: multiple 속성 제거 + accept 단일화 ─
+                    driver.execute_script("""
+                        document.querySelectorAll('input[type=file]').forEach(function(el){
+                            el.removeAttribute('multiple');
+                            el.style.display='block'; el.style.opacity='1';
+                        });
+                    """)
                     file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
                     if not file_inputs:
-                        # JS로 hidden input 노출 후 찾기
-                        driver.execute_script("""
-                            var fi = document.querySelectorAll('input[type=file]');
-                            fi.forEach(function(el){ el.style.display='block'; el.style.opacity='1'; });
-                        """)
+                        # JS로 hidden input 노출 후 다시 찾기
                         file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
 
                     if file_inputs:
                         abs_path = str(_img_path.resolve())
                         file_inputs[0].send_keys(abs_path)
-                        _img_uploaded = True   # 업로드 시도 즉시 가드 ON (재진입 방지)
-                        print(f"    이미지 경로 전송: {abs_path}")
+                        # ── send_keys 직후 즉시 다른 모든 input 차단 ─
+                        driver.execute_script("""
+                            document.querySelectorAll('input[type=file]').forEach(function(el, idx){
+                                if (idx > 0) {
+                                    el.disabled = true;
+                                    try { el.value = ''; } catch(e) {}
+                                    el.style.pointerEvents = 'none';
+                                }
+                            });
+                        """)
+                        print(f"    이미지 경로 전송: {abs_path} (다른 file input {len(file_inputs)-1}개 차단)")
 
                         # 업로드 진행 대기 -- 썸네일 또는 progress 사라질 때까지 최대 30초
                         for _w in range(30):
@@ -1687,6 +1777,36 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
                             if "uploading" not in src and "progress" not in src:
                                 break
                         print("    업로드 완료 대기 끝")
+
+                        # ━━━ IMAGE COUNT GUARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                        # 업로드 후 실제 첨부된 이미지 갯수 확인 — 2장 이상이면 즉시 중단
+                        try:
+                            _uploaded_imgs = driver.find_elements(
+                                By.CSS_SELECTOR,
+                                ".thumbs .thumb, .image-list .image, "
+                                "[class*='upload'] img, .preview img, "
+                                "img[src*='images.craigslist']"
+                            )
+                            _img_count = len(_uploaded_imgs)
+                            if _img_count > 1:
+                                _emergency_data = json.dumps({
+                                    "reason": "IMAGE_GUARD_VIOLATION",
+                                    "job_code": job.get("job_code", "?"),
+                                    "image_count": _img_count,
+                                    "ts": datetime.now().isoformat()
+                                }, ensure_ascii=False, indent=2)
+                                _EMERGENCY_STOP_PATH = _LOG_DIR / "EMERGENCY_STOP.log"
+                                _EMERGENCY_STOP_PATH.write_text(_emergency_data, encoding="utf-8")
+                                print(f"    [EMERGENCY] 이미지 {_img_count}장 감지 → 즉시 중단 + EMERGENCY_STOP.log 생성")
+                                _log_event("error", job.get("job_code", "?"), "image_guard",
+                                           f"Multiple images detected: {_img_count}", {"count": _img_count})
+                                driver.quit()
+                                sys.exit(99)
+                            elif _img_count == 1:
+                                print(f"    이미지 검증 OK (1장)")
+                        except Exception as _img_chk_err:
+                            print(f"    이미지 카운트 체크 실패 (무시): {_img_chk_err}")
+                        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
                         # "done" 버튼 클릭
                         done_btn = _find(driver, [
@@ -1934,7 +2054,36 @@ def main():
     parser.add_argument("--limit",      type=int, default=10)
     parser.add_argument("--no-overlay", action="store_true",
                         help="RPAOverlay 창 띄우지 않음 (Admin Board 통합 모드)")
+    parser.add_argument("--user-confirmed", action="store_true",
+                        help="사용자 명시 실행 확인 (자동트리거 차단 우회)")
+    parser.add_argument("--manual", action="store_true",
+                        help="수동 실행 확인 (GUI 런처 경유)")
     args = parser.parse_args()
+
+    # ━━━ AUTO-TRIGGER GUARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 사용자 명시 인자 없이 svchost/taskeng 등 시스템 부모에서 실행 시 즉시 차단
+    _BLOCK_LOG = _LOG_DIR / "AUTO_TRIGGER_BLOCKED.log"
+    _EMERGENCY_STOP = _LOG_DIR / "EMERGENCY_STOP.log"
+
+    if _EMERGENCY_STOP.exists():
+        print("[EMERGENCY] EMERGENCY_STOP.log 존재 → 실행 거부. 수동 삭제 후 재시도.")
+        sys.exit(99)
+
+    if not args.user_confirmed and not args.manual and not args.dry_run and not args.diagnose:
+        _SYSTEM_PARENTS = {"svchost.exe", "taskeng.exe", "schtasks.exe",
+                           "taskhostw.exe", "services.exe", "wmiprvse.exe"}
+        try:
+            import psutil as _psu_guard
+            _parent_name = _psu_guard.Process(os.getppid()).name().lower()
+            if _parent_name in _SYSTEM_PARENTS:
+                _BLOCK_LOG.write_text(
+                    f"차단: 부모={_parent_name}, PID={os.getppid()}, 시각={datetime.now().isoformat()}\n",
+                    encoding="utf-8")
+                print(f"[BLOCK] 시스템 프로세스({_parent_name})에서 실행 시도 → 차단됨")
+                sys.exit(99)
+        except Exception:
+            pass  # psutil 없으면 가드 스킵 (수동 실행 허용)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     # ── 워치독: 건수 기반 동적 타임아웃 (응답없음 방지) ─────────────────────────
     import threading as _thr
@@ -2226,6 +2375,24 @@ def main():
                 jcode = job["job_code"]
                 print(f"\n{'='*55}")
                 print(f"[{i}/{len(ad_list)}] {jcode} | {job.get('city')} | {job.get('teaching_age')}")
+
+                # ━━━ 24H DUPLICATE GUARD ━━━━━��━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                try:
+                    _dup24_conn = get_conn()
+                    _dup24_cnt = _dup24_conn.execute(
+                        """SELECT COUNT(*) FROM ad_posts
+                           WHERE job_code=? AND status='posted'
+                             AND posted_at > datetime('now', '-24 hours')""",
+                        (jcode,)
+                    ).fetchone()[0]
+                    _dup24_conn.close()
+                    if _dup24_cnt >= 1:
+                        print(f"  [DUP-24H] {jcode} 이미 24시간 내 게시됨 → SKIP")
+                        _log_event("warn", jcode, "dup_24h", "Already posted within 24h")
+                        continue
+                except Exception as _dup24_err:
+                    print(f"  [WARN] 24h 중복 ���크 실패 (무시): {_dup24_err}")
+                # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
                 try:
                     url = cl_post(driver, title, body, job)
