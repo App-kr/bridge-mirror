@@ -614,15 +614,19 @@ def write_intake_row(
     output_filename: str,
     submission_date: str = "",
     pii_count: int = 0,
+    candidate_name: str = "",
 ) -> bool:
     """
-    신규 강사 처리 완료 → 접수 Google Sheet에 행 추가.
+    강사 처리 완료 → Google Sheet 기존 행 업데이트.
 
-    순서:
-      1) gspread (service account) — 시트에 SA 권한 공유된 경우
-      2) Sheets REST API + OAuth 토큰 — form_watcher 재인증 후 spreadsheets 스코프
-
-    Row: [접수일, 강사번호, 국적, 성별, 생년, 파일명, 상태, PII제거수]
+    전략:
+      1) D열(No)에서 candidate_id 검색 → 일치 행 찾기
+      2) 없으면 B열(Full name)에서 이름 유사도로 검색
+      3) 찾은 행의 다음 컬럼(처리열)에 파일명+상태 기록
+         - D열(No): 비어있으면 candidate_id 기록
+         - F열(Nationality): 비어있으면 nationality 기록
+         - AV열(처리): "변환완료 | {output_filename} | PII:{pii_count}" 기록
+      4) 실패 시 로컬 CSV 폴백
     """
     sid = _get_sheet_id()
     gid = _get_sheet_gid()
@@ -630,50 +634,114 @@ def write_intake_row(
         log.warning("[시트] sheet_id 미설정 — config.json 확인 필요")
         return False
 
-    ts  = submission_date or datetime.now().strftime("%Y-%m-%d")
-    row = [ts, candidate_id, nationality, gender, birth_year,
-           output_filename, "변환완료", str(pii_count)]
-
-    # ── 방법 1: service account (gspread) ──────────────────────────────
-    ws = _get_gs_worksheet_by_gid(sid, gid)
-    if ws is not None:
-        try:
-            # 헤더 확인
-            existing = ws.get_all_values()
-            if not existing or not any(existing[0]):
-                ws.append_row(_INTAKE_HEADERS, value_input_option="USER_ENTERED")
-            ws.append_row(row, value_input_option="USER_ENTERED")
-            log.info("  [시트] %s 기록 완료 (service account)", candidate_id)
-            return True
-        except Exception as e:
-            log.debug("SA 시트 쓰기 실패: %s", e)
-
-    # ── 방법 2: OAuth 토큰 (Sheets REST API) ───────────────────────────
     svc = _get_sheets_service_oauth()
     if svc is None:
-        log.warning(
-            "  [시트] OAuth Sheets 접근 불가 — "
-            "Google Cloud Console에서 Sheets API 활성화 후 자동 재시도됩니다"
+        log.warning("  [시트] OAuth Sheets 접근 불가")
+        _write_intake_csv_fallback(
+            [submission_date or datetime.now().strftime("%Y-%m-%d"),
+             candidate_id, nationality, gender, birth_year,
+             output_filename, "변환완료", str(pii_count)]
         )
-        _write_intake_csv_fallback(row)
         return False
+
     try:
         tab = _get_sheet_tab_name_by_gid(svc, sid, gid)
-        _ensure_intake_headers(svc, sid, tab)
-        svc.spreadsheets().values().append(
+        # 전체 데이터 로드
+        res = svc.spreadsheets().values().get(
             spreadsheetId=sid,
-            range=f"'{tab}'!A:H",
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [row]},
+            range=f"'{tab}'!A:AV",
         ).execute()
-        log.info("  [시트] %s 기록 완료 (OAuth)", candidate_id)
-        # CSV 폴백 파일에도 동기화 (이중 기록)
-        _write_intake_csv_fallback(row)
+        rows = res.get("values", [])
+
+        # ── 행 탐색 ────────────────────────────────────────────────────
+        target_row_idx = None   # 1-indexed sheet row number
+
+        # 1차: D열(index 3)에서 candidate_id 직접 검색
+        for i, row in enumerate(rows):
+            if len(row) > 3 and str(row[3]).strip() == str(candidate_id):
+                target_row_idx = i + 1
+                break
+
+        # 2차: B열(index 1)에서 이름 유사도 검색
+        if target_row_idx is None and candidate_name:
+            name_parts = set(candidate_name.lower().split())
+            best_score = 0
+            best_idx   = None
+            for i, row in enumerate(rows[1:], start=2):  # 헤더 제외
+                if len(row) < 2 or not row[1]:
+                    continue
+                sheet_name  = row[1].lower()
+                sheet_words = set(sheet_name.replace(";", " ").split())
+                common      = name_parts & sheet_words
+                score       = len(common) / max(len(name_parts), 1)
+                if score >= 0.5 and score > best_score:
+                    best_score = score
+                    best_idx   = i
+            if best_idx:
+                target_row_idx = best_idx
+                log.info("  [시트] 이름 유사도 매칭 행%d (score=%.2f)", best_idx, best_score)
+
+        if target_row_idx is None:
+            log.warning(
+                "  [시트] %s(%s) 행 찾기 실패 → CSV 폴백",
+                candidate_id, candidate_name[:20] if candidate_name else "?"
+            )
+            _write_intake_csv_fallback(
+                [submission_date or datetime.now().strftime("%Y-%m-%d"),
+                 candidate_id, nationality, gender, birth_year,
+                 output_filename, "변환완료", str(pii_count)]
+            )
+            return False
+
+        # ── 업데이트 requests ─────────────────────────────────────────
+        existing_row = rows[target_row_idx - 1]
+
+        def _cell(col_idx: int) -> str:
+            return existing_row[col_idx].strip() if len(existing_row) > col_idx else ""
+
+        updates = []
+        ts = submission_date or datetime.now().strftime("%Y-%m-%d")
+
+        # D열(4번째=index 3): 비어있으면 강사번호 기록
+        if not _cell(3):
+            updates.append({
+                "range": f"'{tab}'!D{target_row_idx}",
+                "values": [[candidate_id]],
+            })
+
+        # F열(6번째=index 5): 비어있으면 국적 기록
+        if not _cell(5) and nationality:
+            updates.append({
+                "range": f"'{tab}'!F{target_row_idx}",
+                "values": [[nationality]],
+            })
+
+        # AV열(48번째=index 47): 처리 상태 기록 (기존값 덮어쓰기)
+        note = f"변환완료 {ts} | {output_filename} | PII:{pii_count}"
+        updates.append({
+            "range": f"'{tab}'!AV{target_row_idx}",
+            "values": [[note]],
+        })
+
+        if updates:
+            svc.spreadsheets().values().batchUpdate(
+                spreadsheetId=sid,
+                body={
+                    "valueInputOption": "USER_ENTERED",
+                    "data": updates,
+                },
+            ).execute()
+
+        log.info("  [시트] 행%d 업데이트 완료 (%s)", target_row_idx, candidate_id)
         return True
+
     except Exception as e:
-        log.warning("  [시트] 기록 실패: %s — 로컬 CSV 저장", e)
-        _write_intake_csv_fallback(row)
+        log.error("  [시트] 기록 실패: %s", e)
+        _write_intake_csv_fallback(
+            [submission_date or datetime.now().strftime("%Y-%m-%d"),
+             candidate_id, nationality, gender, birth_year,
+             output_filename, "변환완료", str(pii_count)]
+        )
         return False
 
 

@@ -1,11 +1,14 @@
 """
-batch_process_forms.py — G폼 inbox 배치 변환기 v2.1
+batch_process_forms.py — G폼 inbox 배치 변환기 v3.0
 ====================================================
 test_pipeline_6155.py 방식 준수:
   extract_text_from_pdf (PyMuPDF) → analyze_pii → build_pdf (텍스트 기반)
-신규 (v2.1):
-  - 변환 완료 후 Google Sheet 접수 행 자동 기록 (sheets_connector.write_intake_row)
-  - 접수일은 meta.json created_time 기준 (없으면 today)
+
+v3.0 신규:
+  - Google Sheet를 1차 메타 소스로 사용 (ID·국적·성별·생년 모두 시트에서 읽기)
+  - Sheet D열(강사번호)이 있으면 그 ID를 사용 (자동부여 보조)
+  - Sheet F(국적)·H(생년)·I(성별) 컬럼 직접 참조 → PDF 텍스트 파싱 폴백
+  - 변환 완료 후 Google Sheet AV열 자동 기록 (sheets_connector.write_intake_row)
 
 사용:
   "Q:/Phtyon 3/python.exe" -X utf8 batch_process_forms.py [--dry] [--no-sheet]
@@ -57,7 +60,25 @@ def _ftype(name: str) -> str:
     return "resume"  # 기본
 
 
-# ── 메타 정보: 국적/성별/생년 추출 ─────────────────────────────────────
+# ── Sheet H열(생년) 정규화 ─────────────────────────────────────────────
+def _norm_year(h: str) -> str:
+    """
+    Sheet H열 값 → 2자리 생년
+    예: "2" → "02", "93" → "93", "1993" → "93", "" → "00"
+    """
+    h = (h or "").strip()
+    if not h:
+        return "00"
+    if len(h) == 1:          # "2" → "02"
+        return f"0{h}"
+    if len(h) == 2:          # "93" → "93"
+        return h
+    if len(h) >= 4:          # "1993" → "93"
+        return h[-2:]
+    return h
+
+
+# ── 메타 정보: 국적/성별/생년 추출 (PDF 텍스트 폴백용) ─────────────────
 _NAT_MAP = {
     "south african": "남아공",  "south africa": "남아공",
     "american":      "미국",    "usa":           "미국",  "u.s.a": "미국",
@@ -107,6 +128,91 @@ def _extract_meta(text: str) -> tuple[str, str, str]:
         if ys:
             yr = ys[0][-2:]
     return nat, gen, yr
+
+
+# ── Sheet 전체 메타 로드 (main()에서 1회) ─────────────────────────────
+def _load_sheet_meta() -> list[dict]:
+    """
+    Google Sheet 'New' 탭에서 강사 메타 데이터 로드.
+    반환: [{row_idx, id, name, nationality, birth_year, gender}, ...]
+    sheet 열: B=이름, D=강사번호, F=국적, H=생년(나이), I=성별
+    """
+    if NO_SHEET:
+        return []
+    try:
+        sys.path.insert(0, str(BASE_DIR))
+        from sheets_connector import (
+            _get_sheets_service_oauth, _get_sheet_id,
+            _get_sheet_gid, _get_sheet_tab_name_by_gid
+        )
+        sid = _get_sheet_id()
+        gid = _get_sheet_gid()
+        svc = _get_sheets_service_oauth()
+        if not svc or not sid:
+            log.warning("  [시트] Sheet 접근 불가 — 메타 로드 건너뜀")
+            return []
+
+        tab = _get_sheet_tab_name_by_gid(svc, sid, gid)
+        res = svc.spreadsheets().values().get(
+            spreadsheetId=sid,
+            range=f"'{tab}'!A1:I200",
+        ).execute()
+        raw_rows = res.get("values", [])
+
+        meta = []
+        for i, row in enumerate(raw_rows):
+            if not row:
+                continue
+            # 헤더/메모 행 건너뜀 (B열이 이름처럼 보이지 않으면)
+            b_val = row[1].strip() if len(row) > 1 else ""
+            if not b_val or not re.search(r"[A-Za-z]", b_val):
+                continue
+            # 데이터 행
+            d_val = row[3].strip() if len(row) > 3 else ""
+            f_val = row[5].strip() if len(row) > 5 else ""
+            h_val = _norm_year(row[7].strip() if len(row) > 7 else "")
+            i_val = row[8].strip() if len(row) > 8 else ""
+
+            # D열이 숫자(강사번호)여야만 유효 데이터로 취급
+            if not re.match(r"^\d{4,6}$", d_val):
+                continue
+
+            meta.append({
+                "row_idx":    i + 1,   # 1-indexed
+                "id":         d_val,
+                "name":       b_val,
+                "nationality":f_val,
+                "birth_year": h_val,
+                "gender":     i_val,
+            })
+
+        log.info(f"  [시트] 메타 {len(meta)}행 로드 완료")
+        return meta
+
+    except Exception as e:
+        log.warning(f"  [시트] 메타 로드 실패: {e}")
+        return []
+
+
+def _find_sheet_entry(sheet_meta: list[dict], name: str) -> dict | None:
+    """
+    이름 유사도(word overlap ≥ 50%)로 sheet_meta에서 matching row 반환.
+    """
+    if not sheet_meta or not name:
+        return None
+    name_parts = set(name.lower().split())
+    best_score = 0.0
+    best_entry = None
+    for entry in sheet_meta:
+        sheet_words = set(entry["name"].lower().replace(";", " ").split())
+        common = name_parts & sheet_words
+        score  = len(common) / max(len(name_parts), 1)
+        if score >= 0.5 and score > best_score:
+            best_score = score
+            best_entry = entry
+    if best_entry:
+        log.info(f"  [시트매칭] '{name}' → ID={best_entry['id']} (score={best_score:.2f})")
+    return best_entry
 
 
 # ── 이미 변환된 파일 → output/ 이동 ────────────────────────────────────
@@ -195,13 +301,17 @@ def _collect_applicants() -> list[dict]:
 
 
 # ── 단일 지원자 변환 ───────────────────────────────────────────────────
-def _process_one(app: dict, candidate_id: str) -> bool:
+def _process_one(app: dict, fallback_id: str,
+                 sheet_hint: dict | None = None) -> bool:
+    """
+    sheet_hint: _find_sheet_entry() 결과 — {id, nationality, birth_year, gender}
+    """
     name        = app["name"]
     files       = app["files"]
     submitted   = app["submitted_at"][:10]
 
     log.info(f"\n{'='*60}")
-    log.info(f"[{candidate_id}] {name} (접수: {submitted})")
+    log.info(f"[{name}] (접수: {submitted})")
     log.info(f"  파일: { {k: v.name for k, v in files.items()} }")
 
     # 텍스트 추출 (PyMuPDF 우선 — test_pipeline_6155 방식)
@@ -241,9 +351,28 @@ def _process_one(app: dict, candidate_id: str) -> bool:
         log.warning(f"  [SKIP] 텍스트 없음 (스캔 이미지만?)")
         return False
 
-    # 메타 추출
-    nat, gen, yr = _extract_meta(combined)
+    # ── 메타 결정: 시트 1차, PDF 파싱 폴백 ────────────────────────────
+    pdf_nat, pdf_gen, pdf_yr = _extract_meta(combined)
+
+    if sheet_hint:
+        candidate_id = sheet_hint.get("id") or fallback_id
+        nat = sheet_hint.get("nationality") or pdf_nat
+        gen = sheet_hint.get("gender")      or pdf_gen
+        yr  = sheet_hint.get("birth_year")  or pdf_yr
+        src = "시트"
+    else:
+        candidate_id = fallback_id
+        nat, gen, yr = pdf_nat, pdf_gen, pdf_yr
+        src = "PDF파싱"
+
+    log.info(f"  ID: {candidate_id} (소스: {src})")
     log.info(f"  메타: 국적={nat} 성별={gen} 생년={yr}")
+
+    # 이미 output/에 같은 ID 파일이 있으면 건너뜀
+    existing = list(OUTPUT_DIR.glob(f"{candidate_id}*.pdf"))
+    if existing:
+        log.info(f"  [SKIP] 이미 변환됨: {existing[0].name}")
+        return True
 
     # PII 분석 — known_names: 성(last)과 전체명 포함 (이름은 남김)
     parts      = name.split()
@@ -265,16 +394,16 @@ def _process_one(app: dict, candidate_id: str) -> bool:
     # PDF 빌드 — 텍스트 기반 (test_pipeline_6155 동일 방식)
     try:
         out_path, size = build_pdf(
-            candidate_id = candidate_id,
-            nationality  = nat,
-            gender       = gen,
-            birth_year   = yr,
-            photo_bytes  = None,
-            cover_text   = cover_pii.cleaned_text  if cover_pii  else None,
-            resume_text  = resume_pii.cleaned_text if resume_pii else None,
-            rec_text     = rec_pii.cleaned_text    if rec_pii    else None,
+            candidate_id   = candidate_id,
+            nationality    = nat,
+            gender         = gen,
+            birth_year     = yr,
+            photo_bytes    = None,
+            cover_text     = cover_pii.cleaned_text  if cover_pii  else None,
+            resume_text    = resume_pii.cleaned_text if resume_pii else None,
+            rec_text       = rec_pii.cleaned_text    if rec_pii    else None,
             candidate_name = name,
-            out_dir      = OUTPUT_DIR,
+            out_dir        = OUTPUT_DIR,
         )
         log.info(f"  [OK] {out_path.name} ({size//1024}KB)")
 
@@ -296,6 +425,7 @@ def _process_one(app: dict, candidate_id: str) -> bool:
                     output_filename = out_path.name,
                     submission_date = submitted,
                     pii_count       = pii_total,
+                    candidate_name  = name,
                 )
             except Exception as se:
                 log.warning(f"  [시트 기록 실패] {se}")
@@ -309,7 +439,7 @@ def _process_one(app: dict, candidate_id: str) -> bool:
 # ── 메인 ───────────────────────────────────────────────────────────────
 def main():
     log.info(f"\n{'#'*60}")
-    log.info(f"BRIDGE Forms 배치 변환 v2.1: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    log.info(f"BRIDGE Forms 배치 변환 v3.0: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info(f"모드: {'DRY RUN' if DRY else '실제 변환'}")
 
     # 미전송 행 일괄 업로드 시도 (Sheets API 재활성화 후)
@@ -323,6 +453,9 @@ def main():
         except Exception:
             pass
 
+    # ── Sheet 메타 1회 로드 ──────────────────────────────────────────
+    sheet_meta = _load_sheet_meta()
+
     # 이미 변환된 파일 정리
     moved = _move_converted()
     log.info(f"\n이미변환 파일: {moved}개 output/ 이동")
@@ -331,28 +464,32 @@ def main():
     applicants = _collect_applicants()
     log.info(f"\n신규 지원자: {len(applicants)}명 (접수순)")
 
-    # 시작 ID: 현재 output/의 최댓값 + 1
+    # fallback 시작 ID: 현재 output/ + 변환완료 meta.json + Sheet D열 최댓값 + 1
     existing_nums = []
+    # output/ 파일: {ID}{한글} 패턴만 (날짜·임시파일 제외)
     for f in OUTPUT_DIR.iterdir():
-        m = re.match(r'^(\d{4,5})', f.name)
+        m = re.match(r'^(\d{4,5})[가-힣]', f.name)
         if m:
-            n = int(m.group(1))
-            if 1000 <= n <= 9999:
-                existing_nums.append(n)
-    # inbox meta.json에서도 확인
+            existing_nums.append(int(m.group(1)))
+    # inbox meta.json: 이미 변환된 파일 한정 (한글 국적명 포함 패턴)
     for f in INBOX_DIR.glob("*.meta.json"):
-        m = re.match(r'^(\d{4,5})', f.name)
+        m = re.match(r'^(\d{4,5})[가-힣_]', f.name)
         if m:
-            n = int(m.group(1))
-            if 1000 <= n <= 9999:
-                existing_nums.append(n)
-    start_id = max(existing_nums, default=6165) + 1
-    log.info(f"시작 ID: {start_id}\n")
+            existing_nums.append(int(m.group(1)))
+    # Sheet D열 ID도 포함
+    for entry in sheet_meta:
+        try:
+            existing_nums.append(int(entry["id"]))
+        except Exception:
+            pass
+    start_id = max(existing_nums, default=6200) + 1
+    log.info(f"fallback 시작 ID: {start_id}\n")
 
     ok = err = skip = 0
     for i, app in enumerate(applicants):
-        cid    = str(start_id + i)
-        result = _process_one(app, cid)
+        fallback_cid = str(start_id + i)
+        sheet_hint   = _find_sheet_entry(sheet_meta, app["name"])
+        result = _process_one(app, fallback_cid, sheet_hint=sheet_hint)
         if result is True:
             ok += 1
         elif result is False:

@@ -108,12 +108,12 @@ def build_filename(
     birth_year: str = "",
 ) -> str:
     """
-    예: 3126_영국_여성(99born).pdf
+    예: 6155미국_여성(93born).pdf  (ID+국적 사이 언더스코어 없음)
     """
     nat = _NAT_MAP.get(nationality.strip().lower(), nationality.strip()) or "미상"
     gen = _GENDER_MAP.get(gender.strip().lower(), gender.strip()) or "미상"
     yr  = str(birth_year)[-2:] if birth_year else "00"
-    return f"{candidate_id}_{nat}_{gen}({yr}born).pdf"
+    return f"{candidate_id}{nat}_{gen}({yr}born).pdf"
 
 
 # ── 사진 오버레이 유틸 ────────────────────────────────────────────────────────
