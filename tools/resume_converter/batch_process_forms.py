@@ -1,24 +1,23 @@
 """
-batch_process_forms.py — G폼 inbox 파일 배치 변환기
-=======================================================
-inbox/에 있는 새 지원자 파일을 지원자별로 그룹화 → PII 제거 → PDF 빌드 → output/
+batch_process_forms.py — G폼 inbox 배치 변환기 v2.0
+====================================================
+test_pipeline_6155.py 방식 준수:
+  extract_text_from_pdf (PyMuPDF) → analyze_pii → build_pdf (텍스트 기반)
 
 사용:
   "Q:/Phtyon 3/python.exe" -X utf8 batch_process_forms.py [--dry]
-
---dry: 파일 목록만 출력, 실제 변환 없음
 """
 
 from __future__ import annotations
 
-import re
-import sys
-import shutil
+import json
 import logging
-from pathlib import Path
+import re
+import shutil
+import sys
 from datetime import datetime
+from pathlib import Path
 
-# ── 경로 설정 ─────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
 INBOX_DIR  = BASE_DIR / "inbox"
 OUTPUT_DIR = BASE_DIR / "output"
@@ -38,63 +37,84 @@ log = logging.getLogger("batch")
 
 DRY = "--dry" in sys.argv
 
-# ── 파일 타입 판별 ─────────────────────────────────────────────────────────
-def classify_ftype(name: str) -> str:
+# ── 이름 추출 패턴 (그리디 → 마지막 ' - Name.ext') ────────────────────
+NAME_RE        = re.compile(r'.* - (.+?)\.(pdf|docx|doc)$', re.IGNORECASE)
+DRIVE_SUFFIX   = re.compile(r'_[A-Za-z0-9]{6,10}$')
+
+# ── 파일 타입 판별 ──────────────────────────────────────────────────────
+def _ftype(name: str) -> str:
     n = name.lower()
-    if re.search(r"(cover|coverletter|cover_letter)", n):
-        return "cover"
-    if re.search(r"(recommend|reference|ref_letter)", n):
-        return "rec"
-    if re.search(r"(resume|cv |cv_|curriculum|_cv\b)", n):
-        return "resume"
-    if re.search(r"(passport|document|scan|adobe)", n):
-        return "doc"
-    if re.search(r"(certif|degree|university|diploma)", n):
-        return "cert"
-    if re.search(r"(self.intro|video|link)", n):
-        return "link"
-    # 기본: resume
-    return "resume"
+    if re.search(r"(cover|coverletter|cover_letter|cover letter)", n): return "cover"
+    if re.search(r"(recommend|reference|ref_letter)",              n): return "rec"
+    if re.search(r"(resume|cv |cv_|\bcv\b|curriculum|teacher.*cv|teaching.*cv)", n): return "resume"
+    if re.search(r"(passport|document|scan|adobe)",                n): return "doc"
+    if re.search(r"(certif|degree|university|diploma|substitute)", n): return "cert"
+    if re.search(r"(self.intro|video|link)",                       n): return "link"
+    return "resume"  # 기본
 
 
-# ── 지원자 그룹화 ──────────────────────────────────────────────────────────
-NAME_RE = re.compile(r'.* - (.+?)\.(pdf|docx|doc)$', re.IGNORECASE)
-DRIVE_SUFFIX_RE = re.compile(r'_[A-Za-z0-9]{6,10}$')  # _1VW9B0dW 같은 Drive 중복 suffix
+# ── 메타 정보: 국적/성별/생년 추출 ─────────────────────────────────────
+_NAT_MAP = {
+    "south african": "남아공",  "south africa": "남아공",
+    "american":      "미국",    "usa":           "미국",  "u.s.a": "미국",
+    "british":       "영국",    "uk":            "영국",  "united kingdom": "영국",
+    "canadian":      "캐나다",  "canada":        "캐나다",
+    "australian":    "호주",    "australia":     "호주",
+    "irish":         "아일랜드","ireland":        "아일랜드",
+    "zimbabwean":    "짐바브웨","zimbabwe":       "짐바브웨",
+    "kenyan":        "케냐",    "kenya":          "케냐",
+    "nigerian":      "나이지리아",
+    "german":        "독일",    "germany":        "독일",
+    "filipino":      "필리핀",  "philippines":    "필리핀",
+    "korean american":"미교포", "korean-american":"미교포",
+    "new zealander":  "뉴질랜드","new zealand":   "뉴질랜드",
+    "jamaican":       "자메이카",
+    "ghanaian":       "가나",
+    "philippine":     "필리핀",
+}
+_GENDER_HINTS = {
+    "female": "여성", "she/her": "여성", "her/she": "여성",
+    "male":   "남성", "he/him":  "남성", "him/he":  "남성",
+    "gender: female": "여성", "sex: female": "여성",
+    "gender: male":   "남성", "sex: male":   "남성",
+}
 
-def normalize_name(name: str) -> str:
-    """Drive 중복 파일 suffix 제거: 'Bomikazi Nkolongwane_1VW9B0dW' → 'Bomikazi Nkolongwane'"""
-    return DRIVE_SUFFIX_RE.sub('', name).strip()
-
-def group_inbox_files() -> dict[str, list[Path]]:
-    """inbox/ 파일을 지원자별로 그룹화. 이미 변환된 파일(숫자 이름) 제외."""
-    files = [f for f in INBOX_DIR.iterdir()
-             if f.is_file() and not f.name.endswith('.meta.json')]
-
-    groups: dict[str, list[Path]] = {}
-    already_converted = []
-
-    for f in files:
-        # 이미 변환된 파일 (숫자로 시작하는 한국어 이름 패턴)
-        if re.match(r'^\d{4,5}[가-힣]', f.name) or re.match(r'^\d{4,5}_[가-힣]', f.name):
-            already_converted.append(f)
-            continue
-
-        m = NAME_RE.search(f.name)
-        if not m:
-            continue
-
-        raw_name = m.group(1).strip()
-        name = normalize_name(raw_name)
-        groups.setdefault(name, []).append(f)
-
-    return groups, already_converted
+def _extract_meta(text: str) -> tuple[str, str, str]:
+    t = text.lower()
+    # 국적
+    nat = "미상"
+    for key, val in _NAT_MAP.items():
+        if key in t:
+            nat = val
+            break
+    # 성별
+    gen = "미상"
+    for key, val in _GENDER_HINTS.items():
+        if key in t:
+            gen = val
+            break
+    # 생년 (DOB 우선)
+    yr = "00"
+    dob_m = re.search(r"(?:dob|date\s+of\s+birth|born)[:\s]+.*?(\d{4})", t)
+    if dob_m:
+        yr = dob_m.group(1)[-2:]
+    else:
+        ys = re.findall(r"\b((?:19[6-9]\d|200\d))\b", text)
+        if ys:
+            yr = ys[0][-2:]
+    return nat, gen, yr
 
 
-# ── 이미 변환된 파일 → output/ 이동 ───────────────────────────────────────
-def move_converted_files(converted: list[Path]):
-    """숫자 이름 파일을 output/ 으로 이동 (이미 처리됨)."""
+# ── 이미 변환된 파일 → output/ 이동 ────────────────────────────────────
+def _move_converted() -> int:
     moved = 0
-    for f in converted:
+    for f in INBOX_DIR.iterdir():
+        if not f.is_file():
+            continue
+        if not re.match(r'^\d{4,5}[가-힣_]', f.name):
+            continue
+        if f.name.endswith('.meta.json'):
+            continue
         dest = OUTPUT_DIR / f.name
         if not dest.exists():
             if not DRY:
@@ -103,216 +123,209 @@ def move_converted_files(converted: list[Path]):
             moved += 1
         else:
             if not DRY:
-                f.unlink()  # 중복 → 삭제
-            log.info(f"[중복제거] {f.name}")
+                f.unlink()
+            log.info(f"[중복] {f.name}")
     return moved
 
 
-# ── 메타 추출 (국적/성별/생년) ──────────────────────────────────────────────
-NAT_PATTERNS = {
-    "south african": "남아공", "south africa": "남아공",
-    "american": "미국", "usa": "미국", "u.s.a": "미국", "u.s.": "미국",
-    "british": "영국", "uk": "영국", "united kingdom": "영국",
-    "canadian": "캐나다", "canada": "캐나다",
-    "australian": "호주", "australia": "호주",
-    "irish": "아일랜드", "ireland": "아일랜드",
-    "zimbabwean": "짐바브웨", "zimbabwe": "짐바브웨",
-    "kenyan": "케냐", "kenya": "케냐",
-    "nigerian": "나이지리아", "nigeria": "나이지리아",
-    "german": "독일", "germany": "독일",
-    "filipino": "필리핀", "philippines": "필리핀",
-    "korean american": "미교포", "korean-american": "미교포",
-}
+# ── 접수순 지원자 목록 (meta.json created_time 기준) ───────────────────
+def _collect_applicants() -> list[dict]:
+    """
+    inbox/*.meta.json 에서 신규 지원자 파일 수집 → 접수순 정렬.
+    Returns list of {name, files: {ftype→Path}, submitted_at}
+    """
+    # step1: meta.json → {raw_name → (earliest_time, [orig_name, ...])}
+    name_times: dict[str, list] = {}
+    for meta_path in INBOX_DIR.glob("*.meta.json"):
+        try:
+            data  = json.loads(meta_path.read_text(encoding="utf-8"))
+            orig  = data.get("original_name", "")
+            ct    = data.get("created_time", "9999")
+        except Exception:
+            continue
+        if re.match(r'^\d{4,5}[가-힣_]', orig):
+            continue  # 이미 변환된 파일
+        nm = NAME_RE.search(orig)
+        if not nm:
+            continue
+        raw = DRIVE_SUFFIX.sub('', nm.group(1)).strip()
+        if raw not in name_times or ct < name_times[raw][0]:
+            name_times[raw] = [ct]
+        name_times[raw].append(orig)
 
-def extract_meta(text: str) -> tuple[str, str, str]:
-    """텍스트에서 국적/성별/생년 추출. 실패시 ('미상','미상','00') 반환."""
-    t = text.lower()
+    # step2: 실제 inbox 파일 경로 연결
+    applicants = []
+    for name, info in name_times.items():
+        submitted_at = info[0]
+        files_by_type: dict[str, Path] = {}
+        for f in INBOX_DIR.iterdir():
+            if not f.is_file() or f.name.endswith('.meta.json'):
+                continue
+            nm = NAME_RE.search(f.name)
+            if not nm:
+                continue
+            raw = DRIVE_SUFFIX.sub('', nm.group(1)).strip()
+            if raw != name:
+                continue
+            ft = _ftype(f.name)
+            # 같은 타입 → PDF 우선, 그 다음 더 큰 파일
+            if ft in files_by_type:
+                existing = files_by_type[ft]
+                if f.suffix.lower() == ".pdf" and existing.suffix.lower() != ".pdf":
+                    files_by_type[ft] = f
+                elif f.suffix.lower() == existing.suffix.lower() and f.stat().st_size > existing.stat().st_size:
+                    files_by_type[ft] = f
+            else:
+                files_by_type[ft] = f
 
-    # 국적
-    nationality = "미상"
-    for key, val in NAT_PATTERNS.items():
-        if key in t:
-            nationality = val
-            break
+        if files_by_type:
+            applicants.append({
+                "name":         name,
+                "files":        files_by_type,
+                "submitted_at": submitted_at,
+            })
 
-    # 성별
-    gender = "미상"
-    if re.search(r"\b(she/her|her/she)\b", t):
-        gender = "여성"
-    elif re.search(r"\b(he/him|him/he)\b", t):
-        gender = "남성"
-    elif re.search(r"\bgender\s*:\s*female\b|\bsex\s*:\s*female\b", t):
-        gender = "여성"
-    elif re.search(r"\bgender\s*:\s*male\b|\bsex\s*:\s*male\b", t):
-        gender = "남성"
-
-    # 생년 (DOB or year 4자리)
-    birth_year = "00"
-    dob_m = re.search(
-        r"(?:dob|date\s+of\s+birth|born)[:\s]+.*?(\d{4})", t
-    )
-    if dob_m:
-        birth_year = dob_m.group(1)[-2:]
-    else:
-        # 첫 번째 출현하는 1980~2009 범위 연도
-        years = re.findall(r"\b((?:19[8-9]\d|200\d))\b", text)
-        if years:
-            birth_year = years[0][-2:]
-
-    return nationality, gender, birth_year
-
-
-# ── 텍스트 추출 ────────────────────────────────────────────────────────────
-def extract_text(path: Path) -> str:
-    """PDF 또는 DOCX에서 텍스트 추출."""
-    try:
-        if path.suffix.lower() == ".pdf":
-            import pdfplumber
-            with pdfplumber.open(str(path)) as pdf:
-                return "\n".join(
-                    (p.extract_text() or "") for p in pdf.pages
-                )
-        elif path.suffix.lower() in (".docx", ".doc"):
-            try:
-                import docx
-                doc = docx.Document(str(path))
-                return "\n".join(para.text for para in doc.paragraphs)
-            except Exception:
-                return ""
-    except Exception as e:
-        log.warning(f"텍스트 추출 실패 {path.name}: {e}")
-        return ""
+    # 접수순 정렬
+    applicants.sort(key=lambda x: x["submitted_at"])
+    return applicants
 
 
-# ── 다음 강사 번호 계산 ────────────────────────────────────────────────────
-def get_next_id() -> int:
-    """output/의 기존 파일에서 최댓값 + 1. 4-5자리 강사번호만 대상."""
-    nums = []
-    for folder in (OUTPUT_DIR, INBOX_DIR):
-        for f in folder.iterdir():
-            m = re.match(r'^(\d{4,5})', f.name)
-            if m:
-                n = int(m.group(1))
-                if 1000 <= n <= 99999:  # 유효 강사번호 범위
-                    nums.append(n)
-    return max(nums, default=6165) + 1
-
-
-# ── 메인 배치 처리 ─────────────────────────────────────────────────────────
-def process_group(name: str, files: list[Path], candidate_id: str) -> bool:
-    """한 지원자 그룹 처리 → output/ 저장. 성공시 True."""
-    try:
-        from .pii_engine import analyze_pii
-        from .pdf_builder import build_pdf, build_filename
-    except ImportError:
-        # 직접 실행 시
-        sys.path.insert(0, str(BASE_DIR.parent.parent))
-        from tools.resume_converter.pii_engine import analyze_pii
-        from tools.resume_converter.pdf_builder import build_pdf, build_filename
+# ── 단일 지원자 변환 ───────────────────────────────────────────────────
+def _process_one(app: dict, candidate_id: str) -> bool:
+    name        = app["name"]
+    files       = app["files"]
+    submitted   = app["submitted_at"][:10]
 
     log.info(f"\n{'='*60}")
-    log.info(f"[{candidate_id}] {name} ({len(files)}개 파일)")
+    log.info(f"[{candidate_id}] {name} (접수: {submitted})")
+    log.info(f"  파일: { {k: v.name for k, v in files.items()} }")
 
-    # 파일 분류
-    by_type: dict[str, Path] = {}
-    for f in files:
-        ft = classify_ftype(f.name)
-        # resume/cover 중 이미 있으면 더 좋은 것 유지 (PDF 우선)
-        if ft in ("resume", "cover"):
-            existing = by_type.get(ft)
-            if existing is None:
-                by_type[ft] = f
-            elif f.suffix.lower() == ".pdf" and existing.suffix.lower() != ".pdf":
-                by_type[ft] = f  # PDF 우선
-        else:
-            by_type.setdefault(ft, f)
+    # 텍스트 추출 (PyMuPDF 우선 — test_pipeline_6155 방식)
+    try:
+        sys.path.insert(0, str(BASE_DIR.parent.parent))
+        from tools.resume_converter.pdf_builder import extract_text_from_pdf, build_pdf
+        from tools.resume_converter.pii_engine  import analyze_pii
+    except ImportError:
+        from pdf_builder import extract_text_from_pdf, build_pdf
+        from pii_engine  import analyze_pii
 
-    log.info(f"  분류: {dict((k, v.name) for k, v in by_type.items())}")
+    def _get_text(path: Path) -> str:
+        if path.suffix.lower() == ".pdf":
+            try:
+                return extract_text_from_pdf(path)  # PyMuPDF
+            except Exception as e:
+                log.warning(f"  PyMuPDF 실패({path.name}): {e}")
+        # DOCX fallback
+        try:
+            import docx as _docx
+            d = _docx.Document(str(path))
+            return "\n".join(p.text for p in d.paragraphs)
+        except Exception as e:
+            log.warning(f"  DOCX 추출 실패({path.name}): {e}")
+        return ""
 
-    # 텍스트 추출
-    resume_path = by_type.get("resume")
-    cover_path  = by_type.get("cover")
+    resume_path  = files.get("resume")
+    cover_path   = files.get("cover")
+    rec_path     = files.get("rec")
 
-    resume_text = extract_text(resume_path) if resume_path else ""
-    cover_text  = extract_text(cover_path) if cover_path else ""
+    resume_raw   = _get_text(resume_path) if resume_path else ""
+    cover_raw    = _get_text(cover_path)  if cover_path  else ""
+    rec_raw      = _get_text(rec_path)    if rec_path    else ""
 
-    if not resume_text and not cover_text:
-        log.warning(f"  [SKIP] 텍스트 없음")
+    combined = (resume_raw + "\n" + cover_raw).strip()
+    if not combined:
+        log.warning(f"  [SKIP] 텍스트 없음 (스캔 이미지만?)")
         return False
 
-    # 메타 추출 (resume 우선, 없으면 cover)
-    combined = (resume_text + "\n" + cover_text).strip()
-    nationality, gender, birth_year = extract_meta(combined)
-    log.info(f"  메타: 국적={nationality} 성별={gender} 생년={birth_year}")
+    # 메타 추출
+    nat, gen, yr = _extract_meta(combined)
+    log.info(f"  메타: 국적={nat} 성별={gen} 생년={yr}")
+
+    # PII 분석 — known_names: 성(last)과 전체명 포함 (이름은 남김)
+    parts      = name.split()
+    last_name  = parts[-1] if len(parts) > 1 else ""
+    known      = [name] + ([last_name] if last_name else [])
+
+    resume_pii = analyze_pii(resume_raw, known_names=known) if resume_raw.strip() else None
+    cover_pii  = analyze_pii(cover_raw,  known_names=known) if cover_raw.strip()  else None
+    rec_pii    = analyze_pii(rec_raw,    known_names=known) if rec_raw.strip()    else None
+
+    if resume_pii: log.info(f"  Resume PII: {len(resume_pii.pii_found)}건 제거")
+    if cover_pii:  log.info(f"  Cover  PII: {len(cover_pii.pii_found)}건 제거")
+    if rec_pii:    log.info(f"  Rec    PII: {len(rec_pii.pii_found)}건 제거")
 
     if DRY:
         log.info(f"  [DRY] 변환 건너뜀")
         return True
 
-    # PII 제거
-    known_names = [name]
-    resume_pii = analyze_pii(resume_text, known_names=known_names) if resume_text.strip() else None
-    cover_pii  = analyze_pii(cover_text,  known_names=known_names) if cover_text.strip() else None
-
-    if resume_pii:
-        log.info(f"  Resume PII 제거: {len(resume_pii.pii_found)}개")
-    if cover_pii:
-        log.info(f"  Cover PII 제거: {len(cover_pii.pii_found)}개")
-
-    # PDF 빌드
+    # PDF 빌드 — 텍스트 기반 (test_pipeline_6155 동일 방식)
     try:
         out_path, size = build_pdf(
-            candidate_id  = candidate_id,
-            nationality   = nationality,
-            gender        = gender,
-            birth_year    = birth_year,
-            cover_text    = cover_pii.cleaned_text if cover_pii else None,
-            resume_text   = resume_pii.cleaned_text if resume_pii else None,
-            cover_pdf_path  = cover_path  if cover_path  and cover_path.suffix.lower()  == ".pdf" else None,
-            resume_pdf_path = resume_path if resume_path and resume_path.suffix.lower() == ".pdf" else None,
-            cover_pii_strings  = [m.original_value for m in cover_pii.pii_found]  if cover_pii  else None,
-            resume_pii_strings = [m.original_value for m in resume_pii.pii_found] if resume_pii else None,
+            candidate_id = candidate_id,
+            nationality  = nat,
+            gender       = gen,
+            birth_year   = yr,
+            photo_bytes  = None,
+            cover_text   = cover_pii.cleaned_text  if cover_pii  else None,
+            resume_text  = resume_pii.cleaned_text if resume_pii else None,
+            rec_text     = rec_pii.cleaned_text    if rec_pii    else None,
             candidate_name = name,
-            out_dir        = OUTPUT_DIR,
+            out_dir      = OUTPUT_DIR,
         )
         log.info(f"  [OK] {out_path.name} ({size//1024}KB)")
         return True
     except Exception as e:
-        log.error(f"  [ERR] PDF 빌드 실패: {e}", exc_info=True)
+        log.error(f"  [ERR] {e}", exc_info=True)
         return False
 
 
+# ── 메인 ───────────────────────────────────────────────────────────────
 def main():
     log.info(f"\n{'#'*60}")
-    log.info(f"BRIDGE Forms 배치 변환 시작: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    log.info(f"BRIDGE Forms 배치 변환 v2.0: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info(f"모드: {'DRY RUN' if DRY else '실제 변환'}")
 
-    groups, already_converted = group_inbox_files()
-
-    # 이미 변환된 파일 → output/ 이동
-    moved = move_converted_files(already_converted)
+    # 이미 변환된 파일 정리
+    moved = _move_converted()
     log.info(f"\n이미변환 파일: {moved}개 output/ 이동")
 
-    log.info(f"\n신규 지원자: {len(groups)}명")
+    # 접수순 지원자 목록
+    applicants = _collect_applicants()
+    log.info(f"\n신규 지원자: {len(applicants)}명 (접수순)")
 
-    next_id = get_next_id()
-    ok_count = err_count = skip_count = 0
+    # 시작 ID: 현재 output/의 최댓값 + 1
+    existing_nums = []
+    for f in OUTPUT_DIR.iterdir():
+        m = re.match(r'^(\d{4,5})', f.name)
+        if m:
+            n = int(m.group(1))
+            if 1000 <= n <= 9999:
+                existing_nums.append(n)
+    # inbox meta.json에서도 확인
+    for f in INBOX_DIR.glob("*.meta.json"):
+        m = re.match(r'^(\d{4,5})', f.name)
+        if m:
+            n = int(m.group(1))
+            if 1000 <= n <= 9999:
+                existing_nums.append(n)
+    start_id = max(existing_nums, default=6165) + 1
+    log.info(f"시작 ID: {start_id}\n")
 
-    for name, files in sorted(groups.items()):
-        cid = str(next_id)
-        result = process_group(name, files, cid)
-        if result:
-            ok_count += 1
-            next_id += 1
+    ok = err = skip = 0
+    for i, app in enumerate(applicants):
+        cid    = str(start_id + i)
+        result = _process_one(app, cid)
+        if result is True:
+            ok += 1
         elif result is False:
-            # None이면 skip, False면 error
-            err_count += 1
+            err += 1
         else:
-            skip_count += 1
+            skip += 1
 
     log.info(f"\n{'='*60}")
-    log.info(f"완료: 성공={ok_count}, 오류={err_count}, 건너뜀={skip_count}")
-    log.info(f"output/ 폴더: {len(list(OUTPUT_DIR.iterdir()))}개 파일")
+    log.info(f"완료: 성공={ok}, 오류={err}, 건너뜀={skip}")
+    log.info(f"output/ 총 파일: {len(list(OUTPUT_DIR.iterdir()))}개")
+    log.info(f"{'='*60}")
 
 
 if __name__ == "__main__":
