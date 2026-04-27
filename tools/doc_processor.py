@@ -558,12 +558,21 @@ RE_KR_RESIDENTIAL = re.compile(
 )
 
 # 영문 주소 패턴: "123 Street Name, City, ST 12345"
-# 약어(St, Ct, Dr 등)는 오탐 심해서 전체 단어만 매칭
+# 전체 단어 + 약어(St./Ave./Dr. 등) 모두 매칭
 RE_EN_ADDRESS = re.compile(
     r"\d{1,5}\s+[\w\s.]{3,40}\b(?:Street|Avenue|Boulevard|Drive|"
-    r"Road|Lane|Court|Place|Trail|Circle|Parkway|Highway)\b"
+    r"Road|Lane|Court|Place|Trail|Circle|Parkway|Highway|"
+    r"St\.?|Ave\.?|Blvd\.?|Dr\.?|Rd\.?|Ln\.?|Ct\.?|Pl\.?|Trl\.?|Cir\.?|Pkwy\.?|Hwy\.?)\b"
     r"[.,]?\s*(?:(?:Apt|Suite|Unit|#)\s*\w+[.,]?\s*)?"
     r"(?:\w[\w\s]*,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?)?",
+    re.I,
+)
+
+# 한국 로마자 주소 패턴: "80-11, Jangji 1-gil," / "123 Teheran-ro" / "45 Sejong-daero"
+RE_KR_ROMANIZED_ADDR = re.compile(
+    r'\d+(?:[-–]\d+)?\s*,?\s*\w+(?:\s+\w+)?\s*\d*\s*[-–]?\s*'
+    r'(?:gil|ro|daero|dong|gu|si|ri|myeon|eup|gun|do)\b'
+    r'(?:\s*,\s*[\w\s]+)?',
     re.I,
 )
 
@@ -1011,6 +1020,9 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
 
     # 영문 주소 삭제 (거리+도시+주/zip)
     _sub(RE_EN_ADDRESS, "", "EN_ADDR")
+
+    # 한국 로마자 주소 삭제 (80-11, Jangji 1-gil 등)
+    _sub(RE_KR_ROMANIZED_ADDR, "", "KR_ROMAN_ADDR")
 
     # ── Pass 2.5: 한국 도시명 처리 ──
     # "Daegu, South Korea" → "South Korea"
@@ -1691,9 +1703,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if fn_name.lower() in text.lower():
                     replacement_redacts.append((fn_name, fn_first))
                     all_logs.append(f"[page{page_num}] FILENAME_NAME→{fn_first}: {fn_name}")
-                if fn_last.lower() in text.lower():
+                # 성(last name): 최소 3자 이상이어야 redact — "T", "K" 등 이니셜 제외
+                if len(fn_last) >= 3 and fn_last.lower() in text.lower():
                     redact_texts.add(fn_last)
-            elif fn_name.lower() not in _fn_first_names and fn_name.lower() in text.lower():
+            elif (fn_name.lower() not in _fn_first_names
+                  and len(fn_name) >= 3  # 이니셜 단독 방지
+                  and fn_name.lower() in text.lower()):
                 # 단일 단어가 이름(first name)이면 redact 금지 — 성(last name)만 허용
                 redact_texts.add(fn_name)
                 all_logs.append(f"[page{page_num}] FILENAME_NAME: {fn_name}")
@@ -1905,10 +1920,14 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
                     # 아이콘 폰트 글리프 삭제 (FontAwesome/icomoon — U+E000~U+F8FF Private Use Area)
-                    # 헤더 상단 300px 이내 아이콘 심볼만 처리 (연락처 섹션)
-                    if any(0xE000 <= ord(c) <= 0xF8FF for c in _st):
+                    # 순수 아이콘 스팬만 (공백 제외 모든 문자가 PUA 범위) — 헤더 상단 400px 이내
+                    _is_pure_glyph = (
+                        bool(_st.strip())
+                        and all(0xE000 <= ord(c) <= 0xF8FF or c.isspace() for c in _st)
+                    )
+                    if _is_pure_glyph:
                         _span_y0 = _span["bbox"][1]
-                        if _span_y0 < 300:
+                        if _span_y0 < 400:
                             page.add_redact_annot(_sr, fill=(1, 1, 1))
                             _has_extra = True
                             all_logs.append(f"[page{page_num}] ICON_GLYPH y={_span_y0:.0f}: {repr(_st[:8])}")
@@ -2052,6 +2071,7 @@ def _build_search_patterns(candidate: dict = None):
         (RE_KR_ADDRESS, "KR_ADDR"),
         (RE_KR_RESIDENTIAL, "KR_RESID"),   # 부영 1차 아파트 등
         (RE_EN_ADDRESS, "EN_ADDR"),
+        (RE_KR_ROMANIZED_ADDR, "KR_ROMAN_ADDR"),
     ]
 
     # 전화번호는 별도 처리 (7자리+ 필터)
