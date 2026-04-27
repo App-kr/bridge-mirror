@@ -1,11 +1,14 @@
 """
-batch_process_forms.py — G폼 inbox 배치 변환기 v2.0
+batch_process_forms.py — G폼 inbox 배치 변환기 v2.1
 ====================================================
 test_pipeline_6155.py 방식 준수:
   extract_text_from_pdf (PyMuPDF) → analyze_pii → build_pdf (텍스트 기반)
+신규 (v2.1):
+  - 변환 완료 후 Google Sheet 접수 행 자동 기록 (sheets_connector.write_intake_row)
+  - 접수일은 meta.json created_time 기준 (없으면 today)
 
 사용:
-  "Q:/Phtyon 3/python.exe" -X utf8 batch_process_forms.py [--dry]
+  "Q:/Phtyon 3/python.exe" -X utf8 batch_process_forms.py [--dry] [--no-sheet]
 """
 
 from __future__ import annotations
@@ -35,7 +38,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("batch")
 
-DRY = "--dry" in sys.argv
+DRY      = "--dry"      in sys.argv
+NO_SHEET = "--no-sheet" in sys.argv
 
 # ── 이름 추출 패턴 (그리디 → 마지막 ' - Name.ext') ────────────────────
 NAME_RE        = re.compile(r'.* - (.+?)\.(pdf|docx|doc)$', re.IGNORECASE)
@@ -273,6 +277,29 @@ def _process_one(app: dict, candidate_id: str) -> bool:
             out_dir      = OUTPUT_DIR,
         )
         log.info(f"  [OK] {out_path.name} ({size//1024}KB)")
+
+        # ── Google Sheet 접수 기록 ───────────────────────────────────
+        if not DRY and not NO_SHEET:
+            pii_total = (
+                (len(resume_pii.pii_found) if resume_pii else 0) +
+                (len(cover_pii.pii_found)  if cover_pii  else 0) +
+                (len(rec_pii.pii_found)    if rec_pii    else 0)
+            )
+            try:
+                sys.path.insert(0, str(BASE_DIR))
+                from sheets_connector import write_intake_row
+                write_intake_row(
+                    candidate_id    = candidate_id,
+                    nationality     = nat,
+                    gender          = gen,
+                    birth_year      = yr,
+                    output_filename = out_path.name,
+                    submission_date = submitted,
+                    pii_count       = pii_total,
+                )
+            except Exception as se:
+                log.warning(f"  [시트 기록 실패] {se}")
+
         return True
     except Exception as e:
         log.error(f"  [ERR] {e}", exc_info=True)
@@ -282,8 +309,19 @@ def _process_one(app: dict, candidate_id: str) -> bool:
 # ── 메인 ───────────────────────────────────────────────────────────────
 def main():
     log.info(f"\n{'#'*60}")
-    log.info(f"BRIDGE Forms 배치 변환 v2.0: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    log.info(f"BRIDGE Forms 배치 변환 v2.1: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info(f"모드: {'DRY RUN' if DRY else '실제 변환'}")
+
+    # 미전송 행 일괄 업로드 시도 (Sheets API 재활성화 후)
+    if not DRY and not NO_SHEET:
+        try:
+            sys.path.insert(0, str(BASE_DIR))
+            from sheets_connector import batch_push_pending_to_sheet
+            pushed = batch_push_pending_to_sheet()
+            if pushed:
+                log.info(f"[시트] 미전송 {pushed}행 일괄 업로드 완료")
+        except Exception:
+            pass
 
     # 이미 변환된 파일 정리
     moved = _move_converted()

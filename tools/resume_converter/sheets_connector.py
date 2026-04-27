@@ -1,10 +1,11 @@
 """
-sheets_connector.py — BRIDGE Resume Converter v2.0
+sheets_connector.py — BRIDGE Resume Converter v2.1
 데이터 소스: Bridge 관리자 API (기본) / Google Sheets (폴백)
+신규: write_intake_row() — 변환 완료 후 접수 시트 자동 기록
 
 소스 우선순위:
   1. Bridge API  — api.bridgejob.co.kr  (실시간, 최우선)
-  2. Google Sheets — gspread (폴백)
+  2. Google Sheets — gspread / Sheets REST API
 
 보안 원칙:
   - 자격증명은 모두 keyring에만 저장 (디스크 평문 없음)
@@ -490,6 +491,259 @@ def get_active_source() -> str:
     # auto: 실제 연결된 소스 판별
     token = _bridge_login()
     return "Bridge API" if token else "Google Sheets"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 접수 시트 자동 기록 (form 변환 완료 → 시트 행 추가)
+# ══════════════════════════════════════════════════════════════════════════
+
+# 접수 시트 헤더 (첫 행이 비어있으면 자동 생성)
+_INTAKE_HEADERS = ["접수일", "강사번호", "국적", "성별", "생년", "파일명", "상태", "PII제거수"]
+
+_TOKEN_FILE = Path(__file__).parent / "form_watcher_token.json"
+
+
+def _get_sheet_gid() -> Optional[int]:
+    v = _config_get("sheet_gid", "")
+    try:
+        return int(v) if v else None
+    except Exception:
+        return None
+
+
+def _get_sheets_service_oauth() -> Optional[object]:
+    """
+    form_watcher OAuth 토큰으로 Google Sheets API 서비스 반환.
+    spreadsheets 스코프 없으면 None.
+    """
+    try:
+        from googleapiclient.discovery import build
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+
+        if not _TOKEN_FILE.exists():
+            return None
+        tok = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
+        scopes = tok.get("scopes", [])
+        # spreadsheets 스코프가 없으면 쓰기 불가
+        has_sheets_scope = any("spreadsheets" in s for s in scopes)
+        if not has_sheets_scope:
+            log.warning("OAuth 토큰에 spreadsheets 스코프 없음 — form_watcher.py --setup 재실행 필요")
+            return None
+
+        creds = Credentials(
+            token=tok.get("token"),
+            refresh_token=tok.get("refresh_token"),
+            token_uri=tok.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id=tok.get("client_id"),
+            client_secret=tok.get("cs"),
+            scopes=scopes,
+        )
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            # 갱신된 토큰 저장
+            tok["token"] = creds.token
+            _TOKEN_FILE.write_text(json.dumps(tok, indent=2, ensure_ascii=False), encoding="utf-8")
+        return build("sheets", "v4", credentials=creds, cache_discovery=False)
+    except Exception as e:
+        log.warning("Sheets OAuth 서비스 초기화 실패: %s", e)
+        return None
+
+
+def _get_gs_worksheet_by_gid(sheet_id: str, gid: Optional[int]) -> Optional[object]:
+    """gspread로 gid 기반 워크시트 반환 (service account)."""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials as SACredentials
+        cred = _get_sa_credential()
+        if not cred:
+            return None
+        sc = ["https://www.googleapis.com/auth/spreadsheets",
+              "https://www.googleapis.com/auth/drive.readonly"]
+        c = SACredentials.from_service_account_info(cred, scopes=sc)
+        gc = gspread.authorize(c)
+        wb = gc.open_by_key(sheet_id)
+        if gid is not None:
+            for ws in wb.worksheets():
+                if ws.id == gid:
+                    return ws
+        return wb.get_worksheet(0)
+    except Exception as e:
+        log.debug("SA gspread 접근 실패: %s", e)
+        return None
+
+
+def _ensure_intake_headers(svc, sheet_id: str, sheet_range: str) -> None:
+    """첫 행이 비어있으면 헤더 행 자동 생성."""
+    try:
+        res = svc.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"{sheet_range}!A1:H1",
+        ).execute()
+        first_row = res.get("values", [[]])[0] if res.get("values") else []
+        if not first_row or not any(first_row):
+            svc.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=f"{sheet_range}!A1",
+                valueInputOption="USER_ENTERED",
+                body={"values": [_INTAKE_HEADERS]},
+            ).execute()
+            log.info("[시트] 헤더 행 자동 생성 완료")
+    except Exception as e:
+        log.debug("헤더 확인 실패 (무시): %s", e)
+
+
+def _get_sheet_tab_name_by_gid(svc, sheet_id: str, gid: Optional[int]) -> str:
+    """Sheets API로 gid에 해당하는 탭 이름 반환. 실패 시 첫 탭 사용."""
+    try:
+        meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+        for sheet in meta.get("sheets", []):
+            props = sheet.get("properties", {})
+            if gid is None or props.get("sheetId") == gid:
+                return props.get("title", "시트1")
+    except Exception:
+        pass
+    return "시트1"
+
+
+def write_intake_row(
+    candidate_id: str,
+    nationality: str,
+    gender: str,
+    birth_year: str,
+    output_filename: str,
+    submission_date: str = "",
+    pii_count: int = 0,
+) -> bool:
+    """
+    신규 강사 처리 완료 → 접수 Google Sheet에 행 추가.
+
+    순서:
+      1) gspread (service account) — 시트에 SA 권한 공유된 경우
+      2) Sheets REST API + OAuth 토큰 — form_watcher 재인증 후 spreadsheets 스코프
+
+    Row: [접수일, 강사번호, 국적, 성별, 생년, 파일명, 상태, PII제거수]
+    """
+    sid = _get_sheet_id()
+    gid = _get_sheet_gid()
+    if not sid:
+        log.warning("[시트] sheet_id 미설정 — config.json 확인 필요")
+        return False
+
+    ts  = submission_date or datetime.now().strftime("%Y-%m-%d")
+    row = [ts, candidate_id, nationality, gender, birth_year,
+           output_filename, "변환완료", str(pii_count)]
+
+    # ── 방법 1: service account (gspread) ──────────────────────────────
+    ws = _get_gs_worksheet_by_gid(sid, gid)
+    if ws is not None:
+        try:
+            # 헤더 확인
+            existing = ws.get_all_values()
+            if not existing or not any(existing[0]):
+                ws.append_row(_INTAKE_HEADERS, value_input_option="USER_ENTERED")
+            ws.append_row(row, value_input_option="USER_ENTERED")
+            log.info("  [시트] %s 기록 완료 (service account)", candidate_id)
+            return True
+        except Exception as e:
+            log.debug("SA 시트 쓰기 실패: %s", e)
+
+    # ── 방법 2: OAuth 토큰 (Sheets REST API) ───────────────────────────
+    svc = _get_sheets_service_oauth()
+    if svc is None:
+        log.warning(
+            "  [시트] OAuth Sheets 접근 불가 — "
+            "Google Cloud Console에서 Sheets API 활성화 후 자동 재시도됩니다"
+        )
+        _write_intake_csv_fallback(row)
+        return False
+    try:
+        tab = _get_sheet_tab_name_by_gid(svc, sid, gid)
+        _ensure_intake_headers(svc, sid, tab)
+        svc.spreadsheets().values().append(
+            spreadsheetId=sid,
+            range=f"'{tab}'!A:H",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row]},
+        ).execute()
+        log.info("  [시트] %s 기록 완료 (OAuth)", candidate_id)
+        # CSV 폴백 파일에도 동기화 (이중 기록)
+        _write_intake_csv_fallback(row)
+        return True
+    except Exception as e:
+        log.warning("  [시트] 기록 실패: %s — 로컬 CSV 저장", e)
+        _write_intake_csv_fallback(row)
+        return False
+
+
+def _write_intake_csv_fallback(row: list) -> None:
+    """
+    Google Sheet 접근 불가 시 로컬 CSV에 행 보존.
+    경로: tools/resume_converter/logs/intake_pending.csv
+    API 활성화 후 batch_push_pending_to_sheet() 로 일괄 업로드.
+    """
+    try:
+        import csv
+        csv_path = Path(__file__).parent / "logs" / "intake_pending.csv"
+        csv_path.parent.mkdir(exist_ok=True)
+        write_header = not csv_path.exists()
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if write_header:
+                w.writerow(_INTAKE_HEADERS)
+            w.writerow(row)
+        log.info("  [CSV폴백] %s → intake_pending.csv", row[1] if len(row) > 1 else "?")
+    except Exception as e:
+        log.error("  [CSV폴백] 저장 실패: %s", e)
+
+
+def batch_push_pending_to_sheet() -> int:
+    """
+    intake_pending.csv의 미전송 행을 Google Sheet에 일괄 업로드.
+    성공 시 CSV 삭제. 반환값: 업로드된 행 수.
+    """
+    csv_path = Path(__file__).parent / "logs" / "intake_pending.csv"
+    if not csv_path.exists():
+        return 0
+
+    import csv
+    rows = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader, None)   # 헤더 건너뜀
+        rows = list(reader)
+
+    if not rows:
+        csv_path.unlink(missing_ok=True)
+        return 0
+
+    sid = _get_sheet_id()
+    gid = _get_sheet_gid()
+    if not sid:
+        return 0
+
+    svc = _get_sheets_service_oauth()
+    if not svc:
+        log.warning("[일괄업로드] Sheets API 사용 불가 — 나중에 재시도")
+        return 0
+
+    try:
+        tab = _get_sheet_tab_name_by_gid(svc, sid, gid)
+        _ensure_intake_headers(svc, sid, tab)
+        svc.spreadsheets().values().append(
+            spreadsheetId=sid,
+            range=f"'{tab}'!A:H",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": rows},
+        ).execute()
+        csv_path.unlink(missing_ok=True)
+        log.info("[일괄업로드] %d행 업로드 완료 → CSV 삭제", len(rows))
+        return len(rows)
+    except Exception as e:
+        log.error("[일괄업로드] 실패: %s", e)
+        return 0
 
 
 # ══════════════════════════════════════════════════════════════════════════

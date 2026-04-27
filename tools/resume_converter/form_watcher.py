@@ -52,6 +52,7 @@ logging.basicConfig(
 # ── OAuth 스코프 ─────────────────────────────────────────────────────────
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",   # 접수 시트 자동 기록용
 ]
 
 # ── 상태 파일 ─────────────────────────────────────────────────────────────
@@ -96,6 +97,14 @@ def _load_creds():
             log.info("토큰 갱신 중...")
             creds.refresh(Request())
             _save_token(creds)
+
+        # 저장된 스코프에 spreadsheets 없으면 경고 (재인증 필요)
+        stored_scopes = tok.get("scopes", [])
+        if not any("spreadsheets" in s for s in stored_scopes):
+            log.warning(
+                "OAuth 토큰에 spreadsheets 스코프 없음 — "
+                "'python form_watcher.py --setup' 재실행으로 접수 시트 쓰기 활성화 가능"
+            )
         return creds
     except Exception as e:
         log.error(f"토큰 로드 실패: {e}")
@@ -332,7 +341,36 @@ def run_once(folder_ids: list[str] | None = None, verbose: bool = True) -> int:
     state["download_count"] = state.get("download_count", 0) + downloaded
     _save_state(state)
 
+    # ── 새 파일 도착 시 배치 변환 자동 트리거 ─────────────────────────────
+    if downloaded > 0:
+        _trigger_batch()
+
     return downloaded
+
+
+def _trigger_batch() -> None:
+    """
+    batch_process_forms.py 를 별도 프로세스로 실행.
+    현재 감시 루프를 블록하지 않음 (백그라운드 실행).
+    """
+    import subprocess
+    batch_script = BASE_DIR / "batch_process_forms.py"
+    if not batch_script.exists():
+        log.warning("batch_process_forms.py 없음 — 자동 변환 건너뜀")
+        return
+    try:
+        flags = {}
+        if sys.platform == "win32":
+            flags["creationflags"] = subprocess.CREATE_NO_WINDOW
+        proc = subprocess.Popen(
+            [sys.executable, str(batch_script)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            **flags,
+        )
+        log.info(f"[배치] 자동 변환 시작 (PID={proc.pid})")
+    except Exception as e:
+        log.error(f"[배치] 트리거 실패: {e}")
 
 
 def run_loop(interval_sec: int = 300, folder_ids: list[str] | None = None):
