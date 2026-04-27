@@ -245,6 +245,19 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
     </div>
     <div class="cb" id="cB">
       <div class="phwrap" id="ePh">
+        <!-- ═══ TITLE GENERATOR ═══ -->
+        <div id="titleGen" style="width:100%;background:#f8fafc;border:1px solid var(--g6);border-radius:14px;padding:16px 18px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:15px;font-weight:700;color:var(--g1)">Ad Title Generator</div>
+            <button class="btn" onclick="genTitles()" style="font-size:12px;padding:5px 14px">Randomize</button>
+          </div>
+          <div id="titleList" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto"></div>
+          <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+            <input id="titleCustom" type="text" placeholder="Custom title..." style="flex:1;padding:8px 12px;border:1px solid var(--g5);border-radius:8px;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')setCustomTitle(this.value)">
+            <button class="btn btn-g" onclick="setCustomTitle(document.getElementById('titleCustom').value)" style="font-size:12px;padding:6px 14px;white-space:nowrap">Use This</button>
+          </div>
+        </div>
+
         <div class="tset" id="tSet"></div>
         <div style="width:100%">
           <div class="phttl">Choose Ad Style</div>
@@ -1436,7 +1449,7 @@ function isExcluded(j){
 }
 
 /* ── Shuffle + buildOrder ── */
-function doShuffle(){buildOrder();_heroCopyIdx=Math.floor(Math.random()*_HERO_COPY.length);renderList();toast('순서 변경됨!','ok');if(lastHtml)generateAd();}
+function doShuffle(){buildOrder();_heroCopyIdx=Math.floor(Math.random()*_HERO_COPY.length);renderList();genTitles();toast('Shuffled!','ok');if(lastHtml)generateAd();}
 
 function buildOrder(){
   var act=jobs.filter(function(j){return j.a;}),inact=jobs.filter(function(j){return!j.a;});
@@ -1822,14 +1835,23 @@ function renderSettings(){
     /* ── 펼쳐지는 팔레트 ── */
     +'<div id="tSetPal" style="display:'+(_palOpen?'flex':'none')+';flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--g6);margin-top:10px">'
       +'<div class="tset-row col3">'
-        +'<div class="tset-sec"><div class="tset-lbl">히어로</div>'+mkPal(acH,'setHeroAc')+'</div>'
-        +'<div class="tset-sec"><div class="tset-lbl">카드</div>'+mkPal(acC,'setCardAc')+'</div>'
-        +'<div class="tset-sec"><div class="tset-lbl">버튼</div>'+mkPal(acB,'setCtaAc')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Hero Color</div>'+mkPal(acH,'setHeroAc')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Card Color</div>'+mkPal(acC,'setCardAc')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">CTA Button</div>'+mkPal(acB,'setCtaAc')+'</div>'
+      +'</div>'
+      +'<div class="tset-row col3">'
+        +'<div class="tset-sec"><div class="tset-lbl">Body Text Color</div>'+mkPal(ts.clr_body||'#333333','setBodyClr')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Button Text Color</div>'+mkPal(ts.clr_btn||'#ffffff','setBtnClr')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Job ID Color</div>'+mkPal(ts.clr_id||'#6e6e73','setIdClr')+'</div>'
+      +'</div>'
+      +'<div class="tset-row col3">'
+        +'<div class="tset-sec"><div class="tset-lbl">Body Font</div>'+mkFs(fsB,'setBodyFs')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Hero Font</div>'+mkFs(ts.fs_hero||18,'setHeroFs')+'</div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Apply Btn Size</div>'+mkFs(ts.btn_size||14,'setBtnSize')+'</div>'
       +'</div>'
       +'<div class="tset-row col2">'
-        +'<div class="tset-sec"><div class="tset-lbl">Aa 본문 폰트</div>'+mkFs(fsB,'setBodyFs')+'</div>'
-        +'<div class="tset-sec"><div class="tset-lbl">Apply Now 링크</div>'
-          +'<div class="tset-link"><input type="text" id="tLinkI" placeholder="URL 직접 입력..." value="'+(ts.link||'')+'" oninput="setTLink(this.value)"></div>'
+        +'<div class="tset-sec"><div class="tset-lbl">Apply Now Link</div>'
+          +'<div class="tset-link"><input type="text" id="tLinkI" placeholder="URL..." value="'+(ts.link||'')+'" oninput="setTLink(this.value)"></div>'
         +'</div>'
       +'</div>'
     +'</div>';
@@ -1844,16 +1866,78 @@ function setTheme(el,t){
 }
 function setFs(v){TS[curTheme].fs=v;renderSettings();if(lastHtml)generateAd();}
 function setBodyFs(v){TS[curTheme].fs_body=v;renderSettings();if(lastHtml)generateAd();}
+function setHeroFs(v){TS[curTheme].fs_hero=v;renderSettings();if(lastHtml)generateAd();}
+function setBtnSize(v){TS[curTheme].btn_size=v;renderSettings();if(lastHtml)generateAd();}
 function setHeroAc(c){TS[curTheme].ac_hero=c;renderSettings();if(lastHtml)generateAd();}
 function setCardAc(c){TS[curTheme].ac_card=c;renderSettings();if(lastHtml)generateAd();}
 function setCtaAc(c){TS[curTheme].ac_cta=c;renderSettings();if(lastHtml)generateAd();}
+function setBodyClr(c){TS[curTheme].clr_body=c;renderSettings();if(lastHtml)generateAd();}
+function setBtnClr(c){TS[curTheme].clr_btn=c;renderSettings();if(lastHtml)generateAd();}
+function setIdClr(c){TS[curTheme].clr_id=c;renderSettings();if(lastHtml)generateAd();}
 function setAccent(c){
-  /* Master accent — resets all section colors to this value */
   var ts=TS[curTheme];
   ts.accent=c;ts.ac_hero='';ts.ac_card='';ts.ac_cta='';
   renderSettings();if(lastHtml)generateAd();
 }
 function setTLink(v){TS[curTheme].link=v;}
+
+/* ═══ TITLE GENERATOR ═══ */
+var _adTitle='';
+var _TITLE_TEMPLATES=[
+  "🌍🌍Teach English in Korea ({dates}) | Schools, Academies & English Villages Nationwide | BA Required | Visa, Housing, Flights | Gov't-Certified BRIDGE 🌍🌍",
+  "🔸🌍✈️ Teach English ALL OVER KOREA – Native Speakers Wanted! {dates} | Visa, Housing, Flights Sorted | Only Gov't-Certified Recruiters | Apply with BRIDGE 💼",
+  "🟠🌍███ Jobs Available {dates}! Solo, Couples or Friends – Apply Now! Opportunities All Over Korea Teaching Kids to Adults. Don't Miss Out! ███🟠🌍",
+  "⚡🇰🇷 KOREA ESL TEACHING JOBS {dates} ⚡ 120+ Positions Open | Kindergarten to Adults | Visa Sponsored | Housing Provided | BRIDGE Recruitment (Est. Korea)",
+  "🌏✈️💼 TEACH IN SOUTH KOREA | {dates} Start | ALL Regions: Seoul, Busan, Jeju & More | Full Benefits Package | Licensed Agency BRIDGE | Apply Today!",
+  "🔥🔥 URGENT: English Teachers Needed in Korea {dates} | Competitive Salary 2.3M–3.0M KRW | Airfare + Housing + Severance | BRIDGE – Korea's Trusted Recruiter",
+  "🏫🌍 120+ ESL Teaching Positions in Korea ({dates}) | Public & Private Schools | Couples Welcome | Full Visa Support | BRIDGE Official Recruitment",
+  "⭐ NATIVE ENGLISH TEACHERS WANTED ⭐ South Korea {dates} | Kindergarten, Elementary, Middle & High School | Benefits: Housing, Flights, Pension | BRIDGE",
+  "🌍🇰🇷🌍 Korea Teaching Jobs – {dates} Intake | From Seoul to Jeju – 120+ Openings | BA Holders from US/UK/CA/AU/NZ/SA/IE | Apply via BRIDGE Now!",
+  "✈️🌏 START YOUR ADVENTURE IN KOREA! {dates} | Teach English at Top Academies & Schools | Full Relocation Package | Gov't Licensed BRIDGE Recruitment 🏫",
+  "📢📢 HIRING NOW: ESL Teachers for South Korea ({dates}) | No Korean Required | Training Provided | Housing + Flights + Bonus | BRIDGE – 10+ Years in Korea",
+  "🌍💼🔥 SOUTH KOREA NEEDS YOU! Teach English {dates} | 2.3–3.0M KRW Monthly | Free Apt + Round-Trip Airfare | Apply in 5 Min with BRIDGE 🇰🇷",
+  "🎓🌏 BA Degree? Teach in Korea! {dates} Positions Open Nationwide | No Experience Needed | Full Support from Arrival to Departure | BRIDGE Certified Agency",
+  "⚠️ BEWARE OF FAKES ⚠️ Only Gov't-Certified: BRIDGE Recruitment Korea | {dates} Jobs | 120+ Schools | Visa+Housing+Flights | The REAL Deal Since 2015 🌍",
+  "🇰🇷🇰🇷🇰🇷 KOREA ESL: {dates} | Native Speakers from 7 Countries | Salary Negotiable | Couples & Friends Can Apply Together | BRIDGE – Your Korea Career Starts Here"
+];
+
+function _pickDates(){
+  var sel=getMgmtMonths();
+  if(sel.length) return sel.slice(0,2).join('–');
+  var pool=_FUTURE_POOL.length?_FUTURE_POOL:['ASAP'];
+  if(pool.length===1) return pool[0]+' 2026';
+  return pool[0]+'–'+pool[Math.min(pool.length-1,2)]+' 2026';
+}
+
+function genTitles(){
+  var box=document.getElementById('titleList');if(!box)return;
+  var dates=_pickDates();
+  /* pick 4 random non-repeating templates */
+  var pool=_TITLE_TEMPLATES.slice();
+  var picks=[];
+  for(var i=0;i<4&&pool.length;i++){
+    var idx=Math.floor(Math.random()*pool.length);
+    picks.push(pool.splice(idx,1)[0]);
+  }
+  box.innerHTML=picks.map(function(t,i){
+    var filled=t.replace(/\{dates\}/g,dates);
+    return '<div onclick="selectTitle(this)" style="padding:8px 12px;border:1px solid var(--g6);border-radius:8px;cursor:pointer;font-size:12px;line-height:1.5;color:var(--g2);transition:.12s;background:var(--white)" onmouseover="this.style.borderColor=\'var(--blue)\'" onmouseout="this.style.borderColor=this.classList.contains(\'sel-title\')?\'var(--blue)\':\'var(--g6)\'">'
+      +filled+'</div>';
+  }).join('');
+}
+function selectTitle(el){
+  document.querySelectorAll('#titleList > div').forEach(function(d){d.style.borderColor='var(--g6)';d.style.background='var(--white)';d.classList.remove('sel-title');});
+  el.style.borderColor='var(--blue)';el.style.background='#f0f7ff';el.classList.add('sel-title');
+  _adTitle=el.textContent;
+  toast('Title selected','ok');
+}
+function setCustomTitle(v){
+  if(!v||!v.trim())return;
+  _adTitle=v.trim();
+  toast('Custom title set','ok');
+}
+/* auto-generate on load */
+setTimeout(genTitles,300);
 
 /* Theme CSS — base + per-theme overrides */
 var _B=(
@@ -2519,16 +2603,16 @@ function getThemeCss(){
    HERO COPY VARIANTS
    ══════════════════════════ */
 var _HERO_COPY=[
-  {h1:'Teach English in Korea',       h2:'The right school, the right support \u2014 your next chapter starts here',         ey:'Gov\u2019t-Certified Agency \u00b7 BRIDGE Korea'},
-  {h1:'Your Next Chapter\nStarts in Korea', h2:'Real schools. Honest placements. Your career matters to us.',                  ey:'Korea ESL \u00b7 BRIDGE Agency'},
-  {h1:'Ready to Change Lives?',        h2:'Join hundreds of teachers who found their perfect Korean school through BRIDGE.',   ey:'Trusted Recruiter \u00b7 Since 2015'},
-  {h1:'Great Teachers\nDeserve Great Schools', h2:'Let us match you with a school that values who you are.',                  ey:'Premium ESL \u00b7 Korea'},
-  {h1:'Find Your School in Korea',     h2:'From Seoul to Jeju \u2014 over 120 partner schools. We\u2019ll find your fit.',    ey:'120+ Partner Schools \u00b7 Korea'},
-  {h1:'Start Something Meaningful',    h2:'A teaching career in Korea is more than a job \u2014 it\u2019s a defining chapter.', ey:'Korea ESL \u00b7 Gov\u2019t Certified'},
-  {h1:'Your Career, Cared For',        h2:'We stay with you from application to classroom. No surprises, no shortcuts.',       ey:'Certified Agency \u00b7 Real Support'},
-  {h1:'Korea\u2019s Most Trusted\nESL Recruiter', h2:'Government-certified placements for passionate native English teachers.', ey:'Verified \u00b7 BRIDGE Korea'},
-  {h1:'Real Opportunities.\nReal Schools.', h2:'No fake listings. No mystery employers. BRIDGE verifies every placement.',     ey:'Verified Placements \u00b7 Korea'},
-  {h1:'Your Students Are Waiting',     h2:'Thousands of Korean kids are ready for a teacher just like you.',                   ey:'Korea ESL \u00b7 Apply Today'},
+  {h1:'Teach English in Korea',       h2:'Visa sponsorship, housing, flights included. Your adventure starts now.',            ey:'Government-Certified \u00b7 BRIDGE Korea'},
+  {h1:'Your Next Chapter\nStarts in Korea', h2:'Real schools, honest salaries, full relocation support from day one.',         ey:'Native Speakers \u00b7 7 Countries Welcome'},
+  {h1:'Ready to Change Lives?',        h2:'Hundreds of teachers launched their Korean career through BRIDGE. You\u2019re next.', ey:'Trusted Since 2015 \u00b7 120+ Schools'},
+  {h1:'Great Teachers\nDeserve Great Schools', h2:'We match you with schools that respect your skills and your time.',         ey:'Premium Placements \u00b7 All Regions'},
+  {h1:'Nationwide Positions\nOpen Now', h2:'Seoul, Busan, Daegu, Jeju and everywhere in between. 120+ verified schools.',      ey:'Seoul to Jeju \u00b7 All Levels K\u2013Adult'},
+  {h1:'Start Something Meaningful',    h2:'Competitive pay, free apartment, round-trip airfare. This is the real deal.',       ey:'2.3\u20133.0M KRW \u00b7 Full Benefits'},
+  {h1:'Your Career, Fully Supported',  h2:'From visa paperwork to your first day in class \u2014 we handle it all.',           ey:'End-to-End Support \u00b7 No Hidden Fees'},
+  {h1:'Korea\u2019s Most Trusted\nESL Recruiter', h2:'Government-certified. No fake listings. Every school personally verified.', ey:'Verified Placements \u00b7 Licensed Agency'},
+  {h1:'No Experience? No Problem.',    h2:'BA degree + native English = qualified. We provide training and orientation.',       ey:'All Majors Welcome \u00b7 Training Provided'},
+  {h1:'Couples & Friends\nApply Together', h2:'Same city, same start date. We place groups at partner schools.',               ey:'Group Placements \u00b7 Korea Nationwide'},
 ];
 var _heroCopyIdx=Math.floor(Math.random()*_HERO_COPY.length);
 
