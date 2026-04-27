@@ -806,6 +806,23 @@ _RESUME_SECTION_HEADERS = frozenset({
     "cover letter", "letter of introduction", "summary",
 })
 
+# 이름으로 오인하면 안 되는 단어 (파일명 + PDF 텍스트 양쪽 사용)
+_NON_NAME_WORDS = frozenset({
+    # CV/파일명 관련
+    "resume", "cv", "curriculum", "vitae", "cover", "letter",
+    "teaching", "teacher", "english", "esl", "tesol", "tefl",
+    "application", "updated", "final", "new", "copy", "version",
+    "document", "file", "scan", "draft", "official",
+    # 주소/장소
+    "street", "road", "avenue", "drive", "lane", "court", "place",
+    "boulevard", "terrace", "close", "crescent", "way", "park",
+    "phase", "block", "floor", "unit", "apt", "suite", "room",
+    "north", "south", "east", "west",
+    # 일반 영단어 (이름에는 없는)
+    "and", "the", "for", "with", "from", "into", "about",
+    "skills", "profile", "summary", "experience", "education",
+})
+
 # ── EDUCATION 섹션 보호용 헤더 감지 정규식 ──
 # Pass 2.7(학교명 일반화)은 EDUCATION 섹션에서 실행 금지
 _EDU_SECTION_RE = re.compile(
@@ -1257,13 +1274,15 @@ def _extract_names_from_filename(filepath: Path) -> list[str]:
         clean = re.sub(r"\d{4,}", "", clean).strip()
         if clean.lower() in ("resume", "cv", "cover letter", "coverletter", ""):
             continue
-        # 2단어 이상이면 이름으로 간주
-        words = clean.split()
+        # 이름이 아닌 단어 제거 (Teaching, CV, English 등)
+        words = [w for w in clean.split()
+                 if w and w.lower() not in _NON_NAME_WORDS and len(w) >= 2]
         if len(words) >= 2 and all(w[0].isupper() for w in words if w):
-            names.append(clean)
-            # 개별 단어도 추가 (3글자 이상)
+            name_clean = " ".join(words)
+            names.append(name_clean)
+            # 개별 단어도 추가 (3글자 이상, non-name 제외)
             for w in words:
-                if len(w) >= 3:
+                if len(w) >= 3 and w.lower() not in _NON_NAME_WORDS:
                     names.append(w)
     return names
 
@@ -1580,13 +1599,16 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                                 _pdf_extracted_names.append(_cw)  # "VAN", "ZYL" 개별
                     continue
                 words = line.split()
+                # 주소/일반 단어 포함 줄은 이름이 아님 (Zama Zama Street, Phase 1 등)
+                if any(w.lower() in _NON_NAME_WORDS for w in words):
+                    continue
                 if 2 <= len(words) <= 5 and all(
                     w[0].isupper() or w in ("de", "van", "von", "del", "K.", "K")
                     for w in words if w
                 ):
                     _pdf_extracted_names.append(line)
                     for w in words:
-                        if len(w) >= 3 and w[0].isupper():
+                        if len(w) >= 3 and w[0].isupper() and w.lower() not in _NON_NAME_WORDS:
                             _pdf_extracted_names.append(w)
 
     # ── 헤더 페이지 자동 감지 (More About Me 인트로 페이지 스킵) ──
@@ -1975,9 +1997,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         hdr_page = doc[_header_page_num]
         pw = hdr_page.rect.width
 
-        # 베이지 헤더 배경색 + 헤더 높이 감지
-        # 예: fill=(0.835, 0.714, 0.565) 같은 컬러 사각형이 페이지 상단 전체를 덮음
-        _hdr_fill_color = (0.93, 0.87, 0.78)  # fallback 베이지
+        # ── 헤더 배경색 + 높이 감지 ──────────────────────────────────────────
+        # 실제 colored 사각형이 페이지 상단에 있을 때만 헤더로 인정
+        # fill=(0,0,0)/(1,1,1) 제외, y0<50, width>40% 조건
+        _hdr_fill_color = None   # None = 헤더 없음
         _hdr_bottom = 0
         for _drw in hdr_page.get_drawings():
             _dfill = _drw.get("fill")
@@ -1987,67 +2010,112 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     and _dr.y1 > _hdr_bottom):
                 _hdr_fill_color = _dfill
                 _hdr_bottom = _dr.y1
-        if _hdr_bottom < 60:
-            _hdr_bottom = 120  # fallback
 
-        # 구분선 Y 위치 감지 (베이지 헤더 아래 얇은 수평선)
-        # 연락처 스트립 하단 경계 = 이 구분선
-        _divider_y = _hdr_bottom + 110  # fallback
-        for _drw in hdr_page.get_drawings():
-            _dr = _drw.get("rect", fitz.Rect())
-            if (_dr.y0 > _hdr_bottom and (_dr.y1 - _dr.y0) < 3
-                    and _dr.width > pw * 0.5 and _dr.y0 < _divider_y):
-                _divider_y = _dr.y0
+        _has_real_header = _hdr_fill_color is not None and _hdr_bottom > 40
 
-        # ① 왼쪽 사진 자리 표시(흰색 박스)를 베이지로 덮기
-        # 원본 PDF의 왼쪽 사진 플레이스홀더(흰색)와 코너 장식을 베이지로 복원
-        # pw*0.34 = 이름 텍스트 시작 위치(약 x=231) 왼쪽까지만 덮기 (이름 보존)
-        _left_cover = pw * 0.34
-        hdr_page.draw_rect(
-            fitz.Rect(0, 0, _left_cover, _hdr_bottom),
-            color=None, fill=_hdr_fill_color,
-        )
-        all_logs.append(
-            f"[page{_header_page_num}] LEFT_BEIGE: 0-{_left_cover:.0f} / 0-{_hdr_bottom:.0f}"
-        )
+        if _has_real_header:
+            # ── 실제 colored 헤더가 있는 경우 ─────────────────────────────
+            # 구분선 Y 감지 (헤더 아래 얇은 수평선 = 연락처 스트립 하단)
+            _divider_y = _hdr_bottom + 110  # fallback
+            for _drw in hdr_page.get_drawings():
+                _dr = _drw.get("rect", fitz.Rect())
+                if (_dr.y0 > _hdr_bottom and (_dr.y1 - _dr.y0) < 3
+                        and _dr.width > pw * 0.5 and _dr.y0 < _divider_y):
+                    _divider_y = _dr.y0
 
-        # ② 연락처 스트립 화이트아웃 (베이지 하단 ~ 구분선)
-        # 이 구간의 아이콘 박스(벡터 드로잉) + 남은 PII 텍스트를 흰색으로 완전 덮기
-        hdr_page.draw_rect(
-            fitz.Rect(0, _hdr_bottom - 2, pw, _divider_y + 1),
-            color=None, fill=(1, 1, 1),
-        )
-        all_logs.append(
-            f"[page{_header_page_num}] STRIP_WHITE: y={_hdr_bottom:.0f}~{_divider_y:.0f}"
-        )
+            # ── 헤더 밝기 기반 커버 방식 결정 ────────────────────────────
+            # 밝은 헤더(beige/tan, 0.5이상): 왼쪽 사진 플레이스홀더만 덮기 → 중앙 이름 보존 (6165형)
+            # 어두운 헤더(navy/dark, 0.5미만): 전체 이름 영역 덮기 → 자간벌림/벡터 이름 제거 (6189형)
+            _r, _g, _b = _hdr_fill_color
+            _brightness = 0.299 * _r + 0.587 * _g + 0.114 * _b
 
-        # ③ 강사 번호 삽입 (왼쪽 베이지, 수직 중하단)
-        _num_y = _hdr_bottom * 0.70
-        hdr_page.insert_text(
-            fitz.Point(12, _num_y),
-            str(brj_number),
-            fontsize=24,
-            fontname="helv",
-            color=(0.20, 0.14, 0.06),
-        )
-        all_logs.append(f"[page{_header_page_num}] BRJNUM: {brj_number}")
+            if _brightness >= 0.5:
+                # 밝은 헤더 (6165형): 왼쪽 사진 플레이스홀더만 덮기
+                _name_cover_right = pw * 0.34
+                _cover_mode = "LEFT"
+            else:
+                # 어두운 헤더 (6189형): 이름 영역 전체 덮기
+                photo_reserve = _hdr_bottom - 10
+                _name_cover_right = pw - photo_reserve - 5
+                _cover_mode = "FULL"
 
-        # ④ 사진 삽입 (오른쪽 베이지, 헤더 전체 높이)
-        photo = photo_path or _find_photo_for_candidate(filepath)
-        if photo and photo.exists():
-            _img_margin = 5
-            _img_h = int(_hdr_bottom - _img_margin * 2)
-            photo_rect = fitz.Rect(
-                pw - _img_h - _img_margin, _img_margin,
-                pw - _img_margin, _hdr_bottom - _img_margin,
+            hdr_page.draw_rect(
+                fitz.Rect(0, 0, _name_cover_right, _hdr_bottom),
+                color=None, fill=_hdr_fill_color,
             )
-            try:
-                hdr_page.insert_image(photo_rect, filename=str(photo))
-                all_logs.append(f"[photo] {_header_page_num}p {_img_h}px: {photo.name}")
-            except Exception as e:
-                all_logs.append(f"[photo] 삽입 실패: {e}")
+            all_logs.append(
+                f"[page{_header_page_num}] HDR_COVER({_cover_mode}): 0-{_name_cover_right:.0f} / 0-{_hdr_bottom:.0f}"
+            )
+
+            # ② 연락처 스트립 화이트아웃 (헤더 하단 ~ 구분선)
+            # 아이콘 박스(벡터) + PII 텍스트 완전 제거
+            hdr_page.draw_rect(
+                fitz.Rect(0, _hdr_bottom - 2, pw, _divider_y + 1),
+                color=None, fill=(1, 1, 1),
+            )
+            all_logs.append(
+                f"[page{_header_page_num}] STRIP_WHITE: y={_hdr_bottom:.0f}~{_divider_y:.0f}"
+            )
+
+            # ③ 강사 번호 삽입 (헤더 왼쪽)
+            _num_y = _hdr_bottom * 0.70
+            # 밝은 헤더 → 어두운 텍스트, 어두운 헤더 → 밝은 텍스트
+            _r, _g, _b = _hdr_fill_color
+            _brightness = 0.299 * _r + 0.587 * _g + 0.114 * _b
+            _num_color = (0.95, 0.95, 0.95) if _brightness < 0.5 else (0.20, 0.14, 0.06)
+            hdr_page.insert_text(
+                fitz.Point(12, _num_y),
+                str(brj_number),
+                fontsize=24,
+                fontname="helv",
+                color=_num_color,
+            )
+            all_logs.append(f"[page{_header_page_num}] BRJNUM: {brj_number}")
+
+            # ④ 사진 삽입 (헤더 오른쪽)
+            photo = photo_path or _find_photo_for_candidate(filepath)
+            if photo and photo.exists():
+                _img_margin = 5
+                _img_h = int(_hdr_bottom - _img_margin * 2)
+                photo_rect = fitz.Rect(
+                    pw - _img_h - _img_margin, _img_margin,
+                    pw - _img_margin, _hdr_bottom - _img_margin,
+                )
+                try:
+                    hdr_page.insert_image(photo_rect, filename=str(photo))
+                    all_logs.append(f"[photo] {_header_page_num}p {_img_h}px: {photo.name}")
+                except Exception as e:
+                    all_logs.append(f"[photo] 삽입 실패: {e}")
+            else:
+                all_logs.append("[photo] 없음 (스킵)")
+
         else:
-            all_logs.append("[photo] 없음 (스킵)")
+            # ── 헤더 없는 일반 CV ─────────────────────────────────────────
+            # beige/dark rect를 그리지 않음 — 레이아웃 보존
+            # 강사 번호만 페이지 상단 왼쪽에 작게 삽입
+            hdr_page.insert_text(
+                fitz.Point(10, 20),
+                str(brj_number),
+                fontsize=14,
+                fontname="helv",
+                color=(0.15, 0.15, 0.15),
+            )
+            all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}")
+
+            # 사진 삽입 (있으면 페이지 우상단)
+            photo = photo_path or _find_photo_for_candidate(filepath)
+            if photo and photo.exists():
+                _img_size = 90
+                _img_margin = 10
+                photo_rect = fitz.Rect(
+                    pw - _img_size - _img_margin, _img_margin,
+                    pw - _img_margin, _img_size + _img_margin,
+                )
+                try:
+                    hdr_page.insert_image(photo_rect, filename=str(photo))
+                    all_logs.append(f"[photo] NO_HDR {_header_page_num}p: {photo.name}")
+                except Exception as e:
+                    all_logs.append(f"[photo] 삽입 실패: {e}")
 
     # PDF 메타데이터 클리어 (이름/제목 제거)
     if not dry:
