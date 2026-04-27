@@ -190,7 +190,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
   <div class="ck" id="clk"></div>
   <div id="eslBtns" style="display:flex;gap:8px;align-items:center">
     <button class="btn" onclick="doShuffle()" style="font-size:13px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
-    <button class="btn btn-g" onclick="generateAd()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate Ads</button>
+    <button class="btn btn-g" onclick="_cachedActive=null;generateAd()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate Ads</button>
   </div>
   <div id="teastBtns" style="display:none;gap:8px;align-items:center">
     <button class="btn btn-g" onclick="doGenTeast()" style="font-size:13px;padding:8px 18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
@@ -226,7 +226,7 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
   <div class="cp">
     <div class="tb">
       <button class="btn" onclick="_genCount=Math.max(5,_genCount-5);document.getElementById('adCnt').textContent=_genCount;" style="min-width:40px;font-size:14px">-5</button>
-      <button class="btn btn-g" onclick="generateAd()" style="padding:7px 20px;font-size:13px;font-weight:700">Generate <span id="adCnt">25</span> Ads</button>
+      <button class="btn btn-g" onclick="_cachedActive=null;generateAd()" style="padding:7px 20px;font-size:13px;font-weight:700">Generate <span id="adCnt">25</span> Ads</button>
       <button class="btn" onclick="_genCount+=5;document.getElementById('adCnt').textContent=_genCount;" style="min-width:40px;font-size:14px">+5</button>
     </div>
     <div class="ctabs">
@@ -1316,6 +1316,7 @@ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="
 /* ── State ── */
 var jobs=[],selIdx=-1,curF='all',urlMode='gform',obsLv=1,lastHtml='',curTheme='classic',curGroup='A',layoutMode='std';
 var _genCount=25;
+var _cachedActive=null; /* 잡 캐시 — 명시적 Generate 시에만 초기화 */
 
 /* ── smartDate: 현재 월 기준 지난 달 → ASAP ── */
 var MONTHS={'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12,'january':1,'february':2,'march':3,'april':4,'june':6,'july':7,'august':8,'september':9,'october':10,'november':11,'december':12};
@@ -1449,7 +1450,7 @@ function isExcluded(j){
 }
 
 /* ── Shuffle + buildOrder ── */
-function doShuffle(){buildOrder();_heroCopyIdx=Math.floor(Math.random()*_HERO_COPY.length);renderList();genTitles();toast('Shuffled!','ok');if(lastHtml)generateAd();}
+function doShuffle(){buildOrder();_heroCopyIdx=Math.floor(Math.random()*_HERO_COPY.length);_cachedActive=null;renderList();genTitles();toast('Shuffled!','ok');if(lastHtml)generateAd();}
 
 function buildOrder(){
   var act=jobs.filter(function(j){return j.a;}),inact=jobs.filter(function(j){return!j.a;});
@@ -2628,17 +2629,22 @@ var _TYPO_COPY=[['TEACH.','INSPIRE.','EXPLORE.'],['INSPIRE.','GROW.','TEACH.'],[
    ══════════════════════════ */
 function generateAd(){
   renderList();
-  var active=jobs.filter(function(j){
-    if(!j.a||isExcluded(j))return false;
-    /* 기본값 플레이스홀더 제외 */
-    var loc=(j.l||'').trim();
-    if(!loc||/^new location/i.test(loc))return false;
-    return true;
-  });
-  /* _genCount 개수만큼 랜덤 추출 */
-  if(active.length>_genCount){
-    for(var _si=active.length-1;_si>0;_si--){var _sj=Math.floor(Math.random()*(_si+1));var _st=active[_si];active[_si]=active[_sj];active[_sj]=_st;}
-    active=active.slice(0,_genCount);
+  var active;
+  if(_cachedActive){
+    active=_cachedActive.slice();
+  } else {
+    active=jobs.filter(function(j){
+      if(!j.a||isExcluded(j))return false;
+      var loc=(j.l||'').trim();
+      if(!loc||/^new location/i.test(loc))return false;
+      return true;
+    });
+    /* _genCount 개수만큼 랜덤 추출 (명시적 Generate 시에만 도달) */
+    if(active.length>_genCount){
+      for(var _si=active.length-1;_si>0;_si--){var _sj=Math.floor(Math.random()*(_si+1));var _st=active[_si];active[_si]=active[_sj];active[_sj]=_st;}
+      active=active.slice(0,_genCount);
+    }
+    _cachedActive=active.slice();
   }
   var nowMonth=new Date().getMonth()+1;
   var _ts=TS[curTheme]||{};
@@ -2713,11 +2719,11 @@ function generateAd(){
     heroH='<div class="hero hero-typo"><div class="hbg"></div><div style="position:relative;z-index:2">'
     +'<div class="hty-top">'
     +_eyebrow
-    +_cta
     +'</div>'
     +'<h1 class="hty-h1">'+(_TYPO_COPY[_heroCopyIdx%_TYPO_COPY.length]).join('<br>')+'</h1>'
     +'<span class="hty-rule" style="background:'+_accentColor+'"></span>'
     +'<p class="hty-sub">The right school, the right support &mdash; your next chapter starts here</p>'
+    +_cta
     +'<div class="hty-chips">'
     +'<span class="hty-chip">'+_iFlag+' US &middot; CA &middot; UK &middot; IE &middot; AU &middot; NZ &middot; SA</span>'
     +'<span class="hty-chip">'+_iDeg+' Bachelor\'s degree+</span>'
@@ -2741,7 +2747,6 @@ function generateAd(){
     +'<div class="hbd-stat"><strong>120+</strong><span>Schools</span></div>'
     +'<div class="hbd-stat"><strong>E-2</strong><span>Visa</span></div>'
     +'</div>'
-    +_cta
     +'</div>'
     +'<div class="hbd-elig">'
     +'<span class="hbd-lbl">Who Can Apply</span>'
@@ -2752,6 +2757,7 @@ function generateAd(){
     +'<span class="hbd-chip">Intro Video 1&ndash;3 min</span>'
     +'<span class="hbd-chip">F-Visa Welcome</span>'
     +'</div>'
+    +_cta
     +'</div></div>';
 
   } else {
