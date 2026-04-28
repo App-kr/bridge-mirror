@@ -650,7 +650,8 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
         log.info(f"[SKIP] 업무시간 외 (KST {now_kst}) — 폴링 건너뜀")
         return
 
-    processed = _load_processed()
+    processed = _load_processed()  # Message-ID 기반 영구 중복 셋
+    _session_ids: set = set()      # 이번 실행 내 uid 캐시 (빠른 중복 방지)
 
     imap = imap_connect(cfg)
     if imap is None:
@@ -665,7 +666,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
         for uid_b in uid_list:
             uid = uid_b.decode()
-            if uid in processed:
+            if uid in _session_ids:  # 이번 세션 내 빠른 중복 스킵
                 continue
 
             # 메일 1건 처리 최대 20초 제한
@@ -705,6 +706,12 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                 from_addr   = from_addr.lower().strip()
                 received_at = hdr_msg.get("Date", "")
                 message_id  = hdr_msg.get("Message-ID", "").strip()
+                _mid_key    = message_id or uid  # Message-ID 우선 (uid는 재번호 시 변함)
+
+                # Message-ID 기반 영구 중복 체크
+                if _mid_key in processed:
+                    _session_ids.add(uid)
+                    continue
 
                 # ── STEP A: 스팸 필터 (헤더 기반) ────────────────────────────
                 if is_spam(from_addr, subject, "", {}, cfg["gmail_addr"]):
@@ -713,7 +720,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                         imap.store(uid_b, "+FLAGS", "\\Seen")
                     except Exception:
                         pass
-                    processed.add(uid)
+                    processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
 
@@ -766,7 +773,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                         dual_notify(cfg, f"🚨 Teast 발송 실패: {from_addr}")
                     log_email(from_addr, from_name, subject, received_at,
                               sent_at, "TEAST", status_val, uid)
-                    processed.add(uid)
+                    processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue  # Teast 처리 완료 — 일반 로직 건너뜀
 
@@ -796,7 +803,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                             f"→ Gmail 직접 확인 필요")
                     log_email(from_addr, from_name, subject, received_at,
                               None, "RETURNING", "PENDING", uid)
-                    processed.add(uid)
+                    processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
 
@@ -845,13 +852,55 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     "tinyurl.com/bridgekr",
                     "we have received your application",
                     "english teacher application(google form)",
+                    "forms.gle/y5sute6253qlbr5v8",
                 ]
                 if any(m in body.lower() for m in _BRIDGE_MARKERS):
                     log.info(f"[CONV] BRIDGE 회신 인용 감지 → 대화 중, 안읽음 유지: {from_addr} | {subject}")
+                    _session_ids.add(uid)
+                    continue
+
+                # ── STEP C-1: 기존 연락처 감지 → 양식 미발송 ──────────────
+                # 케이스: 잡번호 언급, 이미 대화 중인 사람 회신, 이미 인터뷰한 사람 등
+                _bl = body.lower()
+                _existing_inquiry = (
+                    # 잡 번호 직접 언급 (Nathan 케이스)
+                    re.search(r"\bjob\s*\d{3,4}\b", _bl)
+                    or re.search(r"jobs\s+on\s+your\s+website", _bl)
+                    or re.search(r"found.*on.*your\s+(website|site)", _bl)
+                    # 이전 연락 언급
+                    or re.search(r"after\s+our\s+(call|interview|meeting|zoom|chat|conversation)", _bl)
+                    or re.search(r"just\s+emailing\s+after\s+our", _bl)
+                    or re.search(r"following\s+(up\s+)?on\s+our\s+(call|interview|meeting|chat)", _bl)
+                    # "Thanks for your email/message" → 우리가 먼저 보낸 것에 대한 회신 (Monique 케이스)
+                    or re.search(r"thanks?\s+(so\s+much\s+)?for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back)", _bl)
+                    or re.search(r"thank\s+you\s+for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back)", _bl)
+                    or re.search(r"apolog(y|ies|ize)\s+for\s+(not\s+)?(getting\s+back|replying|responding)", _bl)
+                    or re.search(r"sorry\s+for\s+(not\s+)?(getting\s+back|replying|responding|the\s+(delay|late))", _bl)
+                    # 이미 인터뷰/등록 완료
+                    or re.search(r"already\s+had\s+(my\s+)?(screening|interview|call|zoom|meet)", _bl)
+                    or re.search(r"(screening|interview)\s+(on|last|the)\s+\d", _bl)
+                    or "already filled" in _bl
+                    or "already completed" in _bl
+                    or "already registered" in _bl
+                    or "already submitted" in _bl
+                    # haven't heard back → 우리 메일에 대한 회신
+                    or re.search(r"i\s+haven.t\s+heard\s+(back\s+)?from\s+you", _bl)
+                )
+                if _existing_inquiry:
+                    log.info(f"[EXISTING] 기존 연락처 새 포지션 문의 → 양식 미발송: {from_addr} | {subject}")
+                    tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                            f"📬 기존 연락처 새 포지션 문의\n"
+                            f"📧 {from_addr}\n"
+                            f"👤 {from_name}\n"
+                            f"💬 {subject}\n"
+                            f"→ Gmail 직접 확인 필요")
+                    _session_ids.add(uid)
                     continue
 
                 if not is_applicant(subject, body):
                     log.info(f"[UNKNOWN] 패턴 미해당 → 안읽음 유지: {from_addr} | {subject}")
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
@@ -877,7 +926,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                     log_email(from_addr, from_name, subject, received_at,
                               sent_at, "NEW_APPLICANT", status_val, uid)
-                    processed.add(uid)
+                    processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
 
                 else:
@@ -926,7 +975,30 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
 
 # ── 텔레그램 커맨드 폴링 ─────────────────────────────────────────────────────
+def _is_tg_commander_running() -> bool:
+    """tg_commander.py가 실행 중이면 True — 실행 중이면 우리는 polling 하지 않음 (409 방지)."""
+    try:
+        pid_file = Path(__file__).resolve().parent.parent / ".claude" / "tg_commander.pid"
+        if not pid_file.exists():
+            return False
+        pid = int(pid_file.read_text().strip())
+        if pid <= 0:
+            return False
+        # wmic으로 실제 프로세스 존재 확인
+        import subprocess as _sp
+        r = _sp.run(
+            ["wmic", "process", "where", f"processid={pid}", "get", "processid"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return str(pid) in r.stdout
+    except Exception:
+        return False
+
+
 def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
+    if _is_tg_commander_running():
+        log.info("[TG] tg_commander 실행 중 — TG 폴링 스킵 (409 방지)")
+        return
     offset = 0
     log.info("[TG] 커맨드 폴링 시작")
 
@@ -937,6 +1009,50 @@ def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
                 offset = upd["update_id"] + 1
                 msg = upd.get("message") or upd.get("channel_post") or {}
                 text = msg.get("text", "")
+
+                # ── 자연어 명령 처리 ─────────────────────────────────────────
+                _t = text.strip().lower()
+
+                # 메일 체크 / 밀린 메일 처리
+                _CHECK_KW = [
+                    "메일체크", "메일 체크", "메일확인", "메일 확인",
+                    "메일체크했어", "메일 체크했어", "메일봐", "메일 봐",
+                    "메일처리", "메일 처리", "받은거있어", "받은 거 있어",
+                    "/flush", "/retry", "/check",
+                ]
+                if any(_t == k or _t.startswith(k) for k in _CHECK_KW):
+                    _save_processed(set())
+                    tg_send(cfg["tg_token"], cfg["tg_chat_id"],
+                            "🔄 메일 체크 시작... 결과 곧 알림")
+                    threading.Thread(target=process_inbox, args=(cfg, True), daemon=True).start()
+                    continue
+
+                # 현황 조회
+                _STATUS_KW = [
+                    "현황", "상태", "오늘메일", "오늘 메일", "메일현황", "메일 현황",
+                    "몇개왔어", "몇 개 왔어", "메일몇개", "/status",
+                ]
+                if any(_t == k or _t.startswith(k) for k in _STATUS_KW):
+                    try:
+                        conn = sqlite3.connect(str(DB_PATH))
+                        today = datetime.now(_KST).strftime("%Y-%m-%d")
+                        rows = conn.execute(
+                            "SELECT type, status, COUNT(*) FROM email_logs "
+                            "WHERE created_at >= ? GROUP BY type, status",
+                            (today,)
+                        ).fetchall()
+                        total_sent = conn.execute(
+                            "SELECT COUNT(*) FROM email_logs WHERE status='SENT'"
+                        ).fetchone()[0]
+                        conn.close()
+                        lines = [f"📊 오늘({today}) 메일 현황"]
+                        for etype, status, cnt in rows:
+                            lines.append(f"  {etype}/{status}: {cnt}건")
+                        lines.append(f"\n누적 발송: {total_sent}건")
+                        tg_send(cfg["tg_token"], cfg["tg_chat_id"], "\n".join(lines))
+                    except Exception as e:
+                        tg_send(cfg["tg_token"], cfg["tg_chat_id"], f"⚠️ 현황 조회 실패: {e}")
+                    continue
 
                 # /send_{uid}
                 m = re.match(r"/send_(\S+)", text)
