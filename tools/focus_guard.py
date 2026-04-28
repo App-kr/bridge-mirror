@@ -144,7 +144,46 @@ def is_visible(hwnd):
     return bool(user32.IsWindowVisible(hwnd))
 
 
+SWP_NOMOVE = 0x0002
+SWP_NOSIZE = 0x0001
+SWP_NOZORDER = 0x0004
+SWP_NOACTIVATE = 0x0010
+SWP_HIDEWINDOW = 0x0080
+SWP_FLAGS_HIDE_NO_FOCUS = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW
+
+GWL_EXSTYLE = -20
+WS_EX_NOACTIVATE = 0x08000000   # 창이 활성화 자체 안 됨
+WS_EX_TOOLWINDOW = 0x00000080   # 작업 표시줄 미표시
+
+# Win32 API signatures (LongPtr 호환)
+user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+user32.GetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int]
+user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+user32.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_ssize_t]
+
+
+def _force_no_activate(hwnd):
+    """창 스타일에 WS_EX_NOACTIVATE 적용 — 활성화 자체 차단."""
+    try:
+        ex = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+        new_ex = ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+        user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex)
+    except Exception:
+        pass
+
+
 def hide_window(hwnd):
+    """창 숨김 — 3중 방어 (활성화 차단 + 화면 밖 + SW_HIDE).
+
+    1. WS_EX_NOACTIVATE 스타일 강제 적용 — 창이 활성화 못 됨
+    2. SetWindowPos(SWP_HIDEWINDOW | SWP_NOACTIVATE) — 활성화 없이 숨김
+    3. ShowWindow(SW_HIDE) — 최종 fallback
+    """
+    _force_no_activate(hwnd)
+    try:
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FLAGS_HIDE_NO_FOCUS)
+    except Exception:
+        pass
     user32.ShowWindow(hwnd, SW_HIDE)
 
 
