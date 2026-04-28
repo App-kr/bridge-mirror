@@ -1651,6 +1651,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         # 줄 단위 PII 라벨 검사 → redact 대상 텍스트 수집
         redact_texts = set()
         replacement_redacts = []  # (원문, 대체텍스트) 쌍
+        job_title_replaces: list = []  # 직업 타이틀줄 전체교체: (원문, 클린텍스트) — 갭 없이 제거
 
         for line in text.split("\n"):
             stripped = line.strip()
@@ -1801,34 +1802,86 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             _is_job_line_kw = " — " in stripped or " - " in stripped  # 직업 타이틀줄
             if has_kr_work:
                 if _is_job_line_kw:
-                    # 직업 타이틀줄: 브랜드명만 삭제, 전체 줄 삭제 금지
-                    # 긴 키워드(multi-word)가 이미 매칭된 경우 하위 단어 중복 제거
-                    _matched_ranges: list = []
+                    # 직업 타이틀줄: 갭 없이 제거 → 전체 줄 교체 방식 (job_title_replaces)
+                    # (redact_texts에 추가하지 않음 — 아래 full-line clean 섹션에서 처리)
+                    _cleaned_jt = stripped
+                    # 1순위: Branch 전체 패턴 (Gwanak Branch 등) — KW 개별 제거 전에 먼저 처리
+                    _cleaned_jt = re.sub(r'\b[A-Za-z]+(?:\s+[A-Za-z]+)?\s+Branch\b', '', _cleaned_jt, flags=re.I)
+                    # 2순위: 괄호 위치 태그: (Yongsan-Gu SMU Camp)
+                    _cleaned_jt = re.sub(
+                        r'\s*\([^)]{3,50}(?:Gu|Branch|Camp|District|Center|Centre|City)\b[^)]*\)',
+                        '', _cleaned_jt, flags=re.I)
+                    # 3순위: KW 브랜드명 (긴 것 먼저)
                     _sorted_kws = sorted(
                         (kw for kw in KR_WORKPLACE_KEYWORDS if kw not in _GENERIC_TYPES_SET and kw in s_lower),
-                        key=len, reverse=True  # 긴 키워드 먼저
+                        key=len, reverse=True
                     )
-                    for kw in _sorted_kws:
-                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
-                        for m in kw_pat.finditer(stripped):
-                            ms, me = m.start(), m.end()
-                            # 이미 더 긴 키워드가 커버한 범위면 건너뜀
-                            if any(rs <= ms and me <= re2 for rs, re2 in _matched_ranges):
-                                continue
-                            _matched_ranges.append((ms, me))
-                            redact_texts.add(m.group())
-                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
-                elif has_kr or len(stripped) < 50:
-                    if len(stripped) < 50 and not has_kr:
-                        redact_texts.add(stripped)
-                        all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
-                    for kw in KR_WORKPLACE_KEYWORDS:
-                        if kw in _GENERIC_TYPES_SET:
-                            continue  # 유형명 유지
-                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
-                        for m in kw_pat.finditer(stripped):
-                            redact_texts.add(m.group())
-                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+                    for _kw in _sorted_kws:
+                        _cleaned_jt = re.sub(r'\b' + re.escape(_kw) + r'\b', '', _cleaned_jt, flags=re.I)
+                    # 연속 공백 정리
+                    _cleaned_jt = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt).strip()
+                    # "Junior -  — Teacher" → "Junior - Teacher" (branch 제거 후 dangling — 정리)
+                    _cleaned_jt = re.sub(r'\s+-\s+—\s+', ' - ', _cleaned_jt)
+                    # 앞뒤 고립 " - " 또는 " — " 정리
+                    _cleaned_jt = re.sub(r'^[\s\-—]+', '', _cleaned_jt).strip()
+                    if _cleaned_jt != stripped:
+                        job_title_replaces.append((stripped, _cleaned_jt))
+                        all_logs.append(f"[page{page_num}] JOB_TITLE_CLEAN: {stripped[:50]} → {_cleaned_jt[:50]}")
+            # 직업 타이틀줄 중 KR_WORKPLACE 없어도 괄호/브랜치 있는 경우 처리
+            # (Sookmyung Women's University — Teacher (Yongsan-Gu Camp) 같은 경우)
+            if _is_job_line_kw and not has_kr_work:
+                _paren_re = re.compile(
+                    r'\s*\([^)]{3,50}(?:Gu|Branch|Camp|District|Center|Centre|City)\b[^)]*\)', re.I)
+                _branch_re = re.compile(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+Branch\b')
+                _cleaned_np = stripped
+                _cleaned_np = _paren_re.sub('', _cleaned_np)
+                _cleaned_np = _branch_re.sub('', _cleaned_np)
+                _cleaned_np = re.sub(r'[ \t]{2,}', ' ', _cleaned_np).strip()
+                if _cleaned_np != stripped:
+                    job_title_replaces.append((stripped, _cleaned_np))
+                    all_logs.append(f"[page{page_num}] JOB_PAREN_CLEAN: {stripped[:50]} → {_cleaned_np[:50]}")
+            # ── 직업 타이틀줄 후처리: 대학교 고용주 + 한국인 이름형 브랜드 ──────
+            # 위 두 블록 이후 실행 — has_kr_work 무관
+            # 대상: "Sookmyung Women's University — Teacher" / "Min-Byung-Chul Junior - Teacher"
+            if _is_job_line_kw:
+                # 현재 job_title_replaces에서 이 줄의 최신 클린 텍스트 가져오기
+                _current_clean_jt = next(
+                    (_c for _o, _c in job_title_replaces if _o == stripped), stripped)
+                _cleaned_jt2 = _current_clean_jt
+                # 4순위: 고용주 대학교명 제거
+                # "Sookmyung Women's University — Native English Teacher" → "Native English Teacher"
+                _cleaned_jt2 = re.sub(
+                    r'^.+?University\s*(?:—|-)\s*', '', _cleaned_jt2, flags=re.I).strip()
+                # 5순위: 한국인 이름형 학원 브랜드 (Min-Byung-Chul Junior)
+                # 패턴: 대문자+소문자 대시 연결 3단어 + 선택적 Junior/Senior
+                _cleaned_jt2 = re.sub(
+                    r'\b[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+(?:\s+(?:Junior|Senior|Academy|Institute))?\b',
+                    '', _cleaned_jt2).strip()
+                # 앞뒤 고립 구분자 정리
+                _cleaned_jt2 = re.sub(r'^[\s\-—]+', '', _cleaned_jt2).strip()
+                _cleaned_jt2 = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt2).strip()
+                if _cleaned_jt2 != stripped:
+                    _existing_idx = next(
+                        (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped), -1)
+                    if _existing_idx >= 0:
+                        job_title_replaces[_existing_idx] = (stripped, _cleaned_jt2)
+                    else:
+                        job_title_replaces.append((stripped, _cleaned_jt2))
+                    all_logs.append(
+                        f"[page{page_num}] JOB_EXTRA_CLEAN: {stripped[:50]} → {_cleaned_jt2[:50]}")
+
+            # 비직업타이틀 학원명: 한국 키워드 있거나 짧은 줄일 때만 redact
+            if has_kr_work and not _is_job_line_kw and (has_kr or len(stripped) < 50):
+                if len(stripped) < 50 and not has_kr:
+                    redact_texts.add(stripped)
+                    all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
+                for kw in KR_WORKPLACE_KEYWORDS:
+                    if kw in _GENERIC_TYPES_SET:
+                        continue  # 유형명 유지
+                    kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                    for m in kw_pat.finditer(stripped):
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
 
             # 한국 도시명 redact (korea 자체는 유지) — page_has_korea일 때만
             # !! 학원/학교명 포함 줄은 도시명 유지
@@ -1859,22 +1912,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # if _idx not in _edu_lines and not _is_job_title_line:
             #     for m in RE_SCHOOL_NAMED.finditer(_ls): ...
             pass
-            # 직업 타이틀줄 부가 위치 정보 → blank redact
-            # "(Yongsan-Gu SMU Summer Camp)" / "Gwanak Branch" 등
-            if _is_job_title_line:
-                # 괄호 안 위치/캠프 태그: "(Word-Gu ...)" / "(Word Camp)" 등
-                _re_paren_loc = re.compile(
-                    r'\s*\([^)]{3,50}(?:Gu|Branch|Camp|District|Center|Centre|City)\b[^)]*\)',
-                    re.I)
-                for _pm in _re_paren_loc.finditer(_ls):
-                    redact_texts.add(_pm.group())
-                    all_logs.append(f"[page{page_num}] JOB_PAREN_LOC: {_pm.group()[:50]}")
-                # "Word Branch" 형태 (Gwanak Branch 등)
-                _re_branch = re.compile(
-                    r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+Branch\b')
-                for _bm in _re_branch.finditer(_ls):
-                    redact_texts.add(_bm.group())
-                    all_logs.append(f"[page{page_num}] JOB_BRANCH: {_bm.group()[:40]}")
+            # 직업 타이틀줄 위치/괄호 태그는 job_title_replaces에서 일괄 처리 (위)
+            # (JOB_PAREN_LOC / JOB_BRANCH → job_title_replaces 방식으로 통합, 갭 없이 제거)
             # 외국 도시/주 → blank redact
             for m in RE_US_CITY_STATE.finditer(_ls):
                 redact_texts.add(m.group())
@@ -2030,6 +2069,74 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     all_logs.append(f"[page{page_num}] KR_ADDR_BBOX: {_lstripped[:50]}")
         if _has_extra:
             page.apply_redactions()
+
+        # ── 직업 타이틀줄 전체 교체 (갭 없이) ──────────────────────────────────
+        # 브랜드명/지점명 제거: 개별 단어 whitebox 대신 줄 전체 교체 → 공백 갭 없음
+        if not dry and job_title_replaces:
+            import fitz as _fitz
+            # 페이지에 내장된 폰트 참조명 감지 (F5=Bold, F4=Regular 등)
+            # em-dash(U+2014) 지원: 내장 폰트 사용 시 정상 렌더링
+            _pg_fonts = page.get_fonts()
+            _jt_bold_ref = None
+            _jt_reg_ref = None
+            for _pgf in _pg_fonts:
+                _pfbase = _pgf[3].lower()  # basefont name
+                _pfref = _pgf[4]           # /F-name in resource dict
+                if "bold" in _pfbase:
+                    _jt_bold_ref = _pfref
+                elif "italic" not in _pfbase and "oblique" not in _pfbase:
+                    _jt_reg_ref = _pfref
+
+            _jt_dict = page.get_text("dict", flags=0)
+            for _orig_jt, _clean_jt in job_title_replaces:
+                # 원문 줄을 get_text("dict")에서 찾기
+                for _jblk in _jt_dict.get("blocks", []):
+                    if _jblk.get("type") != 0:
+                        continue
+                    for _jln in _jblk.get("lines", []):
+                        _jlt = "".join(s.get("text", "") for s in _jln.get("spans", [])).strip()
+                        # 원문이 이 줄에 포함되어 있으면 교체
+                        if _orig_jt not in _jlt:
+                            continue
+                        _jrect = _fitz.Rect(_jln["bbox"])
+                        _jspans = _jln.get("spans", [])
+                        _jfst = _jspans[0] if _jspans else {}
+                        _jfsize = _jfst.get("size", 8)
+                        _jfflags = _jfst.get("flags", 0)
+                        _jcolor_i = _jfst.get("color", 0)
+                        _jrgb = (
+                            ((_jcolor_i >> 16) & 0xFF) / 255.0,
+                            ((_jcolor_i >> 8) & 0xFF) / 255.0,
+                            (_jcolor_i & 0xFF) / 255.0,
+                        )
+                        # 폰트: 내장 PDF 폰트 참조 우선 (em-dash 지원)
+                        _is_bold = bool(_jfflags & 16)
+                        _jfontref = (_jt_bold_ref if _is_bold else _jt_reg_ref)
+                        _ins_kwargs = dict(fontsize=_jfsize, color=_jrgb)
+                        if _jfontref:
+                            _ins_kwargs["fontname"] = _jfontref  # PDF 내장 폰트
+                        else:
+                            _ins_kwargs["fontname"] = "tibo" if _is_bold else "tiro"
+                        # 1. 전체 줄 whiteout
+                        page.add_redact_annot(_jrect, fill=(1, 1, 1))
+                        page.apply_redactions()
+                        # 2. 클린 텍스트 재삽입 (baseline = bbox 하단)
+                        _jx0, _jy0, _jx1, _jy1 = _jrect
+                        page.insert_text(
+                            _fitz.Point(_jx0, _jy1),
+                            _clean_jt,
+                            **_ins_kwargs,
+                        )
+                        # 3. 밑줄 (원본이 bold+underline인 경우)
+                        if _jfflags & 4:  # bit 2 = underline
+                            _ul_y = _jy1 + 0.5
+                            page.draw_line(
+                                _fitz.Point(_jx0, _ul_y),
+                                _fitz.Point(_jx1, _ul_y),
+                                color=_jrgb, width=0.5
+                            )
+                        all_logs.append(f"[page{page_num}] JOB_LINE_REINSERT: {_clean_jt[:60]}")
+                        break  # 한 줄만 처리 후 다음 교체 항목으로
 
     # ── 헤더 페이지 연락처 스트립 정리 + 번호/사진 삽입 ──
     # _header_page_num: 위에서 자동 감지된 실제 이력서 헤더 페이지 번호
