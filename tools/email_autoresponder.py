@@ -270,7 +270,7 @@ _SPAM_SENDER_DOMAINS = {
 # ── Teast Admin 전용 설정 ──────────────────────────────────────────────────────
 _TEAST_DOMAINS = {"teast.com", "teast.co.kr", "teast.co"}
 
-# 허용 국적 키워드 (미국·영국·캐나다·호주·아일랜드·뉴질랜드)
+# 허용 국적 키워드 (미국·영국·캐나다·호주·아일랜드·뉴질랜드·남아공)
 _ALLOWED_NATIONALITIES = {
     # 미국
     "american", "usa", "u.s.a", "u.s", "united states",
@@ -285,6 +285,8 @@ _ALLOWED_NATIONALITIES = {
     "irish", "ireland",
     # 뉴질랜드
     "new zealand", "new zealander", "nz",
+    # 남아공
+    "south african", "south africa", "rsa",
 }
 
 
@@ -296,8 +298,46 @@ def is_teast_admin(from_addr: str) -> bool:
     return domain in _TEAST_DOMAINS
 
 
+def parse_teast_applicant(body: str) -> dict:
+    """Teast 본문에서 지원자 Name / Nationality / Email 파싱.
+
+    예시 본문:
+      Name: Nomalungelo Ntsini
+      Nationality: Swaziland
+      Email: nomaluntsini@gmail.com
+    """
+    result: dict = {}
+    for line in body.splitlines():
+        stripped = line.strip()
+        low = stripped.lower()
+        if low.startswith("name:") and "name" not in result:
+            result["name"] = stripped[5:].strip()
+        elif low.startswith("nationality:") and "nationality" not in result:
+            result["nationality"] = stripped[12:].strip()
+        elif low.startswith("email:") and "email" not in result:
+            candidate_email = stripped[6:].strip()
+            if "@" in candidate_email:
+                result["email"] = candidate_email
+    return result
+
+
 def teast_allowed_nationality(body: str) -> str | None:
-    """Teast 본문에서 허용 국적 키워드 감지 → 감지된 키워드 반환, 없으면 None."""
+    """Teast 본문에서 허용 국적 감지.
+
+    1) 'Nationality: ...' 필드를 파싱해 정확히 비교
+    2) 필드 파싱 실패 시 본문 전체 키워드 폴백
+    반환: 감지된 국적 문자열, 없으면 None
+    """
+    applicant = parse_teast_applicant(body)
+    nat_field = applicant.get("nationality", "").strip()
+    if nat_field:
+        nat_low = nat_field.lower()
+        for allowed in _ALLOWED_NATIONALITIES:
+            if allowed in nat_low or nat_low == allowed:
+                return nat_field
+        return None  # Nationality 필드 있지만 비허용 국적
+
+    # 폴백: 본문 전체 키워드 검색
     body_low = body.lower()
     for nat in _ALLOWED_NATIONALITIES:
         if nat in body_low:
@@ -438,8 +478,8 @@ def has_prior_contact(imap_conn: imaplib.IMAP4_SSL, addr: str,
         pass
 
     if not _result:
-        log.warning(f"[IMAP] 연락이력 조회 10초 타임아웃 addr={addr} → 발송 진행")
-        return False
+        log.warning(f"[IMAP] 연락이력 조회 10초 타임아웃 addr={addr} → 안전 스킵 (발송 금지)")
+        return True  # timeout → conservative: 이력 있다고 가정, 발송하지 않음
     return _result[0]
 
 
@@ -713,6 +753,13 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     _session_ids.add(uid)
                     continue
 
+                # ── STEP A-0: Re: subject → 대화 중인 회신, 발송 금지 ──────────
+                # "Re:"로 시작하면 우리 메일에 대한 답장 → 지원폼 발송 절대 금지
+                if subject.strip().lower().startswith("re:"):
+                    log.info(f"[CONV] Re: subject → 대화 중 회신, 안읽음 유지: {from_addr} | {subject}")
+                    _session_ids.add(uid)
+                    continue
+
                 # ── STEP A: 스팸 필터 (헤더 기반) ────────────────────────────
                 if is_spam(from_addr, subject, "", {}, cfg["gmail_addr"]):
                     log.info(f"[SPAM] {from_addr} | {subject}")
@@ -724,9 +771,9 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     _save_processed(processed)
                     continue
 
-                # ── STEP A-1: Teast Admin 메일 — 국적 필터 전용 처리 ─────────
+                # ── STEP A-1: Teast Admin 메일 — 국적 필터 + 지원자 직접 발송 ──
                 if is_teast_admin(from_addr):
-                    # Teast는 시스템 발신이므로 연락이력 체크 생략, 본문 국적만 확인
+                    # Teast는 시스템 발신 → 연락이력 체크 생략, 본문만 분석
                     _teast_buf: list = []
                     def _do_teast_body(u=uid_b):
                         try:
@@ -740,8 +787,6 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     if _teast_buf and not isinstance(_teast_buf[0], Exception):
                         try:
                             raw_fetch = _teast_buf[0]
-                            # imaplib fetch 응답: (status, data_list)
-                            # data_list[0]은 tuple(header_bytes, body_bytes) 또는 bytes
                             raw_data = raw_fetch[1] if isinstance(raw_fetch, tuple) and len(raw_fetch) > 1 else []
                             if raw_data and isinstance(raw_data[0], tuple) and len(raw_data[0]) > 1:
                                 teast_body = raw_data[0][1].decode("utf-8", errors="ignore")
@@ -750,28 +795,55 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                         except Exception as _te:
                             log.warning(f"[TEAST] 본문 파싱 오류 uid={uid}: {_te}")
                             teast_body = ""
+
+                    # 지원자 정보 파싱 (Name / Nationality / Email)
+                    applicant_info = parse_teast_applicant(teast_body)
+                    applicant_email = applicant_info.get("email", "")
+                    applicant_name  = applicant_info.get("name", "")
+                    applicant_nat   = applicant_info.get("nationality", "unknown")
+
                     found_nat = teast_allowed_nationality(teast_body)
+
                     if not found_nat:
-                        log.info(f"[TEAST] 허용 국적 없음 → 스킵: {from_addr} | {subject}")
-                        processed.add(uid)
+                        # 비허용 국적 → Gmail 휴지통으로 이동 후 처리 완료
+                        log.info(f"[TEAST] 비허용 국적({applicant_nat}) → 삭제: {applicant_email or from_addr} | {subject}")
+                        try:
+                            imap.copy(uid_b, '"[Gmail]/Trash"')
+                            imap.store(uid_b, "+FLAGS", "\\Deleted")
+                            imap.expunge()
+                        except Exception as _del_e:
+                            log.warning(f"[TEAST] 삭제 실패({_del_e}) → 읽음 처리만")
+                            try:
+                                imap.store(uid_b, "+FLAGS", "\\Seen")
+                            except Exception:
+                                pass
+                        processed.add(_mid_key); _session_ids.add(uid)
                         _save_processed(processed)
                         continue
-                    log.info(f"[TEAST] 허용 국적 감지({found_nat}) → 자동발송 진행: {from_addr} | {subject}")
-                    first_name = from_name.split()[0] if from_name else "there"
+
+                    # 허용 국적 — 지원자 이메일로 답장 (admin@teast.co 아님)
+                    if not applicant_email:
+                        log.warning(f"[TEAST] 지원자 이메일 파싱 실패 → 스킵: {subject}")
+                        processed.add(_mid_key); _session_ids.add(uid)
+                        _save_processed(processed)
+                        continue
+
+                    log.info(f"[TEAST] 허용 국적({found_nat}) → {applicant_email} 발송 진행")
+                    first_name = (applicant_name.split()[0] if applicant_name else "there")
                     subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
-                    ok = send_reply(cfg, from_addr, from_name, subj, body_reply, html=html_reply,
-                                   in_reply_to=message_id)
+                    ok = send_reply(cfg, applicant_email, applicant_name, subj, body_reply,
+                                   html=html_reply, in_reply_to=message_id)
                     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
                     status_val = "SENT" if ok else "FAILED"
                     if ok:
-                        dual_notify(cfg, f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
+                        dual_notify(cfg, f"강사 {applicant_name}({applicant_nat}) - Teast 접수 안내메일 발송완료")
                         try:
                             imap.store(uid_b, "+FLAGS", "\\Seen")
                         except Exception:
                             pass
                     else:
-                        dual_notify(cfg, f"🚨 Teast 발송 실패: {from_addr}")
-                    log_email(from_addr, from_name, subject, received_at,
+                        dual_notify(cfg, f"🚨 Teast 발송 실패: {applicant_email}")
+                    log_email(applicant_email, applicant_name, subject, received_at,
                               sent_at, "TEAST", status_val, uid)
                     processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
@@ -872,8 +944,13 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     or re.search(r"just\s+emailing\s+after\s+our", _bl)
                     or re.search(r"following\s+(up\s+)?on\s+our\s+(call|interview|meeting|chat)", _bl)
                     # "Thanks for your email/message" → 우리가 먼저 보낸 것에 대한 회신 (Monique 케이스)
-                    or re.search(r"thanks?\s+(so\s+much\s+)?for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back)", _bl)
-                    or re.search(r"thank\s+you\s+for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back)", _bl)
+                    or re.search(r"thanks?\s+(so\s+much\s+)?for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back|response|reply|update)", _bl)
+                    or re.search(r"thank\s+you\s+for\s+(your\s+)?(email|message|reaching\s+out|getting\s+back|response|reply|update)", _bl)
+                    # 일정 조율 회신 (Caleb 케이스)
+                    or re.search(r"does\s+(this\s+)?[a-z]+day\s+.{0,30}(work|okay|fine|good|possible)", _bl)
+                    or re.search(r"(work|available|free)\s+(for\s+)?[a-z]+day\s+.{0,30}(at\s+)?\d+\s*(pm|am)", _bl)
+                    or re.search(r"let\s+me\s+know\s+what\s+works", _bl)
+                    or re.search(r"if\s+(it\s+is\s+|it.s\s+)?okay,?\s+does", _bl)
                     or re.search(r"apolog(y|ies|ize)\s+for\s+(not\s+)?(getting\s+back|replying|responding)", _bl)
                     or re.search(r"sorry\s+for\s+(not\s+)?(getting\s+back|replying|responding|the\s+(delay|late))", _bl)
                     # 이미 인터뷰/등록 완료
