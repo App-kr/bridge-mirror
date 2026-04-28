@@ -1,5 +1,21 @@
 # BRIDGE MASTER PROTOCOL v2.5
-<!-- 26/04/19 KST -->
+<!-- 26/04/28 KST -->
+
+---
+
+## [RULE-PC-TOPLEVEL] PC 운영 절대 규칙 — 모든 규칙 위에 우선
+
+> **반드시 먼저 읽기**: `Q:\Claudework\PC_OPERATING_RULES.md`
+>
+> 이 BRIDGE 프로토콜과 PC 절대 규칙이 충돌하면 → **PC_OPERATING_RULES.md 가 이긴다**.
+> 새 기능/Task/Daemon 도입 전 PC_OPERATING_RULES 의 자체 체크리스트 통과 필수.
+
+핵심 요약 (전문은 위 파일):
+- **RULE-1**: 사용자 활성창보다 우선하는 spawn 절대 금지 (focus_guard.py 강제)
+- **RULE-2**: cmd/powershell 콘솔 깜빡임 금지 (CREATE_NO_WINDOW / Hidden 의무)
+- **RULE-3**: 게임 감지 시 비필수 task 자동 일시정지 (game_mode_guardian.py)
+- **RULE-4**: 신규 자동화 도입 전 정책 검증 체크리스트 통과
+- **RULE-5**: enforcement daemon (focus_guard / ram_watchdog / game_mode_guardian / bridge_guard)
 
 ---
 
