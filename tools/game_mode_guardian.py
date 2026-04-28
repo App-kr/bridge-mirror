@@ -38,6 +38,7 @@ PC_OPERATING_RULES.md RULE-3 강제 메커니즘.
 
 from __future__ import annotations
 
+import ctypes
 import json
 import subprocess
 import sys
@@ -120,20 +121,45 @@ def save_state(state: dict):
         pass
 
 
-# ── 게임 감지 ──────────────────────────────────────────────
+# ── 게임 감지 (ctypes 직접 — subprocess spawn 없음) ────────
+# 2026-04-28 핵심 수정: tasklist subprocess가 conhost 깜빡임을 만들어
+# 사용자 입력을 가로채는 문제 발생 → ctypes EnumProcesses 로 교체
+_user32 = ctypes.windll.user32
+_kernel32 = ctypes.windll.kernel32
+_psapi = ctypes.windll.psapi
+
+
+def _list_process_names() -> set[str]:
+    """EnumProcesses + GetModuleBaseNameW — 외부 프로세스 spawn 없음."""
+    arr = (ctypes.c_ulong * 4096)()
+    cb_needed = ctypes.c_ulong()
+    if not _psapi.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(cb_needed)):
+        return set()
+    count = cb_needed.value // ctypes.sizeof(ctypes.c_ulong)
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    names = set()
+    for i in range(count):
+        pid = arr[i]
+        if pid == 0:
+            continue
+        h = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            continue
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            n = _psapi.GetModuleBaseNameW(h, None, buf, 260)
+            if n > 0:
+                names.add(buf.value.lower())
+        finally:
+            _kernel32.CloseHandle(h)
+    return names
+
+
 def is_game_running() -> str | None:
-    try:
-        out = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=4,
-            creationflags=NO_WINDOW,
-        )
-        names_lower = (out.stdout or "").lower()
-        for g in GAME_PROCESS_NAMES:
-            if g in names_lower:
-                return g
-    except Exception:
-        pass
+    names = _list_process_names()
+    for g in GAME_PROCESS_NAMES:
+        if g in names:
+            return g
     return None
 
 

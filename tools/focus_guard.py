@@ -235,22 +235,59 @@ def should_hide(hwnd, always_on: bool):
         return False
 
 
-# ── 게임 감지 ──────────────────────────────────────────────
+# ── 게임 감지 (ctypes 직접 — subprocess spawn 없음) ────────
+# 2026-04-28 핵심 수정: tasklist subprocess가 conhost 깜빡임을 만들어
+# 자기 자신이 만든 conhost를 hide하려는 무한 루프 발생 → ctypes 로 교체
+_psapi = ctypes.windll.psapi
+
+
+def _list_process_names_via_ctypes() -> set[str]:
+    """EnumProcesses + GetModuleBaseNameW — 외부 프로세스 spawn 없음.
+
+    tasklist.exe 호출보다 훨씬 빠르고 conhost 깜빡임 자체를 만들지 않음.
+    """
+    arr = (ctypes.c_ulong * 4096)()
+    cb_needed = ctypes.c_ulong()
+    if not _psapi.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(cb_needed)):
+        return set()
+    count = cb_needed.value // ctypes.sizeof(ctypes.c_ulong)
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000  # Win Vista+, 안전한 권한
+    names = set()
+    for i in range(count):
+        pid = arr[i]
+        if pid == 0:
+            continue
+        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            continue
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            n = _psapi.GetModuleBaseNameW(h, None, buf, 260)
+            if n > 0:
+                names.add(buf.value.lower())
+        finally:
+            kernel32.CloseHandle(h)
+    return names
+
+
+_game_check_cache = {"names": set(), "ts": 0.0}
+_GAME_CACHE_TTL = 4.0  # 4초 동안 결과 재사용 (CPU 부하 감소)
+
+
 def is_game_running():
-    """tasklist 로 게임 프로세스 검사 (CREATE_NO_WINDOW=0x08000000)."""
-    import subprocess
-    try:
-        out = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=4,
-            creationflags=0x08000000,
-        )
-        names_lower = out.stdout.lower()
-        for g in GAME_PROCESS_NAMES:
-            if g in names_lower:
-                return g
-    except Exception:
-        pass
+    """게임 프로세스 검사 — ctypes 기반 (subprocess spawn 없음 + 4초 캐시)."""
+    now = time.time()
+    if now - _game_check_cache["ts"] < _GAME_CACHE_TTL:
+        names = _game_check_cache["names"]
+    else:
+        names = _list_process_names_via_ctypes()
+        _game_check_cache["names"] = names
+        _game_check_cache["ts"] = now
+
+    for g in GAME_PROCESS_NAMES:
+        if g in names:
+            return g
     return None
 
 
