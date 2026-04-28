@@ -149,11 +149,19 @@ SWP_NOSIZE = 0x0001
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
 SWP_HIDEWINDOW = 0x0080
-SWP_FLAGS_HIDE_NO_FOCUS = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW
+SWP_NOREDRAW = 0x0008
+SWP_NOSENDCHANGING = 0x0400
+SWP_FLAGS_HIDE_NO_FOCUS = SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW | SWP_NOSENDCHANGING
 
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000   # 창이 활성화 자체 안 됨
 WS_EX_TOOLWINDOW = 0x00000080   # 작업 표시줄 미표시
+WS_EX_LAYERED = 0x00080000      # 투명도 적용 가능
+LWA_ALPHA = 0x00000002          # alpha 값 적용
+
+# 화면 밖 좌표 (사용자 눈에 절대 안 보임)
+OFFSCREEN_X = -32000
+OFFSCREEN_Y = -32000
 
 # Win32 API signatures (LongPtr 호환)
 user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
@@ -163,23 +171,37 @@ user32.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_ssize_t]
 
 
 def _force_no_activate(hwnd):
-    """창 스타일에 WS_EX_NOACTIVATE 적용 — 활성화 자체 차단."""
+    """창 스타일에 WS_EX_NOACTIVATE + LAYERED 적용 — 활성화 차단 + 투명화 가능."""
     try:
         ex = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
-        new_ex = ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+        new_ex = ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED
         user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex)
+        # alpha=0 으로 완전 투명 (시각적으로 0% 가시화)
+        user32.SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA)
     except Exception:
         pass
 
 
 def hide_window(hwnd):
-    """창 숨김 — 3중 방어 (활성화 차단 + 화면 밖 + SW_HIDE).
+    """창 숨김 — v3.3 5중 방어 (시각적으로 절대 안 보임 + 활성화 절대 안 됨).
 
-    1. WS_EX_NOACTIVATE 스타일 강제 적용 — 창이 활성화 못 됨
-    2. SetWindowPos(SWP_HIDEWINDOW | SWP_NOACTIVATE) — 활성화 없이 숨김
-    3. ShowWindow(SW_HIDE) — 최종 fallback
+    1. WS_EX_NOACTIVATE + LAYERED 스타일 강제 적용
+    2. SetLayeredWindowAttributes alpha=0 (완전 투명, 픽셀 0%)
+    3. SetWindowPos with OFFSCREEN 좌표 (-32000, -32000) — 화면 밖
+    4. SetWindowPos with SWP_HIDEWINDOW (Z-order 변경 없이 숨김)
+    5. ShowWindow(SW_HIDE) — 최종 fallback
+
+    이 5중 방어로 새 창이 spawn되어도 사용자 눈에 절대 안 보이고
+    포커스도 절대 안 빼앗김.
     """
     _force_no_activate(hwnd)
+    # 화면 밖으로 이동 (활성화 없이)
+    try:
+        user32.SetWindowPos(hwnd, 0, OFFSCREEN_X, OFFSCREEN_Y, 1, 1,
+                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING)
+    except Exception:
+        pass
+    # 숨김 (활성화 없이)
     try:
         user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FLAGS_HIDE_NO_FOCUS)
     except Exception:
