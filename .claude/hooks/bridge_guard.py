@@ -116,6 +116,20 @@ BASH_RULES: list[tuple[str, str, bool]] = [
     # 민감 크리덴셜 파일 직접 읽기 경고
     (r"(?:cat|type|Get-Content|gc\b)\s+.*(?:\.env|\.bridge\.key|\.rpa_vault|settings\.local\.json)\b",
      "크리덴셜 파일 직접 읽기 감지 (경고)", False),
+
+    # PC_OPERATING_RULES RULE-7: 신규 Task 등록 시 Hidden 누락 차단 (2026-04-28)
+    # schtasks /create 명령은 /RL HIGHEST 또는 cmd.exe 직접 호출 시 위험
+    (r"schtasks\s+/create\s+.*?(?:cmd\.exe|\.bat\b|\.cmd\b)(?!.*-WindowStyle\s+Hidden)",
+     "RULE-7 위반: 신규 Task가 cmd/.bat 직접 호출 — Hidden wrapper 필수",
+     True),
+    # Register-ScheduledTask 호출 시 -Hidden 누락 (Settings 객체에 Hidden=$true 명시 안 함)
+    (r"(?<!#)\bRegister-ScheduledTask\b(?!.*-Hidden)(?!.*Settings.*Hidden\s*=\s*\$true)",
+     "RULE-7 권고: Register-ScheduledTask -Hidden 또는 Settings.Hidden=true 누락 (검토)",
+     False),
+    # python.exe (콘솔 창 뜸) Task 등록 — pythonw.exe 권장
+    (r"schtasks\s+/create\s+.*python\.exe(?!w)",
+     "RULE-7 권고: python.exe 콘솔 창 뜸 — pythonw.exe 사용 권장",
+     False),
 ]
 
 
