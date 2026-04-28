@@ -696,7 +696,8 @@ PII_LINE_LABELS = [
     ("passport", True), ("passport number", True), ("passport no", True),
     ("date of birth", True), ("dob", True),
     ("national id", True), ("ssn", True),
-    ("nationality", True), ("citizenship", True),
+    # nationality/citizenship 은 고용주가 필요한 정보 → 삭제 안 함
+    # ("nationality", True), ("citizenship", True),
     ("race", True), ("ethnicity", True), ("religion", True),
     ("birth", True), ("born", True),     # "Birth: UK / 1990"
     ("gender", True), ("sex", True),     # "Gender: Female"
@@ -737,6 +738,9 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "chungdahm learning", "creverse", "lucid", "topia",
     "snb", "jls", "like english", "english egg",
     "canlearn", "kids college", "english town",
+    # 추가 브랜드 (2026-04-28)
+    "asset", "empire", "prairie think tool", "prairie",
+    "gwanak", "yongsan-gu",
     # 일반 유형
     "english village", "language school", "language academy",
     "language institute", "language center", "language centre",
@@ -1785,24 +1789,46 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
             # 브랜드 접두사 + 일반 유형명 → 유형명 보존 (replacement redact)
             # "Broad Language School" → "Language School"
-            for m in _RE_KR_SCHOOL_PREFIX.finditer(stripped):
-                canonical = " ".join(w.capitalize() for w in m.group(1).split())
-                replacement_redacts.append((m.group(), canonical))
-                all_logs.append(f"[page{page_num}] KR_SCHOOL_PREFIX→{canonical}: {m.group()[:60]}")
+            # !! 80자 초과 줄(서술문)은 제외 — "management for Kindergarten" 오탐 방지
+            if len(stripped) <= 80:
+                for m in _RE_KR_SCHOOL_PREFIX.finditer(stripped):
+                    canonical = " ".join(w.capitalize() for w in m.group(1).split())
+                    replacement_redacts.append((m.group(), canonical))
+                    all_logs.append(f"[page{page_num}] KR_SCHOOL_PREFIX→{canonical}: {m.group()[:60]}")
 
             # 학원명 redact: 같은 줄에 한국 키워드 있거나, 짧은 줄(<50자)
             # 유형명(language school 등)은 건너뜀 — 위에서 처리
-            if has_kr_work and (has_kr or len(stripped) < 50):
-                if len(stripped) < 50 and not has_kr:
-                    redact_texts.add(stripped)
-                    all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
-                for kw in KR_WORKPLACE_KEYWORDS:
-                    if kw in _GENERIC_TYPES_SET:
-                        continue  # 유형명 유지
-                    kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
-                    for m in kw_pat.finditer(stripped):
-                        redact_texts.add(m.group())
-                        all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+            _is_job_line_kw = " — " in stripped or " - " in stripped  # 직업 타이틀줄
+            if has_kr_work:
+                if _is_job_line_kw:
+                    # 직업 타이틀줄: 브랜드명만 삭제, 전체 줄 삭제 금지
+                    # 긴 키워드(multi-word)가 이미 매칭된 경우 하위 단어 중복 제거
+                    _matched_ranges: list = []
+                    _sorted_kws = sorted(
+                        (kw for kw in KR_WORKPLACE_KEYWORDS if kw not in _GENERIC_TYPES_SET and kw in s_lower),
+                        key=len, reverse=True  # 긴 키워드 먼저
+                    )
+                    for kw in _sorted_kws:
+                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                        for m in kw_pat.finditer(stripped):
+                            ms, me = m.start(), m.end()
+                            # 이미 더 긴 키워드가 커버한 범위면 건너뜀
+                            if any(rs <= ms and me <= re2 for rs, re2 in _matched_ranges):
+                                continue
+                            _matched_ranges.append((ms, me))
+                            redact_texts.add(m.group())
+                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+                elif has_kr or len(stripped) < 50:
+                    if len(stripped) < 50 and not has_kr:
+                        redact_texts.add(stripped)
+                        all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
+                    for kw in KR_WORKPLACE_KEYWORDS:
+                        if kw in _GENERIC_TYPES_SET:
+                            continue  # 유형명 유지
+                        kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
+                        for m in kw_pat.finditer(stripped):
+                            redact_texts.add(m.group())
+                            all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
 
             # 한국 도시명 redact (korea 자체는 유지) — page_has_korea일 때만
             # !! 학원/학교명 포함 줄은 도시명 유지
@@ -1818,21 +1844,37 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
 
         # ── 학교/기관명 일반화 + 외국 도시/나이/비자 — 줄 단위 스캔 ──
-        # EDUCATION 섹션 줄은 RE_SCHOOL_NAMED/RE_UNIV_OF 미적용 (본인 학력 보호)
+        # EDUCATION 섹션 줄 + 직업 타이틀줄(" — " 포함)은 RE_SCHOOL_NAMED 미적용
+        # → 고용주 대학명(Sookmyung Women's University — Teacher) 보호
         for _idx, _line in enumerate(_page_lines):
             _ls = _line.strip()
             if not _ls:
                 continue
-            # 학교/기관명 → replacement redact (EDUCATION 섹션 제외)
-            if _idx not in _edu_lines:
-                for m in RE_SCHOOL_NAMED.finditer(_ls):
-                    _g = _school_to_generic(m.group())
-                    replacement_redacts.append((m.group(), _g))
-                    all_logs.append(f"[page{page_num}] SCHOOL→{_g}: {m.group()[:50]}")
-                for m in RE_UNIV_OF.finditer(_ls):
-                    _g = _school_to_generic(m.group())
-                    replacement_redacts.append((m.group(), _g))
-                    all_logs.append(f"[page{page_num}] UNIVOF→{_g}: {m.group()[:50]}")
+            _is_job_title_line = " — " in _ls or " - " in _ls and any(
+                w in _ls.lower() for w in ("teacher", "tutor", "instructor", "manager", "scholar")
+            )
+            # RE_SCHOOL_NAMED / RE_UNIV_OF — PDF에서는 비활성화
+            # 학교명은 PII가 아님 (위치만 제거; RE_US_CITY_STATE / RE_FOREIGN_CITY 처리)
+            # 고용주 대학명(Sookmyung Women's University — Teacher) 보호
+            # if _idx not in _edu_lines and not _is_job_title_line:
+            #     for m in RE_SCHOOL_NAMED.finditer(_ls): ...
+            pass
+            # 직업 타이틀줄 부가 위치 정보 → blank redact
+            # "(Yongsan-Gu SMU Summer Camp)" / "Gwanak Branch" 등
+            if _is_job_title_line:
+                # 괄호 안 위치/캠프 태그: "(Word-Gu ...)" / "(Word Camp)" 등
+                _re_paren_loc = re.compile(
+                    r'\s*\([^)]{3,50}(?:Gu|Branch|Camp|District|Center|Centre|City)\b[^)]*\)',
+                    re.I)
+                for _pm in _re_paren_loc.finditer(_ls):
+                    redact_texts.add(_pm.group())
+                    all_logs.append(f"[page{page_num}] JOB_PAREN_LOC: {_pm.group()[:50]}")
+                # "Word Branch" 형태 (Gwanak Branch 등)
+                _re_branch = re.compile(
+                    r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+Branch\b')
+                for _bm in _re_branch.finditer(_ls):
+                    redact_texts.add(_bm.group())
+                    all_logs.append(f"[page{page_num}] JOB_BRANCH: {_bm.group()[:40]}")
             # 외국 도시/주 → blank redact
             for m in RE_US_CITY_STATE.finditer(_ls):
                 redact_texts.add(m.group())
