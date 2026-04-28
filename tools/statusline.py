@@ -11,6 +11,9 @@ from pathlib import Path
 
 PROJECTS_DIR = Path(os.environ.get("USERPROFILE", r"C:\Users\Scarlett")) / ".claude" / "projects"
 NPX = r"Q:\Code\Node\npx.cmd"
+# CREATE_NO_WINDOW: 자식 cmd 창 깜빡임 방지 (Windows 전용)
+# 2026-04-28 긴급 패치: ccusage 호출 시 cmd 창이 1~5초마다 떠서 사용자 작업 방해
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 # 최근 1시간 이내 수정된 파일만 대상 (오래된 세션 제외)
 MAX_AGE_SEC = 3600
 
@@ -112,6 +115,7 @@ def call_ccusage(jsonl_path: Path, project_dir: Path, model_id: str) -> str:
             errors="replace",
             timeout=10,
             cwd=str(project_dir),
+            creationflags=_NO_WINDOW,   # 2026-04-28: cmd 창 깜빡임 차단
         )
         return r.stdout.strip()
     except Exception:

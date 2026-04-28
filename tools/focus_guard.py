@@ -61,7 +61,22 @@ WHITELIST_TITLE_KEYWORDS = (
     "anthropic",
     "chocolatey",           # 사용자 패키지 매니저
     "nodejs cli",
+    "antigravity",          # Antigravity terminal panel
 )
+
+# 강제 숨김 대상 — 어떤 모드에서도 항상 숨김 (transient spawn)
+ALWAYS_HIDE_TITLE_KEYWORDS = (
+    "ccusage statusline",
+    "npm exec ccusage",
+    "git.exe",              # 백업/hook용 git 호출
+    "npm run dev",          # 누군가 spawn한 npm dev (사용자가 띄운 건 wt에서)
+    "next dev",
+    "npx ccusage",
+    "subprocess",           # python -c 호출 식별자
+)
+
+# 2026-04-28 긴급: 게임 아니어도 항상 동작 (사용자 호소 — 1~5초 깜빡임)
+ALWAYS_ON_MODE = True
 
 # 로그
 LOG_DIR = Path(r"Q:\Claudework\bridge base\logs")
@@ -129,7 +144,13 @@ def is_game_running():
 
 
 # ── 콘솔창 enumerate + 숨김 ─────────────────────────────────
-def find_target_windows():
+def find_target_windows(always_on: bool = False):
+    """대상 콘솔 창 식별.
+
+    always_on=True (게임 외 모드): ALWAYS_HIDE_TITLE_KEYWORDS 매칭만 숨김
+                                   (사용자가 띄운 일반 cmd/powershell은 보호)
+    always_on=False (게임 모드): 화이트리스트 외 모든 콘솔 숨김
+    """
     targets = []
 
     def cb(hwnd, _):
@@ -139,11 +160,30 @@ def find_target_windows():
             cls = get_window_class(hwnd)
             if cls not in TARGET_CLASSES:
                 return True
-            title = get_window_title(hwnd).lower()
+            title_raw = get_window_title(hwnd)
+            title = title_raw.lower()
+
+            # 화이트리스트 — 사용자가 직접 띄운 것은 절대 안 숨김
             for kw in WHITELIST_TITLE_KEYWORDS:
                 if kw in title:
                     return True
-            targets.append((hwnd, cls, get_window_title(hwnd), get_window_pid(hwnd)))
+
+            # always_on (게임 외 모드): 알려진 spawn 패턴만 숨김
+            if always_on:
+                for kw in ALWAYS_HIDE_TITLE_KEYWORDS:
+                    if kw in title:
+                        targets.append((hwnd, cls, title_raw, get_window_pid(hwnd)))
+                        return True
+                # 빈 제목 + 짧은 시간 cmd/powershell.exe → 자식 spawn 강력 의심
+                if not title.strip() or title in ("c:\\windows\\system32\\cmd.exe",
+                                                   "c:\\windows\\system32\\windowspowershell\\v1.0\\powershell.exe",
+                                                   "관리자: c:\\windows\\system32\\cmd.exe",
+                                                   "관리자: c:\\windows\\system32\\windowspowershell\\v1.0\\powershell.exe"):
+                    targets.append((hwnd, cls, title_raw, get_window_pid(hwnd)))
+                return True
+
+            # 게임 모드: 모든 콘솔 숨김 (화이트리스트 외)
+            targets.append((hwnd, cls, title_raw, get_window_pid(hwnd)))
         except Exception:
             pass
         return True
@@ -178,8 +218,9 @@ def main():
                 log_event({"event": "GAME_GONE"})
                 last_state = "idle"
 
-            if game:
-                wins = find_target_windows()
+            # 게임 중이면 모든 모드, 아니어도 ALWAYS_ON_MODE면 transient spawn 차단
+            if game or ALWAYS_ON_MODE:
+                wins = find_target_windows(always_on=(not game))
                 for hwnd, cls, title, pid in wins:
                     hide_window(hwnd)
                     if log_count < MAX_LOG_PER_HOUR:
@@ -188,7 +229,7 @@ def main():
                             "class": cls,
                             "title": title[:60],
                             "pid": pid,
-                            "game": game,
+                            "mode": "game" if game else "always-on",
                         })
                         log_count += 1
 
