@@ -356,6 +356,27 @@ _SPAM_SUBJECT_PREFIX = [
     "cl posting:",   # Craigslist 시스템 메시지 (추후 별도 로직으로 교체 예정)
 ]
 
+# 본문 키워드 — B2B 광고/구인 플랫폼 영업 메일 감지
+# (esljobsdb.com 류 구인 플랫폼이 구인자 행세로 보내는 광고)
+_SPAM_BODY_KW = [
+    "greetings from esl",          # ESL 구인 플랫폼 인사말
+    "eslJobsdb", "esl jobs db",    # 특정 사이트명
+    "browse and search profiles",   # 프로필 검색 서비스 홍보
+    "post jobs and receive applicants",
+    "active applicants in your inbox",
+    "free 7 day trial", "7-day trial", "7 day free trial",
+    "unlimited posting",
+    "simply reply if interested",   # 광고 CTA 패턴
+    "guaranteed 20+ active applicants",
+    "we currently have esl teachers ready",
+    "immediate placement",          # 구인 플랫폼 홍보
+]
+
+# 발신 이메일 로컬파트에 구인 플랫폼 관련 키워드 포함 시 차단
+_SPAM_LOCALPART_KW = [
+    "esljobs", "esldb", "jobsdb", "teacherjobs", "eslplatform",
+]
+
 
 def is_spam(from_addr: str, subject: str, body: str, headers: dict,
             self_addr: str) -> bool:
@@ -371,6 +392,9 @@ def is_spam(from_addr: str, subject: str, body: str, headers: dict,
     domain_local = from_addr.split("@")[0].lower() if "@" in from_addr else from_addr.lower()
     if any(sp in domain_local for sp in _SPAM_DOMAINS):
         return True
+    # 발신 로컬파트에 구인 플랫폼 키워드 포함
+    if any(kw in domain_local for kw in _SPAM_LOCALPART_KW):
+        return True
     if "@" in from_addr:
         domain = from_addr.split("@")[1].lower()
         if any(sp in domain for sp in _SPAM_DOMAINS):
@@ -382,6 +406,11 @@ def is_spam(from_addr: str, subject: str, body: str, headers: dict,
     # 제목 키워드
     if any(kw in subj_low for kw in _SPAM_SUBJECT_KW):
         return True
+    # 본문 키워드 (B2B 광고/플랫폼 영업 감지)
+    if body:
+        body_low = body.lower()
+        if any(kw.lower() in body_low for kw in _SPAM_BODY_KW):
+            return True
     # 본문 링크 10개 이상
     links = re.findall(r'https?://', body)
     if len(links) >= 10:
@@ -499,6 +528,26 @@ def lookup_candidate(email_addr: str) -> dict | None:
             return dict(row)
     except Exception as e:
         log.error(f"[DB] candidates 조회 실패: {e}")
+    return None
+
+
+def lookup_candidate_recent(email_addr: str, months: int = 6) -> dict | None:
+    """최근 N개월 내 접수된 기존 지원자 조회 — 있으면 재발송 금지."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cutoff = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d %H:%M:%S")
+        row = conn.execute(
+            """SELECT sheet_number, full_name AS name, status, created_at
+               FROM candidates WHERE email=? AND is_deleted!=1 AND created_at > ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (email_addr, cutoff),
+        ).fetchone()
+        conn.close()
+        if row:
+            return dict(row)
+    except Exception as e:
+        log.error(f"[DB] candidates 최근조회 실패: {e}")
     return None
 
 
@@ -828,6 +877,17 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                         _save_processed(processed)
                         continue
 
+                    # 6개월 내 기존 지원자 → 재발송 금지 (안읽음 유지)
+                    _teast_recent = lookup_candidate_recent(applicant_email, months=6)
+                    if _teast_recent:
+                        log.info(
+                            f"[TEAST] 6개월 내 기존 지원자 → 안읽음 유지: "
+                            f"{applicant_email} (등록일: {_teast_recent.get('created_at', '?')})"
+                        )
+                        processed.add(_mid_key); _session_ids.add(uid)
+                        _save_processed(processed)
+                        continue
+
                     log.info(f"[TEAST] 허용 국적({found_nat}) → {applicant_email} 발송 진행")
                     first_name = (applicant_name.split()[0] if applicant_name else "there")
                     subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
@@ -917,6 +977,18 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                             body = raw_data2[0].decode("utf-8", errors="ignore")
                     except Exception:
                         body = ""
+
+                # ── STEP C-0: 본문 기반 스팸 2차 체크 ──────────────────────
+                # 헤더만으론 못 잡은 B2B 광고/구인 플랫폼 영업 메일 차단
+                if body and is_spam(from_addr, subject, body, {}, cfg["gmail_addr"]):
+                    log.info(f"[SPAM-BODY] 본문 스팸 감지 → 읽음 처리: {from_addr} | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
+                    continue
 
                 # BRIDGE 자신의 메일이 인용된 경우 → 대화 진행 중, 발송 금지
                 _BRIDGE_MARKERS = [
