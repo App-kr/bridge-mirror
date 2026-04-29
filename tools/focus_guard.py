@@ -153,6 +153,12 @@ SWP_NOREDRAW = 0x0008
 SWP_NOSENDCHANGING = 0x0400
 SWP_FLAGS_HIDE_NO_FOCUS = SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW | SWP_NOSENDCHANGING
 
+# 게임 창 강제 topmost
+HWND_TOPMOST = -1
+HWND_NOTOPMOST = -2
+LSFW_LOCK = 1
+LSFW_UNLOCK = 2
+
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000   # 창이 활성화 자체 안 됨
 WS_EX_TOOLWINDOW = 0x00000080   # 작업 표시줄 미표시
@@ -506,20 +512,62 @@ def _on_window_event(hWinEventHook, event, hwnd, idObject, idChild,
         return
     try:
         always_on = ALWAYS_ON_MODE and not _state["game_active"]
-        # 게임이면 화이트리스트 외 전부 숨김, 일반은 패턴 매치만
         if not (_state["game_active"] or always_on):
             return
-        if not should_hide(hwnd, always_on=always_on):
+
+        # ── v3.5: 게임 모드면 EVENT_OBJECT_CREATE에서 visible 검사 SKIP ──
+        # 새 콘솔이 visible 되기 전 미리 차단 (가장 강력한 방어)
+        cls = get_window_class(hwnd)
+        if cls not in TARGET_CLASSES:
             return
 
-        prev_focus = _state["last_user_focus"]
+        # 사용자 작업 도구 보호
+        try:
+            wpid = get_window_pid(hwnd)
+            if wpid and _is_user_tool_child(wpid):
+                return
+        except Exception:
+            pass
+
         title_raw = get_window_title(hwnd)
-        cls = get_window_class(hwnd)
+        title = title_raw.lower()
+
+        # 화이트리스트
+        for kw in WHITELIST_TITLE_KEYWORDS:
+            if kw in title:
+                return
+
+        # 게임 모드: 화이트리스트 외 모든 콘솔 차단 (visible 여부 무관)
+        # 일반 모드: 패턴 매칭만
+        if not _state["game_active"]:
+            # always_on - 패턴 매치만
+            matched = False
+            for kw in ALWAYS_HIDE_TITLE_KEYWORDS:
+                if kw in title:
+                    matched = True
+                    break
+            if not matched:
+                if not title.strip():
+                    matched = True
+                elif "관리자:" in title_raw or "administrator:" in title:
+                    matched = True
+            if not matched:
+                return
+
+        prev_focus = _state["last_user_focus"]
         pid = get_window_pid(hwnd)
 
         hide_window(hwnd)
         # 포커스 즉시 복원 — 사용자 키보드/마우스 입력 보호
         restore_focus(prev_focus)
+
+        # 게임 모드: 게임 창을 강제로 TOPMOST 로 (다른 창이 게임 위 못 올림)
+        if _state["game_active"] and prev_focus:
+            try:
+                user32.SetWindowPos(prev_focus, HWND_TOPMOST, 0, 0, 0, 0,
+                                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            except Exception:
+                pass
 
         _maybe_log({
             "event": "HIDDEN_EVT",
@@ -552,11 +600,33 @@ def _polling_thread():
             if game and last_state != "game":
                 log_event({"event": "GAME_DETECTED", "name": game})
                 last_state = "game"
+                # v3.5: 게임 진입 시 다른 프로세스의 SetForegroundWindow 차단
+                try:
+                    user32.LockSetForegroundWindow(LSFW_LOCK)
+                    log_event({"event": "FOREGROUND_LOCKED"})
+                except Exception:
+                    pass
             elif not game and last_state == "game":
                 log_event({"event": "GAME_GONE"})
                 last_state = "idle"
+                try:
+                    user32.LockSetForegroundWindow(LSFW_UNLOCK)
+                    log_event({"event": "FOREGROUND_UNLOCKED"})
+                except Exception:
+                    pass
 
             _track_user_focus()
+
+            # v3.5: 게임 모드면 게임 창을 매 polling 주기마다 TOPMOST 강제
+            if game and _state.get("last_user_focus"):
+                try:
+                    user32.SetWindowPos(
+                        _state["last_user_focus"], HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                    )
+                except Exception:
+                    pass
 
             if game or ALWAYS_ON_MODE:
                 always_on = not game
