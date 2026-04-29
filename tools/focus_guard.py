@@ -273,9 +273,13 @@ _psapi = ctypes.windll.psapi
 
 
 # 사용자 작업 도구 — 부모 프로세스가 이 목록에 있으면 자식 콘솔 절대 hide 안 함
-# 2026-04-29 사용자 확인: Antigravity는 자동 spawn하므로 보호 제외
-# (사용자가 직접 연 콘솔만 보호 — Windows Terminal / Explorer)
+# 2026-04-29 재수정: Antigravity 자식 콘솔도 사용자 작업이므로 보호 (Claude Terminal 등)
 USER_TOOL_PARENTS = {
+    "antigravity.exe",          # Antigravity IDE 안의 모든 터미널 (Claude Terminal 1~6 포함)
+    "code.exe",                 # VS Code
+    "code - insiders.exe",
+    "cursor.exe",
+    "windsurf.exe",
     "windowsterminal.exe",
     "wt.exe",
     "explorer.exe",             # 사용자가 직접 실행한 cmd
