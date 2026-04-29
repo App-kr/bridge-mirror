@@ -471,17 +471,34 @@ def already_replied(email_addr: str) -> bool:
 
 def has_prior_contact(imap_conn: imaplib.IMAP4_SSL, addr: str,
                       current_uid: str, days: int = 365) -> bool:
-    """1년이내 우리가 해당 주소로 보낸 이력이 있으면 True.
+    """1년이내 해당 주소와 대화 이력이 있으면 True.
 
-    ① 보낸편지함(TO addr) — 수동 발송 포함 전체
-    (동일인이 여러 메일을 보내도 우리가 답장 보내기 전까지는 첫 메일에만 회신)
+    ① 받은편지함에 FROM addr 읽은 메일이 있으면 = 이미 본 적 있음 (기존 접촉)
+    ② 보낸편지함(TO addr) — 수동 발송 포함 전체
+    둘 중 하나라도 해당되면 True.
     """
-    from datetime import timedelta
     since_str = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
     _result: list = []
 
     def _do_check():
-        # ① 보낸편지함 확인 (우리가 이 주소로 보낸 메일이 있으면 이미 대화 중)
+        # ① 받은편지함: 이 주소에서 온 메일 중 이미 읽은 것이 있으면 기존 접촉
+        #    (현재 처리 중인 UID는 아직 Seen이 아니므로 자동으로 제외됨)
+        try:
+            imap_conn.select("INBOX", readonly=True)
+            _, data = imap_conn.search(
+                None, f'FROM "{addr}" SEEN SINCE {since_str}'
+            )
+            if data and data[0]:
+                uids = data[0].split()
+                # current_uid 외의 메일이 있으면 과거 대화 이력
+                others = [u for u in uids if u.decode() != current_uid]
+                if others:
+                    _result.append(True)
+                    return
+        except Exception:
+            pass
+
+        # ② 보낸편지함: 우리가 이 주소로 보낸 메일이 있으면 이미 대화 중
         for folder in ('"[Gmail]/Sent Mail"', '"[Gmail]/Sent"', "Sent"):
             try:
                 typ, _ = imap_conn.select(folder, readonly=True)
