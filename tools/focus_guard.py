@@ -233,6 +233,15 @@ def should_hide(hwnd, always_on: bool):
         title_raw = get_window_title(hwnd)
         title = title_raw.lower()
 
+        # 부모가 사용자 작업 도구 (Antigravity / VSCode / Cursor / Terminal / Explorer)
+        # 면 절대 hide 안 함 — 사용자가 띄운 콘솔 보호
+        try:
+            wpid = get_window_pid(hwnd)
+            if wpid and _is_user_tool_child(wpid):
+                return False
+        except Exception:
+            pass
+
         # 화이트리스트
         for kw in WHITELIST_TITLE_KEYWORDS:
             if kw in title:
@@ -261,6 +270,91 @@ def should_hide(hwnd, always_on: bool):
 # 2026-04-28 핵심 수정: tasklist subprocess가 conhost 깜빡임을 만들어
 # 자기 자신이 만든 conhost를 hide하려는 무한 루프 발생 → ctypes 로 교체
 _psapi = ctypes.windll.psapi
+
+
+# 사용자 작업 도구 — 부모 프로세스가 이 목록에 있으면 자식 콘솔 절대 hide 안 함
+# 2026-04-29 사용자 확인: Antigravity는 자동 spawn하므로 보호 제외
+# (사용자가 직접 연 콘솔만 보호 — Windows Terminal / Explorer)
+USER_TOOL_PARENTS = {
+    "windowsterminal.exe",
+    "wt.exe",
+    "explorer.exe",             # 사용자가 직접 실행한 cmd
+    "openconsole.exe",
+}
+
+
+def _get_parent_pid(pid: int) -> int:
+    """Win32 NtQueryInformationProcess 대신 toolhelp32 활용."""
+    try:
+        # CreateToolhelp32Snapshot
+        TH32CS_SNAPPROCESS = 0x00000002
+        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snapshot == -1 or snapshot == 0:
+            return 0
+
+        class PROCESSENTRY32(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", ctypes.c_ulong),
+                ("cntUsage", ctypes.c_ulong),
+                ("th32ProcessID", ctypes.c_ulong),
+                ("th32DefaultHeapID", ctypes.c_void_p),
+                ("th32ModuleID", ctypes.c_ulong),
+                ("cntThreads", ctypes.c_ulong),
+                ("th32ParentProcessID", ctypes.c_ulong),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", ctypes.c_ulong),
+                ("szExeFile", ctypes.c_char * 260),
+            ]
+
+        entry = PROCESSENTRY32()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+        try:
+            if kernel32.Process32First(snapshot, ctypes.byref(entry)):
+                while True:
+                    if entry.th32ProcessID == pid:
+                        return entry.th32ParentProcessID
+                    if not kernel32.Process32Next(snapshot, ctypes.byref(entry)):
+                        break
+        finally:
+            kernel32.CloseHandle(snapshot)
+    except Exception:
+        pass
+    return 0
+
+
+def _get_process_name(pid: int) -> str:
+    """프로세스 이름 (소문자)."""
+    if pid <= 0:
+        return ""
+    try:
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            n = _psapi.GetModuleBaseNameW(h, None, buf, 260)
+            if n > 0:
+                return buf.value.lower()
+        finally:
+            kernel32.CloseHandle(h)
+    except Exception:
+        pass
+    return ""
+
+
+def _is_user_tool_child(pid: int) -> bool:
+    """창의 프로세스가 사용자 작업 도구 자식인지 확인 (최대 3대 거슬러 올라감)."""
+    cur = pid
+    for _ in range(3):
+        parent = _get_parent_pid(cur)
+        if parent <= 0:
+            return False
+        pname = _get_process_name(parent)
+        if pname in USER_TOOL_PARENTS:
+            return True
+        cur = parent
+    return False
 
 
 def _list_process_names_via_ctypes() -> set[str]:
