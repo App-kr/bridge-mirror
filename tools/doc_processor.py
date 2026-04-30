@@ -1896,7 +1896,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
 
         # ── 사전 계산: EDUCATION 섹션 줄 인덱스 ──
-        # EDUCATION 섹션 줄에는 RE_SCHOOL_NAMED/KR_WORKPLACE 미적용 (본인 학력 보호)
+        # 규칙: Education 섹션 내 전 세계 대학/학교명 삭제 절대 금지
+        #       Work/Experience 섹션 업체명만 삭제
+        # 2컬럼 PDF 대응: 텍스트 추출 순서가 레이아웃과 다를 수 있음
+        # → 정방향(헤더→다음섹션) + degree 인접 검사 두 가지 병용
         _page_lines = text.split("\n")
         _edu_lines: set = set()
         _edu_flag = False
@@ -1908,6 +1911,19 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _edu_flag = False
             if _edu_flag:
                 _edu_lines.add(_idx)
+        # ── 보조: 학위 키워드 인접 줄도 교육 섹션으로 간주 ──
+        # 2컬럼 PDF에서 Education 헤더 전에 교육 내용(Liberty University 등)이 추출되는 경우 보호
+        _degree_kws_edu = frozenset({
+            "degree", "bachelor", "master", "associate", "diploma",
+            "doctorate", "phd", "m.a.", "b.a.", "b.s.", "m.s.", "mba",
+            "b.ed.", "m.ed.", "b.sc.", "m.sc.", "honors", "honours",
+        })
+        for _idx, _ll in enumerate(_page_lines):
+            _ll_lower = _ll.lower()
+            if any(dk in _ll_lower for dk in _degree_kws_edu):
+                # 이 줄 ±3줄을 교육 섹션으로 추가 표시
+                for _adj in range(max(0, _idx - 3), min(len(_page_lines), _idx + 4)):
+                    _edu_lines.add(_adj)
 
         # ── 한국 학원명/도시명 redact ──
         # KR_WORKPLACE_KEYWORDS: EDUCATION 섹션 제외, 유형명(_GENERIC_TYPES_SET) 건너뜀
@@ -2039,24 +2055,11 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             _is_job_title_line = " — " in _ls or " - " in _ls and any(
                 w in _ls.lower() for w in ("teacher", "tutor", "instructor", "manager", "scholar")
             )
-            # RE_SCHOOL_NAMED: Experience 섹션 학교명 일반화
-            # - EDUCATION 섹션 제외 (본인 학력 보호)
-            # - 직업 타이틀줄(" — Teacher" 등) 제외
-            # - 인근 줄에 학위 키워드(degree/bachelor/master 등) 있으면 학력 항목 → 제외
-            _degree_kws = {"degree", "bachelor", "master", "associate", "diploma",
-                           "doctorate", "phd", "m.a.", "b.a.", "b.s.", "m.s."}
-            _ctx_start = max(0, _idx - 2)
-            _ctx_end = min(len(_page_lines), _idx + 3)
-            _near_degree = any(
-                dkw in _page_lines[_ci].lower()
-                for _ci in range(_ctx_start, _ctx_end)
-                for dkw in _degree_kws
-            )
-            if _idx not in _edu_lines and not _is_job_title_line and not _near_degree:
-                for m in RE_SCHOOL_NAMED.finditer(_ls):
-                    generic = _school_to_generic(m.group())
-                    replacement_redacts.append((m.group(), generic))
-                    all_logs.append(f"[page{page_num}] SCHOOL_NAMED→{generic}: {m.group()[:60]}")
+            # RE_SCHOOL_NAMED: PDF 경로에서 비활성화
+            # ★ 규칙: Education 섹션 전 세계 대학/학교명 삭제 절대 금지
+            # PDF 섹션 감지는 2컬럼 레이아웃에서 불안정 → RE_SCHOOL_NAMED 사용 금지
+            # Work 섹션 고용주 학교명은 KR_WORKPLACE_KEYWORDS + KR_INST_LINE으로 처리
+            # (francis parker, hillside collegiate 등 KR_WORKPLACE_KEYWORDS에 직접 등록)
             # 직업 타이틀줄 위치/괄호 태그는 job_title_replaces에서 일괄 처리 (위)
             # (JOB_PAREN_LOC / JOB_BRANCH → job_title_replaces 방식으로 통합, 갭 없이 제거)
             # 외국 도시/주 → blank redact
