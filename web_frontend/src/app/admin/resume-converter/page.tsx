@@ -100,112 +100,6 @@ function downloadFile(pf: ProcessedFile) {
 }
 
 // ────────────────────────────────────────────────────────────
-// 슬롯 행 — 각 문서 타입 1개 드롭존
-// ────────────────────────────────────────────────────────────
-function SlotRow({
-  slot,
-  slotFile,
-  onDrop,
-  onClear,
-}: {
-  slot: typeof DOC_SLOTS[number]
-  slotFile: SlotFile | null
-  onDrop: (file: File) => void
-  onClear: () => void
-}) {
-  const [isDragging, setIsDragging] = useState(false)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  const handleDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
-  const handleDragLeave = () => setIsDragging(false)
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0) onDrop(files[0])
-  }
-
-  return (
-    <div className="px-3 py-2 border-b border-[#f4f4f5] last:border-0">
-      {/* 슬롯 라벨 */}
-      <div className="flex items-center justify-between mb-1.5">
-        <span
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-          style={{ color: slot.color, backgroundColor: slot.bg }}
-        >
-          {slot.label}
-        </span>
-        {slotFile && (
-          <button
-            onClick={onClear}
-            className="text-[#9AA0A6] hover:text-[#E24B4A] p-0.5 rounded transition-colors"
-          >
-            <X size={11} />
-          </button>
-        )}
-      </div>
-
-      {/* 드롭존 */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => !slotFile && inputRef.current?.click()}
-        className={`rounded-lg transition-all ${
-          slotFile
-            ? 'border border-[#e8eaed] bg-[#fafafa]'
-            : isDragging
-              ? 'border-2 border-dashed cursor-pointer'
-              : 'border border-dashed border-[#d4d4d8] cursor-pointer hover:border-[#a1a1aa] hover:bg-[#fafafa]'
-        }`}
-        style={isDragging ? { borderColor: slot.color, backgroundColor: slot.bg } : {}}
-      >
-        {slotFile ? (
-          <div className="flex items-center gap-1.5 px-2 py-1.5">
-            {slot.id === 'photo'
-              ? <ImageIcon size={12} style={{ color: slot.color }} className="shrink-0" />
-              : <FileText  size={12} style={{ color: slot.color }} className="shrink-0" />
-            }
-            <span
-              className="text-[11px] text-[#202124] truncate flex-1 min-w-0"
-              title={slotFile.file.name}
-            >
-              {slotFile.file.name}
-            </span>
-            <span className="text-[10px] text-[#9AA0A6] shrink-0">
-              {formatSize(slotFile.file.size)}
-            </span>
-            {slotFile.processedFile && (
-              <button
-                onClick={e => { e.stopPropagation(); downloadFile(slotFile.processedFile!) }}
-                className="shrink-0 p-0.5 rounded hover:bg-[#e8eaed] transition-colors"
-                title="변환 결과 다운로드"
-              >
-                <Download size={11} style={{ color: C_PRIMARY }} />
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-1 py-2 text-[#a1a1aa]">
-            <Upload size={11} />
-            <span className="text-[11px]">드롭 또는 클릭</span>
-          </div>
-        )}
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        className="hidden"
-        accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp"
-        onChange={e => {
-          if (e.target.files?.[0]) { onDrop(e.target.files[0]); e.target.value = '' }
-        }}
-      />
-    </div>
-  )
-}
-
-// ────────────────────────────────────────────────────────────
 // 지원자 컬럼 (목록 1 / 목록 2 / ...)
 // ────────────────────────────────────────────────────────────
 function CandidateColumn({
@@ -222,6 +116,7 @@ function CandidateColumn({
   onDownloadAll: () => void
 }) {
   const [isDraggingCol, setIsDraggingCol] = useState(false)
+  const multiInputRef = useRef<HTMLInputElement | null>(null)
 
   // 컬럼 전체 드롭 → 슬롯 자동 배정
   const handleColumnDrop = (e: React.DragEvent) => {
@@ -326,17 +221,94 @@ function CandidateColumn({
         )}
       </div>
 
-      {/* 슬롯 목록 */}
-      <div className="flex-1 py-1">
-        {DOC_SLOTS.map(slot => (
-          <SlotRow
-            key={slot.id}
-            slot={slot}
-            slotFile={col.slots[slot.id]}
-            onDrop={file => setSlot(slot.id, file)}
-            onClear={() => clearSlot(slot.id)}
-          />
-        ))}
+      {/* 단일 드롭존 + 파일 목록 */}
+      <div className="flex-1 px-3 py-3 flex flex-col gap-2">
+        {/* 빈 상태: 드롭 안내 */}
+        {fileCount === 0 && (
+          <div
+            className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-[#d4d4d8] cursor-pointer hover:border-[#1D9E75] hover:bg-[#f0fdf4] transition-all"
+            onClick={() => multiInputRef.current?.click()}
+          >
+            <Upload size={22} className="mb-2 text-[#9AA0A6]" />
+            <span className="text-xs font-medium text-[#6B7280]">파일 드롭 또는 클릭</span>
+            <span className="text-[10px] text-[#c4c4c4] mt-0.5">이력서·사진·추천서 자동 분류</span>
+          </div>
+        )}
+
+        {/* 추가된 파일 리스트 */}
+        {(DOC_SLOTS as readonly typeof DOC_SLOTS[number][]).map(slot => {
+          const sf = col.slots[slot.id]
+          if (!sf) return null
+          return (
+            <div
+              key={slot.id}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#f8f9fa] border border-[#e8eaed] group"
+            >
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                style={{ color: slot.color, backgroundColor: slot.bg }}
+              >
+                {slot.label}
+              </span>
+              {slot.id === 'photo'
+                ? <ImageIcon size={11} className="shrink-0" style={{ color: slot.color }} />
+                : <FileText  size={11} className="shrink-0" style={{ color: slot.color }} />
+              }
+              <span
+                className="text-[11px] text-[#202124] truncate flex-1 min-w-0"
+                title={sf.file.name}
+              >
+                {sf.file.name}
+              </span>
+              <span className="text-[10px] text-[#9AA0A6] shrink-0">{formatSize(sf.file.size)}</span>
+              {sf.processedFile && (
+                <button
+                  onClick={e => { e.stopPropagation(); downloadFile(sf.processedFile!) }}
+                  className="shrink-0 p-0.5 rounded hover:bg-[#e8eaed] transition-colors"
+                  title="변환 결과 다운로드"
+                >
+                  <Download size={11} style={{ color: '#1D9E75' }} />
+                </button>
+              )}
+              <button
+                onClick={() => clearSlot(slot.id)}
+                className="shrink-0 p-0.5 rounded text-[#c4c4c4] hover:text-[#E24B4A] opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )
+        })}
+
+        {/* 파일 있을 때 추가 버튼 */}
+        {fileCount > 0 && (
+          <button
+            onClick={() => multiInputRef.current?.click()}
+            className="text-[11px] text-[#9AA0A6] hover:text-[#1D9E75] py-1.5 border border-dashed border-[#e8eaed] rounded-lg hover:border-[#1D9E75] transition-colors"
+          >
+            + 파일 추가
+          </button>
+        )}
+
+        {/* 숨김 input (multiple) */}
+        <input
+          ref={multiInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp"
+          onChange={e => {
+            if (e.target.files) {
+              const files = Array.from(e.target.files)
+              onUpdate(col.uid, c => {
+                const updated = { ...c.slots }
+                files.forEach(file => { updated[autoSlot(file)] = { file } })
+                return { ...c, slots: updated }
+              })
+              e.target.value = ''
+            }
+          }}
+        />
       </div>
 
       {/* 상태 메시지 */}

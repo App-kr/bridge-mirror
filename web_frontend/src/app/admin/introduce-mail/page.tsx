@@ -182,6 +182,9 @@ function IntroduceMailContent() {
       .filter(s => s && /^\d+$/.test(s))
   }
 
+  /* ── CV 직접 첨부 선택 ── */
+  const [attachCvIds, setAttachCvIds] = useState<Set<string>>(new Set())
+
   /* ── v2.0: 강사별 CV 처리 상태 (chip 표시용) ── */
   interface CvStatus {
     status: string
@@ -254,6 +257,7 @@ function IntroduceMailContent() {
           sender,
           link_expiry_days: expiryDays,
           custom_message: customMsg.trim(),
+          attach_cv_ids: Array.from(attachCvIds),
         }),
       })
       const data = await res.json()
@@ -310,7 +314,15 @@ function IntroduceMailContent() {
           <textarea
             placeholder={'강사번호 입력 (쉼표·줄바꿈 구분)\n예: 1001, 1003\n또는\n1001\n1003'}
             value={candidateInput}
-            onChange={e => setCandidateInput(e.target.value)}
+            onChange={e => {
+              setCandidateInput(e.target.value)
+              const validIds = new Set(e.target.value.split(/[\n,\s]+/).map(s => s.trim()).filter(s => /^\d+$/.test(s)))
+              setAttachCvIds(prev => {
+                const next = new Set(prev)
+                for (const id of prev) if (!validIds.has(id)) next.delete(id)
+                return next
+              })
+            }}
             rows={9}
             style={TA}
           />
@@ -336,13 +348,33 @@ function IntroduceMailContent() {
                 {candidateIds.map(id => {
                   const b = cvStatusBadge(id)
                   return (
-                    <span key={id} style={CHIP} title={b.title}>
+                    <span key={id} style={{ ...CHIP, display: 'inline-flex', alignItems: 'center', gap: 3 }} title={b.title}>
                       {id}
                       <span style={{
-                        marginLeft: 4, padding: '0 5px', borderRadius: 3,
+                        padding: '0 5px', borderRadius: 3,
                         fontSize: 11, fontWeight: 700,
                         color: b.color, background: b.bg,
                       }}>{b.label}</span>
+                      {/* CV 첨부 토글 — done 상태만 */}
+                      {cvStatuses[id]?.status === 'done' && cvStatuses[id]?.has_cv && (
+                        <button
+                          onClick={() => setAttachCvIds(prev => {
+                            const next = new Set(prev)
+                            next.has(id) ? next.delete(id) : next.add(id)
+                            return next
+                          })}
+                          title={attachCvIds.has(id) ? 'CV 첨부 해제' : 'CV 첨부 (이메일에 PDF 직접 첨부)'}
+                          style={{
+                            border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 11,
+                            padding: '1px 5px', fontWeight: 700,
+                            background: attachCvIds.has(id) ? '#DBEAFE' : '#F3F4F6',
+                            color: attachCvIds.has(id) ? '#1D4ED8' : '#9CA3AF',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          📎
+                        </button>
+                      )}
                     </span>
                   )
                 })}
@@ -491,6 +523,9 @@ function IntroduceMailContent() {
               <div>강사: <strong style={{ color: candidateIds.length ? '#111' : '#9CA3AF' }}>{candidateIds.length}명</strong></div>
               <div>구인자: <strong style={{ color: selectedIds.size ? '#111' : '#9CA3AF' }}>{selectedIds.size}개 기관</strong></div>
               <div>링크 유효: <strong>{expiryDays}일</strong></div>
+              {attachCvIds.size > 0 && (
+                <div>CV 첨부: <strong style={{ color: '#1D4ED8' }}>{attachCvIds.size}명 📎</strong></div>
+              )}
             </div>
           </div>
 
