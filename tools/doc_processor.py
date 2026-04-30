@@ -744,6 +744,9 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     # 추가 브랜드 (2026-04-28)
     "asset", "empire", "prairie think tool", "prairie",
     "gwanak", "yongsan-gu",
+    # 추가 브랜드 (2026-04-30)
+    "busan global village", "global village", "hillside collegiate",
+    "hillside", "berkeley language", "francis parker",
     # 일반 유형
     "english village", "language school", "language academy",
     "language institute", "language center", "language centre",
@@ -787,13 +790,14 @@ _GENERIC_TYPES_SET = frozenset(_GENERIC_SCHOOL_TYPES.keys())
 # "Broad Language School" → "Language School"
 # !! 줄 경계 넘어 매칭 방지: [ \t]+ 사용 (not \s+) !!
 _RE_KR_SCHOOL_PREFIX = re.compile(
+    # !! re.IGNORECASE 제거: [A-Z] prefix가 lowercase "in" 등을 매칭하던 버그 수정
+    # 예: "in Kindergarten" → IGNORECASE 있으면 매칭됨 → 제거
     r'\b[A-Z][a-zA-Z\'\-\.]+(?:[ \t]+[A-Z][a-zA-Z\'\-\.]+){0,2}[ \t]+'
     r'(Language[ \t]+School|Language[ \t]+Academy|Language[ \t]+Institute|'
     r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy)|'
     r'Teaching[ \t]+Academy|Private[ \t]+Academy|International[ \t]+School|'
     r'(?:Elementary|Primary|Secondary|Middle|High)[ \t]+School|'
     r'Kindergarten|Preschool)\b',
-    re.IGNORECASE,
 )
 
 # 이력서 섹션 헤더 (PDF 이름 추출 시 오탐 방지)
@@ -832,6 +836,9 @@ _NON_NAME_WORDS = frozenset({
     # 일반 영단어 (이름에는 없는)
     "and", "the", "for", "with", "from", "into", "about",
     "skills", "profile", "summary", "experience", "education",
+    # 교육기관 유형명 (이름 오인 방지 — Liberty University, Francis Parker Collegiate 등)
+    "university", "college", "collegiate", "polytechnic", "institute",
+    "academy", "faculty", "campus", "seminary",
 })
 
 # ── EDUCATION 섹션 보호용 헤더 감지 정규식 ──
@@ -1051,6 +1058,37 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
 
     # 한국 로마자 주소 삭제 (80-11, Jangji 1-gil 등)
     _sub(RE_KR_ROMANIZED_ADDR, "", "KR_ROMAN_ADDR")
+
+    # ── Pass 2.4b: 한국 고용주 위치줄 통합 교체 ──
+    # "[School Name], [Korean City]" → "English school, South Korea"
+    # 예: "Berkeley Language School, Busan" → "English school, South Korea"
+    #     "Hillside Collegiate, Daegu" → "English school, South Korea"
+    #     "Busan Global Village, South Korea" → "English school, South Korea"
+    # "korea", "south korea", "republic of korea" 포함 — 도시명 없이 국가명만 있는 줄도 처리
+    _kr_city_pat = re.compile(
+        r'\b(?:' + '|'.join(re.escape(c) for c in KR_KEYWORDS if len(c) > 3) + r')\b',
+        re.IGNORECASE,
+    )
+    _has_kr_workplace = any(kw in result.lower() for kw in KR_WORKPLACE_KEYWORDS
+                            if kw not in _GENERIC_TYPES_SET)
+    _has_kr_school_named = bool(RE_SCHOOL_NAMED.search(result))
+    # 줄 단위로 검사: 한국 도시 포함 + 학원/학교명 있는 짧은 줄 → 전체 교체
+    if (_has_kr_workplace or _has_kr_school_named) and not skip_school_names:
+        _new_lines = []
+        for _rl in result.split("\n"):
+            _rls = _rl.strip()
+            if (len(_rls) > 0 and len(_rls) <= 80
+                    and _kr_city_pat.search(_rls)
+                    and (any(kw in _rls.lower() for kw in KR_WORKPLACE_KEYWORDS
+                             if kw not in _GENERIC_TYPES_SET)
+                         or RE_SCHOOL_NAMED.search(_rls))):
+                log.append(f"KR_EMPLOYER_LINE→English school, South Korea: {_rls[:60]}")
+                # 원본 줄의 indentation 유지
+                _indent = _rl[:len(_rl) - len(_rl.lstrip())]
+                _new_lines.append(_indent + "English school, South Korea")
+            else:
+                _new_lines.append(_rl)
+        result = "\n".join(_new_lines)
 
     # ── Pass 2.5: 한국 도시명 처리 ──
     # "Daegu, South Korea" → "South Korea"
@@ -1593,6 +1631,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
     # PDF 첫 페이지 텍스트에서 이름 추출 (상단 영역)
     _pdf_extracted_names = []
+    # 직책/타이틀 줄: 풀텍스트만 blank, 단어 분리 금지 (educator/school 등 오탐 방지)
+    _header_title_texts: set = set()
     if len(doc) > 0:
         first_text = doc[0].get_text()
         first_lines = [l.strip() for l in first_text.split("\n") if l.strip()]
@@ -1650,6 +1690,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         # ── 인접 두 줄이 각각 단일 단어 이름인 경우 합쳐서 처리 ──
         # 예: "DéyJah" / "Burrows" → "DéyJah Burrows"
+        # 이름 탐지 후 바로 다음 줄이 직책/타이틀 설명이면 함께 blank
+        # 예: "DéyJah" / "Burrows" / "American Kindergarten & Lower Primary Educator" → 타이틀줄도 삭제
         for _pi in range(min(12, len(first_lines) - 1)):
             _l1, _l2 = first_lines[_pi], first_lines[_pi + 1]
             _w1, _w2 = _l1.split(), _l2.split()
@@ -1665,6 +1707,25 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _pdf_extracted_names.append(_l1)
                 _pdf_extracted_names.append(_l2)
                 all_logs.append(f"[pre] SPLIT_NAME: {_l1!r} + {_l2!r}")
+                # ── 이름 직후 직책/타이틀 설명줄 blank ──
+                # 이름 바로 뒤에 오는 짧은 설명줄(≤8단어, 섹션헤더 아님)도 삭제
+                # "American Kindergarten & Lower Primary Educator" 같은 직책줄 제거
+                for _adj in range(_pi + 2, min(_pi + 4, len(first_lines))):
+                    _lt = first_lines[_adj].strip()
+                    if not _lt:
+                        continue
+                    _lt_lower = _lt.lower()
+                    if _lt_lower in _RESUME_SECTION_HEADERS:
+                        break  # 섹션 헤더 → 직책줄 종료
+                    _lt_words = _lt.split()
+                    if (2 <= len(_lt_words) <= 8
+                            and not _should_skip_line(_lt_lower)):
+                        # 직책 타이틀: 단어 분리 없이 풀텍스트만 blank
+                        # (_pdf_extracted_names에 추가하면 "Educator", "Primary" 등 단독 단어가 본문 오탐)
+                        _header_title_texts.add(_lt)
+                        all_logs.append(f"[pre] NAMETITLE_BLANK: {_lt!r}")
+                    else:
+                        break
 
     # ── 헤더 페이지 자동 감지 (More About Me 인트로 페이지 스킵) ──
     # "More About Me" / "About Me" 같은 자기소개 페이지는 Page 0이지만
@@ -1701,6 +1762,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         # 줄 단위 PII 라벨 검사 → redact 대상 텍스트 수집
         redact_texts = set()
+        # 헤더 직책 타이틀 전체 blank (단어 분리 없음 — "educator" 등 본문 오탐 방지)
+        redact_texts.update(_header_title_texts)
         replacement_redacts = []  # (원문, 대체텍스트) 쌍
         job_title_replaces: list = []  # 직업 타이틀줄 전체교체: (원문, 클린텍스트) — 갭 없이 제거
 
@@ -1860,7 +1923,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # 브랜드 접두사 + 일반 유형명 → 유형명 보존 (replacement redact)
             # "Broad Language School" → "Language School"
             # !! 80자 초과 줄(서술문)은 제외 — "management for Kindergarten" 오탐 방지
-            if len(stripped) <= 80:
+            # !! has_kr 또는 has_kr_work 조건 추가 — "Homeroom Kindergarten Teacher"(한국 키워드 없음) 오탐 방지
+            if len(stripped) <= 80 and (has_kr or has_kr_work):
                 for m in _RE_KR_SCHOOL_PREFIX.finditer(stripped):
                     canonical = " ".join(w.capitalize() for w in m.group(1).split())
                     replacement_redacts.append((m.group(), canonical))
@@ -1975,12 +2039,24 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             _is_job_title_line = " — " in _ls or " - " in _ls and any(
                 w in _ls.lower() for w in ("teacher", "tutor", "instructor", "manager", "scholar")
             )
-            # RE_SCHOOL_NAMED / RE_UNIV_OF — PDF에서는 비활성화
-            # 학교명은 PII가 아님 (위치만 제거; RE_US_CITY_STATE / RE_FOREIGN_CITY 처리)
-            # 고용주 대학명(Sookmyung Women's University — Teacher) 보호
-            # if _idx not in _edu_lines and not _is_job_title_line:
-            #     for m in RE_SCHOOL_NAMED.finditer(_ls): ...
-            pass
+            # RE_SCHOOL_NAMED: Experience 섹션 학교명 일반화
+            # - EDUCATION 섹션 제외 (본인 학력 보호)
+            # - 직업 타이틀줄(" — Teacher" 등) 제외
+            # - 인근 줄에 학위 키워드(degree/bachelor/master 등) 있으면 학력 항목 → 제외
+            _degree_kws = {"degree", "bachelor", "master", "associate", "diploma",
+                           "doctorate", "phd", "m.a.", "b.a.", "b.s.", "m.s."}
+            _ctx_start = max(0, _idx - 2)
+            _ctx_end = min(len(_page_lines), _idx + 3)
+            _near_degree = any(
+                dkw in _page_lines[_ci].lower()
+                for _ci in range(_ctx_start, _ctx_end)
+                for dkw in _degree_kws
+            )
+            if _idx not in _edu_lines and not _is_job_title_line and not _near_degree:
+                for m in RE_SCHOOL_NAMED.finditer(_ls):
+                    generic = _school_to_generic(m.group())
+                    replacement_redacts.append((m.group(), generic))
+                    all_logs.append(f"[page{page_num}] SCHOOL_NAMED→{generic}: {m.group()[:60]}")
             # 직업 타이틀줄 위치/괄호 태그는 job_title_replaces에서 일괄 처리 (위)
             # (JOB_PAREN_LOC / JOB_BRANCH → job_title_replaces 방식으로 통합, 갭 없이 제거)
             # 외국 도시/주 → blank redact
