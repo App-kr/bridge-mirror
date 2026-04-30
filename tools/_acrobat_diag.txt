@@ -1,0 +1,39 @@
+=== A) Adobe Acrobat actual install locations ===
+
+  FOUND: C:\Program Files\Adobe
+
+  FOUND: C:\Program Files (x86)\Adobe
+
+  FOUND: Q:\Apps\Adobe
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\Acrobat.exe  (3597 KB)
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\AcrobatInfo.exe  (23 KB)
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\acrobat_sl.exe  (23.5 KB)
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat Elements\Acrobat Elements.exe  (2477 KB)
+
+=== B) Acrobat.exe / Acrobat Elements.exe / AcroRd32.exe in PATH (any drive) ===
+
+Looking for: Acrobat.exe
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\Acrobat.exe
+
+Looking for: AcroRd32.exe
+    C:\Windows\Installer\$PatchCache$\Managed\68AB67CA3301FFFF7706C0F070E41400\15.7.20033\acrord32.exe
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat\AcroRd32.exe
+
+Looking for: Acrobat Elements.exe
+    Q:\Apps\Adobe\ProgramFiles_x86\Acrobat DC\Acrobat Elements\Acrobat Elements.exe
+
+=== C) .pdf file association (current default) ===
+.pdf=Acrobat.Document.DC
+
+AcroExch.Document.DC -> 
+AcroExch.Document -> AcroExch.Document="C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe" "%1"
+
+=== D) HKCU UserChoice for .pdf ===
+  ProgId: Acrobat.Document.DC
+  Hash:   kR6t9wajdCw=
+
+=== E) AppPaths for Acrobat ===
+  HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Acrobat.exe = C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe
+  HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Acrobat.exe = C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe
+
+=== F) Acrobat Run/Startup entries ===

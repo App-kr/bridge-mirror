@@ -1,0 +1,50 @@
+==================================================
+PC FULL DIAGNOSIS - 60s window
+==================================================
+
+=== A) Top CPU+RAM+IO consumers (snapshot avg) ===
+
+TOP-10 CPU consumers (delta, 30s):
+
+Name                  Id CPU_Delta_s RAM_MB
+----                  -- ----------- ------
+SearchIndexer       7004       19.86  332.7
+claude             15096       13.42  735.3
+claude              9916       10.55  127.6
+dwm                 1796        5.19   99.9
+SearchProtocolHost  3324        4.98   29.8
+System                 4        4.41    3.8
+claude              7728        3.42  314.1
+MsMpEng             5180        0.83  480.9
+chrome              9848        0.69  326.6
+chrome             10292        0.66  443.9
+
+
+TOP-10 RAM consumers:
+
+Name                  Id RAM_MB
+----                  -- ------
+claude             15096  735.3
+chrome              6684  598.7
+claude              1208  542.9
+claude               784  540.9
+claude             11072  533.8
+chrome             11284  502.9
+claude             18996  488.8
+MsMpEng             5180  480.9
+chrome             10292  443.9
+Memory Compression  2444    438
+
+
+
+=== B) Disk IO heavy hitters (delta IO_Operations) ===
+
+=== C) Foreground window activity (input-steal trace) ===
+Foreground window changes (20s, 100ms poll):
+Total changes: 1
+    1x  powershell | Claude
+
+=== D) System performance ===
+CPU avg %: 12.4
+Disk %: 3.6
+RAM: 13.8 GB / 31.9 GB (43.3%)

@@ -511,13 +511,12 @@ def _get_sheet_gid() -> Optional[int]:
         return None
 
 
-def _get_sheets_service_oauth() -> Optional[object]:
+def _get_oauth_creds():
     """
-    form_watcher OAuth 토큰으로 Google Sheets API 서비스 반환.
-    spreadsheets 스코프 없으면 None.
+    form_watcher OAuth Credentials 객체 반환 (Sheets + Drive 공용).
+    토큰 없거나 만료 시 None.
     """
     try:
-        from googleapiclient.discovery import build
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
 
@@ -525,11 +524,6 @@ def _get_sheets_service_oauth() -> Optional[object]:
             return None
         tok = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
         scopes = tok.get("scopes", [])
-        # spreadsheets 스코프가 없으면 쓰기 불가
-        has_sheets_scope = any("spreadsheets" in s for s in scopes)
-        if not has_sheets_scope:
-            log.warning("OAuth 토큰에 spreadsheets 스코프 없음 — form_watcher.py --setup 재실행 필요")
-            return None
 
         creds = Credentials(
             token=tok.get("token"),
@@ -541,9 +535,35 @@ def _get_sheets_service_oauth() -> Optional[object]:
         )
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            # 갱신된 토큰 저장
             tok["token"] = creds.token
             _TOKEN_FILE.write_text(json.dumps(tok, indent=2, ensure_ascii=False), encoding="utf-8")
+        return creds
+    except Exception as e:
+        log.warning("OAuth Credentials 초기화 실패: %s", e)
+        return None
+
+
+def _get_sheets_service_oauth() -> Optional[object]:
+    """
+    form_watcher OAuth 토큰으로 Google Sheets API 서비스 반환.
+    spreadsheets 스코프 없으면 None.
+    """
+    try:
+        from googleapiclient.discovery import build
+
+        if not _TOKEN_FILE.exists():
+            return None
+        tok = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
+        scopes = tok.get("scopes", [])
+        # spreadsheets 스코프가 없으면 쓰기 불가
+        has_sheets_scope = any("spreadsheets" in s for s in scopes)
+        if not has_sheets_scope:
+            log.warning("OAuth 토큰에 spreadsheets 스코프 없음 — form_watcher.py --setup 재실행 필요")
+            return None
+
+        creds = _get_oauth_creds()
+        if not creds:
+            return None
         return build("sheets", "v4", credentials=creds, cache_discovery=False)
     except Exception as e:
         log.warning("Sheets OAuth 서비스 초기화 실패: %s", e)

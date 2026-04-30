@@ -1,0 +1,11 @@
+위치 Q:\Claudework\bridge base\tools\kill_lingering_procs.ps1:22 문자:20
++ Write-Host "`n=== 3) ?쇳쉶??RPA/釉붾줈洹?硫붿씪 daemon ?앸퀎 (kill ?꾨낫) ==="
++                    ~
+식 또는 문에서 예기치 않은 ')' 토큰입니다.
+위치 Q:\Claudework\bridge base\tools\kill_lingering_procs.ps1:33 문자:1
++ )
++ ~
+식 또는 문에서 예기치 않은 ')' 토큰입니다.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnexpectedToken
+ 

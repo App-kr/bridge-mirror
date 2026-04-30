@@ -384,6 +384,7 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     def _content_score(j: dict) -> int:
         return sum(1 for f in _SCORE_FIELDS if j.get(f) and str(j[f]).strip())
 
+    # 원래 동작 (잘 되던 상태): score >= 2 만 — 필수필드 가드 제거
     eligible = [j for j in all_clean if _content_score(j) >= 2]
     candidates = [j for j in eligible if _norm(j['job_code']) not in posted_nums]
 
@@ -410,20 +411,21 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
             candidates = list(eligible)
 
     # ── 마지막 게시 도시 조회 (같은 도시 연속 방지) ─────────────────────────
+    # 사용자 요청 (2026-04-28): SEOUL DONGDAEM, SEOUL YONGSAN 모두 SEOUL 도시로 통합
     def _extract_city(title: str) -> str:
-        """'HANAM, Korea, ...' → 'HANAM'  (앞부분 도시명 정규화)"""
+        """'SEOUL GANGNAM, Korea, ...' → 'SEOUL' (첫 단어 = 주요 도시 정규화)"""
         if not title:
             return ""
-        # ", Korea," 앞의 첫 번째 토큰이 도시명
         m = re.match(r'^([^,]+),\s*Korea', title, re.I)
-        if m:
-            return m.group(1).strip().upper()
-        return title.split(",")[0].strip().upper()
+        first_part = m.group(1).strip() if m else title.split(",")[0].strip()
+        # 첫 단어만 → SEOUL/BUSAN/INCHEON 등 주요 도시
+        first_word = first_part.split()[0] if first_part.split() else ""
+        return first_word.upper()
 
     recent_posted = conn.execute(
         """SELECT ad_title FROM ad_posts
            WHERE platform='craigslist' AND status='posted'
-           ORDER BY posted_at DESC LIMIT 3"""
+           ORDER BY posted_at DESC LIMIT 5"""
     ).fetchall()
     recent_cities = [_extract_city(r[0]) for r in recent_posted if r[0]]
 
@@ -433,17 +435,25 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
     random.shuffle(candidates)
     candidates.sort(key=_content_score, reverse=True)
 
-    # ── 같은 도시 연속 방지: 최근 3건과 동일 도시는 순위 뒤로 이동 ───────────
+    # ── 같은 주요 도시 연속 차단 (최근 5건 가중 페널티) ──────────────────────
     if recent_cities:
+        def _main_city(j: dict) -> str:
+            """잡 location 의 첫 단어 = 주요 도시"""
+            loc = (j.get('location') or '').strip()
+            return loc.split()[0].upper() if loc else ""
+
         def _city_penalty(j: dict) -> int:
-            """최근 게시 도시와 같으면 페널티(1=같음, 0=다름) → 다른 도시 우선"""
-            jcity = (j.get('location') or '').strip().upper()
-            # 세부 지역명 포함 비교 (예: 'SEOUL GANGNAM' vs 'SEOUL')
-            for rc in recent_cities:
-                if jcity == rc or jcity.startswith(rc) or rc.startswith(jcity):
-                    return 1
-            return 0
-        # content_score 내림차순 유지하면서, 같은 점수 내 다른 도시 우선 배치
+            """최근 5건 중 같은 주요 도시면 위치별 가중 페널티 (직전=200, 그 이전 -50씩)"""
+            jcity = _main_city(j)
+            if not jcity:
+                return 0
+            penalty = 0
+            for idx, rc in enumerate(recent_cities):
+                if jcity == rc:
+                    # idx=0 직전(200), idx=1 (150), idx=2 (100), idx=3 (50), idx=4 (25)
+                    penalty += max(25, 200 - idx * 50)
+            return penalty
+        # content_score 유지 + 다른 도시 우선
         candidates.sort(key=lambda j: (-_content_score(j), _city_penalty(j)))
 
     # ── 4. ad_only 필드 → generate_ad/save_draft 기대 필드명으로 매핑 ───
@@ -475,7 +485,31 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
             'content_score': _content_score(j),
         }
 
-    allowed = [_to_rpa(j) for j in candidates[:limit]]
+    # ── limit 픽업 — 도시별 라운드로빈 강제 (사용자 요청 2026-04-29) ──────────
+    # 같은 도시(첫 단어 = SEOUL/BUSAN 등) 한 번에 1개씩만 → 다른 도시 한 바퀴 후 또 1개
+    def _city_first(j):
+        loc = (j.get('location') or '').strip()
+        return loc.split()[0].upper() if loc else "?"
+
+    picked: list[dict] = []
+    used_round: set[str] = set()
+    pool = list(candidates)
+    while len(picked) < limit and pool:
+        # 이번 라운드에서 아직 안 쓴 도시 중 첫 잡 픽업
+        idx = -1
+        for i, j in enumerate(pool):
+            if _city_first(j) not in used_round:
+                idx = i
+                break
+        if idx < 0:
+            # 라운드 끝 — 새 라운드 시작
+            used_round = set()
+            idx = 0
+        pick = pool.pop(idx)
+        picked.append(pick)
+        used_round.add(_city_first(pick))
+
+    allowed = [_to_rpa(j) for j in picked]
 
     return allowed
 
@@ -2058,6 +2092,8 @@ def main():
                         help="사용자 명시 실행 확인 (자동트리거 차단 우회)")
     parser.add_argument("--manual", action="store_true",
                         help="수동 실행 확인 (GUI 런처 경유)")
+    parser.add_argument("--no-relaunch", action="store_true",
+                        help="(launcher 호환) python.exe → pythonw.exe 재시작 안 함")
     args = parser.parse_args()
 
     # ━━━ AUTO-TRIGGER GUARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2237,27 +2273,36 @@ def main():
         print("게시할 포지션 없음 (이미 전부 posted 또는 조건 없음)")
         return
 
-    # 최근 3일 내 게시된 제목 집합 (제목 중복 최종 방어선)
-    _dup_conn = get_conn()
-    _dup_rows = _dup_conn.execute(
-        """SELECT ad_title FROM ad_posts
-           WHERE platform='craigslist' AND status='posted'
-             AND posted_at > datetime('now', '-3 days')"""
-    ).fetchall()
-    _dup_conn.close()
-    _posted_titles_3d: set[str] = {r[0] for r in _dup_rows if r[0]}
+    # 이번 배치 내 동일 제목만 차단 (DB 3일 가드 제거 — 후보 풀 너무 좁아짐)
+    _posted_titles_3d: set[str] = set()
 
     # 광고 생성 + PII 강제 치환 + 보안 검증
     ads: list[tuple[dict, str, str, int]] = []
     for job in jobs:
         title, body = generate_ad(job)
 
-        # ── 제목 중복 체크 (3일 내 동일 제목 게시 차단) ──────────────────────
-        if title in _posted_titles_3d:
-            print(f"  [SKIP-DUP] {job['job_code']}: 동일 제목 3일 내 게시됨 → 스킵")
-            _log_event("warn", job["job_code"], "dup_title", "Same title posted within 3 days -- skipped")
+        # ── 본문 데이터 검증 (사용자 요청 2026-04-28: "직업리스트 이상하면 패스") ──
+        # body 에 "Job." 번호가 2개 이상 있으면 다른 잡 데이터 섞인 것 → SKIP
+        _job_count = len(re.findall(r'Job\.\s*\d+', body))
+        if _job_count > 1:
+            print(f"  [SKIP-BAD-DATA] {job['job_code']}: body 에 Job 번호 {_job_count}개 (데이터 오염) → 스킵")
+            _log_event("warn", job["job_code"], "bad_body",
+                       f"body contains {_job_count} Job numbers — data contamination, skipped")
             continue
-        _posted_titles_3d.add(title)  # 이번 배치 내 중복도 차단
+        # body 에 "Working Hour" / "Starting Date" 등 키 라인이 2회+ 등장하면 중복 잡 섞임 가능성
+        _wh_count = len(re.findall(r'Working\s*Hours?\s*:', body, re.I))
+        if _wh_count > 1:
+            print(f"  [SKIP-BAD-DATA] {job['job_code']}: Working Hours {_wh_count}회 (데이터 오염) → 스킵")
+            _log_event("warn", job["job_code"], "bad_body",
+                       f"body contains {_wh_count} Working Hours lines, skipped")
+            continue
+
+        # ── 제목 중복 체크: 이번 배치 내 동일 제목 차단만 (DB 3일 가드 제거 — 너무 빡빡함) ──
+        if title in _posted_titles_3d:
+            print(f"  [SKIP-DUP] {job['job_code']}: 이번 배치 내 동일 제목 → 스킵")
+            _log_event("warn", job["job_code"], "dup_title", "Same title in current batch -- skipped")
+            continue
+        _posted_titles_3d.add(title)  # 이번 배치 내 중복만 차단
 
         # ── [REDACTED] 강제 치환 ───────────────────────────────────────────
         body_clean, removed = redact_pii(body, preserve_email=CL_CONTACT)

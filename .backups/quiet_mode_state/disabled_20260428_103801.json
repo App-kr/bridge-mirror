@@ -1,0 +1,20 @@
+﻿[
+    "BRIDGE_GDrive_Backup_Frequent",
+    "BRIDGE_EmailAutoresponder",
+    "BRIDGE_EmailAutoresponder_Night",
+    "BRIDGE_EmailReporter",
+    "ClaudeBlog_AutoBackup",
+    "BRIDGE_IOC_Watcher",
+    "BRIDGE_Render_Keepalive",
+    "BRIDGE_DB_Backup",
+    "BridgeBlogAuto",
+    "MatjokdoDaily",
+    "TeastPost30Day",
+    "ClaudeBlog_monthly_kw",
+    "SpeakerDefaultOnLogon",
+    "ABKO_N460_AutoConnect",
+    "BridgeTelegramBot",
+    "\\Bridge\\AutoBackup5min",
+    "\\Bridge\\Afternoon-Monitor",
+    "\\Bridge\\Final-Backup"
+]

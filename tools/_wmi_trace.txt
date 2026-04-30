@@ -1,0 +1,8 @@
+=== WMI Win32_ProcessStartTrace - 60s real-time tracking ===
+Watching cmd/powershell/conhost spawn with parent details
+
+=== Spawn aggregate (60s) ===
+
+Total: 0 | Rate: 0/s
+
+=== First 30 spawn events with parent CommandLine ===

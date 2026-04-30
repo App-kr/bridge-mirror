@@ -1,0 +1,447 @@
+=== A) RunLevel=HIGHEST tasks (admin elevation -> visible UAC/cmd window) ===
+
+Name                                                                                                  User     Hidden E
+                                                                                                                      x
+                                                                                                                      e
+                                                                                                                      c
+----                                                                                                  ----     ------ -
+\ABKO_N460_AutoConnect                                                                                Scarlett   True p
+                                                                                                                      o
+                                                                                                                      w
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      s
+                                                                                                                      h
+                                                                                                                      e
+                                                                                                                      l
+                                                                                                                      l
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\BridgeBlogAuto                                                                                       Scarlett  False w
+                                                                                                                      s
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      i
+                                                                                                                      p
+                                                                                                                      t
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\BridgeTelegramBot                                                                                    Scarlett  False w
+                                                                                                                      s
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      i
+                                                                                                                      p
+                                                                                                                      t
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\MatjokdoDaily                                                                                        Scarlett  False w
+                                                                                                                      s
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      i
+                                                                                                                      p
+                                                                                                                      t
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\MicrosoftEdgeUpdateTaskMachineCore                                                                   SYSTEM    False C
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      r
+                                                                                                                      a
+                                                                                                                      m
+                                                                                                                       
+                                                                                                                      F
+                                                                                                                      i
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      s
+                                                                                                                       
+                                                                                                                      (
+                                                                                                                      x
+                                                                                                                      8
+                                                                                                                      6
+                                                                                                                      )
+                                                                                                                      \
+                                                                                                                      M
+                                                                                                                      i
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      s
+                                                                                                                      o
+                                                                                                                      f
+                                                                                                                      t
+                                                                                                                      \
+                                                                                                                      E
+                                                                                                                      d
+                                                                                                                      g
+                                                                                                                      e
+                                                                                                                      U
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      \
+                                                                                                                      M
+                                                                                                                      i
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      s
+                                                                                                                      o
+                                                                                                                      f
+                                                                                                                      t
+                                                                                                                      E
+                                                                                                                      d
+                                                                                                                      g
+                                                                                                                      e
+                                                                                                                      U
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\MicrosoftEdgeUpdateTaskMachineUA                                                                     SYSTEM    False C
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      r
+                                                                                                                      a
+                                                                                                                      m
+                                                                                                                       
+                                                                                                                      F
+                                                                                                                      i
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      s
+                                                                                                                       
+                                                                                                                      (
+                                                                                                                      x
+                                                                                                                      8
+                                                                                                                      6
+                                                                                                                      )
+                                                                                                                      \
+                                                                                                                      M
+                                                                                                                      i
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      s
+                                                                                                                      o
+                                                                                                                      f
+                                                                                                                      t
+                                                                                                                      \
+                                                                                                                      E
+                                                                                                                      d
+                                                                                                                      g
+                                                                                                                      e
+                                                                                                                      U
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      \
+                                                                                                                      M
+                                                                                                                      i
+                                                                                                                      c
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      s
+                                                                                                                      o
+                                                                                                                      f
+                                                                                                                      t
+                                                                                                                      E
+                                                                                                                      d
+                                                                                                                      g
+                                                                                                                      e
+                                                                                                                      U
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\NVIDIA GeForce Experience SelfUpdate_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}                                    False "
+                                                                                                                      C
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      r
+                                                                                                                      a
+                                                                                                                      m
+                                                                                                                       
+                                                                                                                      F
+                                                                                                                      i
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      s
+                                                                                                                      \
+                                                                                                                      N
+                                                                                                                      V
+                                                                                                                      I
+                                                                                                                      D
+                                                                                                                      I
+                                                                                                                      A
+                                                                                                                       
+                                                                                                                      C
+                                                                                                                      o
+                                                                                                                      r
+                                                                                                                      p
+                                                                                                                      o
+                                                                                                                      r
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      i
+                                                                                                                      o
+                                                                                                                      n
+                                                                                                                      \
+                                                                                                                      N
+                                                                                                                      V
+                                                                                                                      I
+                                                                                                                      D
+                                                                                                                      I
+                                                                                                                      A
+                                                                                                                       
+                                                                                                                      G
+                                                                                                                      e
+                                                                                                                      F
+                                                                                                                      o
+                                                                                                                      r
+                                                                                                                      c
+                                                                                                                      e
+                                                                                                                       
+                                                                                                                      E
+                                                                                                                      x
+                                                                                                                      p
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      i
+                                                                                                                      e
+                                                                                                                      n
+                                                                                                                      c
+                                                                                                                      e
+                                                                                                                      \
+                                                                                                                      N
+                                                                                                                      V
+                                                                                                                      I
+                                                                                                                      D
+                                                                                                                      I
+                                                                                                                      A
+                                                                                                                       
+                                                                                                                      G
+                                                                                                                      e
+                                                                                                                      F
+                                                                                                                      o
+                                                                                                                      r
+                                                                                                                      c
+                                                                                                                      e
+                                                                                                                       
+                                                                                                                      E
+                                                                                                                      x
+                                                                                                                      p
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      i
+                                                                                                                      e
+                                                                                                                      n
+                                                                                                                      c
+                                                                                                                      e
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+                                                                                                                      "
+\SpeakerDefaultOnLogon                                                                                Scarlett   True p
+                                                                                                                      o
+                                                                                                                      w
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      s
+                                                                                                                      h
+                                                                                                                      e
+                                                                                                                      l
+                                                                                                                      l
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\Bridge\Afternoon-Monitor                                                                             Scarlett   True p
+                                                                                                                      o
+                                                                                                                      w
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      s
+                                                                                                                      h
+                                                                                                                      e
+                                                                                                                      l
+                                                                                                                      l
+\Bridge\AutoBackup5min                                                                                Scarlett   True Q
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      h
+                                                                                                                      t
+                                                                                                                      y
+                                                                                                                      o
+                                                                                                                      n
+                                                                                                                       
+                                                                                                                      3
+                                                                                                                      \
+                                                                                                                      p
+                                                                                                                      y
+                                                                                                                      t
+                                                                                                                      h
+                                                                                                                      o
+                                                                                                                      n
+                                                                                                                      w
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+\Bridge\DBSyncDaemon                                                                                  Scarlett  False "
+                                                                                                                      Q
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      h
+                                                                                                                      t
+                                                                                                                      y
+                                                                                                                      o
+                                                                                                                      n
+                                                                                                                       
+                                                                                                                      3
+                                                                                                                      \
+                                                                                                                      p
+                                                                                                                      y
+                                                                                                                      t
+                                                                                                                      h
+                                                                                                                      o
+                                                                                                                      n
+                                                                                                                      w
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+                                                                                                                      "
+\Bridge\Final-Backup                                                                                  Scarlett   True p
+                                                                                                                      o
+                                                                                                                      w
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      s
+                                                                                                                      h
+                                                                                                                      e
+                                                                                                                      l
+                                                                                                                      l
+\GoogleSystem\GoogleUpdater\GoogleUpdaterTaskSystem148.0.7730.0{480B35AE-50E3-45A4-96AC-4BD419FF564A} SYSTEM     True "
+                                                                                                                      C
+                                                                                                                      :
+                                                                                                                      \
+                                                                                                                      P
+                                                                                                                      r
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      r
+                                                                                                                      a
+                                                                                                                      m
+                                                                                                                       
+                                                                                                                      F
+                                                                                                                      i
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      s
+                                                                                                                       
+                                                                                                                      (
+                                                                                                                      x
+                                                                                                                      8
+                                                                                                                      6
+                                                                                                                      )
+                                                                                                                      \
+                                                                                                                      G
+                                                                                                                      o
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      \
+                                                                                                                      G
+                                                                                                                      o
+                                                                                                                      o
+                                                                                                                      g
+                                                                                                                      l
+                                                                                                                      e
+                                                                                                                      U
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      \
+                                                                                                                      1
+                                                                                                                      4
+                                                                                                                      8
+                                                                                                                      .
+                                                                                                                      0
+                                                                                                                      .
+                                                                                                                      7
+                                                                                                                      7
+                                                                                                                      3
+                                                                                                                      0
+                                                                                                                      .
+                                                                                                                      0
+                                                                                                                      \
+                                                                                                                      u
+                                                                                                                      p
+                                                                                                                      d
+                                                                                                                      a
+                                                                                                                      t
+                                                                                                                      e
+                                                                                                                      r
+                                                                                                                      .
+                                                                                                                      e
+                                                                                                                      x
+                                                                                                                      e
+                                                                                                                      "
+
+
+
+=== B) Tasks with interval <= 5min (every-few-second culprits) ===
+
+Mins Name                   Hidden Exec                    Args                                             
+---- ----                   ------ ----                    ----                                             
+   5 \Bridge\AutoBackup5min   True Q:\Phtyon 3\pythonw.exe "Q:\Claudework\bridge base\.hooks\auto_backup.py"
+   5 \ClaudeBlog_AutoBackup   True wscript.exe             "Q:\Claudework\ClaudeBlog\auto_backup_silent.vbs"
+
+
+
+=== C) Watch active cmd/powershell spawning over 15 seconds ===
+New cmd/powershell/conhost spawned in 15s: 3

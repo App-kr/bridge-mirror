@@ -1,0 +1,64 @@
+=== A) 4-daemon ?´ì˜ ?íƒœ ===
+  BRIDGE_FocusGuard: lastRun=26-4-28 ¿ÀÀü 9:47:47 result=267009
+  BRIDGE_RAMWatchdog: lastRun=26-4-28 ¿ÀÀü 9:47:47 result=0
+  BRIDGE_GameModeGuardian: lastRun=26-4-28 ¿ÀÀü 9:47:47 result=267009
+
+=== B) focus_guard ?„ë¡œ?¸ìŠ¤ ?•ì¸ ===
+
+ProcessId age_min RAM
+--------- ------- ---
+     5388    12.2   7
+
+
+
+=== C) game_mode_guardian ?„ë¡œ?¸ìŠ¤ ?•ì¸ ===
+
+ProcessId age_min RAM
+--------- ------- ---
+     4072    12.2 4.9
+
+
+
+=== D) ForegroundLockTimeout (Windows focus protection) ===
+  Current: 4294967295 (decimal ms)
+  0 = ?¤ë¥¸ ?„ë¡œ?¸ìŠ¤ê°€ ?ìœ ë¡?²Œ ?¬ì»¤??ë¹¼ì•—?????ˆìŒ
+  200000 = 200ì´??™ì•ˆ ?¬ìš©??ì°?ë³´í˜¸
+
+=== E) 30ì´??™ì•ˆ cmd/PS spawn ?¤ì‹œê°?ì¶”ì  (parentë³? ===
+
+=== Top spawn patterns (30s window) ===
+   41x  conhost.exe <- tasklist.exe
+   21x  conhost.exe <- GONE
+   13x  conhost.exe <- bash.exe
+    8x  git.exe <- git.exe
+    7x  git.exe <- pythonw.exe
+    6x  conhost.exe <- claude.exe
+    5x  conhost.exe <- git.exe
+    2x  conhost.exe <- powershell.exe
+    2x  git.exe <- GONE
+    2x  powershell.exe <- bash.exe
+
+Total new processes spawned in 30s: 112
+Rate: 3.73 per second
+
+=== F) focus_guard ìµœê·¼ hidden ?œë™ (last 20) ===
+  2026-04-28T09:59:44 HIDDEN_EVT pid=18112 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T09:59:48 HIDDEN_EVT pid=6932 title=C:\WINDOWS\System32\WindowsPowerShell\v1.0\powersh
+  2026-04-28T09:59:50 HIDDEN_EVT pid=16348 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T09:59:50 HIDDEN_EVT pid=4064 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T09:59:51 HIDDEN_EVT pid=11068 title=C:\WINDOWS\System32\WindowsPowerShell\v1.0\powersh
+  2026-04-28T09:59:55 HIDDEN_EVT pid=4596 title=C:\WINDOWS\System32\WindowsPowerShell\v1.0\powersh
+  2026-04-28T09:59:58 HIDDEN_EVT pid=4064 title=C:\WINDOWS\System32\WindowsPowerShell\v1.0\powersh
+  2026-04-28T09:59:58 HIDDEN_EVT pid=18348 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T09:59:59 HIDDEN_EVT pid=17836 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:05 HIDDEN_EVT pid=17740 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:05 HIDDEN_EVT pid=5432 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:08 HIDDEN_EVT pid=17960 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:08 HIDDEN_POLL pid=9520 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:08 HIDDEN_EVT pid=9520 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:14 HIDDEN_EVT pid=17672 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:14 HIDDEN_EVT pid=8160 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:16 HIDDEN_EVT pid=11604 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:16 HIDDEN_EVT pid=16960 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:21 HIDDEN_EVT pid=7556 title=Q:\Code\Git\mingw64\bin\git.exe
+  2026-04-28T10:00:22 HIDDEN_EVT pid=5756 title=Q:\Code\Git\mingw64\bin\git.exe

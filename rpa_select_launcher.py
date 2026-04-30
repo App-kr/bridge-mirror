@@ -43,28 +43,30 @@ _ACCOUNT_DEFS = [
     {"file": "account2.env", "color": "#a855f7", "tag": "PURPLE", "fallback": "airelair"},
 ]
 
-# ── 팔레트 (목업 모던 다크) ──────────────────────────────────────────────────
-BG      = "#0d1017"   # 메인 배경 (가장 어두움)
-SURFACE = "#161a23"   # 헤더/패널 배경
-CARD    = "#1e2230"   # 카드 배경
-CARD_HI = "#252a3a"   # 카드 호버
-BORDER  = "#2a2f3d"   # 외곽선
-BORDER_LI = "#3a4055" # 강조 외곽선
-TEXT1   = "#f1f5f9"   # 제1 텍스트
-TEXT2   = "#94a3b8"   # 제2 텍스트
-TEXT3   = "#64748b"   # 제3 텍스트 (placeholder)
-GREEN   = "#22c55e"   # 단일계정 액션
+# ── 팔레트 (라이트 테마 — 옅은 회색 배경 + 블랙 폰트, 사용자 요청 2026-04-28) ─
+BG      = "#f3f4f6"   # 메인 배경 (옅은 회색)
+SURFACE = "#fafafa"   # 헤더/패널 배경 (더 옅은 회색 — 부드러운 톤)
+CARD    = "#ffffff"   # 카드 배경 (흰색)
+CARD_HI = "#e5e7eb"   # 카드 호버
+BORDER  = "#d1d5db"   # 외곽선 (옅은 회색)
+BORDER_LI = "#9ca3af" # 강조 외곽선
+TEXT1   = "#111827"   # 제1 텍스트 (블랙)
+TEXT2   = "#374151"   # 제2 텍스트 (진한 회색)
+TEXT3   = "#6b7280"   # 제3 텍스트 (placeholder)
+GREEN   = "#16a34a"   # 단일계정 액션 (진한 녹색)
 GREEN_D = "#15803d"
-BLUE    = "#3b82f6"   # 배치 액션
+BLUE    = "#2563eb"   # 배치 액션 (진한 파랑)
 BLUE_D  = "#1e40af"
-RED     = "#ef4444"   # 위험/중단
+RED     = "#dc2626"   # 위험/중단 (진한 빨강)
 RED_D   = "#991b1b"
-RED_BG  = "#2d0a0a"
-RED_FG  = "#f87171"
-HIDE_BG = "#1e2230"
-HIDE_FG = "#94a3b8"
-DIM     = "#1a1e2a"
-ACCENT  = "#6366f1"   # 브랜드 인디고
+RED_BG  = "#fee2e2"   # 빨간 배경 (라이트)
+RED_FG  = "#dc2626"   # 에러 텍스트 (진한 빨강)
+HIDE_BG = "#f3f4f6"
+HIDE_FG = "#374151"
+DIM     = "#f9fafb"
+ACCENT  = "#4f46e5"   # 브랜드 인디고 (진함)
+LOG_BG  = "#ffffff"   # 로그 배경 (흰색)
+LOG_FG  = "#111827"   # 로그 텍스트 (블랙)
 
 # ── 폰트 (+2pt, 자간 넓힘) ───────────────────────────────────────────────────
 FN_HEAD = ("Malgun Gothic", 15, "bold")
@@ -368,8 +370,8 @@ class RoundCanvas(tk.Canvas):
 
 
 class AccountCard(tk.Canvas):
-    """계정 카드 — 우측 체크박스(선택) + 수정 버튼(편집)."""
-    H  = 66
+    """계정 카드 — 라이트 테마 + 좌측 색 띠 + 큰 라벨 + 우측 [수정] [✓]."""
+    H  = 72   # 라벨 14pt + 이메일 9pt + 여백
     R  = 10
     CB = 22   # 체크박스 크기
 
@@ -406,6 +408,7 @@ class AccountCard(tk.Canvas):
 
     # ── 그리기 ──────────────────────────────────────────
     def _draw(self, _=None):
+        """라이트 테마 + 색 띠로 색표시 (TAG 라벨 제거, 아이디 크게)."""
         self.delete("all")
         w, h, r = self.winfo_width(), self.winfo_height(), self.R
         if w < 4:
@@ -413,14 +416,17 @@ class AccountCard(tk.Canvas):
 
         color = self.acct["color"]
 
-        # 카드 배경
+        # 카드 배경 — 라이트 테마: 옅은 회색 (선택 시 약간 강조)
+        # 색은 좌측 띠로만 표시 (사용자 요청 2026-04-28)
         if self._selected:
-            bg = self._tint(color, 0.12)
-            self._rr(0, 0, w, h, r, bg)
-            self._rr(0, 0, 5, h, 0, color)
+            self._rr(0, 0, w, h, r, "#ffffff")              # 흰색 배경
+            # 외곽선 (옅은 회색)
+            self.create_rectangle(0, 0, w-1, h-1, outline=BORDER_LI, width=1)
+            self._rr(0, 0, 6, h, 0, color)                  # 좌측 색 띠 (선명)
         else:
-            self._rr(0, 0, w, h, r, DIM)
-            self._rr(0, 0, 5, h, 0, BORDER)
+            self._rr(0, 0, w, h, r, "#f3f4f6")              # 옅은 회색 배경 (미선택)
+            self.create_rectangle(0, 0, w-1, h-1, outline=BORDER, width=1)
+            self._rr(0, 0, 6, h, 0, "#d1d5db")              # 좌측 띠 (회색)
 
         PAD_R = 14
 
@@ -434,7 +440,7 @@ class AccountCard(tk.Canvas):
 
         if self._selected:
             self._rr(cb_x1, cb_y1, cb_x2, cb_y2, 5, color)
-            # 체크마크
+            # 체크마크 (흰색)
             tx1 = cb_x1 + 4
             ty1 = cb_y1 + CB // 2
             tmx = cb_x1 + CB // 3 + 1
@@ -442,42 +448,41 @@ class AccountCard(tk.Canvas):
             tx2 = cb_x2 - 3
             ty2 = cb_y1 + 4
             self.create_line(tx1, ty1, tmx, tmy,
-                             fill=BG, width=2.5, capstyle="round")
+                             fill="#ffffff", width=2.5, capstyle="round")
             self.create_line(tmx, tmy, tx2, ty2,
-                             fill=BG, width=2.5, capstyle="round")
+                             fill="#ffffff", width=2.5, capstyle="round")
         else:
-            # 빈 체크박스 (테두리)
-            self._rr(cb_x1, cb_y1, cb_x2, cb_y2, 5, TEXT3)
-            self._rr(cb_x1 + 1, cb_y1 + 1, cb_x2 - 1, cb_y2 - 1, 4, DIM)
+            # 빈 체크박스 (외곽선만)
+            self._rr(cb_x1, cb_y1, cb_x2, cb_y2, 5, "#9ca3af")
+            self._rr(cb_x1 + 1, cb_y1 + 1, cb_x2 - 1, cb_y2 - 1, 4, "#ffffff")
 
         # ── 수정 버튼 (체크박스 왼쪽) ───────────────────
-        EDIT_W = 38
+        EDIT_W = 42
         ex2 = cb_x1 - 8
         ex1 = ex2 - EDIT_W
-        ey1, ey2 = h // 2 - 12, h // 2 + 12
+        ey1, ey2 = h // 2 - 13, h // 2 + 13
         self._edit_box = (ex1, ex2)
-        edit_bg = SURFACE if self._selected else BORDER
+        edit_bg = "#ffffff" if self._selected else "#e5e7eb"
         self._rr(ex1, ey1, ex2, ey2, 6, edit_bg)
+        self.create_rectangle(ex1, ey1, ex2-1, ey2-1, outline=BORDER, width=1)
         self.create_text((ex1 + ex2) // 2, h // 2, text="수정",
-                         fill=TEXT2, font=("Malgun Gothic", 10), anchor="center")
+                         fill=TEXT1, font=("Malgun Gothic", 10), anchor="center")
 
-        # ── 태그 뱃지 ────────────────────────────────────
-        TAG_X, TAG_Y = 16, h // 2 - 10
-        tag = self.acct["tag"]
-        tw = max(40, len(tag) * 8 + 12)
-        self._rr(TAG_X, TAG_Y, TAG_X + tw, TAG_Y + 20, 5,
-                 color if self._selected else TEXT3)
-        self.create_text(TAG_X + tw // 2, TAG_Y + 10, text=tag,
-                         fill=BG, font=FN_TAG, anchor="center")
-
-        # ── 계정명 + 이메일 ──────────────────────────────
-        LBL_X = TAG_X + tw + 12
-        tc = TEXT1 if self._selected else TEXT3
-        self.create_text(LBL_X, h // 2 - 8, text=self.acct["label"],
-                         fill=tc, font=FN_MID, anchor="w")
-        self.create_text(LBL_X, h // 2 + 10, text=self.acct["email"],
-                         fill=TEXT3 if self._selected else BORDER,
-                         font=("Consolas", 9), anchor="w")
+        # ── 계정명 (크게) + 이메일 (작게) ─────────────────
+        # TAG 라벨 박스 제거 — 좌측 색 띠로 충분 (사용자 요청)
+        LBL_X = 18  # 색 띠(6) 와 약간의 간격
+        # 라벨 = 진한 블랙, 큰 폰트 (Malgun Gothic 14 bold)
+        self.create_text(LBL_X, h // 2 - 10,
+                         text=self.acct["label"],
+                         fill=TEXT1 if self._selected else TEXT2,
+                         font=("Malgun Gothic", 14, "bold"),
+                         anchor="w")
+        # 이메일 = 옅은 회색, 작은 폰트
+        self.create_text(LBL_X, h // 2 + 12,
+                         text=self.acct["email"],
+                         fill=TEXT3,
+                         font=("Consolas", 9),
+                         anchor="w")
 
     def _rr(self, x1, y1, x2, y2, r, fill):
         if r == 0:
@@ -862,12 +867,13 @@ class AdminBoard:
         self._pump.wm_attributes("-toolwindow", True)
 
         self.root = tk.Toplevel(self._pump)
-        self.root.title("Bridge RPA Admin")
+        self.root.title("Craig")
         self.root.configure(bg=BG)
+        # 창 높이 — 헤더 70 + 본문 ~660 + 여유 (sub 제거로 60px 절약)
         self.root.geometry(f"{self.W}x760")
         self.root.resizable(True, True)
-        self.root.minsize(300, 60)
-        self.root.wm_attributes("-toolwindow", True)
+        self.root.minsize(260, 56)
+        # 2026-04-28: toolwindow 제거 (사용자 요청 — 알트탭/작업표시줄 정상 표시)
 
         _ico = _DIR / "rpa_icon.ico"
         if _ico.exists():
@@ -906,78 +912,101 @@ class AdminBoard:
     def _build(self):
         p = self.PAD
 
-        # ── 최소화 컴팩트 바 (기본 숨김) ─────────────────
-        self._compact_bar = tk.Frame(self.root, bg=SURFACE, height=44)
+        # ── 최소화 컴팩트 바 — 매우 작게 (사용자 요청 2026-04-29):
+        #     [● 도트][큰 % 글씨][종료] 만. 깜박임 + 둥근 외곽선
+        self._compact_bar = tk.Frame(self.root, bg=SURFACE,
+                                     highlightbackground=BORDER_LI,
+                                     highlightthickness=2)
+        # 깜박이는 도트
         self._cb_dot = tk.Label(self._compact_bar, text="●",
-                                font=("Consolas", 12), bg=SURFACE, fg=TEXT3)
-        self._cb_dot.pack(side="left", padx=(16, 8))
-        self._cb_lbl = tk.Label(self._compact_bar,
-                                text="대기 중",
-                                font=("Malgun Gothic", 10), bg=SURFACE, fg=TEXT2,
-                                anchor="w")
-        self._cb_lbl.pack(side="left", fill="x", expand=True)
-        RoundCanvas(self._compact_bar, h=30, width=92, fill=RED_D,
-                    text="즉시 중단", text_color="#ffffff",
-                    command=self._on_stop,
-                    font=("Malgun Gothic", 10, "bold"),
-                    ).pack(side="right", padx=10, pady=7)
+                                font=("Segoe UI", 18, "bold"),
+                                bg=SURFACE, fg=TEXT3)
+        self._cb_dot.pack(side="left", padx=(14, 6))
+        # 큰 % 텍스트 (가운데, 22pt bold)
+        self._cb_pct = tk.Label(self._compact_bar, text="대기",
+                                font=("Malgun Gothic", 16, "bold"),
+                                bg=SURFACE, fg=TEXT1)
+        self._cb_pct.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        # (호환용 dummy 위젯 — 기존 _tick 코드가 _cb_lbl/_cb_gauge 참조)
+        self._cb_lbl  = self._cb_pct       # 같은 위젯 alias
+        self._cb_gauge = tk.Canvas(self._compact_bar, height=1, width=1,
+                                   bg=SURFACE, highlightthickness=0, bd=0)
+        # _cb_gauge 는 pack 안 함 (안 보임)
+        # 종료 버튼 (완전 kill)
+        RoundCanvas(self._compact_bar, h=32, width=72, fill=RED_D,
+                    text="종료", text_color="#ffffff",
+                    command=self._on_exit,
+                    font=("Malgun Gothic", 11, "bold"),
+                    ).pack(side="right", padx=8, pady=7)
 
         # ─────────────────────────────────────────────────────────────
-        # ❶  헤더 (슬림 + 타이틀 + 상태 칩 + 도구 버튼)
+        # ❶  헤더 한 줄 (사용자 요청 2026-04-28):
+        #    [Craig] [● 상태칩] ----- [투명도] [숨기기] [종료]
         # ─────────────────────────────────────────────────────────────
-        self._hdr_frame = tk.Frame(self.root, bg=SURFACE, height=58)
+        self._hdr_frame = tk.Frame(self.root, bg=SURFACE, height=70)
         self._hdr_frame.pack(fill="x")
         self._hdr_frame.pack_propagate(False)
         hdr = self._hdr_frame
 
-        # 좌측: 브랜드 마크 + 타이틀
+        # 좌측 1: Craig 타이틀 (간단)
         brand = tk.Frame(hdr, bg=SURFACE)
-        brand.pack(side="left", padx=(p, 0), pady=12)
+        brand.pack(side="left", padx=(p, 8), pady=14)
         tk.Label(brand, text="◆", font=("Consolas", 16, "bold"),
                  bg=SURFACE, fg=ACCENT).pack(side="left", padx=(0, 8))
-        tk.Label(brand, text="BRIDGE", font=("Malgun Gothic", 14, "bold"),
+        tk.Label(brand, text="Craig", font=("Malgun Gothic", 16, "bold"),
                  bg=SURFACE, fg=TEXT1).pack(side="left")
-        tk.Label(brand, text="RPA Admin", font=("Malgun Gothic", 11),
-                 bg=SURFACE, fg=TEXT3).pack(side="left", padx=(8, 0))
 
-        # 우측: 도구 버튼 그룹
-        tools = tk.Frame(hdr, bg=SURFACE)
-        tools.pack(side="right", padx=(0, p), pady=10)
-
-        def _tool_btn(parent, text, cmd, fg=TEXT2, hover_bg=CARD_HI):
-            b = tk.Label(parent, text=text, bg=SURFACE, fg=fg,
-                         font=("Malgun Gothic", 10),
-                         padx=12, pady=8, cursor="hand2")
-            b.bind("<Button-1>", lambda e: cmd())
-            b.bind("<Enter>", lambda e: b.configure(bg=hover_bg, fg=TEXT1))
-            b.bind("<Leave>", lambda e: b.configure(bg=SURFACE, fg=fg))
-            return b
-
-        _tool_btn(tools, "✕  종료", self._on_exit, fg=RED_FG, hover_bg=RED_BG).pack(side="right", padx=(2, 0))
-        _tool_btn(tools, "▼  숨기기", self._on_hide, fg=HIDE_FG).pack(side="right", padx=(2, 0))
-
-        # ─────────────────────────────────────────────────────────────
-        # ❷  서브 헤더: 상태 칩(좌) + 투명도 슬라이더(우)
-        # ─────────────────────────────────────────────────────────────
-        sub = tk.Frame(self.root, bg=BG, height=44)
-        sub.pack(fill="x")
-        sub.pack_propagate(False)
-        # 헤더-서브 사이 미세 라인
-        tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
-
-        # 상태 칩 (둥근 박스 형태)
-        chip = tk.Frame(sub, bg=CARD, highlightbackground=BORDER,
-                        highlightthickness=1)
-        chip.pack(side="left", padx=p, pady=8)
-        self._dot = tk.Label(chip, text="●", font=("Consolas", 11),
+        # 좌측 2: 상태 칩 (외곽선 없이 깔끔)
+        self._chip_frame = tk.Frame(hdr, bg=CARD, highlightthickness=0)
+        self._chip_frame.pack(side="left", padx=(8, 0), pady=14, fill="y")
+        chip = self._chip_frame
+        self._dot = tk.Label(chip, text="●", font=("Segoe UI", 13),
                              bg=CARD, fg=TEXT3)
-        self._dot.pack(side="left", padx=(10, 6), pady=4)
+        self._dot.pack(side="left", padx=(12, 8), pady=6)
         self._st_lbl = tk.Label(chip, text="대기 중 — 작업이 없습니다",
-                                font=("Malgun Gothic", 10),
-                                bg=CARD, fg=TEXT2)
-        self._st_lbl.pack(side="left", padx=(0, 12), pady=4)
+                                font=("Malgun Gothic", 11, "bold"),
+                                bg=CARD, fg=TEXT1)
+        self._st_lbl.pack(side="left", padx=(0, 10), pady=6)
+        # 그래픽 progress bar (실제 차오름) — 사이즈 축소 (헤더 한 줄에 다 들어가게)
+        self._chip_gauge = tk.Canvas(chip, height=10, width=100,
+                                     bg=DIM, highlightthickness=1,
+                                     highlightbackground=BORDER, bd=0)
+        self._chip_gauge.pack(side="left", padx=(0, 8), pady=12)
+        self._chip_pct = tk.Label(chip, text="",
+                                  font=("Consolas", 9, "bold"),
+                                  bg=CARD, fg=TEXT2)
+        self._chip_pct.pack(side="left", padx=(0, 10), pady=6)
 
-        # 투명도 — 숨기기 아래 (서브 헤더 우측)
+        # 우측: 도구 버튼 그룹 (실제 tk.Button — 클릭 확실)
+        tools = tk.Frame(hdr, bg=SURFACE)
+        tools.pack(side="right", padx=(0, p), pady=14)
+
+        # ─ 최소화 (X 닫기는 Windows 타이틀바가 담당) — 사용자 요청 2026-04-28
+        # 클릭 시 컴팩트 모드 (상태바만)
+        _min_btn = tk.Button(tools, text="─  최소화", command=self._on_minimize,
+                             bg=SURFACE, fg=TEXT1,
+                             font=("Malgun Gothic", 11, "bold"),
+                             relief="flat", cursor="hand2",
+                             padx=14, pady=6, bd=0,
+                             activebackground=CARD_HI,
+                             activeforeground=TEXT1)
+        _min_btn.pack(side="right", padx=(4, 0))
+        _min_btn.bind("<Enter>", lambda e: _min_btn.configure(bg=CARD_HI, fg=TEXT1))
+        _min_btn.bind("<Leave>", lambda e: _min_btn.configure(bg=SURFACE, fg=TEXT1))
+
+        # ▼ 숨기기 (작업표시줄 트레이로 사라짐)
+        _hide_btn = tk.Button(tools, text="▼  숨기기", command=self._on_hide,
+                              bg=SURFACE, fg=TEXT2,
+                              font=("Malgun Gothic", 11),
+                              relief="flat", cursor="hand2",
+                              padx=14, pady=6, bd=0,
+                              activebackground=CARD_HI,
+                              activeforeground=TEXT1)
+        _hide_btn.pack(side="right", padx=(4, 0))
+        _hide_btn.bind("<Enter>", lambda e: _hide_btn.configure(bg=CARD_HI, fg=TEXT1))
+        _hide_btn.bind("<Leave>", lambda e: _hide_btn.configure(bg=SURFACE, fg=TEXT2))
+
+        # 투명도 슬라이더 (도구 버튼 좌측, 같은 줄)
         _alpha_prefs_file = LOGS_DIR / ".admin_prefs.json"
         def _load_alpha():
             try:
@@ -1003,15 +1032,29 @@ class AdminBoard:
             except Exception:
                 pass
 
-        alpha_box = tk.Frame(sub, bg=BG)
-        alpha_box.pack(side="right", padx=p, pady=8)
-        tk.Label(alpha_box, text="투명도", font=("Malgun Gothic", 9),
-                 bg=BG, fg=TEXT3).pack(side="left", padx=(0, 6))
+        # 투명도 — 한 줄에 통합 (사용자 요청 2026-04-28)
+        # [숨기기] 좌측, 슬라이더 + 라벨
+        alpha_box = tk.Frame(tools, bg=SURFACE)
+        alpha_box.pack(side="right", padx=(0, 14))
+        # 슬라이더 — length 110 (한 줄에 들어가는 길이)
         tk.Scale(alpha_box, from_=0.3, to=1.0, resolution=0.05,
-                 orient="horizontal", variable=_av, command=_on_alpha_change,
-                 length=120, bg=BG, fg=TEXT2, highlightthickness=0,
-                 sliderrelief="flat", bd=0, troughcolor=BORDER, showvalue=False,
-                 ).pack(side="left")
+                 orient="horizontal", variable=_av,
+                 command=_on_alpha_change,
+                 length=110, bg=SURFACE, fg=TEXT2,
+                 highlightthickness=0, bd=0,
+                 sliderrelief="raised",
+                 troughcolor=BORDER_LI,
+                 activebackground=ACCENT,
+                 showvalue=False,
+                 sliderlength=18,
+                 width=12,
+                 ).pack(side="left", padx=(0, 6), pady=4)
+        tk.Label(alpha_box, text="투명도",
+                 font=("Malgun Gothic", 10, "bold"),
+                 bg=SURFACE, fg=TEXT2).pack(side="left")
+
+        # 헤더 아래 미세 라인
+        tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
         # ─────────────────────────────────────────────────────────────
         # ❸  본문: 좌측 작업 패널 + 우측 로그 패널
@@ -1059,9 +1102,10 @@ class AdminBoard:
         _ghost_btn(tf, "전체 선택", self._sel_all).pack(side="left", padx=(0, 4))
         _ghost_btn(tf, "전체 해제", self._desel_all).pack(side="left")
 
-        # 계정 카드 리스트
+        # 계정 카드 리스트 — _reload_accounts 가 사용할 수 있도록 인스턴스 속성으로 보관
         cf = tk.Frame(left, bg=BG)
         cf.pack(fill="x", padx=p)
+        self._cards_frame = cf
         for i, acct in enumerate(self._accounts):
             card = AccountCard(cf, acct, on_edit=lambda i=i: self._edit(i))
             card.pack(fill="x", pady=3)
@@ -1161,30 +1205,37 @@ class AdminBoard:
         sf = tk.Frame(batch_card, bg=CARD)
         sf.pack(fill="x", padx=12, pady=(4, 8))
 
+        # spinbox + 단위 라벨 — 한 줄에 다 들어가는 사이즈 (사용자 요청 잘림 X)
         def _spin(parent, var, lo=1, hi=30, w=3):
             return tk.Spinbox(parent, from_=lo, to=hi, textvariable=var,
-                              width=w, font=("Malgun Gothic", 10, "bold"),
-                              bg=DIM, fg=TEXT1, buttonbackground=BORDER,
+                              width=w, font=("Malgun Gothic", 11, "bold"),
+                              bg="#ffffff", fg=TEXT1, buttonbackground=BORDER,
                               relief="flat", highlightthickness=1,
-                              highlightbackground=BORDER)
+                              highlightbackground=BORDER_LI,
+                              highlightcolor=BLUE,
+                              justify="center")
 
-        def _lbl(parent, text):
-            tk.Label(parent, text=text, font=("Malgun Gothic", 9),
-                     bg=CARD, fg=TEXT2).pack(side="left", padx=(3, 3))
+        def _unit(parent, text, fg=TEXT1):
+            """단위 라벨 (개/분/회) — 콤팩트."""
+            tk.Label(parent, text=text, font=("Malgun Gothic", 10, "bold"),
+                     bg=CARD, fg=fg).pack(side="left", padx=(2, 4))
 
-        self._b_cnt1  = tk.IntVar(value=3)
-        self._b_rest  = tk.IntVar(value=5)
-        self._b_cnt2  = tk.IntVar(value=2)
-        self._b_reps  = tk.IntVar(value=2)
+        # 사용자 요청 (2026-04-29): 4개 → 2분 휴식 → 3세트 (라운드B 제거)
+        self._b_cnt1  = tk.IntVar(value=4)
+        self._b_rest  = tk.IntVar(value=2)
+        self._b_cnt2  = tk.IntVar(value=0)   # 사용 안 함 (호환용)
+        self._b_reps  = tk.IntVar(value=3)
 
         _spin(sf, self._b_cnt1).pack(side="left")
-        _lbl(sf, "개 →")
+        _unit(sf, "개")
+        tk.Label(sf, text="→", font=("Malgun Gothic", 10),
+                 bg=CARD, fg=TEXT3).pack(side="left", padx=(0, 4))
         _spin(sf, self._b_rest, lo=1, hi=60).pack(side="left")
-        _lbl(sf, "분 휴식 →")
-        _spin(sf, self._b_cnt2).pack(side="left")
-        _lbl(sf, "개  ×")
+        _unit(sf, "분 휴식", fg=BLUE)
+        tk.Label(sf, text="×", font=("Malgun Gothic", 10),
+                 bg=CARD, fg=TEXT3).pack(side="left", padx=(0, 4))
         _spin(sf, self._b_reps, lo=1, hi=20, w=2).pack(side="left")
-        _lbl(sf, "회")
+        _unit(sf, "세트")
 
         # 계정스와이프 액션 버튼
         batch_btn_row = tk.Frame(batch_card, bg=CARD)
@@ -1213,8 +1264,9 @@ class AdminBoard:
         self._gauge = _ProgressGauge(batch_card)
 
     def _build_log_panel(self, parent):
-        """오른쪽 실시간 로그 패널 (모던 다크)."""
-        LOG_BG = "#0a0d13"
+        """오른쪽 실시간 로그 패널 (라이트 테마 — 글로벌 LOG_BG 사용)."""
+        # 라이트 테마 적용 — 글로벌 LOG_BG=#ffffff, LOG_FG=#111827 그대로 사용
+        # (이전엔 여기서 LOG_BG="#0a0d13" 로 덮어써 로그가 안 보였음)
 
         # 로그 헤더 (서브헤더와 동일 높이 정렬)
         lh = tk.Frame(parent, bg=SURFACE, height=58)
@@ -1250,33 +1302,55 @@ class AdminBoard:
                           relief="flat", width=8)
         sb.pack(side="right", fill="y")
 
+        # 로그 폰트 11 (사용자 요청 — 더 잘 보임)
         self._log_widget = tk.Text(
             frame,
-            bg=LOG_BG, fg="#cccccc",
-            font=("Consolas", 9),
+            bg=LOG_BG, fg=LOG_FG,
+            font=("Consolas", 11),
             relief="flat",
             bd=0,
-            padx=10, pady=8,
+            padx=12, pady=10,
             wrap="word",
             state="disabled",
             yscrollcommand=sb.set,
-            selectbackground="#333355",
+            selectbackground="#dbeafe",
             insertbackground=LOG_BG,
-            spacing1=2,
+            spacing1=3,
+            spacing3=2,
         )
         self._log_widget.pack(side="left", fill="both", expand=True)
         sb.config(command=self._log_widget.yview)
 
-        # 색상 태그
-        self._log_widget.tag_config("success", foreground="#22c55e")
-        self._log_widget.tag_config("error",   foreground="#f87171")
-        self._log_widget.tag_config("warn",    foreground="#fbbf24")
-        self._log_widget.tag_config("info",    foreground="#60a5fa")
-        self._log_widget.tag_config("dim",     foreground="#555566")
-        self._log_widget.tag_config("normal",  foreground="#cccccc")
-        self._log_widget.tag_config("ts",      foreground="#444455")
+        # 라이트 테마 색상 태그
+        self._log_widget.tag_config("success", foreground="#16a34a", font=("Consolas", 11, "bold"))
+        # 에러는 빨간 배경 + 진한 빨강 폰트 + 깜박임 (아래 _flash_error_tag 가 토글)
+        self._log_widget.tag_config("error",   foreground="#dc2626", background="#fee2e2",
+                                    font=("Consolas", 11, "bold"))
+        self._log_widget.tag_config("warn",    foreground="#ca8a04", font=("Consolas", 11, "bold"))
+        self._log_widget.tag_config("info",    foreground="#2563eb")
+        self._log_widget.tag_config("dim",     foreground="#9ca3af")
+        self._log_widget.tag_config("normal",  foreground="#111827")
+        self._log_widget.tag_config("ts",      foreground="#6b7280")
+
+        # 에러 깜박임 시작 (700ms 토글)
+        self._error_blink_state = False
+        self._start_error_blink()
 
         self._append_log("--- BRIDGE RPA 로그 시작 ---", "dim")
+
+    def _start_error_blink(self):
+        """error 태그 깜박임 — 빨간 배경 toggle (700ms)."""
+        try:
+            if self._log_widget:
+                self._error_blink_state = not self._error_blink_state
+                bg = "#fee2e2" if self._error_blink_state else "#fca5a5"
+                self._log_widget.tag_config("error", background=bg)
+        except Exception:
+            pass
+        try:
+            self.root.after(700, self._start_error_blink)
+        except Exception:
+            pass
 
     # ── 내부 유틸 ─────────────────────────────────────────────────────────────
 
@@ -1352,6 +1426,46 @@ class AdminBoard:
 
     _flush_count = 0  # see("end") / 줄수 체크 빈도 조절용
 
+    @staticmethod
+    def _clean_log_line(raw: str) -> str | None:
+        """로그 라인 정제 — URL 노이즈 제거 + 한국어 친화 (사용자 요청 2026-04-28).
+        return None 시 라인 안 보임 (스킵).
+        """
+        import re as _re
+        line = (raw or "").strip()
+        if not line:
+            return None
+        # ── 노이즈 패턴 (안 보여줌) ──
+        # "→ ?s=cat (k/...long-url)" 같은 navigation
+        if _re.match(r'^→\s*\?s=\w+\s*\(', line):
+            return None
+        # URL 라인 자체
+        if line.startswith("(k/") or line.startswith("https://"):
+            return None
+        # ── 친화적 변환 ──
+        # "[?s=area] 지역 선택" → "지역 선택"
+        line = _re.sub(r'^\s*\[\?s=\w+\]\s*', '', line)
+        # "[POST] " prefix 제거
+        line = _re.sub(r'^\[POST\]\s*', '', line)
+        # "[OK] " 강조 유지
+        # "<button>...</button>" 태그 제거
+        line = _re.sub(r'<button>([^<]+)</button>', r'\1', line)
+        # 특정 단어 더 명확하게
+        replacements = [
+            ("이전 게시물 복사 페이지 → SKIP 버튼만 명시 클릭 (re-use 절대 금지)", "이전 게시물 복사 페이지 → SKIP"),
+            ("seoul.craigslist.org → post to classifieds...", "Craigslist 새 게시 시작"),
+            ("→ Publish 완료:", "✓ 게시 완료:"),
+            ("타입: job offered 선택", "타입: 구인공고"),
+            ("카테고리: education 선택", "카테고리: education"),
+            ("이미지 업로드 (포스트당 1회만)", "이미지 1장 업로드"),
+            ("이미지 이미 업로드됨", "이미지 가드 — 재업로드 차단"),
+            ("posting title", "제목"),
+            ("description", "본문"),
+        ]
+        for old, new in replacements:
+            line = line.replace(old, new)
+        return line.strip() or None
+
     def _flush_log_queue(self):
         """200ms마다 로그 큐 드레인 — 배치 25줄로 메인스레드 부하 최소화."""
         batch: list[tuple[str, str]] = []
@@ -1365,7 +1479,12 @@ class AdminBoard:
             from datetime import datetime as _dt
             ts = _dt.now().strftime("%H:%M:%S")
             self._log_widget.configure(state="normal")
-            for line, force_tag in batch:
+            for raw_line, force_tag in batch:
+                # 라인 정제 — URL 노이즈/공통 prefix 제거
+                cleaned = self._clean_log_line(raw_line)
+                if cleaned is None:
+                    continue
+                line = cleaned
                 if force_tag:
                     tag = force_tag
                 elif any(k in line for k in ("완료", "성공", "Publish")):
@@ -1400,46 +1519,79 @@ class AdminBoard:
         self.root.after(200, self._flush_log_queue)
 
     def _tick(self):
-        # 단일/배치 어느 쪽이든 실행 중이면 busy
+        """깜박임 + Canvas 그래픽 게이지 갱신 (사용자 요청 2026-04-28)."""
         busy = self._running or self._batch_running
         if busy:
             self._idle_drawn = False
             self._blink = not self._blink
-            # 모드별 색상: 배치=BLUE, 단일=GREEN
             on_color  = BLUE  if self._batch_running else GREEN
             off_color = BLUE_D if self._batch_running else GREEN_D
             dot_fg = on_color if self._blink else off_color
             action = self._gauge_action if self._gauge_action and self._gauge_action != "준비 중..." else "작업 진행 중"
             done, total = self._gauge_done, self._gauge_total
-            # 게이지 막대 (12칸 유니코드 블록)
-            BARS = 12
-            if total > 0:
-                filled = max(0, min(BARS, int(BARS * done / total + 0.5)))
-                pct    = int(done / total * 100)
-                gauge  = "▰" * filled + "▱" * (BARS - filled)
-                meter  = f"  {gauge}  {done}/{total} ({pct}%)"
-            else:
-                # total 미정 — 바운싱 점 표시 (살아있음 표시)
-                pos = int(_time.time() * 2) % BARS
-                gauge = "▱" * pos + "▰" + "▱" * (BARS - pos - 1)
-                meter = f"  {gauge}"
-            text = f"{action}{meter}"
+
             self._dot.configure(fg=dot_fg)
-            self._st_lbl.configure(text=text, fg=TEXT1)
-            # 컴팩트 바 동기화
-            self._cb_dot.configure(fg=dot_fg)
-            self._cb_lbl.configure(text=text, fg=TEXT1)
+            self._st_lbl.configure(text=action, fg=TEXT1)
+            # 칩 외곽선 색 토글 = 깜박임
+            try:
+                self._chip_frame.configure(highlightbackground=on_color if self._blink else BORDER_LI)
+            except Exception:
+                pass
+
+            # 헤더 칩 Canvas 게이지
+            try:
+                self._chip_gauge.delete("all")
+                w = max(1, int(self._chip_gauge.winfo_width()) or 140)
+                h = max(1, int(self._chip_gauge.winfo_height()) or 12)
+                if total > 0:
+                    pct = max(0.0, min(1.0, done / total))
+                    fill_w = int(w * pct)
+                    if fill_w > 0:
+                        self._chip_gauge.create_rectangle(0, 0, fill_w, h,
+                                                         fill=on_color, outline="")
+                    self._chip_pct.configure(text=f"{done}/{total} · {int(pct*100)}%")
+                else:
+                    pos = (int(_time.time() * 4) % 10) / 10
+                    bx = int(w * pos)
+                    self._chip_gauge.create_rectangle(bx, 0, min(bx+30, w), h,
+                                                     fill=on_color, outline="")
+                    self._chip_pct.configure(text="...")
+            except Exception:
+                pass
+
+            # 컴팩트 바 — 큰 % + 깜박임 (사용자 요청 2026-04-29)
+            try:
+                self._cb_dot.configure(fg=dot_fg)
+                if total > 0:
+                    pct = max(0.0, min(1.0, done / total))
+                    self._cb_pct.configure(text=f"{int(pct*100)}%", fg=on_color)
+                else:
+                    self._cb_pct.configure(text="진행 중...", fg=on_color)
+                # 컴팩트 바 외곽선 깜박임 (on/off)
+                self._compact_bar.configure(
+                    highlightbackground=on_color if self._blink else BORDER_LI)
+            except Exception:
+                pass
         else:
             if not self._idle_drawn:
                 self._dot.configure(fg=TEXT3)
                 self._st_lbl.configure(text="대기 중 — 작업이 없습니다", fg=TEXT2)
                 self._start_btn.update_text("단일계정 포스팅하기")
                 self._start_btn.update_fill(GREEN, "#ffffff")
-                self._cb_dot.configure(fg=TEXT3)
-                self._cb_lbl.configure(text="대기 중", fg=TEXT2)
+                try: self._chip_frame.configure(highlightbackground=BORDER_LI)
+                except Exception: pass
+                try:
+                    self._chip_gauge.delete("all")
+                    self._chip_pct.configure(text="")
+                except Exception: pass
+                try:
+                    self._cb_dot.configure(fg=TEXT3)
+                    self._cb_pct.configure(text="대기", fg=TEXT2)
+                    self._compact_bar.configure(highlightbackground=BORDER_LI)
+                except Exception: pass
                 self._idle_drawn = True
-        # 깜박임 부드럽게 — 600ms
-        self.root.after(600, self._tick)
+        # 500ms 갱신 — 깜박임 + 게이지 부드럽게
+        self.root.after(500, self._tick)
 
     # ── 일반 실행 게이지 제어 ────────────────────────────────────────────────
 
@@ -1586,12 +1738,34 @@ class AdminBoard:
         EditAccountDialog(self.root, acct, on_save=_saved)
 
     def _on_add(self):
+        """계정 추가 — 추가 후 카드 다시 그리기 (사용자 요청 2026-04-28)."""
         def _added(acct_id, email):
             messagebox.showinfo("완료", f"계정 추가 완료\n{email}", parent=self.root)
+            self._reload_accounts()
         AddAccountDialog(self.root, on_added=_added)
 
     def _on_manage(self):
-        ManageAccountsDialog(self.root, self._accounts, on_changed=lambda: None)
+        """계정 관리 — 삭제/수정 후 카드 다시 그리기."""
+        ManageAccountsDialog(self.root, self._accounts, on_changed=self._reload_accounts)
+
+    def _reload_accounts(self):
+        """계정 목록 다시 로드 + 카드 재생성. 추가/삭제 라이브 반영."""
+        try:
+            new_accounts = _load_accounts()
+            # 기존 카드 모두 제거
+            for card in self._cards:
+                try: card.destroy()
+                except Exception: pass
+            self._cards.clear()
+            self._accounts = new_accounts
+            # 새 카드 생성 — 부모 frame 은 기존 카드의 첫 부모
+            cf = self._cards_frame
+            for i, acct in enumerate(self._accounts):
+                card = AccountCard(cf, acct, on_edit=lambda i=i: self._edit(i))
+                card.pack(fill="x", pady=3)
+                self._cards.append(card)
+        except Exception as e:
+            print(f"[RELOAD] 실패: {e}")
 
     # ── 실행 이벤트 ──────────────────────────────────────────────────────────
 
@@ -1629,6 +1803,7 @@ class AdminBoard:
                 try:
                     self._proc = subprocess.Popen(
                         [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
+                         "--no-relaunch",
                          "--account", acct["id"],
                          "--limit", str(count), "--no-overlay", "--manual"],
                         cwd=str(_DIR),
@@ -1731,15 +1906,15 @@ class AdminBoard:
         self._batch_btn.set_enabled(False)
         self._start_btn.set_enabled(False)
 
-        # 게이지 초기화 + 표시
+        # 게이지 초기화 + 표시 (사용자 요청 2026-04-29: 라운드B 제거)
         self._gauge_done   = 0
-        self._gauge_total  = (cnt1 + cnt2) * reps * len(selected)
+        self._gauge_total  = cnt1 * reps * len(selected)
         self._gauge_action = "배치 시작 중..."
         self._gauge_start  = _time.time()
         self._show_gauge()
 
         self._append_log(
-            f"=== 배치 시작: {len(selected)}계정 × [{cnt1}건 → {rest}분 → {cnt2}건] × {reps}회 ===",
+            f"=== 배치 시작: {len(selected)}계정 × {cnt1}건 → {rest}분 휴식 × {reps}세트 ===",
             "info")
 
         def _batch_worker():
@@ -1747,62 +1922,48 @@ class AdminBoard:
             for rep in range(1, reps + 1):
                 if not self._batch_running:
                     break
-                # ── 라운드 A ──────────────────────────────
+                # ── 세트 (cnt1 건/계정) ────────────────────
                 self.root.after(0, self._append_log,
-                                f"--- [{rep}/{reps}회] 라운드A ({cnt1}건/계정) 시작 ---", "info")
+                                f"--- 세트 [{rep}/{reps}] ({cnt1}건/계정) 시작 ---", "info")
                 self.root.after(0, self._msg,
-                                f"배치 {rep}/{reps}회 — 라운드A", "#60a5fa")
+                                f"세트 {rep}/{reps} 진행 중", "#60a5fa")
                 self.root.after(0, self._set_gauge_action,
-                                f"{rep}/{reps}회 라운드A 시작")
+                                f"세트 {rep}/{reps} 시작")
                 for i, acct in enumerate(selected, 1):
                     if not self._batch_running:
                         break
                     self.root.after(0, self._append_log,
-                                    f"=== A [{i}/{total_accts}] {acct['label']} ({cnt1}건) ===", "info")
+                                    f"=== [{i}/{total_accts}] {acct['label']} ({cnt1}건) ===", "info")
                     self._run_single(acct, cnt1)
                 if not self._batch_running:
                     break
 
-                # ── 라운드 간 휴식 ────────────────────────
-                self.root.after(0, self._append_log,
-                                f"--- [{rep}/{reps}회] {rest}분 휴식 시작 ---", "dim")
-                rest_sec = rest * 60
-                for s in range(rest_sec, 0, -1):
-                    if not self._batch_running:
-                        break
-                    if s % 30 == 0 or s <= 10:
-                        self.root.after(0, self._msg,
-                                        f"배치 {rep}/{reps}회 — 휴식 {s}초 남음", TEXT3)
-                    if s % 5 == 0 or s <= 10:
-                        self.root.after(0, self._set_gauge_action,
-                                        f"라운드 휴식 중  {s}초 남음")
-                    _time.sleep(1)
-                if not self._batch_running:
-                    break
-
-                # ── 라운드 B ──────────────────────────────
-                self.root.after(0, self._append_log,
-                                f"--- [{rep}/{reps}회] 라운드B ({cnt2}건/계정) 시작 ---", "info")
-                self.root.after(0, self._msg,
-                                f"배치 {rep}/{reps}회 — 라운드B", "#60a5fa")
-                self.root.after(0, self._set_gauge_action,
-                                f"{rep}/{reps}회 라운드B 시작")
-                for i, acct in enumerate(selected, 1):
-                    if not self._batch_running:
-                        break
+                # ── 마지막 세트가 아니면 휴식 ────────────────
+                if rep < reps:
                     self.root.after(0, self._append_log,
-                                    f"=== B [{i}/{total_accts}] {acct['label']} ({cnt2}건) ===", "info")
-                    self._run_single(acct, cnt2)
+                                    f"--- 세트 [{rep}/{reps}] 완료 — {rest}분 휴식 ---", "dim")
+                    rest_sec = rest * 60
+                    for s in range(rest_sec, 0, -1):
+                        if not self._batch_running:
+                            break
+                        if s % 30 == 0 or s <= 10:
+                            self.root.after(0, self._msg,
+                                            f"세트 {rep}/{reps} 후 휴식 {s}초", TEXT3)
+                        if s % 5 == 0 or s <= 10:
+                            self.root.after(0, self._set_gauge_action,
+                                            f"휴식 중  {s}초 남음")
+                        _time.sleep(1)
+                    if not self._batch_running:
+                        break
 
-            # ── 완료 ──────────────────────────────────────
+            # ── 전체 완료 → 사용자 요청 (2026-04-29): 잔존 없이 자동 종료 ──
             self._batch_running = False
             self.root.after(0, self._hide_gauge)
-            self.root.after(0, self._batch_btn.set_enabled, True)
-            self.root.after(0, self._start_btn.set_enabled, True)
-            self.root.after(0, self._batch_btn.update_text, "계정스와이프 포스팅시작")
-            self.root.after(0, self._msg, f"배치 완료 ({reps}회)", GREEN)
+            self.root.after(0, self._msg, f"배치 완료 ({reps}세트) — 종료 중...", GREEN)
             self.root.after(0, self._append_log,
-                            f"=== 배치 전체 완료: {reps}회 ===", "success")
+                            f"=== 배치 전체 완료: {reps}세트 — 자동 종료 ===", "success")
+            # 2초 후 _full_shutdown — 사용자가 결과 메시지 잠깐 보게
+            self.root.after(2000, self._full_shutdown)
 
         threading.Thread(target=_batch_worker, daemon=True).start()
 
@@ -1828,10 +1989,14 @@ class AdminBoard:
         _time.sleep(3)
 
     def _run_single(self, acct: dict, count: int):
-        """단일 계정 RPA 실행 (배치용 — 동기, 워커 스레드에서 호출)."""
+        """단일 계정 RPA 실행 (배치용 — 동기, 워커 스레드에서 호출).
+        ⚠️ --no-relaunch 필수: python.exe → pythonw.exe 자동 재시작 분기 우회.
+        그래야 stdout 이 launcher 로 캡처됨.
+        """
         try:
             self._proc = subprocess.Popen(
                 [_PYTHON_EXE, "-X", "utf8", "-u", SCRIPT,
+                 "--no-relaunch",       # ← 핵심: pythonw 재시작 분기 우회
                  "--account", acct["id"],
                  "--limit", str(count), "--no-overlay", "--manual"],
                 cwd=str(_DIR),
@@ -1971,10 +2136,86 @@ class AdminBoard:
     def _on_hide(self):
         self.root.withdraw()
 
+    def _on_minimize(self):
+        """[─ 최소화] — 매우 작은 컴팩트 바 (사용자 요청 2026-04-29: 최대한 작게)."""
+        try:
+            x = self.root.winfo_x()
+            y = self.root.winfo_y()
+            # 280x60 — % 큰 글씨 + 종료 버튼만 들어감
+            self.root.geometry(f"280x60+{x}+{y}")
+            # _on_resize 자동으로 _enter_compact 호출
+        except Exception:
+            pass
+
     def _on_exit(self, _=None):
-        """X 버튼 — 실행 중 작업 종료 후 창 닫기."""
-        self._on_stop()
-        self._on_close()
+        """[X] / [종료] 버튼 — 항상 강제 완전 종료 보장 (2026-04-28)."""
+        # 작업 진행 중 표시 정리
+        try:
+            self._batch_running = False
+            self._running = False
+        except Exception:
+            pass
+        # 즉시 _full_shutdown — 작업 중이라도 사용자가 X 누르면 무조건 종료
+        try:
+            self._msg("종료 중...", RED_FG)
+        except Exception:
+            pass
+        # 0.1초 뒤 강제 종료 (UI 메시지 잠깐 보이게)
+        try:
+            self.root.after(100, self._full_shutdown)
+        except Exception:
+            self._full_shutdown()
+
+    def _full_shutdown(self):
+        """RPA 자식 프로세스 + chromedriver + launcher 자체 완전 종료 (좀비 0).
+        2026-04-28: cmd 깜박임 제거 — psutil.kill() 만 사용 (taskkill 외부 호출 X).
+        """
+        # 1. RPA 관련 프로세스 모두 psutil 로 in-process kill (cmd 창 안 뜸)
+        try:
+            import psutil as _psu
+            my_pid = os.getpid()
+            for p in _psu.process_iter(["pid", "name", "cmdline"]):
+                try:
+                    pid = p.info.get("pid")
+                    if not pid or pid == my_pid:
+                        continue
+                    nm = (p.info.get("name") or "").lower()
+                    cl = " ".join(p.info.get("cmdline") or []).lower()
+                    # chromedriver: 모두 RPA 전용
+                    if nm == "chromedriver.exe":
+                        try: p.kill()
+                        except Exception: pass
+                        continue
+                    # chrome: RPA 자식만 (cmdline 검사)
+                    if nm == "chrome.exe":
+                        if any(k in cl for k in [
+                            "user-data-dir=q:\\claudework", "user-data-dir=q:/claudework",
+                            "accounts.craigslist", "post.craigslist",
+                        ]):
+                            try: p.kill()
+                            except Exception: pass
+                        continue
+                    # python: craigslist_auto_rpa / overlay 자식
+                    if nm in ("python.exe", "pythonw.exe"):
+                        if "craigslist_auto_rpa" in cl or "rpa_overlay" in cl:
+                            try: p.kill()
+                            except Exception: pass
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        # 2. lock/HWND 정리
+        try: (LOGS_DIR / ".rpa_running.lock").unlink(missing_ok=True)
+        except Exception: pass
+        try: ADMIN_HWND_FILE.unlink(missing_ok=True)
+        except Exception: pass
+        # 3. tk 창 destroy
+        try: self.root.destroy()
+        except Exception: pass
+        try: self._pump.destroy()
+        except Exception: pass
+        # 4. 즉시 강제 종료 (atexit 우회)
+        os._exit(0)
 
     def run(self):
         self._pump.mainloop()
@@ -1995,6 +2236,38 @@ if __name__ == "__main__":
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
             )
             sys.exit(0)
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # OS named mutex — 절대 중복 실행 차단 (사용자 요청 2026-04-28)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    try:
+        import ctypes as _ct_mutex
+        from ctypes import wintypes as _wt
+        _kernel32 = _ct_mutex.windll.kernel32
+        _kernel32.CreateMutexW.argtypes = [_ct_mutex.c_void_p, _wt.BOOL, _wt.LPCWSTR]
+        _kernel32.CreateMutexW.restype = _wt.HANDLE
+        _MUTEX_NAME = "Global\\BRIDGE_RPA_LAUNCHER_SINGLE_INSTANCE_2026"
+        _mutex_handle = _kernel32.CreateMutexW(None, True, _MUTEX_NAME)
+        # ERROR_ALREADY_EXISTS = 183 → 이미 다른 launcher 가 잡고 있음
+        ERROR_ALREADY_EXISTS = 183
+        if _kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            # 이미 살아있는 launcher 가 있음 — hwnd 파일로 그 창을 전면 표시
+            try:
+                if ADMIN_HWND_FILE.exists():
+                    raw = ADMIN_HWND_FILE.read_text(encoding="utf-8").strip()
+                    hwnd_str = raw.split(":", 1)[0]
+                    hwnd = _safe_hwnd(hwnd_str)
+                    if hwnd:
+                        ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                        _bring_hwnd_to_front(hwnd)
+            except Exception:
+                pass
+            # 새 인스턴스 즉시 종료 — 무조건
+            sys.exit(0)
+        # mutex 잡음 → 이 launcher 가 정식 인스턴스. 종료 시까지 mutex 보유 (프로세스 종료 시 자동 해제)
+    except Exception:
+        # mutex 시스템 실패 시 기존 hwnd 체크 분기로 폴백
+        pass
 
     # 단일 인스턴스 — 이미 실행 중이면 창 복원
     # ⚠️ 좀비 pythonw 가 hidden 상태로 살아있으면 ShowWindow 가 화면에 안 뜨고
@@ -2041,15 +2314,17 @@ if __name__ == "__main__":
 
             if (hwnd and ctypes.windll.user32.IsWindow(hwnd)
                     and pid_alive and proc_is_launcher):
-                ctypes.windll.user32.ShowWindow(hwnd, 5)
+                # 살아있는 정상 launcher 발견 — 절대 새 인스턴스 만들지 않음
+                # SW_RESTORE(9) 로 최소화/숨김 모두 복원 + 강제 전면
+                ctypes.windll.user32.ShowWindow(hwnd, 9)
                 _bring_hwnd_to_front(hwnd)
-                # 창이 실제 visible 상태가 됐는지 확인 (hidden/minimized 잔존 방지)
+                # visible 확인 — visible True 면 무조건 sys.exit (중복 방지 최우선)
                 try:
                     import time as _t
                     _t.sleep(0.3)
                     if ctypes.windll.user32.IsWindowVisible(hwnd):
                         sys.exit(0)
-                    # visible 안 됨 → 좀비로 간주, kill 후 새 인스턴스
+                    # visible 가 끝까지 False — 좀비로 판정
                     print(f"[stale] hwnd {hwnd} not visible → killing PID {pid}")
                     try:
                         import psutil as _psu
@@ -2061,11 +2336,31 @@ if __name__ == "__main__":
                         except Exception:
                             pass
                 except Exception:
+                    # 예외 시에도 안전하게 종료 (중복 인스턴스 안 만듦)
                     sys.exit(0)
             else:
-                # stale: PID/HWND 죽었거나 다른 프로세스가 PID 재사용
-                if pid_alive and not proc_is_launcher:
-                    print(f"[stale] PID {pid} alive but not launcher → ignoring")
+                # PID 죽었거나 다른 프로세스. 또 한 번 launcher 살아있는지 cmdline 으로 직접 검사
+                # — psutil 정확도 보강 (간혹 stale hwnd 파일만 남았는데 다른 launcher 가 살아있을 때)
+                try:
+                    import psutil as _psu
+                    other_alive = False
+                    my_pid = os.getpid()
+                    for p in _psu.process_iter(["pid", "name", "cmdline"]):
+                        try:
+                            if p.info["pid"] == my_pid:
+                                continue
+                            cl = " ".join(p.info.get("cmdline") or []).lower()
+                            if "rpa_select_launcher" in cl:
+                                other_alive = True
+                                print(f"[stale-but-alive] launcher PID {p.info['pid']} 살아있음 → 새 인스턴스 종료")
+                                # 그쪽 hwnd 모르니 일단 그쪽이 알아서 보이도록 하고 종료
+                                sys.exit(0)
+                        except Exception:
+                            continue
+                    if not other_alive and pid_alive and not proc_is_launcher:
+                        print(f"[stale] PID {pid} alive but not launcher → ignoring")
+                except Exception:
+                    pass
         except Exception:
             pass
         ADMIN_HWND_FILE.unlink(missing_ok=True)

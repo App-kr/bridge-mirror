@@ -1,0 +1,117 @@
+=== A) Other BRIDGE Python scripts using subprocess WITHOUT CREATE_NO_WINDOW ===
+
+File                                              Lines
+----                                              -----
+tools\bridge_control.py                               5
+tools\bridge_backup.py                                2
+tools\bridge_desktop_agent.py                         2
+scripts\daily_backup_runner.py                        2
+cl_manual_login.py                                    1
+backup_before_restore_0414\craigslist_auto_rpa.py     1
+
+
+
+=== B) Currently running cmd.exe / powershell.exe (admin or system) ===
+
+  PID Parent Name           Owner         CmdLine                                                                      
+  --- ------ ----           -----         -------                                                                      
+ 9932   9916 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+10820  10808 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+14088  14036 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+14096  14044 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+12936   6704 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+17208  10024 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+11648  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 28 --height 79 --signa
+                                          l 0x588 --server 0x580                                                       
+ 8488  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+19580  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 28 --height 79 --signa
+                                          l 0x5c0 --server 0x5bc                                                       
+19804  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+ 8032  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 28 --height 79 --signa
+                                          l 0x620 --server 0x61c                                                       
+14236  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+19924  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 28 --height 79 --signa
+                                          l 0x658 --server 0x65c                                                       
+20152  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+16928  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 28 --height 79 --signa
+                                          l 0x6b4 --server 0x6b0                                                       
+20396  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+11704  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 27 --height 79 --signa
+                                          l 0x710 --server 0x70c                                                       
+19764  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command "c
+                                          d Q:\Claudework; claude --model claude-sonnet-4-6"                           
+23104   4348 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+16924  20024 conhost.exe    TACO\Scarlett \\?\C:\WINDOWS\system32\conhost.exe --headless --width 80 --height 30 --signa
+                                          l 0x4b8 --server 0x4c8                                                       
+22936  20024 powershell.exe TACO\Scarlett C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noexit -command "t
+                                          ry { . \"q:\Antigravity\Antigravity\resources\app\out\vs\workbe              
+ 8916  24364 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+26000   8428 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+20536  15100 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+19780  23520 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+23256   1460 cmd.exe        TACO\Scarlett C:\WINDOWS\system32\cmd.exe /c ""Q:\Code\Node\npm.cmd" run dev "             
+22452  23256 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+19404  11692 cmd.exe        TACO\Scarlett C:\WINDOWS\system32\cmd.exe /d /s /c next dev -p 3002                        
+11012  13324 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+16608  21140 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+ 1428   8492 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+26456  21824 conhost.exe    TACO\Scarlett \??\C:\WINDOWS\system32\conhost.exe 0x4                                      
+12536   6920 powershell.exe TACO\Scarlett C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Executi
+                                          onPolicy Bypass -File "Q:\Claudework\bridge base\tools\trace_cm              
+
+
+
+=== C) Recent task-scheduler events (last 30 min) ===
+
+LastRun              Name                                  Result Exec                                                 
+-------              ----                                  ------ ----                                                 
+26-4-28 오전 9:02:02 \ClaudeBlog_AutoBackup                     0 wscript.exe                                          
+26-4-28 오전 9:02:02 \AgenticOS_Orchestrator                    1 "Q:\Phtyon 3\pythonw.exe"                            
+26-4-28 오전 9:00:00 \Bridge\Final-Backup              4294770688 powershell                                           
+26-4-28 오전 9:00:00 \Bridge\AutoBackup5min                     1 Q:\Phtyon 3\pythonw.exe                              
+26-4-28 오전 9:00:00 \MatjokdoDaily                             0 wscript.exe                                          
+26-4-28 오전 9:00:00 \BRIDGE_EmailAutoresponder                 0 Q:\Phtyon 3\pythonw.exe                              
+26-4-28 오전 9:00:00 \BRIDGE_IOC_Watcher                        0 Q:\Phtyon 3\pythonw.exe                              
+26-4-28 오전 8:51:51 \BRIDGE_Render_Keepalive                   0 powershell                                           
+26-4-28 오전 8:39:39 \BRIDGE_RAMWatchdog                        0 Q:\Phtyon 3\pythonw.exe                              
+26-4-28 오전 8:39:39 \MicrosoftEdgeUpdateTaskMachineUA          0 C:\Program Files (x86)\Microsoft\EdgeUpdate\Microsoft
+                                                                  EdgeUpdate.exe                                       
+26-4-28 오전 8:37:37 \Bridge_TgCommander                        0 wscript.exe                                          
+
+
+
+=== D) Conhost (cmd window host) processes ===
+
+ProcessId ParentProcessId ParentName                     
+--------- --------------- ----------                     
+     9932            9916 VPWalletDaemon.exe             
+    10820           10808 NVIDIA Web Helper.exe          
+    14088           14036                                
+    14096           14044                                
+    12936            6704 GoogleDriveFS.exe              
+    17208           10024 claude.exe                     
+    11648           20024 Antigravity.exe                
+    19580           20024 Antigravity.exe                
+     8032           20024 Antigravity.exe                
+    19924           20024 Antigravity.exe                
+    16928           20024 Antigravity.exe                
+    11704           20024 Antigravity.exe                
+    23104            4348 claude.exe                     
+    16924           20024 Antigravity.exe                
+     8916           24364 language_server_windows_x64.exe
+    26000            8428 claude.exe                     
+    20536           15100 claude.exe                     
+    19780           23520 bash.exe                       
+    22452           23256 cmd.exe                        
+    11012           13324 claude.exe                     
+    16608           21140 python.exe                     
+     1428            8492 bash.exe                       
+    26456           21824 bash.exe                       
+    21952           19052                                
+
+
