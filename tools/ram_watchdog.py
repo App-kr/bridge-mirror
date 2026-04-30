@@ -106,32 +106,108 @@ def log(event: dict):
 
 
 def list_processes():
-    """WMIC 대안 — Get-CimInstance via PowerShell."""
-    ps_cmd = (
-        "Get-CimInstance Win32_Process | "
-        "Select-Object ProcessId,ParentProcessId,Name,CommandLine,CreationDate,WorkingSetSize | "
-        "ConvertTo-Json -Depth 3 -Compress"
-    )
-    try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-OutputFormat", "Text", "-Command", ps_cmd],
-            capture_output=True, text=True, timeout=30,
-            encoding="utf-8", errors="replace",
-            creationflags=0x08000000,
-        )
-        if out.returncode != 0:
-            log({"event": "PS_FAIL", "rc": out.returncode, "err": (out.stderr or "")[:200]})
-            return []
-        raw = (out.stdout or "").strip()
-        if not raw:
-            return []
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            data = [data]
-        return data
-    except Exception as e:
-        log({"event": "LIST_FAIL", "err": str(e)[:200]})
+    """ctypes 직접 — powershell spawn 없음 (30분마다 conhost 깜빡임 차단).
+
+    2026-04-30: 이전 powershell ConvertTo-Json 호출이 30분마다 conhost spawn
+    (CREATE_NO_WINDOW 적용해도 conhost 프로세스 자체는 attach).
+    EnumProcesses + GetModuleBaseNameW + NtQueryInformationProcess 로 대체.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    psapi = ctypes.windll.psapi
+    kernel32 = ctypes.windll.kernel32
+    ntdll = ctypes.windll.ntdll
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    PROCESS_VM_READ = 0x0010
+
+    # 1) PID 목록
+    arr = (ctypes.c_ulong * 8192)()
+    cb_needed = ctypes.c_ulong()
+    if not psapi.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(cb_needed)):
+        log({"event": "ENUM_FAIL"})
         return []
+    pid_count = cb_needed.value // ctypes.sizeof(ctypes.c_ulong)
+
+    # 2) 각 PID 의 정보 수집
+    results = []
+    for i in range(pid_count):
+        pid = arr[i]
+        if pid == 0:
+            continue
+
+        h = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, False, pid
+        )
+        if not h:
+            continue
+
+        try:
+            # 이름
+            name_buf = ctypes.create_unicode_buffer(260)
+            if psapi.GetModuleBaseNameW(h, None, name_buf, 260) == 0:
+                continue
+            name = name_buf.value
+
+            # 메모리
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+            pmc = PROCESS_MEMORY_COUNTERS()
+            pmc.cb = ctypes.sizeof(pmc)
+            ws_size = 0
+            if psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb):
+                ws_size = pmc.WorkingSetSize
+
+            # 생성 시각 (FILETIME)
+            creation = wintypes.FILETIME()
+            exit_ft = wintypes.FILETIME()
+            kernel_ft = wintypes.FILETIME()
+            user_ft = wintypes.FILETIME()
+            create_str = ""
+            if kernel32.GetProcessTimes(
+                h, ctypes.byref(creation), ctypes.byref(exit_ft),
+                ctypes.byref(kernel_ft), ctypes.byref(user_ft),
+            ):
+                ft = (creation.dwHighDateTime << 32) | creation.dwLowDateTime
+                # FILETIME (100ns ticks since 1601) -> Unix epoch
+                if ft > 0:
+                    UNIX_EPOCH_DELTA = 11644473600
+                    epoch_sec = (ft / 10_000_000.0) - UNIX_EPOCH_DELTA
+                    create_str = datetime.fromtimestamp(epoch_sec).strftime(
+                        "%Y%m%d%H%M%S"
+                    )
+
+            # CommandLine 은 NtQueryInformationProcess + PEB 읽기 필요
+            # 단순화: 매칭 패턴이 process name 또는 module path 에 있는지로 판단
+            full_path = ctypes.create_unicode_buffer(1024)
+            full_path_str = ""
+            if psapi.GetModuleFileNameExW(h, None, full_path, 1024) > 0:
+                full_path_str = full_path.value
+
+            results.append({
+                "ProcessId": pid,
+                "ParentProcessId": 0,  # 부모 PID 는 미수집 (필요시 별도)
+                "Name": name,
+                "CommandLine": full_path_str,  # 풀 경로 (CommandLine 대용)
+                "CreationDate": create_str,
+                "WorkingSetSize": ws_size,
+            })
+        finally:
+            kernel32.CloseHandle(h)
+
+    return results
 
 
 def is_protected(cmdline: str, name: str) -> bool:
@@ -181,13 +257,18 @@ def parse_cim_date(s):
 
 
 def kill_pid(pid: int) -> bool:
+    """ctypes TerminateProcess — taskkill subprocess 없음 (conhost spawn 0)."""
     try:
-        out = subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(pid)],
-            capture_output=True, text=True, timeout=10,
-            creationflags=0x08000000,
-        )
-        return out.returncode == 0
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_TERMINATE = 0x0001
+        h = kernel32.OpenProcess(PROCESS_TERMINATE, False, int(pid))
+        if not h:
+            return False
+        try:
+            return bool(kernel32.TerminateProcess(h, 1))
+        finally:
+            kernel32.CloseHandle(h)
     except Exception:
         return False
 
