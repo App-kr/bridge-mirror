@@ -1586,34 +1586,75 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
     if len(doc) > 0:
         first_text = doc[0].get_text()
         first_lines = [l.strip() for l in first_text.split("\n") if l.strip()]
-        for line in first_lines[:5]:  # 상위 5줄만
+
+        # ── 스페이스 장식체 이름 감지: "A RY A M OH AN KA" → "ARYA MOHANKA" ──
+        # 패턴: 공백으로 분리된 1~3자 대문자 토큰이 4개 이상 연속
+        for _fl in first_lines[:6]:
+            _toks = _fl.split()
+            if (len(_toks) >= 4
+                    and all(1 <= len(t) <= 3 and t.isupper() for t in _toks)):
+                _collapsed = re.sub(r'\s+', '', _fl)  # "ARYAMOHANKA"
+                # 2~4단어로 분리 시도 (단어 경계를 추정하기 어려우므로 전체 collapsed 삭제)
+                _pdf_extracted_names.append(_fl)        # 원문 그대로 ("A RY A M OH AN KA")
+                _pdf_extracted_names.append(_collapsed)  # 합친 것 ("ARYAMOHANKA")
+                all_logs.append(f"[pre] SPACED_NAME: {_fl!r} → {_collapsed!r}")
+
+        for line in first_lines[:6]:  # 상위 6줄 (이전 5줄에서 확장)
+            # ── suffix 제거: "MiCaila Rae Holland, M.A.T." → "MiCaila Rae Holland" ──
+            _line_clean = re.sub(
+                r',?\s+(?:[A-Z]\.){1,4}[A-Z]?\.?\s*$'   # ", M.A.T." / "Ph.D."
+                r'|,?\s+(?:Jr|Sr|II|III|IV|Esq)\.?\s*$',  # ", Jr." etc.
+                '', line).strip()
             # 이름 패턴: 2~5단어, 각 첫글자 대문자, 짧은 줄
-            if len(line) < 60 and not _should_skip_line(line.lower()):
+            if len(_line_clean) < 60 and not _should_skip_line(_line_clean.lower()):
                 # 섹션 헤더 제외 (PROFESSIONAL SUMMARY 등)
-                if line.strip().lower() in _RESUME_SECTION_HEADERS:
+                if _line_clean.strip().lower() in _RESUME_SECTION_HEADERS:
                     continue
                 # ALL-CAPS 2+단어 → 섹션 제목으로 간주 (이름은 보통 Mixed Case)
                 # 단, 2단어이고 각 단어가 짧으면(≤8자) 성씨일 가능성 → 개별 추가
-                if line.isupper() and len(line.split()) >= 2:
-                    _caps_words = line.split()
+                if _line_clean.isupper() and len(_line_clean.split()) >= 2:
+                    _caps_words = _line_clean.split()
                     if len(_caps_words) == 2 and all(len(w) <= 8 for w in _caps_words):
-                        _pdf_extracted_names.append(line)  # "VAN ZYL" 전체
+                        _pdf_extracted_names.append(_line_clean)
                         for _cw in _caps_words:
                             if len(_cw) >= 3:
-                                _pdf_extracted_names.append(_cw)  # "VAN", "ZYL" 개별
+                                _pdf_extracted_names.append(_cw)
                     continue
-                words = line.split()
-                # 주소/일반 단어 포함 줄은 이름이 아님 (Zama Zama Street, Phase 1 등)
+                words = _line_clean.split()
+                # 주소/일반 단어 포함 줄은 이름이 아님
                 if any(w.lower() in _NON_NAME_WORDS for w in words):
                     continue
                 if 2 <= len(words) <= 5 and all(
-                    w[0].isupper() or w in ("de", "van", "von", "del", "K.", "K")
+                    (w[0].isupper() if w else False) or w in ("de", "van", "von", "del", "K.", "K")
                     for w in words if w
                 ):
-                    _pdf_extracted_names.append(line)
+                    _pdf_extracted_names.append(_line_clean)
+                    # suffix 제거 전 원문도 추가 (검색 일치 위해)
+                    if _line_clean != line:
+                        _pdf_extracted_names.append(line)
                     for w in words:
-                        if len(w) >= 3 and w[0].isupper() and w.lower() not in _NON_NAME_WORDS:
-                            _pdf_extracted_names.append(w)
+                        # 쉼표 등 후처리
+                        w_clean = w.rstrip(",.;:")
+                        if len(w_clean) >= 3 and w_clean[0].isupper() and w_clean.lower() not in _NON_NAME_WORDS:
+                            _pdf_extracted_names.append(w_clean)
+
+        # ── 인접 두 줄이 각각 단일 단어 이름인 경우 합쳐서 처리 ──
+        # 예: "DéyJah" / "Burrows" → "DéyJah Burrows"
+        for _pi in range(min(12, len(first_lines) - 1)):
+            _l1, _l2 = first_lines[_pi], first_lines[_pi + 1]
+            _w1, _w2 = _l1.split(), _l2.split()
+            if (len(_w1) == 1 and len(_w2) == 1
+                    and 2 <= len(_l1) <= 20 and 2 <= len(_l2) <= 20
+                    and _l1[0].isupper() and _l2[0].isupper()
+                    and not _should_skip_line(_l1.lower())
+                    and not _should_skip_line(_l2.lower())
+                    and not any(w in _l1.lower() for w in _NON_NAME_WORDS)
+                    and not any(w in _l2.lower() for w in _NON_NAME_WORDS)):
+                _combined = f"{_l1} {_l2}"
+                _pdf_extracted_names.append(_combined)
+                _pdf_extracted_names.append(_l1)
+                _pdf_extracted_names.append(_l2)
+                all_logs.append(f"[pre] SPLIT_NAME: {_l1!r} + {_l2!r}")
 
     # ── 헤더 페이지 자동 감지 (More About Me 인트로 페이지 스킵) ──
     # "More About Me" / "About Me" 같은 자기소개 페이지는 Page 0이지만
