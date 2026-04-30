@@ -278,18 +278,20 @@ def should_hide(hwnd, always_on: bool):
 _psapi = ctypes.windll.psapi
 
 
-# 사용자 작업 도구 — 부모 프로세스가 이 목록에 있으면 자식 콘솔 절대 hide 안 함
-# 2026-04-29 재수정: Antigravity 자식 콘솔도 사용자 작업이므로 보호 (Claude Terminal 등)
+# 사용자 작업 도구 (IDE/Terminal 본체) — 부모 프로세스가 이 목록에 있으면 자식 콘솔 보호
+# 2026-04-30 정리: IDE/Terminal 본체만 보호. Claude/node/bash 등은 부모 추적 (3대) 으로 IDE 자식 자동 보호
+# (claude.exe 자식 conhost가 IDE 안 작업이면 부모 따라가서 Antigravity 발견 → 보호)
+# (claude.exe가 자체적으로 spawn하는 단명 conhost는 hide → 사용자 시야 깜빡임 차단)
 USER_TOOL_PARENTS = {
-    "antigravity.exe",          # Antigravity IDE 안의 모든 터미널 (Claude Terminal 1~6 포함)
+    "antigravity.exe",          # Antigravity IDE
     "code.exe",                 # VS Code
     "code - insiders.exe",
     "cursor.exe",
     "windsurf.exe",
-    "windowsterminal.exe",
+    "windowsterminal.exe",      # Windows Terminal
     "wt.exe",
-    "explorer.exe",             # 사용자가 직접 실행한 cmd
     "openconsole.exe",
+    "explorer.exe",             # 사용자가 직접 cmd 더블클릭한 경우
 }
 
 
