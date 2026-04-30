@@ -1,14 +1,9 @@
 {
-  "last_updated": "2026-04-30 14:30:42",
-  "last_tool": "Bash",
-  "last_command": "\"C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe\" -X utf8 -c \"\nimport sys, pathlib, re\nsys.path.insert(0, 'Q:/Claudework/bridge base/tools')\nimport doc_processor as dp\nimport fitz",
+  "last_updated": "2026-04-30 20:43:23",
+  "last_tool": "Write",
+  "last_command": "Write: Q:\\Claudework\\bridge base\\tools\\stop_claude_messenger.ps1",
   "git_head": "fed6c3e7",
   "modified_files": [
-    "Q:\\Claudework\\bridge_ops\\scripts\\run_dlp_scan.bat",
-    "Q:\\Claudework\\bridge_ops\\scripts\\run_swarm_sim.bat",
-    "Q:\\Claudework\\bridge_ads\\.github\\workflows\\build-deploy.yml",
-    "Q:\\Claudework\\bridge_ops\\dlp\\secret_scanner.py",
-    "Q:\\Claudework\\bridge_ops\\config\\policy.yaml",
     "Q:\\Claudework\\bridge_ops\\NEXT_STEPS.md",
     "Q:\\Claudework\\bridge_ops\\telegram_bot\\env_loader.py",
     "Q:\\Claudework\\bridge_ops\\scripts\\start_telegram_bot.bat",
@@ -23,7 +18,12 @@
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\static\\js\\main.js",
     "Q:\\Claudework\\matjokdo_safe\\dashboard\\templates\\index.html",
     "Q:\\Claudework\\bridge base\\tools\\catch_blink_any.ps1",
-    "Q:\\Claudework\\bridge base\\tools\\ram_watchdog.py"
+    "Q:\\Claudework\\bridge base\\tools\\ram_watchdog.py",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\resume-converter\\page.tsx",
+    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\introduce-mail\\page.tsx",
+    "Q:\\Claudework\\bridge base\\tools\\doc_processor.py",
+    "Q:\\Claudework\\bridge base\\tools\\test_taskscheduler_com.py",
+    "Q:\\Claudework\\bridge base\\tools\\stop_claude_messenger.ps1"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-04-26 기준)",
   "git_changed": [
