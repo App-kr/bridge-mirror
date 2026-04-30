@@ -606,7 +606,7 @@ _US_STATES = (
     r'West\s+Virginia|Wisconsin|Wyoming'
 )
 RE_US_CITY_STATE = re.compile(
-    r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?,\s*(?:' + _US_STATES + r')\b',
+    r'\b[A-Z][a-zA-Z]+(?:[ ]+[A-Z][a-zA-Z]+)?,\s*(?:' + _US_STATES + r')\b',
     re.I
 )
 
@@ -645,6 +645,9 @@ KR_KEYWORDS = frozenset([
     "daejeon", "ulsan", "sejong", "gyeonggi", "gangwon",
     "chungbuk", "chungnam", "jeonbuk", "jeonnam",
     "gyeongbuk", "gyeongnam", "jeju",
+    # 도(道) 접미사 포함 변형 — "Gangwon-do" 등에서 "-do" 잔류 방지
+    "gangwon-do", "gyeonggi-do", "chungbuk-do", "chungnam-do",
+    "jeonbuk-do", "jeonnam-do", "gyeongbuk-do", "gyeongnam-do", "jeju-do",
     "south korea", "republic of korea", "rok",
     "한국", "서울", "부산", "대구", "인천", "광주", "대전", "울산",
     "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
@@ -821,7 +824,11 @@ _NON_NAME_WORDS = frozenset({
     "street", "road", "avenue", "drive", "lane", "court", "place",
     "boulevard", "terrace", "close", "crescent", "way", "park",
     "phase", "block", "floor", "unit", "apt", "suite", "room",
-    "north", "south", "east", "west",
+    "north", "south", "east", "west", "city",
+    # 국가/지역 (이름 오인 방지)
+    "usa", "korea", "canada", "australia", "zealand", "africa",
+    "britain", "england", "ireland", "scotland", "wales",
+    "america", "states", "republic", "province", "district",
     # 일반 영단어 (이름에는 없는)
     "and", "the", "for", "with", "from", "into", "about",
     "skills", "profile", "summary", "experience", "education",
@@ -1050,8 +1057,11 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     # "Seoul" → ""
     for city in KR_KEYWORDS:
         if len(city) > 2 and city.lower() not in ("korea", "south korea", "rok"):
-            # 단어 경계로 정확하게 매칭
-            pat = re.compile(r"\b" + re.escape(city) + r"\b", re.IGNORECASE)
+            # 단어 경계: 하이픈 포함 키워드("gangwon-do")는 \b 대신 앞뒤 공백/구두점 경계
+            if "-" in city:
+                pat = re.compile(r"(?<![A-Za-z])" + re.escape(city) + r"(?![A-Za-z])", re.IGNORECASE)
+            else:
+                pat = re.compile(r"\b" + re.escape(city) + r"\b", re.IGNORECASE)
             if pat.search(result):
                 log.append(f"KR_CITY→REMOVE: {city}")
                 # 도시명 제거, 앞뒤 쉼표/공백 정리
@@ -1721,7 +1731,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 redact_texts.add(matched)
                 all_logs.append(f"[page{page_num}] {tag}: {matched[:60]}")
 
-        # ── 후보자 이름: 성만 삭제, 이름 유지 (DOCX와 동일 정책) ──
+        # ── 후보자 이름: PDF는 전체 blank (다중 렌더링 레이어 완전 제거) ──
         if candidate and candidate.get("full_name"):
             name = candidate["full_name"].strip()
             words = name.split()
@@ -1729,14 +1739,28 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 last_name = words[-1]
                 first_name = " ".join(words[:-1])
                 text_lower = text.lower()
-                # 풀네임 → 이름만 남기기 (replacement redact)
+                # 풀네임 전체 blank (replacement 사용 금지 — 다중 레이어 잔류 방지)
                 if name.lower() in text_lower:
-                    replacement_redacts.append((name, first_name))
-                    all_logs.append(f"[page{page_num}] FULLNAME→{first_name}: {name}")
+                    redact_texts.add(name)
+                    all_logs.append(f"[page{page_num}] FULLNAME_BLANK: {name}")
+                # 이름 부분(first_name)도 blank — "MiCaila Rae" 단독 블록 제거
+                if first_name and first_name.lower() in text_lower:
+                    redact_texts.add(first_name)
+                    all_logs.append(f"[page{page_num}] FIRSTNAME_BLANK: {first_name}")
                 # 성 단독 삭제 (풀네임 미검출 시에도 성은 반드시 제거)
                 if len(last_name) >= 2 and last_name.lower() in text_lower:
                     redact_texts.add(last_name)
                     all_logs.append(f"[page{page_num}] LASTNAME: {last_name}")
+                # ── 개별 이름 단어 blank — 부분 처리된 파일에서 잔류 이름 제거 ──
+                # "My name is Katerina" 같은 본문 참조도 제거
+                _skip_words = frozenset({"van", "von", "de", "del", "la", "le", "the", "and"})
+                for _nw in words:
+                    _nwc = _nw.rstrip(",.;:")
+                    if (len(_nwc) >= 4
+                            and _nwc.lower() not in _skip_words
+                            and _nwc.lower() in text_lower):
+                        redact_texts.add(_nwc)
+                        all_logs.append(f"[page{page_num}] NAMEWORD: {_nwc}")
                 # ── CamelCase 성 분리: "VanZyl" → "Van Zyl" / "VAN ZYL" 대응 ──
                 _cc_parts = re.findall(r'[A-Z][a-z]+|[A-Z]{2,}', last_name)
                 if len(_cc_parts) > 1:
@@ -1787,9 +1811,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             if len(pdf_words) >= 2:
                 pdf_last = pdf_words[-1]
                 pdf_first = " ".join(pdf_words[:-1])
+                # 풀네임·이름부분 모두 blank (replacement 금지 — 다중 레이어 잔류 방지)
                 if pdf_name.lower() in text.lower():
-                    replacement_redacts.append((pdf_name, pdf_first))
-                    all_logs.append(f"[page{page_num}] PDF_NAME→{pdf_first}: {pdf_name}")
+                    redact_texts.add(pdf_name)
+                    all_logs.append(f"[page{page_num}] PDF_NAME_BLANK: {pdf_name}")
+                if pdf_first and pdf_first.lower() in text.lower():
+                    redact_texts.add(pdf_first)
+                    all_logs.append(f"[page{page_num}] PDF_FIRSTNAME_BLANK: {pdf_first}")
                 if pdf_last.lower() in text.lower():
                     redact_texts.add(pdf_last)
             elif len(pdf_name) >= 3 and pdf_name.lower() in text.lower():
