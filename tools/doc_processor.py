@@ -877,6 +877,35 @@ RE_DATE_RANGE = re.compile(
 )
 
 
+# ── 연락 요청 문장 감지 ──────────────────────────────────────────────────────
+# "please email me at X", "find me on WhatsApp (+44...)", "reach me at..."
+# → 커버레터/이력서에서 해당 문장 전체 삭제
+# 조건: 필자(me/us)에게 연락하라는 초대 문구 + 연락처 or 플랫폼 언급
+_CONTACT_INVITE_RE = re.compile(
+    r'\b(?:'
+    r'please\s+(?:email|call|contact|reach|text|message|find)\s+(?:me|us)\b'
+    r'|email\s+me\s+(?:at|on|directly)\b'
+    r'|reach\s+(?:me|out\s+to\s+me)\s+(?:at|on|via|by|through)\b'
+    r'|contact\s+me\s+(?:at|on|via|by|through|directly|using)\b'
+    r'|find\s+me\s+(?:on|at|via|through)\b'
+    r'|(?:on|via|through|over|using)\s+whatsapp\b'
+    r'|(?:on|via|through)\s+wechat\b'
+    r'|(?:on|via|through)\s+kakao(?:talk)?\b'
+    r'|my\s+(?:email|phone|mobile|number|whatsapp|wechat|contact)\s+(?:is|address\s+is|number\s+is)\b'
+    r'|i\s+can\s+be\s+reached\s+(?:at|on|via|by|through)\b'
+    r'|i\s+am\s+reachable\s+(?:at|on|via|by)\b'
+    r'|feel\s+free\s+to\s+(?:email|call|contact|reach|message)\s+(?:me|us)\b'
+    r'|(?:do\s+not|don\'t)\s+hesitate\s+to\s+(?:contact|reach|email|call)\s+(?:me|us)\b'
+    r'|at\s+your\s+convenience.*?(?:email|call|contact|reach|message)\s+me\b'
+    r')',
+    re.IGNORECASE | re.DOTALL,
+)
+# 연락 플랫폼/수단 단독 언급 (WhatsApp/WeChat 번호 포함 문장)
+_CONTACT_PLATFORM_RE = re.compile(
+    r'\b(?:whatsapp|wechat|kakao(?:talk)?|viber|telegram|line\s+app)\b',
+    re.IGNORECASE,
+)
+
 # ══════════════════════════════════════════════════════
 #  3. PII 삭제 엔진
 # ══════════════════════════════════════════════════════
@@ -1013,6 +1042,30 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
             continue
         kept_lines.append(line)
     result = "\n".join(kept_lines)
+
+    # ── Pass 1.5: 연락 초대 문장 삭제 ──
+    # "please email me at ...", "find me on WhatsApp (+44 ...)", "I can be reached at ..."
+    # → 해당 문장 전체 삭제 (커버레터/이력서 공통 적용)
+    # 전략: 문단 분리 → 문장 분리 → 초대 문구 포함 문장 삭제 → 재조합
+    _ci_paragraphs = result.split("\n\n")
+    _ci_out_paragraphs = []
+    for _para in _ci_paragraphs:
+        # 줄바꿈 없는 단락은 문장 단위로 분리
+        _sentences = re.split(r'(?<=[.!?])\s+', _para)
+        _kept_sentences = []
+        for _sent in _sentences:
+            if _CONTACT_INVITE_RE.search(_sent) or _CONTACT_PLATFORM_RE.search(_sent):
+                log.append(f"CONTACT_INVITE_DEL: {_sent.strip()[:80]}")
+            else:
+                _kept_sentences.append(_sent)
+        # 문장 삭제로 단락이 비면 단락 자체 드롭
+        _rebuilt = " ".join(_kept_sentences).strip()
+        if _rebuilt:
+            _ci_out_paragraphs.append(_rebuilt)
+        # 빈 단락(원래 빈 줄 구분자)도 유지해 형태 보존
+        elif _para.strip() == "":
+            _ci_out_paragraphs.append(_para)
+    result = "\n\n".join(_ci_out_paragraphs)
 
     # ── Pass 2: regex 기반 인라인 삭제 ──
     def _sub(pattern, repl, tag):
@@ -2080,6 +2133,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             for m in RE_KR_CITY_COUNTRY.finditer(_ls):
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
+            # 연락 초대 줄: "please email me at X", "find me on WhatsApp" → 줄 전체 redact
+            if _CONTACT_INVITE_RE.search(_ls) or _CONTACT_PLATFORM_RE.search(_ls):
+                redact_texts.add(_ls)
+                all_logs.append(f"[page{page_num}] CONTACT_INVITE_LINE: {_ls[:80]}")
 
         # 위치 라벨 → 값만 redact (Korea 대체 텍스트 삽입)
         # 직장명 라벨 → 값만 redact
