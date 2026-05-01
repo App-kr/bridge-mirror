@@ -2550,6 +2550,41 @@ def _release_lock():
         pass
 
 
+def _kill_competing_pollers():
+    """시작 시 같은 토큰으로 polling 할 수 있는 로컬 경쟁 프로세스를 킬.
+    대상: tg_approval_daemon.py, agentic_os/bot.py, email_autoresponder(tg 스레드)."""
+    _COMPETING_SCRIPTS = [
+        "tg_approval_daemon.py",
+        "agentic_os/bot.py",
+        "agentic_os\\bot.py",
+    ]
+    my_pid = os.getpid()
+    try:
+        for exe in ("python.exe", "pythonw.exe"):
+            r = subprocess.run(
+                ["wmic", "process", "where", f"name='{exe}'",
+                 "get", "processid,commandline"],
+                capture_output=True, text=True, timeout=8,
+            )
+            for line in r.stdout.splitlines():
+                pid_match = None
+                for part in line.split():
+                    if part.isdigit():
+                        pid_match = int(part)
+                if pid_match and pid_match != my_pid:
+                    if any(s in line for s in _COMPETING_SCRIPTS):
+                        try:
+                            subprocess.run(
+                                ["taskkill", "/PID", str(pid_match), "/F"],
+                                capture_output=True, timeout=5,
+                            )
+                            _log(f"[tg] 경쟁 poller 킬: PID {pid_match} ({line[:80].strip()})")
+                        except Exception:
+                            pass
+    except Exception as e:
+        _log(f"[tg] _kill_competing_pollers 오류: {e}")
+
+
 def _force_close_other_pollers():
     """startup 시 텔레그램 close() 호출 — 다른 곳(Termux, 다른 PC)에서 polling 중이면 강제 종료시켜서 우리가 잡음.
     실패해도 무시 (이미 닫혀 있을 수 있음)."""
@@ -2569,7 +2604,9 @@ def main():
     _acquire_lock()
     _log(f"[tg_commander v2] 시작 -- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}")
 
-    # 다른 곳(Termux/원격)에서 같은 토큰으로 polling 중이면 강제 종료
+    # 1단계: 로컬 경쟁 poller 프로세스 직접 킬
+    _kill_competing_pollers()
+    # 2단계: 원격(Termux/다른 PC) poller도 Telegram API close()로 종료
     _force_close_other_pollers()
 
     broadcast(
