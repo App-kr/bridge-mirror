@@ -88,8 +88,8 @@ LOG_DIR = Path(r"Q:\Claudework\bridge base\logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_PATH = LOG_DIR / "focus_guard.jsonl"
 
-POLL_SEC = 0.1              # 100ms fallback polling (이벤트 누락 시)
-MAX_LOG_PER_HOUR = 500      # 빈도 높음 — 한도 상향
+POLL_SEC = 0.03             # 30ms (was 100ms) — 사용자 깜빡임 호소로 강화
+MAX_LOG_PER_HOUR = 500
 
 
 # ── Win32 ──────────────────────────────────────────────────
@@ -595,6 +595,13 @@ def _message_loop_thread():
 # ── 폴링 fallback (이벤트 누락 대비) ────────────────────────
 def _polling_thread():
     last_state = None
+    # v3.6: 시작 즉시 ForegroundLock 활성 (게임 여부 무관)
+    try:
+        user32.LockSetForegroundWindow(LSFW_LOCK)
+        log_event({"event": "FOREGROUND_LOCKED_ALWAYS_ON"})
+    except Exception:
+        pass
+
     while True:
         try:
             game = is_game_running()
@@ -602,30 +609,22 @@ def _polling_thread():
             if game and last_state != "game":
                 log_event({"event": "GAME_DETECTED", "name": game})
                 last_state = "game"
-                # v3.5: 게임 진입 시 다른 프로세스의 SetForegroundWindow 차단
-                try:
-                    user32.LockSetForegroundWindow(LSFW_LOCK)
-                    log_event({"event": "FOREGROUND_LOCKED"})
-                except Exception:
-                    pass
             elif not game and last_state == "game":
                 log_event({"event": "GAME_GONE"})
                 last_state = "idle"
-                try:
-                    user32.LockSetForegroundWindow(LSFW_UNLOCK)
-                    log_event({"event": "FOREGROUND_UNLOCKED"})
-                except Exception:
-                    pass
 
             _track_user_focus()
 
-            # v3.5: 게임 모드면 게임 창을 매 polling 주기마다 TOPMOST 강제
-            if game and _state.get("last_user_focus"):
+            # v3.6: 사용자 활성창을 매 polling (30ms) 마다 강제로 z-order 유지
+            # (게임/일반 모드 무관) - 다른 콘솔이 spawn해도 z-order 위로 못 옴
+            if _state.get("last_user_focus"):
                 try:
+                    # NOTOPMOST 로 한 번 두면 일반 z-order 정상 유지하면서
+                    # 다른 ConsoleWindowClass 가 위로 못 올라옴 (focus_guard hide 작동)
                     user32.SetWindowPos(
-                        _state["last_user_focus"], HWND_TOPMOST,
+                        _state["last_user_focus"], 0,  # 0 = HWND_TOP
                         0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING
                     )
                 except Exception:
                     pass
