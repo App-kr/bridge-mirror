@@ -1,6 +1,7 @@
-# Bridge Work Tracker — 5분 간격 자동 작업 기록
-# 경로: Q:\Claudework\bridge base\.claude\work-tracker.ps1
-# 보안: 키/비밀번호 절대 기록하지 않음. git 상태만 추적.
+# Bridge Work Tracker - 5min interval auto work logging
+# 2026-05-01: git child conhost flicker fix
+#   Was: & git rev-parse / log / diff / ls-files (7x conhost spawn per run)
+#   Now: System.Diagnostics.Process with CreateNoWindow=true (zero conhost)
 
 $ProjectRoot = "Q:\Claudework\bridge base"
 $LogFile = "$ProjectRoot\.claude\work-log.txt"
@@ -8,28 +9,44 @@ $MaxLogLines = 500
 
 Set-Location $ProjectRoot
 
-# --- 1) git 상태 수집 ---
-try {
-    $branch = git rev-parse --abbrev-ref HEAD 2>$null
-    if (-not $branch) { $branch = "unknown" }
-    $lastCommit = git log -1 --format="%s" 2>$null
-    $lastCommitTime = git log -1 --format="%ar" 2>$null
-    $modifiedFiles = @(git diff --name-only 2>$null)
-    $untrackedFiles = @(git ls-files --others --exclude-standard 2>$null)
-    $stagedFiles = @(git diff --cached --name-only 2>$null)
-} catch {
-    $branch = "error"
-    $lastCommit = "git error"
-    $lastCommitTime = ""
-    $modifiedFiles = @()
-    $untrackedFiles = @()
-    $stagedFiles = @()
+# Helper: Run git silently (no conhost spawn)
+function Invoke-GitSilent {
+    param([string]$Args)
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "git"
+        $psi.Arguments = $Args
+        $psi.WorkingDirectory = $ProjectRoot
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        if (-not $proc) { return "" }
+        $out = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit(5000) | Out-Null
+        return $out.Trim()
+    } catch {
+        return ""
+    }
 }
+
+# --- 1) git 상태 수집 ---
+$branch = Invoke-GitSilent "rev-parse --abbrev-ref HEAD"
+if (-not $branch) { $branch = "unknown" }
+$lastCommit = Invoke-GitSilent 'log -1 --format=%s'
+$lastCommitTime = Invoke-GitSilent 'log -1 --format=%ar'
+$modifiedFilesRaw = Invoke-GitSilent "diff --name-only"
+$modifiedFiles = if ($modifiedFilesRaw) { @($modifiedFilesRaw -split "`n" | Where-Object { $_ }) } else { @() }
+$untrackedFilesRaw = Invoke-GitSilent "ls-files --others --exclude-standard"
+$untrackedFiles = if ($untrackedFilesRaw) { @($untrackedFilesRaw -split "`n" | Where-Object { $_ }) } else { @() }
+$stagedFilesRaw = Invoke-GitSilent "diff --cached --name-only"
+$stagedFiles = if ($stagedFilesRaw) { @($stagedFilesRaw -split "`n" | Where-Object { $_ }) } else { @() }
 
 $totalChanged = $modifiedFiles.Count + $untrackedFiles.Count + $stagedFiles.Count
 
 # --- 2) 1시간 이내 활동 체크 ---
-$lastCommitEpoch = git log -1 --format="%ct" 2>$null
+$lastCommitEpoch = Invoke-GitSilent 'log -1 --format=%ct'
 $nowEpoch = [int][double]::Parse((Get-Date -UFormat %s))
 if ($lastCommitEpoch) {
     $minutesAgo = [math]::Round(($nowEpoch - [int]$lastCommitEpoch) / 60)
@@ -37,7 +54,7 @@ if ($lastCommitEpoch) {
     $minutesAgo = 9999
 }
 
-# 1시간(60분) 이내 커밋이 있거나 수정 파일이 있으면 기록
+# 1시간 이내 커밋이 있거나 수정 파일이 있으면 기록
 if ($minutesAgo -gt 60 -and $totalChanged -eq 0) {
     exit 0
 }
@@ -64,7 +81,6 @@ $entry = "[$timestamp] Branch:$branch | $workName | commit:$lastCommitTime | cha
 if (-not (Test-Path $LogFile)) {
     New-Item -Path $LogFile -ItemType File -Force | Out-Null
 }
-
 Add-Content -Path $LogFile -Value $entry -Encoding UTF8
 
 # --- 5) 로그 크기 제한 ---
