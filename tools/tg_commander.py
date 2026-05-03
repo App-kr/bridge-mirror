@@ -1115,15 +1115,18 @@ def _gemini_key_works(k: str) -> bool:
 
 # 키 검증 결과 캐시 (provider → (works, ts))
 _key_cache: dict = {}
-_KEY_CACHE_TTL = 300.0   # 5분
+_KEY_CACHE_TTL_OK  = 300.0        # 성공: 5분
+_KEY_CACHE_TTL_FAIL = 43200.0     # 실패: 12시간 (401/429 반복 로그 방지)
 
 
 def _cached_check(name: str, fn, *args) -> bool:
-    """키 검증 결과 캐싱 (5분)."""
+    """키 검증 결과 캐싱 — 성공 5분, 실패 12시간."""
     now = time.time()
     cached = _key_cache.get(name)
-    if cached and now - cached[1] < _KEY_CACHE_TTL:
-        return cached[0]
+    if cached:
+        ttl = _KEY_CACHE_TTL_OK if cached[0] else _KEY_CACHE_TTL_FAIL
+        if now - cached[1] < ttl:
+            return cached[0]
     ok = fn(*args)
     _key_cache[name] = (ok, now)
     return ok
@@ -1454,12 +1457,22 @@ def _ask_claude(chat_id, user_text):
             _log(f"[llm] OK provider={prov}")
             break
         except Exception as e:
-            last_err = f"{prov}: {str(e)[:120]}"
-            _log(f"[llm] FAIL {prov}: {str(e)[:120]}")
+            err_str = str(e)
+            last_err = f"{prov}: {err_str[:120]}"
+            # 401/429 는 이미 캐시됨 — debug 레벨로만 기록 (스팸 방지)
+            if "401" in err_str or "429" in err_str:
+                _log(f"[llm] skip {prov} (key invalid/rate-limited)")
+            else:
+                _log(f"[llm] FAIL {prov}: {err_str[:120]}")
+            # 실패 키는 즉시 캐시에 반영 (12시간 재시도 없음)
+            if prov == "anthropic" and key:
+                _key_cache["anthropic:" + key[:20]] = (False, time.time())
+            elif prov == "gemini" and key:
+                _key_cache["gemini:" + key[:20]] = (False, time.time())
             continue
 
     if raw is None:
-        send(chat_id, f"AI 모든 백엔드 실패: {last_err}\n\n메뉴를 사용하세요.",
+        send(chat_id, "AI 처리 중 오류가 발생했어요. 버튼 메뉴를 사용해주세요.",
              markup=keyboard([btn("메인 메뉴", "menu")]))
         return
 
