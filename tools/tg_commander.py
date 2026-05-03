@@ -127,13 +127,39 @@ def tg_post(method, data):
         return {}
 
 
+def _safe_text(text: str, parse_mode: str) -> str:
+    """HTML parse_mode일 때 Telegram 미지원 태그를 escape — subprocess 출력 보호."""
+    if parse_mode != "HTML":
+        return text
+    import re as _re
+    # Telegram HTML 허용 태그: b i u s code pre a spoiler tg-spoiler
+    _ALLOWED = re.compile(
+        r'<(/?(b|i|u|s|code|pre|a|em|strong|tg-spoiler|spoiler)'
+        r'(\s[^>]*)?)>', re.IGNORECASE
+    )
+    def _esc_tag(m):
+        # 허용 태그면 그대로, 아니면 &lt;...&gt; 로 escape
+        tag = m.group(0)
+        if _ALLOWED.match(tag):
+            return tag
+        return tag.replace('<', '&lt;').replace('>', '&gt;')
+    return re.sub(r'<[^>]+>', _esc_tag, text)
+
+
 def send(chat_id, text, parse_mode="HTML", markup=None):
+    text = _safe_text(str(text), parse_mode)
     chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
     for i, chunk in enumerate(chunks):
         body = {"chat_id": chat_id, "text": chunk, "parse_mode": parse_mode}
         if markup and i == len(chunks) - 1:
             body["reply_markup"] = markup
-        tg_post("sendMessage", body)
+        r = tg_post("sendMessage", body)
+        # HTML parse 실패 시 parse_mode 없이 재시도
+        if not r.get("ok") and "parse" in str(r.get("description", "")).lower():
+            body2 = {"chat_id": chat_id, "text": chunk}
+            if markup and i == len(chunks) - 1:
+                body2["reply_markup"] = markup
+            tg_post("sendMessage", body2)
 
 
 def edit_msg(chat_id, message_id, text, markup=None, parse_mode="HTML"):
@@ -984,6 +1010,12 @@ _SYSTEM = """\
 사용자: "RPA 광고 20건"
 응답: {"action": "rpa", "params": {"account": "gray", "limit": 20}, "reply": "RPA 광고 20건 실행할게요."}
 
+사용자: "Rpa 각 계정별 5건 실행"
+응답: {"action": "rpa", "params": {"account": "all", "limit": 5}, "reply": "전체 계정 각 5건씩 RPA 실행할게요."}
+
+사용자: "모든 계정으로 RPA 10건"
+응답: {"action": "rpa", "params": {"account": "all", "limit": 10}, "reply": "전체 계정 각 10건씩 RPA 실행할게요."}
+
 사용자: "터미널 1에서 bridge base 분석"
 응답: {"action": "terminal", "params": {"tid": "1", "task": "bridge base 분석", "workdir": "Q:/Claudework/bridge base"}, "reply": "터미널 1에서 분석 시작."}
 
@@ -1342,14 +1374,21 @@ def _deterministic_route(text: str) -> dict | None:
             m = re.search(r"(?:rpa|광고|포스팅)\D*(\d+)", text, re.IGNORECASE)
         limit = int(m.group(1)) if m else 5
         limit = max(1, min(limit, 100))  # 안전 범위
-        # 계정 추론: 사용자가 명시했으면 사용
+        # 계정 추론: "각 계정" / "모든 계정" / "전체" → all
         account = "gray"
-        for a in ("gray", "green", "brown", "purple", "account1", "account2", "account3", "account4"):
-            if a in t:
-                account = a
-                break
+        if any(kw in t for kw in ("각 계정", "각계정", "모든 계정", "모든계정", "전체 계정", "전체계정", "all")):
+            account = "all"
+        else:
+            for a in ("gray", "green", "brown", "purple", "account1", "account2", "account3", "account4"):
+                if a in t:
+                    account = a
+                    break
+        if account == "all":
+            reply_txt = f"전체 계정 각 {limit}건씩 RPA 실행할게요."
+        else:
+            reply_txt = f"RPA 포스팅 {limit}건 ({account}) 실행 — 동일직업 자동 제외."
         return {"action": "rpa", "params": {"account": account, "limit": limit},
-                "reply": f"RPA 포스팅 {limit}건 ({account}) 실행 — 동일직업 자동 제외."}
+                "reply": reply_txt}
 
     # 실시간 작업현황 — 이 구체적 패턴이 단순 "현황"보다 우선
     LIVE_KW = ("작업현황", "작업 현황", "작업중", "작업 중", "실시간",
@@ -1503,7 +1542,19 @@ def _dispatch_action(chat_id, action: str, params: dict, reply: str,
         account = params.get("account", "gray")
         limit   = int(params.get("limit", 5))
         send(chat_id, reply)
-        _run_rpa_direct(chat_id, account, limit)
+        # "all" / "각 계정" → RPA_ACCOUNTS 전체 순차 실행
+        if account in ("all", "전체", "각", "모두"):
+            def _run_all_accounts():
+                for acc in RPA_ACCOUNTS:
+                    send(chat_id, f"[RPA] {acc} 계정 실행 중... ({limit}건)")
+                    _run_rpa_direct(chat_id, acc, limit)
+                    # 각 계정 사이 2초 간격
+                    time.sleep(2)
+                send(chat_id, f"[RPA] 전체 계정 완료 ({len(RPA_ACCOUNTS)}개 × {limit}건)",
+                     markup=keyboard([btn("메인 메뉴", "menu")]))
+            threading.Thread(target=_run_all_accounts, daemon=True).start()
+        else:
+            _run_rpa_direct(chat_id, account, limit)
         return
 
     if action == "daebang":
