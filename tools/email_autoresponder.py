@@ -1150,13 +1150,17 @@ def _is_tg_commander_running() -> bool:
         pid = int(pid_file.read_text().strip())
         if pid <= 0:
             return False
-        # wmic으로 실제 프로세스 존재 확인
+        # tasklist로 실제 프로세스 존재 확인 (CREATE_NO_WINDOW로 CMD창 차단)
         import subprocess as _sp
+        # Windows: 콘솔창 발생 차단 (CREATE_NO_WINDOW=0x08000000)
+        _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
         r = _sp.run(
-            ["wmic", "process", "where", f"processid={pid}", "get", "processid"],
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, timeout=5,
+            creationflags=_CREATE_NO_WINDOW,
         )
-        return str(pid) in r.stdout
+        # PID가 결과에 포함되면 살아있음
+        return f'"{pid}"' in r.stdout or str(pid) in r.stdout
     except Exception:
         return False
 
@@ -1169,6 +1173,10 @@ def _tg_command_loop(cfg: dict, stop_event: threading.Event) -> None:
     log.info("[TG] 커맨드 폴링 시작")
 
     while not stop_event.is_set():
+        # ── 매 반복마다 tg_commander 재확인 — 이후 실행되면 즉시 양보 ──
+        if _is_tg_commander_running():
+            log.info("[TG] tg_commander 감지 — 폴링 중단 (409 방지)")
+            return
         try:
             updates = tg_get_updates(cfg["tg_token"], offset)
             for upd in updates:
