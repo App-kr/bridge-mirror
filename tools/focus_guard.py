@@ -88,8 +88,9 @@ LOG_DIR = Path(r"Q:\Claudework\bridge base\logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_PATH = LOG_DIR / "focus_guard.jsonl"
 
-POLL_SEC = 0.03             # 30ms (was 100ms) — 사용자 깜빡임 호소로 강화
-MAX_LOG_PER_HOUR = 500
+POLL_SEC = 0.005            # 5ms (was 30ms) — 사용자 반복 호소 ("Q드라이브 git 검정창")
+                            # 200회/초 polling, CPU < 1%. 깜빡임 visible 시간 5ms 이하
+MAX_LOG_PER_HOUR = 1000
 
 
 # ── Win32 ──────────────────────────────────────────────────
@@ -614,20 +615,8 @@ def _polling_thread():
                 last_state = "idle"
 
             _track_user_focus()
-
-            # v3.6: 사용자 활성창을 매 polling (30ms) 마다 강제로 z-order 유지
-            # (게임/일반 모드 무관) - 다른 콘솔이 spawn해도 z-order 위로 못 옴
-            if _state.get("last_user_focus"):
-                try:
-                    # NOTOPMOST 로 한 번 두면 일반 z-order 정상 유지하면서
-                    # 다른 ConsoleWindowClass 가 위로 못 올라옴 (focus_guard hide 작동)
-                    user32.SetWindowPos(
-                        _state["last_user_focus"], 0,  # 0 = HWND_TOP
-                        0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING
-                    )
-                except Exception:
-                    pass
+            # v3.6.1: 매 30ms z-order 호출이 오히려 redraw 깜빡임 유발
+            # -> 비활성화. ForegroundLock 만으로 충분.
 
             if game or ALWAYS_ON_MODE:
                 always_on = not game
