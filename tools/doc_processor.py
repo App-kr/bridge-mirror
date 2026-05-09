@@ -1217,6 +1217,13 @@ _GENERIC_SCHOOL_TYPES: dict = {
     "after school": "After School",
     "after-school": "After-School",
     "afterschool": "Afterschool",
+    # 일반 서비스어 — KR_WORKPLACE_KEYWORDS에 포함되나 비한국 맥락에서도 자주 쓰임
+    # 오탐 방지: 삭제 대상에서 제외하고 유형명으로 유지
+    "tutoring": "Tutoring",
+    "hagwon": "Hagwon",
+    "global english": "Global English",
+    "global village": "Global Village",
+    "native english": "Native English",
 }
 _GENERIC_TYPES_SET = frozenset(_GENERIC_SCHOOL_TYPES.keys())
 
@@ -1284,7 +1291,8 @@ _EDU_SECTION_RE = re.compile(
 )
 # 다른 섹션 헤더 감지 → EDUCATION 섹션 종료 신호
 _OTHER_SECTION_RE = re.compile(
-    r'^(?:experience|work(?:\s+(?:experience|history))?|employment(?:\s+history)?|'
+    r'^(?:(?:related|relevant|additional|other|extra|recent)\s+)?'
+    r'(?:experience|work(?:\s+(?:experience|history))?|employment(?:\s+history)?|'
     r'teaching(?:\s+experience)?|professional(?:\s+experience)?|'
     r'career(?:\s+(?:summary|objective))?|volunteer|internship|reference|'
     r'skills?|languages?|interests?|awards?|certifications?|'
@@ -2499,6 +2507,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     )
                     for _kw in _sorted_kws:
                         _cleaned_jt = re.sub(r'\b' + re.escape(_kw) + r'\b', '', _cleaned_jt, flags=re.I)
+                        # Fallback: redact_texts에도 직접 추가
+                        # (job_title_replaces는 apply_redactions() 이후 실행 → 선행 redact로 _orig_jt 불일치 가능)
+                        _fb_pat = re.compile(r'\b' + re.escape(_kw) + r'\b', re.I)
+                        for _fb_m in _fb_pat.finditer(stripped):
+                            redact_texts.add(_fb_m.group())
+                            all_logs.append(f"[page{page_num}] JOB_KW_FALLBACK: {_fb_m.group()}")
                     # 연속 공백 정리
                     _cleaned_jt = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt).strip()
                     # "Junior -  — Teacher" → "Junior - Teacher" (branch 제거 후 dangling — 정리)
@@ -2552,8 +2566,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         f"[page{page_num}] JOB_EXTRA_CLEAN: {stripped[:50]} → {_cleaned_jt2[:50]}")
 
             # 비직업타이틀 학원명: 한국 키워드 있거나 짧은 줄일 때만 redact
-            if has_kr_work and not _is_job_line_kw and (has_kr or len(stripped) < 50):
-                if len(stripped) < 50 and not has_kr:
+            # len <= 55: 경계값(50자) 라인도 포함 ("at Poly. New teachers..." 등)
+            if has_kr_work and not _is_job_line_kw and (has_kr or len(stripped) <= 55):
+                if len(stripped) <= 55 and not has_kr:
                     redact_texts.add(stripped)
                     all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
                 for kw in KR_WORKPLACE_KEYWORDS:
