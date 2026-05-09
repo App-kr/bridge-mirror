@@ -217,6 +217,84 @@ function EasyDate({
   )
 }
 
+// ── Single-type Queue Upload Zone ─────────────────────────────────────────
+function QueueZone({
+  fileType, icon, hint, accept, queuedFiles, setQueuedFiles, maxFiles,
+}: {
+  fileType: string; icon: string; hint: string; accept: string
+  queuedFiles: { type: string; file: File }[]
+  setQueuedFiles: React.Dispatch<React.SetStateAction<{ type: string; file: File }[]>>
+  maxFiles: number
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const typeCount = queuedFiles.filter(q => q.type === fileType).length
+  const totalCount = queuedFiles.length
+  const canAdd = totalCount < maxFiles
+
+  function addFiles(fileList: File[]) {
+    const remaining = maxFiles - totalCount
+    fileList.slice(0, remaining).forEach(f => {
+      setQueuedFiles(prev => [...prev, { type: fileType, file: f }])
+    })
+  }
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        accept={accept}
+        multiple={fileType === 'certificate'}
+        onChange={e => {
+          if (e.target.files?.length) addFiles(Array.from(e.target.files))
+          e.target.value = ''
+        }}
+      />
+      <div
+        role="button"
+        tabIndex={canAdd ? 0 : -1}
+        aria-disabled={!canAdd}
+        onClick={() => canAdd && inputRef.current?.click()}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
+        onDragOver={e => { e.preventDefault(); e.stopPropagation() }}
+        onDrop={e => {
+          e.preventDefault(); e.stopPropagation()
+          if (!canAdd) return
+          const files: File[] = []
+          if (e.dataTransfer.items) {
+            for (let i = 0; i < e.dataTransfer.items.length; i++) {
+              const f = e.dataTransfer.items[i].getAsFile()
+              if (f) files.push(f)
+            }
+          } else {
+            Array.from(e.dataTransfer.files).forEach(f => files.push(f))
+          }
+          addFiles(files)
+        }}
+        className={`flex items-center gap-3 w-full border-2 border-dashed rounded-xl px-4 py-4 cursor-pointer
+                    transition-all select-none text-left
+                    ${!canAdd
+                      ? 'border-gray-200 opacity-40 cursor-not-allowed'
+                      : typeCount > 0
+                        ? 'border-green-400 bg-green-50/40 hover:border-green-500'
+                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
+      >
+        <span className="text-2xl">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-700">{hint}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {typeCount > 0 ? `${typeCount} file${typeCount > 1 ? 's' : ''} selected` : 'Click or drag here'}
+          </p>
+        </div>
+        {typeCount > 0 && (
+          <span className="text-green-600 text-xs font-medium shrink-0">✓ Ready</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── File Upload Component ──────────────────────────────────────────────────
 interface UploadedFile { name: string; file_url?: string; uploading?: boolean; error?: string }
 
@@ -359,7 +437,6 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   const [candidateId, setCandidateId] = useState<string | null>(null)
 
   const [queuedFiles, setQueuedFiles] = useState<{ type: string; file: File }[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const set = (field: keyof typeof INIT) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -631,76 +708,47 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               />
             </section>
 
-            <section className="card space-y-4">
+            <section className="card space-y-5">
               <Sec title="Attach Your Files" />
-              <Desc text="Upload your CV, a recent photo, and cover letter. Overseas applicants should also include a short intro video. Save files individually — no compressed folders." />
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,video/mp4,.mp4,video/quicktime,.mov,video/webm,.webm"
-                  onChange={(e) => {
-                    if (!e.target.files?.length) return
-                    const remaining = MAX_FILES - queuedFiles.length
-                    const picked = Array.from(e.target.files).slice(0, remaining)
-                    picked.forEach((f) => {
-                      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-                      let ft = 'attachment'
-                      if (['jpg','jpeg','png','webp'].includes(ext)) ft = 'photo'
-                      else if (['pdf','doc','docx'].includes(ext)) ft = 'cv'
-                      else if (['mp4','mov','webm'].includes(ext)) ft = 'video'
-                      setQueuedFiles((prev) => [...prev, { type: ft, file: f }])
-                    })
-                    e.target.value = ''
-                  }}
-                />
-                <div
-                  role="button"
-                  tabIndex={queuedFiles.length >= MAX_FILES ? -1 : 0}
-                  aria-disabled={queuedFiles.length >= MAX_FILES}
-                  onClick={() => { if (queuedFiles.length < MAX_FILES) fileInputRef.current?.click() }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click() }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
-                  onDrop={(e) => {
-                    e.preventDefault(); e.stopPropagation()
-                    if (queuedFiles.length >= MAX_FILES) return
-                    const items = e.dataTransfer.items
-                    const files: File[] = []
-                    if (items) {
-                      for (let i = 0; i < items.length; i++) {
-                        const f = items[i].getAsFile()
-                        if (f) files.push(f)
-                      }
-                    } else {
-                      Array.from(e.dataTransfer.files).forEach(f => files.push(f))
-                    }
-                    const remaining = MAX_FILES - queuedFiles.length
-                    files.slice(0, remaining).forEach((f) => {
-                      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-                      let ft = 'attachment'
-                      if (['jpg','jpeg','png','webp'].includes(ext)) ft = 'photo'
-                      else if (['pdf','doc','docx'].includes(ext)) ft = 'cv'
-                      else if (['mp4','mov','webm'].includes(ext)) ft = 'video'
-                      setQueuedFiles((prev) => [...prev, { type: ft, file: f }])
-                    })
-                  }}
-                  className={`w-full border-2 border-dashed rounded-xl py-7 text-center cursor-pointer
-                              transition-all select-none
-                              ${queuedFiles.length >= MAX_FILES
-                                ? 'border-gray-200 opacity-40 cursor-not-allowed'
-                                : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'}`}
-                >
-                  <p className="text-[15px] font-semibold text-gray-700">Click or drag files here</p>
-                  <p className="text-sm text-gray-400 mt-1">{queuedFiles.length}/{MAX_FILES} files · CV, photo, cover letter, video</p>
-                </div>
+              <Desc text="Please upload files in the correct category. This helps us process your application faster and more accurately." />
+
+              {/* ── 1. Photo ── */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-700">Profile Photo</label>
+                <Desc text="Passport-style, clear face, no filters. JPG or PNG." />
+                <QueueZone fileType="photo" icon="📷" hint="Photo (JPG / PNG)" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
               </div>
+
+              {/* ── 2. CV / Resume ── */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-700">CV / Resume <span className="text-red-400">*</span></label>
+                <Desc text="Your main resume. PDF or Word document." />
+                <QueueZone fileType="cv" icon="📄" hint="CV / Resume (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
+              </div>
+
+              {/* ── 3. Cover Letter ── */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-700">Cover Letter</label>
+                <Desc text="Optional but recommended. PDF or Word document." />
+                <QueueZone fileType="cover_letter" icon="📝" hint="Cover Letter (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
+              </div>
+
+              {/* ── 4. Other / Certificates ── */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-700">Certificates &amp; Other Documents</label>
+                <Desc text="TEFL/TESOL, degrees, or any other supporting documents." />
+                <QueueZone fileType="certificate" icon="📎" hint="Certificates / Other (PDF / Image)" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
+              </div>
+
+              {/* ── 업로드 대기 파일 목록 ── */}
               {queuedFiles.length > 0 && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Files ready to upload</p>
                   {queuedFiles.map((q, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
-                      <span className="text-green-600 font-medium text-xs">Ready</span>
+                      <span className="text-gray-400 text-xs w-20 shrink-0">
+                        {q.type === 'cover_letter' ? 'Cover Letter' : q.type === 'cv' ? 'CV' : q.type === 'photo' ? 'Photo' : 'Certificate'}
+                      </span>
                       <span className="text-gray-700 truncate flex-1">{q.file.name}</span>
                       <span className="text-gray-400 text-xs">{(q.file.size / 1024).toFixed(0)} KB</span>
                       <button type="button"
