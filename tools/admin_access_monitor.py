@@ -77,8 +77,8 @@ def _save_state(state: dict):
 
 def _notify(msg: str):
     try:
-        from tools.tg_notify import send_telegram  # type: ignore
-        send_telegram(msg)
+        from tools.tg_notify import send as _send_tg  # type: ignore
+        _send_tg(msg)
     except Exception as e:
         _log(f"텔레그램 알림 실패: {e}")
 
@@ -95,37 +95,40 @@ def _read_admin_key() -> str:
 
 def check_admin_access() -> str:
     """admin/login 응답 분류:
-    - 'normal' = 정상 (잘못된 비번 응답 제대로 받음)
-    - 'blocked' = IP 차단 (Access denied)
+    - 'normal' = public 엔드포인트 정상 응답 (차단 없음)
+    - 'blocked' = SecurityMiddleware "Access denied" 응답 (IP 차단)
     - 'down' = 서버 응답 없음
-    - 'unknown' = 예상외 응답
+
+    **중요**: 이 함수는 admin_login_guard 카운터를 증가시키지 않는다.
+    /api/public/talents 는 인증 불필요한 공개 엔드포인트이지만,
+    SecurityMiddleware의 IP 블랙리스트 검사는 동일하게 받는다.
+    → 차단 여부 감지 가능 + 잘못된 비번 시도 누적 위험 0.
     """
     req = urllib.request.Request(
-        f"{API_BASE}/api/admin/login",
-        data=b'{"password":"__monitor_probe__"}',
+        f"{API_BASE}/api/public/talents?limit=1",
         headers={
-            "Content-Type": "application/json",
             "Origin": VERCEL_ORIGIN,
             "User-Agent": USER_AGENT,
+            "Accept": "application/json",
         },
-        method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             body = r.read().decode("utf-8", errors="ignore")
+            if r.status == 200 and "success" in body:
+                return "normal"
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore") if e.fp else ""
+        if "Access denied" in body:
+            return "blocked"
     except Exception as ex:
         _log(f"check 요청 실패: {ex}")
         return "down"
-
-    if "비밀번호가 올바르지 않습니다" in body or "FORBIDDEN" in body:
-        return "normal"
     if "Access denied" in body:
         return "blocked"
     if not body.strip():
         return "down"
-    return "unknown"
+    return "normal"  # 200이지만 형식 다른 경우도 정상으로 간주
 
 
 def reset_blacklist_via_api() -> bool:
