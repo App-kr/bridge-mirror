@@ -447,7 +447,11 @@ class AdminLoginGuard:
         self._fails: dict[str, list[float]] = defaultdict(list)
 
     def record_fail(self, ip: str) -> Optional[int]:
-        """실패 기록. 차단해야 하면 차단 분(None=영구) 반환, 아니면 None."""
+        """실패 기록. 차단해야 하면 차단 분(None=영구) 반환, 아니면 None.
+        ADMIN_ALLOWED_IPS 화이트리스트는 카운트 증가 없이 항상 None 반환 (관리자 lockout 방지).
+        """
+        if _is_admin_whitelisted(ip):
+            return None  # 화이트리스트 IP는 카운트 안 함
         now = time.time()
         self._fails[ip] = [t for t in self._fails[ip] if now - t < 86400]  # 24h 윈도우
         self._fails[ip].append(now)
