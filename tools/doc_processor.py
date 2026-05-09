@@ -579,7 +579,8 @@ RE_KR_ROMANIZED_ADDR = re.compile(
 # ── 학교/기관명 일반화 (전 세계 공통) ──────────────────────────────────────
 # "Sheffield University", "Lincoln High School" → 기관 유형만 남김
 RE_SCHOOL_NAMED = re.compile(
-    r'\b[A-Z][a-zA-Z\'\-\.]+(?:\s+(?:of|the|at|and|&|[A-Z][a-zA-Z\'\-\.]+)){0,5}\s+'
+    # ★ "at" 제거 — "Studied at University" 오매칭 방지
+    r'\b[A-Z][a-zA-Z\'\-\.]+(?:\s+(?:of|the|and|&|[A-Z][a-zA-Z\'\-\.]+)){0,5}\s+'
     r'(?:University|College|High\s+School|Secondary\s+School|'
     r'Elementary\s+School|Primary\s+School|Grammar\s+School|'
     r'Boarding\s+School|Prep\s+School|Junior\s+School|'
@@ -1123,6 +1124,12 @@ def _is_korea(text: str) -> bool:
     return any(kw in lower for kw in KR_KEYWORDS)
 
 
+def _contains_protected_university(text: str) -> bool:
+    """텍스트에 정식 인가 대학교명이 포함되어 있는지 확인 (보호 우선 판별)"""
+    tl = text.lower()
+    return any(pu in tl for pu in _PROTECTED_UNIVERSITIES)
+
+
 def _replace_workplace_generic(value: str) -> str:
     """
     근무처 명을 일반명으로 대체.
@@ -1340,6 +1347,7 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
             _rls = _rl.strip()
             if (len(_rls) > 0 and len(_rls) <= 80
                     and _kr_city_pat.search(_rls)
+                    and not _contains_protected_university(_rls)  # ★ 정식 대학교 보호
                     and (any(kw in _rls.lower() for kw in KR_WORKPLACE_KEYWORDS
                              if kw not in _GENERIC_TYPES_SET)
                          or RE_SCHOOL_NAMED.search(_rls))):
@@ -1354,6 +1362,7 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     # ── Pass 2.5: 한국 도시명 처리 ──
     # "Daegu, South Korea" → "South Korea"
     # "Seoul" → ""
+    # ★ 정식 대학교명에 포함된 도시는 삭제 금지 (예: Seoul National University)
     for city in KR_KEYWORDS:
         if len(city) > 2 and city.lower() not in ("korea", "south korea", "rok"):
             # 단어 경계: 하이픈 포함 키워드("gangwon-do")는 \b 대신 앞뒤 공백/구두점 경계
@@ -1361,13 +1370,26 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
                 pat = re.compile(r"(?<![A-Za-z])" + re.escape(city) + r"(?![A-Za-z])", re.IGNORECASE)
             else:
                 pat = re.compile(r"\b" + re.escape(city) + r"\b", re.IGNORECASE)
-            if pat.search(result):
-                log.append(f"KR_CITY→REMOVE: {city}")
-                # 도시명 제거, 앞뒤 쉼표/공백 정리
-                result = pat.sub("", result)
-                result = re.sub(r",\s*,", ",", result)
-                result = re.sub(r"^\s*,\s*", "", result, flags=re.MULTILINE)
-                result = re.sub(r"\s*,\s*$", "", result, flags=re.MULTILINE)
+            if not pat.search(result):
+                continue
+            # 도시명이 정식 대학교명 내에 포함된 경우 해당 줄 전체 보호
+            # ★ _snap: sub() 호출 전 스냅샷 명시적 캡처 → 콜백 내부에서 인덱스 일관성 보장
+            _snap = result
+            def _kr_city_replacer(m, _city=city, _s=_snap):
+                matched = m.group()
+                start = m.start()
+                end = m.end()
+                line_start = _s.rfind('\n', 0, start) + 1
+                line_end_idx = _s.find('\n', end)
+                full_line = _s[line_start:] if line_end_idx == -1 else _s[line_start:line_end_idx]
+                if _contains_protected_university(full_line):
+                    return matched  # 대학교명 포함 줄 → 도시명 유지
+                log.append(f"KR_CITY→REMOVE: {_city}")
+                return ""
+            result = pat.sub(_kr_city_replacer, result)
+            result = re.sub(r",\s*,", ",", result)
+            result = re.sub(r"^\s*,\s*", "", result, flags=re.MULTILINE)
+            result = re.sub(r"\s*,\s*$", "", result, flags=re.MULTILINE)
     # 도시 제거 후 남은 "— , Text" 패턴 정리: "— , South Korea" → "— South Korea"
     result = re.sub(r'([—–])\s*,+\s*', r'\1 ', result)
     result = re.sub(r',+\s*([—–])', r' \1', result)
@@ -1411,8 +1433,26 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
         result = RE_UNIV_OF.sub(school_replacer, result)
 
     # ── Pass 2.8: 외국 도시/주 + 나이 + 비자 삭제 ──
-    _sub(RE_US_CITY_STATE, "", "US_CITY_STATE")
-    _sub(RE_FOREIGN_CITY, "", "FOREIGN_CITY")
+    # ★ FOREIGN_CITY / US_CITY_STATE: 정식 대학교명 포함 시 보호 (삭제 금지)
+    def _city_replacer_safe(pattern, tag):
+        nonlocal result
+        def replacer(m):
+            matched = m.group()
+            start = m.start()
+            end = m.end()
+            # 현재 줄 전체 추출 (짧은 매칭이라도 줄 전체로 대학교명 판별)
+            line_start = result.rfind('\n', 0, start) + 1
+            line_end_i = result.find('\n', end)
+            full_line = result[line_start:] if line_end_i == -1 else result[line_start:line_end_i]
+            # 매칭 자체 또는 해당 줄에 정식 대학교명 포함 → 보호
+            if _contains_protected_university(matched) or _contains_protected_university(full_line):
+                return matched
+            log.append(f"{tag}: {matched[:60]}")
+            return ""
+        result = pattern.sub(replacer, result)
+
+    _city_replacer_safe(RE_US_CITY_STATE, "US_CITY_STATE")
+    _city_replacer_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
     _sub(RE_AGE_MENTION, "", "AGE_MENTION")
     _sub(RE_VISA_STATUS, "", "VISA_STATUS")
 
