@@ -264,11 +264,64 @@ HONEYPOT_PATHS: set[str] = {
 }
 
 
+def _load_admin_whitelist() -> list:
+    """ADMIN_ALLOWED_IPS 환경변수를 ipaddress 네트워크 리스트로 파싱.
+    화이트리스트 IP는 어떤 차단 메소드에서도 등록되지 않음.
+    """
+    import os, ipaddress as _ipa
+    raw = os.getenv("ADMIN_ALLOWED_IPS", "").strip()
+    if not raw:
+        return []
+    nets = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            nets.append(_ipa.ip_network(chunk, strict=False))
+        except ValueError:
+            continue
+    return nets
+
+
+_ADMIN_WHITELIST = _load_admin_whitelist()
+
+
+def _is_admin_whitelisted(ip: str) -> bool:
+    """주어진 IP가 ADMIN_ALLOWED_IPS에 있으면 True (어떤 블랙리스트에도 등록 금지)."""
+    if not _ADMIN_WHITELIST:
+        return False
+    import ipaddress as _ipa
+    try:
+        addr = _ipa.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in _ADMIN_WHITELIST)
+
+
 class IPBlacklist:
     def __init__(self):
         self._list: dict[str, dict] = {}   # ip -> {until, reason, count, offenses}
         self._permanent: set[str] = set()  # 영구 차단 목록
         self._load()
+        # 시작 시 화이트리스트 IP는 모든 블랙리스트에서 즉시 제거
+        self._purge_whitelisted()
+
+    def _purge_whitelisted(self):
+        """화이트리스트 IP가 어쩌다 들어왔으면 자동 정리."""
+        if not _ADMIN_WHITELIST:
+            return
+        removed = []
+        for ip in list(self._list.keys()):
+            if _is_admin_whitelisted(ip):
+                del self._list[ip]
+                removed.append(ip)
+        for ip in list(self._permanent):
+            if _is_admin_whitelisted(ip):
+                self._permanent.discard(ip)
+                removed.append(ip)
+        if removed:
+            self._save()
 
     def _load(self):
         # 일반 블랙리스트 (만료된 것 제외)
@@ -297,6 +350,14 @@ class IPBlacklist:
             pass
 
     def is_blocked(self, ip: str) -> bool:
+        # ADMIN_ALLOWED_IPS 화이트리스트는 절대 차단하지 않음 (관리자 lockout 방지)
+        if _is_admin_whitelisted(ip):
+            # 어쩌다 등록되었으면 즉시 제거
+            if ip in self._permanent or ip in self._list:
+                self._permanent.discard(ip)
+                self._list.pop(ip, None)
+                self._save()
+            return False
         # 영구 차단 먼저
         if ip in self._permanent:
             return True
@@ -323,6 +384,9 @@ class IPBlacklist:
 
     def record_attack(self, ip: str, reason: str) -> bool:
         """공격 기록 → 누진 차단 적용. 차단됐으면 True."""
+        # ADMIN_ALLOWED_IPS 화이트리스트는 공격 기록도 안 함
+        if _is_admin_whitelisted(ip):
+            return False
         entry = self._list.get(ip, {"count": 0, "offenses": 0, "reason": reason, "until": ""})
         entry["count"] = entry.get("count", 0) + 1
         entry["reason"] = reason
@@ -347,6 +411,8 @@ class IPBlacklist:
 
     def block(self, ip: str, reason: str, minutes: int = 60):
         """즉시 차단 (기본 1시간)."""
+        if _is_admin_whitelisted(ip):
+            return  # 화이트리스트 IP는 차단 거부
         entry = self._list.get(ip, {"count": ATTACK_THRESHOLD, "offenses": 0})
         entry["until"] = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
         entry["reason"] = reason
@@ -355,7 +421,9 @@ class IPBlacklist:
         self._save()
 
     def block_permanent(self, ip: str, reason: str):
-        """영구 차단."""
+        """영구 차단. ADMIN_ALLOWED_IPS는 영구 차단 거부."""
+        if _is_admin_whitelisted(ip):
+            return  # 관리자 IP 영구 차단 절대 금지
         self._permanent.add(ip)
         self._list[ip] = {
             "until": "9999-12-31T23:59:59+00:00",
