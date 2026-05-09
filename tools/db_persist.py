@@ -167,8 +167,22 @@ def _list_backups(drive, folder_id: str) -> list[dict]:
 # ── SQL 덤프 생성 ──────────────────────────────────────────────────────────────
 
 def _make_sql_dump() -> bytes:
-    TARGET = ["candidates", "jobs", "client_inquiries", "interviews",
-              "site_settings", "file_uploads", "mail_introduce_log"]
+    # ── 백업 대상 테이블 — Render 재배포/마이그레이션 시 보존 필수 ──
+    # 사용자 데이터 + UI 설정 + 운영 이력 모두 포함 (휘발성 큐/로그/단기토큰 제외)
+    TARGET = [
+        # 핵심 데이터 (사용자 입력)
+        "candidates", "jobs", "client_inquiries", "interviews",
+        # UI 설정 (Canvas Sheet 셀색/높이/너비/탭) — 반복 분실 사안
+        "sheet_prefs",
+        # 사이트 콘텐츠 (관리자 직접 편집)
+        "site_settings", "boards", "community_posts", "banners",
+        "site_partners", "testimonials", "form_configs", "page_content",
+        # 운영 이력 (필요 시 감사·복구 기준)
+        "file_uploads", "mail_introduce_log", "mail_logs",
+        "interview_status_log", "profile_sends",
+        # 운영 정책
+        "email_blacklist",
+    ]
 
     def quote_val(v):
         if v is None: return "NULL"
@@ -220,12 +234,19 @@ def backup(dry_run: bool = False) -> bool:
         print("[backup] master.db 없음 — 스킵")
         return False
 
+    # 백업 가치 판단 — 핵심 테이블 + UI 설정 모두 합산
     db_rows = 0
+    table_counts = {}
     try:
         c = sqlite3.connect(str(DB_PATH))
-        for t in ["candidates", "jobs", "client_inquiries"]:
-            try: db_rows += c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            except Exception: pass
+        for t in ["candidates", "jobs", "client_inquiries", "sheet_prefs",
+                  "boards", "community_posts", "form_configs"]:
+            try:
+                cnt = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                table_counts[t] = cnt
+                db_rows += cnt
+            except Exception:
+                table_counts[t] = "(없음)"
         c.close()
     except Exception:
         pass
@@ -234,7 +255,8 @@ def backup(dry_run: bool = False) -> bool:
         print("[backup] DB가 비어있음 — 백업 스킵")
         return False
 
-    print(f"[backup] 덤프 생성 중... (DB rows ~{db_rows})")
+    print(f"[backup] 덤프 생성 중... (총 rows ~{db_rows})")
+    print(f"  테이블별: {table_counts}")
     gz_data = _make_sql_dump()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     fname = f"bridge_db_{ts}.sql.gz"
@@ -303,13 +325,17 @@ def restore(dry_run: bool = False) -> bool:
         conn.executescript(sql_text)
         conn.commit()
         counts = {}
-        for t in ("candidates", "jobs", "client_inquiries"):
+        # 핵심 데이터 + UI 설정 모두 검증
+        for t in ("candidates", "jobs", "client_inquiries",
+                  "sheet_prefs", "boards", "form_configs", "site_settings"):
             try: counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             except Exception: counts[t] = 0
         conn.close()
         print(f"  검증: {counts}")
-        if any(v == 0 for v in counts.values()):
-            print("  [WARN] 일부 테이블 비어있음")
+        # 핵심 3개만 0건 경고 (선택 테이블은 비어있어도 정상)
+        critical = {"candidates", "jobs", "client_inquiries"}
+        if any(counts[t] == 0 for t in critical if t in counts):
+            print("  [WARN] 핵심 테이블 비어있음")
         os.replace(tmp_path, db_str)
         print(f"  [restore] 완료 ✓")
 

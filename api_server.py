@@ -502,6 +502,32 @@ def _startup_db_health_check() -> None:
                     ok = _drive_restore()
                     if ok:
                         _log.info("[STARTUP] ✓ Drive 자동 복원 성공 — DB 준비 완료")
+                        # 복원된 DB에 새 테이블 누락 시 자동 생성 (옛 백업 호환성)
+                        # IF NOT EXISTS 멱등이므로 안전 — 새 테이블만 추가 + 기존은 보존
+                        _ENSURE_FUNCS = [
+                            "_ensure_sheet_prefs_table",
+                            "_ensure_email_blacklist_table",
+                            "_ensure_boards_table",
+                            "_ensure_file_uploads_table",
+                            "_ensure_banners_table",
+                            "_ensure_site_partners_table",
+                            "_ensure_site_settings_table",
+                            "_ensure_site_visits_table",
+                            "_ensure_page_content_table",
+                            "_ensure_pipeline_tables",
+                            "_ensure_talent_auth_tables",
+                        ]
+                        _ok_count = 0
+                        for _fn in _ENSURE_FUNCS:
+                            try:
+                                _f = globals().get(_fn)
+                                if callable(_f):
+                                    _f()
+                                    _ok_count += 1
+                            except Exception as _ee:
+                                _log.warning("[STARTUP] %s 실패: %s", _fn, _ee)
+                        _log.info("[STARTUP] post-restore ensure: %d/%d 테이블 보장",
+                                  _ok_count, len(_ENSURE_FUNCS))
                     else:
                         _log.error("[STARTUP] ✗ Drive 복원 실패 — 수동 복원 필요")
                 except Exception as _re:
