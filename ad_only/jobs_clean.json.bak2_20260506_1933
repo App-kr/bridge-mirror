@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-09T06:30:02",
+  "generated_at": "2026-05-06T08:20:59",
   "source": "jobs_clean.txt",
   "count": 878,
   "jobs": [
@@ -517,9 +517,7 @@
       "housing": "only allowance 500k",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, flexible lunch, part-of airfare support.",
-      "extra_lines": [
-        "Working Hour : 09:00~17:30"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Seongdong",
@@ -534,9 +532,7 @@
       "housing": "provided or allowance 600k",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, Part-of airfare support.",
-      "extra_lines": [
-        "Working Hour : 09:00~18.10"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Cheongju",
@@ -601,7 +597,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, pension, severance pay, insurance, paid vacation",
       "extra_lines": [
-        "Working hour : 13:00 ~19:30",
         "Native Teacher (Numbers can change) : Approx. 3"
       ]
     },
@@ -986,7 +981,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, flexible lunch, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~18:00",
         "Native Teacher (Numbers can change) : Approx. 3"
       ]
     },
@@ -1367,7 +1361,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:30~17:00",
         "Native Teacher (Numbers can change) : Approx. 5",
         "Any weekend work requires advance notice and is fully paid."
       ]
@@ -1714,7 +1707,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, flexible lunch, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~17:30",
         "Native Teacher (Numbers can change) : Approx. 7"
       ]
     },
@@ -1945,7 +1937,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided    accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~17:00",
         "Native Teacher (Numbers can change) : Approx. 4"
       ]
     },
@@ -3081,7 +3072,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Working hour : 13:30~21:00",
         "Native Teacher (Numbers can change) : Approx. 1"
       ]
     },
@@ -3428,7 +3418,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~18:00",
         "Native Teacher (Numbers can change) : Approx. 10"
       ]
     },
@@ -4385,7 +4374,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~18:00",
         "Native Teacher (Numbers can change) : Approx.7"
       ]
     },
@@ -4981,7 +4969,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and round-trip airfare support.",
       "extra_lines": [
-        "Working Hour : 08:30~17:20",
         "Vacation days : 4~5 weeks",
         "Native Teacher (Numbers can change) : Approx. 7",
         "Christians, F visa holders with Intl curriculum full-time experience preferred."
@@ -5218,7 +5205,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and round airfare support.",
       "extra_lines": [
-        "Working Hour : MT 12:40~20:15 F 12:40~18:00",
         "Native Teacher (Numbers can change) : Approx.5"
       ]
     },
@@ -5583,7 +5569,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation",
       "extra_lines": [
-        "Working hour : 12:00~20:30",
         "F visa native, young, experienced teacher with own housing preferred."
       ]
     },
@@ -5899,7 +5884,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Working Hour : 08:30~17:30",
         "Native Teacher (Numbers can change) : Approx. 5"
       ]
     },
@@ -6715,7 +6699,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working hour : 08:30~17:30",
         "Vacation days : Total 16 days"
       ]
     },
@@ -6733,7 +6716,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working hour : 11:00~19:00",
         "Vacation days : Total 16 days"
       ]
     },
@@ -7316,9 +7298,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, Housing or allowance.",
-      "extra_lines": [
-        "Working hour : 13:00~22:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Gangnam",
@@ -7352,9 +7332,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, Housing allowance 30 man",
-      "extra_lines": [
-        "Working hour : Split Shift: Monday - Thursday, 7:00 am - 11:00 am (4 hours) & 4:30 pm - 9:30 pm (5 hours) + two Saturdays a month, 10:00 am - 6:00 pm (mandatory, paid)"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Yongin",
@@ -7657,7 +7635,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working Hour : MWF 09:00~18:00 TTH 09:00~18:50 ( 40min*8-9 )",
         "Native Teacher (Numbers can change) : Approx. 11"
       ]
     },
@@ -7896,7 +7873,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~17:00",
         "Native Teacher (Numbers can change) : Approx. 5"
       ]
     },
@@ -7946,7 +7922,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, flexible lunch and airfare support.",
       "extra_lines": [
-        "Working hour : 09:00~18:00",
         "Native Teacher (Numbers can change) : Approx. 2"
       ]
     },
@@ -7964,7 +7939,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and flexible lunch.",
       "extra_lines": [
-        "Working Hour : 09:00~18:00 (50min 3-4 classes)",
         "Vacation days : 20 days",
         "Couple-friendly accommodation, couples welcome.",
         "Native Teacher (Numbers can change) : Approx. 4",
@@ -8161,7 +8135,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and round airfare support.",
       "extra_lines": [
-        "Working Hour : MWF 09:00~18:10 TTH 09:00~18:50",
         "Native Teacher (Numbers can change) : Approx. 20"
       ]
     },
@@ -8179,7 +8152,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working Hour : 09:00~18:00",
         "Native Teacher (Numbers can change) : Approx. 10"
       ]
     },
@@ -8212,7 +8184,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working Hour : 15:20~22:20",
         "Advanced instructor for small middle-high school classes.",
         "Native Teacher (Numbers can change) : Approx. 3"
       ]
@@ -8383,7 +8354,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, Provided accommodation, flexible lunch hour",
       "extra_lines": [
-        "Working hour : 09:00~18:30",
         "Vacation days : 15 days a year",
         "Native Teacher (Numbers can change) : Approx. 2"
       ]
@@ -8576,7 +8546,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 8",
         "Bachelor's or higher with an F visa kyopo or native speakers are welcome"
       ]
@@ -9080,9 +9049,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Songpa",
@@ -9373,9 +9340,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, a large accommodation provided, and airfare support.",
-      "extra_lines": [
-        "Working hour : 09:00~18:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Hanam",
@@ -9572,7 +9537,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, Housing allowance only (0.5m, No deposit support)",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 7"
       ]
     },
@@ -9818,9 +9782,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : MWF 13:00~21:00 TTH 13:00~20:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Gangdong",
@@ -9932,7 +9894,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Working Hour : 09:40-18:40 (40min/class, 15.20,35min type, 114hr in a month)",
         "Native Teacher (Numbers can change) : Approx. 5"
       ]
     },
@@ -10254,7 +10215,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance. and airfare support.",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 6"
       ]
     },
@@ -10379,7 +10339,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 9"
       ]
     },
@@ -10543,9 +10502,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Daejeon, Sejong",
@@ -10560,9 +10517,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, pension, severance pay, insurance, paid vacation, accommodation provided.",
-      "extra_lines": [
-        "Working hour : 13:30~19:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Nowon",
@@ -10646,9 +10601,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : 13:30~21:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Busan Gangseo",
@@ -10678,9 +10631,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Suwon",
@@ -10728,7 +10679,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, housing allowance",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 4"
       ]
     },
@@ -10860,9 +10810,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance.",
-      "extra_lines": [
-        "Working Hour : 10:00~15:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Namyangju",
@@ -11027,9 +10975,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, accommodation provided, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Suwon",
@@ -11235,9 +11181,7 @@
       "housing": "provided or allowance 300k",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Gumi",
@@ -11652,9 +11596,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, accommodation provided.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Uijeongbu",
@@ -11817,9 +11759,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Yongin",
@@ -11949,7 +11889,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance",
       "extra_lines": [
-        "Starting Date:",
         "Native Teacher (Numbers can change) : Approx. 4"
       ]
     },
@@ -12246,9 +12185,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Suwon",
@@ -12439,8 +12376,7 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and round-trip airfare support.",
       "extra_lines": [
-        "preferred above Bachelor's degree in the UK, Good grades in school also who is A-Level of Biology & Chemistry. (F visa welcome)",
-        "Working Hour : 09:00~18:00 ( 25-30 hr teaching )"
+        "preferred above Bachelor's degree in the UK, Good grades in school also who is A-Level of Biology & Chemistry. (F visa welcome)"
       ]
     },
     {
@@ -12516,9 +12452,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : 14.30~20:30"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Busan",
@@ -12565,9 +12499,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and round-trip airfare support.",
-      "extra_lines": [
-        "Working hour : 09:20-17:50"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Busan",
@@ -12612,9 +12544,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : 09:00~18:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Gangwon Do",
@@ -13177,9 +13107,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : 13:15-20:15"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Hwaseong Dongtan",
@@ -13209,9 +13137,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Songpa",
@@ -13242,7 +13168,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation.",
       "extra_lines": [
-        "Starting Date:",
         "Children friendly, Responsibility, Cooperative."
       ]
     },
@@ -13527,9 +13452,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Hwaseong, Dongtan",
@@ -13559,9 +13482,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Gangnam",
@@ -13681,9 +13602,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Daejeon",
@@ -13899,9 +13818,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance.",
-      "extra_lines": [
-        "Working hour : 11:00~16.30"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Busan",
@@ -13916,9 +13833,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Working hour : 09:00~18:00"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Busan",
@@ -14025,9 +13940,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Yangsan",
@@ -14132,9 +14045,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, accommodation provided.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Paju",
@@ -14149,9 +14060,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Cheonan",
@@ -14275,9 +14184,7 @@
       "housing": "Provided or allowance 300k",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, and airfare support.",
-      "extra_lines": [
-        "Jeonju"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Yongin",
@@ -14308,7 +14215,6 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance.",
       "extra_lines": [
-        "Seoul Gwanak",
         "Vacation days : 5 ~8 weeks",
         "Positive mind, Teaching Skills, Christianity Beliefs(Cover letter in philosophy of religion required.)"
       ]
@@ -14326,10 +14232,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, Resign bonus, and airfare support.",
-      "extra_lines": [
-        "Gyeongju",
-        "Pohang"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Siheung",
@@ -14361,15 +14264,8 @@
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation",
       "extra_lines": [
         "Native Teacher (Numbers can change) : Approx. 5",
-        "Incheon",
-        "Starting Date:",
-        "Siheung",
-        "Seongnam",
         "Children friendly, Responsibility, Cooperative",
-        "Seongnam",
-        "Starting Date:",
-        "Children friendly, Responsibility, Cooperative",
-        "Busan"
+        "Children friendly, Responsibility, Cooperative"
       ]
     },
     {
@@ -14434,9 +14330,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, accommodation provided, and airfare support.",
-      "extra_lines": [
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Cheongju",
@@ -14452,22 +14346,10 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Yongin",
         "Teaching experience in Korea.",
-        "Seoul",
         "adult teaching experience, degree in Education, TESOL, Linguistics or literature.",
-        "Busan",
-        "Gimpo",
-        "Cheongju",
-        "Incheon",
-        "Suwon",
         "adult teaching experience, responsibility, Residing in Korea",
-        "Seoul, Northern area",
-        "Working hour : 12:00~20:00",
-        "Gwangmyeong",
-        "Starting Date:",
-        "Seoul Gangnam",
-        "Daejeon"
+        "Seoul, Northern area"
       ]
     },
     {
@@ -14483,11 +14365,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Starting Date:",
-        "Jeju",
-        "Starting Date:"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Suwon",
@@ -14534,10 +14412,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Anyang",
-        "Working hour : 13:30~21.30"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seoul Gangseo",
@@ -14568,13 +14443,7 @@
       "native_count": "",
       "benefits": "No Visa sponsorship, pension, severance pay, insurance, paid vacation, Share dormitory, No airfare support.",
       "extra_lines": [
-        "Cooperation, Bright personality",
-        "Working Hour : 15.30~20:00 (40min / 4-5 classes )",
-        "Seoul Dongjak",
-        "Working Hour : 12,40- 20.40 (MWF 14.30~20:10 TTH 15.30~20.40)",
-        "Jinju",
-        "Jeju",
-        "Goyang"
+        "Cooperation, Bright personality"
       ]
     },
     {
@@ -14590,11 +14459,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Goyang",
-        "Sejong",
-        "Working hour : MWF 14:00~19.40 / TTH 14:00~20:00 ( 40min classes )"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seongnam",
@@ -14610,17 +14475,9 @@
       "native_count": "",
       "benefits": "Visa sponsorship, pension, severance pay, insurance, paid vacation, provided accommodation or allowance, No airfare support.",
       "extra_lines": [
-        "Sejong",
         "Native Teacher (Numbers can change) : Approx. 10",
-        "Busan",
-        "Sejong",
-        "Namyangju",
-        "Namyangju",
-        "Ulsan",
-        "Seongnam",
         "Teaching skills, adult teaching experience, degree from the United States or United kingdom.",
-        "Native Teacher (Numbers can change) : Approx. 4",
-        "Busan"
+        "Native Teacher (Numbers can change) : Approx. 4"
       ]
     },
     {
@@ -14637,37 +14494,12 @@
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
-        "Seongnam",
-        "Starting Date:",
-        "Changwon, Masan",
-        "Chuncheon",
         "Children friendly, Responsibility",
-        "Gunpo",
-        "Busan, Namgu",
-        "Bucheon",
         "Seoul, Northern area",
         "EFL ESL teaching skill, F-4 visa Kyopo",
         "Teaching hours : Elem - Middle school",
-        "Busan",
-        "Osan",
-        "Gwangju",
-        "Starting Date:",
-        "Busan",
         "Children friendly, Responsibility, Cooperative",
-        "Yongin",
-        "Wonju",
-        "Seoul",
-        "Working hour : 09:00~17:00",
-        "Cheonan",
-        "Working hour : 13:30~20:15",
-        "Busan",
-        "Working hour : 10:00~19:00",
-        "Daegu",
-        "Changwon",
-        "Ansan",
-        "Tongyeong Coastal City",
-        "Daegu",
-        "Asan"
+        "Tongyeong Coastal City"
       ]
     },
     {
@@ -14698,9 +14530,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
-      "extra_lines": [
-        "Namyangju"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Incheon,Gimpo",
@@ -14717,14 +14547,8 @@
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance, and airfare support.",
       "extra_lines": [
         "Christianity Beliefs, Responsibility",
-        "Cheonan",
         "Housing info : provided accommodation or allowance",
-        "Gwangju",
-        "Gangwon Do",
-        "Jeonju",
-        "Busan",
-        "Daejeon",
-        "Pyeongtaek"
+        "Gangwon Do"
       ]
     },
     {
@@ -14740,9 +14564,7 @@
       "housing": "",
       "native_count": "",
       "benefits": "Visa sponsorship, severance pay, pension, insurance, paid vacation, provided accommodation or allowance.",
-      "extra_lines": [
-        "Busan Gangseo"
-      ]
+      "extra_lines": []
     },
     {
       "location": "Seongnam",

@@ -1,0 +1,12 @@
+﻿[
+    "BRIDGE_GDrive_Backup",
+    "BRIDGE_EmailAutoresponder",
+    "BRIDGE_IOC_Watcher",
+    "BRIDGE_DB_Backup",
+    "BRIDGE_Behavior_Check",
+    "BRIDGE_Auto_Security_Patch",
+    "BRIDGE_ThreatFeed_Sync",
+    "BridgeTelegramBot",
+    "\\Bridge\\AutoBackup5min",
+    "\\Bridge\\Final-Backup"
+]
