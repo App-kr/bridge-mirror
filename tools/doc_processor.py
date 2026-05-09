@@ -948,7 +948,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "kumon",
     "bricks", "bricks english",
     "slp", "slp english",
-    "rise", "rise english",
+    "rise english", "rise korea", "rise english academy",  # rise 단독 제거 (동사 오탐)
     "cdi", "cdi english",
     "jle", "jlec",
     "aclipse",
@@ -968,12 +968,12 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "kids college",
     "canlearn",
     "eduplex",
-    "lucid",
+    "lucid english", "lucid academy",       # lucid 단독 제거 (형용사 오탐)
     "topia",
-    "snb",
+    "snb english",                          # snb 단독 제거
     "jls",
-    "gse",
-    "ils",
+    "gse english", "gse academy",          # gse 단독 제거 (Pearson GSE 점수 오탐)
+    "ils english", "ils academy",          # ils 단독 제거
     "fastrackids",
     "ding ding dang",
     "seouldal",
@@ -984,16 +984,17 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "emg",
     "hampson",
     "engoo",
-    "bcm", "gnb", "iei", "ael", "tel",
-    "hess",
+    "gnb", "gnb english",           # bcm/ael/tel 제거 — 일반 영어단어 오탐
+    "hess english", "hess english school",  # hess 단독 제거 (회사명 오탐)
     "global adventure",
     "chungjae",
-    "asset", "empire", "prairie",
+    "empire english", "empire academy",     # asset/empire/lucid 단독 제거
+    "lucid english",
     # ══ 2026년 5월 실시간 업데이트 — 확인된 신규 브랜드 ══
     # JLS 계열 (CHESS·ACE·V.GROUP — 한국 최대 영어학원 네트워크 125+ 캠퍼스)
-    "chess english", "chess academy", "chess",
+    "chess english", "chess english academy", "chess academy",  # chess 단독 제거 (취미)
     "v group", "v.group",
-    "canb",
+    "canb english", "canb academy",         # canb 단독 제거
     # DYB / 최선어학원 계열
     "dyb", "dyb choisun", "dyb english",
     # 헬렌도론 (글로벌 유아영어 프랜차이즈)
@@ -1001,8 +1002,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     # iGarten / 아이가르텐 (청담어학원 영어유치원 브랜드)
     "igarten", "i-garten", "i garten", "아이가르텐",
     # 크레버스 계열 (April+청담+iGarten 모회사)
-    "april english", "april institute", "april",
-    "chungdahm april",
+    "april english", "april institute", "chungdahm april",  # april 단독 제거 (월 이름 오탐)
     # 윤선생 계열
     "yoons", "yoon's english", "윤선생",
     "yoons igse", "yoons forest",
@@ -1039,7 +1039,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "brighton english",
     "british education korea",
     "canada beavers",
-    "callan",
+    "callan institute", "callan english",   # callan 단독 제거 (Callan Method 교수법 오탐)
     "cleverkinder", "clever kinder",
     "dna english",
     "dreamedu",
@@ -1058,7 +1058,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "ingeniiis",
     "inspire english",
     "lingua english",
-    "dux academy", "dux",
+    "dux academy",                          # dux 단독 제거 (수석졸업상 오탐)
     "worwick franklin", "worwick",
     "english vine",
     "eie english", "eie",
@@ -1112,7 +1112,7 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     # ══ 사립 영어전문학원 브랜드 ══
     "gnb english",
     "gnb",
-    "april english", "april",
+    "april english",                        # april 단독 제거 중복 정리
     "iwell", "i-well",
     "sprintclass",
     "visang", "비상",
