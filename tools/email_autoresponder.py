@@ -453,17 +453,91 @@ def is_applicant(subject: str, body: str) -> bool:
 
 
 # ── 이미 자동응답 발송 여부 확인 ─────────────────────────────────────────────
-def already_replied(email_addr: str) -> bool:
-    """email_logs에 해당 주소로 SENT 기록이 있으면 True (대화 중)."""
+def _extract_real_email_from_body(body: str) -> str | None:
+    """craigslist reply 메일 본문에서 진짜 발신자 이메일 추출.
+
+    예시:
+      'From: <real@gmail.com>\\n...'
+      'Reply-to: real@gmail.com'
+      '발신자: real@gmail.com'
+    """
+    if not body:
+        return None
+    # 본문 상단 200줄만 검사 (서명/푸터 제외)
+    head = "\n".join(body.splitlines()[:200])
+    patterns = [
+        r"From:\s*(?:[^<\n]*<)?\s*([\w._%+-]+@[\w.-]+\.[A-Za-z]{2,})",
+        r"Reply[-\s]?to:\s*([\w._%+-]+@[\w.-]+\.[A-Za-z]{2,})",
+        r"발신자:\s*([\w._%+-]+@[\w.-]+\.[A-Za-z]{2,})",
+        r"Email:\s*([\w._%+-]+@[\w.-]+\.[A-Za-z]{2,})",
+    ]
+    for pat in patterns:
+        m = re.search(pat, head, re.IGNORECASE)
+        if m:
+            cand = m.group(1).lower().strip()
+            # craigslist reply 주소는 실제 이메일 아님 — 제외
+            if "@reply.craigslist.org" in cand or "noreply" in cand or "no-reply" in cand:
+                continue
+            return cand
+    return None
+
+
+def already_replied(
+    email_addr: str,
+    from_name: str | None = None,
+    body: str | None = None,
+    days: int = 30,
+) -> bool:
+    """동일 사람에게 단기간(days) 내 SENT 기록 있으면 True.
+
+    매칭 전략 (OR — 어느 하나라도 해당):
+      1) from_email 동일
+      2) from_name 동일 (대소문자 무시, NULL/빈값 제외)
+      3) 본문에서 추출한 진짜 이메일이 과거 SENT 또는 대화 중 발신자
+    """
     try:
         conn = sqlite3.connect(str(DB_PATH))
         _ensure_email_logs(conn)
+
+        # 1) email 직접 매칭 (전 기간)
         row = conn.execute(
             "SELECT 1 FROM email_logs WHERE from_email=? AND status='SENT' LIMIT 1",
             (email_addr,),
         ).fetchone()
+        if row:
+            conn.close()
+            return True
+
+        # 2) from_name 단기간(days) 매칭 — craigslist reply 우회 차단
+        if from_name and from_name.strip():
+            name_norm = from_name.strip().lower()
+            row = conn.execute(
+                f"""SELECT 1 FROM email_logs
+                    WHERE LOWER(TRIM(from_name)) = ?
+                      AND status='SENT'
+                      AND sent_at > datetime('now', '-{int(days)} days')
+                    LIMIT 1""",
+                (name_norm,),
+            ).fetchone()
+            if row:
+                conn.close()
+                log.info(f"[DEDUP] 이름 매칭 스킵: '{from_name}' ({days}일 내 발송 이력)")
+                return True
+
+        # 3) 본문 진짜 이메일 매칭 (craigslist reply 우회 차단)
+        if body:
+            real_email = _extract_real_email_from_body(body)
+            if real_email and real_email != email_addr.lower():
+                row = conn.execute(
+                    "SELECT 1 FROM email_logs WHERE LOWER(from_email)=? AND status='SENT' LIMIT 1",
+                    (real_email,),
+                ).fetchone()
+                if row:
+                    conn.close()
+                    log.info(f"[DEDUP] 본문 이메일 매칭 스킵: {real_email}")
+                    return True
+
         conn.close()
-        return row is not None
     except Exception as e:
         log.error(f"[DB] email_logs 조회 실패: {e}")
     return False
@@ -927,12 +1001,25 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     continue  # Teast 처리 완료 — 일반 로직 건너뜀
 
                 # ── STEP B-0: 이미 발송한 주소 → 대화 중, 안읽음 유지 ────────
-                # DB 기록(자동발송) + Gmail 보낸편지함(수동발송 포함 전체) 이중 체크
-                if already_replied(from_addr):
-                    log.info(f"[CONV] DB 발송 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
+                # DB 기록(자동발송) + 이름 기반 단기간 dedup (craigslist reply 우회 차단)
+                # + Gmail 보낸편지함(수동발송 포함 전체) 이중 체크
+                if already_replied(from_addr, from_name=from_name, days=30):
+                    log.info(f"[CONV] DB 발송 이력 있음 → 안읽음 유지: '{from_name}' <{from_addr}> | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
                 if has_prior_contact(imap, from_addr, uid):
                     log.info(f"[CONV] 1년이내 연락 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
 
                 # ── STEP B: 기존 지원자 중복 체크 (헤더만으로 충분) ────────
@@ -1389,12 +1476,10 @@ def main() -> None:
 
     log.info(f"[START] 이메일 자동응답 시작 | gmail={cfg['gmail_addr']} | auto_mode={cfg['auto_mode']}")
 
-    # 텔레그램 커맨드 폴링 스레드
+    # TG 커맨드 폴링: tg_commander가 전담 → 여기서는 비활성화
+    # (tg_commander.pid 존재 여부와 무관하게 절대 polling 안 함 — 409 영구 차단)
     stop_ev = threading.Event()
-    tg_thread = threading.Thread(
-        target=_tg_command_loop, args=(cfg, stop_ev), daemon=True, name="tg-poll"
-    )
-    tg_thread.start()
+    log.info("[TG] 폴링 비활성화 — tg_commander 전담 모드")
 
     once = "--once" in args
     force = "--force" in args  # 업무시간 무관 강제 실행
