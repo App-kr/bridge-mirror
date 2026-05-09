@@ -989,6 +989,80 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "global adventure",
     "chungjae",
     "asset", "empire", "prairie",
+    # ══ 2026년 5월 실시간 업데이트 — 확인된 신규 브랜드 ══
+    # JLS 계열 (CHESS·ACE·V.GROUP — 한국 최대 영어학원 네트워크 125+ 캠퍼스)
+    "chess english", "chess academy", "chess",
+    "v group", "v.group",
+    "canb",
+    # DYB / 최선어학원 계열
+    "dyb", "dyb choisun", "dyb english",
+    # 헬렌도론 (글로벌 유아영어 프랜차이즈)
+    "helen doron", "helen doron english",
+    # iGarten / 아이가르텐 (청담어학원 영어유치원 브랜드)
+    "igarten", "i-garten", "i garten", "아이가르텐",
+    # 크레버스 계열 (April+청담+iGarten 모회사)
+    "april english", "april institute", "april",
+    "chungdahm april",
+    # 윤선생 계열
+    "yoons", "yoon's english", "윤선생",
+    "yoons igse", "yoons forest",
+    # 삼성영어 (삼성출판사)
+    "samsung english", "samsung selena", "삼성영어",
+    # 민병철 계열
+    "min byungchul", "minbyungchul", "민병철",
+    "minbyungchul speaking works",
+    # 단비교육
+    "danbi", "danbi english", "단비교육",
+    # 앙코아어학원
+    "ankoa", "앙코아",
+    # 링구아포럼
+    "lingua forum", "linguaforum", "링구아포럼",
+    # 야나두 (온라인 영어)
+    "yanadoo", "야나두",
+    # 스피킹맥스
+    "speaking max", "speakingmax", "스피킹맥스",
+    # 케이크 (카카오 계열 영어앱)
+    "cake english", "cake app",
+    # 튜터링
+    "tutoring english", "tutoring",
+    # 링글 (1:1 화상영어)
+    "ringle",
+    # 그 외 korvia 목록 확인 브랜드
+    "apex english", "apex",
+    "apple english academy",
+    "arte english",
+    "bis academy",
+    "bono english",
+    "bibakids", "biba kids",
+    "billy english",
+    "blooming kinder",
+    "brighton english",
+    "british education korea",
+    "canada beavers",
+    "callan",
+    "cleverkinder", "clever kinder",
+    "dna english",
+    "dreamedu",
+    "english joy",
+    "english republic",
+    "englfit",
+    "gaon english",
+    "gem academy",
+    "gemstone english",
+    "gilbert language",
+    "glovia english",
+    "guilford",
+    "hans language",
+    "heritage english",
+    "ile academy",
+    "ingeniiis",
+    "inspire english",
+    "lingua english",
+    "dux academy", "dux",
+    "worwick franklin", "worwick",
+    "english vine",
+    "eie english", "eie",
+    "kics", "kics prep",
     # ══ 영어유치원 / 유아 영어 브랜드 ══
     "wonderkids",
     "kinderhaus",
