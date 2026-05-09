@@ -3028,16 +3028,22 @@ async def admin_change_password(request: Request):
 async def admin_reset_blacklist(request: Request):
     """IP 블랙리스트 초기화 (관리자 전용)."""
     _check_admin(request)
-    bl_path = Path(os.getenv("AUDIT_DIR", str(Path(__file__).resolve().parent / "audit"))) / "ip_blacklist.json"
-    bl_path.write_text("{}", encoding="utf-8")
-    # 메모리 블랙리스트도 초기화
+    audit_dir = Path(os.getenv("AUDIT_DIR", str(Path(__file__).resolve().parent / "audit")))
+    (audit_dir / "ip_blacklist.json").write_text("{}", encoding="utf-8")
+    # 영구 블랙리스트 파일도 초기화 (관리자 lockout 복구)
+    try:
+        (audit_dir / "ip_permanent_ban.json").write_text("[]", encoding="utf-8")
+    except Exception:
+        pass
+    # 메모리 블랙리스트도 초기화 (일시 + 영구)
     try:
         from security_middleware import ip_blacklist
         ip_blacklist._list.clear()
+        ip_blacklist._permanent.clear()
         ip_blacklist._save()
     except Exception:
         pass
-    return ok(message="IP 블랙리스트 초기화 완료")
+    return ok(message="IP 블랙리스트 초기화 완료 (일시+영구)")
 
 
 @app.get("/api/admin/dashboard", tags=["admin"])
