@@ -219,6 +219,14 @@ export function defaultCols(): ColDef[] {
     { key: 'introFee', label: '소개료', w: 100, type: 'dropdown', opts: FEE_OPTS, v: true },
     { key: 'process', label: '처리여부', w: 100, type: 'dropdown', opts: PROC_OPTS, v: true },
     { key: 'history', label: '과거기록', w: 150, type: 'long', v: true },
+    // ── Google Sheets 추가 컬럼 (순서 일치) ──
+    { key: 'koreaExp', label: '한국경력', w: 90, type: 't', v: true },
+    { key: 'documents', label: '서류현황', w: 100, type: 'long', v: true },
+    { key: 'notes', label: '메모', w: 150, type: 'long', v: true },
+    { key: 'visaType', label: '비자종류', w: 80, type: 't', v: true },
+    { key: 'passportStatus', label: '여권', w: 80, type: 't', v: true },
+    { key: 'piercings', label: '피어싱', w: 60, type: 't', v: true },
+    { key: 'housingType', label: '숙소타입', w: 80, type: 't', v: true },
     // 인재 게시판 관리 컬럼 (Phase 3.8)
     { key: 'talent_visible', label: '공개', w: 45, type: 't', v: false },
     { key: 'talent_badge', label: '배지', w: 60, type: 't', v: false },

@@ -148,6 +148,14 @@ function mapRow(c: Record<string, unknown>, idx: number, edits: Record<string, E
     introFee: (ov.introFee as string) ?? String(c.referral_fee ?? ''),
     process: (ov.process as string) ?? String(c.process_date ?? ''),
     history: (ov.history as string) ?? String(c.past_placement ?? ''),
+    // ── Google Sheets 추가 필드 ──
+    koreaExp: (ov.koreaExp as string) ?? String(c.korea_experience ?? ''),
+    documents: (ov.documents as string) ?? String(c.documents ?? ''),
+    notes: (ov.notes as string) ?? String(c.notes ?? ''),
+    visaType: (ov.visaType as string) ?? String(c.visa_type ?? ''),
+    passportStatus: (ov.passportStatus as string) ?? String(c.passport_status ?? ''),
+    piercings: (ov.piercings as string) ?? String(c.piercings ?? ''),
+    housingType: (ov.housingType as string) ?? String(c.housing_type ?? ''),
   }
 }
 
@@ -683,22 +691,53 @@ export default function BridgeCanvasSheet() {
   }, [selectedRows, pushHistory, showPhotoToast])
 
   /* ── Server save ── */
-  const saveToServer = useCallback(async (cid: string, field: string, value: string | number) => {
+  // ★ 저장 실패 큐 — 서버 콜드 스타트 등으로 실패한 PATCH를 재시도
+  const pendingSavesRef = useRef<Map<string, { field: string; value: string | number; retries: number }>>(new Map())
+
+  const saveToServer = useCallback(async (cid: string, field: string, value: string | number, isRetry = false) => {
+    const key = `${cid}::${field}`
+    // 큐에 추가/갱신 (이미 있으면 최신 값으로 덮어씀)
+    if (!isRetry) {
+      pendingSavesRef.current.set(key, { field, value, retries: 0 })
+    }
     try {
       const res = await fetch(`${API}/api/admin/candidates/${encodeURIComponent(cid)}`, {
         method: 'PATCH',
         headers: { ...hdrsRef.current(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
       })
-      if (!res.ok) {
+      if (res.ok) {
+        // 성공 → 큐에서 제거
+        pendingSavesRef.current.delete(key)
+      } else {
         console.error(`[PATCH] ${field} 저장 실패: ${res.status}`)
-        showPhotoToast(`저장 실패: ${field}`, false)
+        if (!isRetry) showPhotoToast(`저장 실패: ${field} (자동 재시도)`, false)
       }
     } catch {
-      console.error(`[PATCH] ${field} 네트워크 오류`)
-      showPhotoToast('네트워크 오류 — 저장 실패', false)
+      console.error(`[PATCH] ${field} 네트워크 오류 — 재시도 큐에 유지`)
+      if (!isRetry) showPhotoToast('서버 연결 중... 저장 자동 재시도', false)
     }
   }, [showPhotoToast])
+
+  // ★ 30초마다 실패 큐 재시도 (서버 콜드 스타트 복구)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const pending = Array.from(pendingSavesRef.current.entries())
+      if (!pending.length) return
+      for (const [key, { field, value, retries }] of pending) {
+        const cid = key.split('::')[0]
+        if (retries >= 5) {
+          // 5회 실패 → 포기, 큐에서 제거
+          pendingSavesRef.current.delete(key)
+          console.warn(`[PATCH] ${key} 5회 실패, 포기`)
+          continue
+        }
+        pendingSavesRef.current.get(key)!.retries = retries + 1
+        await saveToServer(cid, field, value, true)
+      }
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [saveToServer])
 
   /* ── Photo upload handler ── */
   const handlePhotoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -877,6 +916,11 @@ export default function BridgeCanvasSheet() {
           personalNote: 'personal_consideration', history: 'past_placement',
           housing: 'housing', introFee: 'referral_fee',
           process: 'process_date',
+          // Google Sheets 추가 필드
+          koreaExp: 'korea_experience', documents: 'documents',
+          notes: 'notes', visaType: 'visa_type',
+          passportStatus: 'passport_status', piercings: 'piercings',
+          housingType: 'housing_type',
         }
         const dbField = fieldMap[colKey]
         if (dbField) saveToServer(cid, dbField, value)
