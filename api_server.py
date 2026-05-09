@@ -1508,30 +1508,17 @@ async def apply(request: Request, body: CandidateApply):
 
             db_payload = _map_apply_payload(payload)
             # sheet_number: INSERT 서브쿼리로 원자적 할당 (동시접수 race 방지)
-            db_payload["sheet_number"] = None  # placeholder
+            # 4를 포함하지 않는 sheet_number 할당 (Python에서 계산 후 INSERT)
+            db_payload["sheet_number"] = _next_sheet_number(conn)
             cols = list(db_payload.keys())
             vals = list(db_payload.values())
-            sn_idx = cols.index("sheet_number")
-            # 서브쿼리로 MAX+1 계산 (최소 10000)
-            ph = []
-            final_vals = []
-            for i, c in enumerate(cols):
-                if i == sn_idx:
-                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
-                else:
-                    ph.append("?")
-                    final_vals.append(vals[i])
+            ph = ["?" for _ in cols]
             conn.execute(
                 f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
-                final_vals,
+                vals,
             )
             conn.commit()
-            # 할당된 sheet_number 조회 (응답/후속 처리용)
-            sn_row = conn.execute(
-                "SELECT sheet_number FROM candidates WHERE candidate_id = ?",
-                (new_id,),
-            ).fetchone()
-            payload["sheet_number"] = sn_row[0] if sn_row else 0
+            payload["sheet_number"] = db_payload["sheet_number"]
 
             token_out = _make_candidate_token(new_id)
 
@@ -3775,29 +3762,16 @@ async def admin_create_candidate(request: Request, body: dict):
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
-            # sheet_number: INSERT 서브쿼리로 원자적 할당 (동시접수 race 방지)
-            record["sheet_number"] = None  # placeholder
+            # 4를 포함하지 않는 sheet_number 할당
+            record["sheet_number"] = _next_sheet_number(conn)
             cols = list(record.keys())
             vals = list(record.values())
-            sn_idx = cols.index("sheet_number")
-            ph = []
-            final_vals = []
-            for i, c in enumerate(cols):
-                if i == sn_idx:
-                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
-                else:
-                    ph.append("?")
-                    final_vals.append(vals[i])
+            ph = ["?" for _ in cols]
             conn.execute(
                 f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
-                final_vals,
+                vals,
             )
             conn.commit()
-            sn_row = conn.execute(
-                "SELECT sheet_number FROM candidates WHERE candidate_id = ?",
-                (cid,),
-            ).fetchone()
-            record["sheet_number"] = sn_row[0] if sn_row else 0
             return ok(data={"candidate_id": cid, "sheet_number": record["sheet_number"]}, message="후보자 등록 완료")
         finally:
             conn.close()
@@ -4745,6 +4719,28 @@ def _build_profile_card(c: dict) -> str:
 
 
 # ── 프로필 메일 빌더 ──────────────────────────────────────────────────────────
+
+
+def _next_sheet_number(conn) -> int:
+    """4를 포함하지 않는 다음 sheet_number 반환 (최소 10013부터).
+
+    규칙:
+    - DB 최대값 + 1부터 시작
+    - 숫자 문자열에 '4'가 포함된 번호는 모두 건너뜀 (사음수 회피)
+    - 최소 시작: 10013 (10000~10012에 4가 없는 첫 번호는 10001이지만, 정책상 10013)
+    - safety loop: 최대 10,000회 탐색 후 RuntimeError
+    """
+    row = conn.execute(
+        "SELECT COALESCE(MAX(sheet_number), 10012) FROM candidates"
+    ).fetchone()
+    n = max(int(row[0]), 10012) + 1
+    if n < 10013:
+        n = 10013
+    for _ in range(10_000):
+        if "4" not in str(n):
+            return n
+        n += 1
+    raise RuntimeError(f"_next_sheet_number: 유효 번호를 찾지 못함 (n={n})")
 
 
 def _ensure_candidates_sheet_number():
@@ -9346,28 +9342,17 @@ async def admin_sync_incoming(request: Request):
             clean["candidate_id"] = cand_id
             clean["status"] = "Active"
             clean["updated_at"] = datetime.now(timezone.utc).isoformat()
-            # sheet_number 원자적 할당 (최소 10000)
-            clean["sheet_number"] = None  # placeholder
+            # 4를 포함하지 않는 sheet_number 할당
+            clean["sheet_number"] = _next_sheet_number(conn)
+            new_sn = clean["sheet_number"]
             cols = list(clean.keys())
             vals = list(clean.values())
-            sn_idx = cols.index("sheet_number")
-            ph = []
-            final_vals = []
-            for i, c in enumerate(cols):
-                if i == sn_idx:
-                    ph.append("MAX(COALESCE((SELECT MAX(sheet_number) FROM candidates), 9999) + 1, 10000)")
-                else:
-                    ph.append("?")
-                    final_vals.append(vals[i])
+            ph = ["?" for _ in cols]
             conn.execute(
                 f"INSERT INTO candidates ({', '.join(cols)}) VALUES ({', '.join(ph)})",
-                final_vals,
+                vals,
             )
             conn.commit()
-            sn_row = conn.execute(
-                "SELECT sheet_number FROM candidates WHERE candidate_id = ?", (cand_id,)
-            ).fetchone()
-            new_sn = sn_row[0] if sn_row else 0
         finally:
             conn.close()
         # Google Sheet 동기화 (비동기)
