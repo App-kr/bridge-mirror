@@ -248,6 +248,7 @@ export default function BridgeCanvasSheet() {
   const engineRef = useRef<GridEngine | null>(null)
   const prefsRef = useRef(new PrefsManager())
   const historyRef = useRef(new HistoryManager<{ data: DataStore; dbAll: DataRow[] }>(20))
+  const dbPrefsLoadedRef = useRef(false)  // DB 프리퍼런스 로드 완료 여부
   const editsRef = useRef<Record<string, EditOverride>>({})
   const photoRef = useRef<HTMLInputElement>(null)
   const photoTargetRef = useRef<number>(-1)
@@ -266,59 +267,92 @@ export default function BridgeCanvasSheet() {
   useEffect(() => { colsRef.current = cols }, [cols])
   useEffect(() => { hdrsRef.current = () => authHeaders() }, [authHeaders])
 
-  /* ── Prefs restore ── */
+  /* ── Prefs restore — DB 우선, localStorage 폴백 ── */
   useEffect(() => {
+    if (!adminKey) return  // 인증 완료 후 실행
     const pm = prefsRef.current
-    const { cols: restored, frozenCols: fc } = pm.load(defaultCols())
-    setCols(restored)
-    setFrozenCols(fc)
 
-    // 암호화 값 판별 (AES-256-GCM base64: 40자 이상 + base64 문자만)
+    // ★ StyleManager + PrefsManager에 인증 정보 주입
+    pm.setAuth(API, adminKey)
+
     const isStaleEncrypted = (v: unknown): boolean =>
       typeof v === 'string' && v.length > 40 && /^[A-Za-z0-9+/]{38,}={0,2}$/.test(v)
 
-    // editsRef: 암호화된 stale 값 제거
-    const rawEdits = pm.loadEdits() as Record<string, EditOverride>
-    for (const cid of Object.keys(rawEdits)) {
-      const ov = rawEdits[cid] as Record<string, unknown>
-      for (const k of Object.keys(ov)) {
-        if (isStaleEncrypted(ov[k])) delete ov[k]
+    const applyPrefs = (dbPrefs: {
+      cols?: { cw?: Record<string, number>; cl?: Record<string, string>; cv?: Record<string, boolean>; fc?: number }
+      rowHeights?: Record<string, number>
+      cellStyles?: Record<string, unknown>
+      tabData?: unknown
+      edits?: Record<string, Record<string, string>>
+    } | null) => {
+      // 컬럼 설정 — DB 우선
+      if (dbPrefs?.cols) {
+        const p = dbPrefs.cols
+        const restored = defaultCols().map(c => ({
+          ...c,
+          w: p.cw?.[c.key] ?? c.w,
+          label: p.cl?.[c.key] || c.label,
+          v: p.cv?.[c.key] !== undefined ? (p.cv[c.key] ?? true) : true,
+        }))
+        setCols(restored)
+        setFrozenCols(p.fc ?? 3)
+      } else {
+        const { cols: restored, frozenCols: fc } = pm.load(defaultCols())
+        setCols(restored)
+        setFrozenCols(fc)
       }
-    }
-    editsRef.current = rawEdits
 
-    // savedData: DataRow 내 암호화된 stale 값 빈 문자열로 교체
-    const savedData = pm.loadTabData<DataStore>()
-    if (savedData && (savedData.active?.length || savedData.past?.length || savedData.blacklist?.length)) {
-      const cleanRows = (rows: DataRow[]): DataRow[] =>
-        rows.map(r => {
-          const cleaned: DataRow = { ...r }
-          for (const k of Object.keys(r)) {
-            if (isStaleEncrypted(r[k])) (cleaned as Record<string, unknown>)[k] = ''
-          }
-          return cleaned
+      // edits overlay — DB 우선
+      const rawEdits = (dbPrefs?.edits ?? pm.loadEdits()) as Record<string, EditOverride>
+      for (const cid of Object.keys(rawEdits)) {
+        const ov = rawEdits[cid] as Record<string, unknown>
+        for (const k of Object.keys(ov)) {
+          if (isStaleEncrypted(ov[k])) delete ov[k]
+        }
+      }
+      editsRef.current = rawEdits
+
+      // tab data — DB 우선
+      const savedData = (dbPrefs?.tabData ?? pm.loadTabData<DataStore>()) as DataStore | null
+      if (savedData && (savedData.active?.length || savedData.past?.length || savedData.blacklist?.length)) {
+        const cleanRows = (rows: DataRow[]): DataRow[] =>
+          rows.map(r => {
+            const cleaned: DataRow = { ...r }
+            for (const k of Object.keys(r)) {
+              if (isStaleEncrypted(r[k])) (cleaned as Record<string, unknown>)[k] = ''
+            }
+            return cleaned
+          })
+        setData({
+          active: cleanRows(savedData.active || []),
+          past: cleanRows(savedData.past || []),
+          blacklist: cleanRows(savedData.blacklist || []),
         })
-      setData({
-        active: cleanRows(savedData.active || []),
-        past: cleanRows(savedData.past || []),
-        blacklist: cleanRows(savedData.blacklist || []),
-      })
+      }
+
+      // 행 높이 — DB 우선
+      const rh = dbPrefs?.rowHeights ?? pm.loadRowHeights()
+      if (rh && Object.keys(rh).length > 0) setRowHeights(rh)
+
+      // Memo restore (localStorage 유지)
+      try {
+        const savedMemo = localStorage.getItem('bridge_sheet_memo')
+        if (savedMemo) {
+          const mp = JSON.parse(savedMemo)
+          if (mp.memo) setMemo(mp.memo)
+          if (mp.style) setMemoStyle({ fontSize: 13, bold: false, color: '#111', bgColor: '#FFFDE7', ...mp.style })
+        }
+      } catch { /* ignore */ }
+
+      dbPrefsLoadedRef.current = true
+      setReady(true)
     }
 
-    setRowHeights(pm.loadRowHeights())
-
-    // Memo restore
-    try {
-      const savedMemo = localStorage.getItem('bridge_sheet_memo')
-      if (savedMemo) {
-        const mp = JSON.parse(savedMemo)
-        if (mp.memo) setMemo(mp.memo)
-        if (mp.style) setMemoStyle({ fontSize: 13, bold: false, color: '#111', bgColor: '#FFFDE7', ...mp.style })
-      }
-    } catch { /* ignore */ }
-
-    setReady(true)
-  }, [])
+    // DB에서 로드 시도 (실패 시 localStorage 자동 폴백)
+    pm.loadFromDB().then(dbPrefs => {
+      applyPrefs(dbPrefs && Object.keys(dbPrefs).length > 0 ? dbPrefs : null)
+    }).catch(() => applyPrefs(null))
+  }, [adminKey])  // adminKey가 준비된 후 실행
 
   useEffect(() => { if (ready) prefsRef.current.save(cols, frozenCols) }, [cols, frozenCols, ready])
   useEffect(() => { if (ready) prefsRef.current.saveTabData(data) }, [data, ready])
@@ -995,6 +1029,10 @@ export default function BridgeCanvasSheet() {
     if (!containerRef.current || !ready) return
     const engine = new GridEngine(containerRef.current, stableCallbacks)
     engine.setHeaderGetter(() => hdrsRef.current())
+    // ★ StyleManager에 인증 정보 주입 (DB 저장용)
+    engine.styleManager.setAuth(API, adminKey)
+    // ★ DB에서 셀 스타일 로드
+    engine.styleManager.loadFromDB().then(() => engine.forceRedraw?.())
     // 열 드래그 순서 변경 콜백
     engine.onColReorder = (newCols) => {
       setCols(newCols.filter(c => defaultCols().some(d => d.key === c.key)) as typeof newCols)

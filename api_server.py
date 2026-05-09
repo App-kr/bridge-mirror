@@ -14205,6 +14205,97 @@ async def form_watch_set_folder(req: Request):
         raise HTTPException(500, f"설정 실패: {e}")
 
 
+# ── Sheet Preferences (영구 영속성) ───────────────────────────────────────────
+
+def _ensure_sheet_prefs_table():
+    """Canvas Sheet 모든 UI 설정을 DB에 영구 저장 — localStorage 의존 제거."""
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sheet_prefs (
+            pref_key   TEXT PRIMARY KEY,
+            pref_value TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+try:
+    _ensure_sheet_prefs_table()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_sheet_prefs_table 스킵: %s", _e)
+
+
+@app.get("/api/admin/sheet/prefs", tags=["admin"])
+async def get_sheet_prefs(req: Request):
+    """Canvas Sheet 전체 환경설정 로드 (컬럼너비/행높이/셀스타일/열순서 등)."""
+    _check_admin(req)
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        rows = conn.execute("SELECT pref_key, pref_value FROM sheet_prefs").fetchall()
+        conn.close()
+        result = {}
+        for key, val in rows:
+            try:
+                result[key] = json.loads(val)
+            except Exception:
+                result[key] = val
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"sheet_prefs 로드 실패: {e}")
+
+
+@app.patch("/api/admin/sheet/prefs", tags=["admin"])
+async def save_sheet_prefs(req: Request):
+    """Canvas Sheet 환경설정 저장. body: { key: string, value: any }"""
+    _check_admin(req)
+    body = await req.json()
+    key = body.get("key", "").strip()
+    if not key:
+        raise HTTPException(400, "key 필요")
+    value = body.get("value")
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute(
+            "INSERT INTO sheet_prefs(pref_key, pref_value, updated_at) VALUES(?,?,datetime('now')) "
+            "ON CONFLICT(pref_key) DO UPDATE SET pref_value=excluded.pref_value, updated_at=excluded.updated_at",
+            (key, json.dumps(value, ensure_ascii=False))
+        )
+        conn.commit()
+        conn.close()
+        return ok(message=f"저장 완료: {key}")
+    except Exception as e:
+        raise HTTPException(500, f"sheet_prefs 저장 실패: {e}")
+
+
+@app.patch("/api/admin/sheet/prefs/bulk", tags=["admin"])
+async def save_sheet_prefs_bulk(req: Request):
+    """Canvas Sheet 환경설정 일괄 저장. body: { prefs: { key: value, ... } }"""
+    _check_admin(req)
+    body = await req.json()
+    prefs = body.get("prefs", {})
+    if not prefs:
+        raise HTTPException(400, "prefs 필요")
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        for key, value in prefs.items():
+            conn.execute(
+                "INSERT INTO sheet_prefs(pref_key, pref_value, updated_at) VALUES(?,?,datetime('now')) "
+                "ON CONFLICT(pref_key) DO UPDATE SET pref_value=excluded.pref_value, updated_at=excluded.updated_at",
+                (key, json.dumps(value, ensure_ascii=False))
+            )
+        conn.commit()
+        conn.close()
+        return ok(message=f"{len(prefs)}개 저장 완료")
+    except Exception as e:
+        raise HTTPException(500, f"sheet_prefs 일괄 저장 실패: {e}")
+
+
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
