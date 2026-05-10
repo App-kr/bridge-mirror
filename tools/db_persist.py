@@ -164,67 +164,30 @@ def _list_backups(drive, folder_id: str) -> list[dict]:
     return res.get("files", [])
 
 
-# ── SQL 덤프 생성 ──────────────────────────────────────────────────────────────
+# ── 바이너리 SQLite 백업 ───────────────────────────────────────────────────────
+# SQL 덤프 방식 폐기 — 멀티라인 문자열/세미콜론 파싱 오류 근본 해결
+# sqlite3.connect().backup() API 사용 → 100% 무손실 바이너리 복사
 
-def _make_sql_dump() -> bytes:
-    # ── 백업 대상 테이블 — Render 재배포/마이그레이션 시 보존 필수 ──
-    # 사용자 데이터 + UI 설정 + 운영 이력 모두 포함 (휘발성 큐/로그/단기토큰 제외)
-    TARGET = [
-        # 핵심 데이터 (사용자 입력)
-        "candidates", "jobs", "client_inquiries", "interviews",
-        # UI 설정 (Canvas Sheet 셀색/높이/너비/탭) — 반복 분실 사안
-        "sheet_prefs",
-        # 사이트 콘텐츠 (관리자 직접 편집)
-        "site_settings", "boards", "community_posts", "banners",
-        "site_partners", "testimonials", "form_configs", "page_content",
-        # 운영 이력 (필요 시 감사·복구 기준)
-        "file_uploads", "mail_introduce_log", "mail_logs",
-        "interview_status_log", "profile_sends",
-        # 운영 정책
-        "email_blacklist",
-    ]
-
-    def quote_val(v):
-        if v is None: return "NULL"
-        if isinstance(v, (int, float)): return str(v)
-        return "'" + str(v).replace("'", "''") + "'"
-
-    def build_create(conn, tbl):
-        cols = conn.execute(f'PRAGMA table_info("{tbl}")').fetchall()
-        if not cols: return None
-        pk_cols = [c[1] for c in cols if c[5] > 0]
-        defs = []
-        for _, name, typ, notnull, dflt, pk in cols:
-            typ = typ or "TEXT"
-            parts = [f'"{name}" {typ}']
-            if len(pk_cols) == 1 and pk: parts.append("PRIMARY KEY")
-            if notnull and not pk: parts.append("NOT NULL")
-            if dflt is not None: parts.append(f"DEFAULT {dflt}")
-            defs.append("    " + " ".join(parts))
-        if len(pk_cols) > 1:
-            defs.append("    PRIMARY KEY (" + ", ".join(f'"{c}"' for c in pk_cols) + ")")
-        return f'CREATE TABLE IF NOT EXISTS "{tbl}" (\n' + ",\n".join(defs) + "\n);"
-
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA busy_timeout=5000")
-    buf = io.StringIO()
-    buf.write("BEGIN TRANSACTION;\n")
-    for t in TARGET:
-        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone():
-            continue
-        cs = build_create(conn, t)
-        if cs: buf.write(cs + "\n")
-        for (idx_sql,) in conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", (t,)
-        ).fetchall():
-            buf.write(idx_sql + ";\n")
-        for row in conn.execute(f'SELECT * FROM "{t}"').fetchall():
-            vals = ",".join(quote_val(v) for v in row)
-            buf.write(f'INSERT OR IGNORE INTO "{t}" VALUES({vals});\n')
-    buf.write("COMMIT;\n")
-    conn.close()
-    sql = buf.getvalue()
-    return gzip.compress(sql.encode("utf-8"), compresslevel=6)
+def _make_binary_backup() -> bytes:
+    """SQLite 바이너리 백업 → gzip 압축. SQL 파싱 이슈 없이 완전 복원 보장."""
+    import tempfile as _tf
+    with _tf.NamedTemporaryFile(suffix=".db", delete=False,
+                                dir=str(DB_PATH.parent)) as tmp:
+        tmp_path = tmp.name
+    try:
+        src = sqlite3.connect(str(DB_PATH))
+        src.execute("PRAGMA busy_timeout=5000")
+        dst = sqlite3.connect(tmp_path)
+        src.backup(dst)           # WAL 포함 완전 복사
+        src.close()
+        dst.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        dst.close()
+        with open(tmp_path, "rb") as f:
+            raw = f.read()
+        return gzip.compress(raw, compresslevel=6)
+    finally:
+        try: os.unlink(tmp_path)
+        except Exception: pass
 
 
 # ── 공개 API ──────────────────────────────────────────────────────────────────
@@ -255,11 +218,12 @@ def backup(dry_run: bool = False) -> bool:
         print("[backup] DB가 비어있음 — 백업 스킵")
         return False
 
-    print(f"[backup] 덤프 생성 중... (총 rows ~{db_rows})")
+    # ★ 바이너리 백업 (SQL 덤프 방식 폐기 — 세미콜론/멀티라인 파싱 오류 근본 해결)
+    print(f"[backup] 바이너리 백업 생성 중... (총 rows ~{db_rows})")
     print(f"  테이블별: {table_counts}")
-    gz_data = _make_sql_dump()
+    gz_data = _make_binary_backup()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
-    fname = f"bridge_db_{ts}.sql.gz"
+    fname = f"bridge_db_{ts}.db.gz"          # .db.gz = 바이너리 포맷 식별자
     print(f"  크기: {len(gz_data)//1024}KB → {fname}")
 
     if dry_run:
@@ -288,6 +252,10 @@ def backup(dry_run: bool = False) -> bool:
 
 
 def restore(dry_run: bool = False) -> bool:
+    """Drive 최신 백업 → master.db 복원.
+    .db.gz = 바이너리 SQLite (권장), .sql.gz = 레거시 SQL 덤프 (폐기됨).
+    바이너리 백업 우선 선택 — 없으면 레거시 SQL 폴백.
+    """
     drive = _drive()
     folder_id = _get_or_create_folder(drive)
     backups = _list_backups(drive, folder_id)
@@ -296,15 +264,25 @@ def restore(dry_run: bool = False) -> bool:
         print("[restore] Drive에 백업 없음")
         return False
 
-    latest = backups[0]
-    print(f"[restore] 최신 백업: {latest['name']} ({int(latest.get('size',0))//1024}KB)")
+    # ★ .db.gz 바이너리 백업 우선 — .sql.gz 레거시 건너뜀
+    binary_backups = [b for b in backups if b["name"].endswith(".db.gz")]
+    sql_backups    = [b for b in backups if b["name"].endswith(".sql.gz")]
+    target = binary_backups[0] if binary_backups else (sql_backups[0] if sql_backups else None)
+
+    if not target:
+        print("[restore] 복원 가능한 백업 없음")
+        return False
+
+    is_binary = target["name"].endswith(".db.gz")
+    print(f"[restore] 최신 백업: {target['name']} ({int(target.get('size',0))//1024}KB)"
+          f" [{'바이너리' if is_binary else '레거시SQL'}]")
 
     if dry_run:
         print("  [dry-run] 복원 스킵")
         return True
 
     from googleapiclient.http import MediaIoBaseDownload
-    request = drive.files().get_media(fileId=latest["id"])
+    request = drive.files().get_media(fileId=target["id"])
     buf = io.BytesIO()
     downloader = MediaIoBaseDownload(buf, request)
     done = False
@@ -313,10 +291,48 @@ def restore(dry_run: bool = False) -> bool:
     buf.seek(0)
     gz_data = buf.read()
 
+    db_str = str(DB_PATH)
+
+    # ── 바이너리 복원 (메인 경로) ──────────────────────────────────────────────
+    if is_binary:
+        raw = gzip.decompress(gz_data)
+        print(f"  SQLite 바이너리: {len(raw):,} bytes")
+        # SQLite magic bytes 검증
+        if not raw.startswith(b"SQLite format 3"):
+            print("  [restore] ✗ SQLite 매직 바이트 불일치 — 파일 손상")
+            return False
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False,
+                                         dir=str(DB_PATH.parent)) as tmp:
+            tmp_path = tmp.name
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(raw)
+            # 무결성 검증
+            conn = sqlite3.connect(tmp_path)
+            result = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            counts = {}
+            for t in ("candidates", "jobs", "client_inquiries", "sheet_prefs"):
+                try: counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                except Exception: counts[t] = 0
+            conn.close()
+            print(f"  integrity: {result}, 검증: {counts}")
+            critical = {"candidates", "jobs", "client_inquiries"}
+            if any(counts.get(t, 0) == 0 for t in critical):
+                print("  [WARN] 핵심 테이블 비어있음 — 복원은 진행")
+            os.replace(tmp_path, db_str)
+            print(f"  [restore] 바이너리 복원 완료 ✓")
+            return True
+        except Exception as e:
+            try: os.unlink(tmp_path)
+            except Exception: pass
+            print(f"  [restore] ✗ 실패: {e}")
+            return False
+
+    # ── 레거시 SQL 복원 폴백 (가능하면 사용, 실패해도 무방) ─────────────────────
+    print("  [WARN] 레거시 SQL 백업 — 세미콜론 파싱 오류 가능성 있음")
     sql_text = gzip.decompress(gz_data).decode("utf-8")
     print(f"  SQL: {sql_text.count(chr(10)):,}줄")
 
-    db_str = str(DB_PATH)
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False,
                                      dir=str(DB_PATH.parent)) as tmp:
         tmp_path = tmp.name
@@ -325,29 +341,18 @@ def restore(dry_run: bool = False) -> bool:
         conn.executescript(sql_text)
         conn.commit()
         counts = {}
-        # 핵심 데이터 + UI 설정 모두 검증
-        for t in ("candidates", "jobs", "client_inquiries",
-                  "sheet_prefs", "boards", "form_configs", "site_settings"):
+        for t in ("candidates", "jobs", "client_inquiries"):
             try: counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             except Exception: counts[t] = 0
         conn.close()
         print(f"  검증: {counts}")
-        # 핵심 3개만 0건 경고 (선택 테이블은 비어있어도 정상)
-        critical = {"candidates", "jobs", "client_inquiries"}
-        if any(counts[t] == 0 for t in critical if t in counts):
-            print("  [WARN] 핵심 테이블 비어있음")
         os.replace(tmp_path, db_str)
-        print(f"  [restore] 완료 ✓")
-
-        c2 = sqlite3.connect(db_str)
-        result = c2.execute("PRAGMA integrity_check").fetchone()[0]
-        c2.close()
-        print(f"  integrity_check: {result}")
+        print(f"  [restore] 레거시 SQL 복원 완료 ✓")
         return True
     except Exception as e:
         try: os.unlink(tmp_path)
         except Exception: pass
-        print(f"  [restore] 실패: {e}")
+        print(f"  [restore] ✗ 레거시 SQL 실패: {e}")
         return False
 
 
