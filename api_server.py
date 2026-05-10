@@ -488,10 +488,29 @@ def _startup_db_health_check() -> None:
             conn.close()
 
         _log.info("[STARTUP] 테이블 카운트: %s", counts)
-        if any(v <= 0 for v in counts.values()):
-            _log.warning("[STARTUP] ⚠ 일부 테이블 비어있거나 없음")
+
+        # 자동 복원 트리거 조건 강화 — Render Free Plan sleep/wake 시 ephemeral 휘발 대응:
+        # 1) 일부 테이블 비어있음 (기존 조건)
+        # 2) candidates < 100건 (정상 운영 시 3000건+, 100미만이면 무조건 휘발 의심)
+        # 3) sheet_prefs 0건 + 다른 테이블도 빈약 (UI 설정 손실 명확)
+        _CRITICAL_LOSS = (
+            any(v <= 0 for v in counts.values())
+            or counts.get("candidates", 0) < 100
+        )
+
+        # 환경변수 진단 — 어떤 인증 방식이든 감지하도록 다중 fallback
+        _OAUTH_TOK = os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip()
+        _SA_B64    = os.getenv("GCP_SA_JSON_B64", "").strip()
+        _log.info(
+            "[STARTUP] Drive 인증: OAuth=%s, SA(legacy)=%s",
+            f"set({len(_OAUTH_TOK)}자)" if _OAUTH_TOK else "미설정",
+            f"set({len(_SA_B64)}자)" if _SA_B64 else "미설정",
+        )
+
+        if _CRITICAL_LOSS:
+            _log.warning("[STARTUP] ⚠ DB 데이터 휘발 감지 (counts=%s)", counts)
             # ── Drive 자동 복원 시도 ──────────────────────────────────────────
-            if os.getenv("DRIVE_OAUTH_TOKEN_JSON"):
+            if _OAUTH_TOK:
                 _log.info("[STARTUP] DRIVE_OAUTH_TOKEN_JSON 감지 → Drive 자동 복원 시작")
                 try:
                     import sys as _sys
@@ -532,10 +551,18 @@ def _startup_db_health_check() -> None:
                         _log.error("[STARTUP] ✗ Drive 복원 실패 — 수동 복원 필요")
                 except Exception as _re:
                     _log.error("[STARTUP] Drive 복원 예외: %s", _re, exc_info=True)
+            elif _SA_B64:
+                _log.error(
+                    "[STARTUP] ❌ GCP_SA_JSON_B64 (legacy Service Account)만 등록됨. "
+                    "현재 코드는 OAuth 방식 — DRIVE_OAUTH_TOKEN_JSON 환경변수 추가 필요. "
+                    "복원 절차: 로컬 'python tools/db_persist.py status' 실행 후 "
+                    "drive_oauth_token.json 전체 내용을 Render Environment 등록."
+                )
             else:
-                _log.warning(
-                    "[STARTUP] DRIVE_OAUTH_TOKEN_JSON 미설정 -- "
-                    "Render 환경변수에 추가하거나 수동으로 tools/render_db_upload.py 실행"
+                _log.error(
+                    "[STARTUP] ❌ Drive 인증 환경변수 전무 — 자동 복원 불가. "
+                    "DRIVE_OAUTH_TOKEN_JSON 미설정 → master.db 휘발 시 복구 불가능. "
+                    "Render 환경변수 등록 즉시 필요."
                 )
     except Exception as e:
         _log.error("[STARTUP] DB 헬스체크 실패: %s", e, exc_info=True)
@@ -14320,6 +14347,135 @@ async def save_sheet_prefs_bulk(req: Request):
         return ok(message=f"{len(prefs)}개 저장 완료")
     except Exception as e:
         raise HTTPException(500, f"sheet_prefs 일괄 저장 실패: {e}")
+
+
+# ── 영속성 진단 엔드포인트 (관리자 키 또는 IP 화이트리스트 필요) ────────────
+@app.get("/api/admin/diag/persistence", tags=["admin"])
+async def diag_persistence(req: Request):
+    """DB 데이터 + Drive 백업 + 자동 복원 환경변수 상태 종합 진단.
+    데이터 안 보일 때 한 번 호출로 원인 즉시 파악."""
+    _check_admin(req)
+    diag = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "render_env": {
+            "DRIVE_OAUTH_TOKEN_JSON_set": bool(os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip()),
+            "DRIVE_OAUTH_TOKEN_JSON_len": len(os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip()),
+            "GCP_SA_JSON_B64_set": bool(os.getenv("GCP_SA_JSON_B64", "").strip()),
+            "ADMIN_API_KEY_set": bool(os.getenv("ADMIN_API_KEY", "").strip()),
+            "BRIDGE_FIELD_KEY_set": bool(os.getenv("BRIDGE_FIELD_KEY", "").strip()),
+            "DB_PATH": os.getenv("DB_PATH", "master.db"),
+        },
+        "db": {},
+        "drive_backups": [],
+        "auto_restore_capable": False,
+        "recommended_action": "",
+    }
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        for t in ["candidates", "jobs", "client_inquiries", "sheet_prefs",
+                  "boards", "community_posts", "form_configs", "interviews",
+                  "site_partners", "testimonials"]:
+            try:
+                cnt = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                diag["db"][t] = cnt
+            except Exception:
+                diag["db"][t] = "(테이블 없음)"
+        conn.close()
+    except Exception as e:
+        diag["db_error"] = str(e)[:200]
+
+    # Drive 백업 목록 (OAuth 토큰 있을 때만)
+    if diag["render_env"]["DRIVE_OAUTH_TOKEN_JSON_set"]:
+        diag["auto_restore_capable"] = True
+        try:
+            import sys as _sys
+            _tools_dir = str(Path(__file__).resolve().parent / "tools")
+            if _tools_dir not in _sys.path:
+                _sys.path.insert(0, _tools_dir)
+            from db_persist import _drive, _get_or_create_folder, _list_backups  # type: ignore
+            d = _drive()
+            fid = _get_or_create_folder(d)
+            backups = _list_backups(d, fid)[:5]
+            diag["drive_backups"] = [{
+                "name": b["name"],
+                "size_kb": int(b.get("size", 0)) // 1024,
+                "created": b["createdTime"][:16],
+            } for b in backups]
+        except Exception as e:
+            diag["drive_error"] = str(e)[:200]
+
+    # 권장 조치
+    cand = diag["db"].get("candidates", 0)
+    sp = diag["db"].get("sheet_prefs", 0)
+    if isinstance(cand, int) and cand < 100:
+        if not diag["render_env"]["DRIVE_OAUTH_TOKEN_JSON_set"]:
+            diag["recommended_action"] = (
+                "🚨 DB 휘발 + 자동복원 불가. Render Environment에 "
+                "DRIVE_OAUTH_TOKEN_JSON 환경변수 즉시 등록 필요."
+            )
+        else:
+            diag["recommended_action"] = (
+                "🔄 DB 휘발 감지 + OAuth 토큰 등록됨. "
+                "POST /api/admin/diag/auto-restore 호출하면 즉시 복원."
+            )
+    elif isinstance(sp, int) and sp == 0:
+        diag["recommended_action"] = (
+            "⚠️ candidates 정상이지만 sheet_prefs 비어있음. "
+            "이전 시점 UI 설정은 손실. 지금부터 입력하면 영구 보존."
+        )
+    else:
+        diag["recommended_action"] = "✅ 모든 데이터 정상."
+
+    return ok(data=diag)
+
+
+@app.post("/api/admin/diag/auto-restore", tags=["admin"])
+async def diag_auto_restore(req: Request):
+    """수동으로 Drive 자동복원 트리거 — 즉시 master.db 채우기.
+    Render Free Plan sleep/wake 시 데이터 휘발 응급 복구용."""
+    _check_admin(req)
+    if not os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip():
+        raise HTTPException(503, "DRIVE_OAUTH_TOKEN_JSON 미설정. Render Environment 등록 필요.")
+    try:
+        import sys as _sys
+        _tools_dir = str(Path(__file__).resolve().parent / "tools")
+        if _tools_dir not in _sys.path:
+            _sys.path.insert(0, _tools_dir)
+        from db_persist import restore as _drive_restore  # type: ignore
+        ok_flag = _drive_restore()
+        if ok_flag:
+            # post-restore ensure (옛 백업 호환)
+            _ENSURE_FUNCS = [
+                "_ensure_sheet_prefs_table", "_ensure_email_blacklist_table",
+                "_ensure_boards_table", "_ensure_file_uploads_table",
+                "_ensure_banners_table", "_ensure_site_partners_table",
+                "_ensure_site_settings_table", "_ensure_site_visits_table",
+                "_ensure_page_content_table", "_ensure_pipeline_tables",
+                "_ensure_talent_auth_tables",
+            ]
+            for fn in _ENSURE_FUNCS:
+                try:
+                    f = globals().get(fn)
+                    if callable(f): f()
+                except Exception:
+                    pass
+            # 카운트 재확인
+            counts = {}
+            try:
+                conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+                for t in ["candidates", "jobs", "client_inquiries", "sheet_prefs"]:
+                    try:
+                        counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                    except Exception:
+                        counts[t] = -1
+                conn.close()
+            except Exception:
+                pass
+            return ok(message="Drive 자동복원 성공", data={"counts": counts})
+        raise HTTPException(500, "Drive 복원 실패 — 백업 미존재 또는 권한 오류")
+    except Exception as e:
+        raise HTTPException(500, f"자동복원 예외: {e}")
 
 
 # ── 로컬 실행 ─────────────────────────────────────────────────────────────────
