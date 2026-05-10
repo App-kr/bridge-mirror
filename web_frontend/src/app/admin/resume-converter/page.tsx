@@ -42,9 +42,22 @@ interface SlotFile {
 
 type SlotMap = Record<SlotId, SlotFile | null>
 
+// 국적 옵션 (처리된 파일명에서 추출)
+const NATIONALITY_OPTIONS = [
+  '미국', '영국', '캐나다', '호주', '남아공', '아일랜드', '뉴질랜드',
+  '독일', '미교포', '필리핀', '인도', '기타',
+]
+const GENDER_OPTIONS = [
+  { value: '여성', label: '여성 (F)' },
+  { value: '남성', label: '남성 (M)' },
+]
+
 interface CandidateCol {
   uid: string
   candidateId: string
+  nationality: string
+  gender: string
+  birthYear: string
   slots: SlotMap
   status: 'idle' | 'processing' | 'done' | 'error'
   message: string
@@ -54,10 +67,25 @@ function makeCol(): CandidateCol {
   return {
     uid: crypto.randomUUID(),
     candidateId: '',
+    nationality: '',
+    gender: '여성',
+    birthYear: '',
     slots: { resume: null, cover: null, photo: null, reference: null, other: null },
     status: 'idle',
     message: '',
   }
+}
+
+function buildOutputName(col: CandidateCol, ext: string): string {
+  const num   = col.candidateId.trim()
+  const nat   = col.nationality.trim()
+  const gen   = col.gender.trim()
+  const yr    = col.birthYear.trim()
+  if (!num) return `processed.${ext}`
+  let name = num
+  if (nat) name += nat
+  if (gen || yr) name += `_${gen}(${yr}born)`
+  return `${name}.${ext}`
 }
 
 function getSlot(id: SlotId) {
@@ -205,9 +233,46 @@ function CandidateColumn({
           type="text"
           value={col.candidateId}
           onChange={e => onUpdate(col.uid, c => ({ ...c, candidateId: e.target.value }))}
-          placeholder="지원자 번호 (예: 3126)"
+          placeholder="번호 (예: 6295)"
           className="w-full text-xs px-2.5 py-1.5 border border-[#e8eaed] rounded-lg outline-none focus:border-[#1D9E75] transition-colors"
         />
+
+        {/* 국적 + 성별 + 년생 */}
+        <div className="flex gap-1 mt-1">
+          <select
+            value={col.nationality}
+            onChange={e => onUpdate(col.uid, c => ({ ...c, nationality: e.target.value }))}
+            className="flex-1 min-w-0 text-xs px-1.5 py-1.5 border border-[#e8eaed] rounded-lg outline-none focus:border-[#1D9E75] transition-colors bg-white"
+          >
+            <option value="">국적</option>
+            {NATIONALITY_OPTIONS.map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <select
+            value={col.gender}
+            onChange={e => onUpdate(col.uid, c => ({ ...c, gender: e.target.value }))}
+            className="flex-shrink-0 text-xs px-1 py-1.5 border border-[#e8eaed] rounded-lg outline-none focus:border-[#1D9E75] transition-colors bg-white"
+          >
+            {GENDER_OPTIONS.map(g => (
+              <option key={g.value} value={g.value}>{g.value}</option>
+            ))}
+          </select>
+        </div>
+        <input
+          type="text"
+          value={col.birthYear}
+          onChange={e => onUpdate(col.uid, c => ({ ...c, birthYear: e.target.value.replace(/\D/g,'').slice(0,2) }))}
+          placeholder="년생 2자리 (예: 92)"
+          maxLength={2}
+          className="w-full text-xs px-2.5 py-1.5 border border-[#e8eaed] rounded-lg outline-none focus:border-[#1D9E75] transition-colors mt-1"
+        />
+        {/* 파일명 미리보기 */}
+        {col.candidateId && (
+          <p className="text-[10px] text-[#1D9E75] mt-1 font-mono truncate" title={buildOutputName(col, 'pdf')}>
+            → {buildOutputName(col, 'pdf')}
+          </p>
+        )}
 
         {fileCount > 0 && (
           <p className="text-[10px] text-[#9AA0A6] mt-1.5">
@@ -364,6 +429,9 @@ function ResumeConverterInner() {
 
     const formData = new FormData()
     formData.append('candidate_id', col.candidateId.trim())
+    formData.append('nationality', col.nationality.trim())
+    formData.append('gender', col.gender.trim())
+    formData.append('birth_year', col.birthYear.trim())
     for (const [slotId, slotFile] of Object.entries(col.slots)) {
       if (slotFile) formData.append(`files_${slotId}`, slotFile.file)
     }

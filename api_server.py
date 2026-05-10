@@ -13007,6 +13007,9 @@ threading.Thread(target=_interview_reminder_loop, daemon=True, name="reminder").
 async def process_resume_files(
     request: Request,
     candidate_id: str = None,
+    nationality: str = None,
+    gender: str = None,
+    birth_year: str = None,
     files_resume: list[UploadFile] = FastFile(default=None),
     files_cover: list[UploadFile] = FastFile(default=None),
     files_photo: list[UploadFile] = FastFile(default=None),
@@ -13022,6 +13025,7 @@ async def process_resume_files(
     - files_photo: 사진 (JPG/PNG/WEBP)
     - files_reference: 추천서 (PDF/DOCX)
     - files_other: 기타 파일
+    출력 파일명: {candidate_id}{nationality}_{gender}({birth_year}born).{ext}
     """
     # 관리자 인증
     _check_admin(request)
@@ -13031,6 +13035,16 @@ async def process_resume_files(
         raise HTTPException(status_code=400, detail="candidate_id는 필수입니다")
 
     candidate_id = candidate_id.strip()
+
+    # 출력 파일명 스템 생성: {번호}{국적}_{성별}({년생}born)
+    _nat   = (nationality or "").strip()
+    _gen   = (gender or "").strip()
+    _yr    = (birth_year or "").strip()
+    _stem  = candidate_id
+    if _nat:
+        _stem += _nat
+    if _gen or _yr:
+        _stem += f"_{_gen}({_yr}born)"
 
     # 파일 섹션 수집
     file_sections = {
@@ -13166,8 +13180,9 @@ async def process_resume_files(
                         )])
 
                         import base64 as _b64
+                        out_fname = f"{_stem}.docx"
                         return {
-                            "file_name": file_name,
+                            "file_name": out_fname,
                             "file_type": "docx",
                             "processed": True,
                             "pii_count": pii_count,
@@ -13190,53 +13205,35 @@ async def process_resume_files(
                         "error": f"처리 실패: {str(e)}",
                     }
 
-            # PDF 처리 — resume_converter/pipeline 사용 (축약 없음 + 사진 자동 삽입)
+            # PDF 처리 — doc_processor.process_pdf 사용 (원본 레이아웃 유지 + PII 제거 + 번호 삽입)
             elif file_ext == '.pdf':
                 try:
                     sys.path.insert(0, str(Path(__file__).resolve().parent))
-                    from tools.resume_converter.pdf_builder import (
-                        extract_text_from_pdf, text_to_pdf_bytes,
-                    )
-                    from tools.resume_converter.pii_engine import analyze_pii
+                    from tools.doc_processor import process_pdf
 
                     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
                         tmp.write(file_bytes)
                         tmp_path = Path(tmp.name)
 
                     try:
-                        # 원본 텍스트 추출 (2-col 마커 포함)
-                        src_text = extract_text_from_pdf(tmp_path)
-                        known = [candidate_dict["full_name"]] if (candidate_dict and candidate_dict.get("full_name")) else []
-                        pii_result = analyze_pii(src_text, known_names=known)
-
-                        # 사진 bytes 로딩 (photo_tmp_path 있으면)
-                        _photo_bytes = None
-                        if photo_tmp_path and photo_tmp_path.exists():
-                            try:
-                                from tools.resume_converter.face_crop import crop_face_from_bytes, FaceNotFoundError
-                                _raw = photo_tmp_path.read_bytes()
-                                try:
-                                    _photo_bytes = crop_face_from_bytes(_raw)
-                                except FaceNotFoundError:
-                                    _photo_bytes = _raw
-                            except Exception:
-                                _photo_bytes = None
-
-                        # 원본 축약 없이 자연스러운 분량 렌더
-                        processed_bytes = text_to_pdf_bytes(
-                            pii_result.cleaned_text,
-                            photo_bytes=_photo_bytes,
-                            candidate_id=str(_brj_number or ""),
-                            line_h=16,
-                            margin_cm=1.5,
-                            font_size=10,
+                        doc, log_entries = process_pdf(
+                            tmp_path,
+                            brj_number=_brj_number or 0,
+                            candidate=candidate_dict,
+                            photo_path=photo_tmp_path,
                         )
 
-                        pii_count = len(pii_result.pii_found)
+                        processed_bytes = doc.tobytes(deflate=True)
+                        doc.close()
+
+                        pii_count = len([l for l in log_entries if any(
+                            kw in l for kw in ["EMAIL:", "PHONE:", "NAME:", "LOCATION:", "WORKPLACE:", "REDACT"]
+                        )])
 
                         import base64 as _b64
+                        out_fname = f"{_stem}.pdf"
                         return {
-                            "file_name": file_name,
+                            "file_name": out_fname,
                             "file_type": "pdf",
                             "processed": True,
                             "pii_count": pii_count,
