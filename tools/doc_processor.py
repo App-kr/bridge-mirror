@@ -1204,6 +1204,10 @@ _GENERIC_SCHOOL_TYPES: dict = {
     "language centre": "Language Centre",
     "english village": "English Village",
     "english academy": "English Academy",
+    "english institute": "English Institute",
+    "english center": "English Center",
+    "english centre": "English Centre",
+    "english school": "English School",
     "teaching academy": "Teaching Academy",
     "private academy": "Private Academy",
     "international school": "International School",
@@ -1235,7 +1239,7 @@ _RE_KR_SCHOOL_PREFIX = re.compile(
     # 예: "in Kindergarten" → IGNORECASE 있으면 매칭됨 → 제거
     r'\b[A-Z][a-zA-Z\'\-\.]+(?:[ \t]+[A-Z][a-zA-Z\'\-\.]+){0,2}[ \t]+'
     r'(Language[ \t]+School|Language[ \t]+Academy|Language[ \t]+Institute|'
-    r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy)|'
+    r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy|Institute|Cent(?:er|re)|School)|'
     r'Teaching[ \t]+Academy|Private[ \t]+Academy|International[ \t]+School|'
     r'(?:Elementary|Primary|Secondary|Middle|High)[ \t]+School|'
     r'Kindergarten|Preschool)\b',
