@@ -1,16 +1,40 @@
 # BRIDGE 작업 상태 (세션 간 유지)
-최근 업데이트: 2026-04-26 (세션 39 — 이메일 자동응답 하드닝 + 보고 시스템)
+최근 업데이트: 2026-05-10 (세션 40 — Render DB 복구 + Sheet 완전 영속화)
 
-## ⏭ 다음 세션 우선순위 (2026-04-26 기준)
+## ⏭ 다음 세션 우선순위 (2026-05-10 기준)
 
-1. **카카오톡 알림 설정** (사용자 직접):
-   - `! "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/kakao_notify.py" setup`
-   - REST API 키 입력 → 브라우저 OAuth → 완료 시 카카오 알림 활성화
-2. **Render 환경변수** (사용자 직접):
-   - `GMAIL_SYNC_ENABLED=true` 추가 → 서버사이드 Gmail 자동 동기화
-   - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_BUCKET` 5개 추가
+1. **Render 환경변수 등록** (Render 대시보드 직접):
+   - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_BUCKET` → 사진 업로드 기능
+   - `GMAIL_SYNC_ENABLED=true` → Gmail 자동 동기화
+2. **카카오톡 알림 설정** (사용자 직접):
+   - `"Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/kakao_notify.py" setup`
 3. **Task Scheduler 등록** — `scripts/register_ad_only_refresh.bat` 관리자 권한 실행
-4. **ESL Cafe UI 운영** — premium/hot 토글 수동 설정 (관리자 페이지)
+4. **admin/sheet Google Sheets 형식 맞춤** — https://docs.google.com/spreadsheets/d/1PveCbB7yfPhsmV-YwERf2PjoaKtXJmB0uJngu1dhTxM
+
+## ✅ 2026-05-10 완료된 작업 (세션 40 — Render DB 복구 + Sheet 완전 영속화)
+
+### Render DB 복구 (master.db 13.2MB 직접 업로드)
+- `POST /api/admin/db/restore` 엔드포인트로 로컬 백업 업로드
+- 후보자 3,059명 / 구인 2,299건 / 문의 1,239건 복원
+- sheet_prefs 테이블 포함 DB 재업로드 (백업은 테이블 생성 전이었으므로)
+
+### Canvas Sheet 영속성 완성 (커밋 812387fe ~ 9fd47e9d)
+- `sheet_prefs` SQLite 테이블 자동 생성 (`_ensure_sheet_prefs_table`)
+- GET/PATCH/bulk-PATCH API 엔드포인트 3개 (api_server.py)
+- `PrefsManager.ts`: DB 이중 저장 (localStorage 즉시 + DB 디바운스 500ms)
+- `StyleManager.ts`: DB 이중 저장 (localStorage 즉시 + DB 디바운스 800ms)
+- `BridgeCanvasSheet.tsx` STEP1/STEP2 분리:
+  - STEP1 동기: localStorage → `setReady(true)` 항상 즉시 실행
+  - STEP2 비동기: DB merge + 5초 AbortController 타임아웃
+- **Cold start 빈화면 버그 완전 수정** (커밋 9fd47e9d)
+- **재시도 큐**: `pendingSavesRef` Map, 30초 간격, 최대 5회
+
+### Google Sheets 누락 컬럼 7개 추가 (커밋 5f8d66fa)
+- koreaExp, documents, notes, visaType, passportStatus, piercings, housingType
+
+### tg_commander.py — Telegram 대화형 관리 데몬 (커밋 포함)
+- /status, /pipeline, /watcher, /git, /db, /apply_test, /resume, /run, /help
+- Windows Task Scheduler BRIDGE_TgCommander 등록 완료
 
 ## ✅ 2026-04-26 완료된 작업 (세션 39 — 이메일 자동응답 하드닝 + 보고체계)
 
