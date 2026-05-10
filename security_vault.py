@@ -192,16 +192,30 @@ def _get_field_key_raw() -> bytearray:
     if prod_key:
         return bytearray(prod_key.encode('utf-8'))
 
+    # 로컬 .bridge.key 폴백 (개발/로컬 환경)
+    _key_candidates = [
+        Path(__file__).resolve().parent / ".bridge.key",
+        Path("Q:/Claudework/bridge base/.bridge.key"),
+    ]
+    for _kp in _key_candidates:
+        if _kp.exists():
+            _raw = _kp.read_text(encoding="utf-8").strip()
+            if _raw:
+                return bytearray(_raw.encode("utf-8"))
+
+    # V4 Vault (레거시 — 미사용)
     _vault_path = Path("Q:/")
     if str(_vault_path) not in sys.path:
         sys.path.insert(0, str(_vault_path))
-        
     try:
-        from secure_vault_v3 import PolymorphicQuantumVault
+        from secure_vault_v3 import PolymorphicQuantumVault  # type: ignore
         vault = PolymorphicQuantumVault()
         return vault.unseal_and_roll("BRIDGE_FIELD_KEY")
     except Exception as e:
-        raise EnvironmentError(f"V4 Vault 오류: {e} (python Q:/secure_vault_v3.py 로 사전 seal 필요)")
+        raise EnvironmentError(
+            f"BRIDGE_FIELD_KEY 미설정 + .bridge.key 없음 + V4 Vault 오류: {e}\n"
+            "로컬: .bridge.key 파일 확인 / Render: BRIDGE_FIELD_KEY 환경변수 설정"
+        )
 
 
 def _derive_key() -> bytes:

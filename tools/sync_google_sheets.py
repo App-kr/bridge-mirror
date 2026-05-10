@@ -67,12 +67,13 @@ except ImportError:
     def is_encrypted(v):  # type: ignore
         return False
 
-def _enc(value: str | None) -> str | None:
+def _enc(value: str | None, column_name: str = "") -> str | None:
+    """PII 암호화 (column_name 포함 필수 — L1 키 분리용)."""
     if not value:
         return value
     if is_encrypted(str(value)):
         return str(value)
-    return encrypt_field(str(value))
+    return encrypt_field(str(value), column_name)
 
 # ── Google Sheets 클라이언트 ────────────────────────────────────────────────────
 def _get_sheets_service():
@@ -140,29 +141,56 @@ def _rows_to_dicts(raw: list[list[str]]) -> list[dict[str, str]]:
 
 # PII 컬럼 (암호화 대상)
 _CAND_PII_COLS = {"email", "phone", "full_name", "date_of_birth", "address", "passport_number",
-                  "kakao_id", "emergency_contact", "emergency_phone"}
+                  "kakao_id", "emergency_contact", "emergency_phone", "kakaotalk"}
 
 # 허용 컬럼 (candidates 테이블 기준)
 _CAND_ALLOWED = {
     "full_name", "email", "phone", "nationality", "teaching_age",
     "visa_type", "start_date", "source", "created_at",
     "kakao_id", "current_location", "degree", "major",
+    "gender", "dob", "religion", "marital_status",
+    "korean_criminal_record", "criminal_record", "health_info",
+    "e_visa", "area_prefs", "housing", "reference",
 }
 
-# 시트 컬럼 → DB 컬럼 매핑 (시트 헤더명이 다를 경우)
+# 시트 컬럼 → DB 컬럼 매핑
+# ★ 실제 시트 헤더(한/영 혼용)에 맞춰 정확히 매핑
 _CAND_COL_MAP: dict[str, str] = {
+    # ─── 식별자 (필수) ───────────────────────────────────────────────
+    "이메일 주소": "email",          # 실제 시트 헤더
+    "Email Address": "email",       # 영문 폼 폴백
+    "Mobile Phone": "phone",        # 실제 시트 헤더
+    "Phone Number": "phone",        # 영문 폼 폴백
+    # ─── 기본 정보 ──────────────────────────────────────────────────
+    "Full name": "full_name",
     "Full Name": "full_name",
-    "Email Address": "email",
-    "Phone Number": "phone",
     "Nationality": "nationality",
-    "Teaching Level": "teaching_age",
-    "Visa Type": "visa_type",
-    "Available Start Date": "start_date",
-    "KakaoTalk ID": "kakao_id",
+    "Date of Birth": "dob",
+    "Gender": "gender",
     "Current Location": "current_location",
+    "KakaoTalk": "kakao_id",         # 실제 시트 헤더
+    "KakaoTalk ID": "kakao_id",      # 영문 폼 폴백
+    # ─── 지원 정보 ──────────────────────────────────────────────────
+    "Target": "teaching_age",        # 실제 시트 헤더 (초/중/고)
+    "Teaching Level": "teaching_age",
+    "Start date": "start_date",      # 실제 시트 헤더
+    "Available Start Date": "start_date",
+    "Area prefs": "area_prefs",
+    "E visa": "e_visa",
+    # ─── 학력/자격 ──────────────────────────────────────────────────
     "Degree": "degree",
     "Major": "major",
-    "Timestamp": "created_at",
+    # ─── 기타 정보 ──────────────────────────────────────────────────
+    "Religion": "religion",
+    "Marital Status": "marital_status",
+    "Housing": "housing",
+    "Reference": "reference",
+    "Criminal Record": "criminal_record",
+    "Criminal Record in Korea": "korean_criminal_record",
+    "Health Information": "health_info",
+    # ─── 타임스탬프 ─────────────────────────────────────────────────
+    "타임스탬프": "created_at",       # 실제 시트 헤더
+    "Timestamp": "created_at",       # 영문 폼 폴백
 }
 
 
@@ -195,13 +223,19 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
                     skipped += 1
                     continue  # 식별자 없으면 스킵
 
-                # PII 암호화
+                # PII 암호화 (column_name 전달 → L1 키 분리)
                 for col in _CAND_PII_COLS:
                     if col in mapped:
-                        mapped[col] = _enc(mapped[col])
+                        mapped[col] = _enc(mapped[col], col)
 
                 mapped.setdefault("source", "google_sheet_import")
                 mapped.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                mapped.setdefault("status", "Active")
+                mapped.setdefault("resume_status", "pending")
+                # candidate_id 자동 생성 (UUID 기반)
+                if "candidate_id" not in mapped:
+                    import uuid as _uuid_mod
+                    mapped["candidate_id"] = f"cnd_{_uuid_mod.uuid4().hex[:12]}"
 
                 if dry_run:
                     added += 1
@@ -300,7 +334,7 @@ def sync_jobs(service, dry_run: bool = False) -> dict[str, int]:
                 # PII 암호화
                 for col in _JOB_PII_COLS:
                     if col in mapped:
-                        mapped[col] = _enc(mapped[col])
+                        mapped[col] = _enc(mapped[col], col)
 
                 # client_inquiries 테이블에 insert (PII 컬럼명 변환)
                 inq_map: dict[str, Any] = {}
