@@ -30,7 +30,7 @@ interface DiagData {
 }
 
 export default function DiagnosePage() {
-  const { authed, login, headers } = useAdminAuth()
+  const { authed, headers } = useAdminAuth()
   const [data, setData] = useState<DiagData | null>(null)
   const [loading, setLoading] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -79,7 +79,11 @@ export default function DiagnosePage() {
     if (authed) fetchDiag()
   }, [authed, fetchDiag])
 
-  if (!authed) return <div className="p-8"><button onClick={login}>관리자 로그인</button></div>
+  if (!authed) return (
+    <div className="p-8">
+      <p>관리자 로그인이 필요합니다. /admin 페이지에서 먼저 로그인해 주세요.</p>
+    </div>
+  )
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
