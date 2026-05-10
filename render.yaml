@@ -7,9 +7,9 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn api_server:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
-    # autoDeploy: 사용자 요청에 따라 main push 시 자동 배포 활성화
-    # 자동 복원 트리거가 매 재배포마다 작동해서 master.db 영구 보존
-    autoDeploy: true
+    # autoDeploy: false — DB 보호. git push가 DB를 날리므로 수동 배포만
+    # 자동배포는 DRIVE_OAUTH_TOKEN_JSON 설정 완료 후 다시 true로
+    autoDeploy: false
     branch: main
     envVars:
       - key: ENV
