@@ -8329,15 +8329,45 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                     _log_upload.error("[AutoProcess] doc_processor 폴백도 실패: %s -- %s",
                                      entity_id, dp_err, exc_info=True)
 
+            # ── 3차 폴백: doc_processor DOCX 전용 ──
+            if processed_bytes is None and cv_ext == ".docx":
+                try:
+                    import importlib as _il, io as _io
+                    _dp_spec2 = _il.util.find_spec("tools.doc_processor")
+                    if _dp_spec2 is None:
+                        _tools_dir2 = Path(__file__).resolve().parent / "tools"
+                        if str(_tools_dir2.parent) not in sys.path:
+                            sys.path.insert(0, str(_tools_dir2.parent))
+                    from tools.doc_processor import process_docx as _dp_process_docx
+
+                    processed_doc_obj, logs = _dp_process_docx(
+                        cv_path, brj_number, candidate,
+                        dry=False, photo_path=photo_path,
+                    )
+                    _docx_buf = _io.BytesIO()
+                    processed_doc_obj.save(_docx_buf)
+                    processed_bytes = _docx_buf.getvalue()
+                    pii_count = len(logs)
+                    _log_upload.info(
+                        "[AutoProcess] DOCX Fallback OK: %s (#%s) → %d PII, %d bytes",
+                        entity_id, brj_number, pii_count, len(processed_bytes),
+                    )
+                except Exception as dp_docx_err:
+                    _log_upload.error(
+                        "[AutoProcess] DOCX 폴백도 실패: %s -- %s",
+                        entity_id, dp_docx_err, exc_info=True,
+                    )
+
             if not processed_bytes:
                 _set_resume_status(entity_id, "error")
                 return
 
-            # 5. S3 업로드 (동기)
+            # 5. S3 업로드 (동기) — 확장자 보존
+            _processed_fname = f"cv_processed{'.docx' if cv_ext == '.docx' else '.pdf'}"
             result = s3_upload_bytes_sync(
                 data=processed_bytes,
                 folder=f"candidates/{entity_id}",
-                filename="cv_processed.pdf",
+                filename=_processed_fname,
                 allowed_category="resume",
             )
 
@@ -8551,6 +8581,7 @@ async def upload_file(
     # 이미지(photo) → image_process (해시 + photo_s3_key 갱신)
     # 영상(video) → video_process (해시만)
     # 기타(attachment 등) → attachment_store (해시만)
+    _enqueue_ok = False
     if entity_type == "candidate":
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -8562,6 +8593,7 @@ async def upload_file(
                 filename=fname,
                 trigger="upload_endpoint",
             )
+            _enqueue_ok = True
             logging.getLogger("bridge.pipeline").info(
                 "[ENQUEUE] cid=%s job_id=%s type=%s file=%s",
                 entity_id, _job_id, file_type, fname[:60]
@@ -8571,8 +8603,8 @@ async def upload_file(
                 "[ENQUEUE] fail cid=%s err=%s", entity_id, _enq_err
             )
 
-    # 레거시 즉시 처리 (CV/커버레터만) — 큐 워커 미구동 시 안전망
-    if entity_type == "candidate" and file_type in ("cv", "cover_letter"):
+    # 레거시 즉시 처리 (CV/커버레터만) — 큐 등록 실패 시 안전망 (이중처리 방지)
+    if entity_type == "candidate" and file_type in ("cv", "cover_letter") and not _enqueue_ok:
         threading.Thread(
             target=_auto_process_resume,
             args=(entity_id, s3_key),
