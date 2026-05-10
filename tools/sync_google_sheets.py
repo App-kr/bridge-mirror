@@ -140,27 +140,31 @@ def _rows_to_dicts(raw: list[list[str]]) -> list[dict[str, str]]:
 # ── Candidates 동기화 ──────────────────────────────────────────────────────────
 
 # PII 컬럼 (암호화 대상)
-_CAND_PII_COLS = {"email", "phone", "full_name", "date_of_birth", "address", "passport_number",
-                  "kakao_id", "emergency_contact", "emergency_phone", "kakaotalk"}
+# ★ 실제 DB 컬럼명 기준 — candidates 테이블 PRAGMA 확인 완료 (2026-05-10)
+_CAND_PII_COLS = {"email", "mobile_phone", "full_name", "date_of_birth", "address", "passport_number",
+                  "kakaotalk", "emergency_contact", "emergency_phone"}
 
-# 허용 컬럼 (candidates 테이블 기준)
+# 허용 컬럼 (candidates 테이블 실제 컬럼명 기준)
+# 수정 이력 (2026-05-10 QA): teaching_age→target_age, phone→mobile_phone,
+#   kakao_id→kakaotalk, degree→education_level, marital_status→married
 _CAND_ALLOWED = {
-    "full_name", "email", "phone", "nationality", "teaching_age",
+    "full_name", "email", "mobile_phone", "nationality", "target_age",
     "visa_type", "start_date", "source", "created_at",
-    "kakao_id", "current_location", "degree", "major",
-    "gender", "dob", "religion", "marital_status",
+    "kakaotalk", "current_location", "education_level", "major",
+    "gender", "dob", "religion", "married",
     "korean_criminal_record", "criminal_record", "health_info",
     "e_visa", "area_prefs", "housing", "reference",
 }
 
 # 시트 컬럼 → DB 컬럼 매핑
 # ★ 실제 시트 헤더(한/영 혼용)에 맞춰 정확히 매핑
+# ★ DB 컬럼명은 candidates 테이블 실제 컬럼 기준 (2026-05-10 QA 수정)
 _CAND_COL_MAP: dict[str, str] = {
     # ─── 식별자 (필수) ───────────────────────────────────────────────
-    "이메일 주소": "email",          # 실제 시트 헤더
-    "Email Address": "email",       # 영문 폼 폴백
-    "Mobile Phone": "phone",        # 실제 시트 헤더
-    "Phone Number": "phone",        # 영문 폼 폴백
+    "이메일 주소": "email",               # 실제 시트 헤더
+    "Email Address": "email",            # 영문 폼 폴백
+    "Mobile Phone": "mobile_phone",      # 실제 시트 헤더 → DB: mobile_phone
+    "Phone Number": "mobile_phone",      # 영문 폼 폴백
     # ─── 기본 정보 ──────────────────────────────────────────────────
     "Full name": "full_name",
     "Full Name": "full_name",
@@ -168,30 +172,47 @@ _CAND_COL_MAP: dict[str, str] = {
     "Date of Birth": "dob",
     "Gender": "gender",
     "Current Location": "current_location",
-    "KakaoTalk": "kakao_id",         # 실제 시트 헤더
-    "KakaoTalk ID": "kakao_id",      # 영문 폼 폴백
+    "KakaoTalk": "kakaotalk",            # 실제 시트 헤더 → DB: kakaotalk
+    "KakaoTalk ID": "kakaotalk",         # 영문 폼 폴백
     # ─── 지원 정보 ──────────────────────────────────────────────────
-    "Target": "teaching_age",        # 실제 시트 헤더 (초/중/고)
-    "Teaching Level": "teaching_age",
-    "Start date": "start_date",      # 실제 시트 헤더
+    "Target": "target_age",              # 실제 시트 헤더 → DB: target_age
+    "Teaching Level": "target_age",      # 영문 폼 폴백
+    "Start date": "start_date",          # 실제 시트 헤더
     "Available Start Date": "start_date",
     "Area prefs": "area_prefs",
     "E visa": "e_visa",
     # ─── 학력/자격 ──────────────────────────────────────────────────
-    "Degree": "degree",
+    "Degree": "education_level",         # DB: education_level
     "Major": "major",
     # ─── 기타 정보 ──────────────────────────────────────────────────
     "Religion": "religion",
-    "Marital Status": "marital_status",
+    "Marital Status": "married",         # DB: married
     "Housing": "housing",
     "Reference": "reference",
     "Criminal Record": "criminal_record",
     "Criminal Record in Korea": "korean_criminal_record",
     "Health Information": "health_info",
     # ─── 타임스탬프 ─────────────────────────────────────────────────
-    "타임스탬프": "created_at",       # 실제 시트 헤더
-    "Timestamp": "created_at",       # 영문 폼 폴백
+    "타임스탬프": "created_at",            # 실제 시트 헤더
+    "Timestamp": "created_at",           # 영문 폼 폴백
 }
+
+
+def _next_sheet_number(conn) -> int:
+    """4를 포함하지 않는 다음 sheet_number 반환 (최소 10013부터).
+    api_server.py의 _next_sheet_number와 동일한 로직 유지.
+    """
+    row = conn.execute(
+        "SELECT COALESCE(MAX(sheet_number), 10012) FROM candidates"
+    ).fetchone()
+    n = max(int(row[0]), 10012) + 1
+    if n < 10013:
+        n = 10013
+    for _ in range(10_000):
+        if "4" not in str(n):
+            return n
+        n += 1
+    raise RuntimeError("_next_sheet_number: 유효 번호를 찾지 못함")
 
 
 def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
@@ -210,7 +231,7 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
     conn.row_factory = sqlite3.Row
 
     try:
-        for rec in records:
+        for row_idx, rec in enumerate(records):
             try:
                 # 컬럼명 정규화
                 mapped: dict[str, Any] = {}
@@ -219,7 +240,7 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
                     if db_col in _CAND_ALLOWED and val:
                         mapped[db_col] = val
 
-                if not mapped.get("email") and not mapped.get("phone"):
+                if not mapped.get("email") and not mapped.get("mobile_phone"):
                     skipped += 1
                     continue  # 식별자 없으면 스킵
 
@@ -229,7 +250,10 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
                         mapped[col] = _enc(mapped[col], col)
 
                 mapped.setdefault("source", "google_sheet_import")
-                mapped.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                # 타임스탬프 없는 행에 결정적 row_idx 포함 시각 사용 (멱등성 보장)
+                # 시트 원본 타임스탬프가 있으면 그대로 사용, 없으면 row_idx 기반 고정값
+                if "created_at" not in mapped:
+                    mapped["created_at"] = f"row_{row_idx:04d}"
                 mapped.setdefault("status", "Active")
                 mapped.setdefault("resume_status", "pending")
                 # candidate_id 자동 생성 (UUID 기반)
@@ -243,8 +267,8 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
 
                 # 중복 방지: source='google_sheet_import' + created_at 동일 행 스킵
                 # (email은 암호화되어 직접 조회 불가)
+                # row_idx 기반 created_at이므로 매 실행 동일값 → 중복 정확히 감지
                 created_at_val = mapped.get("created_at", "")
-                school_check_val = mapped.get("full_name", "") or mapped.get("email", "")
                 if created_at_val:
                     dup = conn.execute(
                         "SELECT 1 FROM candidates WHERE source=? AND created_at=? LIMIT 1",
@@ -253,6 +277,10 @@ def sync_candidates(service, dry_run: bool = False) -> dict[str, int]:
                     if dup:
                         skipped += 1
                         continue
+
+                # sheet_number 자동 할당 (api_server.py와 동일 로직)
+                if "sheet_number" not in mapped:
+                    mapped["sheet_number"] = _next_sheet_number(conn)
 
                 cols = ", ".join(mapped.keys())
                 placeholders = ", ".join("?" * len(mapped))
