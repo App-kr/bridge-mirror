@@ -1,14 +1,9 @@
 {
-  "last_updated": "2026-05-10 13:22:07",
-  "last_tool": "Bash",
-  "last_command": "grep -n \"US_CITY\\|FOREIGN_CITY\\|RE_US_CITY\\|RE_FOREIGN\" \"Q:/Claudework/bridge base/tools/doc_processor.py\" | head -20",
+  "last_updated": "2026-05-10 19:53:26",
+  "last_tool": "Write",
+  "last_command": "Write: Q:\\Claudework\\bridge base\\tools\\backup_to_k_drive.ps1",
   "git_head": "fed6c3e7",
   "modified_files": [
-    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\auth\\google\\callback\\route.ts",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\auth\\signin\\page.tsx",
-    "Q:\\Claudework\\bridge_ads\\.git\\hooks\\post-commit",
-    "Q:\\Claudework\\bridge base\\.claude\\worktrees\\funny-wescoff-015f8e\\.claude\\work_state.md",
-    "Q:\\Claudework\\bridge base\\.claude\\work_state.md",
     "Q:\\Claudework\\bridge base\\tools\\hide_git_console.ps1",
     "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\diagnose\\page.tsx",
     "Q:\\Claudework\\.vscode\\settings.json",
@@ -23,7 +18,12 @@
     "Q:\\Claudework\\bridge base\\tools\\protect_adobe_permanent.ps1",
     "Q:\\Claudework\\bridge base\\tools\\amtlib_guardian.py",
     "Q:\\Claudework\\bridge base\\tools\\register_amtlib_guardian.ps1",
-    "Q:\\Claudework\\PC_OPERATING_RULES.md"
+    "Q:\\Claudework\\PC_OPERATING_RULES.md",
+    "Q:\\Claudework\\bridge base\\tools\\doc_processor.py",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\admin\\seed\\route.ts",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\auth\\google\\start\\route.ts",
+    "Q:\\Claudework\\bridge_ads\\src\\lib\\env.ts",
+    "Q:\\Claudework\\bridge base\\tools\\backup_to_k_drive.ps1"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-05-10 기준)",
   "git_changed": [
