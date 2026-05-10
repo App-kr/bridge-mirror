@@ -1,497 +1,344 @@
 'use client'
 
 /**
- * /admin/interview-setup — 인터뷰 세팅 위저드 (원클릭 자동화)
- * 3단계: ① 후보자 선택 → ② 구인처 매칭 → ③ 일정 확정 & 발송
- * 기존 API만 사용, 백엔드 변경 0건
+ * /admin/interview-setup — 인터뷰 세팅 (다중 발송)
+ *
+ * 흐름:
+ *  ① 활성 후보자 리스트 + 체크박스 다중 선택 (검색)
+ *  ② 구인처 리스트 + 체크박스 다중 선택 (검색·필터)
+ *  ③ 일정 설정 (Date/Time/Duration/Stagger)
+ *  ④ 발송 → N후보자 × M구인처 = N×M 인터뷰 생성
+ *      · 각자에게 자기 Meet 링크만 포함된 개별 이메일
+ *      · 상대측 이메일/연락처 노출 안 함 (백엔드 _render_interview_email PII 격리)
+ *
+ * 백엔드 변경 0줄 — /api/admin/interview/confirm (1쌍/호출) 순차 호출.
  */
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { API_URL } from '@/lib/api'
 
 /* ── Types ── */
-interface CandidateResult {
+interface Candidate {
   candidate_id: string
   sheet_number: string
   full_name: string
   nationality: string
+  current_location: string
   email: string
+  kakao_id: string
+  status: string
   target: string
   target_age: string
   area_prefs: string
-  experience: string
-  education_level: string
-  certification: string
-  visa_type: string
-  start_date: string
-  photo_url: string
-  dob: string
-  gender: string
-  interview_time: string
 }
 
 interface Employer {
   id: number
   school_name: string
   location: string
-  email: string
   contact_name: string
-  teaching_age: string
+  email: string
   phone: string
-  _region_match: boolean
-  _target_match: boolean
-  _already_sent: boolean
-  _match_score: number
+  teaching_age: string
+  start_date: string
 }
 
-interface ConfirmResult {
-  id: number
+interface PairResult {
+  candidate_id: string
+  candidate_name: string
+  inquiry_id: number
+  school_name: string
+  interview_id: number | null
   meet_link: string
-  gcal_error: string | null
-  email_errors: string[]
+  date: string
+  time: string
+  ok: boolean
+  error?: string
 }
 
-/* ── Meet Room Pool ── */
-const MEET_ROOMS = [
-  { label: 'Room 1', code: 'kmt-ydhj-fmf' },
-]
-
-/** 풀에서 랜덤 Meet 링크 반환 */
-function fallbackMeetLink(): string {
-  return `https://meet.google.com/${MEET_ROOMS[0]?.code || 'kmt-ydhj-fmf'}`
-}
-
-function getDefaultDate(): string {
+/* ── Helpers ── */
+function defaultDate(): string {
   const d = new Date()
   let added = 0
   while (added < 3) {
     d.setDate(d.getDate() + 1)
-    const day = d.getDay()
-    if (day !== 0 && day !== 6) added++
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) added++
   }
   return d.toISOString().slice(0, 10)
 }
 
-/* ── Step Bar ── */
-function StepBar({ step }: { step: number }) {
-  const steps = [
-    { num: 1, label: '후보자 선택' },
-    { num: 2, label: '구인처 매칭' },
-    { num: 3, label: '일정 확정' },
-  ]
-  return (
-    <div className="flex items-center justify-center gap-1 mb-8">
-      {steps.map((s, i) => (
-        <div key={s.num} className="flex items-center">
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold transition-all ${
-            step === s.num
-              ? 'bg-[#0071e3] text-white shadow-sm'
-              : step > s.num
-                ? 'bg-green-100 text-green-700'
-                : 'bg-[#f5f5f7] text-[#86868b]'
-          }`}>
-            <span className="w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-bold bg-white/20">
-              {step > s.num ? '\u2713' : s.num}
-            </span>
-            {s.label}
-          </div>
-          {i < steps.length - 1 && (
-            <div className={`w-8 h-px mx-1 ${step > s.num ? 'bg-green-300' : 'bg-[#d2d2d7]'}`} />
-          )}
-        </div>
-      ))}
-    </div>
-  )
+function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + minutes
+  const nh = Math.floor(total / 60) % 24
+  const nm = total % 60
+  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function InterviewSetupPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center text-[#86868b]">Loading...</div>}>
-      <InterviewSetupInner />
-    </Suspense>
-  )
-}
-
-function InterviewSetupInner() {
   const { authed, login, signedFetch, adminFetch, waking } = useAdminAuth()
-  const searchParams = useSearchParams()
 
-  /* ── State ── */
-  const [step, setStep] = useState(1)
+  /* ── 후보자 패널 ── */
+  const [candQ, setCandQ] = useState('')
+  const [candList, setCandList] = useState<Candidate[]>([])
+  const [candLoading, setCandLoading] = useState(false)
+  const [selectedCands, setSelectedCands] = useState<Set<string>>(new Set())
 
-  // Step 1
-  const [searchQ, setSearchQ] = useState('')
-  const [candidates, setCandidates] = useState<CandidateResult[]>([])
-  const [candidate, setCandidate] = useState<CandidateResult | null>(null)
-  const [searchLoading, setSearchLoading] = useState(false)
+  /* ── 구인처 패널 ── */
+  const [empLocation, setEmpLocation] = useState('')
+  const [empAge, setEmpAge] = useState('')
+  const [empQ, setEmpQ] = useState('')
+  const [empList, setEmpList] = useState<Employer[]>([])
+  const [empLoading, setEmpLoading] = useState(false)
+  const [selectedEmps, setSelectedEmps] = useState<Set<number>>(new Set())
 
-  // Step 2
-  const [matched, setMatched] = useState<Employer[]>([])
-  const [unmatched, setUnmatched] = useState<Employer[]>([])
-  const [showUnmatched, setShowUnmatched] = useState(false)
-  const [selectedEmployer, setSelectedEmployer] = useState<Employer | null>(null)
-  const [matchLoading, setMatchLoading] = useState(false)
-
-  // Step 3
-  const [interviewDate, setInterviewDate] = useState(getDefaultDate)
-  const [interviewTime, setInterviewTime] = useState('10:00')
+  /* ── 일정 ── */
+  const [date, setDate] = useState(defaultDate)
+  const [time, setTime] = useState('10:00')
   const [duration, setDuration] = useState(20)
+  const [stagger, setStagger] = useState(30)
   const [notes, setNotes] = useState('')
-  const [selectedRoom, setSelectedRoom] = useState(-1) // -1 = random
-  const [emailSubject, setEmailSubject] = useState('')
-  const [emailBody, setEmailBody] = useState('')
-  const [confirming, setConfirming] = useState(false)
-  const [result, setResult] = useState<ConfirmResult | null>(null)
 
-  // Edit mode
-  const [editing, setEditing] = useState(false)
-  const [editDate, setEditDate] = useState('')
-  const [editTime, setEditTime] = useState('')
-  const [editDuration, setEditDuration] = useState(20)
-  const [editNotes, setEditNotes] = useState('')
-  const [editSaving, setEditSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
+  /* ── 발송 ── */
+  const [sending, setSending] = useState(false)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [results, setResults] = useState<PairResult[]>([])
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
-  /* ── Generate email preview ── */
-  const generateEmailPreview = useCallback((c: CandidateResult | null, date: string, time: string, dur: number, roomIdx: number) => {
-    if (!c) return
-    const firstName = (c.full_name || '').split(' ')[0] || c.full_name
-    const meetUrl = roomIdx >= 0 && roomIdx < MEET_ROOMS.length ? `https://meet.google.com/${MEET_ROOMS[roomIdx].code}` : fallbackMeetLink()
-    setEmailSubject(`[BRIDGE] Interview — ${firstName}`)
-    setEmailBody(
-      `Dear ${firstName},\n\nYour interview has been scheduled.\n\nDate: ${date}\nTime: ${time} KST\nDuration: ${dur} minutes\n\nMeet Link: ${meetUrl}\n\nPlease join 2-3 minutes early.\n\nBest regards,\nBRIDGE Recruitment`
-    )
-  }, [])
-
-  // Update email preview when schedule changes
-  useEffect(() => {
-    if (step === 3 && candidate) {
-      generateEmailPreview(candidate, interviewDate, interviewTime, duration, selectedRoom)
+  /* ── 후보자 검색 (디바운스) ── */
+  const fetchCandidates = useCallback(async (q: string) => {
+    setCandLoading(true)
+    setError(null)
+    try {
+      const url = q.trim()
+        ? `${API_URL}/api/admin/candidates?search=${encodeURIComponent(q)}&limit=100&status=active`
+        : `${API_URL}/api/admin/candidates?limit=100&status=active`
+      const res = await adminFetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const j = await res.json()
+      const rows = j.data?.candidates || []
+      const mapped: Candidate[] = (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({
+        candidate_id: String(r.candidate_id || r.id || ''),
+        sheet_number: String(r.sheet_number || ''),
+        full_name: String(r.full_name || ''),
+        nationality: String(r.nationality || ''),
+        current_location: String(r.current_location || ''),
+        email: String(r.email || ''),
+        kakao_id: String(r.kakao_id || ''),
+        status: String(r.status || ''),
+        target: String(r.target || ''),
+        target_age: String(r.target_age || ''),
+        area_prefs: String(r.area_prefs || ''),
+      }))
+      setCandList(mapped)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Candidate fetch failed')
+    } finally {
+      setCandLoading(false)
     }
-  }, [step, candidate, interviewDate, interviewTime, duration, selectedRoom, generateEmailPreview])
+  }, [adminFetch])
 
-  /* ── URL param auto-load ── */
-  useEffect(() => {
-    const cid = searchParams.get('candidate')
-    if (cid && authed) {
-      loadCandidateById(cid)
+  /* ── 구인처 검색 ── */
+  const fetchEmployers = useCallback(async () => {
+    setEmpLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams()
+      if (empLocation.trim()) params.set('location', empLocation.trim())
+      if (empAge.trim()) params.set('teaching_age', empAge.trim())
+      params.set('per_page', '200')
+      const res = await adminFetch(`${API_URL}/api/admin/employers-for-mail?${params}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const j = await res.json()
+      const rows = j.data?.employers || []
+      setEmpList(rows as Employer[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Employer fetch failed')
+    } finally {
+      setEmpLoading(false)
     }
+  }, [adminFetch, empLocation, empAge])
+
+  /* ── 초기 + 디바운스 로드 ── */
+  useEffect(() => {
+    if (!authed) return
+    const t = setTimeout(() => fetchCandidates(candQ), 300)
+    return () => clearTimeout(t)
+  }, [authed, candQ, fetchCandidates])
+
+  useEffect(() => {
+    if (!authed) return
+    fetchEmployers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, authed])
+  }, [authed])
 
-  /* ── Candidate Search ── */
-  const searchCandidates = useCallback(async (q: string) => {
-    if (!q.trim()) { setCandidates([]); return }
-    setSearchLoading(true)
-    setError(null)
-    try {
-      // candidate_id (cnd_) 검색은 profile-search, 이름 검색은 main API
-      const isCidSearch = q.trim().startsWith('cnd_') || /^\d+$/.test(q.trim())
-      if (isCidSearch) {
-        // profile-search: candidate_id, nationality, location 검색 가능
-        const res = await adminFetch(`${API_URL}/api/admin/candidates/profile-search?q=${encodeURIComponent(q)}&limit=20`)
-        if (!res.ok) throw new Error(`Error ${res.status}`)
-        const j = await res.json()
-        const rows = j.data || []
-        // profile-search는 full_name이 없음 → nationality로 대체 표시
-        const mapped = (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({
-          candidate_id: String(r.candidate_id || ''),
-          sheet_number: String(r.sheet_number || ''),
-          full_name: String(r.full_name || `#${r.sheet_number || '?'} (${r.nationality || '?'})`),
-          nationality: String(r.nationality || ''),
-          target: String(r.target || ''),
-          target_age: String(r.target_age || ''),
-          area_prefs: String(r.area_prefs || ''),
-          experience: String(r.experience || ''),
-          education_level: String(r.education_level || ''),
-          certification: String(r.certification || ''),
-          visa_type: String(r.visa_type || ''),
-          start_date: String(r.start_date || ''),
-          photo_url: String(r.photo_url || ''),
-          dob: String(r.dob || ''),
-          gender: String(r.gender || ''),
-          email: String(r.email || ''),
-          interview_time: String(r.interview_time || ''),
-        } as CandidateResult))
-        setCandidates(mapped)
-      } else {
-        // main API: full_name, email 검색 (암호화 필드)
-        const res = await adminFetch(`${API_URL}/api/admin/candidates?search=${encodeURIComponent(q)}&limit=20&status=active`)
-        if (!res.ok) throw new Error(`Error ${res.status}`)
-        const j = await res.json()
-        const rows = j.data?.candidates || []
-        // main API renames candidate_id → id
-        const mapped = (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({
-          candidate_id: String(r.candidate_id || r.id || ''),
-          sheet_number: String(r.sheet_number || ''),
-          full_name: String(r.full_name || ''),
-          nationality: String(r.nationality || ''),
-          target: String(r.target || ''),
-          target_age: String(r.target_age || ''),
-          area_prefs: String(r.area_prefs || ''),
-          experience: String(r.experience || ''),
-          education_level: String(r.education_level || ''),
-          certification: String(r.certification || ''),
-          visa_type: String(r.visa_type || ''),
-          start_date: String(r.start_date || ''),
-          photo_url: String(r.photo_url || ''),
-          dob: String(r.dob || ''),
-          gender: String(r.gender || ''),
-          email: String(r.email || ''),
-          interview_time: String(r.interview_time || ''),
-        } as CandidateResult))
-        setCandidates(mapped)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Search failed')
-    } finally {
-      setSearchLoading(false)
-    }
-  }, [adminFetch])
+  /* ── 클라이언트측 추가 필터 (school_name) ── */
+  const filteredEmps = useMemo(() => {
+    const q = empQ.trim().toLowerCase()
+    if (!q) return empList
+    return empList.filter(e =>
+      (e.school_name || '').toLowerCase().includes(q) ||
+      (e.contact_name || '').toLowerCase().includes(q) ||
+      (e.email || '').toLowerCase().includes(q)
+    )
+  }, [empList, empQ])
 
-  const loadCandidateById = useCallback(async (cid: string) => {
-    setSearchLoading(true)
-    setError(null)
-    try {
-      // matching API로 직접 조회 — candidate_id 정확 매칭 + 매칭 데이터도 함께 로드
-      const res = await adminFetch(`${API_URL}/api/admin/matching/employers?candidate_id=${encodeURIComponent(cid)}`)
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || `Candidate ${cid} not found`)
-      }
-      const j = await res.json()
-      const cand = j.data?.candidate
-      if (cand) {
-        setCandidate(cand)
-        setMatched(j.data?.matched || [])
-        setUnmatched(j.data?.unmatched || [])
-        setCandidates([])
-        setSearchQ('')
-        if (cand.interview_time) setNotes(cand.interview_time)
-        setStep(2) // 바로 Step 2 (매칭 데이터 이미 로드됨)
-      } else {
-        setError(`Candidate ${cid} not found`)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
-    } finally {
-      setSearchLoading(false)
-    }
-  }, [adminFetch]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ── Select Candidate → Go to Step 2 ── */
-  const selectCandidate = (c: CandidateResult) => {
-    // main API renames candidate_id → id, normalize it
-    const normalized = { ...c, candidate_id: c.candidate_id || (c as unknown as Record<string, string>).id || '' }
-    setCandidate(normalized)
-    setStep(2)
-    setCandidates([])
-    setSearchQ('')
-    // Pre-fill notes from candidate's interview_time preference
-    if (normalized.interview_time) setNotes(normalized.interview_time)
-    fetchMatching(normalized.candidate_id)
+  /* ── 선택 토글 ── */
+  const toggleCand = (cid: string) => {
+    setSelectedCands(prev => {
+      const next = new Set(prev)
+      next.has(cid) ? next.delete(cid) : next.add(cid)
+      return next
+    })
   }
-
-  /* ── Matching ── */
-  const fetchMatching = useCallback(async (cid: string) => {
-    setMatchLoading(true)
-    setError(null)
-    try {
-      const res = await adminFetch(`${API_URL}/api/admin/matching/employers?candidate_id=${encodeURIComponent(cid)}`)
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || `Error ${res.status}`)
-      }
-      const j = await res.json()
-      setMatched(j.data?.matched || [])
-      setUnmatched(j.data?.unmatched || [])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Matching failed')
-    } finally {
-      setMatchLoading(false)
+  const toggleEmp = (id: number) => {
+    setSelectedEmps(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleAllCands = () => {
+    if (selectedCands.size === candList.length) {
+      setSelectedCands(new Set())
+    } else {
+      setSelectedCands(new Set(candList.map(c => c.candidate_id)))
     }
-  }, [adminFetch])
-
-  /* ── Select Employer → Go to Step 3 ── */
-  const selectEmployerAndProceed = (emp: Employer) => {
-    setSelectedEmployer(emp)
-    setStep(3)
-    setInterviewDate(getDefaultDate())
   }
-
-  /* ── Pick random meet room ── */
-  const pickRandomRoom = () => {
-    const idx = Math.floor(Math.random() * MEET_ROOMS.length)
-    setSelectedRoom(idx)
-  }
-
-  /* ── Confirm Interview ── */
-  const handleConfirm = async () => {
-    if (!candidate || !selectedEmployer) return
-    setConfirming(true)
-    setError(null)
-    setResult(null)
-    try {
-      const res = await signedFetch(`${API_URL}/api/admin/interview/confirm`, {
-        method: 'POST',
-        body: JSON.stringify({
-          candidate_id: candidate.candidate_id,
-          inquiry_id: selectedEmployer.id,
-          interview_date: interviewDate,
-          interview_time: interviewTime,
-          duration_minutes: duration,
-          notes: notes,
-        }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || j.message || `Error ${res.status}`)
-      }
-      const j = await res.json()
-      const data = j.data as ConfirmResult
-
-      // GCal 실패 시 폴백 — 저장된 Meet 풀에서 선택
-      if (data.gcal_error && !data.meet_link) {
-        const fallbackLink = selectedRoom >= 0 && selectedRoom < MEET_ROOMS.length
-          ? `https://meet.google.com/${MEET_ROOMS[selectedRoom].code}`
-          : fallbackMeetLink()
-        data.meet_link = fallbackLink
-        await signedFetch(`${API_URL}/api/admin/interviews/${data.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ meet_link: fallbackLink }),
-        }).catch(() => {})
-      }
-
-      setResult(data)
-      setMsg('Interview confirmed successfully')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Confirm failed')
-    } finally {
-      setConfirming(false)
+  const toggleAllEmps = () => {
+    if (selectedEmps.size === filteredEmps.length) {
+      setSelectedEmps(new Set())
+    } else {
+      setSelectedEmps(new Set(filteredEmps.map(e => e.id)))
     }
   }
 
-  /* ── Edit Interview ── */
-  const startEdit = () => {
-    setEditDate(interviewDate)
-    setEditTime(interviewTime)
-    setEditDuration(duration)
-    setEditNotes(notes)
-    setEditing(true)
-    setError(null)
-  }
+  /* ── 미리보기 ── */
+  const totalPairs = selectedCands.size * selectedEmps.size
 
-  const saveEdit = async () => {
-    if (!result) return
-    setEditSaving(true)
-    setError(null)
-    try {
-      const res = await signedFetch(`${API_URL}/api/admin/interviews/${result.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          interview_date: editDate,
-          interview_time: editTime,
-          duration_minutes: editDuration,
-          notes: editNotes,
-        }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || `Error ${res.status}`)
+  const pairs = useMemo(() => {
+    const out: { candidate: Candidate; employer: Employer; slot: number }[] = []
+    let slot = 0
+    for (const cid of selectedCands) {
+      const c = candList.find(x => x.candidate_id === cid)
+      if (!c) continue
+      for (const eid of selectedEmps) {
+        const e = empList.find(x => x.id === eid)
+        if (!e) continue
+        out.push({ candidate: c, employer: e, slot })
+        slot++
       }
-      // Apply changes locally
-      setInterviewDate(editDate)
-      setInterviewTime(editTime)
-      setDuration(editDuration)
-      setNotes(editNotes)
-      setEditing(false)
-      setMsg('Schedule updated successfully')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed')
-    } finally {
-      setEditSaving(false)
     }
-  }
+    return out
+  }, [selectedCands, selectedEmps, candList, empList])
 
-  /* ── Delete Interview ── */
-  const handleDelete = async () => {
-    if (!result) return
-    if (!window.confirm(`Interview #${result.id} will be permanently deleted. Are you sure?`)) return
-    setDeleting(true)
-    setError(null)
-    try {
-      const res = await signedFetch(`${API_URL}/api/admin/interviews/${result.id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.detail || `Error ${res.status}`)
-      }
-      setMsg(`Interview #${result.id} deleted`)
-      setResult(null)
-      // Go back to step 3 so they can recreate
-      setEditing(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed')
-    } finally {
-      setDeleting(false)
+  /* ── 발송 (순차 호출, 백엔드 부하 보호) ── */
+  const handleSend = async () => {
+    if (totalPairs === 0) {
+      setError('후보자·구인처 각각 최소 1명 이상 선택하세요.')
+      return
     }
-  }
+    if (!window.confirm(
+      `${selectedCands.size}명 후보자 × ${selectedEmps.size}개 구인처 = ${totalPairs}개 인터뷰를 생성합니다.\n` +
+      `각자에게 개별 메일이 발송됩니다.\n계속하시겠습니까?`
+    )) return
 
-  /* ── Reset ── */
-  const resetAll = () => {
-    setStep(1)
-    setCandidate(null)
-    setSelectedEmployer(null)
-    setMatched([])
-    setUnmatched([])
-    setResult(null)
+    setSending(true)
     setError(null)
     setMsg(null)
-    setNotes('')
-    setSearchQ('')
-    setCandidates([])
-    setSelectedRoom(-1)
-    setEditing(false)
-  }
+    setResults([])
+    setProgress({ done: 0, total: totalPairs })
 
-  /* ── Debounced search ── */
-  useEffect(() => {
-    if (step !== 1 || !searchQ.trim()) return
-    const t = setTimeout(() => searchCandidates(searchQ), 300)
-    return () => clearTimeout(t)
-  }, [searchQ, step, searchCandidates])
+    const out: PairResult[] = []
+    for (let i = 0; i < pairs.length; i++) {
+      const { candidate, employer, slot } = pairs[i]
+      const slotTime = addMinutes(time, slot * stagger)
+      try {
+        const res = await signedFetch(`${API_URL}/api/admin/interview/confirm`, {
+          method: 'POST',
+          body: JSON.stringify({
+            candidate_id: candidate.candidate_id,
+            inquiry_id: employer.id,
+            interview_date: date,
+            interview_time: slotTime,
+            duration_minutes: duration,
+            notes,
+          }),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          out.push({
+            candidate_id: candidate.candidate_id,
+            candidate_name: candidate.full_name,
+            inquiry_id: employer.id,
+            school_name: employer.school_name,
+            interview_id: null,
+            meet_link: '',
+            date,
+            time: slotTime,
+            ok: false,
+            error: j.detail || j.message || `HTTP ${res.status}`,
+          })
+        } else {
+          const j = await res.json()
+          const data = j.data || {}
+          out.push({
+            candidate_id: candidate.candidate_id,
+            candidate_name: candidate.full_name,
+            inquiry_id: employer.id,
+            school_name: employer.school_name,
+            interview_id: data.id || null,
+            meet_link: data.meet_link || '',
+            date,
+            time: slotTime,
+            ok: true,
+            error: data.email_errors?.length ? `email: ${data.email_errors.join(', ')}` : undefined,
+          })
+        }
+      } catch (e) {
+        out.push({
+          candidate_id: candidate.candidate_id,
+          candidate_name: candidate.full_name,
+          inquiry_id: employer.id,
+          school_name: employer.school_name,
+          interview_id: null,
+          meet_link: '',
+          date,
+          time: slotTime,
+          ok: false,
+          error: e instanceof Error ? e.message : 'Unknown error',
+        })
+      }
+      setResults([...out])
+      setProgress({ done: i + 1, total: pairs.length })
+      // 백엔드 부하 보호 (Render Free + Google Calendar API throttle)
+      if (i + 1 < pairs.length) {
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    setSending(false)
+    const okCount = out.filter(r => r.ok).length
+    setMsg(`${okCount}/${out.length}개 인터뷰 생성 완료`)
+  }
 
   if (!authed) return <AdminAuth onLogin={login} waking={waking} />
 
   return (
     <div className="min-h-screen bg-[#f5f5f7]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">Interview Setup</h1>
-            <p className="text-[13px] text-[#86868b] mt-0.5">
-              {result ? 'Interview confirmed' : 'One-click interview automation'}
-            </p>
-          </div>
-          {step > 1 && !result && (
-            <button type="button" onClick={resetAll}
-              className="text-[13px] text-[#0071e3] hover:underline">
-              Start Over
-            </button>
-          )}
+        <div className="mb-6">
+          <h1 className="text-[22px] font-bold text-[#1d1d1f] tracking-tight">Interview Setup (Bulk)</h1>
+          <p className="text-[13px] text-[#86868b] mt-0.5">
+            후보자·구인처 다중 선택 → 개별 메일로 인터뷰 가이드 + Google Meet 링크 발송
+          </p>
         </div>
-
-        {/* Step Bar */}
-        {!result && <StepBar step={step} />}
 
         {/* Error / Success */}
         {error && (
@@ -499,560 +346,286 @@ function InterviewSetupInner() {
             {error}
           </div>
         )}
-        {msg && !error && !result && (
+        {msg && !error && (
           <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4 text-[13px] text-green-700">
             {msg}
           </div>
         )}
 
-        {/* ═══ STEP 1: Candidate Search ═══ */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-6">
-              <h2 className="text-[16px] font-semibold text-[#1d1d1f] mb-4">Search Candidate</h2>
+        {/* ═══ 2-PANEL: Candidates + Employers ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          {/* Candidates */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa] flex items-center justify-between">
+              <h2 className="text-[14px] font-semibold text-[#1d1d1f]">
+                후보자 ({selectedCands.size}/{candList.length})
+              </h2>
+              <button type="button" onClick={toggleAllCands}
+                className="text-[12px] text-[#0071e3] hover:underline">
+                {selectedCands.size === candList.length && candList.length > 0 ? '전체 해제' : '전체 선택'}
+              </button>
+            </div>
+            <div className="p-4 border-b border-[#e5e5e7]">
               <input
                 type="text"
-                value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
-                placeholder="Search by name, nationality, or candidate ID..."
-                className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
-                autoFocus
+                value={candQ}
+                onChange={e => setCandQ(e.target.value)}
+                placeholder="이름·국적·번호로 검색…"
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
               />
-              {searchLoading && (
-                <p className="text-[13px] text-[#86868b] mt-3 animate-pulse">Searching...</p>
+              {candLoading && <p className="text-[11px] text-[#86868b] mt-2">검색 중…</p>}
+            </div>
+            <div className="max-h-[420px] overflow-y-auto">
+              {candList.length === 0 && !candLoading && (
+                <p className="px-5 py-8 text-[13px] text-[#86868b] text-center">활성 후보자 없음</p>
               )}
+              <table className="w-full text-[12px]">
+                <thead className="bg-[#fafafa] sticky top-0">
+                  <tr className="text-left text-[#86868b]">
+                    <th className="px-2 py-2 w-[30px]"></th>
+                    <th className="px-2 py-2 w-[50px]">#</th>
+                    <th className="px-2 py-2">이름</th>
+                    <th className="px-2 py-2">국적</th>
+                    <th className="px-2 py-2">현위치</th>
+                    <th className="px-2 py-2">이메일</th>
+                    <th className="px-2 py-2">카톡</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f5f5f7]">
+                  {candList.map((c, idx) => {
+                    const checked = selectedCands.has(c.candidate_id)
+                    return (
+                      <tr key={c.candidate_id}
+                        onClick={() => toggleCand(c.candidate_id)}
+                        className={`cursor-pointer hover:bg-[#f5f5f7] ${checked ? 'bg-[#e6f0ff]' : ''}`}>
+                        <td className="px-2 py-1.5"><input type="checkbox" checked={checked} readOnly /></td>
+                        <td className="px-2 py-1.5 text-[#86868b]">{idx + 1}</td>
+                        <td className="px-2 py-1.5 font-medium">
+                          {c.full_name || `#${c.sheet_number || c.candidate_id}`}
+                          {c.sheet_number && <span className="ml-1 text-[10px] text-[#86868b]">#{c.sheet_number}</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b]">{c.nationality || '-'}</td>
+                        <td className="px-2 py-1.5 text-[#86868b]">{c.current_location || '-'}</td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[120px]" title={c.email}>
+                          {c.email || '-'}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[80px]" title={c.kakao_id}>
+                          {c.kakao_id || '-'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* Search Results */}
-            {candidates.length > 0 && (
-              <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-                <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa]">
-                  <h3 className="text-[13px] font-semibold text-[#86868b]">
-                    {candidates.length} candidate(s) found
-                  </h3>
-                </div>
-                <div className="divide-y divide-[#f5f5f7] max-h-[400px] overflow-y-auto">
-                  {candidates.map(c => (
-                    <button
-                      key={c.candidate_id}
-                      type="button"
-                      onClick={() => selectCandidate(c)}
-                      className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-[#0071e3]/5 transition-colors text-left"
-                    >
-                      {c.photo_url ? (
-                        <img src={c.photo_url} alt="" className="w-11 h-11 rounded-full object-cover border border-[#e5e5e7] shrink-0" />
-                      ) : (
-                        <div className="w-11 h-11 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[16px] font-bold text-[#86868b] shrink-0">
-                          {(c.full_name || '?')[0]}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[14px] font-semibold text-[#1d1d1f] truncate">{c.full_name || 'Unknown'}</span>
-                          <span className="text-[11px] text-[#86868b]">#{c.sheet_number || c.candidate_id}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[12px] text-[#86868b]">
-                          <span>{c.nationality || '\u2014'}</span>
-                          {c.target && <><span className="text-[#d2d2d7]">|</span><span>{c.target}</span></>}
-                          {c.area_prefs && <><span className="text-[#d2d2d7]">|</span><span>{c.area_prefs}</span></>}
-                        </div>
-                      </div>
-                      <span className="text-[#0071e3] text-[13px] shrink-0">Select</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        )}
 
-        {/* ═══ STEP 2: Employer Matching ═══ */}
-        {step === 2 && candidate && (
-          <div className="space-y-4">
-            {/* Selected Candidate Card */}
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <div className="flex items-center gap-4">
-                {candidate.photo_url ? (
-                  <img src={candidate.photo_url} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-[#e5e5e7]" />
-                ) : (
-                  <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[20px] font-bold text-[#86868b]">
-                    {(candidate.full_name || '?')[0]}
-                  </div>
-                )}
-                <div className="flex-1">
-                  <h3 className="text-[16px] font-bold text-[#1d1d1f]">{candidate.full_name}</h3>
-                  <div className="flex items-center gap-2 mt-0.5 text-[12px] text-[#86868b] flex-wrap">
-                    <span>{candidate.nationality}</span>
-                    {candidate.target && <><span className="text-[#d2d2d7]">|</span><span>Target: {candidate.target}</span></>}
-                    {candidate.area_prefs && <><span className="text-[#d2d2d7]">|</span><span>Area: {candidate.area_prefs}</span></>}
-                  </div>
-                </div>
-                <button type="button" onClick={() => { setStep(1); setCandidate(null); setMatched([]); setUnmatched([]) }}
-                  className="text-[12px] text-[#86868b] hover:text-[#1d1d1f] px-3 py-1.5 border border-[#e5e5e7] rounded-lg shrink-0">
-                  Change
+          {/* Employers */}
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa] flex items-center justify-between">
+              <h2 className="text-[14px] font-semibold text-[#1d1d1f]">
+                구인처 ({selectedEmps.size}/{filteredEmps.length})
+              </h2>
+              <button type="button" onClick={toggleAllEmps}
+                className="text-[12px] text-[#0071e3] hover:underline">
+                {selectedEmps.size === filteredEmps.length && filteredEmps.length > 0 ? '전체 해제' : '전체 선택'}
+              </button>
+            </div>
+            <div className="p-4 border-b border-[#e5e5e7] space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={empLocation}
+                  onChange={e => setEmpLocation(e.target.value)}
+                  placeholder="도시 (예: 서울)"
+                  className="px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]"
+                />
+                <input
+                  type="text"
+                  value={empAge}
+                  onChange={e => setEmpAge(e.target.value)}
+                  placeholder="대상 연령 (예: K-5)"
+                  className="px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]"
+                />
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={empQ}
+                  onChange={e => setEmpQ(e.target.value)}
+                  placeholder="업체명·담당자·이메일로 필터…"
+                  className="flex-1 px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]"
+                />
+                <button type="button" onClick={fetchEmployers}
+                  className="px-4 py-2 rounded-lg bg-[#0071e3] text-white text-[13px] font-medium hover:bg-[#0077ed]">
+                  검색
                 </button>
               </div>
+              {empLoading && <p className="text-[11px] text-[#86868b]">검색 중…</p>}
             </div>
-
-            {/* Matched Employers */}
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-              <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa] flex items-center justify-between">
-                <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
-                  Matched Employers ({matched.length})
-                </h3>
-                <span className="text-[12px] text-[#86868b]">Select one for interview</span>
-              </div>
-              <div className="divide-y divide-[#f5f5f7] max-h-[450px] overflow-y-auto">
-                {matchLoading ? (
-                  <div className="py-12 text-center text-[13px] text-[#86868b] animate-pulse">Loading matched employers...</div>
-                ) : matched.length === 0 ? (
-                  <div className="py-12 text-center text-[13px] text-[#86868b]">No matched employers found</div>
-                ) : (
-                  matched.map(emp => (
-                    <button
-                      key={emp.id}
-                      type="button"
-                      onClick={() => selectEmployerAndProceed(emp)}
-                      className={`w-full flex items-center gap-3 px-5 py-3.5 transition-colors text-left ${
-                        selectedEmployer?.id === emp.id ? 'bg-[#0071e3]/10' : 'hover:bg-[#fafafa]'
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        selectedEmployer?.id === emp.id ? 'border-[#0071e3] bg-[#0071e3]' : 'border-[#d2d2d7]'
-                      }`}>
-                        {selectedEmployer?.id === emp.id && (
-                          <span className="text-white text-[10px]">{'\u2713'}</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[14px] font-medium text-[#1d1d1f]" title={emp.school_name || ''}>{emp.school_name || 'Unknown'}</span>
-                          {emp._match_score === 2 && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">Full Match</span>
-                          )}
-                          {emp._region_match && !emp._target_match && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">Region</span>
-                          )}
-                          {emp._target_match && !emp._region_match && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">Target</span>
-                          )}
-                          {emp._already_sent && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium">Profile Sent</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[12px] text-[#86868b]">
-                          <span>{emp.location || '\u2014'}</span>
-                          {emp.teaching_age && <><span className="text-[#d2d2d7]">|</span><span>{emp.teaching_age}</span></>}
-                          {emp.contact_name && <><span className="text-[#d2d2d7]">|</span><span>{emp.contact_name}</span></>}
-                        </div>
-                      </div>
-                      <span className="text-[#0071e3] text-[13px] font-medium shrink-0">Select</span>
-                    </button>
-                  ))
-                )}
-              </div>
+            <div className="max-h-[420px] overflow-y-auto">
+              {filteredEmps.length === 0 && !empLoading && (
+                <p className="px-5 py-8 text-[13px] text-[#86868b] text-center">구인처 없음</p>
+              )}
+              <table className="w-full text-[12px]">
+                <thead className="bg-[#fafafa] sticky top-0">
+                  <tr className="text-left text-[#86868b]">
+                    <th className="px-2 py-2 w-[30px]"></th>
+                    <th className="px-2 py-2">업체명</th>
+                    <th className="px-2 py-2">지역</th>
+                    <th className="px-2 py-2">연령</th>
+                    <th className="px-2 py-2">담당자</th>
+                    <th className="px-2 py-2">이메일</th>
+                    <th className="px-2 py-2">전화</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f5f5f7]">
+                  {filteredEmps.map(e => {
+                    const checked = selectedEmps.has(e.id)
+                    return (
+                      <tr key={e.id}
+                        onClick={() => toggleEmp(e.id)}
+                        className={`cursor-pointer hover:bg-[#f5f5f7] ${checked ? 'bg-[#e6f0ff]' : ''}`}>
+                        <td className="px-2 py-1.5"><input type="checkbox" checked={checked} readOnly /></td>
+                        <td className="px-2 py-1.5 font-medium truncate max-w-[140px]" title={e.school_name}>
+                          {e.school_name || `#${e.id}`}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[80px]" title={e.location}>
+                          {e.location || '-'}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b]">{e.teaching_age || '-'}</td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[80px]" title={e.contact_name}>
+                          {e.contact_name || '-'}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[120px]" title={e.email}>
+                          {e.email || '-'}
+                        </td>
+                        <td className="px-2 py-1.5 text-[#86868b] truncate max-w-[100px]" title={e.phone}>
+                          {e.phone || '-'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* Unmatched Toggle */}
-            {unmatched.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setShowUnmatched(!showUnmatched)}
-                  className="text-[13px] text-[#86868b] hover:text-[#1d1d1f] transition-colors"
-                >
-                  {showUnmatched ? 'Hide' : 'Show'} Unmatched ({unmatched.length})
-                </button>
-                {showUnmatched && (
-                  <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-                    <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa]">
-                      <h3 className="text-[13px] font-semibold text-[#86868b]">Unmatched ({unmatched.length})</h3>
-                    </div>
-                    <div className="divide-y divide-[#f5f5f7] max-h-[300px] overflow-y-auto">
-                      {unmatched.map(emp => (
-                        <button
-                          key={emp.id}
-                          type="button"
-                          onClick={() => selectEmployerAndProceed(emp)}
-                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#fafafa] transition-colors text-left"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[13px] text-[#424245]">{emp.school_name || 'Unknown'}</span>
-                            <span className="text-[12px] text-[#86868b] ml-2">{emp.location || ''}</span>
-                          </div>
-                          <span className="text-[#0071e3] text-[12px] shrink-0">Select</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
           </div>
-        )}
+        </div>
 
-        {/* ═══ STEP 3: Schedule & Confirm ═══ */}
-        {step === 3 && candidate && selectedEmployer && !result && (
-          <div className="space-y-5">
-            {/* ── Candidate Info Card (큰 폰트) ── */}
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <div className="flex items-start gap-5">
-                {candidate.photo_url ? (
-                  <img src={candidate.photo_url} alt="" className="w-16 h-16 rounded-xl object-cover border border-[#e5e5e7] shrink-0" />
-                ) : (
-                  <div className="w-16 h-16 rounded-xl bg-[#f5f5f7] flex items-center justify-center text-[22px] font-bold text-[#86868b] shrink-0">
-                    {(candidate.full_name || '?')[0]}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">번호</div>
-                      <div className="text-[16px] font-bold text-[#1d1d1f]">#{candidate.sheet_number || candidate.candidate_id}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">이름</div>
-                      <div className="text-[16px] font-bold text-[#1d1d1f]">{candidate.full_name}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">국적</div>
-                      <div className="text-[16px] font-semibold text-[#1d1d1f]">{candidate.nationality || '\u2014'}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">이메일</div>
-                      <div className="text-[15px] text-[#1d1d1f] truncate">{candidate.email || '\u2014'}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">시작일</div>
-                      <div className="text-[15px] text-[#1d1d1f]">{candidate.start_date || '\u2014'}</div>
-                    </div>
-                    <div className="col-span-2 sm:col-span-1">
-                      <div className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">메모 / 선호 인터뷰 시간</div>
-                      <div className="text-[15px] text-[#1d1d1f]">{candidate.interview_time || '\u2014'}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <button type="button" onClick={() => setStep(2)}
-                    className="text-[11px] text-[#86868b] hover:text-[#1d1d1f] px-3 py-1 border border-[#e5e5e7] rounded-lg">
-                    Change
-                  </button>
-                </div>
+        {/* ═══ 일정 + 발송 ═══ */}
+        <div className="bg-white rounded-2xl border border-[#e5e5e7] p-6 mb-4">
+          <h2 className="text-[14px] font-semibold text-[#1d1d1f] mb-4">일정 설정</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <div>
+              <label className="block text-[12px] text-[#86868b] mb-1">날짜</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]" />
+            </div>
+            <div>
+              <label className="block text-[12px] text-[#86868b] mb-1">시작 시각 (KST)</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]" />
+            </div>
+            <div>
+              <label className="block text-[12px] text-[#86868b] mb-1">개당 시간 (분)</label>
+              <input type="number" min={5} max={120} value={duration}
+                onChange={e => setDuration(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]" />
+            </div>
+            <div>
+              <label className="block text-[12px] text-[#86868b] mb-1">간격 (분)</label>
+              <input type="number" min={0} max={240} value={stagger}
+                onChange={e => setStagger(Math.max(0, Math.min(240, Number(e.target.value) || 30)))}
+                className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] text-[#86868b] mb-1">공통 메모 (선택)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+              placeholder="모든 인터뷰에 동일하게 추가될 메모…"
+              className="w-full px-3 py-2 rounded-lg border border-[#d2d2d7] text-[13px]" />
+          </div>
+        </div>
+
+        {/* 발송 미리보기 + 버튼 */}
+        <div className="bg-white rounded-2xl border border-[#e5e5e7] p-6 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-[14px] font-semibold text-[#1d1d1f]">
+                {selectedCands.size}명 × {selectedEmps.size}개 = <span className="text-[#0071e3]">{totalPairs}개</span> 인터뷰 생성
               </div>
-              {/* Employer info (compact) */}
-              <div className="mt-3 pt-3 border-t border-[#f0f0f2] flex items-center gap-3 text-[13px]">
-                <span className="text-[#86868b]">Employer:</span>
-                <span className="font-semibold text-[#1d1d1f]">{selectedEmployer.school_name}</span>
-                <span className="text-[#86868b]">{selectedEmployer.location}</span>
-                <span className="text-[#86868b]">{selectedEmployer.contact_name}</span>
+              <div className="text-[12px] text-[#86868b] mt-0.5">
+                메일 발송: 후보자 {selectedCands.size * selectedEmps.size}건 + 구인처 {selectedCands.size * selectedEmps.size}건 (개별 발송, PII 격리됨)
               </div>
             </div>
-
-            {/* ── Schedule Row ── */}
-            <div className="bg-white rounded-2xl border border-[#e5e5e7] p-5">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Date</label>
-                  <input
-                    type="date"
-                    value={interviewDate}
-                    onChange={e => setInterviewDate(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Time (KST)</label>
-                  <input
-                    type="time"
-                    value={interviewTime}
-                    onChange={e => setInterviewTime(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">Duration</label>
-                  <div className="flex gap-1.5">
-                    {[15, 20, 30].map(d => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDuration(d)}
-                        className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold border transition-colors ${
-                          duration === d
-                            ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/30'
-                            : 'bg-white text-[#424245] border-[#d2d2d7] hover:bg-[#f5f5f7]'
-                        }`}
-                      >
-                        {d}m
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1.5">메모</label>
-                  <input
-                    type="text"
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="추가 메모..."
-                    className="w-full px-3 py-2.5 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ── Two Column: Meet Rooms (Left) + Email Preview (Right) ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* LEFT: Meet 회의실 */}
-              <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
-                <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa] flex items-center justify-between">
-                  <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
-                    Meet 회의실 ({MEET_ROOMS.length})
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${candidate?.full_name || ''}`)}&dates=${(() => { const d = interviewDate; const t = interviewTime || '14:00'; const [y,mo,dd] = d.split('-').map(Number); const [h,mi] = t.split(':').map(Number); const s = new Date(y,mo-1,dd,h,mi); const e = new Date(s.getTime()+duration*60000); const f = (dt: Date) => dt.toISOString().replace(/[-:]/g,'').replace(/\.\d+/,''); return `${f(s)}/${f(e)}` })()}&details=${encodeURIComponent('BRIDGE Recruitment Interview')}${candidate?.email ? `&add=${encodeURIComponent(candidate.email)}` : ''}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="text-[12px] px-3 py-1 bg-blue-500 text-white rounded-full font-medium hover:bg-blue-600 transition-colors"
-                    >
-                      📅 캘린더에서 Meet 생성
-                    </a>
-                    <button
-                      type="button"
-                      onClick={pickRandomRoom}
-                      className="text-[12px] px-3 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-full font-medium hover:bg-[#0071e3]/20 transition-colors"
-                    >
-                      랜덤
-                    </button>
-                  </div>
-                </div>
-                <div className="px-4 py-2 text-[11px] text-[#86868b] border-b border-[#f5f5f7]">
-                  액세스: 항상 열기 &middot; 허가없이 참여 가능
-                </div>
-                <div className="divide-y divide-[#f5f5f7]">
-                  {MEET_ROOMS.map((room, idx) => (
-                    <div
-                      key={room.code}
-                      className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${
-                        selectedRoom === idx ? 'bg-green-50' : 'hover:bg-[#fafafa]'
-                      }`}
-                      onClick={() => setSelectedRoom(idx)}
-                    >
-                      {/* Radio indicator */}
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        selectedRoom === idx ? 'border-green-500 bg-green-500' : 'border-[#d2d2d7]'
-                      }`}>
-                        {selectedRoom === idx && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[13px] font-medium text-[#1d1d1f]">{room.label}</span>
-                        <span className="text-[12px] text-[#86868b] ml-2">&middot; {room.code}</span>
-                      </div>
-                      <a
-                        href={`https://meet.google.com/${room.code}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="text-[11px] px-2.5 py-1 bg-[#0071e3]/10 text-[#0071e3] rounded-lg font-medium hover:bg-[#0071e3]/20 transition-colors"
-                      >
-                        입장
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* RIGHT: 이메일 자동 발송 */}
-              <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden flex flex-col">
-                <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa]">
-                  <h3 className="text-[14px] font-semibold text-[#1d1d1f]">이메일 자동 발송</h3>
-                </div>
-                <div className="p-4 flex-1 flex flex-col gap-3">
-                  <div>
-                    <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1">제목</label>
-                    <input
-                      type="text"
-                      value={emailSubject}
-                      onChange={e => setEmailSubject(e.target.value)}
-                      className="w-full px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] bg-[#fafafa]"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider block mb-1">본문</label>
-                    <textarea
-                      value={emailBody}
-                      onChange={e => setEmailBody(e.target.value)}
-                      className="w-full h-full min-h-[200px] px-3 py-2 border border-[#d2d2d7] rounded-lg text-[13px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] bg-[#fafafa] resize-none font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Confirm Button (옅은 초록) ── */}
             <button
               type="button"
-              onClick={handleConfirm}
-              disabled={confirming}
-              className="w-full py-4 bg-green-500 text-white text-[16px] font-bold rounded-2xl hover:bg-green-600 disabled:opacity-50 transition-colors shadow-sm"
+              onClick={handleSend}
+              disabled={sending || totalPairs === 0}
+              className="px-6 py-3 rounded-xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#0077ed] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {confirming ? 'Setting up interview...' : '생성'}
+              {sending ? `발송 중… ${progress.done}/${progress.total}` : '발송하기'}
             </button>
           </div>
-        )}
-
-        {/* ═══ RESULT ═══ */}
-        {result && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-green-200 p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-[20px] shrink-0">
-                  {'\u2713'}
-                </div>
-                <div>
-                  <h2 className="text-[17px] font-bold text-[#1d1d1f]">Interview #{result.id} Confirmed</h2>
-                  <p className="text-[13px] text-[#86868b]">{msg}</p>
-                </div>
-              </div>
-
-              {/* Edit Form */}
-              {editing ? (
-                <div className="space-y-4 mb-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Date</label>
-                      <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30" />
-                    </div>
-                    <div>
-                      <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Time</label>
-                      <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Duration</label>
-                    <div className="flex gap-2">
-                      {[15, 20, 30].map(d => (
-                        <button key={d} type="button" onClick={() => setEditDuration(d)}
-                          className={`px-5 py-2 rounded-xl text-[13px] font-semibold border transition-colors ${
-                            editDuration === d
-                              ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/30'
-                              : 'bg-white text-[#424245] border-[#d2d2d7] hover:bg-[#f5f5f7]'
-                          }`}>
-                          {d} min
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[12px] font-semibold text-[#86868b] block mb-1">Notes</label>
-                    <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2}
-                      className="w-full px-3 py-2 border border-[#d2d2d7] rounded-xl text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 resize-none" />
-                  </div>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={saveEdit} disabled={editSaving}
-                      className="flex-1 py-2.5 bg-[#0071e3] text-white text-[14px] font-semibold rounded-xl hover:bg-[#0077ED] disabled:opacity-50 transition-colors">
-                      {editSaving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button type="button" onClick={() => setEditing(false)}
-                      className="px-5 py-2.5 text-[14px] text-[#86868b] border border-[#d2d2d7] rounded-xl hover:bg-[#f5f5f7] transition-colors">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 text-[14px] mb-5">
-                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                    <span className="text-[#86868b]">Candidate</span>
-                    <span className="text-[#1d1d1f] font-medium">{candidate?.full_name}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                    <span className="text-[#86868b]">Employer</span>
-                    <span className="text-[#1d1d1f] font-medium">{selectedEmployer?.school_name}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                    <span className="text-[#86868b]">Date / Time</span>
-                    <span className="text-[#1d1d1f] font-medium">{interviewDate} {interviewTime} KST</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                    <span className="text-[#86868b]">Duration</span>
-                    <span className="text-[#1d1d1f] font-medium">{duration} min</span>
-                  </div>
-                  {result.meet_link && (
-                    <div className="flex justify-between py-2 border-b border-[#f5f5f7]">
-                      <span className="text-[#86868b]">Meet Link</span>
-                      <div className="flex items-center gap-2">
-                        <a href={result.meet_link} target="_blank" rel="noopener noreferrer"
-                          className="text-[#0071e3] font-medium hover:underline truncate max-w-[200px]">
-                          {result.meet_link.replace('https://meet.google.com/', '')}
-                        </a>
-                        <a href={`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(`BRIDGE Interview — ${candidate?.full_name || ''}`)}&details=${encodeURIComponent('Meet: ' + result.meet_link)}`}
-                          target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium hover:bg-blue-200 shrink-0">
-                          📅 편집
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Status badges */}
-              {!editing && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {result.gcal_error ? (
-                    <span className="text-[11px] px-2 py-1 bg-orange-100 text-orange-700 rounded-full">
-                      GCal: {result.gcal_error.length > 30 ? 'Fallback to Meet Pool' : result.gcal_error}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                      Google Calendar OK
-                    </span>
-                  )}
-                  {result.email_errors.length === 0 ? (
-                    <span className="text-[11px] px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                      Emails sent to both parties
-                    </span>
-                  ) : (
-                    <span className="text-[11px] px-2 py-1 bg-red-100 text-red-700 rounded-full">
-                      Email errors: {result.email_errors.join(', ')}
-                    </span>
-                  )}
-                </div>
-              )}
+          {sending && progress.total > 0 && (
+            <div className="w-full bg-[#f5f5f7] rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-[#0071e3] h-full transition-all duration-300"
+                style={{ width: `${(progress.done / progress.total) * 100}%` }}
+              />
             </div>
+          )}
+        </div>
 
-            {/* Actions: 수정 / 삭제 / New / View All */}
-            {!editing && (
-              <div className="flex gap-3">
-                <button type="button" onClick={startEdit}
-                  className="flex-1 py-3 text-center text-[14px] font-semibold text-[#0071e3] bg-white border border-[#0071e3]/30 rounded-2xl hover:bg-[#0071e3]/5 transition-colors">
-                  일정 수정
-                </button>
-                <button type="button" onClick={handleDelete} disabled={deleting}
-                  className="flex-1 py-3 text-center text-[14px] font-semibold text-red-600 bg-white border border-red-200 rounded-2xl hover:bg-red-50 disabled:opacity-50 transition-colors">
-                  {deleting ? 'Deleting...' : '일정 삭제'}
-                </button>
-                <button type="button" onClick={resetAll}
-                  className="flex-1 py-3 text-[14px] font-bold text-white bg-green-500 rounded-2xl hover:bg-green-600 transition-colors">
-                  New Interview
-                </button>
-              </div>
-            )}
-
-            {/* View All link */}
-            <a href="/admin/interviews"
-              className="block text-center text-[13px] text-[#86868b] hover:text-[#1d1d1f] transition-colors py-2">
-              View All Interviews &rarr;
-            </a>
-          </div>
-        )}
-
-        {/* ═══ Deleted → Back to creation ═══ */}
-        {!result && msg && step === 3 && candidate && selectedEmployer && msg.includes('deleted') && (
-          <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-[13px] text-orange-700">
-            Interview deleted. You can create a new one above.
+        {/* 결과 */}
+        {results.length > 0 && (
+          <div className="bg-white rounded-2xl border border-[#e5e5e7] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#e5e5e7] bg-[#fafafa]">
+              <h3 className="text-[14px] font-semibold text-[#1d1d1f]">
+                발송 결과 ({results.filter(r => r.ok).length}/{results.length} 성공)
+              </h3>
+            </div>
+            <div className="max-h-[400px] overflow-y-auto">
+              <table className="w-full text-[12px]">
+                <thead className="bg-[#fafafa] sticky top-0">
+                  <tr className="text-left text-[#86868b]">
+                    <th className="px-3 py-2 w-[40px]">상태</th>
+                    <th className="px-3 py-2">후보자</th>
+                    <th className="px-3 py-2">구인처</th>
+                    <th className="px-3 py-2">시각</th>
+                    <th className="px-3 py-2">Meet</th>
+                    <th className="px-3 py-2">메모</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f5f5f7]">
+                  {results.map((r, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2">
+                        {r.ok
+                          ? <span className="text-green-600 font-semibold">✓</span>
+                          : <span className="text-red-600 font-semibold">✗</span>}
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[140px]" title={r.candidate_name}>
+                        {r.candidate_name || r.candidate_id}
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[140px]" title={r.school_name}>
+                        {r.school_name}
+                      </td>
+                      <td className="px-3 py-2 text-[#86868b]">{r.date} {r.time}</td>
+                      <td className="px-3 py-2">
+                        {r.meet_link
+                          ? <a href={r.meet_link} target="_blank" rel="noopener noreferrer"
+                              className="text-[#0071e3] hover:underline">link</a>
+                          : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-[#86868b] truncate max-w-[200px]" title={r.error}>
+                        {r.error || (r.ok ? `#${r.interview_id} OK` : '-')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
