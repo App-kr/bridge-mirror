@@ -910,6 +910,9 @@ PII_LINE_LABELS = [
     ("national id", True), ("ssn", True),
     # nationality/citizenship 은 고용주가 필요한 정보 → 삭제 안 함
     # ("nationality", True), ("citizenship", True),
+    ("age", True),                         # "Age: 28"
+    ("marital status", True),             # "Marital status: Single"
+    ("civil status", True),               # "Civil status: Single"
     ("race", True), ("ethnicity", True), ("religion", True),
     ("birth", True), ("born", True),     # "Birth: UK / 1990"
     ("gender", True), ("sex", True),     # "Gender: Female"
@@ -1468,19 +1471,29 @@ def _name_variants(full_name: str) -> list[str]:
 
 
 def _should_skip_line(stripped_lower: str) -> bool:
-    """PII 라벨로 시작하는 줄인지 판별"""
-    for label, needs_colon in PII_LINE_LABELS:
-        if not stripped_lower.startswith(label):
-            continue
-        rest = stripped_lower[len(label):]
-        if not rest:
-            return True  # 라벨만 있는 줄
-        first_char = rest.lstrip()[0] if rest.lstrip() else ""
-        if needs_colon and first_char == ":":
-            return True
-        if not needs_colon:
-            if first_char in (":", " "):
+    """PII 라벨로 시작하는 줄인지 판별.
+    불릿(•·▪▸), 아이콘, 탭 등 앞부분 비알파벳 문자 제거 후 재검사.
+    예: '• date of birth: 7 april 1997' → inner='date of birth: ...' → 감지됨
+    """
+    # 앞 비알파벳 문자 제거 버전 (불릿·아이콘·탭 포함)
+    _inner = re.sub(r'^[^\w]+', '', stripped_lower)
+    # 원본 + 불릿 제거 버전 둘 다 검사
+    _candidates = [stripped_lower]
+    if _inner and _inner != stripped_lower:
+        _candidates.append(_inner)
+    for _t in _candidates:
+        for label, needs_colon in PII_LINE_LABELS:
+            if not _t.startswith(label):
+                continue
+            rest = _t[len(label):]
+            if not rest:
+                return True  # 라벨만 있는 줄
+            first_char = rest.lstrip()[0] if rest.lstrip() else ""
+            if needs_colon and first_char == ":":
                 return True
+            if not needs_colon:
+                if first_char in (":", " "):
+                    return True
     return False
 
 
@@ -2587,8 +2600,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
             # 비직업타이틀 학원명: 한국 키워드 있거나 짧은 줄일 때만 redact
             # len <= 55: 경계값(50자) 라인도 포함 ("at Poly. New teachers..." 등)
+            # not has_kr 조건 제거: "Korea Poly School" 처럼 국가명+학원명 조합도 전체 삭제
             if has_kr_work and not _is_job_line_kw and (has_kr or len(stripped) <= 55):
-                if len(stripped) <= 55 and not has_kr:
+                if len(stripped) <= 55:
                     redact_texts.add(stripped)
                     all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
                 for kw in KR_WORKPLACE_KEYWORDS:
