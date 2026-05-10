@@ -1951,8 +1951,16 @@
       "git": "8a46c892",
       "files": 2890,
       "db_hash": "e1b1733ff862"
+    },
+    {
+      "dir": "20260510_120516__converter-naming-fields",
+      "task": "converter-naming-fields",
+      "ts": "2026.05.10 12:05:23",
+      "git": "7e65f357",
+      "files": 2893,
+      "db_hash": "a3a121ff8692"
     }
   ],
-  "last_backup": "2026.05.10 04:30:30",
-  "total_count": 244
+  "last_backup": "2026.05.10 12:05:23",
+  "total_count": 245
 }
