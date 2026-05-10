@@ -1280,6 +1280,13 @@ _NON_NAME_WORDS = frozenset({
     # 교육기관 유형명 (이름 오인 방지 — Liberty University, Francis Parker Collegiate 등)
     "university", "college", "collegiate", "polytechnic", "institute",
     "academy", "faculty", "campus", "seminary",
+    # 커버레터 인사말 (이름 오인 방지 — "Dear Hiring Manager")
+    "dear", "hiring", "manager", "sincerely", "regards", "warmly",
+    "faithfully", "truly", "respectfully",
+    # 자격증/학력 라벨 (이름 오인 방지 — "Endorsements: Elementary")
+    "endorsements", "endorsement", "certifications", "certification",
+    "elementary", "bachelor", "master", "doctorate",
+    "license", "licensed", "diploma", "degree",
 })
 
 # ── EDUCATION 섹션 보호용 헤더 감지 정규식 ──
@@ -1671,6 +1678,9 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
         nonlocal result
         def replacer(m):
             matched = m.group()
+            # 도시명은 반드시 대문자로 시작해야 함 — re.I 오탐("cooperating teacher, Ms") 방지
+            if not matched[0].isupper():
+                return matched
             start = m.start()
             end = m.end()
             # 현재 줄 전체 추출 (짧은 매칭이라도 줄 전체로 대학교명 판별)
@@ -2214,6 +2224,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 # 주소/일반 단어 포함 줄은 이름이 아님
                 if any(w.lower() in _NON_NAME_WORDS for w in words):
                     continue
+                # 라벨 단어("Endorsements:", "Phone:", "Date:") 포함 줄은 이름이 아님
+                if any(w.endswith(':') for w in words):
+                    continue
+                # 커버레터 인사말("Dear Hiring Manager,") 패턴 → 이름이 아님
+                if words and words[0].lower() in ("dear", "to", "from", "re", "subject"):
+                    continue
                 if 2 <= len(words) <= 5 and all(
                     (w[0].isupper() if w else False) or w in ("de", "van", "von", "del", "K.", "K")
                     for w in words if w
@@ -2609,13 +2625,15 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # (francis parker, hillside collegiate 등 KR_WORKPLACE_KEYWORDS에 직접 등록)
             # 직업 타이틀줄 위치/괄호 태그는 job_title_replaces에서 일괄 처리 (위)
             # (JOB_PAREN_LOC / JOB_BRANCH → job_title_replaces 방식으로 통합, 갭 없이 제거)
-            # 외국 도시/주 → blank redact
+            # 외국 도시/주 → blank redact (도시명은 실제 대문자로 시작해야 함 — re.I 오탐 방지)
             for m in RE_US_CITY_STATE.finditer(_ls):
-                redact_texts.add(m.group())
-                all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
+                if m.group()[0].isupper():  # 소문자 시작("cooperating teacher, Ms") 오탐 방지
+                    redact_texts.add(m.group())
+                    all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
             for m in RE_FOREIGN_CITY.finditer(_ls):
-                redact_texts.add(m.group())
-                all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
+                if m.group()[0].isupper():  # 소문자 시작 오탐 방지
+                    redact_texts.add(m.group())
+                    all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
             # 나이/비자 → blank redact
             for m in RE_AGE_MENTION.finditer(_ls):
                 redact_texts.add(m.group())
