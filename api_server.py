@@ -200,11 +200,11 @@ if not _JWT_SECRET:
     print("[CRITICAL] Render 대시보드 → Environment Variables → JWT_SECRET 추가 후 재배포.")
     sys.exit(1)
 _JWT_ALG     = "HS256"
-_JWT_TTL     = timedelta(hours=1)
+_JWT_TTL     = timedelta(hours=4)   # W4: 200MB 영상 업로드 대응 (1h → 4h)
 
 
 def _make_candidate_token(candidate_id: str) -> str:
-    """지원자 ID를 담은 1시간짜리 JWT 생성."""
+    """지원자 ID를 담은 4시간짜리 JWT 생성."""
     exp = datetime.now(timezone.utc) + _JWT_TTL
     payload = {
         "sub": str(candidate_id),
@@ -8093,6 +8093,20 @@ def _validate_file(data: bytes, filename: str, file_type: str) -> str:
         if not (any(header[:8].startswith(m) for m in magic_prefixes) or is_mp4):
             raise HTTPException(400, "File content does not match its extension.")
 
+    # W3: DOCX/ODT는 PK 헤더를 ZIP과 공유 → 내부 구조 추가 검증
+    if ext == ".docx":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as _zf:
+                _names = {e.filename for e in _zf.infolist()}
+                # DOCX 필수 엔트리 확인
+                if "[Content_Types].xml" not in _names and "word/" not in " ".join(_names):
+                    raise HTTPException(400, "Invalid DOCX: missing required OOXML entries.")
+                total_uncompressed = sum(i.file_size for i in _zf.infolist())
+                if total_uncompressed > 100 * 1024 * 1024:
+                    raise HTTPException(413, "DOCX content exceeds 100MB uncompressed limit.")
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "Invalid or corrupted DOCX file.")
+
     # ZIP bomb 방어: 압축 해제 후 크기 및 파일 수 제한
     if ext == ".zip":
         try:
@@ -8408,6 +8422,24 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                 "[AutoProcess] DONE: %s (#%s) → %d PII, %d bytes, status=done",
                 entity_id, brj_number, pii_count, len(processed_bytes),
             )
+
+            # A1: 관리자 텔레그램 알림 (논블로킹)
+            try:
+                _cname = candidate.get("full_name") or f"#{brj_number}" if candidate else f"#{brj_number}"
+                _tg_msg = (
+                    f"✅ CV 처리 완료\n"
+                    f"후보자: {_cname} (ID {entity_id})\n"
+                    f"PII 제거: {pii_count}건 | 크기: {len(processed_bytes)//1024}KB"
+                )
+                import subprocess as _sp
+                _py = "C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe"
+                _tg_script = str(Path(__file__).resolve().parent / "tools" / "tg_notify.py")
+                _sp.Popen(
+                    [_py, "-X", "utf8", _tg_script, _tg_msg],
+                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                )
+            except Exception:
+                pass  # 알림 실패는 무시 (비핵심 기능)
 
     except Exception as e:
         _log_upload.error("[AutoProcess] FAIL %s: %s", entity_id, e, exc_info=True)
