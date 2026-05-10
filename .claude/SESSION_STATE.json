@@ -1,11 +1,9 @@
 {
-  "last_updated": "2026-05-10 19:53:26",
-  "last_tool": "Write",
-  "last_command": "Write: Q:\\Claudework\\bridge base\\tools\\backup_to_k_drive.ps1",
+  "last_updated": "2026-05-10 19:58:56",
+  "last_tool": "Bash",
+  "last_command": "cd \"Q:\\Claudework\\bridge_ads\" && gh run list --limit 3 2>&1",
   "git_head": "fed6c3e7",
   "modified_files": [
-    "Q:\\Claudework\\bridge base\\tools\\hide_git_console.ps1",
-    "Q:\\Claudework\\bridge base\\web_frontend\\src\\app\\admin\\diagnose\\page.tsx",
     "Q:\\Claudework\\.vscode\\settings.json",
     "Q:\\Claudework\\bridge base\\tools\\disable_git_all_workspaces.ps1",
     "Q:\\Claudework\\bridge_ads\\render.yaml",
@@ -23,7 +21,9 @@
     "Q:\\Claudework\\bridge_ads\\src\\app\\api\\admin\\seed\\route.ts",
     "Q:\\Claudework\\bridge_ads\\src\\app\\api\\auth\\google\\start\\route.ts",
     "Q:\\Claudework\\bridge_ads\\src\\lib\\env.ts",
-    "Q:\\Claudework\\bridge base\\tools\\backup_to_k_drive.ps1"
+    "Q:\\Claudework\\bridge base\\tools\\backup_to_k_drive.ps1",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\jobs\\page.tsx",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\HomeJobs.tsx"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-05-10 기준)",
   "git_changed": [
