@@ -360,22 +360,6 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
   if (phase === 'notice') {
     return (
       <div className="flex items-center justify-center px-4 py-6 sm:py-10" style={{ minHeight: 'calc(100vh - 44px)' }}>
-        <style>{`
-          @keyframes shimmer-inq {
-            0%   { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(250%) skewX(-12deg); }
-          }
-          .btn-shimmer-inq { position: relative; overflow: hidden; }
-          .btn-shimmer-inq::after {
-            content: '';
-            position: absolute;
-            top: 0; left: 0;
-            width: 40%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.38), transparent);
-            animation: shimmer-inq 2.4s ease-in-out infinite;
-          }
-        `}</style>
-
         <div className="w-full max-w-2xl">
           {/* Header */}
           <div className="text-center mb-7 space-y-3">
@@ -439,7 +423,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
               <button
                 type="button"
                 onClick={() => setPhase('form')}
-                className="btn-shimmer-inq w-full py-4 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
+                className="btn-shimmer w-full py-4 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
                            text-white text-base font-semibold rounded-xl transition-colors"
               >
                 동의하고 시작하기 →
@@ -787,8 +771,8 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
           )}
           {step === 3 && (
             <button type="button" onClick={handleSubmit} disabled={status === 'submitting'}
-              className="btn-primary flex-1 text-base py-3">
-              {status === 'submitting' ? '제출 중...' : '채용 문의 제출'}
+              className="btn-shimmer btn-primary flex-1 text-base py-3">
+              <span>{status === 'submitting' ? '제출 중...' : '채용 문의 제출'}</span>
             </button>
           )}
         </div>

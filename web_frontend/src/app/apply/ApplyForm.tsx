@@ -585,22 +585,6 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   if (phase === 'notice') {
     return (
       <div className="flex items-center justify-center px-4 py-6" style={{ minHeight: 'calc(100vh - 44px)' }}>
-        <style>{`
-          @keyframes shimmer {
-            0%   { transform: translateX(-100%) skewX(-12deg); }
-            100% { transform: translateX(250%) skewX(-12deg); }
-          }
-          .btn-shimmer { position: relative; overflow: hidden; }
-          .btn-shimmer::after {
-            content: '';
-            position: absolute;
-            top: 0; left: 0;
-            width: 40%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.38), transparent);
-            animation: shimmer 2.4s ease-in-out infinite;
-          }
-        `}</style>
-
         <div className="w-full max-w-2xl">
           {/* Header */}
           <div className="text-center mb-8 space-y-2">
@@ -1087,9 +1071,9 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
           )}
           {step === 3 && (
             <button type="button" onClick={handleSubmit} disabled={status === 'submitting'}
-              className="flex-1 text-base py-3.5 px-8 rounded-lg font-bold text-white disabled:opacity-50"
+              className="btn-shimmer flex-1 text-base py-3.5 px-8 rounded-lg font-bold text-white disabled:opacity-50"
               style={{ background: '#1a1a2e', fontSize: 16 }}>
-              {status === 'submitting' ? 'Submitting...' : 'Submit Application'}
+              <span>{status === 'submitting' ? 'Submitting...' : 'Submit Application'}</span>
             </button>
           )}
         </div>

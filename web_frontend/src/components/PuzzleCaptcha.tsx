@@ -367,24 +367,29 @@ function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
     ctx.fill()
   }
 
-  // Header bar
+  // Header bar — 2-row layout (text 위, shapes 아래) 텍스트 가림 방지
+  const HEADER_H = 72
   ctx.fillStyle = 'rgba(255,255,255,0.07)'
-  ctx.fillRect(0, 0, CW, 50)
-  ctx.fillStyle = 'rgba(255,255,255,0.75)'
-  ctx.font = '13px Arial'
-  ctx.textAlign = 'left'
+  ctx.fillRect(0, 0, CW, HEADER_H)
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.font = '12px Arial'
+  ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('순서대로 클릭 / Click in order:', 12, 25)
+  ctx.fillText('순서대로 클릭 / Click in order', CW / 2, 14)
 
-  // Sequence preview
+  // Sequence preview — 헤더 하단 행에 가운데 정렬
+  const SEQ_GAP = 70
+  const SEQ_TOTAL = (s.seq.length - 1) * SEQ_GAP
+  const SEQ_START = (CW - SEQ_TOTAL) / 2
+  const SEQ_Y = 46
   s.seq.forEach((itemIdx, pos) => {
     const item = s.items[itemIdx]
     const isDone = s.done.includes(itemIdx)
-    const ox = 130 + pos * 85
+    const cx = SEQ_START + pos * SEQ_GAP
 
     ctx.save()
-    ctx.translate(ox + 14, 25)
-    drawShapeAt(ctx, item.shape, 0, 0, 12)
+    ctx.translate(cx, SEQ_Y)
+    drawShapeAt(ctx, item.shape, 0, 0, 11)
     ctx.fillStyle = isDone ? 'rgba(255,255,255,0.2)' : item.color
     ctx.fill()
     ctx.strokeStyle = isDone ? 'rgba(255,255,255,0.2)' : 'white'
@@ -397,7 +402,7 @@ function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
       ctx.font = '12px Arial'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText('→', ox + 55, 25)
+      ctx.fillText('→', cx + SEQ_GAP / 2, SEQ_Y)
     }
   })
 
