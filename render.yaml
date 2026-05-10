@@ -38,9 +38,17 @@ services:
         value: bridgejobkr@naver.com
       - key: NAVER_SMTP_PASS
         sync: false
-      # Google Drive DB 자동 복원용 (base64 인코딩된 service account JSON)
-      # 설정 방법: `certutil -encode gcp_service_account.json tmp.b64` 로 base64 생성 후
-      #           Render 대시보드 → Environment → GCP_SA_JSON_B64 값으로 붙여넣기
+      # Google Drive DB 자동 복원용 (base64 인코딩된 service account JSON) — 레거시
       - key: GCP_SA_JSON_B64
+        sync: false
+      # ─────────────────────────────────────────────────────────────────────
+      # ★ 필수: Drive OAuth 토큰 (재배포 시 master.db 자동 복원 트리거)
+      # 미설정 시 Render 재배포 = 데이터 영구 손실 (sheet_prefs/candidates/jobs 등)
+      # 등록 방법:
+      #   1) 로컬에서 `python tools/db_persist.py status` 실행 (토큰 자동 발급)
+      #   2) drive_oauth_token.json 전체 내용을 Render 대시보드 →
+      #      Environment Variables → DRIVE_OAUTH_TOKEN_JSON 값으로 붙여넣기
+      #   3) Manual Deploy → 자동 복원 검증 (로그에 "Drive 자동 복원 성공")
+      - key: DRIVE_OAUTH_TOKEN_JSON
         sync: false
     # disk: 미연결 (Render free plan 미지원 — 유료 플랜 업그레이드 필요)
