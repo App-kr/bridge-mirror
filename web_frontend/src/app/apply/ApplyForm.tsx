@@ -660,8 +660,9 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
           <div className="px-6 pt-6 pb-2">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Security Verification</h2>
-            <p className="text-sm text-gray-500 mb-4">Complete the puzzle to continue with your application.</p>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Security Verification / 보안 확인</h2>
+            <p className="text-sm text-gray-500 mb-1">Complete the puzzle to continue with your application.</p>
+            <p className="text-xs text-gray-400 mb-4">지원서 제출을 계속하려면 아래 퍼즐을 완료해 주세요.</p>
             <PuzzleCaptcha
               onVerified={handleCaptchaVerified}
               onError={(err) => alert(`CAPTCHA Error: ${err}`)}

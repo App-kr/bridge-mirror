@@ -91,7 +91,7 @@ function drawSlide(ctx: CanvasRenderingContext2D, s: SlideState) {
   ctx.font = '13px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('→  조각을 슬라이드하여 구멍에 채워 넣으세요', CW / 2, 8)
+  ctx.fillText('→  조각을 슬라이드하여 구멍에 채워 넣으세요  /  Slide the piece into the hole', CW / 2, 8)
 
   // Snapshot background at hole position (once)
   if (!s.bgSnap) {
@@ -268,7 +268,7 @@ function drawRotate(ctx: CanvasRenderingContext2D, s: RotateState) {
   ctx.font = '13px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('🔄  드래그하여 화살표를 투명 방향에 맞추세요', CW / 2, 8)
+  ctx.fillText('🔄  화살표를 투명 방향에 맞추세요  /  Rotate arrow to match the transparent guide', CW / 2, 8)
 }
 
 // ── TYPE C: CLICK ORDER ───────────────────────────────────────────────────────
@@ -374,7 +374,7 @@ function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
   ctx.font = '13px Arial'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText('순서대로 클릭:', 12, 25)
+  ctx.fillText('순서대로 클릭 / Click in order:', 12, 25)
 
   // Sequence preview
   s.seq.forEach((itemIdx, pos) => {
@@ -590,17 +590,48 @@ export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
     else if (type === 'rotate') rUp()
   }
 
-  const HINT: Record<CaptchaType, string> = {
-    slide:  '조각을 오른쪽으로 드래그하여 구멍에 끼워 넣으세요',
-    rotate: '화살표를 드래그하여 투명 방향에 정확히 맞추세요',
-    order:  '위에 표시된 순서대로 도형을 클릭하세요',
+  const HINT: Record<CaptchaType, { ko: string; en: string }> = {
+    slide:  {
+      ko: '조각을 오른쪽으로 드래그하여 구멍에 끼워 넣으세요',
+      en: 'Drag the piece to the right and fit it into the hole',
+    },
+    rotate: {
+      ko: '화살표를 드래그하여 투명 방향에 정확히 맞추세요',
+      en: 'Drag to rotate the arrow until it matches the transparent guide',
+    },
+    order:  {
+      ko: '위에 표시된 순서대로 도형을 클릭하세요',
+      en: 'Click the shapes in the order shown above',
+    },
   }
+
+  // ── 새로고침 (멈춤 복구) ──────────────────────────────────────────────────
+  const refresh = useCallback(() => {
+    if (isVerified) return
+    if (type === 'slide')  slideS.current  = initSlide()
+    if (type === 'rotate') rotateS.current = initRotate()
+    if (type === 'order')  orderS.current  = initOrder()
+    draw()
+  }, [type, isVerified, draw])
 
   return (
     <div className="my-4 p-4 border border-gray-200 rounded-xl bg-white">
-      <label className="block text-sm font-medium text-gray-700 mb-3">
-        🔐 Security Check
-      </label>
+      <div className="flex items-center justify-between mb-3">
+        <label className="block text-sm font-medium text-gray-700">
+          🔐 Security Check / 보안 확인
+        </label>
+        {!isVerified && (
+          <button
+            type="button"
+            onClick={refresh}
+            className="text-xs px-2 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 transition"
+            aria-label="새로고침 / Refresh"
+            title="문제가 보이지 않거나 멈춘 경우 / Click if puzzle is stuck or not visible"
+          >
+            🔄 새로고침 / Refresh
+          </button>
+        )}
+      </div>
 
       <canvas
         ref={canvasRef}
@@ -613,7 +644,7 @@ export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
         onTouchStart={onDown}
         onTouchMove={onMove}
         onTouchEnd={onUp}
-        className="border border-gray-200 rounded-xl w-full max-w-md mx-auto block"
+        className="border border-gray-200 rounded-xl w-full max-w-md mx-auto block bg-slate-900"
         style={{
           touchAction: 'none',
           userSelect: 'none',
@@ -623,11 +654,17 @@ export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
 
       {isVerified ? (
         <div className="mt-3 p-2 bg-green-100 border border-green-400 text-green-700 rounded text-center text-sm">
-          ✓ CAPTCHA verified successfully
+          ✓ 인증 완료 / CAPTCHA verified successfully
         </div>
       ) : (
-        <div className="mt-3 p-2 bg-slate-50 border border-slate-200 text-slate-600 rounded text-center text-sm">
-          {HINT[type]}
+        <div className="mt-3 p-3 bg-slate-50 border border-slate-200 text-slate-700 rounded text-center text-sm leading-relaxed">
+          <div className="font-medium">{HINT[type].ko}</div>
+          <div className="text-xs text-slate-500 mt-0.5">{HINT[type].en}</div>
+          <div className="text-[11px] text-slate-400 mt-1.5">
+            화면이 흰색으로 멈췄으면 위 “새로고침” 버튼을 눌러주세요
+            <br />
+            If the puzzle is stuck or blank, press the “Refresh” button above
+          </div>
         </div>
       )}
 
