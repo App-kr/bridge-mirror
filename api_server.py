@@ -1153,7 +1153,7 @@ async def health_check():
     """Render / 외부 모니터링용 헬스체크"""
     return {
         "status": "ok",
-        "version": "v2.3.2",
+        "version": "v2.4.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
