@@ -29,6 +29,89 @@ MAX_KEEP    = 7
 SCOPES      = ["https://www.googleapis.com/auth/drive.file"]  # 자기가 만든 파일만 (최소 권한)
 
 
+SA_FOLDER_ID = "1hmdplsuWZZWElVvxPk3gnymNZZMXmgFk"   # BRIDGE_DB_BACKUPS (SA reader 공유됨)
+SA_SCOPES    = ["https://www.googleapis.com/auth/drive.readonly"]
+
+
+# ── Service Account Drive 클라이언트 (GCP_SA_JSON_B64 폴백) ───────────────────
+
+def _drive_sa():
+    """GCP Service Account 기반 Drive 클라이언트 (Render GCP_SA_JSON_B64 폴백)."""
+    import base64, json, tempfile
+    import warnings; warnings.filterwarnings("ignore", category=FutureWarning)
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+
+    sa_b64 = os.getenv("GCP_SA_JSON_B64", "").strip()
+    if not sa_b64:
+        raise EnvironmentError("GCP_SA_JSON_B64 환경변수 미설정")
+
+    sa_json = base64.b64decode(sa_b64).decode("utf-8")
+    sa_info = json.loads(sa_json)
+    creds = service_account.Credentials.from_service_account_info(sa_info, scopes=SA_SCOPES)
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def restore_sa(dry_run: bool = False) -> bool:
+    """GCP_SA_JSON_B64 기반 Drive 복원 (DRIVE_OAUTH_TOKEN_JSON 미설정 시 폴백)."""
+    try:
+        drive = _drive_sa()
+    except Exception as e:
+        print(f"[restore_sa] SA 초기화 실패: {e}")
+        return False
+
+    # SA에 공유된 고정 폴더 ID 사용 (OAuth _get_or_create_folder 우회)
+    folder_id = SA_FOLDER_ID
+    backups = _list_backups(drive, folder_id)
+    if not backups:
+        print("[restore_sa] SA Drive에 접근 가능한 백업 없음")
+        return False
+
+    binary_backups = [b for b in backups if b["name"].endswith(".db.gz")]
+    target = binary_backups[0] if binary_backups else backups[0]
+
+    print(f"[restore_sa] SA 복원 대상: {target['name']} ({int(target.get('size',0))//1024}KB)")
+    if dry_run:
+        return True
+
+    from googleapiclient.http import MediaIoBaseDownload
+    request = drive.files().get_media(fileId=target["id"])
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buf.seek(0)
+    gz_data = buf.read()
+
+    raw = gzip.decompress(gz_data)
+    if not raw.startswith(b"SQLite format 3"):
+        print("[restore_sa] SQLite 매직 바이트 불일치 — 파일 손상")
+        return False
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=str(DB_PATH.parent)) as tmp:
+        tmp_path = tmp.name
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(raw)
+        conn = sqlite3.connect(tmp_path)
+        result = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        conn.close()
+        if result != "ok":
+            print(f"[restore_sa] 무결성 오류: {result}")
+            os.unlink(tmp_path)
+            return False
+        import shutil
+        shutil.move(tmp_path, str(DB_PATH))
+        print(f"[restore_sa] ✓ SA 복원 성공 ({len(raw):,} bytes)")
+        return True
+    except Exception as e:
+        print(f"[restore_sa] 실패: {e}")
+        try: os.unlink(tmp_path)
+        except Exception: pass
+        return False
+
+
 # ── OAuth Drive 클라이언트 ─────────────────────────────────────────────────────
 
 def _drive():

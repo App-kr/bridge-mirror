@@ -552,12 +552,34 @@ def _startup_db_health_check() -> None:
                 except Exception as _re:
                     _log.error("[STARTUP] Drive 복원 예외: %s", _re, exc_info=True)
             elif _SA_B64:
-                _log.error(
-                    "[STARTUP] ❌ GCP_SA_JSON_B64 (legacy Service Account)만 등록됨. "
-                    "현재 코드는 OAuth 방식 — DRIVE_OAUTH_TOKEN_JSON 환경변수 추가 필요. "
-                    "복원 절차: 로컬 'python tools/db_persist.py status' 실행 후 "
-                    "drive_oauth_token.json 전체 내용을 Render Environment 등록."
-                )
+                _log.info("[STARTUP] GCP_SA_JSON_B64 감지 → SA 폴백 복원 시작")
+                try:
+                    import sys as _sys
+                    _tools_dir = str(Path(__file__).resolve().parent / "tools")
+                    if _tools_dir not in _sys.path:
+                        _sys.path.insert(0, _tools_dir)
+                    from db_persist import restore_sa as _sa_restore  # type: ignore
+                    ok = _sa_restore()
+                    if ok:
+                        _log.info("[STARTUP] ✓ SA 폴백 복원 성공 — DB 준비 완료")
+                        _ENSURE_FUNCS = [
+                            "_ensure_sheet_prefs_table", "_ensure_email_blacklist_table",
+                            "_ensure_boards_table", "_ensure_file_uploads_table",
+                            "_ensure_banners_table", "_ensure_site_partners_table",
+                            "_ensure_site_settings_table", "_ensure_site_visits_table",
+                            "_ensure_page_content_table", "_ensure_pipeline_tables",
+                            "_ensure_talent_auth_tables",
+                        ]
+                        for _fn in _ENSURE_FUNCS:
+                            try:
+                                _f = globals().get(_fn)
+                                if callable(_f): _f()
+                            except Exception as _ee:
+                                _log.warning("[STARTUP] %s 실패: %s", _fn, _ee)
+                    else:
+                        _log.error("[STARTUP] ✗ SA 폴백 복원 실패")
+                except Exception as _re:
+                    _log.error("[STARTUP] SA 복원 예외: %s", _re, exc_info=True)
             else:
                 _log.error(
                     "[STARTUP] ❌ Drive 인증 환경변수 전무 — 자동 복원 불가. "
