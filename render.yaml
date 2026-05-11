@@ -7,9 +7,7 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn api_server:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
-    # autoDeploy: false — DB 보호. git push가 DB를 날리므로 수동 배포만
-    # 자동배포는 DRIVE_OAUTH_TOKEN_JSON 설정 완료 후 다시 true로
-    autoDeploy: false
+    autoDeploy: true
     branch: main
     envVars:
       - key: ENV
