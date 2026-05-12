@@ -238,4 +238,6 @@ client_secret_*.json
 .maint_flag
 .behavior_baseline.json
 drive_oauth_token*.json
+drive_full_token.json
+form_cv_state.json
 client_secret_*.json
