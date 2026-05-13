@@ -1983,8 +1983,40 @@
       "git": "f2b14d0e",
       "files": 2897,
       "db_hash": "77c887d427a1"
+    },
+    {
+      "dir": "20260512_043009__daily_20260512",
+      "task": "daily_20260512",
+      "ts": "2026.05.12 04:30:19",
+      "git": "465bec17",
+      "files": 2898,
+      "db_hash": "54e4f2273969"
+    },
+    {
+      "dir": "20260513_043009__daily_20260513",
+      "task": "daily_20260513",
+      "ts": "2026.05.13 04:30:19",
+      "git": "1aaf226a",
+      "files": 2898,
+      "db_hash": "dffc342f0cbf"
+    },
+    {
+      "dir": "20260513_084154__form-cv-pipeline",
+      "task": "form-cv-pipeline",
+      "ts": "2026.05.13 08:42:03",
+      "git": "1aaf226a",
+      "files": 2946,
+      "db_hash": "cc6032e3061f"
+    },
+    {
+      "dir": "20260513_131216__daemon_supervisor_tg_fix",
+      "task": "daemon_supervisor_tg_fix",
+      "ts": "2026.05.13 13:12:53",
+      "git": "1394ccd3",
+      "files": 3496,
+      "db_hash": "16f3f3890e83"
     }
   ],
-  "last_backup": "2026.05.11 08:40:09",
-  "total_count": 248
+  "last_backup": "2026.05.13 13:12:53",
+  "total_count": 252
 }
