@@ -88,9 +88,9 @@ LOG_DIR = Path(r"Q:\Claudework\bridge base\logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_PATH = LOG_DIR / "focus_guard.jsonl"
 
-POLL_SEC = 0.005            # 5ms (was 30ms) — 사용자 반복 호소 ("Q드라이브 git 검정창")
-                            # 200회/초 polling, CPU < 1%. 깜빡임 visible 시간 5ms 이하
-MAX_LOG_PER_HOUR = 1000
+POLL_SEC = 0.001            # 1ms (was 5ms) — 사용자 추가 호소
+                            # 1000회/초 polling, CPU 1-2%. visible 시간 1ms 이하 (사람 눈에 거의 안 보임)
+MAX_LOG_PER_HOUR = 2000
 
 
 # ── Win32 ──────────────────────────────────────────────────
