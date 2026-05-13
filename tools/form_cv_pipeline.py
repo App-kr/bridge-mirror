@@ -1,17 +1,17 @@
 """
-Form CV 자동 처리 파이프라인 v2.0
-Drive 폴더 직접 감시 → 신규 파일만 다운로드(원본 보관) → doc_processor PII 제거
+Form CV 자동 처리 파이프라인 v3.0
+Form 탭 이메일 기반 → 개인별 폴더 분리 → doc_processor PII 제거
 
 원칙:
   - Google Drive 원본: 절대 수정/삭제 금지 (읽기 전용)
-  - incoming/originals/ : 다운로드 원본 영구 보관 (삭제 금지)
-  - processed/          : PII 제거 결과물 (PDF/DOCX만)
-  - 이미지·영상·기타    : originals/ 에만 보관, doc_processor 미실행
+  - incoming/originals/{email}/ : 개인별 폴더로 분리 저장 (사진 혼재 방지)
+  - processed/ : PII 제거 결과물
+  - 이메일로 New탭 번호 정확히 매칭 (이름 fuzzy 매칭 사용 안 함)
 
 실행:
   "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/form_cv_pipeline.py" run
   "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/form_cv_pipeline.py" run --days 3
-  "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/form_cv_pipeline.py" run --limit 10
+  "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/form_cv_pipeline.py" run --limit 5
   "Q:/Phtyon 3/python.exe" -X utf8 "Q:/Claudework/bridge base/tools/form_cv_pipeline.py" status
 """
 
@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
@@ -27,99 +28,30 @@ from pathlib import Path
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
-# ── 경로 설정 ─────────────────────────────────────────────────────
-BASE        = Path("Q:/Claudework/bridge base")
-TOKEN_PATH  = BASE / "drive_full_token.json"
-ORIGINALS   = BASE / "incoming" / "originals"   # 원본 영구 보관
-PROCESSED   = BASE / "processed"                # PII 제거 결과물
-STATE_FILE  = BASE / "tools" / "form_cv_state.json"
-DOC_PROC    = BASE / "tools" / "doc_processor.py"
-PYTHON_EXE  = Path("Q:/Phtyon 3/python.exe")
+BASE           = Path("Q:/Claudework/bridge base")
+TOKEN_PATH     = BASE / "drive_full_token.json"
+ORIGINALS_ROOT = BASE / "incoming" / "originals"   # 개인별 서브폴더
+PROCESSED      = BASE / "processed"
+STATE_FILE     = BASE / "tools" / "form_cv_state.json"
+DOC_PROC       = BASE / "tools" / "doc_processor.py"
+PYTHON_EXE     = Path("Q:/Phtyon 3/pythonw.exe")  # 2026-05-13: pythonw (no console)
+_NO_WINDOW     = 0x08000000  # CREATE_NO_WINDOW
+MASTER_DB      = BASE / "master.db"
 
-# Google Forms 파일 업로드 폴더 ID
-DRIVE_FOLDER_ID = "1a_6bddT9wkbQOBeoDTU7HQWuQxpDIVso75dgdXLAT-RsBNf6Zoqta0GBfl6tKpQOyGdCIWqP"
-
-# PII 제거 대상 MIME (나머지는 originals/ 에만 보관)
-CV_MIMES = {
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/msword",
-    "application/vnd.google-apps.document",
-}
+SPREADSHEET_ID  = "1PveCbB7yfPhsmV-YwERf2PjoaKtXJmB0uJngu1dhTxM"
+FORM_RANGE      = "Form!A2:E"    # A=타임스탬프, B=이메일, D=파일링크, E=이름
+NEW_RANGE       = "New!A5:I"     # A=메일, B=이름, D=번호, F=국적, H=나이, I=성별
 
 MIME_PDF  = "application/pdf"
 MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 MIME_DOC  = "application/msword"
 MIME_GDOC = "application/vnd.google-apps.document"
+CV_MIMES  = {MIME_PDF, MIME_DOCX, MIME_DOC, MIME_GDOC}
 
-# New 탭에서 로드한 이름→번호 캐시 (세션 내 1회)
-_NAME_NO_CACHE: dict[str, int] | None = None
+FILE_RE = re.compile(r"id=([A-Za-z0-9_-]{25,})")
 
-SPREADSHEET_ID = "1PveCbB7yfPhsmV-YwERf2PjoaKtXJmB0uJngu1dhTxM"
-NEW_SHEET_RANGE = "New!B:D"   # B=이름, D=번호
-
-ORIGINALS.mkdir(parents=True, exist_ok=True)
+ORIGINALS_ROOT.mkdir(parents=True, exist_ok=True)
 PROCESSED.mkdir(exist_ok=True)
-
-
-def _load_name_map(sheets) -> dict[str, int]:
-    """New 탭 B열(이름) → D열(번호) 매핑 로드"""
-    global _NAME_NO_CACHE
-    if _NAME_NO_CACHE is not None:
-        return _NAME_NO_CACHE
-
-    res = sheets.spreadsheets().values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=NEW_SHEET_RANGE,
-    ).execute()
-    rows = res.get("values", [])
-    mapping: dict[str, int] = {}
-    for row in rows:
-        if len(row) < 3:
-            continue
-        name_raw = row[0].strip()   # B열
-        no_raw   = row[2].strip()   # D열 (B:D 에서 인덱스 2)
-        if not name_raw or not no_raw:
-            continue
-        try:
-            no = int(no_raw)
-        except ValueError:
-            continue
-        # 세미콜론 구분 별명 포함 모두 등록
-        for part in name_raw.split(";"):
-            part = part.strip()
-            if part:
-                mapping[part.lower()] = no
-    _NAME_NO_CACHE = mapping
-    print(f"  [New탭] 번호 매핑 로드: {len(mapping)}명", flush=True)
-    return mapping
-
-
-def _lookup_sheet_number(name_hint: str, name_map: dict[str, int]) -> int | None:
-    """Drive 파일명 이름으로 New탭 번호 조회 (fuzzy)"""
-    if not name_hint or not name_map:
-        return None
-    needle = name_hint.strip().lower()
-    # 완전 일치
-    if needle in name_map:
-        return name_map[needle]
-    # 단어 단위 부분 일치 (성 또는 이름 하나라도 매칭)
-    parts = needle.split()
-    for part in parts:
-        if len(part) < 3:
-            continue
-        for key, no in name_map.items():
-            if part in key:
-                return no
-    return None
-
-
-def _extract_submitter_name(drive_filename: str) -> str:
-    """Drive 파일명 'filename - SubmitterName.ext' 에서 이름 추출"""
-    stem = Path(drive_filename).stem          # 확장자 제거
-    if " - " in stem:
-        return stem.rsplit(" - ", 1)[-1].strip()
-    return stem
 
 
 def _build_services():
@@ -131,227 +63,289 @@ def _build_services():
     return drive, sheets
 
 
-def _load_state() -> dict:
+def _load_state():
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text(encoding="utf-8"))
     return {"processed": {}, "failed": {}, "last_run": None}
 
 
-def _save_state(state: dict):
+def _save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _safe_name(name: str) -> str:
-    name = re.sub(r"[^\w\s\-.]", "", name)
-    return re.sub(r"\s+", "_", name.strip())[:60]
+def _safe_name(s):
+    return re.sub(r"[^\w\-]", "_", s.strip())[:50]
 
 
-def _list_new_files(drive, since_dt: datetime) -> list[dict]:
-    """Drive 폴더에서 since_dt 이후 업로드된 파일 목록 반환"""
-    since_str = since_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    query = (
-        f"'{DRIVE_FOLDER_ID}' in parents "
-        f"and trashed=false "
-        f"and createdTime > '{since_str}'"
-    )
-    all_files = []
-    page_token = None
-    while True:
-        res = drive.files().list(
-            q=query,
-            fields="nextPageToken,files(id,name,mimeType,size,createdTime)",
-            orderBy="createdTime asc",
-            pageSize=1000,
-            pageToken=page_token,
-        ).execute()
-        all_files.extend(res.get("files", []))
-        page_token = res.get("nextPageToken")
-        if not page_token:
-            break
-    return all_files
+def _load_new_tab(sheets) -> dict:
+    """New 탭 로드 → {email: {no, name, nat, dob, gen}}"""
+    res = sheets.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID, range=NEW_RANGE
+    ).execute()
+    mapping = {}
+    for row in res.get("values", []):
+        if len(row) < 4:
+            continue
+        email  = row[0].strip().lower() if row[0].strip() else ""
+        name   = row[1].strip() if len(row) > 1 else ""
+        no_raw = row[3].strip() if len(row) > 3 else ""
+        nat    = row[5].strip() if len(row) > 5 else ""
+        dob    = row[7].strip() if len(row) > 7 else ""
+        gen    = row[8].strip() if len(row) > 8 else ""
+        if not email or not no_raw:
+            continue
+        try:
+            no = int(no_raw)
+        except ValueError:
+            continue
+        mapping[email] = {"no": no, "name": name, "nat": nat, "dob": dob, "gen": gen}
+    return mapping
 
 
-def _download(drive, file_id: str, mime: str, dest_base: Path) -> Path | None:
-    """파일 다운로드 → originals/ 에 저장. 저장 경로 반환."""
+def _upsert_candidate(info: dict):
+    """New 탭 정보를 master.db에 upsert (doc_processor 국적·성별·생년 사용)"""
+    no = info["no"]
+    try:
+        con = sqlite3.connect(str(MASTER_DB))
+        existing = con.execute("SELECT sheet_number FROM candidates WHERE sheet_number=?", (no,)).fetchone()
+        if not existing:
+            con.execute(
+                "INSERT INTO candidates (sheet_number, full_name, email, nationality, dob, gender, is_deleted) "
+                "VALUES (?,?,?,?,?,?,0)",
+                (no, info["name"], info.get("email",""), info["nat"], info["dob"], info["gen"])
+            )
+            con.commit()
+            print(f"  [DB] 등록: #{no} {info['name']} | {info['nat']} {info['gen']} {info['dob']}", flush=True)
+        con.close()
+    except Exception as e:
+        print(f"  ⚠ DB upsert 실패: {e}", flush=True)
+
+
+def _download(drive, file_id: str, mime: str, dest: Path) -> Path | None:
+    """Drive 파일 다운로드 → dest 경로로 저장. 저장 경로 반환."""
     try:
         if mime == MIME_GDOC:
             data = drive.files().export(fileId=file_id, mimeType=MIME_DOCX).execute()
             ext = ".docx"
-        elif mime == MIME_DOC:
-            req = drive.files().get_media(fileId=file_id)
-            data = req.execute()
-            ext = ".doc"
-        elif mime == MIME_PDF:
+        elif mime in (MIME_PDF,):
             data = drive.files().get_media(fileId=file_id).execute()
             ext = ".pdf"
-        elif mime == MIME_DOCX:
+        elif mime in (MIME_DOCX, MIME_DOC):
             data = drive.files().get_media(fileId=file_id).execute()
-            ext = ".docx"
+            ext = ".docx" if mime == MIME_DOCX else ".doc"
         else:
-            # 이미지/영상 등 — 원본 확장자로 저장
             ext_map = {
                 "image/jpeg": ".jpg", "image/png": ".png", "image/heif": ".heif",
-                "video/mp4": ".mp4", "video/quicktime": ".mov",
-                "text/plain": ".txt",
+                "video/mp4": ".mp4", "video/quicktime": ".mov", "text/plain": ".txt",
             }
             ext = ext_map.get(mime, ".bin")
             data = drive.files().get_media(fileId=file_id).execute()
 
-        save_path = dest_base.with_suffix(ext)
-        save_path.write_bytes(data if isinstance(data, bytes) else data.encode())
-        return save_path
-
+        path = dest.with_suffix(ext)
+        path.write_bytes(data if isinstance(data, bytes) else data.encode())
+        return path
     except Exception as e:
-        print(f"  ✗ 다운로드 실패: {e}", flush=True)
+        print(f"    ✗ 다운로드 실패 [{file_id[:16]}]: {e}", flush=True)
         return None
 
 
-def _run_doc_processor(src: Path, sheet_number: int) -> bool:
-    """doc_processor.py 실행 → processed/ 에 저장. 성공 여부 반환."""
+def _run_doc_processor(cv_path: Path, sheet_no: int) -> bool:
+    """doc_processor process 실행. 성공 여부 반환."""
     cmd = [
-        str(PYTHON_EXE), "-X", "utf8", str(DOC_PROC), "process",
-        str(src), "--number", str(sheet_number), "--output", str(PROCESSED),
+        str(PYTHON_EXE), "-X", "utf8", str(DOC_PROC),
+        "process", str(cv_path),
+        "--number", str(sheet_no),
+        "--output", str(PROCESSED),
     ]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=120)
-        if r.returncode == 0:
-            for line in r.stdout.strip().splitlines():
-                if line.strip():
-                    print(f"    {line.strip()}", flush=True)
-            return True
-        else:
-            print(f"  ✗ doc_processor: {r.stderr[:200]}", flush=True)
-            return False
+                           encoding="utf-8", errors="replace", timeout=120,
+                           creationflags=_NO_WINDOW)
+        for line in r.stdout.strip().splitlines():
+            if line.strip():
+                print(f"    {line.strip()}", flush=True)
+        return r.returncode == 0
     except subprocess.TimeoutExpired:
-        print("  ✗ doc_processor 타임아웃", flush=True)
+        print("    ✗ doc_processor 타임아웃", flush=True)
         return False
     except Exception as e:
-        print(f"  ✗ doc_processor 예외: {e}", flush=True)
+        print(f"    ✗ doc_processor 예외: {e}", flush=True)
         return False
 
 
 def cmd_run(args):
     drive, sheets = _build_services()
-    name_map = _load_name_map(sheets)
-    state  = _load_state()
-    done   = set(state["processed"].keys())
-    failed = state.get("failed", {})
+    state = _load_state()
+    done  = set(state["processed"].keys())
+    new_tab = _load_new_tab(sheets)
+    print(f"  [New탭] {len(new_tab)}명 로드", flush=True)
 
-    # 기준 시각: --days N일 전 (기본 1일)
+    # Form 탭 전체 로드
+    res = sheets.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID, range=FORM_RANGE
+    ).execute()
+    form_rows = res.get("values", [])
+    print(f"  [Form탭] {len(form_rows)}건", flush=True)
+
+    # 기간 필터
     days  = getattr(args, "days", 1) or 1
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    print(f"[Drive] {days}일 이내 신규 파일 조회 (기준: {since.strftime('%Y-%m-%d %H:%M UTC')})", flush=True)
 
-    files = _list_new_files(drive, since)
-    print(f"[Drive] {len(files)}개 발견", flush=True)
+    # 처리 대상 수집 (이메일별 중복 제거 — 같은 이메일 여러 제출 시 파일 통합)
+    email_map: dict = {}  # email → {key, email, name, info, file_ids, row}
+    for i, row in enumerate(form_rows):
+        if len(row) < 4:
+            continue
+        email  = row[1].strip().lower() if len(row) > 1 else ""
+        links  = row[3] if len(row) > 3 else ""
+        name   = row[4].strip() if len(row) > 4 else ""
 
-    # 이미 처리된 파일 제외
-    to_do = [f for f in files if f["id"] not in done]
-    print(f"[Drive] 미처리: {to_do}개 | 이미처리: {len(files)-len(to_do)}개\n",
-          flush=True)
+        key = email or f"row{i+2}"
+        if key in done:
+            continue
+        if not email or not links:
+            continue
+
+        # New탭 매칭 (이메일 기준)
+        info = new_tab.get(email)
+        if not info:
+            continue  # New탭 미등록 → 스킵
+
+        file_ids = FILE_RE.findall(links)
+        if not file_ids:
+            continue
+
+        if email in email_map:
+            # 같은 이메일 재제출 — 파일 ID 합산 (중복 제거)
+            existing_ids = set(email_map[email]["file_ids"])
+            for fid in file_ids:
+                if fid not in existing_ids:
+                    email_map[email]["file_ids"].append(fid)
+                    existing_ids.add(fid)
+        else:
+            email_map[email] = {
+                "key":  key,
+                "email": email,
+                "name": name,
+                "info": info,
+                "file_ids": file_ids,
+                "row": i + 2,
+            }
+
+    to_do = list(email_map.values())
 
     if args.limit:
         to_do = to_do[: args.limit]
 
+    print(f"  미처리: {len(to_do)}건 | 이미완료: {len(done)}건\n", flush=True)
+
     ok = fail = 0
-    for f in to_do:
-        fid   = f["id"]
-        fname = f["name"]
-        mime  = f["mimeType"]
-        ct    = f.get("createdTime", "")[:16]
-        is_cv = mime in CV_MIMES
+    for item in to_do:
+        email    = item["email"]
+        name     = item["name"]
+        info     = item["info"]
+        file_ids = item["file_ids"]
+        no       = info["no"]
 
-        print(f"[{'CV' if is_cv else '파일'}] {fname[:55]} | {ct}", flush=True)
+        print(f"[#{no}] {name} | {email} | 파일 {len(file_ids)}개", flush=True)
 
-        # originals/ 에 저장 (파일ID 접두어로 충돌 방지)
-        safe  = _safe_name(fname)
-        dest  = ORIGINALS / f"{fid[:12]}_{safe}"
-        saved = _download(drive, fid, mime, dest)
+        # master.db upsert
+        _upsert_candidate({**info, "email": email})
 
-        if not saved:
-            failed[fid] = {"ts": datetime.now().isoformat(), "name": fname, "reason": "download_failed"}
-            _save_state(state)
-            fail += 1
-            continue
+        # 개인별 폴더 (사진 혼재 방지)
+        person_dir = ORIGINALS_ROOT / f"{no}_{_safe_name(email)}"
+        person_dir.mkdir(exist_ok=True)
 
-        print(f"  ✓ 원본 저장: {saved.name} ({saved.stat().st_size//1024}KB)", flush=True)
+        cv_paths = []
+        for fid in file_ids:
+            try:
+                meta = drive.files().get(fileId=fid, fields="name,mimeType,size").execute()
+            except Exception as e:
+                print(f"  ✗ 메타 조회 실패 [{fid[:16]}]: {e}", flush=True)
+                continue
 
-        if is_cv:
-            # New 탭 D열에서 번호 조회
-            submitter = _extract_submitter_name(fname)
-            sheet_no  = _lookup_sheet_number(submitter, name_map)
-            if sheet_no:
-                print(f"  → sheet_number={sheet_no} ({submitter})", flush=True)
-                ok_proc = _run_doc_processor(saved, sheet_no)
+            fname = meta.get("name", fid)
+            mime  = meta.get("mimeType", "")
+            size  = int(meta.get("size", 0))
+            dest  = person_dir / _safe_name(fname)
+
+            saved = _download(drive, fid, mime, dest)
+            if not saved:
+                continue
+
+            print(f"  ✓ {fname[:50]} ({size//1024}KB) → {saved.name}", flush=True)
+
+            if mime in CV_MIMES:
+                cv_paths.append(saved)
+
+        # CV 파일만 doc_processor 실행
+        cv_ok = 0
+        for cv in cv_paths:
+            print(f"  → doc_processor: {cv.name}", flush=True)
+            if _run_doc_processor(cv, no):
+                cv_ok += 1
             else:
-                print(f"  ⚠ DB 미등록: {submitter} — originals/ 에만 저장 (sync 후 재처리)", flush=True)
-                ok_proc = False
-
-            if ok_proc:
-                state["processed"][fid] = {
-                    "ts": datetime.now().isoformat(), "name": fname,
-                    "mime": mime, "sheet_no": sheet_no,
-                }
-                ok += 1
-            elif sheet_no is None:
-                # DB 미등록 → 원본만 보관, 나중에 재처리
-                state["processed"][fid] = {
-                    "ts": datetime.now().isoformat(), "name": fname,
-                    "mime": mime, "cv": True, "pending": True,
-                }
-                ok += 1
-            else:
-                failed[fid] = {"ts": datetime.now().isoformat(), "name": fname, "reason": "proc_failed"}
                 fail += 1
-        else:
-            # 이미지·영상은 originals 저장만으로 완료
-            state["processed"][fid] = {"ts": datetime.now().isoformat(), "name": fname, "mime": mime, "cv": False}
-            ok += 1
 
-        _save_state(state)
-        print("", flush=True)
+        if cv_paths and cv_ok == len(cv_paths):
+            state["processed"][email] = {
+                "ts": datetime.now().isoformat(),
+                "name": name, "no": no,
+                "cvs": [str(p) for p in cv_paths],
+            }
+            _save_state(state)
+            ok += 1
+            print(f"  ✅ 완료\n", flush=True)
+        elif not cv_paths:
+            # CV 없음 (사진/영상만) → 완료로 기록
+            state["processed"][email] = {
+                "ts": datetime.now().isoformat(),
+                "name": name, "no": no, "cv": False,
+            }
+            _save_state(state)
+            ok += 1
+            print(f"  ✅ 파일만 보관 (CV 없음)\n", flush=True)
+        else:
+            state["processed"][email] = {
+                "ts": datetime.now().isoformat(),
+                "name": name, "no": no, "partial": True,
+            }
+            _save_state(state)
+            print(f"  ⚠ 일부 실패\n", flush=True)
 
     state["last_run"] = datetime.now().isoformat()
     _save_state(state)
-    print(f"[완료] 성공: {ok}개 | 실패: {fail}개", flush=True)
+    print(f"[완료] 성공: {ok}건 | 실패: {fail}건", flush=True)
 
 
 def cmd_status(args):
     state = _load_state()
     done  = state.get("processed", {})
     fail  = state.get("failed", {})
-    orig  = list(ORIGINALS.glob("*.*")) if ORIGINALS.exists() else []
+    orig  = list(ORIGINALS_ROOT.rglob("*.*")) if ORIGINALS_ROOT.exists() else []
     proc  = list(PROCESSED.glob("*.*"))
-    last  = state.get("last_run", "없음")
-    cv_done = sum(1 for v in done.values() if v.get("cv", True))
-
-    print(f"마지막 실행:         {last}")
-    print(f"originals/ 원본:     {len(orig)}개  (Drive에서 받은 전체 파일)")
-    print(f"processed/ 변환본:   {len(proc)}개  (PII 제거 완료)")
-    print(f"처리 기록:           {len(done)}개  (CV {cv_done}개 + 기타)")
-    print(f"실패:                {len(fail)}개")
-    if fail:
-        print("\n실패 최근 5개:")
-        for fid, v in list(fail.items())[-5:]:
-            print(f"  {fid[:12]} | {v.get('reason')} | {v.get('name','?')[:40]}")
+    print(f"마지막 실행:    {state.get('last_run','없음')}")
+    print(f"처리 완료:      {len(done)}명")
+    print(f"originals/:     {len(orig)}개 파일 ({len(list(ORIGINALS_ROOT.iterdir()))}명 폴더)")
+    print(f"processed/:     {len(proc)}개")
+    if done:
+        print("\n최근 5명:")
+        for k, v in list(done.items())[-5:]:
+            print(f"  #{v.get('no','?')} {v.get('name','?')[:30]:30s} | {k}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Form CV 파이프라인 v2.0")
+    parser = argparse.ArgumentParser()
     sub    = parser.add_subparsers(dest="cmd")
-
-    rp = sub.add_parser("run", help="신규 파일 처리")
-    rp.add_argument("--days",  type=float, default=1, help="조회 기간 (기본: 1일)")
-    rp.add_argument("--limit", type=int,   help="최대 처리 개수")
-
-    sub.add_parser("status", help="현황 출력")
-
+    rp = sub.add_parser("run")
+    rp.add_argument("--days",  type=float, default=1)
+    rp.add_argument("--limit", type=int)
+    sub.add_parser("status")
     args = parser.parse_args()
     if args.cmd == "status":
         cmd_status(args)
     else:
         if args.cmd is None:
-            args.days  = 1
+            args.days = 1
             args.limit = None
         cmd_run(args)
