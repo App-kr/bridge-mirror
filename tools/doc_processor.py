@@ -2700,18 +2700,65 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         if dry:
             continue
 
-        # Redact 적용 — 일반 (흰색 덮기)
+        # ── [PRE-PASS] PII 포함 줄 = 영역 전체를 line-level 깔끔 삭제 ──────
+        # 이유: search_for() 단어 단위 박스는 옆 글자 글리프를 살짝 침범 →
+        #       "TFL-Certified" 의 'E' 글자가 사라지는 깨짐 발생.
+        # 해결: 줄 안에 외국도시/한국도시/US도시/연락초대/이름라벨이 있으면
+        #       그 줄 전체 bbox + 좌우 1.0px / 상하 0.5px 패딩 → 깔끔 whiteout.
+        #       이후 단어 단위 redact는 해당 줄에 작용할 게 없음 → 깨짐 0.
+        _purge_pdict = page.get_text("dict", flags=0)
+        _purge_count = 0
+        for _pblk in _purge_pdict.get("blocks", []):
+            if _pblk.get("type") != 0:
+                continue
+            for _pln in _pblk.get("lines", []):
+                _pspans = _pln.get("spans", [])
+                _pltxt = "".join(s.get("text", "") for s in _pspans).strip()
+                if not _pltxt or len(_pltxt) < 3:
+                    continue
+                # 줄 단위 PII 감지 — 어느 하나라도 매칭되면 줄 전체 삭제
+                _hit = (
+                    (RE_FOREIGN_CITY.search(_pltxt) and any(c.isupper() for c in _pltxt[:30])) or
+                    (RE_US_CITY_STATE.search(_pltxt) and any(c.isupper() for c in _pltxt[:30])) or
+                    RE_KR_CITY_COUNTRY.search(_pltxt) or
+                    _CONTACT_INVITE_RE.search(_pltxt.lower()) or
+                    _CONTACT_PLATFORM_RE.search(_pltxt.lower()) or
+                    _should_skip_line(_pltxt.lower())
+                )
+                if not _hit:
+                    continue
+                _pbbox = fitz.Rect(_pln["bbox"])
+                # 패딩 — 옆 글자 클리핑 방지
+                _pbbox.x0 -= 1.0
+                _pbbox.x1 += 1.0
+                _pbbox.y0 -= 0.5
+                _pbbox.y1 += 0.5
+                page.add_redact_annot(_pbbox, fill=(1, 1, 1))
+                _purge_count += 1
+                all_logs.append(f"[page{page_num}] LINE_PURGE: {_pltxt[:80]}")
+
+        if _purge_count > 0:
+            page.apply_redactions()
+
+        # Redact 적용 — 일반 (흰색 덮기) — 옆 글자 클리핑 방지용 안전 패딩
+        def _safe_rect(r):
+            """글자 박스 ±0.4px 패딩 — adjacent glyph 보호."""
+            nr = fitz.Rect(r)
+            nr.x0 -= 0.4; nr.x1 += 0.4
+            nr.y0 -= 0.2; nr.y1 += 0.2
+            return nr
+
         for target in redact_texts:
             instances = page.search_for(target)
             for rect in instances:
-                page.add_redact_annot(rect, fill=(1, 1, 1))
+                page.add_redact_annot(_safe_rect(rect), fill=(1, 1, 1))
 
         # Redact 적용 — 대체 텍스트 삽입 (위치→Korea)
         for target, replacement in replacement_redacts:
             instances = page.search_for(target)
             for rect in instances:
                 page.add_redact_annot(
-                    rect, text=replacement, fill=(1, 1, 1),
+                    _safe_rect(rect), text=replacement, fill=(1, 1, 1),
                     text_color=(0, 0, 0), fontsize=10,
                 )
 
