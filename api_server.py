@@ -8454,11 +8454,13 @@ def _auto_process_resume(entity_id: str, cv_s3_key: str):
                     f"PII 제거: {pii_count}건 | 크기: {len(processed_bytes)//1024}KB"
                 )
                 import subprocess as _sp
-                _py = "C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/python.exe"
+                # 2026-05-13: pythonw + CREATE_NO_WINDOW (console flicker fix)
+                _py = "C:/Users/Scarlett/AppData/Local/Programs/Python/Python313/pythonw.exe"
                 _tg_script = str(Path(__file__).resolve().parent / "tools" / "tg_notify.py")
                 _sp.Popen(
                     [_py, "-X", "utf8", _tg_script, _tg_msg],
                     stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
                 )
             except Exception:
                 pass  # 알림 실패는 무시 (비핵심 기능)

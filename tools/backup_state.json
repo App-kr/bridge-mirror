@@ -2015,8 +2015,16 @@
       "git": "1394ccd3",
       "files": 3496,
       "db_hash": "16f3f3890e83"
+    },
+    {
+      "dir": "20260513_145130__form_cv_pipeline_v3.0_완성",
+      "task": "form_cv_pipeline v3.0 완성",
+      "ts": "2026.05.13 14:51:47",
+      "git": "c41b0f5d",
+      "files": 3767,
+      "db_hash": "189b28cc108b"
     }
   ],
-  "last_backup": "2026.05.13 13:12:53",
-  "total_count": 252
+  "last_backup": "2026.05.13 14:51:47",
+  "total_count": 253
 }

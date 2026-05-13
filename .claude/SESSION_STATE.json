@@ -1,18 +1,9 @@
 {
-  "last_updated": "2026-05-13 13:57:44",
+  "last_updated": "2026-05-13 14:51:26",
   "last_tool": "Bash",
-  "last_command": "# RPA 실행됐는지 확인 (rpa_run_10 콜백 이후 로그)\ntail -20 \"Q:/Claudework/bridge base/logs/tg_commander.log\"",
+  "last_command": "powershell -Command \"Get-ScheduledTask -TaskName 'BRIDGE_CV_Pipeline' | Select-Object TaskName, State, @{N='LastRun';E={$_.LastRunTime}}, @{N='NextRun';E={$_.NextRunTime}}\"",
   "git_head": "fed6c3e7",
   "modified_files": [
-    "Q:\\Claudework\\agentic_os\\tools\\daemon_supervisor.py",
-    "Q:\\Claudework\\bridge_ads\\src\\lib\\db.ts",
-    "Q:\\Claudework\\agentic_os\\scripts\\install_supervisor.ps1",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\admin\\banners\\route.ts",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\admin\\banners\\page.tsx",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\layout.tsx",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\admin\\page.tsx",
-    "Q:\\Claudework\\agentic_os\\jarvis\\cards.py",
-    "Q:\\Claudework\\bridge base\\tools\\focus_guard.py",
     "Q:\\Claudework\\bridge base\\tools\\silent_git.c",
     "Q:\\Claudework\\bridge_ads\\src\\lib\\env.ts",
     "Q:\\Claudework\\bridge_ads\\src\\app\\api\\auth\\naver\\start\\route.ts",
@@ -23,7 +14,16 @@
     "Q:\\Claudework\\bridge_ads\\src\\app\\api\\admin\\users\\route.ts",
     "Q:\\Claudework\\bridge_ads\\src\\app\\admin\\users\\page.tsx",
     "Q:\\Claudework\\bridge_ads\\src\\components\\Navbar.tsx",
-    "Q:\\Claudework\\bridge_ads\\src\\app\\about\\page.tsx"
+    "Q:\\Claudework\\bridge_ads\\src\\app\\about\\page.tsx",
+    "Q:\\Claudework\\bridge base\\tools\\form_cv_pipeline.py",
+    "Q:\\Claudework\\bridge base\\tools\\tg_commander.py",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\admin\\oauth-config\\route.ts",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\admin\\auth-setup\\page.tsx",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\jobs\\page.tsx",
+    "Q:\\Claudework\\bridge base\\tools\\convert_to_pythonw.ps1",
+    "Q:\\Claudework\\bridge_ads\\src\\app\\api\\auth\\email-link\\route.ts",
+    "Q:\\Claudework\\bridge_ads\\src\\lib\\db.ts",
+    "Q:\\Claudework\\bridge base\\api_server.py"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-05-10 기준)",
   "git_changed": [
