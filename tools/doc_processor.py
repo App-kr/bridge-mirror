@@ -2643,26 +2643,33 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # (francis parker, hillside collegiate 등 KR_WORKPLACE_KEYWORDS에 직접 등록)
             # 직업 타이틀줄 위치/괄호 태그는 job_title_replaces에서 일괄 처리 (위)
             # (JOB_PAREN_LOC / JOB_BRANCH → job_title_replaces 방식으로 통합, 갭 없이 제거)
+            # ★ 학습 폴더 호환: 학교/경력 줄("Univ X | Canterbury, UK | 2020-2022")은
+            #   separator(|·•) 있어 그대로 유지 — 도시명 단어 redact 무력화.
+            #   단독 주소줄(개인 주소)만 PRE-PASS가 line-level로 처리함.
+            _line_has_sep = ("|" in _ls) or ("•" in _ls) or ("·" in _ls)
+
             # 외국 도시/주 → blank redact (도시명은 실제 대문자로 시작해야 함 — re.I 오탐 방지)
-            for m in RE_US_CITY_STATE.finditer(_ls):
-                if m.group()[0].isupper():  # 소문자 시작("cooperating teacher, Ms") 오탐 방지
-                    redact_texts.add(m.group())
-                    all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
-            for m in RE_FOREIGN_CITY.finditer(_ls):
-                if m.group()[0].isupper():  # 소문자 시작 오탐 방지
-                    redact_texts.add(m.group())
-                    all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
-            # 나이/비자 → blank redact
+            if not _line_has_sep:
+                for m in RE_US_CITY_STATE.finditer(_ls):
+                    if m.group()[0].isupper():
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
+                for m in RE_FOREIGN_CITY.finditer(_ls):
+                    if m.group()[0].isupper():
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
+            # 나이/비자 → blank redact (학교 줄에서도 삭제 — 개인정보)
             for m in RE_AGE_MENTION.finditer(_ls):
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] AGE: {m.group()[:40]}")
             for m in RE_VISA_STATUS.finditer(_ls):
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
-            # 한국 도시+국가 주소줄: "Gwangmyeong, South Korea" → blank redact
-            for m in RE_KR_CITY_COUNTRY.finditer(_ls):
-                redact_texts.add(m.group())
-                all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
+            # 한국 도시+국가 주소줄: separator 없는 단독 주소만 삭제
+            if not _line_has_sep:
+                for m in RE_KR_CITY_COUNTRY.finditer(_ls):
+                    redact_texts.add(m.group())
+                    all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
             # 연락 초대 줄: "please email me at X", "find me on WhatsApp" → 줄 전체 redact
             if _CONTACT_INVITE_RE.search(_ls) or _CONTACT_PLATFORM_RE.search(_ls):
                 redact_texts.add(_ls)
