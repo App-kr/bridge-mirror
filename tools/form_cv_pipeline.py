@@ -161,7 +161,8 @@ def _run_doc_processor(cv_path: Path, sheet_no: int) -> bool:
     ]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=120)
+                           encoding="utf-8", errors="replace", timeout=120,
+                           creationflags=_NO_WINDOW)
         for line in r.stdout.strip().splitlines():
             if line.strip():
                 print(f"    {line.strip()}", flush=True)
