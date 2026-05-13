@@ -362,12 +362,12 @@ def cb_rpa_run(chat_id, msg_id, limit):
 
     cmd = [PYTHON, "-X", "utf8",
            str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
-           "--headless", "--account", account, "--limit", str(limit),
-           "--user-confirmed"]
+           "--no-overlay", "--account", account, "--limit", str(limit),
+           "--no-relaunch", "--manual", "--user-confirmed"]
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=180, cwd=str(PROJECT_ROOT),
+            errors="replace", timeout=300, cwd=str(PROJECT_ROOT),
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         out  = (proc.stdout + proc.stderr)[-2000:].strip() or "(출력 없음)"
@@ -1935,8 +1935,8 @@ def _run_rpa_direct(chat_id, account, limit):
     def _rpa_worker():
         cmd = [PYTHON, "-X", "utf8",
                str(PROJECT_ROOT / "craigslist_auto_rpa.py"),
-               "--headless", "--account", account, "--limit", str(limit),
-               "--user-confirmed"]
+               "--no-overlay", "--account", account, "--limit", str(limit),
+               "--no-relaunch", "--manual", "--user-confirmed"]
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, encoding="utf-8",
