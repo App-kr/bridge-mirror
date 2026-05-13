@@ -2700,12 +2700,16 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         if dry:
             continue
 
-        # ── [PRE-PASS] PII 포함 줄 = 영역 전체를 line-level 깔끔 삭제 ──────
-        # 이유: search_for() 단어 단위 박스는 옆 글자 글리프를 살짝 침범 →
-        #       "TFL-Certified" 의 'E' 글자가 사라지는 깨짐 발생.
-        # 해결: 줄 안에 외국도시/한국도시/US도시/연락초대/이름라벨이 있으면
-        #       그 줄 전체 bbox + 좌우 1.0px / 상하 0.5px 패딩 → 깔끔 whiteout.
-        #       이후 단어 단위 redact는 해당 줄에 작용할 게 없음 → 깨짐 0.
+        # ── [PRE-PASS] PII 줄 line-level 깔끔 삭제 (학습폴더 스타일 호환) ─
+        # 학습 폴더 5739: "Canterbury, United Kingdom" 유지 → 외국 도시 단독 줄은 보존
+        # 학습 폴더 6155: 이름·연락처·생일·정확한 한국 주소 깔끔 제거
+        # 규칙:
+        #   1) PII 라벨 줄 (이름/생일/국적/연락처 라벨)
+        #   2) 연락초대 / 카톡·텔레그램 핸들
+        #   3) 한국 도시+국가 (Gwangmyeong, South Korea) — 정확한 한국 주소
+        #   4) 짧은 외국 도시+국가만 있는 줄 (개인 주소) — "|" 없고 30자 이하
+        #   5) 짧은 US 도시+주만 있는 줄 — "|" 없고 30자 이하
+        # ※ 학교/경력 줄 ("University X | Canterbury, UK | 2020-2022") 은 유지
         _purge_pdict = page.get_text("dict", flags=0)
         _purge_count = 0
         for _pblk in _purge_pdict.get("blocks", []):
@@ -2716,26 +2720,35 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _pltxt = "".join(s.get("text", "") for s in _pspans).strip()
                 if not _pltxt or len(_pltxt) < 3:
                     continue
-                # 줄 단위 PII 감지 — 어느 하나라도 매칭되면 줄 전체 삭제
-                _hit = (
-                    (RE_FOREIGN_CITY.search(_pltxt) and any(c.isupper() for c in _pltxt[:30])) or
-                    (RE_US_CITY_STATE.search(_pltxt) and any(c.isupper() for c in _pltxt[:30])) or
-                    RE_KR_CITY_COUNTRY.search(_pltxt) or
-                    _CONTACT_INVITE_RE.search(_pltxt.lower()) or
-                    _CONTACT_PLATFORM_RE.search(_pltxt.lower()) or
-                    _should_skip_line(_pltxt.lower())
-                )
+                _pltxt_lower = _pltxt.lower()
+                _has_separator = ("|" in _pltxt) or ("•" in _pltxt) or ("·" in _pltxt)
+                _is_short = len(_pltxt) <= 35
+
+                # 줄 단위 PII 감지
+                _hit = False
+                _reason = ""
+                if _should_skip_line(_pltxt_lower):
+                    _hit, _reason = True, "PII_LABEL"
+                elif _CONTACT_INVITE_RE.search(_pltxt_lower) or _CONTACT_PLATFORM_RE.search(_pltxt_lower):
+                    _hit, _reason = True, "CONTACT_INVITE"
+                elif RE_KR_CITY_COUNTRY.search(_pltxt):
+                    # 한국 주소 — 학교 줄("English Academy, Seoul" 등)도 통째 삭제하지 말고
+                    # "|" 없는 짧은 단독 주소줄만
+                    if not _has_separator:
+                        _hit, _reason = True, "KR_ADDR_LINE"
+                elif (RE_FOREIGN_CITY.search(_pltxt) and _is_short and not _has_separator):
+                    _hit, _reason = True, "FOREIGN_ADDR_LINE"
+                elif (RE_US_CITY_STATE.search(_pltxt) and _is_short and not _has_separator):
+                    _hit, _reason = True, "US_ADDR_LINE"
+
                 if not _hit:
                     continue
                 _pbbox = fitz.Rect(_pln["bbox"])
-                # 패딩 — 옆 글자 클리핑 방지
-                _pbbox.x0 -= 1.0
-                _pbbox.x1 += 1.0
-                _pbbox.y0 -= 0.5
-                _pbbox.y1 += 0.5
+                _pbbox.x0 -= 1.0; _pbbox.x1 += 1.0
+                _pbbox.y0 -= 0.5; _pbbox.y1 += 0.5
                 page.add_redact_annot(_pbbox, fill=(1, 1, 1))
                 _purge_count += 1
-                all_logs.append(f"[page{page_num}] LINE_PURGE: {_pltxt[:80]}")
+                all_logs.append(f"[page{page_num}] LINE_PURGE/{_reason}: {_pltxt[:80]}")
 
         if _purge_count > 0:
             page.apply_redactions()
