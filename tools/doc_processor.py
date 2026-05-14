@@ -537,8 +537,9 @@ RE_KAKAO = re.compile(
 )
 
 RE_SNS = re.compile(
-    r"(?:instagram|facebook|twitter|whatsapp|wechat|skype|telegram)"
-    r"\s*:?\s*[@]?[A-Za-z0-9._\-]+",
+    r"(?:instagram|facebook|twitter|whatsapp|we\s*chat|skype|telegram|signal|viber|line)"
+    r"(?:\s+id|\s+no\.?|\s+account|\s+handle)?"
+    r"\s*[:\-]?\s*[@]?(?:live:)?[A-Za-z0-9._\-\+]{2,60}",
     re.I,
 )
 
@@ -883,42 +884,51 @@ KR_KEYWORDS = frozenset([
 # PII 라벨 → 해당 줄 전체 삭제
 # 주의: "line", "cell" 등 짧은 단어는 ":" 필수 조건으로 오탐 방지
 PII_LINE_LABELS = [
-    # 연락처 (colon 필수)
-    ("email", True), ("e-mail", True),
-    ("phone", True), ("telephone", True), ("mobile", True),
-    ("cell", True), ("tel", True),
+    # 연락처 — 구체적 표현 먼저, 범용 나중 (순서 중요)
+    ("email address", True), ("email", True), ("e-mail", True),
+    ("phone number", True), ("phone no", True), ("phone", True),
+    ("telephone number", True), ("telephone", True),
+    ("mobile number", True), ("mobile no", True), ("mobile", True),
+    ("cell phone", True), ("cell no", True), ("cell", True),
+    ("home phone", True), ("work phone", True), ("office phone", True),
     ("korean telephone", True), ("u.k. telephone", True),
     ("uk telephone", True), ("us telephone", True),
-    ("home phone", True), ("work phone", True), ("cell phone", True),
-    ("contact", True), ("contact number", True),
+    ("contact number", True), ("contact no", True), ("contact", True),
+    ("tel", True),
     # 주소
-    ("permanent address", True), ("home address", True),
-    ("mailing address", True), ("address", True),
-    ("current address", True),
-    # SNS (colon 필수)
-    ("kakao", True), ("kakaotalk", True),
+    ("permanent address", True), ("current address", True),
+    ("home address", True), ("mailing address", True),
+    ("residential address", True), ("address", True),
+    # SNS (구체적 표현 먼저)
+    ("kakao id", True), ("kakaotalk id", True), ("kakaotalk", True), ("kakao", True),
+    ("wechat id", True), ("we chat id", True), ("wechat", True), ("we chat", True),
     ("line id", True), ("line", True),
-    ("skype", True), ("whatsapp", True),
-    ("wechat", True), ("telegram", True),
-    ("instagram", True), ("facebook", True), ("twitter", True),
+    ("skype id", True), ("skype", True),
+    ("telegram id", True), ("telegram", True),
+    ("whatsapp number", True), ("whatsapp no", True), ("whatsapp", True),
+    ("signal", True), ("viber", True),
+    ("instagram", True), ("facebook", True), ("twitter", True), ("tiktok", True),
     # 링크
-    ("linkedin", True), ("website", True), ("personal website", True),
-    ("portfolio", True),
+    ("linkedin", True), ("personal website", True), ("website", True),
+    ("portfolio", True), ("github", True),
     # 신원
-    ("passport", True), ("passport number", True), ("passport no", True),
-    ("date of birth", True), ("dob", True),
-    ("national id", True), ("ssn", True),
+    ("passport number", True), ("passport no", True), ("passport", True),
+    ("date of birth", True), ("birth date", True), ("dob", True),
+    ("national id", True), ("national identification", True), ("ssn", True),
     # nationality/citizenship 은 고용주가 필요한 정보 → 삭제 안 함
     # ("nationality", True), ("citizenship", True),
-    ("age", True),                         # "Age: 28"
-    ("marital status", True),             # "Marital status: Single"
+    ("age", True),                          # "Age: 28"
+    ("marital status", True),              # "Marital status: Single"
     ("civil status", True),               # "Civil status: Single"
     ("race", True), ("ethnicity", True), ("religion", True),
-    ("birth", True), ("born", True),     # "Birth: UK / 1990"
-    ("gender", True), ("sex", True),     # "Gender: Female"
+    ("birth", True), ("born", True),      # "Birth: UK / 1990"
+    ("gender", True), ("sex", True),      # "Gender: Female"
+    ("emergency contact", True), ("emergency", True),
+    ("next of kin", True),
     # 한국어
     ("이메일", True), ("전화", True), ("연락처", True),
     ("카카오", True), ("여권", True), ("주소", True),
+    ("위챗", True), ("텔레그램", True), ("라인", True),
 ]
 
 # 위치 라벨 → 한국이면 "Korea"로 변환
