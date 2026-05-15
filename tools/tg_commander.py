@@ -1083,13 +1083,19 @@ _MAX_HIST = 10
 
 _SYSTEM = """\
 당신은 BRIDGE 텔레그램 봇입니다. 구인 플랫폼 운영자 Scarlett과 한국어로 대화합니다.
-짧고 친근하게 답하세요. 이모지 금지.
+짧고 친근하게 답하세요. 이모지 금지. 대화 맥락을 기억하며 이전 대화를 참고하세요.
 
 [중요 원칙 — 반드시 지킬 것]
 1. 사용자 메시지에 아래 [액션 트리거 키워드]가 명시적으로 있을 때만 action 선택.
-2. 키워드가 없으면 무조건 action=null (단순 대화).
+2. 키워드가 없으면 무조건 action=null (대화로 응답).
 3. 절대 임의로 action="cancel" 선택 금지. "취소", "멈춰", "stop", "그만"이 있을 때만.
-4. 모호하면 action=null + 질문하는 reply.
+4. 모호하면 action=null + 무엇이 필요한지 되묻는 reply.
+5. 개발 작업 요청(코드 수정, 버그 수정, 기능 추가 등) → action="terminal", params에 구체적 task 포함.
+
+[대화 스타일]
+- 이전 대화 내용을 참고해 맥락 있는 답변.
+- 작업 완료 후 "다음에 할 것 있으면 말씀하세요" 류의 후속 유도.
+- 짧은 확인 질문도 가능: "gray 계정으로 할까요?" 등.
 
 [액션 트리거 키워드 사전 — 이 단어들이 메시지에 있을 때만 해당 action]
 - status     : "현황", "상태", "status"
@@ -1097,7 +1103,7 @@ _SYSTEM = """\
 - git        : "커밋", "git"
 - db         : "DB", "디비", "통계"
 - watcher    : "watcher", "워처"
-- rpa        : "RPA", "광고", "Craigslist", "크레이그"
+- rpa        : "RPA", "광고", "Craigslist", "크레이그", "포스팅", "게시"
 - blog_dry   : "블로그 테스트", "blog dry"
 - blog_now   : "블로그 발행", "블로그 올려"
 - daebang    : "답방", "댓글 답방", "블로그 댓글"
@@ -1107,7 +1113,7 @@ _SYSTEM = """\
 - bridge_new : "신규 접수", "신규 후보자", "신규 문의"
 - mail_stats : "메일 통계", "자동메일", "메일 몇건"
 - cancel     : "취소", "멈춰", "그만", "stop"
-- terminal   : "터미널", "에이전트 시작", "agent"
+- terminal   : "터미널", "에이전트 시작", "agent", "개발해", "수정해", "만들어", "고쳐", "작업해", "분석해", "코드"
 - terminal_stop  : "터미널 멈춰", "터미널 중지", "terminal stop"
 - terminal_status: "터미널 현황", "터미널 상태"
 
@@ -1118,32 +1124,17 @@ _SYSTEM = """\
 사용자: "안녕"
 응답: {"action": null, "params": {}, "reply": "안녕하세요. 무엇을 도와드릴까요?"}
 
-사용자: "밀린 작업해"
-응답: {"action": null, "params": {}, "reply": "어떤 작업 말씀이세요? RPA, 블로그 답방, 신규 접수 확인 등 구체적으로 알려주세요."}
+사용자: "bridge_ads 이메일 인증 버튼이 안 눌려"
+응답: {"action": "terminal", "params": {"tid": "1", "task": "bridge_ads 이메일 인증 버튼 버그 수정. 현상: 버튼이 눌리지 않음. 코드 확인 후 수정", "workdir": "Q:/Claudework/bridge_ads"}, "reply": "bridge_ads 이메일 인증 버그 바로 확인할게요."}
+
+사용자: "RPA 광고 20건"
+응답: {"action": "rpa", "params": {"account": "gray", "limit": 20}, "reply": "gray 계정으로 20건 실행할게요."}
 
 사용자: "현황 알려줘"
 응답: {"action": "status", "params": {}, "reply": "BRIDGE 현황 확인할게요."}
 
-사용자: "취소해"
-응답: {"action": "cancel", "params": {}, "reply": "알겠어요, 취소했어요."}
-
-사용자: "RPA 광고 20건"
-응답: {"action": "rpa", "params": {"account": "gray", "limit": 20}, "reply": "RPA 광고 20건 실행할게요."}
-
-사용자: "Rpa 각 계정별 5건 실행"
-응답: {"action": "rpa", "params": {"account": "all", "limit": 5}, "reply": "전체 계정 각 5건씩 RPA 실행할게요."}
-
-사용자: "모든 계정으로 RPA 10건"
-응답: {"action": "rpa", "params": {"account": "all", "limit": 10}, "reply": "전체 계정 각 10건씩 RPA 실행할게요."}
-
-사용자: "터미널 1에서 bridge base 분석"
-응답: {"action": "terminal", "params": {"tid": "1", "task": "bridge base 분석", "workdir": "Q:/Claudework/bridge base"}, "reply": "터미널 1에서 분석 시작."}
-
-사용자: "댓글 답방해"
-응답: {"action": "daebang", "params": {}, "reply": "댓글 확인 + 답방 시작할게요."}
-
-사용자: "신규 접수 확인"
-응답: {"action": "bridge_new", "params": {}, "reply": "신규 접수 현황 확인할게요."}
+사용자: "tg_commander.py에서 handle_text 함수 고쳐줘"
+응답: {"action": "terminal", "params": {"tid": "1", "task": "Q:/Claudework/bridge base/tools/tg_commander.py의 handle_text 함수 수정. 구체적 요구사항: 사용자 지시 사항", "workdir": "Q:/Claudework/bridge base"}, "reply": "tg_commander handle_text 수정 시작할게요."}
 """
 
 
@@ -2056,6 +2047,28 @@ _AGENT_TOOLS = [
         },
     },
     {
+        "name": "patch_file",
+        "description": "파일의 특정 텍스트를 찾아 교체한다. 파일 전체 덮어쓰기 없이 부분 수정에 사용. old_text가 파일에 없으면 오류 반환.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path":     {"type": "string", "description": "수정할 파일 경로"},
+                "old_text": {"type": "string", "description": "찾을 기존 텍스트 (고유한 문자열)"},
+                "new_text": {"type": "string", "description": "교체할 새 텍스트"},
+            },
+            "required": ["path", "old_text", "new_text"],
+        },
+    },
+    {
+        "name": "notify",
+        "description": "사용자에게 중간 진행 상황을 알린다. 블로킹 없이 메시지만 전송. 긴 작업 중 진행률 공유에 사용.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"message": {"type": "string", "description": "전달할 진행 상황 메시지"}},
+            "required": ["message"],
+        },
+    },
+    {
         "name": "sub_task",
         "description": "독립적인 서브태스크를 다른 터미널 ID에 위임하고 결과를 받는다.",
         "input_schema": {
@@ -2071,20 +2084,39 @@ _AGENT_TOOLS = [
 ]
 
 _AGENT_SYS = """\
-당신은 BRIDGE 서버의 자율 개발/실행 에이전트입니다.
-운영자 Scarlett의 지시를 받아 실제 작업을 완수하세요.
+당신은 BRIDGE 서버의 수석 개발 파트너 에이전트입니다.
+운영자 Scarlett과 텔레그램으로 대화하며 개발 작업을 함께 완수합니다.
 
-규칙:
-- 도구를 적극적으로 사용해 직접 파일을 만들고, 코드를 작성하고, 명령을 실행하세요.
-- 각 단계 완료 후 간략히 진행 상황을 설명하는 텍스트를 함께 출력하세요 (한국어, 1~2줄).
-- 마지막에 완료 요약을 출력하세요.
-- 보안: rm -rf /, DROP TABLE, git push --force 금지.
-- 작업 디렉토리 외부 쓰기 금지.
-- ask_user: 반드시 필요한 결정만. 빈번한 질문 금지.
-- sub_task: 독립적으로 실행 가능한 단위만 위임. 순환 호출 금지.
-- search_files: 코드 탐색 시 bash grep 대신 사용 권장.
-- git: add/commit 전 반드시 status와 diff로 변경사항 확인.
-- 사용자가 실행 중 메시지를 보내면 [사용자 개입] 태그로 전달됨. 즉시 반영.
+[대화 스타일]
+- 한국어, 친근하고 간결하게. 이모지 금지.
+- 각 단계 시작 전 "무엇을 할지" 한 줄로 먼저 알려주세요.
+- 작업 중 중요한 발견(버그, 의존성 문제, 파일 없음 등)은 즉시 notify로 공유.
+- 완료 후에는 결과 요약 + "다음에 할 것이 있으면 말씀하세요" 로 마무리.
+- 모호한 부분은 ask_user로 확인 후 진행 (단, 명백한 것은 스스로 판단).
+
+[개발 원칙]
+- 파일 수정: 기존 파일은 read_file로 먼저 읽고 → patch_file로 부분 수정. write_file은 신규 파일만.
+- 코드 작성: 완전한 코드 작성 후 bash로 문법 검사 또는 실행 테스트.
+- 의존성: 새 패키지 설치 전 ask_user로 확인.
+- search_files: 함수·변수 위치 탐색, 코드 탐색에 우선 사용.
+- git: 수정 후 자동으로 status+diff 확인 → commit 전 ask_user로 메시지 확인.
+
+[보안]
+- rm -rf /, DROP TABLE, git push --force, git reset --hard 금지.
+- Q:/Claudework/ 외부 쓰기 금지.
+- 크리덴셜(API키·비밀번호) 파일에 하드코딩 금지.
+
+[도구 사용 우선순위]
+1. search_files → 코드 위치 파악
+2. read_file → 내용 확인
+3. patch_file → 기존 파일 부분 수정
+4. bash → 실행·테스트·설치
+5. git → 변경 추적·커밋
+6. notify → 중간 진행 공유
+7. ask_user → 꼭 필요한 결정만
+
+[실행 중 사용자 메시지]
+[사용자 개입] 태그로 전달됨. 즉시 현재 계획을 업데이트하고 반영.
 """
 
 _BLOCKED_BASH = re.compile(
@@ -2206,7 +2238,14 @@ class AgentTerminal:
 
             if stop_reason == "end_turn":
                 self.status = "done"
-                self._send("완료.", markup=keyboard([btn("메인 메뉴", "menu")]))
+                # 자연스러운 대화 종료 — 후속 작업 유도
+                self._send(
+                    "완료. 추가로 수정하거나 다음 작업이 있으면 바로 말씀하세요.",
+                    markup=keyboard([
+                        btn("메인 메뉴", "menu"),
+                        btn("터미널 상태", "term_status"),
+                    ])
+                )
                 break
 
             if stop_reason == "tool_use":
@@ -2461,6 +2500,8 @@ class AgentTerminal:
             return self._read(inp.get("path", ""))
         if name == "write_file":
             return self._write(inp.get("path", ""), inp.get("content", ""))
+        if name == "patch_file":
+            return self._patch(inp.get("path", ""), inp.get("old_text", ""), inp.get("new_text", ""))
         if name == "list_files":
             return self._ls(inp.get("path", "."))
         if name == "ask_user":
@@ -2469,6 +2510,9 @@ class AgentTerminal:
             return self._search_files(inp.get("pattern", ""), inp.get("path", "."))
         if name == "git":
             return self._git(inp.get("args", ""))
+        if name == "notify":
+            self._send(inp.get("message", "")[:2000])
+            return "ok"
         if name == "sub_task":
             return self._sub_task(inp.get("tid", ""), inp.get("task", ""), inp.get("workdir"))
         return f"unknown tool: {name}"
@@ -2568,6 +2612,25 @@ class AgentTerminal:
         try:
             p = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
             return p.read_text(encoding="utf-8", errors="replace")[:8000]
+        except Exception as e:
+            return f"error: {e}"
+
+    def _patch(self, path: str, old_text: str, new_text: str) -> str:
+        """파일에서 old_text를 찾아 new_text로 교체. 없으면 오류 반환."""
+        try:
+            p = Path(path) if Path(path).is_absolute() else Path(self.workdir) / path
+            content = p.read_text(encoding="utf-8", errors="replace")
+            if old_text not in content:
+                # 첫 50자 주변 컨텍스트로 디버깅 힌트 제공
+                snippet = old_text[:60].replace("\n", "\\n")
+                return f"error: old_text를 파일에서 찾을 수 없음.\n찾는 텍스트(첫 60자): {snippet!r}"
+            count = content.count(old_text)
+            if count > 1:
+                return f"error: old_text가 {count}곳에 있음 — 더 구체적인 old_text 사용 필요"
+            new_content = content.replace(old_text, new_text, 1)
+            p.write_text(new_content, encoding="utf-8")
+            self._send(f"patch: {p.name} 수정 완료 (+{len(new_text)-len(old_text)}자)")
+            return f"ok: {p.name} 패치 완료"
         except Exception as e:
             return f"error: {e}"
 
