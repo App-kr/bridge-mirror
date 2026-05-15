@@ -3078,6 +3078,28 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 except Exception as e:
                     all_logs.append(f"[photo] 삽입 실패: {e}")
 
+    # ── 링크 어노테이션 제거 (이메일/URI 하이퍼링크 → redaction 이후에도 잔류) ──
+    # 이유: add_redact_annot/apply_redactions은 텍스트 스트림만 덮음.
+    #       link annotation은 별도 오브젝트 → PDF 뷰어에서 클릭 가능하게 남음.
+    #       이메일 파란 밑줄, CamScanner URI 등 완전 제거.
+    if not dry:
+        for _pg in doc:
+            _links = _pg.get_links()
+            for _lnk in _links:
+                # URI (이메일 mailto:, http: 등) 및 내부 점프 링크 모두 제거
+                _lkind = _lnk.get("kind", -1)
+                if _lkind in (
+                    fitz.LINK_URI,     # 0 — http/mailto
+                    fitz.LINK_GOTO,    # 1 — 내부 페이지 이동
+                    fitz.LINK_NAMED,   # 4 — named dest
+                    2,                 # LINK_GOTOR — remote goto
+                ):
+                    try:
+                        _pg.delete_link(_lnk)
+                    except Exception:
+                        pass
+        all_logs.append(f"[post] LINK_ANNOTS_CLEARED: {sum(len(p.get_links()) for p in doc)} remaining")
+
     # PDF 메타데이터 클리어 (이름/제목 제거)
     if not dry:
         doc.set_metadata({
