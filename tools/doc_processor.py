@@ -31,6 +31,46 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# ── python-docx 부동소수점 XML 속성 패치 ──────────────────────────────────
+# 일부 DOCX (Google Docs 내보내기 등)의 XML 속성값이 "863.9999999999999" 형태의
+# 소수점 문자열 → python-docx int(str_value) 변환 실패 방지.
+# simpletypes 모듈의 모든 클래스를 순회하며 패치.
+try:
+    import inspect as _inspect
+    from docx.oxml import simpletypes as _st_mod
+
+    def _make_robust_classmethod(original_func):
+        """int(str_value) 실패 시 round(float(str_value)) 폴백"""
+        def _wrapped(cls, str_value: str):
+            try:
+                return int(str_value)
+            except ValueError:
+                try:
+                    return round(float(str_value))
+                except (ValueError, TypeError):
+                    return original_func(cls, str_value)
+        return classmethod(_wrapped)
+
+    for _name, _cls in _inspect.getmembers(_st_mod, _inspect.isclass):
+        if not hasattr(_cls, 'convert_from_xml'):
+            continue
+        _fn = getattr(_cls, 'convert_from_xml', None)
+        if _fn is None:
+            continue
+        # 직접 정의된 convert_from_xml만 패치 (상속된 것 제외)
+        if 'convert_from_xml' in _cls.__dict__:
+            _orig = _cls.__dict__['convert_from_xml']
+            _orig_fn = _orig.__func__ if hasattr(_orig, '__func__') else _orig
+            # 함수 소스에 int(str_value) 패턴이 있는지 확인
+            try:
+                _src = _inspect.getsource(_orig_fn)
+                if 'int(str_value)' in _src and '.' not in _src.split('int(str_value)')[0].split('\n')[-1]:
+                    _cls.convert_from_xml = _make_robust_classmethod(_orig_fn)  # type: ignore
+            except (OSError, TypeError):
+                pass
+except Exception:
+    pass  # 패치 실패 시 무시 (치명적 아님)
+
 # ── 경로 ──────────────────────────────────────────────
 BASE_DIR = Path("Q:/Claudework/bridge base")
 DB_PATH = BASE_DIR / "master.db"
@@ -961,7 +1001,10 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "kumon",
     "bricks", "bricks english",
     "slp", "slp english",
-    "rise english", "rise korea", "rise english academy",  # rise 단독 제거 (동사 오탐)
+    "rise english", "rise korea", "rise english academy", "rise english kindergarten",  # rise 단독 제거 (동사 오탐)
+    "luxx", "luxx language academy", "luxx english",                 # luxx 단독은 짧지만 단독 단어로만 사용
+    "carrot global", "carrot english", "carrot english academy",     # carrot 단독 제거 (일반명사 오탐)
+    "4kidsedu", "4kids edu", "4kids english",                        # 숫자 포함 브랜드
     "cdi", "cdi english",
     "jle", "jlec",
     "aclipse",
@@ -1252,7 +1295,7 @@ _RE_KR_SCHOOL_PREFIX = re.compile(
     # 예: "in Kindergarten" → IGNORECASE 있으면 매칭됨 → 제거
     r'\b[A-Z][a-zA-Z\'\-\.]+(?:[ \t]+[A-Z][a-zA-Z\'\-\.]+){0,2}[ \t]+'
     r'(Language[ \t]+School|Language[ \t]+Academy|Language[ \t]+Institute|'
-    r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy|Institute|Cent(?:er|re)|School)|'
+    r'Language[ \t]+Cent(?:er|re)|English[ \t]+(?:Village|Academy|Institute|Cent(?:er|re)|School|Kindergarten)|'
     r'Teaching[ \t]+Academy|Private[ \t]+Academy|International[ \t]+School|'
     r'(?:Elementary|Primary|Secondary|Middle|High)[ \t]+School|'
     r'Kindergarten|Preschool)\b',
@@ -1730,30 +1773,46 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     if candidate:
         name = candidate.get("full_name", "")
         if name:
-            # 성(Last name)만 삭제 (이름/First name은 유지)
+            # 이름 전체 삭제 (성+이름 모두 제거)
             words = name.strip().split()
             if len(words) >= 2:
                 last_name = words[-1]
                 first_name = " ".join(words[:-1])  # 성을 제외한 모든 단어
 
-                # 성이 2글자 이상인 경우 삭제
-                if len(last_name) >= 2:
-                    # 방법 1: 전체 이름을 찾아 성만 제거
-                    # "Jodie Dumas" → "Jodie"
-                    full_name_pat = re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)
-                    matches = full_name_pat.findall(result)
-                    if matches:
-                        log.append(f"FULLNAME→{first_name}: {name}")
-                        result = full_name_pat.sub(first_name, result)
+                # 방법 1: 전체 이름(풀네임) 삭제
+                full_name_pat = re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)
+                matches = full_name_pat.findall(result)
+                if matches:
+                    log.append(f"FULLNAME→DELETE: {name}")
+                    result = full_name_pat.sub("", result)
 
-                    # 방법 2: 성만 단어 경계로 삭제
+                # 방법 2: 성(Last name) 단독 삭제
+                if len(last_name) >= 2:
                     last_name_pat = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
                     matches = last_name_pat.findall(result)
                     if matches:
                         log.append(f"LASTNAME→DELETE: {last_name}")
                         result = last_name_pat.sub("", result)
-                        # 앞뒤 공백 정리
-                        result = re.sub(r"\s+", " ", result)
+
+                # 방법 3: 이름(First name) 단독 삭제 — 서명/커버레터 잔류 이름 제거
+                if len(first_name) >= 2:
+                    first_name_pat = re.compile(r"\b" + re.escape(first_name) + r"\b", re.IGNORECASE)
+                    matches = first_name_pat.findall(result)
+                    if matches:
+                        log.append(f"FIRSTNAME→DELETE: {first_name}")
+                        result = first_name_pat.sub("", result)
+
+                    # 개별 이름 단어도 각각 삭제 (multi-word first name 대응)
+                    _skip_words_lower = frozenset({"van", "von", "de", "del", "la", "le", "the", "and"})
+                    for _fw in first_name.split():
+                        if len(_fw) >= 4 and _fw.lower() not in _skip_words_lower:
+                            fw_pat = re.compile(r"\b" + re.escape(_fw) + r"\b", re.IGNORECASE)
+                            if fw_pat.search(result):
+                                log.append(f"FIRSTWORD→DELETE: {_fw}")
+                                result = fw_pat.sub("", result)
+
+                # 앞뒤 공백 정리
+                result = re.sub(r"\s+", " ", result)
 
         # DB에서 가져온 이메일/전화/카카오도 직접 삭제
         for field in ("email", "mobile_phone", "kakaotalk"):
