@@ -51,6 +51,36 @@ CV_MIMES  = {MIME_PDF, MIME_DOCX, MIME_DOC, MIME_GDOC}
 
 FILE_RE = re.compile(r"id=([A-Za-z0-9_-]{25,})")
 
+# 공식 서류 키워드 — 이 단어가 파일명에 포함되면 doc_processor 대상에서 제외
+# (이력서/커버레터가 아닌 배경조회, 학력인증, 여권 사본 등)
+_NON_CV_KEYWORDS = [
+    "apostille", "saqa", "dirco",
+    "police_clearance", "police clearance",
+    "criminal_record", "criminal record",
+    "pcc",                          # Police Clearance Certificate
+    "background_check", "background check",
+    "birth_certificate", "birth certificate",
+    "marriage_certificate", "marriage certificate",
+    "passport_copy", "passport copy", "passport_scan",
+    "bank_statement", "bank statement",
+    "degree_certificate", "degree_cert",
+    "transcript",
+    "apostilled",
+    "clearance_certificate",
+]
+
+def _is_cv_file(filename: str) -> bool:
+    """파일명 기반으로 이력서/커버레터 여부 판별.
+    공식 서류(APOSTILLE, PCC, SAQA 등)는 False 반환 → doc_processor 제외.
+    """
+    fname_lower = filename.lower().replace("-", "_").replace(" ", "_")
+    for kw in _NON_CV_KEYWORDS:
+        kw_norm = kw.lower().replace(" ", "_")
+        if kw_norm in fname_lower:
+            return False
+    return True
+
+
 PROCESSED.mkdir(parents=True, exist_ok=True)
 
 
@@ -257,6 +287,10 @@ def cmd_run(args):
 
                 saved = _download(drive, fid, mime, dest)
                 if not saved:
+                    continue
+
+                if mime in CV_MIMES and not _is_cv_file(fname):
+                    print(f"  ⊘ {fname[:50]} ({size//1024}KB) — 공식서류 스킵", flush=True)
                     continue
 
                 print(f"  ✓ {fname[:50]} ({size//1024}KB)", flush=True)
