@@ -661,6 +661,7 @@ _RPA_ALL_N_RE       = re.compile(r'(?:각|모든|전체)\s*계정\s*(\d+)\s*건'
 # 숫자 없는 RPA 직접 실행 키워드 (기본 5건, gray 계정)
 _RPA_NOW_KEYS   = ("rpa 실행", "rpa 돌려", "rpa 돌려줘", "rpa해", "rpa 해줘", "rpa 해",
                    "광고 올려", "광고 올려줘", "광고 실행", "광고 돌려", "광고 돌려줘",
+                   "광고실행해", "광고실행", "광고해", "광고 해줘", "광고 해",
                    "크레이그 올려", "크레이그 실행", "크레이그 돌려",
                    "craig 실행", "craig 올려", "크레이그리스트 실행")
 # 맛족도 직접 키워드
@@ -671,10 +672,19 @@ _DAEBANG_KEYS   = ("블로그 작업 시작", "블로그 작업시작", "답방 
                    "댓글답방", "블로그 답방", "댓글 확인", "댓글확인", "답방 해", "답방해줘",
                    "블로그 댓글", "댓글 달린거 확인", "댓글달린거")
 # 블로그 포스팅 (ClaudeBlog main.py --now)
-_BLOG_NOW_KEYS  = ("블로그 포스팅 시작", "블로그 포스팅", "블로그 발행", "새 글 발행", "블로그 글 써", "블로그 올려", "블로그 새글")
+_BLOG_NOW_KEYS  = ("블로그 포스팅 시작", "블로그 포스팅", "블로그 발행", "새 글 발행",
+                   "블로그 글 써", "블로그 올려", "블로그 새글",
+                   "블로그 글쓰기", "글쓰기 실행", "블로그 글쓰기 실행", "블로그 써줘",
+                   "블로그 글 써줘", "블로그 실행", "블로그 시작", "블로그 발행해",
+                   "블로그 글 발행", "새 포스팅", "포스팅 실행")
 _BLOG_DRY_KEYS  = ("블로그 테스트", "블로그 드라이", "블로그 dry", "blog dry")
 _NEW_APP_KEYS   = ("신규접수확인", "신규 접수확인", "신규접수 확인", "새 접수", "신규 후보", "새 후보", "신규접수")
 _MAIL_STAT_KEYS = ("자동메일 몇건", "메일답장 몇건", "자동 메일 몇건", "메일 몇건", "자동답장 몇건", "메일답장 오늘")
+# 이메일 자동응답 작업 확인 키워드
+_EMAIL_WORK_KEYS = ("이메일 작업했는지", "이메일작업했는지", "이메일 작업 확인", "이메일작업 확인",
+                    "이메일 오늘", "자동응답 오늘", "자동응답 확인", "이메일 자동응답 확인",
+                    "메일 작업 확인", "메일작업 확인", "이메일 처리", "자동메일 확인",
+                    "메일 작업했는지", "이메일 잘 되고있는지", "이메일 잘되고있는지")
 
 # 일반 텍스트 → 터미널 자동 실행 트리거 (작업 요청 패턴)
 _TASK_TRIGGER_RE = re.compile(
@@ -790,6 +800,49 @@ def _quick_mail_stats(chat_id):
         send(chat_id, msg, markup=keyboard([btn("메인 메뉴", "menu")]))
     except Exception as e:
         send(chat_id, f"[오류] DB 조회 실패: {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
+
+
+def _quick_email_work_check(chat_id):
+    """이메일 자동응답 오늘 처리 현황 (email_logs 테이블 기준)."""
+    try:
+        conn  = sqlite3.connect(str(DB_PATH))
+        cur   = conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        cur.execute("SELECT COUNT(*) FROM email_logs WHERE DATE(sent_at)=? AND status='SENT'", (today,))
+        sent_today = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM email_logs WHERE DATE(created_at)=?", (today,))
+        recv_today = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM email_logs WHERE DATE(sent_at)>=date('now','-7 days') AND status='SENT'")
+        sent_week = cur.fetchone()[0]
+
+        # 최근 발송 3건
+        cur.execute("""
+            SELECT from_email, subject, sent_at FROM email_logs
+            WHERE status='SENT' ORDER BY sent_at DESC LIMIT 3
+        """)
+        recent = cur.fetchall()
+        conn.close()
+
+        lines = [
+            "[이메일 자동응답 현황]",
+            f"오늘 수신: {recv_today}건",
+            f"오늘 자동응답 발송: {sent_today}건",
+            f"이번 주 발송: {sent_week}건",
+        ]
+        if sent_today == 0 and recv_today == 0:
+            lines.append("\n오늘 처리된 이메일 없음")
+        elif sent_today > 0:
+            lines.append("\n최근 발송:")
+            for from_email, subj, sent_at in recent:
+                domain = from_email.split("@")[-1][:20] if "@" in from_email else from_email[:20]
+                lines.append(f"  @{domain} — {subj[:30]} ({sent_at[11:16]})")
+
+        send(chat_id, "\n".join(lines), markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[오류] 이메일 로그 조회 실패: {e}", markup=keyboard([btn("메인 메뉴", "menu")]))
 
 
 def _handle_api_key_update(chat_id: str, new_key: str):
@@ -908,6 +961,14 @@ def _try_direct_cmd(chat_id, text: str) -> bool:
         return True
     if "메일답장" in tl and ("오늘" in tl or "몇" in tl):
         _quick_mail_stats(chat_id)
+        return True
+
+    # 이메일 자동응답 작업 확인 (email_logs)
+    if any(k in tl for k in _EMAIL_WORK_KEYS):
+        _quick_email_work_check(chat_id)
+        return True
+    if ("이메일" in tl or "자동응답" in tl) and ("확인" in tl or "오늘" in tl or "했는지" in tl or "잘" in tl):
+        _quick_email_work_check(chat_id)
         return True
 
     # ── 일반 텍스트 작업 요청 → AgentTerminal 자동 실행 ──────────
@@ -2114,6 +2175,17 @@ _AGENT_SYS = """\
 5. git → 변경 추적·커밋
 6. notify → 중간 진행 공유
 7. ask_user → 꼭 필요한 결정만
+
+[BRIDGE 프로젝트 맵 — 신규 개발 시 참고]
+- 메인 백엔드: Q:/Claudework/bridge base/api_server.py (FastAPI)
+- DB: Q:/Claudework/bridge base/master.db (SQLite)
+- 프론트엔드: Q:/Claudework/bridge base/web_frontend/src/
+- 자동화 도구: Q:/Claudework/bridge base/tools/
+- ClaudeBlog: Q:/Claudework/ClaudeBlog/ (블로그 포스팅 자동화)
+- 맛족도: Q:/Claudework/matjokdo_safe/ (네이버 블로그 댓글 자동화)
+- agentic_os: Q:/Claudework/agentic_os/ (에이전트 프레임워크)
+- Python 경로: Q:/Phtyon 3/python.exe (메인), Q:/Claudework/ClaudeBlog/.venv/Scripts/python.exe (ClaudeBlog 전용)
+- 신규 앱 개발: Q:/Claudework/ 아래 새 폴더에 생성. 의존성은 ask_user로 확인.
 
 [실행 중 사용자 메시지]
 [사용자 개입] 태그로 전달됨. 즉시 현재 계획을 업데이트하고 반영.
