@@ -923,6 +923,10 @@ KR_KEYWORDS = frozenset([
     "songdo", "song-do",
     # 수도권 신도시/지구명
     "bupyeong", "bupyeong-gu",
+    # Gyeonggi-do 오탈자/약식 표기
+    "gyeongi-do", "gyeongi", "gyeong-do",
+    # -si 접미사 (도시명 제거 후 잔류 방지)
+    "paju-si", "incheon-si", "suwon-si", "seongnam-si",
 ])
 
 # PII 라벨 → 해당 줄 전체 삭제
