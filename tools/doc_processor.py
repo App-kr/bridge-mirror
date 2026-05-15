@@ -919,6 +919,10 @@ KR_KEYWORDS = frozenset([
     "anseong", "pyeongtaek", "dongducheon", "gapyeong",
     # 기타 주요 시
     "mokpo", "chungju", "jecheon", "boryeong",
+    # 송도 (Songdo/Song-do) — 인천 경제자유구역, 이력서에서 빈번 등장
+    "songdo", "song-do",
+    # 수도권 신도시/지구명
+    "bupyeong", "bupyeong-gu",
 ])
 
 # PII 라벨 → 해당 줄 전체 삭제
@@ -1002,6 +1006,8 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "bricks", "bricks english",
     "slp", "slp english",
     "rise english", "rise korea", "rise english academy", "rise english kindergarten",  # rise 단독 제거 (동사 오탐)
+    "cedar hill", "cedar hill global prep", "cedar hill global",    # 인천 국제학교
+    "korea poly", "korea poly school",                               # "Korea Poly School" 전체 매칭 (poly school 개별 제거 후 Korea 잔류 방지)
     "luxx", "luxx language academy", "luxx english",                 # luxx 단독은 짧지만 단독 단어로만 사용
     "carrot global", "carrot english", "carrot english academy",     # carrot 단독 제거 (일반명사 오탐)
     "4kidsedu", "4kids edu", "4kids english",                        # 숫자 포함 브랜드
@@ -2621,6 +2627,29 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _cleaned_jt = re.sub(r'\s+-\s+—\s+', ' - ', _cleaned_jt)
                     # 앞뒤 고립 " - " 또는 " — " 정리
                     _cleaned_jt = re.sub(r'^[\s\-—]+', '', _cleaned_jt).strip()
+                    # 파이프 뒤 고아 "Korea" 제거: "Teacher | Korea — South Korea" → "Teacher — South Korea"
+                    # (Korea Poly School → Korea 잔류 후 "|" 구분자 사이에 홀로 남은 경우)
+                    _cleaned_jt = re.sub(
+                        r'\|\s*Korea\s*(?=[—\-])', '| ', _cleaned_jt, flags=re.I)
+                    _cleaned_jt = re.sub(r'\|\s*—', '—', _cleaned_jt)
+                    _cleaned_jt = re.sub(r'\|\s*-\s', '- ', _cleaned_jt)
+                    # 브랜드 제거 후 "— 한국도시, South Korea" 잔류 제거
+                    # "Head Teacher — Song-do, Incheon, South Korea" → "Head Teacher — South Korea"
+                    _keep_kws_jt = {"korea", "south korea"}
+                    for _city_jt in KR_KEYWORDS:
+                        if len(_city_jt) <= 2 or _city_jt.lower() in _keep_kws_jt:
+                            continue
+                        _city_jt_pat = re.compile(
+                            r'\b' + re.escape(_city_jt) + r'\b\s*,?\s*', re.I)
+                        # ① 직업타이틀 clean text에서 제거
+                        _cleaned_jt = _city_jt_pat.sub('', _cleaned_jt)
+                        # ② PDF 텍스트 분리 대응: redact_texts에도 직접 추가
+                        for _cm in _city_jt_pat.finditer(stripped):
+                            redact_texts.add(_cm.group().rstrip(', '))
+                            all_logs.append(f"[page{page_num}] JOB_CITY_FALLBACK: {_cm.group().strip()}")
+                    # 대시 뒤 쉼표/공백 정리
+                    _cleaned_jt = re.sub(r'([—\-])\s*,+\s*', r'\1 ', _cleaned_jt)
+                    _cleaned_jt = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt).strip()
                     if _cleaned_jt != stripped:
                         job_title_replaces.append((stripped, _cleaned_jt))
                         all_logs.append(f"[page{page_num}] JOB_TITLE_CLEAN: {stripped[:50]} → {_cleaned_jt[:50]}")
