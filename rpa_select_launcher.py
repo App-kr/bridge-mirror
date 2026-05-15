@@ -2015,12 +2015,17 @@ class AdminBoard:
             PID_FILE.write_text(str(self._proc.pid))
 
         _last_action = ""
+        _posted_in_run = 0   # 이번 _run_single 안에서 실제 게시 감지된 건수
         for line in self._proc.stdout:
             line = line.rstrip("\r\n")
             if line:
                 self._log_queue.put((line, ""))
+                # ⚠️ 사용자 요청 (2026-05-14): 게시 1건 감지 즉시 게이지 +1 (실시간 차오름)
+                if ("[OK] 게시 완료" in line or "Post successful" in line
+                        or "→ Publish 완료" in line):
+                    _posted_in_run += 1
+                    self.root.after(0, self._inc_gauge_done, 1)
                 action = self._detect_action(line)
-                # 액션 변경 시만 after() 호출
                 if action and action != _last_action:
                     _last_action = action
                     self.root.after(0, self._set_gauge_action, action)
@@ -2031,8 +2036,9 @@ class AdminBoard:
         self.root.after(0, self._append_log,
                         f"  {acct['label']} 완료 (exit {rc})",
                         tag)
-        if rc == 0:
-            self.root.after(0, self._inc_gauge_done, count)
+        # 보완: 실제 감지된 건수가 count 보다 적으면 차이만 추가 (안전장치)
+        if rc == 0 and _posted_in_run < count:
+            self.root.after(0, self._inc_gauge_done, count - _posted_in_run)
         self._proc = None
         PID_FILE.unlink(missing_ok=True)
 

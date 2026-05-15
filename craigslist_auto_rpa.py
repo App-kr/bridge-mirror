@@ -1085,7 +1085,8 @@ def generate_ad(job: dict) -> tuple[str, str]:
 
 
 # ── Selenium ──────────────────────────────────────────────────────────────────
-def _delay(lo=0.8, hi=2.0):
+def _delay(lo=0.4, hi=1.0):
+    """단계별 대기 시간 — 사용자 요청 2026-05-14: 게시 속도 ↑ (기본값 0.8~2.0 → 0.4~1.0)"""
     time.sleep(random.uniform(lo, hi))
 
 
@@ -2505,12 +2506,29 @@ def main():
                     continue
 
                 if i < len(ad_list):
-                    # 5건마다 25초 휴식, 그 외 10~20초 랜덤
+                    # 사용자 요청 (2026-05-14): AI 차단 회피 + 빠른 게시 후 점진 증가
+                    # 5건마다 휴식: 12 → 15 → 18초 (세트 거듭할수록 살짝 증가)
                     if posted > 0 and posted % 5 == 0:
-                        countdown(25, f"[{posted}건 완료] 5건 단위 휴식")
+                        rest_base = 12 + (posted // 5 - 1) * 3   # 12, 15, 18, 21...
+                        rest_base = min(rest_base, 25)
+                        countdown(rest_base, f"[{posted}건 완료] 5건 단위 휴식")
                     else:
-                        wait = random.randint(10, 20)
+                        # 적응형 대기: 누적 게시가 많을수록 약간씩만 느려짐
+                        # posted < 5  → 4~8 초 (빠름)
+                        # posted < 10 → 5~9 초 (살짝)
+                        # posted < 20 → 6~11 초
+                        # posted >= 20 → 7~13 초
+                        if posted < 5:
+                            wait = random.randint(4, 8)
+                        elif posted < 10:
+                            wait = random.randint(5, 9)
+                        elif posted < 20:
+                            wait = random.randint(6, 11)
+                        else:
+                            wait = random.randint(7, 13)
+                        # micro jitter — 1초 단위 외 0~0.9초 추가 (탐지 패턴 회피)
                         countdown(wait, "다음 게시 대기")
+                        time.sleep(random.uniform(0, 0.9))
 
         except Exception as session_exc:
             _log_event("error", "--", "session", f"Session-level exception: {session_exc}")

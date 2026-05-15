@@ -2023,8 +2023,24 @@
       "git": "c41b0f5d",
       "files": 3767,
       "db_hash": "189b28cc108b"
+    },
+    {
+      "dir": "20260515_043009__daily_20260515",
+      "task": "daily_20260515",
+      "ts": "2026.05.15 04:30:24",
+      "git": "052354dc",
+      "files": 3919,
+      "db_hash": "f7dcac274167"
+    },
+    {
+      "dir": "20260515_135608__doc_processor_이름삭제+브랜드패치",
+      "task": "doc_processor 이름삭제+브랜드패치",
+      "ts": "2026.05.15 13:56:25",
+      "git": "2912ba2b",
+      "files": 3943,
+      "db_hash": "824f7cbedbab"
     }
   ],
-  "last_backup": "2026.05.13 14:51:47",
-  "total_count": 253
+  "last_backup": "2026.05.15 13:56:25",
+  "total_count": 255
 }

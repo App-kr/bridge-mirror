@@ -366,7 +366,8 @@ _SPAM_BODY_KW = [
     "active applicants in your inbox",
     "free 7 day trial", "7-day trial", "7 day free trial",
     "unlimited posting",
-    "simply reply if interested",   # 광고 CTA 패턴
+    # "simply reply if interested" 제거 — Craigslist 릴레이 이메일 자동 footer에도 포함되어
+    # 정상 지원자(Frances L 등) 오탐 발생 (2026-05-14 확인)
     "guaranteed 20+ active applicants",
     "we currently have esl teachers ready",
     "immediate placement",          # 구인 플랫폼 홍보
@@ -895,9 +896,18 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                 # ── STEP A-0: Re: subject → 대화 중인 회신, 발송 금지 ──────────
                 # "Re:"로 시작하면 우리 메일에 대한 답장 → 지원폼 발송 절대 금지
-                if subject.strip().lower().startswith("re:"):
-                    log.info(f"[CONV] Re: subject → 대화 중 회신, 안읽음 유지: {from_addr} | {subject}")
-                    _session_ids.add(uid)
+                # ⚠️ 예외: Craigslist relay(@reply.craigslist.org)는 최초 문의도
+                #   항상 "RE:" 접두어로 오므로 subject 필터 적용 안 함
+                #   (중복 발송 방지는 하단 STEP B-0 DB 이력 체크가 담당)
+                _is_craigslist_relay = from_addr.strip().lower().endswith("@reply.craigslist.org")
+                if subject.strip().lower().startswith("re:") and not _is_craigslist_relay:
+                    log.info(f"[CONV] Re: subject → 대화 중 회신, 읽음 처리: {from_addr} | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
 
                 # ── STEP A: 스팸 필터 (헤더 기반) ────────────────────────────
@@ -1084,7 +1094,8 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                 # ── STEP C-0: 본문 기반 스팸 2차 체크 ──────────────────────
                 # 헤더만으론 못 잡은 B2B 광고/구인 플랫폼 영업 메일 차단
-                if body and is_spam(from_addr, subject, body, {}, cfg["gmail_addr"]):
+                # ⚠️ Craigslist relay는 본문에 CL 자동 footer가 포함되어 오탐 가능 → 스킵
+                if body and not _is_craigslist_relay and is_spam(from_addr, subject, body, {}, cfg["gmail_addr"]):
                     log.info(f"[SPAM-BODY] 본문 스팸 감지 → 읽음 처리: {from_addr} | {subject}")
                     try:
                         imap.store(uid_b, "+FLAGS", "\\Seen")
@@ -1103,8 +1114,13 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     "forms.gle/y5sute6253qlbr5v8",
                 ]
                 if any(m in body.lower() for m in _BRIDGE_MARKERS):
-                    log.info(f"[CONV] BRIDGE 회신 인용 감지 → 대화 중, 안읽음 유지: {from_addr} | {subject}")
-                    _session_ids.add(uid)
+                    log.info(f"[CONV] BRIDGE 회신 인용 감지 → 읽음 처리: {from_addr} | {subject}")
+                    try:
+                        imap.store(uid_b, "+FLAGS", "\\Seen")
+                    except Exception:
+                        pass
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
 
                 # ── STEP C-1: 기존 연락처 감지 → 양식 미발송 ──────────────
