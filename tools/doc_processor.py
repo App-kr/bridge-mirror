@@ -239,6 +239,118 @@ def _is_cover_letter(filepath: Path) -> bool:
     ))
 
 
+# ── OCR 기반 스캔 PDF redaction (이미지 전용 PDF 지원) ──
+_OCR_READER = None  # lazy-init
+
+def _is_scanned_page(page) -> bool:
+    """페이지가 스캔 이미지 기반인지 (텍스트 없음 + 이미지 있음) 판별"""
+    if page.get_text().strip():
+        return False
+    return len(page.get_images()) > 0
+
+
+def _get_ocr_reader():
+    """EasyOCR Reader 싱글톤 — 첫 호출 시 ~250MB 모델 로드"""
+    global _OCR_READER
+    if _OCR_READER is None:
+        try:
+            import easyocr
+            _OCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
+        except ImportError:
+            return None
+    return _OCR_READER
+
+
+def _ocr_redact_scanned_page(page, page_idx, candidate, pii_patterns, all_logs, dpi=200):
+    """OCR로 스캔 페이지의 PII 영역을 white-redact.
+    Returns: True if any redactions applied"""
+    import fitz
+
+    reader = _get_ocr_reader()
+    if reader is None:
+        all_logs.append(f"[page{page_idx}] OCR_SKIP: easyocr 미설치")
+        return False
+
+    pix = page.get_pixmap(dpi=dpi)
+    img_bytes = pix.tobytes("png")
+    scale = 72.0 / dpi
+    try:
+        ocr_results = reader.readtext(img_bytes, detail=1)
+    except Exception as e:
+        all_logs.append(f"[page{page_idx}] OCR_FAIL: {e}")
+        return False
+
+    cand_name = ""
+    cand_parts = []
+    if candidate:
+        cand_name = (candidate.get("full_name") or candidate.get("name") or "").strip()
+        if cand_name:
+            cand_parts = [w for w in cand_name.split() if len(w) >= 3]
+
+    redacted = 0
+    for bbox_pts, text, conf in ocr_results:
+        if conf < 0.30 or not text.strip():
+            continue
+        text_lower = text.lower()
+        why = None
+
+        if cand_name and cand_name.lower() in text_lower:
+            why = f"NAME: {text}"
+        elif cand_parts and any(p.lower() in text_lower for p in cand_parts):
+            why = f"NAMEPART: {text}"
+        else:
+            for pat, label in pii_patterns:
+                if pat.search(text):
+                    why = f"{label}: {text}"
+                    break
+            if not why:
+                lower_strip = text_lower.strip().rstrip(":")
+                _PII_LABELS = {
+                    "contact", "address", "phone", "email", "tel",
+                    "mobile", "cell", "kakao", "kakaotalk", "wechat",
+                    "skype", "line", "linkedin", "instagram",
+                }
+                if lower_strip in _PII_LABELS:
+                    why = f"LABEL: {text}"
+
+            # 한국 도시 + Korea (RE_KR_CITY_COUNTRY 보완: "Seoul, Korea" 단순형)
+            if not why:
+                _KR_CITIES_LOW = {
+                    "seoul", "busan", "incheon", "daegu", "daejeon",
+                    "gwangju", "ulsan", "suwon", "gyeonggi", "yongin",
+                    "seongnam", "bundang", "ilsan", "ansan", "anyang",
+                    "bucheon", "goyang", "guri", "namyangju", "uijeongbu",
+                    "pyeongtaek", "siheung", "hwaseong", "gimpo",
+                    "cheongju", "jeonju", "pohang", "changwon", "jeju",
+                    "gangnam", "sinchon", "hongdae", "itaewon",
+                }
+                _has_kr = "korea" in text_lower or "korean" in text_lower
+                _has_city = any(c in text_lower for c in _KR_CITIES_LOW)
+                if _has_kr and _has_city:
+                    why = f"KR_ADDR: {text}"
+                elif text_lower.strip() in (
+                    "seoul, korea", "seoul korea", "south korea",
+                    "republic of korea",
+                ):
+                    why = f"KR_LOC: {text}"
+
+        if why:
+            xs = [p[0] for p in bbox_pts]
+            ys = [p[1] for p in bbox_pts]
+            rect = fitz.Rect(
+                min(xs) * scale - 2, min(ys) * scale - 1,
+                max(xs) * scale + 2, max(ys) * scale + 1,
+            )
+            page.add_redact_annot(rect, fill=(1, 1, 1))
+            redacted += 1
+            all_logs.append(f"[page{page_idx}] OCR_{why[:60]}")
+
+    if redacted:
+        page.apply_redactions()
+        all_logs.append(f"[page{page_idx}] OCR_APPLIED: {redacted}건")
+    return redacted > 0
+
+
 def _merge_pdfs(cover_pdf: Path, resume_pdf: Path, output_pdf: Path):
     """커버레터 PDF + 이력서 PDF → 단일 PDF 병합"""
     import fitz
@@ -2343,6 +2455,17 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
     doc = fitz.open(str(filepath))
     all_logs = []
+
+    # ── 스캔 PDF 감지 + OCR 기반 redaction (텍스트 레이어 없는 이미지 PDF) ──
+    if not dry:
+        _scanned_pages = [pn for pn, pg in enumerate(doc) if _is_scanned_page(pg)]
+        if _scanned_pages:
+            all_logs.append(f"[ocr] 스캔 페이지 감지: {_scanned_pages}")
+            _ocr_patterns = _build_search_patterns(candidate)
+            for _pn in _scanned_pages:
+                _ocr_redact_scanned_page(
+                    doc[_pn], _pn, candidate, _ocr_patterns, all_logs
+                )
 
     # ── 사전 처리: PII 삭제 전 국적 추출 → DB 업데이트 ──
     if not dry and candidate:
