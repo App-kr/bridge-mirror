@@ -3269,31 +3269,59 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
         else:
             # ── 헤더 없는 일반 CV ─────────────────────────────────────────
-            # beige/dark rect를 그리지 않음 — 레이아웃 보존
-            # 강사 번호만 페이지 상단 왼쪽에 작게 삽입
+            # 이름이 redact된 자리(이름 영역 ~ 첫 섹션 헤더) 에 번호+사진 배치
+
+            # 1) 첫 섹션 헤더(PROFILE/CAREER 등) y 위치 탐색
+            _SECTION_HDRS = {
+                "PROFILE", "ABOUT", "ABOUT ME", "SUMMARY",
+                "CAREER", "EXPERIENCE", "EDUCATION", "SKILLS",
+            }
+            _first_sec_y = 200  # fallback
+            _pdict_nh = hdr_page.get_text("dict", flags=0)
+            for _blk_nh in _pdict_nh.get("blocks", []):
+                if _blk_nh.get("type") != 0:
+                    continue
+                for _ln_nh in _blk_nh.get("lines", []):
+                    _lt_nh = "".join(
+                        s.get("text", "") for s in _ln_nh.get("spans", [])
+                    ).strip().upper()
+                    _ly_nh = _ln_nh["bbox"][1]
+                    if _lt_nh in _SECTION_HDRS and 30 < _ly_nh < 300:
+                        _first_sec_y = min(_first_sec_y, int(_ly_nh) - 4)
+
+            # 2) 삽입 존: 다크바 아래(≈48) ~ 첫 섹션 위
+            _zone_top = 48
+            _zone_bot = max(_first_sec_y, _zone_top + 80)
+            _zone_h   = _zone_bot - _zone_top
+            _num_fs   = min(54, max(36, int(_zone_h * 0.52)))
+
+            # 3) 번호 삽입 (왼쪽, 크게)
             hdr_page.insert_text(
-                fitz.Point(10, 20),
+                fitz.Point(15, _zone_top + int(_zone_h * 0.72)),
                 str(brj_number),
-                fontsize=14,
+                fontsize=_num_fs,
                 fontname="helv",
                 color=(0.15, 0.15, 0.15),
             )
-            all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}")
+            all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}  zone={_zone_top}-{_zone_bot} fs={_num_fs}")
 
-            # 사진 삽입 (있으면 페이지 우상단) — 커버레터 제외
+            # 4) 사진 삽입 (오른쪽, 번호와 같은 존) — 커버레터 제외
             photo = None if _is_cover_letter(filepath) else (photo_path or _find_photo_for_candidate(filepath))
             if photo and photo.exists():
-                _img_size = 90
-                _img_margin = 10
+                _pm = 8
+                _pw2 = min(int(_zone_h * 1.05), int(pw * 0.22))
+                _ph2 = _zone_h - _pm
                 photo_rect = fitz.Rect(
-                    pw - _img_size - _img_margin, _img_margin,
-                    pw - _img_margin, _img_size + _img_margin,
+                    pw - _pw2 - _pm, _zone_top + _pm // 2,
+                    pw - _pm,        _zone_top + _pm // 2 + _ph2,
                 )
                 try:
                     hdr_page.insert_image(photo_rect, filename=str(photo))
                     all_logs.append(f"[photo] NO_HDR {_header_page_num}p: {photo.name}")
                 except Exception as e:
                     all_logs.append(f"[photo] 삽입 실패: {e}")
+            else:
+                all_logs.append("[photo] NO_HDR 없음 (스킵)")
 
     # ── 링크 어노테이션 제거 (이메일/URI 하이퍼링크 → redaction 이후에도 잔류) ──
     # 이유: add_redact_annot/apply_redactions은 텍스트 스트림만 덮음.
