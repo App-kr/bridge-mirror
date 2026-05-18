@@ -2245,7 +2245,8 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
 
-        photo = photo_path or _find_photo_for_candidate(filepath)
+        _is_cl = _is_cover_letter(filepath)
+        photo = None if _is_cl else (photo_path or _find_photo_for_candidate(filepath))
         body = doc.element.body
 
         # 기존 본문 이미지 모두 제거 (프로필 사진 중복 방지)
@@ -2911,9 +2912,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     replacement_redacts.append((value_text, "Korea"))
                     all_logs.append(f"[page{page_num}] LOC→Korea: {value_text[:40]}")
                 else:
-                    # 비한국 주소: 값 전체 삭제 (개인 거주지 정보)
+                    # 비한국 주소: 라벨 포함 줄 전체 삭제 (개인 거주지 정보)
                     redact_texts.add(value_text)
-                    all_logs.append(f"[page{page_num}] LOC_NONKR_DEL: {value_text[:40]}")
+                    redact_texts.add(stripped)  # 라벨("location:") 포함 전체 줄도 삭제
+                    all_logs.append(f"[page{page_num}] LOC_NONKR_DEL: {stripped[:60]}")
 
             # 직장명: "Current Employer: YBM Academy" → redact (빈 대체)
             for label in WORKPLACE_LABELS:
@@ -3244,8 +3246,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             )
             all_logs.append(f"[page{_header_page_num}] BRJNUM: {brj_number}")
 
-            # ④ 사진 삽입 (헤더 오른쪽)
-            photo = photo_path or _find_photo_for_candidate(filepath)
+            # ④ 사진 삽입 (헤더 오른쪽) — 커버레터 제외
+            photo = None if _is_cover_letter(filepath) else (photo_path or _find_photo_for_candidate(filepath))
             if photo and photo.exists():
                 _img_margin = 5
                 _img_h = int(_hdr_bottom - _img_margin * 2)
@@ -3274,8 +3276,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             )
             all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}")
 
-            # 사진 삽입 (있으면 페이지 우상단)
-            photo = photo_path or _find_photo_for_candidate(filepath)
+            # 사진 삽입 (있으면 페이지 우상단) — 커버레터 제외
+            photo = None if _is_cover_letter(filepath) else (photo_path or _find_photo_for_candidate(filepath))
             if photo and photo.exists():
                 _img_size = 90
                 _img_margin = 10
