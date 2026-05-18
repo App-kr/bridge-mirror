@@ -1846,7 +1846,7 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
 
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
-        name = candidate.get("full_name", "")
+        name = candidate.get("full_name") or candidate.get("name", "")
         if name:
             # 이름 전체 삭제 (성+이름 모두 제거)
             words = name.strip().split()
@@ -2563,8 +2563,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         all_logs.append(f"[page{page_num}] UNIV_UNPROTECTED: {_univ[:60]}")
 
         # ── 후보자 이름: PDF는 전체 blank (다중 렌더링 레이어 완전 제거) ──
-        if candidate and candidate.get("full_name"):
-            name = candidate["full_name"].strip()
+        if candidate and (candidate.get("full_name") or candidate.get("name")):
+            name = (candidate.get("full_name") or candidate.get("name", "")).strip()
             words = name.split()
             if len(words) >= 2:
                 last_name = words[-1]
