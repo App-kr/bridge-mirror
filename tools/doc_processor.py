@@ -2246,56 +2246,60 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
         from docx.oxml import OxmlElement
 
         _is_cl = _is_cover_letter(filepath)
-        photo = None if _is_cl else (photo_path or _find_photo_for_candidate(filepath))
         body = doc.element.body
 
-        # 기존 본문 이미지 모두 제거 (프로필 사진 중복 방지)
-        for drawing in body.findall('.//' + qn('w:drawing')):
-            parent = drawing.getparent()
-            if parent is not None:
-                parent.remove(drawing)
-                all_logs.append("[photo] 기존 이미지 제거")
-        for pict in body.findall('.//' + qn('w:pict')):
-            parent = pict.getparent()
-            if parent is not None:
-                parent.remove(pict)
+        if not _is_cl:
+            # 기존 본문 이미지 모두 제거 (프로필 사진 중복 방지)
+            for drawing in body.findall('.//' + qn('w:drawing')):
+                parent = drawing.getparent()
+                if parent is not None:
+                    parent.remove(drawing)
+                    all_logs.append("[photo] 기존 이미지 제거")
+            for pict in body.findall('.//' + qn('w:pict')):
+                parent = pict.getparent()
+                if parent is not None:
+                    parent.remove(pict)
 
-        # 1행 2열 테이블: [번호 | 사진]
-        tbl = doc.add_table(rows=1, cols=2)
-        tbl.autofit = True
-        # 테두리 없음
-        tbl_pr = tbl._element.tblPr
-        borders = tbl_pr.find(qn("w:tblBorders"))
-        if borders is not None:
-            tbl_pr.remove(borders)
+            photo = photo_path or _find_photo_for_candidate(filepath)
 
-        # 왼쪽: 번호 (크고 굵게)
-        left_cell = tbl.cell(0, 0)
-        left_cell.text = ""
-        p_num = left_cell.paragraphs[0]
-        run_num = p_num.add_run(str(brj_number))
-        run_num.bold = True
-        run_num.font.size = Pt(28)
-        run_num.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+            # 1행 2열 테이블: [번호 | 사진]
+            tbl = doc.add_table(rows=1, cols=2)
+            tbl.autofit = True
+            # 테두리 없음
+            tbl_pr = tbl._element.tblPr
+            borders = tbl_pr.find(qn("w:tblBorders"))
+            if borders is not None:
+                tbl_pr.remove(borders)
 
-        # 오른쪽: 사진
-        right_cell = tbl.cell(0, 1)
-        right_cell.text = ""
-        p_photo = right_cell.paragraphs[0]
-        p_photo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        if photo and photo.exists():
-            run_photo = p_photo.add_run()
-            run_photo.add_picture(str(photo), height=Cm(3.5))
-            all_logs.append(f"[photo] 삽입: {photo.name}")
+            # 왼쪽: 번호 (크고 굵게)
+            left_cell = tbl.cell(0, 0)
+            left_cell.text = ""
+            p_num = left_cell.paragraphs[0]
+            run_num = p_num.add_run(str(brj_number))
+            run_num.bold = True
+            run_num.font.size = Pt(28)
+            run_num.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+
+            # 오른쪽: 사진
+            right_cell = tbl.cell(0, 1)
+            right_cell.text = ""
+            p_photo = right_cell.paragraphs[0]
+            p_photo.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            if photo and photo.exists():
+                run_photo = p_photo.add_run()
+                run_photo.add_picture(str(photo), height=Cm(3.5))
+                all_logs.append(f"[photo] 삽입: {photo.name}")
+            else:
+                all_logs.append("[photo] 사진 없음 (스킵)")
+
+            # body의 맨 앞 자식 앞에 삽입 (테이블/단락 무관하게 최상단)
+            first_child = body[0] if len(body) > 0 else None
+            if first_child is not None:
+                first_child.addprevious(tbl._element)
+            else:
+                body.append(tbl._element)
         else:
-            all_logs.append("[photo] 사진 없음 (스킵)")
-
-        # body의 맨 앞 자식 앞에 삽입 (테이블/단락 무관하게 최상단)
-        first_child = body[0] if len(body) > 0 else None
-        if first_child is not None:
-            first_child.addprevious(tbl._element)
-        else:
-            body.append(tbl._element)
+            all_logs.append("[cover_letter] 번호/사진 삽입 스킵")
 
     return doc, all_logs
 
