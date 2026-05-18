@@ -6,7 +6,7 @@ cryptography>=42.0.0
 httpx>=0.27.0,<1.0
 pydantic>=2.0.0,<3.0
 python-multipart>=0.0.9,<1.0
-Pillow>=10.0.0,<12.0
+Pillow>=12.2.0,<13.0
 email-validator>=2.0.0,<3.0
 google-api-python-client>=2.100.0,<3.0
 google-auth>=2.29.0,<3.0
@@ -14,7 +14,7 @@ google-auth-oauthlib>=1.1.0,<2.0
 PyJWT>=2.0.0,<3.0
 gunicorn>=22.0.0,<24.0
 pywebpush>=2.0.0,<3.0
-# supabase>=2.0.0,<3.0  # 제거: Render에서 DATABASE_URL 요구 (2026-04-14) — SQLite 전용 운영
+# supabase>=2.0.0,<3.0  # removed: Render requires DATABASE_URL (2026-04-14) - SQLite only
 PyMuPDF>=1.24.0,<2.0
 argon2-cffi>=23.1.0
 pyotp==2.9.0
@@ -29,3 +29,5 @@ pikepdf>=8.0.0,<10.0
 reportlab>=4.0.0,<5.0
 pdfplumber>=0.10.0,<1.0
 python-docx>=1.0.0,<2.0
+# OCR for scanned PDFs (downloads ~250MB models on first run)
+easyocr>=1.7.0,<2.0
