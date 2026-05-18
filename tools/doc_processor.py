@@ -386,6 +386,11 @@ def process_file(
                 out_path = filepath.parent / out_name
                 if not dry:
                     doc.save(str(out_path))
+                    # DOCX → PDF 변환 (Word COM)
+                    _pdf_result = _docx_to_pdf(out_path)
+                    if _pdf_result and _pdf_result.exists():
+                        out_path.unlink(missing_ok=True)
+                        out_path = _pdf_result
                     with open(out_path, "rb") as f:
                         result["sha256"] = _hl.sha256(f.read()).hexdigest()
                 result["processed"] = True
@@ -565,6 +570,24 @@ RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 RE_PHONE = re.compile(
     r"(?:\+?\d{1,3}[\s\-.]?)?\(?\d{2,4}\)?[\s\-.]?\d{3,4}[\s\-.]?\d{3,4}\b"
 )
+
+# 서술형 생년월일: "20th of September 1996", "March 5th, 1990", "5 January 1988"
+# 생년도 범위: 1940~2009 (2010+ = 문서 날짜 또는 경력 날짜 오탐 방지)
+RE_DOB_SPELLED = re.compile(
+    r'\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?'
+    r'(?:January|February|March|April|May|June|July|August|September|October|November|December)'
+    r'\s+(?:19[4-9]\d|200[0-9])\b'
+    r'|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)'
+    r'\s+\d{1,2}(?:st|nd|rd|th)?\s*,?\s*(?:19[4-9]\d|200[0-9])\b',
+    re.IGNORECASE,
+)
+
+# 한국 전화 프리픽스 잔류 제거: "+82 (0)" 홀로 남는 경우
+RE_KR_PHONE_PREFIX = re.compile(r'\+82\s*\(?\s*0\s*\)?(?!\d)', re.IGNORECASE)
+
+# 한국 우편번호 5자리 — 도시명 삭제 후 잔류 방지 (예: "10906", "03000")
+# 주의: 연도·번지 오탐 방지 → 줄 시작 또는 쉼표/공백 직후 5자리만
+RE_KR_POSTAL = re.compile(r'(?:^|(?<=,\s)|(?<=,))[\s]*\b([0-9]{5})\b(?!\d)', re.MULTILINE)
 
 RE_URL = re.compile(r"https?://[^\s<>\"']+|www\.[^\s<>\"']+", re.I)
 
@@ -919,8 +942,8 @@ KR_KEYWORDS = frozenset([
     "anseong", "pyeongtaek", "dongducheon", "gapyeong",
     # 기타 주요 시
     "mokpo", "chungju", "jecheon", "boryeong",
-    # 송도 (Songdo/Song-do) — 인천 경제자유구역, 이력서에서 빈번 등장
-    "songdo", "song-do",
+    # 송도/동백/수지 — 인천·용인 자주 등장하는 지구명
+    "songdo", "song-do", "dongbaek", "suji", "giheung",
     # 수도권 신도시/지구명
     "bupyeong", "bupyeong-gu",
     # Gyeonggi-do 오탈자/약식 표기
@@ -1617,6 +1640,10 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     _sub(RE_KAKAO, "", "KAKAO")
     _sub(RE_SNS, "", "SNS")
     _sub(RE_URL, "", "URL")
+    # 서술형 생년월일 ("20th of September 1996" 등)
+    _sub(RE_DOB_SPELLED, "", "DOB_SPELLED")
+    # 한국 전화 프리픽스 잔류 (+82 (0))
+    _sub(RE_KR_PHONE_PREFIX, "", "KR_PHONE_PREFIX")
 
     # 전화번호 (7자리+ 숫자만)
     def phone_replacer(m):
@@ -1713,6 +1740,16 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     # 도시 제거 후 남은 "— , Text" 패턴 정리: "— , South Korea" → "— South Korea"
     result = re.sub(r'([—–])\s*,+\s*', r'\1 ', result)
     result = re.sub(r',+\s*([—–])', r' \1', result)
+
+    # ── Pass 2.5b: 한국 우편번호 잔류 제거 ──
+    # 도시명 삭제 후 남은 "10906", "03000" 등 5자리 우편번호 제거
+    # 줄 전체가 숫자만 남거나, 쉼표/공백 뒤 5자리 숫자인 경우
+    def _postal_replacer(m):
+        log.append(f"KR_POSTAL→REMOVE: {m.group().strip()}")
+        return ""
+    result = RE_KR_POSTAL.sub(_postal_replacer, result)
+    # 줄 단독 숫자(4~6자리) 잔류 처리: "  10906" 같이 줄이 숫자만 남은 경우
+    result = re.sub(r'^\s*\d{4,6}\s*$', '', result, flags=re.MULTILINE)
 
     # ── Pass 2.6: 한국 업체명 처리 ──
     # Step 1: 브랜드 접두사 제거, 유형명 보존
@@ -2070,6 +2107,24 @@ def process_docx(filepath: Path, brj_number: int, candidate: dict = None,
                     for run in para.runs:
                         run.text = ""
                 continue
+
+            # ── 하이퍼링크 내 이메일/전화번호 제거 (para.text에 포함 안 됨) ──
+            for _child in list(para._element):
+                _ctag = _child.tag.split("}")[-1] if "}" in _child.tag else _child.tag
+                if _ctag == "hyperlink":
+                    _link_parts = []
+                    for _r in _child:
+                        _rtag = _r.tag.split("}")[-1] if "}" in _r.tag else _r.tag
+                        if _rtag == "r":
+                            for _t in _r:
+                                _ttag = _t.tag.split("}")[-1] if "}" in _t.tag else _t.tag
+                                if _ttag == "t" and _t.text:
+                                    _link_parts.append(_t.text)
+                    _link_text = "".join(_link_parts)
+                    if RE_EMAIL.search(_link_text) or RE_KR_PHONE_PREFIX.search(_link_text):
+                        all_logs.append(f"[{section_name}] HYPERLINK_EMAIL: {_link_text[:60]}")
+                        if not dry:
+                            para._element.remove(_child)
 
             cleaned, log = remove_pii(original, candidate, skip_school_names=_in_edu[0])
             # 파일명에서 추출한 이름도 삭제
@@ -3215,6 +3270,9 @@ def _build_search_patterns(candidate: dict = None):
         (RE_KR_RESIDENTIAL, "KR_RESID"),   # 부영 1차 아파트 등
         (RE_EN_ADDRESS, "EN_ADDR"),
         (RE_KR_ROMANIZED_ADDR, "KR_ROMAN_ADDR"),
+        (RE_DOB_SPELLED, "DOB_SPELLED"),   # "20th of September 1996" 서술형 생년월일
+        (RE_KR_PHONE_PREFIX, "KR_PHONE_PREFIX"),  # "+82 (0)" 전화 프리픽스 잔류
+        (RE_KR_POSTAL, "KR_POSTAL"),       # "10906" 우편번호 잔류
     ]
 
     # 전화번호는 별도 처리 (7자리+ 필터)
@@ -3320,6 +3378,14 @@ def backup_original(filepath: Path):
     dest = BACKUP_DIR / f"{ts}_{filepath.name}"
     shutil.copy2(str(filepath), str(dest))
     return dest
+
+
+def _docx_to_pdf(docx_path: Path) -> Path | None:
+    """DOCX → 소용량 PDF 변환 래퍼. 성공 시 PDF Path, 실패 시 None."""
+    pdf_path = docx_path.with_suffix(".pdf")
+    if _convert_docx_to_pdf(docx_path, pdf_path, timeout=90):
+        return pdf_path
+    return None
 
 
 def save_log(filepath, brj_number: int, logs: list[str]):
@@ -3463,12 +3529,19 @@ def cmd_process(args):
             out_path = output_dir / out_name
 
             if ext == ".docx":
+                # DOCX 임시 저장 후 Word COM으로 PDF 변환
                 doc.save(str(out_path))
+                pdf_result = _docx_to_pdf(out_path)
+                if pdf_result and pdf_result.exists():
+                    out_path.unlink(missing_ok=True)  # DOCX 삭제
+                    out_path = pdf_result
+                    print(f"  Output: {out_path.name} (PDF 변환됨)")
+                else:
+                    print(f"  Output: {out_path.name} (DOCX — PDF 변환 실패)")
             elif ext == ".pdf":
                 doc.save(str(out_path), garbage=4, deflate=True)
                 doc.close()
-
-            print(f"  Output: {out_path.name}")
+                print(f"  Output: {out_path.name}")
 
             # 삭제 로그 저장
             if logs:
