@@ -600,7 +600,8 @@ RE_KAKAO = re.compile(
 )
 
 RE_SNS = re.compile(
-    r"(?:instagram|facebook|twitter|whatsapp|we\s*chat|skype|telegram|signal|viber|line)"
+    # (?<!\w): "online" 내 "line", "Ursuline" 내 "line", "anticholinergic" 내 "line" 오탐 방지
+    r"(?<!\w)(?:instagram|facebook|twitter|whatsapp|we\s*chat|skype|telegram|signal|viber|line)"
     r"(?:\s+id|\s+no\.?|\s+account|\s+handle)?"
     r"\s*[:\-]?\s*[@]?(?:live:)?[A-Za-z0-9._\-\+]{2,60}",
     re.I,
@@ -862,6 +863,32 @@ _PROTECTED_UNIVERSITIES = frozenset({
     "chungnam national university", "chungbuk national university",
     "강남대학교", "경희대학교", "고려대학교", "서울대학교", "연세대학교",
     "성균관대학교", "한양대학교", "이화여자대학교", "부산대학교",
+    # ── 스위스/유럽 국제 연구대학 ──
+    "eth zurich", "eth zürich", "eth zurich university", "eth zürich university",
+    "epfl", "école polytechnique fédérale de lausanne",
+    "university of zurich", "university of zürich",
+    "university of geneva", "university of bern", "university of basel",
+    "university of amsterdam", "university of groningen",
+    "leiden university", "delft university of technology",
+    "technical university of munich", "tu munich", "tu münchen",
+    "ludwig maximilian university", "lmu munich",
+    "humboldt university", "humboldt university of berlin",
+    "free university of berlin", "freie universität berlin",
+    "university of vienna", "vienna university of technology",
+    "university of copenhagen", "university of oslo",
+    "university of stockholm", "stockholm university",
+    "karolinska institute", "chalmers university of technology",
+    "university of helsinki",
+    "paris sorbonne", "sorbonne university", "paris-sorbonne university",
+    "école normale supérieure", "sciences po",
+    "university of paris", "paris descartes university",
+    "ku leuven", "university of leuven", "ghent university",
+    "university of bologna", "università di bologna",
+    "sapienza university of rome", "sapienza università di roma",
+    "university of milan", "università degli studi di milano",
+    "universitat barcelona", "university of barcelona",
+    "autonomous university of madrid",
+    "university of lisbon", "university of porto",
 })
 
 # 미국 도시+주: "Houston, TX", "New Orleans, Louisiana"
@@ -885,7 +912,8 @@ RE_US_CITY_STATE = re.compile(
 
 # 외국 도시+국가: "Sheffield, United Kingdom", "Beijing, China"
 RE_FOREIGN_CITY = re.compile(
-    r'\b[A-Z][a-zA-Z\s\-]{2,30},\s*'
+    # [a-zA-Z\-]+(?:[ ][a-zA-Z\-]+){0,3}: 단어 사이 단일 공백만 허용 (PDF 다중공백 오탐 방지)
+    r'\b[A-Z][a-zA-Z\-]+(?:[ ][a-zA-Z\-]+){0,3},\s*'
     r'(?:United\s+Kingdom|England|Scotland|Wales|Northern\s+Ireland|'
     r'China|Japan|Germany|France|South\s+Africa|Australia|New\s+Zealand|'
     r'Canada|USA|United\s+States(?:\s+of\s+America)?|Brazil|India|'
@@ -2501,6 +2529,34 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 redact_texts.add(matched)
                 all_logs.append(f"[page{page_num}] {tag}: {matched[:60]}")
 
+        # ── 학교명 redact (비보호 학교만) ──
+        # 고등학교/중학교/초등학교는 항상 redact (개인 식별 가능)
+        # 대학교는 _PROTECTED_UNIVERSITIES 체크 후 비보호 시 redact
+        _SECONDARY_SUFFIXES = frozenset({
+            "high school", "secondary school", "grammar school",
+            "boarding school", "prep school", "junior school",
+            "elementary school", "primary school", "sixth form college",
+        })
+        for _sline in text.split("\n"):
+            _sstripped = _sline.strip()
+            if not _sstripped:
+                continue
+            for _sm in RE_SCHOOL_NAMED.finditer(_sstripped):
+                _school = _sm.group().strip()
+                _school_lower = _school.lower()
+                _is_secondary = any(_school_lower.endswith(sfx) for sfx in _SECONDARY_SUFFIXES)
+                _is_protected = _school_lower in _PROTECTED_UNIVERSITIES
+                if _is_secondary or not _is_protected:
+                    redact_texts.add(_school)
+                    all_logs.append(f"[page{page_num}] SCHOOL: {_school[:60]}")
+            # RE_UNIV_OF: "University of Sheffield" style (short lines only — 오탐 방지)
+            if len(_sstripped) <= 80:
+                for _um in RE_UNIV_OF.finditer(_sstripped):
+                    _univ = _um.group().strip()
+                    if _univ.lower() not in _PROTECTED_UNIVERSITIES:
+                        redact_texts.add(_univ)
+                        all_logs.append(f"[page{page_num}] UNIV_UNPROTECTED: {_univ[:60]}")
+
         # ── 후보자 이름: PDF는 전체 blank (다중 렌더링 레이어 완전 제거) ──
         if candidate and candidate.get("full_name"):
             name = candidate["full_name"].strip()
@@ -2842,14 +2898,22 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             s_lower = stripped.lower()
 
             # 위치: "Current Location: Seoul, South Korea" → redact → "Korea"
+            # 비한국 주소 ("location: Greater London, SW16 5DE") → 값 전체 redact
             for label in LOCATION_LABELS:
                 pat = re.match(rf"({re.escape(label)}\s*:?\s*)(.+)", s_lower)
-                if pat and _is_korea(pat.group(2)):
-                    label_end = len(pat.group(1))
-                    value_text = stripped[label_end:].strip()
-                    if value_text:
-                        replacement_redacts.append((value_text, "Korea"))
-                        all_logs.append(f"[page{page_num}] LOC→Korea: {value_text[:40]}")
+                if not pat:
+                    continue
+                label_end = len(pat.group(1))
+                value_text = stripped[label_end:].strip()
+                if not value_text:
+                    continue
+                if _is_korea(pat.group(2)):
+                    replacement_redacts.append((value_text, "Korea"))
+                    all_logs.append(f"[page{page_num}] LOC→Korea: {value_text[:40]}")
+                else:
+                    # 비한국 주소: 값 전체 삭제 (개인 거주지 정보)
+                    redact_texts.add(value_text)
+                    all_logs.append(f"[page{page_num}] LOC_NONKR_DEL: {value_text[:40]}")
 
             # 직장명: "Current Employer: YBM Academy" → redact (빈 대체)
             for label in WORKPLACE_LABELS:
