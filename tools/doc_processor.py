@@ -231,16 +231,88 @@ def _update_candidate_nationality(sheet_number: int, nationality_raw: str):
 
 
 def _is_cover_letter(filepath: Path) -> bool:
-    """파일명으로 커버레터 여부 판별"""
+    """파일명으로 커버레터 단독 파일 여부 판별.
+    결합 파일(Resume + Cover Letter)은 False (이력서 처리 우선)"""
     s = filepath.stem.lower()
-    return any(kw in s for kw in (
+    has_cl = any(kw in s for kw in (
         "cover letter", "coverletter", "cover_letter", "cl_", "cl ",
         "cl-", "커버레터", "커버", "자기소개",
     ))
+    if not has_cl:
+        return False
+    # "resume" / "cv" / "이력서" 키워드가 같이 있으면 결합 파일 → 이력서로 처리
+    has_resume = any(kw in s for kw in (
+        "resume", "_cv", "cv_", "cv-", " cv", "이력서", "履歷",
+    ))
+    return not has_resume
 
 
 # ── OCR 기반 스캔 PDF redaction (이미지 전용 PDF 지원) ──
 _OCR_READER = None  # lazy-init
+_FACE_CASCADE = None  # cv2 얼굴 detect용 (스캔 PDF의 원본 사진 영역 탐색)
+
+
+def _get_face_cascade():
+    """OpenCV Haar cascade 얼굴 인식기 — 스캔된 CV의 원본 사진 영역 탐색용"""
+    global _FACE_CASCADE
+    if _FACE_CASCADE is None:
+        try:
+            import cv2
+            xml_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            _FACE_CASCADE = cv2.CascadeClassifier(xml_path)
+            if _FACE_CASCADE.empty():
+                _FACE_CASCADE = False
+        except Exception:
+            _FACE_CASCADE = False
+    return _FACE_CASCADE if _FACE_CASCADE else None
+
+
+def _detect_and_cover_existing_photo(page, page_idx, all_logs, dpi=150):
+    """스캔 페이지에서 얼굴(원본 사진) 영역 탐색 → PDF 좌표로 흰박스 + 영역 반환
+    Returns: list of fitz.Rect (PDF 좌표) covered, or [] if none"""
+    import fitz
+    cascade = _get_face_cascade()
+    if cascade is None:
+        return []
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return []
+
+    pix = page.get_pixmap(dpi=dpi)
+    img_arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+    if pix.n == 4:
+        gray = cv2.cvtColor(img_arr, cv2.COLOR_RGBA2GRAY)
+    elif pix.n == 3:
+        gray = cv2.cvtColor(img_arr, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = img_arr.squeeze()
+
+    faces = cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5,
+        minSize=(60, 60), maxSize=(int(pix.width * 0.4), int(pix.height * 0.4))
+    )
+    if len(faces) == 0:
+        return []
+
+    scale = 72.0 / dpi
+    covered = []
+    for (x, y, w, h) in faces:
+        # 얼굴 주변 여백(원형 사진 + 어깨 부분) 까지 확장
+        pad_x = int(w * 1.0)
+        pad_y_top = int(h * 0.8)
+        pad_y_bot = int(h * 1.2)
+        x0 = max(0, x - pad_x)
+        y0 = max(0, y - pad_y_top)
+        x1 = min(pix.width,  x + w + pad_x)
+        y1 = min(pix.height, y + h + pad_y_bot)
+        rect = fitz.Rect(x0 * scale, y0 * scale, x1 * scale, y1 * scale)
+        page.draw_rect(rect, color=None, fill=(1, 1, 1), overlay=True)
+        covered.append(rect)
+        all_logs.append(f"[page{page_idx}] FACE_COVER: {x},{y} {w}x{h} → PDF rect=({rect.x0:.0f},{rect.y0:.0f})-({rect.x1:.0f},{rect.y1:.0f})")
+    return covered
+
 
 def _is_scanned_page(page) -> bool:
     """페이지가 스캔 이미지 기반인지 (텍스트 없음 + 이미지 있음) 판별"""
@@ -287,12 +359,72 @@ def _ocr_redact_scanned_page(page, page_idx, candidate, pii_patterns, all_logs, 
         if cand_name:
             cand_parts = [w for w in cand_name.split() if len(w) >= 3]
 
+    # Teaching Experience 섹션 시작 y 위치 탐색 (한국 학원명 detect용)
+    _EXP_HEADERS = {
+        "teaching experience", "work experience", "career", "experience",
+        "employment", "employment history", "professional experience",
+    }
+    # 단어 경계 매칭 (substring 오탐 방지 — "esl"이 "ESL students" 본문에 매칭되는 문제)
+    _JOB_TITLE_RE = re.compile(
+        r'\b(?:teacher|tutor|instructor|lecturer|professor|trainer|head\s+of)\b',
+        re.I,
+    )
+    _exp_y = None
+    for bbox_pts, text, conf in ocr_results:
+        if text.lower().strip().rstrip(":") in _EXP_HEADERS:
+            _exp_y = bbox_pts[0][1]
+            break
+
+    # Y 기준 정렬 (직책 다음 줄 = 학원명 탐색용)
+    _sorted_ocr = sorted(ocr_results, key=lambda r: r[0][0][1])
+    _workplace_keys = set()  # (y, text) keys to mark as workplaces
+    if _exp_y is not None:
+        _SENTENCE_WORDS = {
+            "the", "and", "with", "from", "for", "to", "is", "was",
+            "are", "were", "have", "has", "had", "of", "in", "on",
+            "at", "by", "as", "an", "led", "taught", "worked",
+            "subjects", "instructed", "educated", "implementing",
+        }
+        for i, (bbox_i, txt_i, conf_i) in enumerate(_sorted_ocr):
+            y_i = bbox_i[0][1]
+            if y_i < _exp_y:
+                continue
+            if not _JOB_TITLE_RE.search(txt_i):
+                continue
+            job_x = bbox_i[0][0]
+            # 다음 줄(같은 컬럼) 탐색
+            for j in range(i + 1, len(_sorted_ocr)):
+                bbox_j, txt_j, conf_j = _sorted_ocr[j]
+                y_j = bbox_j[0][1]
+                x_j = bbox_j[0][0]
+                if y_j - y_i > 100:
+                    break
+                if abs(x_j - job_x) > 60:
+                    continue
+                t_strip = txt_j.strip()
+                if len(t_strip) > 60:
+                    continue
+                # 연도/날짜 스킵
+                if re.match(r'^\d{4}\s*[-–]', t_strip) or re.match(r'^\d{4}$', t_strip):
+                    continue
+                # 문장형(소문자 시작, 일반 어휘 포함) 스킵
+                first_word = t_strip.split()[0].lower() if t_strip.split() else ""
+                if first_word in _SENTENCE_WORDS:
+                    continue
+                # 학원명 후보로 마킹 (y좌표 + 텍스트로 key 생성)
+                _workplace_keys.add((int(y_j), txt_j))
+                break
+
     redacted = 0
     for bbox_pts, text, conf in ocr_results:
         if conf < 0.30 or not text.strip():
             continue
         text_lower = text.lower()
         why = None
+
+        # 한국 학원/일터 (Teaching Experience 아래 직책 다음 줄)
+        if (int(bbox_pts[0][1]), text) in _workplace_keys:
+            why = f"WORKPLACE: {text}"
 
         if cand_name and cand_name.lower() in text_lower:
             why = f"NAME: {text}"
@@ -2463,6 +2595,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             all_logs.append(f"[ocr] 스캔 페이지 감지: {_scanned_pages}")
             _ocr_patterns = _build_search_patterns(candidate)
             for _pn in _scanned_pages:
+                # 1) 얼굴 탐색 → 원본 사진 영역 흰박스 (번호/새사진과 겹침 방지)
+                _detect_and_cover_existing_photo(doc[_pn], _pn, all_logs)
+                # 2) OCR 기반 텍스트 PII redaction
                 _ocr_redact_scanned_page(
                     doc[_pn], _pn, candidate, _ocr_patterns, all_logs
                 )
