@@ -3229,16 +3229,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             #   단독 주소줄(개인 주소)만 PRE-PASS가 line-level로 처리함.
             _line_has_sep = ("|" in _ls) or ("•" in _ls) or ("·" in _ls)
 
-            # 외국 도시/주 → blank redact (도시명은 실제 대문자로 시작해야 함 — re.I 오탐 방지)
-            if not _line_has_sep:
-                for m in RE_US_CITY_STATE.finditer(_ls):
-                    if m.group()[0].isupper():
-                        redact_texts.add(m.group())
-                        all_logs.append(f"[page{page_num}] US_CITY: {m.group()[:40]}")
-                for m in RE_FOREIGN_CITY.finditer(_ls):
-                    if m.group()[0].isupper():
-                        redact_texts.add(m.group())
-                        all_logs.append(f"[page{page_num}] FOREIGN_CITY: {m.group()[:40]}")
+            # 해외 도시/주는 redact 하지 않음 (사용자 요청: 해외지명 보존)
+            # 단독 개인 주소줄(짧고 separator 없는 줄)은 PRE-PASS LINE_PURGE/
+            # US_ADDR_LINE / FOREIGN_ADDR_LINE에서 줄 단위로 처리됨
             # 나이/비자 → blank redact (학교 줄에서도 삭제 — 개인정보)
             for m in RE_AGE_MENTION.finditer(_ls):
                 redact_texts.add(m.group())
