@@ -3167,18 +3167,25 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         redact_texts.add(m.group())
                         all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
 
-            # 한국 도시명 redact (korea 자체는 유지) — page_has_korea일 때만
-            # !! 학원/학교명 포함 줄은 도시명 유지
-            #    "English Academy, Seoul" → Seoul 살림 (사용자 요구)
-            #    독립 주소줄 "Gwangmyeong, South Korea" → RE_KR_CITY_COUNTRY로 처리
+            # 한국 도시명 처리 (korea 자체는 유지)
+            # 사용자 요청: "특정지역 언급시 South Korea로 변경"
+            # - 줄에 이미 "South Korea"/"Korea" 있으면: 도시 삭제만
+            # - 없으면: 도시 → "South Korea" 로 대체 (지역 정보 보존)
             if page_has_korea and has_kr and not has_kr_work:
+                _line_has_country = bool(re.search(
+                    r'\b(?:south\s+korea|korea|rok|republic\s+of\s+korea|한국)\b',
+                    stripped, re.I))
                 for city in KR_KEYWORDS:
                     if len(city) <= 2 or city.lower() in keep_keywords:
                         continue
                     city_pat = re.compile(r"\b" + re.escape(city) + r"\b", re.I)
                     for m in city_pat.finditer(stripped):
-                        redact_texts.add(m.group())
-                        all_logs.append(f"[page{page_num}] KR_CITY: {m.group()}")
+                        if _line_has_country:
+                            redact_texts.add(m.group())
+                            all_logs.append(f"[page{page_num}] KR_CITY_DEL: {m.group()}")
+                        else:
+                            replacement_redacts.append((m.group(), "South Korea"))
+                            all_logs.append(f"[page{page_num}] KR_CITY→SouthKorea: {m.group()}")
 
         # ── 학교/기관명 일반화 + 외국 도시/나이/비자 — 줄 단위 스캔 ──
         # EDUCATION 섹션 줄 + 직업 타이틀줄(" — " 포함)은 RE_SCHOOL_NAMED 미적용
