@@ -3001,12 +3001,44 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         # KR_WORKPLACE_KEYWORDS: EDUCATION 섹션 제외, 유형명(_GENERIC_TYPES_SET) 건너뜀
         for _idx, line in enumerate(_page_lines):
             stripped = line.strip()
-            if not stripped or _idx in _edu_lines:
+            if not stripped:
                 continue
             s_lower = stripped.lower()
             has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
             has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS
                               if kw not in _GENERIC_TYPES_SET)
+
+            # 학원 유형명 + 한국 지표(Branch/도시) → "{Type}, South Korea"
+            # _edu_lines 검사 전 — 2컬럼 PDF에서 워크경험 줄이 EDU 옆에 위치하는 케이스 대응
+            if len(stripped) <= 100:
+                _matched_generic = None
+                for _gt in sorted(_GENERIC_TYPES_SET, key=len, reverse=True):
+                    if _gt in s_lower:
+                        _matched_generic = _gt
+                        break
+                if _matched_generic:
+                    _has_br_marker = "branch" in s_lower
+                    _has_kr_city = any(
+                        kw.lower() in s_lower for kw in KR_KEYWORDS
+                        if len(kw) > 2 and kw.lower() not in ("korea", "south korea")
+                    )
+                    if _has_br_marker or _has_kr_city or has_kr_work:
+                        _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
+                        _new_line = f"{_gen_cap}, South Korea"
+                        _existing_idx = next(
+                            (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped),
+                            -1
+                        )
+                        if _existing_idx >= 0:
+                            job_title_replaces[_existing_idx] = (stripped, _new_line)
+                        else:
+                            job_title_replaces.append((stripped, _new_line))
+                        all_logs.append(
+                            f"[page{page_num}] KR_INST_REPLACE: {stripped[:60]} → {_new_line}"
+                        )
+
+            if _idx in _edu_lines:
+                continue
 
             # 브랜드 접두사 + 일반 유형명 → 유형명 보존 (replacement redact)
             # "Broad Language School" → "Language School"
@@ -3369,7 +3401,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             all_logs.append(f"[page{page_num}] ICON_GLYPH y={_span_y0:.0f}: {repr(_st[:8])}")
                 # 한국 학원명 라인 보충 bbox 처리 (search_for Bold/Normal 혼합 실패 보완)
                 # 전체 라인에 학원 키워드 + 한국 키워드 있을 때 → 브랜드 접두어 스팬 whiteout
-                if _line_has_kr_work and (_line_has_kr or len(_lstripped) < 60):
+                # ★ KR_INST_REPLACE 대상 라인은 스킵 — job_title_replaces가 전체 교체 처리
+                _is_inst_replace = any(_orig == _lstripped for _orig, _ in job_title_replaces)
+                if not _is_inst_replace and _line_has_kr_work and (_line_has_kr or len(_lstripped) < 60):
                     for _m in _RE_KR_SCHOOL_PREFIX.finditer(_lstripped):
                         # prefix 부분(match 에서 capture group 1 앞부분) 을 span 단위로 삭제
                         _prefix_txt = _lstripped[:_m.start(1)].strip()  # "JLS " 부분
@@ -3445,21 +3479,34 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         # 폰트: 내장 PDF 폰트 참조 우선 (em-dash 지원)
                         _is_bold = bool(_jfflags & 16)
                         _jfontref = (_jt_bold_ref if _is_bold else _jt_reg_ref)
-                        _ins_kwargs = dict(fontsize=_jfsize, color=_jrgb)
-                        if _jfontref:
-                            _ins_kwargs["fontname"] = _jfontref  # PDF 내장 폰트
-                        else:
-                            _ins_kwargs["fontname"] = "tibo" if _is_bold else "tiro"
                         # 1. 전체 줄 whiteout
                         page.add_redact_annot(_jrect, fill=(1, 1, 1))
                         page.apply_redactions()
                         # 2. 클린 텍스트 재삽입 (baseline = bbox 하단)
                         _jx0, _jy0, _jx1, _jy1 = _jrect
-                        page.insert_text(
-                            _fitz.Point(_jx0, _jy1),
-                            _clean_jt,
-                            **_ins_kwargs,
-                        )
+                        _ins_ok = False
+                        # 시도 1: 내장 폰트
+                        if _jfontref:
+                            try:
+                                page.insert_text(
+                                    _fitz.Point(_jx0, _jy1), _clean_jt,
+                                    fontsize=_jfsize, color=_jrgb,
+                                    fontname=_jfontref,
+                                )
+                                _ins_ok = True
+                            except Exception:
+                                pass
+                        # 시도 2: 표준 폰트 폴백
+                        if not _ins_ok:
+                            try:
+                                page.insert_text(
+                                    _fitz.Point(_jx0, _jy1), _clean_jt,
+                                    fontsize=_jfsize, color=_jrgb,
+                                    fontname=("tibo" if _is_bold else "tiro"),
+                                )
+                                _ins_ok = True
+                            except Exception as _ins_err:
+                                all_logs.append(f"[page{page_num}] JOB_INSERT_FAIL: {_ins_err}")
                         # 3. 밑줄 (원본이 bold+underline인 경우)
                         if _jfflags & 4:  # bit 2 = underline
                             _ul_y = _jy1 + 0.5
@@ -3605,13 +3652,34 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _photo_rect_target = fitz.Rect(435, 20, 543, 138)
                 _is_scanned_layout = True
             else:
-                # 텍스트 PDF — 기존 zone 기반 로직
-                _zone_top = 48
-                _zone_bot = max(_first_sec_y, _zone_top + 80)
+                # 텍스트 PDF — 최상단 텍스트 감지하여 충돌 회피
+                _topmost_y = None
+                for _blk_t in _pdict_nh.get("blocks", []):
+                    if _blk_t.get("type") != 0:
+                        continue
+                    for _ln_t in _blk_t.get("lines", []):
+                        _txt = "".join(s.get("text","") for s in _ln_t.get("spans",[])).strip()
+                        if not _txt:
+                            continue
+                        _ly = _ln_t["bbox"][1]
+                        if _ly > 5 and (_topmost_y is None or _ly < _topmost_y):
+                            _topmost_y = _ly
+                if _topmost_y is None:
+                    _topmost_y = max(_first_sec_y, 100)
+
+                # 최상단 텍스트 위에 충분한 공간이 있으면 그 위에 배치
+                if _topmost_y >= 55:
+                    _zone_top = 12
+                    _zone_bot = int(_topmost_y) - 4
+                else:
+                    # 위 공간 부족: 우측 빈 영역(top-right)에 배치
+                    # ESL Teacher 같이 좌측에 제목 있는 케이스
+                    _zone_top = max(8, int(_topmost_y) - 4)
+                    _zone_bot = _zone_top + 40
                 _zone_h   = _zone_bot - _zone_top
-                _num_fs   = min(54, max(36, int(_zone_h * 0.55)))
+                _num_fs   = min(48, max(20, int(_zone_h * 0.75)))
                 _num_left_x = 15
-                _num_baseline_y = _zone_top + int(_zone_h * 0.75)
+                _num_baseline_y = _zone_top + int(_zone_h * 0.85)
                 _is_scanned_layout = False
 
             # 3) 번호 삽입 (왼쪽, 크게)
