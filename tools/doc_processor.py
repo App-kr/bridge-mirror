@@ -359,6 +359,46 @@ def _ocr_redact_scanned_page(page, page_idx, candidate, pii_patterns, all_logs, 
         if cand_name:
             cand_parts = [w for w in cand_name.split() if len(w) >= 3]
 
+    # Contact 섹션 박스 전체 흰박스 (아이콘/벡터 그래픽 제거용)
+    # 전략: "Contact" 라벨의 y → 다음 섹션 헤더 y 사이의 좌측 컬럼을 통째로 덮기
+    _LEFT_SECTION_HDRS = {
+        "certifications", "skill", "skills", "language", "languange",
+        "languages", "education", "experience",
+    }
+    _contact_y = None
+    _contact_x = None
+    for bbox_pts, text, conf in ocr_results:
+        if text.strip().lower().rstrip(":") == "contact":
+            _contact_y = bbox_pts[0][1]
+            _contact_x = bbox_pts[0][0]
+            break
+    if _contact_y is not None:
+        # 같은 컬럼(±100px) 에서 _contact_y 아래의 다음 섹션 헤더
+        _next_sec_y = None
+        for bbox_pts, text, conf in ocr_results:
+            t = text.strip().lower().rstrip(":")
+            if t not in _LEFT_SECTION_HDRS:
+                continue
+            by = bbox_pts[0][1]
+            bx = bbox_pts[0][0]
+            if by <= _contact_y or abs(bx - _contact_x) > 150:
+                continue
+            if _next_sec_y is None or by < _next_sec_y:
+                _next_sec_y = by
+        if _next_sec_y is not None:
+            import fitz as _fitz
+            # 좌측 컬럼 폭: contact_x 기준 좌측 마진~컬럼 중앙
+            col_left = 0
+            col_right = int((_contact_x + 280 / scale) * scale)  # PDF ~280pt
+            col_right = min(col_right, int(595 * 0.40))  # 페이지 좌측 40% 이내
+            top = int((_contact_y - 10) * scale)
+            bot = int((_next_sec_y - 10) * scale)
+            box = _fitz.Rect(col_left, top, col_right, bot)
+            page.draw_rect(box, color=None, fill=(1, 1, 1), overlay=True)
+            all_logs.append(
+                f"[page{page_idx}] CONTACT_BOX_WIPE: y={top}-{bot} x={col_left}-{col_right}"
+            )
+
     # Teaching Experience 섹션 시작 y 위치 탐색 (한국 학원명 detect용)
     _EXP_HEADERS = {
         "teaching experience", "work experience", "career", "experience",
