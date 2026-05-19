@@ -578,6 +578,9 @@ def _build_output_filename(number: int, candidate: dict = None, ext: str = ".doc
                 birth_yr = yr_match.group(2)
             elif re.match(r"^\d{2}$", dob):
                 birth_yr = dob
+            elif re.match(r"^\d{1}$", dob):
+                # 한자리 dob (e.g. "3" → "03") zero-pad
+                birth_yr = dob.zfill(2)
 
     # 규격: 항상 3요소 모두 포함 (누락 시 폴백 문자열)
     return f"{number}{nat_kr}_{gender_kr}({birth_yr}born){ext}"
