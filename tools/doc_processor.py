@@ -3769,19 +3769,22 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if _topmost_y is None:
                     _topmost_y = max(_first_sec_y, 100)
 
-                # 최상단 텍스트 위에 충분한 공간이 있으면 그 위에 배치
+                # 정답 기준: 6321 at y=2-69 x=35-142 (fs~60) — 페이지 최상단 큰 글씨
+                # 텍스트 PDF에서 이름/연락처 redact 후 빈 공간 활용
                 if _topmost_y >= 55:
-                    _zone_top = 12
-                    _zone_bot = int(_topmost_y) - 4
+                    # 충분한 위쪽 공간 — 큰 번호 배치
+                    _zone_top = 2
+                    _zone_bot = max(int(_topmost_y), 60)
+                    _num_fs = 60  # 정답 기준 고정
+                    _num_left_x = 35
                 else:
-                    # 위 공간 부족: 우측 빈 영역(top-right)에 배치
-                    # ESL Teacher 같이 좌측에 제목 있는 케이스
+                    # 위 공간 부족 — 작게
                     _zone_top = max(8, int(_topmost_y) - 4)
                     _zone_bot = _zone_top + 40
-                _zone_h   = _zone_bot - _zone_top
-                _num_fs   = min(48, max(20, int(_zone_h * 0.75)))
-                _num_left_x = 15
-                _num_baseline_y = _zone_top + int(_zone_h * 0.85)
+                    _num_fs = min(36, max(20, int((_zone_bot - _zone_top) * 0.75)))
+                    _num_left_x = 15
+                _zone_h = _zone_bot - _zone_top
+                _num_baseline_y = _zone_top + int(_num_fs * 0.95)
                 _is_scanned_layout = False
 
             # 3) 번호 삽입 (왼쪽, 크게)
@@ -3800,15 +3803,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if _is_scanned_layout:
                     photo_rect = _photo_rect_target
                 else:
-                    # 텍스트 PDF: 최소 사진 크기 보장 (W~108, H~118 — 정답 기준)
-                    # 단 페이지 상단 최초 텍스트와 겹치지 않게 좌측 한계 제한
-                    _pm = 8
-                    _pw2 = 108
-                    _ph2 = 118
-                    _photo_top = max(15, _zone_top - 5)
+                    # 텍스트 PDF: 정답 기준 (464,58)-(552,161) — W=88 H=103, 우상단
+                    _pw2 = 88
+                    _ph2 = 103
                     photo_rect = fitz.Rect(
-                        pw - _pw2 - _pm, _photo_top,
-                        pw - _pm,        _photo_top + _ph2,
+                        pw - _pw2 - 60, 58,
+                        pw - 60,        58 + _ph2,
                     )
                 try:
                     hdr_page.insert_image(photo_rect, filename=str(photo))
