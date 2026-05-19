@@ -2810,6 +2810,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         redact_texts.update(_header_title_texts)
         replacement_redacts = []  # (원문, 대체텍스트) 쌍
         job_title_replaces: list = []  # 직업 타이틀줄 전체교체: (원문, 클린텍스트) — 갭 없이 제거
+        _processed_jt_bboxes: list = []  # JOB_LINE_REINSERT_PRE로 처리된 bbox 추적
 
         for line in text.split("\n"):
             stripped = line.strip()
@@ -3009,8 +3010,19 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                               if kw not in _GENERIC_TYPES_SET)
 
             # 학원 유형명 + 한국 지표(Branch/도시) → "{Type}, South Korea"
+            # 단, "X — JobTitle" 같이 ↔직책 구분자 있는 줄은 기존 로직(아래)에
+            # 위임 — 직책 부분("— English Teacher") 보존 필요
             # _edu_lines 검사 전 — 2컬럼 PDF에서 워크경험 줄이 EDU 옆에 위치하는 케이스 대응
-            if len(stripped) <= 100:
+            _has_jt_sep_pre = (" — " in stripped) or (" – " in stripped)
+            # " - " 는 "Branch -" 같은 suffix marker일 수도 있으므로
+            # 직책 키워드까지 함께 있을 때만 job title sep 로 간주
+            if not _has_jt_sep_pre and (" - " in stripped):
+                _after_dash = stripped.split(" - ", 1)[1].lower() if " - " in stripped else ""
+                if any(jt in _after_dash for jt in ("teacher", "tutor", "instructor",
+                                                    "lecturer", "professor", "trainer",
+                                                    "manager", "coach")):
+                    _has_jt_sep_pre = True
+            if not _has_jt_sep_pre and len(stripped) <= 100:
                 _matched_generic = None
                 for _gt in sorted(_GENERIC_TYPES_SET, key=len, reverse=True):
                     if _gt in s_lower:
@@ -3139,9 +3151,17 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _cleaned_jt2 = re.sub(
                     r'\b[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+(?:\s+(?:Junior|Senior|Academy|Institute))?\b',
                     '', _cleaned_jt2).strip()
+                # 6순위: 한국 행정구역 일반 패턴 (X-gu/dong/si/do/gun/myeon/eup/ri)
+                # KR_KEYWORDS에 없는 케이스도 처리 — "Gangseo-gu", "Mapo-gu" 등
+                _cleaned_jt2 = re.sub(
+                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|si|do|gun|myeon|eup|ri)\b\s*,?\s*',
+                    '', _cleaned_jt2, flags=re.I).strip()
                 # 앞뒤 고립 구분자 정리
                 _cleaned_jt2 = re.sub(r'^[\s\-—]+', '', _cleaned_jt2).strip()
                 _cleaned_jt2 = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt2).strip()
+                # 중복 콤마 정리: "Institute, , South Korea" → "Institute, South Korea"
+                _cleaned_jt2 = re.sub(r',\s*,', ',', _cleaned_jt2)
+                _cleaned_jt2 = re.sub(r',\s*(?=[—–-])', ' ', _cleaned_jt2)  # ", —" → " —"
                 if _cleaned_jt2 != stripped:
                     _existing_idx = next(
                         (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped), -1)
@@ -3301,6 +3321,11 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _has_separator = ("|" in _pltxt) or ("•" in _pltxt) or ("·" in _pltxt)
                 _is_short = len(_pltxt) <= 35
 
+                # job_title_replaces 대상 라인은 PRE-PASS LINE_PURGE 스킵
+                # (전체 줄 reinsert가 적절한 클린 텍스트로 처리)
+                if any(_orig == _pltxt for _orig, _ in job_title_replaces):
+                    continue
+
                 # 줄 단위 PII 감지
                 _hit = False
                 _reason = ""
@@ -3337,6 +3362,74 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             nr.x0 -= 0.4; nr.x1 += 0.4
             nr.y0 -= 0.2; nr.y1 += 0.2
             return nr
+
+        # ── JOB_LINE_REINSERT를 main redact 전에 처리 ─────────────────────
+        # 이유: 개별 redact(KW_FALLBACK 등)가 원본 줄을 부분 변경하면
+        #       이후 _orig_jt 매칭 실패. 줄 단위 처리를 우선 적용.
+        if not dry and job_title_replaces:
+            import fitz as _fitz_pre
+            _pg_fonts_pre = page.get_fonts()
+            _jt_bold_ref_pre = None
+            _jt_reg_ref_pre = None
+            for _pgf in _pg_fonts_pre:
+                _pfbase = _pgf[3].lower()
+                _pfref = _pgf[4]
+                if "bold" in _pfbase:
+                    _jt_bold_ref_pre = _pfref
+                elif "italic" not in _pfbase and "oblique" not in _pfbase:
+                    _jt_reg_ref_pre = _pfref
+            _jt_dict_pre = page.get_text("dict", flags=0)
+            _done_origs = set()
+            _processed_jt_bboxes: list = []  # 처리완료된 bbox 추적
+            for _orig_jt, _clean_jt in job_title_replaces:
+                if _orig_jt in _done_origs:
+                    continue
+                for _jblk in _jt_dict_pre.get("blocks", []):
+                    if _jblk.get("type") != 0:
+                        continue
+                    _matched = False
+                    for _jln in _jblk.get("lines", []):
+                        _jlt = "".join(s.get("text", "") for s in _jln.get("spans", [])).strip()
+                        if _orig_jt not in _jlt:
+                            continue
+                        _jrect = _fitz_pre.Rect(_jln["bbox"])
+                        _jspans = _jln.get("spans", [])
+                        _jfst = _jspans[0] if _jspans else {}
+                        _jfsize = _jfst.get("size", 8)
+                        _jfflags = _jfst.get("flags", 0)
+                        _jcolor_i = _jfst.get("color", 0)
+                        _jrgb = (
+                            ((_jcolor_i >> 16) & 0xFF) / 255.0,
+                            ((_jcolor_i >> 8) & 0xFF) / 255.0,
+                            (_jcolor_i & 0xFF) / 255.0,
+                        )
+                        _is_bold_pre = bool(_jfflags & 16)
+                        _jx0, _jy0, _jx1, _jy1 = _jrect
+                        # ASCII normalize (em-dash -> "-", NBSP -> " ")
+                        _safe_clean = _clean_jt.replace("—", "-").replace("–", "-")
+                        _safe_clean = _safe_clean.replace("​", "").replace(" ", " ")
+                        _safe_clean = re.sub(r"\s+", " ", _safe_clean).strip()
+                        # add_redact_annot text param: whiteout + replacement in one step
+                        _exp_rect = _fitz_pre.Rect(_jx0, _jy0, max(_jx1, _jx0 + 350), _jy1)
+                        _processed_jt_bboxes.append(_jrect)
+                        try:
+                            page.add_redact_annot(
+                                _exp_rect, text=_safe_clean, fill=(1, 1, 1),
+                                text_color=_jrgb, fontsize=max(7, _jfsize - 1),
+                                align=0,
+                            )
+                            page.apply_redactions()
+                            all_logs.append(f"[page{page_num}] JOB_LINE_REINSERT_PRE: {_safe_clean[:60]}")
+                        except Exception as _e:
+                            all_logs.append(f"[page{page_num}] JOB_INSERT_FAIL_PRE: {_e}")
+
+                        _done_origs.add(_orig_jt)
+                        _matched = True
+                        break
+                    if _matched:
+                        break
+            # 처리 완료된 항목 제거 (후속 JOB_LINE_REINSERT 루프에서 중복 처리 방지)
+            job_title_replaces = [(_o, _c) for _o, _c in job_title_replaces if _o not in _done_origs]
 
         for target in redact_texts:
             instances = page.search_for(target)
@@ -3437,7 +3530,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     # "English Academy, Seoul" → Seoul 살림 (사용자 요구)
                     # (도시 삭제는 독립 주소줄에만 적용)
                 # 주소줄 bbox: "Gwangmyeong, South Korea" → 라인 전체 삭제
-                if RE_KR_CITY_COUNTRY.search(_lstripped):
+                # 단, JOB_LINE_REINSERT_PRE로 처리된 bbox는 스킵 (재redact 방지)
+                _ln_bbox_y = _lnobj["bbox"][1]
+                try:
+                    _is_jt_processed = any(abs(_pjr[1] - _ln_bbox_y) < 2 for _pjr in _processed_jt_bboxes)
+                except NameError:
+                    _is_jt_processed = False
+                if not _is_jt_processed and RE_KR_CITY_COUNTRY.search(_lstripped):
                     page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
                     _has_extra = True
                     all_logs.append(f"[page{page_num}] KR_ADDR_BBOX: {_lstripped[:50]}")
@@ -3625,6 +3724,9 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             else:
                 all_logs.append("[photo] 없음 (스킵)")
 
+        elif _is_cover_letter(filepath):
+            # 커버레터: 번호/사진 일체 삽입 안 함 — PII redact만 적용됨
+            all_logs.append(f"[page{_header_page_num}] COVER_LETTER_SKIP_HEADER")
         else:
             # ── 헤더 없는 일반 CV ─────────────────────────────────────────
             # 이름이 redact된 자리(이름 영역 ~ 첫 섹션 헤더) 에 번호+사진 배치
@@ -3699,18 +3801,21 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             )
             all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}  x={_num_left_x} y={_num_baseline_y} fs={_num_fs}")
 
-            # 4) 사진 삽입 (오른쪽, 같은 높이) — 커버레터 제외
-            photo = None if _is_cover_letter(filepath) else (photo_path or _find_photo_for_candidate(filepath))
+            # 4) 사진 삽입 (오른쪽, 적정 크기) — 커버레터 제외
+            photo = photo_path or _find_photo_for_candidate(filepath)
             if photo and photo.exists():
                 if _is_scanned_layout:
                     photo_rect = _photo_rect_target
                 else:
+                    # 텍스트 PDF: 최소 사진 크기 보장 (W~108, H~118 — 정답 기준)
+                    # 단 페이지 상단 최초 텍스트와 겹치지 않게 좌측 한계 제한
                     _pm = 8
-                    _pw2 = min(int(_zone_h * 1.05), int(pw * 0.22))
-                    _ph2 = _zone_h - _pm
+                    _pw2 = 108
+                    _ph2 = 118
+                    _photo_top = max(15, _zone_top - 5)
                     photo_rect = fitz.Rect(
-                        pw - _pw2 - _pm, _zone_top + _pm // 2,
-                        pw - _pm,        _zone_top + _pm // 2 + _ph2,
+                        pw - _pw2 - _pm, _photo_top,
+                        pw - _pm,        _photo_top + _ph2,
                     )
                 try:
                     hdr_page.insert_image(photo_rect, filename=str(photo))
