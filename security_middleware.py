@@ -567,7 +567,7 @@ audit = AuditLogger()
 # ═══════════════════════════════════════════════════════════════
 # HMAC 요청 서명 검증
 # ═══════════════════════════════════════════════════════════════
-SIGNED_PATHS = {"/api/admin", "/api/security/report"}
+SIGNED_PATHS = {"/api/admin"}  # /api/security/report는 공개 폼 실패 알림 받기 위해 면제 (rate limit 20/분으로 보호)
 SIGNATURE_MAX_AGE = 300  # 5분
 
 def verify_hmac(request: Request, body: bytes) -> bool:
