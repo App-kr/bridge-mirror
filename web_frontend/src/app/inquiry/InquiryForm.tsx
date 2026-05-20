@@ -7,7 +7,7 @@
  * Payment: Bank Transfer + PayPal only (no credit card — immutable)
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
 import { API_URL } from '@/lib/api'
@@ -252,6 +252,15 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
   const [form,      setForm]      = useState(INIT)
   const [inquiryId, setInquiryId] = useState<string | null>(null)
 
+  // 캡차 토큰 sessionStorage 복원 (새로고침 후에도 form 단계 유지)
+  useEffect(() => {
+    const savedToken = sessionStorage.getItem('bridge_inquiry_captcha_token')
+    if (savedToken) {
+      setForm((p) => ({ ...p, captcha_token: savedToken }))
+      setPhase('form')
+    }
+  }, [])
+
   const set = (field: keyof typeof INIT) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((p) => ({ ...p, [field]: e.target.value }))
@@ -329,32 +338,43 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
         const m = netErr instanceof Error ? netErr.message : 'Network error'
         throw new Error(`Network error: ${m}. Please check your connection and try again.`)
       }
-      let json: { success?: boolean; detail?: unknown; message?: string; error?: string; data?: { id?: number } } = {}
+      let json: { success?: boolean; detail?: unknown; message?: string; error?: unknown; data?: { id?: number } } = {}
       try { json = await res.json() } catch { /* non-JSON */ }
       if (!res.ok || !json.success) {
-        const detail = json.detail
-        let detailMsg = ''
-        if (Array.isArray(detail)) {
-          detailMsg = detail.map((d: unknown) => {
-            if (typeof d === 'object' && d !== null) {
-              const o = d as Record<string, unknown>
-              const loc = Array.isArray(o.loc) ? o.loc.slice(1).join('.') : ''
-              return loc ? `${loc}: ${o.msg}` : String(o.msg ?? JSON.stringify(d))
-            }
-            return String(d)
-          }).join(' / ')
-        } else if (typeof detail === 'string') {
-          detailMsg = detail
-        } else if (detail && typeof detail === 'object') {
-          const o = detail as Record<string, unknown>
-          detailMsg = String(o.context ?? o.message ?? JSON.stringify(detail))
+        const pickMessage = (v: unknown): string => {
+          if (!v) return ''
+          if (typeof v === 'string') return v
+          if (Array.isArray(v)) {
+            return v.map((d) => {
+              if (typeof d === 'object' && d !== null) {
+                const o = d as Record<string, unknown>
+                const loc = Array.isArray(o.loc) ? o.loc.slice(1).join('.') : ''
+                return loc ? `${loc}: ${o.msg}` : (o.msg ? String(o.msg) : JSON.stringify(d))
+              }
+              return String(d)
+            }).join(' / ')
+          }
+          if (typeof v === 'object') {
+            const o = v as Record<string, unknown>
+            return String(o.message ?? o.detail ?? o.context ?? o.error ?? JSON.stringify(v))
+          }
+          return String(v)
         }
-        throw new Error(detailMsg || json.message || json.error || `Server error (${res.status} ${res.statusText || ''})`)
+        throw new Error(pickMessage(json.detail) || pickMessage(json.error) || pickMessage(json.message) || `서버 오류 (${res.status} ${res.statusText || ''})`)
       }
       if (json.data?.id) setInquiryId(String(json.data.id))
       setStatus('success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Submission failed.'
+      // CAPTCHA 만료 시 자동으로 captcha 단계로 — 사용자 다시 풀기만 하면 됨
+      if (msg.toLowerCase().includes('captcha')) {
+        sessionStorage.removeItem('bridge_inquiry_captcha_token')
+        setForm((p) => ({ ...p, captcha_token: '' }))
+        setErrorMsg('Security verification expired. Please complete the puzzle again. (보안 확인이 만료되었습니다. 퍼즐을 다시 풀어주세요.)')
+        setPhase('captcha')
+        setStatus('error')
+        return
+      }
       setErrorMsg(msg)
       setStatus('error')
       // 운영자 알림 (fire-and-forget)
@@ -488,6 +508,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
             <p className="text-xs text-gray-400 mb-4">채용 문의 제출을 계속하려면 아래 퍼즐을 완료해 주세요.</p>
             <PuzzleCaptcha
               onVerified={(token) => {
+                sessionStorage.setItem('bridge_inquiry_captcha_token', token)
                 setForm((p) => ({ ...p, captcha_token: token }))
                 setPhase('form')
               }}

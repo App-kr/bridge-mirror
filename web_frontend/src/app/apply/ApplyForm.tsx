@@ -420,12 +420,17 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
   const [phase, setPhase] = useState<'notice' | 'captcha' | 'form'>('notice')
 
   useEffect(() => {
-    // 같은 세션에서 이미 캡차 통과했으면 바로 form으로
-    if (sessionStorage.getItem('bridge_captcha_ok')) setPhase('form')
+    // 같은 세션에서 이미 캡차 통과했으면 토큰 복원 + form 단계로
+    // (이전 버그: 'ok' 플래그만 저장 → 토큰 비어있는데 form 점프 → submit 실패)
+    const savedToken = sessionStorage.getItem('bridge_captcha_token')
+    if (savedToken) {
+      setForm((p) => ({ ...p, captcha_token: savedToken }))
+      setPhase('form')
+    }
   }, [])
 
   function handleCaptchaVerified(token: string) {
-    sessionStorage.setItem('bridge_captcha_ok', '1')
+    sessionStorage.setItem('bridge_captcha_token', token)
     setForm((p) => ({ ...p, captcha_token: token }))
     setPhase('form')
   }
@@ -517,29 +522,32 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
         throw new Error(`Network error: ${msg}. Please check your connection and try again.`)
       }
 
-      let json: { success?: boolean; detail?: unknown; message?: string; error?: string; data?: { id?: number; apply_token?: string } } = {}
+      let json: { success?: boolean; detail?: unknown; message?: string; error?: unknown; data?: { id?: number; apply_token?: string } } = {}
       try { json = await res.json() } catch { /* non-JSON response */ }
 
       if (!res.ok || !json.success) {
-        // Pydantic validation 에러는 array 구조 — 각 msg 추출
-        const detail = json.detail
-        let detailMsg = ''
-        if (Array.isArray(detail)) {
-          detailMsg = detail.map((d: unknown) => {
-            if (typeof d === 'object' && d !== null) {
-              const obj = d as Record<string, unknown>
-              const loc = Array.isArray(obj.loc) ? obj.loc.slice(1).join('.') : ''
-              return loc ? `${loc}: ${obj.msg}` : String(obj.msg ?? JSON.stringify(d))
-            }
-            return String(d)
-          }).join(' / ')
-        } else if (typeof detail === 'string') {
-          detailMsg = detail
-        } else if (detail && typeof detail === 'object') {
-          const obj = detail as Record<string, unknown>
-          detailMsg = String(obj.context ?? obj.message ?? JSON.stringify(detail))
+        // 모든 에러 객체/문자열/배열 처리 — 절대 [object Object] 노출 안 함
+        const pickMessage = (v: unknown): string => {
+          if (!v) return ''
+          if (typeof v === 'string') return v
+          if (Array.isArray(v)) {
+            return v.map((d) => {
+              if (typeof d === 'object' && d !== null) {
+                const o = d as Record<string, unknown>
+                const loc = Array.isArray(o.loc) ? o.loc.slice(1).join('.') : ''
+                return loc ? `${loc}: ${o.msg}` : (o.msg ? String(o.msg) : JSON.stringify(d))
+              }
+              return String(d)
+            }).join(' / ')
+          }
+          if (typeof v === 'object') {
+            const o = v as Record<string, unknown>
+            // BRIDGE bridge_error 구조: {code, message, status} 또는 {detail, context}
+            return String(o.message ?? o.detail ?? o.context ?? o.error ?? JSON.stringify(v))
+          }
+          return String(v)
         }
-        const msg = detailMsg || json.message || json.error || `Server error (${res.status} ${res.statusText || ''})`
+        const msg = pickMessage(json.detail) || pickMessage(json.error) || pickMessage(json.message) || `서버 오류 (${res.status} ${res.statusText || ''})`
         throw new Error(msg)
       }
 
@@ -555,9 +563,18 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
       setStatus('success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Submission failed.'
+      // CAPTCHA 실패 시 자동으로 captcha 단계로 돌려보냄 — 만료/누락 자동 복구
+      if (msg.toLowerCase().includes('captcha')) {
+        sessionStorage.removeItem('bridge_captcha_token')
+        setForm((p) => ({ ...p, captcha_token: '' }))
+        setErrorMsg('Security verification expired. Please complete the puzzle again. (보안 확인이 만료되었습니다. 퍼즐을 다시 풀어주세요.)')
+        setPhase('captcha')
+        setStatus('error')
+        return
+      }
       setErrorMsg(msg)
       setStatus('error')
-      // 운영자 텔레그램 알림 (백엔드 endpoint, fire-and-forget)
+      // 운영자 텔레그램/이메일 알림 (백엔드 endpoint, fire-and-forget)
       try {
         fetch(`${API}/api/security/report`, {
           method: 'POST',
