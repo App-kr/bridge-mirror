@@ -28,6 +28,7 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
   '/community/korea': [
     { href: '/community/korea', label: 'Living in Korea', labelKr: '한국 생활' },
+    { href: '/community/korea?tag=cities', label: 'City Guide', labelKr: '도시 정보' },
     { href: '/community/school-types', label: 'School Types & Pay', labelKr: '학교 유형 & 급여' },
   ],
   '/community/visa': [

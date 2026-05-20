@@ -1735,6 +1735,16 @@ const KOREA_SECTIONS = [
 ] as const
 
 function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
+  // URL 쿼리 ?tag=cities → 도시정보만 / 그 외 → 한국 생활(living)만 노출
+  // (관리자 편집 모드에서는 전체 노출하여 카테고리 이동/순서 변경 가능)
+  const activeTag = (typeof window !== 'undefined')
+    ? new URLSearchParams(window.location.search).get('tag') || ''
+    : ''
+  const wantCity = activeTag === 'cities' || activeTag === 'city' || activeTag === 'city_guides'
+  const targetCat = wantCity ? 'city_guides' : 'living'
+  const filteredPosts = editMode
+    ? posts
+    : posts.filter(p => (p.category || 'living') === targetCat)
   const photoCard = (p: Post, i: number) => {
     const imgKey = getPostImageKey(p.title)
     // 우선순위: DB image_paths[0] → 하드코딩 POST_IMAGES → 그라데이션 폴백
@@ -1786,12 +1796,7 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
     )
   }
 
-  // 카테고리별 게시물 그룹화
-  const grouped = KOREA_SECTIONS.map(sec => ({
-    ...sec,
-    items: posts.filter(p => p.category === sec.key),
-  }))
-  const uncategorized = posts.filter(p => !p.category || !KOREA_SECTIONS.find(s => s.key === p.category))
+  // (편집 모드는 전체 sortable, 일반 모드는 단일 카테고리 평면 리스트 — filteredPosts 사용)
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 relative">
@@ -1827,41 +1832,19 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
           </div>
         </SortableContainer>
       ) : (
-        /* View mode: grouped by category with section headers */
-        <div className="space-y-12">
-          {grouped.map(sec => sec.items.length > 0 && (
-            <section key={sec.key}>
-              <div className="flex items-center gap-3 mb-6">
-                <span className="text-2xl">{sec.emoji}</span>
-                <div>
-                  <h2 className="text-xl font-bold text-[#1d1d1f]">{sec.label}</h2>
-                  <span className="text-xs text-[#86868b]">{sec.labelKr}</span>
-                </div>
-                <div className="flex-1 h-px bg-gray-200 ml-2" />
-              </div>
-              <div className="space-y-5">
-                {sec.items.map((p, i) => {
-                  const variant = i % 2 === 0 ? slideInLeft : slideInRight
-                  return (
-                    <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-                      {photoCard(p, i)}
-                    </motion.div>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-          {uncategorized.length > 0 && (
-            <div className="space-y-5">
-              {uncategorized.map((p, i) => {
-                const variant = i % 2 === 0 ? slideInLeft : slideInRight
-                return (
-                  <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
-                    {photoCard(p, i)}
-                  </motion.div>
-                )
-              })}
-            </div>
+        /* View mode: 단일 카테고리 평면 리스트 (URL ?tag=cities → 도시정보, 그 외 → 한국 생활) */
+        <div className="space-y-5">
+          {filteredPosts.length === 0 ? (
+            <p className="text-center text-[#86868b] py-16">No posts in this section yet.</p>
+          ) : (
+            filteredPosts.map((p, i) => {
+              const variant = i % 2 === 0 ? slideInLeft : slideInRight
+              return (
+                <motion.div key={p.id} variants={variant} initial="hidden" whileInView="visible" viewport={defaultViewport}>
+                  {photoCard(p, i)}
+                </motion.div>
+              )
+            })
           )}
         </div>
       )}
