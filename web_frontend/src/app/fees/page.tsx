@@ -52,7 +52,7 @@ export default function FeesPage() {
 
         <Article num="제2조" title="소개 요금표">
           {/* 정상 요금 */}
-          <p className="text-[12px] font-semibold text-gray-500 mb-1">정상 요금</p>
+          <p className="text-[16px] font-semibold text-gray-700 mb-1">정상 요금</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] border-collapse border border-gray-200 rounded-lg overflow-hidden">
               <thead>
@@ -64,11 +64,11 @@ export default function FeesPage() {
               <tbody className="divide-y divide-gray-100">
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">일반 학원 · 영어유치원</td>
-                  <td className="border border-gray-200 px-3 py-2 font-semibold">150만원</td>
+                  <td className="border border-gray-200 px-3 py-2 font-semibold">약 250~450만원</td>
                 </tr>
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">영어교육기관 · 학교</td>
-                  <td className="border border-gray-200 px-3 py-2 font-semibold">200만원</td>
+                  <td className="border border-gray-200 px-3 py-2 font-semibold">약 250~450만원</td>
                 </tr>
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">국제학교 · 공공기관</td>
@@ -83,7 +83,7 @@ export default function FeesPage() {
           </div>
 
           {/* 할인 반영 요금 */}
-          <p className="text-[12px] font-semibold text-gray-500 mt-5 mb-1">할인 반영 요금</p>
+          <p className="text-[16px] font-semibold text-gray-700 mt-5 mb-1">할인 반영 요금</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] border-collapse border border-gray-200 rounded-lg overflow-hidden">
               <thead>
@@ -113,16 +113,16 @@ export default function FeesPage() {
             </table>
           </div>
 
-          <p className="mt-4 text-[13px] text-gray-600">
+          <p className="mt-4 text-[15px] text-gray-700">
             본 요금은 비자 안내, 에이전시 관리자 면접 및 면접 조율, 계약 상담을 포함한 서비스 요금입니다.
           </p>
-          <p className="mt-2 text-[13px] text-gray-500">
+          <p className="mt-2 text-[15px] text-gray-700">
             *원어민 채용 이력이 전무하며, 사업자 등록이 되지 않은 기관은 서비스 진행료가 선불로 청구됩니다.
           </p>
-          <p className="mt-2 text-[13px] text-gray-600">
+          <p className="mt-2 text-[15px] text-gray-700">
             할인 요금은 지급 기한 등을 준수하는 경우에만 제공 가능하며, 상세 내용은 계약 체결 시 별도 계약서로 안내됩니다.
           </p>
-          <p className="mt-2 text-[13px] text-gray-500">
+          <p className="mt-2 text-[15px] text-gray-700">
             근로개시일 이전에 기관의 사정으로 계약이 해지된 경우, 실제 수행된 업무에 해당하는 수수료가 공제된 잔액이 환불됩니다. 세부 조건은 계약서에 따릅니다.
           </p>
         </Article>
@@ -140,7 +140,7 @@ export default function FeesPage() {
                 <tr>
                   <td className="border border-gray-200 px-3 py-2">학원 · 유치원</td>
                   <td className="border border-gray-200 px-3 py-2">
-                    계약 체결 시 <strong>50%</strong> / 근로개시일(트레이닝 포함) <strong>50%</strong> / 또는 계약 체결 시 <strong>100%</strong>
+                    근로계약 체결 시 <strong>100%</strong>
                   </td>
                 </tr>
                 <tr>
@@ -175,7 +175,12 @@ export default function FeesPage() {
         </Article>
 
         <Article num="제6조" title="재매칭 서비스">
-          <p>재매칭 서비스 제공 조건 및 기간 등은 요금의 정상납부, 공급계약서의 회신이 정상적으로 이루어진 경우 제공하는 서비스 항목이며 법적 의무가 아닙니다. 상세 내용은 계약 체결시 발송되는 인력공급 계약서에 명시합니다.</p>
+          <p>재매칭 서비스는 요금 정상납부 및 공급계약서 회신이 완료된 경우에만 제공되며, 법적 의무가 아니며 상세 내용은 인력공급계약서에 명시합니다.</p>
+          <p className="mt-3">
+            브릿지의 홍보·면접·선발 과정을 거쳐 안내된 인재는 고용주의 직접 인터뷰 및 계약 상담을 통해 최종 채용이 확정됩니다. 미팅·트레이닝을 포함하여 인력을 투입하는 시점부터 근로 개시로 간주하며,
+            강의 만족도 저하나 조직 부적응 등 주관적인 사유는 근로기준법상 정당한 해고 사유에 해당하지 않으며, 급여 지연이나 계약 조건과 다른 근무 요구 등 역시 고용주의 귀책 사유가 됩니다.
+            따라서 재매칭 서비스는 무단결근, 계약 불이행 등 명백하고 객관적인 강사의 과실이 서류상 입증될 때에만 지원됩니다.
+          </p>
         </Article>
 
         <Article num="제7조" title="사업자 정보">
