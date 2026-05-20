@@ -111,17 +111,17 @@ function FieldLine({ label, value }: { label: string; value: string }) {
       style={{
         display: 'flex',
         gap: 6,
-        padding: '4px 0',
-        fontSize: 14.5,
-        lineHeight: 1.7,
-        color: '#1f2937',
+        padding: '3px 0',
+        fontSize: 14,
+        lineHeight: 1.65,
+        color: '#374151',
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
       }}
     >
-      <span style={{ color: '#9ca3af', flexShrink: 0, userSelect: 'none' }}>`</span>
+      <span style={{ color: '#cbd5e1', flexShrink: 0, userSelect: 'none' }}>`</span>
       <span>
-        <span style={{ color: '#6b7280', fontWeight: 500 }}>{label} : </span>
-        <span style={{ color: '#111827', fontWeight: 600 }}>{value}</span>
+        <span style={{ color: '#6b7280' }}>{label} : </span>
+        <span style={{ color: '#1f2937' }}>{value}</span>
       </span>
     </div>
   )
@@ -242,15 +242,15 @@ export default function JobDetailModal({
 
         {/* ── 헤더 ── */}
         <div style={{ paddingRight: 40 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#1f2937', margin: 0, letterSpacing: '-0.01em' }}>
             {job.location || 'Korea'}
           </h2>
-          <div className="flex items-center gap-3" style={{ marginTop: 6 }}>
-            <span style={{ fontSize: 16, color: '#6b7280', fontWeight: 600 }}>
+          <div className="flex items-center gap-3" style={{ marginTop: 4 }}>
+            <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>
               Job. {(job.job_id || '').replace(/^Job\.?\s*/i, '')}
             </span>
             {isHot && (
-              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: '#ea580c', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#ea580c', textTransform: 'uppercase' }}>
                 🔥 Hot
               </span>
             )}
