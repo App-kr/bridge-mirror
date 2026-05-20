@@ -178,20 +178,36 @@ export default function AdminPostsPage() {
   const handleSaveOrder = async () => {
     if (!localPosts) return
     setSavingOrder(true)
+    setActionMsg(`⏳ 순서 저장 중... (${localPosts.length}개)`)
     try {
       const items = localPosts.map((p, idx) => ({ id: p.id, sort_order: localPosts.length - idx }))
-      const res = await fetch(`${API}/api/admin/community-reorder/${board}`, {
+      // signedFetch 사용 (HMAC 서명 + x-admin-key 자동 첨부) — fetch() 직접 호출 시 서명 누락으로 백엔드 거부됨
+      const res = await signedFetch(`${API}/api/admin/community-reorder/${board}`, {
         method: 'PATCH',
-        headers: { ...headers(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
-      setActionMsg('순서 저장 완료!')
+      let json: { detail?: unknown; error?: string; message?: string } = {}
+      try { json = await res.json() } catch { /* non-JSON */ }
+      if (!res.ok) {
+        const detail = json.detail
+        let msg = ''
+        if (Array.isArray(detail)) {
+          msg = detail.map((d: unknown) => {
+            const o = d as Record<string, unknown>
+            const loc = Array.isArray(o?.loc) ? o.loc.slice(1).join('.') : ''
+            return loc ? `${loc}: ${o.msg}` : String(o?.msg ?? JSON.stringify(d))
+          }).join(' / ')
+        } else if (typeof detail === 'string') {
+          msg = detail
+        }
+        throw new Error(msg || json.error || json.message || `HTTP ${res.status} ${res.statusText}`)
+      }
+      setActionMsg(`✅ 순서 저장 완료! (${localPosts.length}개 게시물 재정렬)`)
       setLocalPosts(null)
       fetchPosts()
     } catch (e) {
-      setActionMsg(`순서 저장 오류: ${e instanceof Error ? e.message : '실패'}`)
+      const msg = e instanceof Error ? e.message : '실패'
+      setActionMsg(`❌ 순서 저장 실패: ${msg}`)
     } finally {
       setSavingOrder(false)
     }
@@ -363,21 +379,41 @@ export default function AdminPostsPage() {
   }
 
   const handleEdit = async () => {
-    if (!editTitle.trim()) { setActionMsg('제목을 입력하세요.'); return }
+    if (!editTitle.trim()) { setActionMsg('❌ 제목을 입력하세요.'); return }
+    if (!editBody.trim() || editBody.trim().length < 10) {
+      setActionMsg('❌ 본문을 10자 이상 입력하세요.'); return
+    }
     setSaving(true)
+    setActionMsg(`⏳ 저장 중... (post #${editId})`)
     try {
       const bodyStr = JSON.stringify({ title: editTitle.trim(), body: editBody.trim(), content_type: editContentType })
       const res = await signedFetch(`${API}/api/admin/community/${editBoard}/${editId}`, {
         method: 'PATCH',
         body: bodyStr,
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail || json.error || `Error ${res.status}`)
-      setActionMsg(`Post #${editId} 수정 완료`)
+      let json: { detail?: unknown; error?: string; message?: string; success?: boolean } = {}
+      try { json = await res.json() } catch { /* non-JSON */ }
+      if (!res.ok) {
+        // Pydantic detail 배열 자세히 표시
+        const detail = json.detail
+        let msg = ''
+        if (Array.isArray(detail)) {
+          msg = detail.map((d: unknown) => {
+            const o = d as Record<string, unknown>
+            const loc = Array.isArray(o?.loc) ? o.loc.slice(1).join('.') : ''
+            return loc ? `${loc}: ${o.msg}` : String(o?.msg ?? JSON.stringify(d))
+          }).join(' / ')
+        } else if (typeof detail === 'string') {
+          msg = detail
+        }
+        throw new Error(msg || json.error || json.message || `HTTP ${res.status} ${res.statusText}`)
+      }
+      setActionMsg(`✅ Post #${editId} 수정 완료 (서버 응답: ${JSON.stringify(json).slice(0, 100)})`)
       setEditId(null)
       fetchPosts()
     } catch (e) {
-      setActionMsg(`Error: ${e instanceof Error ? e.message : 'Failed'}`)
+      const msg = e instanceof Error ? e.message : 'Failed'
+      setActionMsg(`❌ 저장 실패: ${msg} — F12 Network 탭 확인 또는 운영자에게 캡처 전송`)
     } finally {
       setSaving(false)
     }
