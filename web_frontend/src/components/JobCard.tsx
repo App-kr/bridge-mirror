@@ -39,12 +39,9 @@ export default function JobCard({
         e.currentTarget.style.transform = 'translateY(0)'
       }}
     >
-      {/* Status + Job ID */}
+      {/* HOT badge (좌) + Job ID (우) */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', color: '#16a34a', textTransform: 'uppercase' }}>
-            Open
-          </span>
           {isHot && (
             <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: '#ea580c', textTransform: 'uppercase' }}>
               &#x1F525; Hot

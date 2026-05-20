@@ -19,18 +19,32 @@ interface Parsed {
 const LABEL_MAP: Record<string, string> = {
   'starting date':                       'Starting Date',
   'teaching age':                        'Teaching Age',
-  'class size':                          'Class Size',
+  'class size':                          'Class size',
   'working hours':                       'Working Hours',
   'monthly salary':                      'Monthly Salary',
-  'average teaching hours per week':     'Avg Teaching Hrs / Week',
-  'average teaching hours':              'Avg Teaching Hrs / Week',
+  'average teaching hours per week':     'Average Teaching Hours per Week',
+  'average teaching hours':              'Average Teaching Hours per Week',
   'vacation':                            'Vacation',
-  'native teacher (numbers can change)': 'Native Teachers',
-  'native teacher':                      'Native Teachers',
+  'native teacher (numbers can change)': 'Native Teacher (Numbers can change)',
+  'native teacher':                      'Native Teacher (Numbers can change)',
   'housing':                             'Housing',
   'preference':                          'Preference',
   'preferences':                         'Preference',
 }
+
+// 모달 본문 순서 (사용자 요청 기준)
+const FIELD_ORDER = [
+  'Starting Date',
+  'Teaching Age',
+  'Class size',
+  'Working Hours',
+  'Monthly Salary',
+  'Average Teaching Hours per Week',
+  'Housing',
+  'Native Teacher (Numbers can change)',
+  'Vacation',
+  'Preference',
+]
 
 function normalizeLabel(raw: string): string {
   return LABEL_MAP[raw.toLowerCase().trim()] ?? raw.trim()
@@ -72,27 +86,26 @@ function parseRawText(raw: string): Parsed {
 }
 
 /* ─────────────────────────────────────────────
-   FieldRow — 2컬럼 그리드 행
+   FieldLine — 백틱 프리픽스 한 줄 형태
+   예) `Starting Date : March, August
 ───────────────────────────────────────────── */
-function FieldRow({
-  label,
-  value,
-  zebra,
-}: {
-  label: string
-  value: string
-  zebra: boolean
-}) {
+function FieldLine({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="flex flex-col sm:flex-row gap-x-2 gap-y-0.5 px-2 py-[9px] border-b border-[#f3f4f6]"
-      style={{ background: zebra ? '#fafafa' : '#fff' }}
+      style={{
+        display: 'flex',
+        gap: 6,
+        padding: '4px 0',
+        fontSize: 14.5,
+        lineHeight: 1.7,
+        color: '#1f2937',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+      }}
     >
-      <span className="text-[13px] text-[#6b7280] sm:w-40 sm:shrink-0 sm:text-right sm:pr-3.5 leading-[1.6]">
-        {label}
-      </span>
-      <span style={{ fontSize: 14, color: '#111827', fontWeight: 500, lineHeight: 1.6 }}>
-        {value}
+      <span style={{ color: '#9ca3af', flexShrink: 0, userSelect: 'none' }}>`</span>
+      <span>
+        <span style={{ color: '#6b7280', fontWeight: 500 }}>{label} : </span>
+        <span style={{ color: '#111827', fontWeight: 600 }}>{value}</span>
       </span>
     </div>
   )
@@ -134,17 +147,24 @@ export default function JobDetailModal({
   const parsed  = rawText ? parseRawText(rawText) : null
 
   // raw_text 파싱 결과 사용, 없으면 DB 구조화 필드로 fallback
-  const fields = parsed?.fields ?? [
-    { label: 'Starting Date',           value: job.starting_date },
-    { label: 'Teaching Age',            value: job.teaching_age_raw || (job.teaching_age ?? []).map(g => AGE_SHORT[g as AgeGroup] ?? g).join(' - ') },
-    { label: 'Class Size',              value: job.class_size },
-    { label: 'Working Hours',           value: job.working_hours },
-    { label: 'Monthly Salary',          value: job.monthly_salary },
-    { label: 'Avg Teaching Hrs / Week', value: job.teaching_hours_per_week },
-    { label: 'Vacation',                value: job.vacation },
-    { label: 'Native Teachers',         value: job.native_teacher_count },
-    { label: 'Housing',                 value: job.housing },
+  const rawFields = parsed?.fields ?? [
+    { label: 'Starting Date',                    value: job.starting_date },
+    { label: 'Teaching Age',                     value: job.teaching_age_raw || (job.teaching_age ?? []).map(g => AGE_SHORT[g as AgeGroup] ?? g).join(' - ') },
+    { label: 'Class size',                       value: job.class_size },
+    { label: 'Working Hours',                    value: job.working_hours },
+    { label: 'Monthly Salary',                   value: job.monthly_salary },
+    { label: 'Average Teaching Hours per Week',  value: job.teaching_hours_per_week },
+    { label: 'Vacation',                         value: job.vacation },
+    { label: 'Native Teacher (Numbers can change)', value: job.native_teacher_count },
+    { label: 'Housing',                          value: job.housing },
   ].filter((f): f is { label: string; value: string } => !!f.value)
+
+  // 정해진 순서로 정렬 (지정 외 필드는 뒤로)
+  const fields = [...rawFields].sort((a, b) => {
+    const ai = FIELD_ORDER.indexOf(a.label)
+    const bi = FIELD_ORDER.indexOf(b.label)
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+  })
 
   const notes    = parsed?.notes ?? (Array.isArray(job.notes) ? job.notes : [])
   const benefits = parsed?.benefits.length
@@ -154,8 +174,6 @@ export default function JobDetailModal({
         : (job.employee_benefits
             ? String(job.employee_benefits).split(',').map(s => s.trim()).filter(Boolean)
             : []))
-
-  const isOpen = !job.status || job.status === 'open'
 
   return (
     <div
@@ -192,23 +210,12 @@ export default function JobDetailModal({
 
         {/* ── 헤더 ── */}
         <div style={{ paddingRight: 40 }}>
-          <div className="flex items-baseline justify-between">
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>
-              {job.location || 'Korea'}
-            </h2>
-            <span style={{ fontSize: 15, color: '#6b7280', fontWeight: 600, letterSpacing: '-0.02em' }}>
-              {job.job_id}
-            </span>
-          </div>
-          <div className="flex items-center gap-3" style={{ marginTop: 8 }}>
-            <span
-              style={{
-                fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                color: isOpen ? '#16a34a' : '#9ca3af',
-              }}
-            >
-              {isOpen ? 'Open' : 'Closed'}
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
+            {job.location || 'Korea'}
+          </h2>
+          <div className="flex items-center gap-3" style={{ marginTop: 6 }}>
+            <span style={{ fontSize: 16, color: '#6b7280', fontWeight: 600 }}>
+              Job. {(job.job_id || '').replace(/^Job\.?\s*/i, '')}
             </span>
             {isHot && (
               <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: '#ea580c', textTransform: 'uppercase' }}>
@@ -220,12 +227,12 @@ export default function JobDetailModal({
 
         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
 
-        {/* ── 본문 ── */}
+        {/* ── 본문 — 백틱 프리픽스 한 줄씩 ── */}
         <>
           {fields.length > 0 && (
-            <div style={{ borderTop: '1px solid #f3f4f6' }}>
+            <div style={{ paddingLeft: 4 }}>
               {fields.map((f, i) => (
-                <FieldRow key={i} label={f.label} value={f.value} zebra={i % 2 === 1} />
+                <FieldLine key={i} label={f.label} value={f.value} />
               ))}
             </div>
           )}
