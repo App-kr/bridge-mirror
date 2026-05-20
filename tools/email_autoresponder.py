@@ -694,7 +694,7 @@ def log_email(from_email: str, from_name: str, subject: str,
         log.error(f"[DB] email_logs 기록 실패: {e}")
 
 
-_APPLY_URL = "https://forms.gle/Y5SuTe6253QLBR5v8"
+_APPLY_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf3zwNSEb00ErLIOTLH4YwnQr4AhmzewXYG8xISgZKOpzMimg/viewform?usp=header"
 
 # ── 답장 초안 생성 ───────────────────────────────────────────────────────────
 def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str, str]:
@@ -702,35 +702,38 @@ def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str,
     subject = f"Re: {orig_subject}"
 
     plain = (
-        "Hello,\n"
-        "This is BRIDGE Agency.\n\n"
-        "Great! We\u2019ve got your application. :) Since we don\u2019t have your info on file yet, "
-        "please take 3\u20135 minutes to fill out our registration form so we can get started:\n\n"
-        f"\U0001f449\U0001f3fc\U0001f517 Apply [Link: English Teacher Application(Google form)]: {_APPLY_URL}\n\n"
-        "Please ensure the following are included:\n"
-        "`CV (Workplace Name, Location, Dates in YY/MM format)\n"
-        "`Cover Letter & Photo that taken 1 year\n"
-        "`Scanned Apostilled Documents\n"
-        "`Short Video Intro (1-3 mins)\n\n"
-        "Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.\n\n"
-        "kind regards,\n"
-        "\u26a0IF you are not a citizen of the US, UK, CA, IE, AU, NZ, or ZA, please do NOT apply."
+        "Hello, This is BRIDGE Agency.\n\n"
+        "We\u2019ve got your email! To officially submit you as a candidate for this role, "
+        "please take 3 minutes to complete your registration here:)\n\n"
+        f"\U0001f449\U0001f3fc [English Teacher Application Form]: {_APPLY_URL}\n\n"
+        "Please ensure you upload:\n"
+        "  \u2022 Updated CV (with clear school info, and MM/YY dates)\n"
+        "  \u2022 Cover Letter & Recent Photo\n"
+        "  \u2022 Scanned Apostilled Documents\n"
+        "  \u2022 Short Video Intro (1\u20133 mins) (Mandatory for South African citizens for compliance)\n\n"
+        "Once reviewed, we will contact you for a quick 5 minute Google Meet.\n\n"
+        "Kind regards,\n"
+        "BRIDGE Team\n\n"
+        "Note: Applicants must hold citizenship from the US, UK, CA, IE, AU, NZ, or ZA due to visa regulations."
     )
 
     html = (
         "<div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6'>"
-        "<p>Hello,<br>This is BRIDGE Agency.</p>"
-        "<p>Great! We\u2019ve got your application. :) Since we don\u2019t have your info on file yet, "
-        "please take 3\u20135 minutes to fill out our registration form so we can get started:</p>"
-        f"<p>\U0001f449\U0001f3fc\U0001f517 <a href='{_APPLY_URL}'>Apply [Link: English Teacher Application(Google form)]</a></p>"
-        "<p>Please ensure the following are included:<br>"
-        "`CV (Workplace Name, Location, Dates in YY/MM format)<br>"
-        "`Cover Letter &amp; Photo that taken 1 year<br>"
-        "`Scanned Apostilled Documents<br>"
-        "`Short Video Intro (1-3 mins)</p>"
-        "<p>Once reviewed, we will reach out to schedule a brief 5-minute Google Meet.</p>"
-        "<p>kind regards,<br>"
-        "<strong>\u26a0IF you are not a citizen of the US, UK, CA, IE, AU, NZ, or ZA, please do NOT apply.</strong></p>"
+        "<p>Hello, This is BRIDGE Agency.</p>"
+        "<p>We\u2019ve got your email! To officially submit you as a candidate for this role, "
+        "please take 3 minutes to complete your registration here:)</p>"
+        f"<p>\U0001f449\U0001f3fc <a href='{_APPLY_URL}'>[English Teacher Application Form]</a></p>"
+        "<p>Please ensure you upload:</p>"
+        "<ul style='margin:0 0 12px 20px;padding:0'>"
+        "<li>Updated CV (with clear school info, and MM/YY dates)</li>"
+        "<li>Cover Letter &amp; Recent Photo</li>"
+        "<li>Scanned Apostilled Documents</li>"
+        "<li>Short Video Intro (1\u20133 mins) <em>(Mandatory for South African citizens for compliance)</em></li>"
+        "</ul>"
+        "<p>Once reviewed, we will contact you for a quick 5 minute Google Meet.</p>"
+        "<p>Kind regards,<br>BRIDGE Team</p>"
+        "<p style='color:#666;font-size:12px'><strong>Note:</strong> Applicants must hold citizenship "
+        "from the US, UK, CA, IE, AU, NZ, or ZA due to visa regulations.</p>"
         "</div>"
     )
 
