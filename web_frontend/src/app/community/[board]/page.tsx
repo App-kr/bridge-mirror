@@ -6,7 +6,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getBoardConfig, type BoardConfig } from '@/lib/boards'
@@ -430,7 +430,6 @@ const WHY_BRIDGE = [
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BoardPage() {
   const { board } = useParams<{ board: string }>()
-  const router = useRouter()
   const config = getBoardConfig(board)
   const editMode = useEditMode()
   const { signedFetch } = useAdminAuth()
@@ -702,7 +701,6 @@ export default function BoardPage() {
       }
       setEditorOpen(false)
       refreshPosts()
-      router.refresh()   // Next.js 라우터 캐시도 무효 — 즉시 반영 보장
     } else if (type === 'post-edit' && postId) {
       const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
         method: 'PATCH',
@@ -715,9 +713,8 @@ export default function BoardPage() {
       }
       setEditorOpen(false)
       refreshPosts()
-      router.refresh()
     }
-  }, [editorCtx, faqItems, saveFaqToApi, board, signedFetch, refreshPosts, router])
+  }, [editorCtx, faqItems, saveFaqToApi, board, signedFetch, refreshPosts])
 
   const handleFaqItemEdit = useCallback((index: number) => {
     const item = faqItems[index]
