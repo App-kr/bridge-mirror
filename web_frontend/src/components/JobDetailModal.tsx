@@ -18,18 +18,34 @@ interface Parsed {
 
 const LABEL_MAP: Record<string, string> = {
   'starting date':                       'Starting Date',
+  'start date':                          'Starting Date',
   'teaching age':                        'Teaching Age',
+  'age':                                 'Teaching Age',
   'class size':                          'Class size',
+  'class':                               'Class size',
   'working hours':                       'Working Hours',
+  'working hour':                        'Working Hours',
+  'work hours':                          'Working Hours',
+  'hours':                               'Working Hours',
   'monthly salary':                      'Monthly Salary',
+  'salary':                              'Monthly Salary',
+  'pay':                                 'Monthly Salary',
   'average teaching hours per week':     'Average Teaching Hours per Week',
+  'avg teaching hours per week':         'Average Teaching Hours per Week',
   'average teaching hours':              'Average Teaching Hours per Week',
+  'teaching hours per week':             'Average Teaching Hours per Week',
+  'teaching hours':                      'Average Teaching Hours per Week',
   'vacation':                            'Vacation',
+  'vacation days':                       'Vacation',
+  'paid vacation':                       'Vacation',
   'native teacher (numbers can change)': 'Native Teacher (Numbers can change)',
   'native teacher':                      'Native Teacher (Numbers can change)',
+  'native teachers':                     'Native Teacher (Numbers can change)',
   'housing':                             'Housing',
+  'house':                               'Housing',
   'preference':                          'Preference',
   'preferences':                         'Preference',
+  'preferred':                           'Preference',
 }
 
 // 모달 본문 순서 (사용자 요청 기준)
@@ -146,21 +162,37 @@ export default function JobDetailModal({
   const rawText = job.raw_text ?? ''
   const parsed  = rawText ? parseRawText(rawText) : null
 
-  // raw_text 파싱 결과 사용, 없으면 DB 구조화 필드로 fallback
-  const rawFields = parsed?.fields ?? [
-    { label: 'Starting Date',                    value: job.starting_date },
+  // DB 구조화 필드 (항상 평가 — raw_text와 병합 대상)
+  const dbFields: { label: string; value: string }[] = [
+    { label: 'Starting Date',                    value: job.starting_date || '' },
     { label: 'Teaching Age',                     value: job.teaching_age_raw || (job.teaching_age ?? []).map(g => AGE_SHORT[g as AgeGroup] ?? g).join(' - ') },
-    { label: 'Class size',                       value: job.class_size },
-    { label: 'Working Hours',                    value: job.working_hours },
-    { label: 'Monthly Salary',                   value: job.monthly_salary },
-    { label: 'Average Teaching Hours per Week',  value: job.teaching_hours_per_week },
-    { label: 'Vacation',                         value: job.vacation },
-    { label: 'Native Teacher (Numbers can change)', value: job.native_teacher_count },
-    { label: 'Housing',                          value: job.housing },
-  ].filter((f): f is { label: string; value: string } => !!f.value)
+    { label: 'Class size',                       value: job.class_size || '' },
+    { label: 'Working Hours',                    value: job.working_hours || '' },
+    { label: 'Monthly Salary',                   value: job.monthly_salary || '' },
+    { label: 'Average Teaching Hours per Week',  value: job.teaching_hours_per_week || '' },
+    { label: 'Vacation',                         value: job.vacation || '' },
+    { label: 'Native Teacher (Numbers can change)', value: job.native_teacher_count || '' },
+    { label: 'Housing',                          value: job.housing || '' },
+  ].filter(f => !!f.value)
+
+  // 라벨 정규화 — DB와 raw_text 양쪽이 다른 표기 써도 동일 라벨로 합치기
+  const normLabel = (s: string): string => {
+    const k = s.toLowerCase().trim().replace(/\s+/g, ' ')
+    return LABEL_MAP[k] ?? s.trim()
+  }
+  // 병합: raw_text 파싱 결과 우선, 부족한 라벨은 DB로 보완
+  const byLabel = new Map<string, { label: string; value: string }>()
+  for (const f of dbFields) byLabel.set(normLabel(f.label), { label: normLabel(f.label), value: f.value })
+  if (parsed) {
+    for (const f of parsed.fields) {
+      const k = normLabel(f.label)
+      // raw_text의 값이 있으면 덮어쓰기 (관리자가 raw_text에 직접 적은 값을 우선)
+      if (f.value) byLabel.set(k, { label: k, value: f.value })
+    }
+  }
 
   // 정해진 순서로 정렬 (지정 외 필드는 뒤로)
-  const fields = [...rawFields].sort((a, b) => {
+  const fields = Array.from(byLabel.values()).sort((a, b) => {
     const ai = FIELD_ORDER.indexOf(a.label)
     const bi = FIELD_ORDER.indexOf(b.label)
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
