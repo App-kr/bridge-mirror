@@ -697,20 +697,64 @@ def log_email(from_email: str, from_name: str, subject: str,
 _APPLY_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf3zwNSEb00ErLIOTLH4YwnQr4AhmzewXYG8xISgZKOpzMimg/viewform?usp=header"
 
 # ── 답장 초안 생성 ───────────────────────────────────────────────────────────
-def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str, str, str]:
-    """(subject, plain_text, html) 반환"""
+def detect_source(subject: str, body: str) -> str:
+    """Returns 'craigslist' if email references craigslist, else 'direct'."""
+    haystack = f"{subject or ''}\n{body or ''}".lower()
+    markers = [
+        "craigslist.org",
+        "seoul.craigslist",
+        "post.craigslist",
+        "reply.craigslist",
+        "saw your job post on craigslist",
+        "your craigslist post",
+        "found on craigslist",
+        "via craigslist",
+    ]
+    return "craigslist" if any(m in haystack for m in markers) else "direct"
+
+
+def build_reply(first_name: str, orig_subject: str, form_url: str,
+                source: str = "direct") -> tuple[str, str, str]:
+    """(subject, plain_text, html) 반환.
+
+    source:
+      'craigslist' — Craigslist 게시물 보고 지원 → 지정 직책 안내
+      'direct'     — 일반 직접 메일 → 양식 + 인터뷰 필수 안내
+    """
     subject = f"Re: {orig_subject}"
+
+    if source == "craigslist":
+        intro_plain = (
+            "Thanks for reaching out about our Craigslist posting!\n\n"
+            "To officially apply for this specific role, please take 3 minutes "
+            "to complete your registration here:)"
+        )
+        intro_html = (
+            "<p>Thanks for reaching out about our Craigslist posting!</p>"
+            "<p>To officially apply for this specific role, please take 3 minutes "
+            "to complete your registration here:)</p>"
+        )
+    else:
+        intro_plain = (
+            "We’ve received your email. Since our recruitment runs fully online, "
+            "completing the registration form and a short team interview are required steps.\n\n"
+            "Please take 3 minutes to fill out our application form:)"
+        )
+        intro_html = (
+            "<p>We’ve received your email. Since our recruitment runs fully online, "
+            "completing the registration form and a short team interview are required steps.</p>"
+            "<p>Please take 3 minutes to fill out our application form:)</p>"
+        )
 
     plain = (
         "Hello, This is BRIDGE Agency.\n\n"
-        "We\u2019ve got your email! To officially submit you as a candidate for this role, "
-        "please take 3 minutes to complete your registration here:)\n\n"
+        f"{intro_plain}\n\n"
         f"\U0001f449\U0001f3fc [English Teacher Application Form]: {_APPLY_URL}\n\n"
         "Please ensure you upload:\n"
-        "  \u2022 Updated CV (with clear school info, and MM/YY dates)\n"
-        "  \u2022 Cover Letter & Recent Photo\n"
-        "  \u2022 Scanned Apostilled Documents\n"
-        "  \u2022 Short Video Intro (1\u20133 mins) (Mandatory for South African citizens for compliance)\n\n"
+        "  • Updated CV (with clear school info, and MM/YY dates)\n"
+        "  • Cover Letter & Recent Photo\n"
+        "  • Scanned Apostilled Documents\n"
+        "  • Short Video Intro (1–3 mins) (Mandatory for South African citizens for compliance)\n\n"
         "Once reviewed, we will contact you for a quick 5 minute Google Meet.\n\n"
         "Kind regards,\n"
         "BRIDGE Team\n\n"
@@ -720,15 +764,14 @@ def build_reply(first_name: str, orig_subject: str, form_url: str) -> tuple[str,
     html = (
         "<div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6'>"
         "<p>Hello, This is BRIDGE Agency.</p>"
-        "<p>We\u2019ve got your email! To officially submit you as a candidate for this role, "
-        "please take 3 minutes to complete your registration here:)</p>"
+        f"{intro_html}"
         f"<p>\U0001f449\U0001f3fc <a href='{_APPLY_URL}'>[English Teacher Application Form]</a></p>"
         "<p>Please ensure you upload:</p>"
         "<ul style='margin:0 0 12px 20px;padding:0'>"
         "<li>Updated CV (with clear school info, and MM/YY dates)</li>"
         "<li>Cover Letter &amp; Recent Photo</li>"
         "<li>Scanned Apostilled Documents</li>"
-        "<li>Short Video Intro (1\u20133 mins) <em>(Mandatory for South African citizens for compliance)</em></li>"
+        "<li>Short Video Intro (1–3 mins) <em>(Mandatory for South African citizens for compliance)</em></li>"
         "</ul>"
         "<p>Once reviewed, we will contact you for a quick 5 minute Google Meet.</p>"
         "<p>Kind regards,<br>BRIDGE Team</p>"
@@ -994,7 +1037,8 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                     log.info(f"[TEAST] 허용 국적({found_nat}) → {applicant_email} 발송 진행")
                     first_name = (applicant_name.split()[0] if applicant_name else "there")
-                    subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
+                    # TEAST relay → 우리 craigslist 게시물 응답 흐름
+                    subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"], source="craigslist")
                     ok = send_reply(cfg, applicant_email, applicant_name, subj, body_reply,
                                    html=html_reply, in_reply_to=message_id)
                     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ok else None
@@ -1177,7 +1221,10 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                 # ── STEP D: 초안 생성 및 발송 처리 ─────────────────────────
                 first_name = (from_name.split()[0] if from_name else "there")
-                subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"])
+                # 본문/제목에서 craigslist 출처 감지 → 메일 톤 분기
+                _src = detect_source(subject, body)
+                log.info(f"[SOURCE] {_src} → {from_addr} | {subject[:50]}")
+                subj, body_reply, html_reply = build_reply(first_name, subject, cfg["form_url"], source=_src)
 
                 if cfg["auto_mode"]:
                     # 즉시 자동 발송
