@@ -78,6 +78,8 @@ interface LayoutProps {
   orderDirty?: boolean
   orderSaving?: boolean
   onSaveOrder?: () => void
+  /** 카테고리 즉시 변경 (Korea 게시판 — Living ↔ City Guide 토글) */
+  onCategoryChange?: (postId: number, category: string) => void | Promise<void>
 }
 
 /** Strip markdown syntax for preview text */
@@ -857,6 +859,25 @@ export default function BoardPage() {
     orderDirty,
     orderSaving,
     onSaveOrder: handleSaveOrder,
+    onCategoryChange: async (postId: number, category: string) => {
+      // 즉시 로컬 반영 (낙관적 업데이트)
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, category } : p))
+      try {
+        const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category }),
+        })
+        if (!res.ok) {
+          // 실패 시 롤백
+          await refreshPosts()
+          alert('카테고리 변경 실패')
+        }
+      } catch {
+        await refreshPosts()
+        alert('카테고리 변경 실패 (네트워크)')
+      }
+    },
   }
 
   const Layout = (() => {
@@ -1734,7 +1755,7 @@ const KOREA_SECTIONS = [
   { key: 'city_guides', label: 'City Guides',     labelKr: '도시 가이드', emoji: '🗺️' },
 ] as const
 
-function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
+function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder, onCategoryChange }: LayoutProps) {
   // URL 쿼리 ?tag=cities → 도시정보만 / 그 외 → 한국 생활(living)만 노출
   // (관리자 편집 모드에서는 전체 노출하여 카테고리 이동/순서 변경 가능)
   const activeTag = (typeof window !== 'undefined')
@@ -1833,28 +1854,64 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
       )}
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
       {editMode ? (
-        /* Edit mode: flat sortable list with category badge */
+        /* Edit mode: 전체 게시물 정렬 + 카테고리 즉시 토글 */
         <SortableContainer
           items={posts.map(p => String(p.id))}
           onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
         >
           <div className="space-y-5">
-            {posts.map((p, i) => (
-              <SortableItem key={p.id} id={String(p.id)}>
-                <div className="flex items-center gap-1.5">
-                  {onMoveUp && onMoveDown && (
-                    <SortHandle
-                      onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
-                      isFirst={i === 0} isLast={i === posts.length - 1}
-                    />
+            {posts.map((p, i) => {
+              const currentCat: 'living' | 'city_guides' = resolveCat(p) === 'city_guides' ? 'city_guides' : 'living'
+              return (
+                <SortableItem key={p.id} id={String(p.id)}>
+                  <div className="flex items-center gap-1.5">
+                    {onMoveUp && onMoveDown && (
+                      <SortHandle
+                        onMoveUp={() => onMoveUp(p.id)} onMoveDown={() => onMoveDown(p.id)}
+                        isFirst={i === 0} isLast={i === posts.length - 1}
+                      />
+                    )}
+                    {onToggleSelect && (
+                      <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
+                    )}
+                    <div className="flex-1 flex items-stretch gap-2">
+                      {photoCard(p, i)}
+                    </div>
+                  </div>
+                  {/* 카테고리 즉시 토글 — Living | City Guide */}
+                  {onCategoryChange && (
+                    <div className="flex items-center gap-2 pl-12 pt-1.5 pb-1">
+                      <span className="text-[11px] font-semibold text-gray-500">Section:</span>
+                      <button
+                        type="button"
+                        onClick={() => onCategoryChange(p.id, 'living')}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors"
+                        style={{
+                          background: currentCat === 'living' ? '#0071e3' : '#f3f4f6',
+                          color: currentCat === 'living' ? '#fff' : '#6b7280',
+                          border: currentCat === 'living' ? '1px solid #0071e3' : '1px solid #e5e7eb',
+                        }}
+                      >
+                        🇰🇷 Living in Korea
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onCategoryChange(p.id, 'city_guides')}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors"
+                        style={{
+                          background: currentCat === 'city_guides' ? '#0071e3' : '#f3f4f6',
+                          color: currentCat === 'city_guides' ? '#fff' : '#6b7280',
+                          border: currentCat === 'city_guides' ? '1px solid #0071e3' : '1px solid #e5e7eb',
+                        }}
+                      >
+                        🗺️ City Guide
+                      </button>
+                      <span className="text-[10px] text-gray-400 ml-1">현재: {currentCat === 'city_guides' ? '도시정보' : '한국 생활'}</span>
+                    </div>
                   )}
-                  {onToggleSelect && (
-                    <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
-                  )}
-                  {photoCard(p, i)}
-                </div>
-              </SortableItem>
-            ))}
+                </SortableItem>
+              )
+            })}
           </div>
         </SortableContainer>
       ) : (
