@@ -886,6 +886,40 @@ def _handle_api_key_update(chat_id: str, new_key: str):
         _log(f"[KEY] key update error: {e}")
 
 
+def _handle_gemini_key_update(chat_id: str, new_key: str):
+    """AIzaSy... 형식 Gemini 키가 붙여넣어지면 bx vault에 저장 + 즉시 활성화."""
+    try:
+        send(chat_id, "[Gemini] API 키 감지됨 — 저장 중...")
+        # 기존 키 목록에 추가 (중복 제거)
+        sys.path.insert(0, r"Q:\Claudework\bridge base\tools")
+        from bx import get_gemini_keys, _store as bx_store
+        existing = get_gemini_keys()
+        # 같은 키 이미 있으면 교체
+        existing = [e for e in existing if e.get("key") != new_key]
+        existing.append({"name": f"gemini_{len(existing)+1}", "key": new_key})
+        bx_store("GEMINI_KEYS_JSON", json.dumps(existing))
+        # 캐시 초기화
+        for k in list(_key_cache.keys()):
+            if "gemini" in k:
+                del _key_cache[k]
+        _log(f"[KEY] Gemini key added via Telegram, total={len(existing)}")
+        # 즉시 유효성 확인
+        valid = _gemini_key_works(new_key)
+        if valid:
+            send(chat_id,
+                 f"[Gemini] 키 저장 + 검증 완료 ({len(existing)}개)\n"
+                 "이제 대화형 개발, 명령 라우팅 모두 Gemini로 무료 작동합니다.",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+        else:
+            send(chat_id,
+                 "[Gemini] 키 저장됨, 단 API 확인 실패 (할당량 초과 또는 키 오류)\n"
+                 "aistudio.google.com 에서 키 상태를 확인하세요.",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[Gemini] 키 저장 실패: {e}")
+        _log(f"[KEY] gemini key update error: {e}")
+
+
 def _try_direct_cmd(chat_id, text: str) -> bool:
     """한국어 키워드 직접 매칭 → LLM 없이 즉시 실행. 처리되면 True 반환."""
     t  = text.strip()
@@ -1085,6 +1119,10 @@ def handle_text(chat_id, text):
     _stripped = text.strip()
     if _stripped.startswith("sk-ant-api"):
         _handle_api_key_update(chat_id, _stripped)
+        return
+    # Gemini API 키 (AIzaSy...)
+    if _stripped.startswith("AIzaSy") and len(_stripped) >= 30:
+        _handle_gemini_key_update(chat_id, _stripped)
         return
 
     # ── 기존 처리 ────────────────────────────────────────────
