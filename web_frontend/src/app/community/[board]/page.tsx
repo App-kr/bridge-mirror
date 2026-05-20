@@ -1741,10 +1741,36 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
     ? new URLSearchParams(window.location.search).get('tag') || ''
     : ''
   const wantCity = activeTag === 'cities' || activeTag === 'city' || activeTag === 'city_guides'
+
+  // 도시명 기반 분류 폴백 — DB category 필드가 비어 있어도 제목으로 자동 판단
+  // (Render DB 시드가 카테고리 없이 들어간 경우 방어)
+  const CITY_KEYWORDS = [
+    'seoul', '서울',
+    'busan', '부산',
+    'daegu', '대구',
+    'incheon', '인천',
+    'gyeonggi', '경기',
+    'daejeon', '대전',
+    'jeju', '제주',
+    'ulsan', '울산',
+    'gwangju', '광주',
+    'suwon', '수원',
+    'sejong', '세종',
+  ]
+  const isCityPost = (p: Post): boolean => {
+    const t = (p.title || '').toLowerCase()
+    return CITY_KEYWORDS.some(kw => t.startsWith(kw) || t.includes(` ${kw}`) || t.startsWith(`${kw} `))
+  }
+  const resolveCat = (p: Post): string => {
+    // DB 카테고리 우선 → 비어있으면 제목으로 추론 → 기본 living
+    if (p.category === 'city_guides' || p.category === 'living') return p.category
+    return isCityPost(p) ? 'city_guides' : 'living'
+  }
+
   const targetCat = wantCity ? 'city_guides' : 'living'
   const filteredPosts = editMode
     ? posts
-    : posts.filter(p => (p.category || 'living') === targetCat)
+    : posts.filter(p => resolveCat(p) === targetCat)
   const photoCard = (p: Post, i: number) => {
     const imgKey = getPostImageKey(p.title)
     // 우선순위: DB image_paths[0] → 하드코딩 POST_IMAGES → 그라데이션 폴백
