@@ -38,6 +38,11 @@ interface SplitEditorProps {
   initialData?: { title: string; content: string; contentType?: ContentType; links?: LinkItem[] }
   previewType: 'faq' | 'list' | 'card' | 'testimonial'
   label?: string
+  // 게시판 이미지 영구 보존 (Cafe24 FTP 방식 — postId 있을 때만 표시)
+  board?: string
+  postId?: number
+  initialImagePaths?: string[]
+  signedFetch?: (url: string, init?: RequestInit) => Promise<Response>
 }
 
 const PURIFY_CONFIG = {
@@ -84,6 +89,7 @@ function HtmlPreview({ html }: { html: string }) {
 
 export default function SplitEditor({
   isOpen, onClose, onSave, initialData, previewType, label,
+  board, postId, initialImagePaths, signedFetch,
 }: SplitEditorProps) {
   const [title, setTitle] = useState(initialData?.title ?? '')
   const [content, setContent] = useState(initialData?.content ?? '')
@@ -462,6 +468,18 @@ export default function SplitEditor({
               />
             </div>
 
+            {/* 영구 게시판 이미지 (Cafe24 FTP 대체) — 기존 글에만 표시 */}
+            {board && postId && signedFetch && (
+              <div className="px-4 py-3 border-t border-zinc-800 shrink-0">
+                <BoardImageManager
+                  board={board}
+                  postId={postId}
+                  initialPaths={initialImagePaths || []}
+                  signedFetch={signedFetch}
+                />
+              </div>
+            )}
+
             {/* Attachments list */}
             {attachments.length > 0 && (
               <div className="px-4 py-2 border-t border-zinc-800 shrink-0">
@@ -675,3 +693,129 @@ function TestimonialPreview({ title, content, contentType }: { title: string; co
 }
 
 export { HtmlPreview }
+
+
+// ════════════════════════════════════════════════════════════════════
+// BoardImageManager — Cafe24 FTP 대체. 글당 영구 파일.
+// 업로드/삭제 시 DB image_paths 자동 동기. 영구 보존.
+// ════════════════════════════════════════════════════════════════════
+function BoardImageManager({
+  board, postId, initialPaths, signedFetch,
+}: {
+  board: string
+  postId: number
+  initialPaths: string[]
+  signedFetch: (url: string, init?: RequestInit) => Promise<Response>
+}) {
+  const [paths, setPaths] = useState<string[]>(initialPaths)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setErr(null)
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await signedFetch(
+          `${API_URL}/api/admin/community/${board}/${postId}/images`,
+          { method: 'POST', body: fd }
+        )
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j?.detail || j?.error || `HTTP ${res.status}`)
+        }
+        const j = await res.json()
+        const newPaths = j?.data?.image_paths || j?.image_paths || []
+        setPaths(newPaths)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setErr(`업로드 실패: ${msg}`)
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const deletePath = async (url: string) => {
+    if (!confirm('이 이미지를 삭제하시겠습니까? (파일 영구 삭제)')) return
+    setErr(null)
+    try {
+      const res = await signedFetch(
+        `${API_URL}/api/admin/community/${board}/${postId}/images?url=${encodeURIComponent(url)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPaths(prev => prev.filter(p => p !== url))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setErr(`삭제 실패: ${msg}`)
+    }
+  }
+
+  const fullUrl = (path: string) => (path.startsWith('http') ? path : `${API_URL}${path}`)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-zinc-400 font-medium">
+          📁 게시판 이미지 ({paths.length}/10) — 서버 영구 저장
+        </span>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading || paths.length >= 10}
+          className="px-2.5 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-40"
+        >
+          {uploading ? '업로드 중…' : '+ 이미지 첨부'}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+      </div>
+      {paths.length === 0 ? (
+        <p className="text-xs text-zinc-600">아직 업로드된 이미지가 없습니다. 첫 번째 이미지가 카드 썸네일로 사용됩니다.</p>
+      ) : (
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+          {paths.map((p, i) => (
+            <div key={p} className="relative group aspect-square overflow-hidden rounded bg-zinc-800">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fullUrl(p)}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0.3' }}
+              />
+              {i === 0 && (
+                <span className="absolute top-0.5 left-0.5 px-1 py-0.5 rounded bg-blue-600 text-white text-[8px] font-bold">
+                  썸네일
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => deletePath(p)}
+                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                title="삭제"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <p className="mt-1.5 text-[11px] text-red-400">{err}</p>}
+      <p className="mt-1 text-[10px] text-zinc-600">
+        Render 영구 디스크 저장 — 배포·코드 변경에도 사라지지 않음. 첫 번째가 카드 썸네일.
+      </p>
+    </div>
+  )
+}

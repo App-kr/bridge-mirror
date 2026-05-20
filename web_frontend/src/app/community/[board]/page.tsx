@@ -515,20 +515,24 @@ export default function BoardPage() {
     setEditorOpen(true)
   }, [getPostPreviewType])
 
+  const [editorImagePaths, setEditorImagePaths] = useState<string[]>([])
   const handleEdit = useCallback(async (post: Post) => {
     const pvType = getPostPreviewType()
+    let imgPaths: string[] = Array.isArray(post.image_paths) ? post.image_paths : []
     try {
       const res = await fetch(`${API}/api/community/${board}/${post.id}`)
       const j = await res.json()
       if (j.success) {
         const ct: ContentType = j.data.content_type === 'html' ? 'html' : 'markdown'
         setEditorInitialData({ title: j.data.title ?? post.title, content: j.data.body ?? '', contentType: ct })
+        if (Array.isArray(j.data.image_paths)) imgPaths = j.data.image_paths
       } else {
         setEditorInitialData({ title: post.title, content: post.preview ?? '' })
       }
     } catch {
       setEditorInitialData({ title: post.title, content: post.preview ?? '' })
     }
+    setEditorImagePaths(imgPaths)
     setEditorPreviewType(pvType)
     setEditorCtx({ type: 'post-edit', postId: post.id })
     setEditorOpen(true)
@@ -825,6 +829,10 @@ export default function BoardPage() {
           previewType={editorPreviewType}
           onSave={handleEditorSave}
           onClose={() => setEditorOpen(false)}
+          board={editorCtx.type === 'post-edit' ? board : undefined}
+          postId={editorCtx.type === 'post-edit' ? editorCtx.postId : undefined}
+          initialImagePaths={editorImagePaths}
+          signedFetch={signedFetch}
         />
       )}
     </>
