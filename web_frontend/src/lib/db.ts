@@ -58,7 +58,7 @@ export async function fetchBoardPostsFromRender(
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (category) params.set('category', category)
     const res = await fetch(`${API_URL}/api/community/${board}?${params}`, {
-      next: { revalidate: 60 },  // 1-minute cache (빠른 반영)
+      cache: 'no-store',  // 캐시 없음 — 편집 즉시 반영, JSON 폴백이 옛 내용으로 덮지 못하게
     })
     if (res.ok) {
       const json = await res.json()

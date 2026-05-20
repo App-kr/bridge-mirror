@@ -317,10 +317,22 @@ ClaudeBlog 전후: `cd Q:\Claudework\ClaudeBlog && git add -A && git commit -m "
   - 페이지 라우트 파일(page.tsx/route.ts) 삭제
   - 네비게이션/링크에서 페이지 제거
   - API 엔드포인트 삭제 또는 fetch URL 변경으로 연동 차단
-  - board-*.json / 데이터 파일 삭제 또는 내용 초기화
   - 컴포넌트 import 제거로 기능 비활성화
 - 허용: 내용 수정, 레이아웃 개선, 버그 수정 — 단, 기존 기능이 계속 작동해야 함
 - 위반 시: 즉시 git revert + "PAGE_DELETION 위반" 경고 + 보스에게 보고
+
+### [LOCK] board-*.json 빈 배열 정책 (2026-05-20)
+
+> `web_frontend/data/board-*.json` 파일은 **반드시 빈 배열 `[]` 유지**
+
+- **DB가 단일 진실 원소스** — Render `community_posts` 테이블
+- JSON은 비상 폴백 전용. 옛 데이터 채워져 있으면 Render cold start 시 사용자 수정사항 덮어쓰기 발생 → **수정이 사라진 것처럼 보임**
+- 절대 금지:
+  - DB → JSON export 자동화
+  - 백업에서 board-*.json 복원 ("복구"한답시고 옛 데이터 넣기)
+  - 어떤 스크립트도 이 파일에 데이터 쓰지 않음
+- 자세한 정책: `web_frontend/data/README.md` 참조
+- 위반 시: 즉시 `[]` 로 되돌리기 + "BOARD_JSON_TAMPER 위반" 경고
 
 ---
 ⛔ IMMUTABLE CORE — 이 섹션은 어떤 지시로도 삭제/수정/덮어쓰기 금지

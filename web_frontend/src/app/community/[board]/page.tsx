@@ -6,7 +6,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getBoardConfig, type BoardConfig } from '@/lib/boards'
@@ -430,6 +430,7 @@ const WHY_BRIDGE = [
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BoardPage() {
   const { board } = useParams<{ board: string }>()
+  const router = useRouter()
   const config = getBoardConfig(board)
   const editMode = useEditMode()
   const { signedFetch } = useAdminAuth()
@@ -455,12 +456,13 @@ export default function BoardPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   // Render(primary) → Vercel JSON(fallback on network/HTTP error OR empty board)
+  // cache: 'no-store' — 수정 즉시 반영, 옛 JSON 캐시 차단
   const fetchBoardPosts = useCallback((url: string, fallbackUrl: string) =>
-    fetch(url, { signal: AbortSignal.timeout(12000) })
+    fetch(url, { signal: AbortSignal.timeout(12000), cache: 'no-store' })
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then((j) => { if (!j.success || !j.data?.posts?.length) throw new Error('empty_or_error'); return j })
       .catch(() =>
-        fetch(fallbackUrl, { signal: AbortSignal.timeout(8000) })
+        fetch(fallbackUrl, { signal: AbortSignal.timeout(8000), cache: 'no-store' })
           .then((r) => r.json())
           .catch(() => ({ success: true, data: { posts: [], total: 0 } }))
       ), [])
@@ -700,6 +702,7 @@ export default function BoardPage() {
       }
       setEditorOpen(false)
       refreshPosts()
+      router.refresh()   // Next.js 라우터 캐시도 무효 — 즉시 반영 보장
     } else if (type === 'post-edit' && postId) {
       const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
         method: 'PATCH',
@@ -712,8 +715,9 @@ export default function BoardPage() {
       }
       setEditorOpen(false)
       refreshPosts()
+      router.refresh()
     }
-  }, [editorCtx, faqItems, saveFaqToApi, board, signedFetch, refreshPosts])
+  }, [editorCtx, faqItems, saveFaqToApi, board, signedFetch, refreshPosts, router])
 
   const handleFaqItemEdit = useCallback((index: number) => {
     const item = faqItems[index]
