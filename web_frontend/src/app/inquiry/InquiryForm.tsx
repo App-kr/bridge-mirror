@@ -282,8 +282,10 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
   }
 
   async function handleSubmit() {
-    if (!form.privacy_policy.includes('동의')) {
-      setErrorMsg('개인정보처리방침에 동의해 주세요.')
+    // "I agree." 만 통과 — "I do not agree." 또는 미선택은 차단
+    const agreed = form.privacy_policy.includes('I agree') || form.privacy_policy.startsWith('동의합니다')
+    if (!agreed) {
+      setErrorMsg('You must agree to the Privacy Policy to submit. (제출하려면 개인정보처리방침에 동의해야 합니다.)')
       return
     }
     setStatus('submitting')
@@ -437,22 +439,32 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
           {/* Card */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
             <div className="px-8 sm:px-10 pt-8 pb-6 space-y-6">
-              {/* Notice text */}
-              <p className="text-[15px] sm:text-base text-gray-700 leading-relaxed">
-                작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다.
-                허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니
-                정확하게 입력해 주세요.
-              </p>
+              {/* Notice text — English first, Korean as gray subtitle */}
+              <div className="space-y-1.5">
+                <p className="text-[15px] sm:text-base text-gray-800 leading-relaxed">
+                  All information provided here is required for the recruitment process.
+                  Inaccurate or false information may restrict service eligibility.
+                </p>
+                <p className="text-xs sm:text-sm text-gray-400 leading-relaxed">
+                  작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다.
+                  허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니
+                  정확하게 입력해 주세요.
+                </p>
+              </div>
 
               <div className="border-t border-gray-100" />
 
-              {/* Email notice */}
+              {/* Email notice — English first */}
               <div className="space-y-3">
-                <p className="text-[15px] sm:text-base text-gray-700 leading-relaxed">
-                  접수 완료 후{' '}
-                  <span className="font-semibold text-gray-900">사업자 등록증 사본</span>을
-                  이메일로 보내주시기 바랍니다.
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-[15px] sm:text-base text-gray-800 leading-relaxed">
+                    After submission, please email a copy of your{' '}
+                    <span className="font-semibold text-gray-900">business registration certificate</span>.
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-400 leading-relaxed">
+                    접수 완료 후 사업자 등록증 사본을 이메일로 보내주시기 바랍니다.
+                  </p>
+                </div>
                 <a
                   href="mailto:bridgejobkr@gmail.com?subject=사업자등록증 사본 첨부 - 구인신청"
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
@@ -463,24 +475,27 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                     <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                     <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                   </svg>
-                  브릿지팀으로 메일전송
+                  Send to Bridge Team / 브릿지팀으로 메일전송
                 </a>
               </div>
             </div>
 
             {/* Footer / CTA */}
             <div className="px-8 sm:px-10 pb-8 pt-5 border-t border-gray-100 space-y-4">
-              <p className="text-xs text-gray-400 leading-relaxed">
-                계속 진행하시면 위 내용을 확인하고 동의한 것으로 간주됩니다.
-                수집된 정보는 채용 대행 서비스 목적으로만 사용됩니다.{' '}
+              <p className="text-xs text-gray-500 leading-relaxed">
+                By continuing, you confirm and agree to the above. Collected information is used solely for recruitment services.{' '}
                 <a
                   href="/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-gray-700"
                 >
-                  개인정보처리방침
+                  Privacy Policy
                 </a>
+                <br />
+                <span className="text-gray-400">
+                  계속 진행하시면 위 내용을 확인하고 동의한 것으로 간주됩니다. 수집된 정보는 채용 대행 서비스 목적으로만 사용됩니다.
+                </span>
               </p>
               <button
                 type="button"
@@ -750,8 +765,8 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
             </section>
 
             <section className="card space-y-4">
-              <Sec title="숙소제공" subtitle="Housing" />
-              <Desc text="거주비용 지원은 일반적으로 근무처 주변의 숙소 시세에 맞추어 측정합니다. 그보다 낮은 가격을 제공하는 것은 권장되지 않습니다." />
+              <Sec title="Housing" subtitle="숙소제공" />
+              <Desc text="Housing support is typically offered in line with local rental market rates near the workplace. (거주비용 지원은 일반적으로 근무처 주변의 숙소 시세에 맞추어 제공하는 것을 추천합니다.)" />
               <Dropdown value={form.housing_provided}
                 onChange={(v) => setForm((p) => ({ ...p, housing_provided: v }))}
                 options={HOUSING_OPTS} />
@@ -810,26 +825,33 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
         {step === 3 && (
           <>
             <section className="card space-y-4">
-              <Sec title="개인정보처리방침" subtitle="Privacy Policy & Compliance" />
-              <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 space-y-3 max-h-64 overflow-y-auto border border-gray-200 leading-relaxed">
-                <p className="font-semibold text-gray-800">1. 고용주 준수 사항 및 차별 금지 (Compliance)</p>
-                <p><strong>영업 보호 및 직접 연락 금지:</strong> 공식 계약 체결 전, 당사가 소개한 인력의 개인정보를 무단 수집하거나 사전 협의 없이 직접 접촉하는 행위는 엄격히 금지됩니다. 위반 시 정상 서비스 요금이 즉시 부과되며, 영업 비밀 침해에 따른 법적 책임이 청구될 수 있습니다.</p>
-                <p><strong>성별·연령 차별 금지:</strong> 모집 및 채용 시 남녀를 차별하거나, 직무 수행에 불필요한 신체 조건 또는 연령 제한을 둘 수 없습니다. (위반 시 남녀고용평등법 등에 의거 500만 원 이하의 벌금 부과)</p>
-                <p><strong>국적·인종 차별 금지:</strong> 국적, 인종, 출신 국가를 이유로 근로 조건에서 불합리한 차별을 할 수 없으며, 위반 시 국가인권위원회법 및 외국인근로자 고용법에 따른 시정 권고 및 제재를 받을 수 있습니다.</p>
+              <Sec title="Privacy Policy & Compliance" subtitle="개인정보처리방침" />
+              <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-700 space-y-3 max-h-64 overflow-y-auto border border-gray-200 leading-relaxed">
+                <p className="font-semibold text-gray-900">1. Employer Compliance & Anti-Discrimination</p>
+                <p><strong>No Direct Contact:</strong> Before a signed contract, unauthorized collection of candidate personal information or any direct contact without prior agreement is strictly prohibited. Violations will result in immediate billing of the full service fee and potential legal liability for trade-secret infringement.</p>
+                <p><strong>No Gender / Age Discrimination:</strong> Discrimination by gender or age, or imposing unnecessary physical or age requirements unrelated to job duties, is prohibited. (Up to KRW 5 million fine under the Equal Employment Opportunity Act.)</p>
+                <p><strong>No Nationality / Race Discrimination:</strong> Unfair working conditions based on nationality, race, or country of origin are prohibited under Korean human-rights and foreign-worker employment laws.</p>
                 <p className="text-gray-600 pl-2 border-l-2 border-amber-300 ml-1">
-                  채용을 완료한 이후 주관적인 의견을 통해 강사의 국적·인종 등을 이유로 차별 대우가 이루어지는 경우, 브릿지는 별도의 중재나 재매칭 등 특별한 도움을 드리기 어렵습니다.
+                  If discriminatory treatment occurs after hiring based on subjective opinions regarding the teacher&apos;s nationality or race, Bridge cannot provide additional mediation or rematching support.
                 </p>
-                <p className="font-semibold text-gray-800 pt-2">2. 개인정보의 수집 및 이용 (Privacy Policy)</p>
-                <p><strong>수집 항목:</strong> 성명, 연락처, 사업장 정보(사업자등록증), 채용 조건, 접속 로그 등</p>
-                <p><strong>이용 목적:</strong> 원어민 강사 매칭, 인터뷰 조율, 고용계약서 작성 및 사증(비자) 발급 행정 지원</p>
-                <p><strong>보유 기간:</strong> 관련 법령에 명시된 기간 동안 안전하게 보관, 목적 달성 후 파기</p>
-                <p className="font-semibold text-gray-800 pt-2">3. 안전성 확보 및 정보주체의 권리</p>
-                <p><strong>보안 관리:</strong> 개인정보의 암호화, 접근 권한 제한, 보안 프로그램 설치 등 기술적/관리적 보호 조치 수행</p>
-                <p><strong>동의 거부 권리:</strong> 개인정보 수집에 대한 동의를 거부할 수 있으나, 이 경우 채용 서비스 이용 및 인터뷰 진행이 제한될 수 있습니다.</p>
-                <p className="font-semibold text-gray-800 pt-2">Summary of Recruitment Compliance</p>
-                <p><strong>Direct Contact Prohibited:</strong> Any unauthorized contact or collection of candidate info before a signed contract is strictly forbidden.</p>
-                <p><strong>Anti-Discrimination:</strong> Discrimination based on gender, age, race, or nationality is illegal under Korean Labor Law.</p>
-                <p><strong>Data Privacy:</strong> Your information is securely stored for recruitment and visa support purposes only.</p>
+                <p className="text-[11px] text-gray-400 pl-2 border-l-2 border-gray-200 ml-1">
+                  영업 보호 및 직접 연락 금지 · 성별·연령 차별 금지 · 국적·인종 차별 금지 — 위반 시 정상 서비스 요금 부과 및 관련 법령에 따른 제재가 있을 수 있습니다.
+                </p>
+
+                <p className="font-semibold text-gray-900 pt-2">2. Collection & Use of Personal Information</p>
+                <p><strong>Collected Items:</strong> Name, contact, business information (registration certificate), hiring conditions, access logs.</p>
+                <p><strong>Purpose:</strong> Native teacher matching, interview coordination, employment-contract drafting, and visa administrative support.</p>
+                <p><strong>Retention:</strong> Stored securely for the period required by law, then destroyed.</p>
+                <p className="text-[11px] text-gray-400 pl-2 border-l-2 border-gray-200 ml-1">
+                  수집 항목: 성명·연락처·사업장 정보·채용 조건·접속 로그 / 이용 목적: 강사 매칭·인터뷰 조율·계약서·비자 행정 / 보유 기간: 법령에 따른 기간 안전 보관 후 파기.
+                </p>
+
+                <p className="font-semibold text-gray-900 pt-2">3. Security & Your Rights</p>
+                <p><strong>Security:</strong> Encryption, restricted access, and technical/administrative safeguards are applied to all personal data.</p>
+                <p><strong>Right to Refuse:</strong> You may refuse consent, but service use and interviews may be limited as a result.</p>
+                <p className="text-[11px] text-gray-400 pl-2 border-l-2 border-gray-200 ml-1">
+                  보안 관리: 암호화·접근 권한 제한·기술적 보호조치 / 동의 거부 시 채용 서비스 이용 및 인터뷰가 제한될 수 있습니다.
+                </p>
               </div>
 
               {/* CAPTCHA는 시작 단계(captcha phase)에서 이미 처리됨 */}
@@ -842,8 +864,18 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
               <div>
                 <Label required>Agreement / 동의 여부</Label>
                 <SingleTog value={form.privacy_policy}
-                  onChange={(v) => setForm((p) => ({ ...p, privacy_policy: v }))}
-                  options={['동의합니다. I agree.', '동의하지 않습니다. I do not agree.']} />
+                  onChange={(v) => {
+                    setForm((p) => ({ ...p, privacy_policy: v }))
+                    if (v.includes('I agree') || v.startsWith('동의합니다')) setErrorMsg('')
+                  }}
+                  options={['I agree. 동의합니다.', 'I do not agree. 동의하지 않습니다.']} />
+                {form.privacy_policy.includes('do not agree') && (
+                  <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+                    You must agree to the Privacy Policy in order to submit this inquiry.
+                    <br />
+                    <span className="text-xs text-amber-700">제출하려면 개인정보처리방침에 동의해야 합니다.</span>
+                  </div>
+                )}
               </div>
             </section>
           </>
