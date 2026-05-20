@@ -466,16 +466,47 @@ export default function BoardPage() {
           .catch(() => ({ success: true, data: { posts: [], total: 0 } }))
       ), [])
 
+  // visa 페이지는 4개 board 통합 조회: visa + visa_type + visa_related + immigration
+  // (DB에는 분리 저장되어 있지만 사용자 관점에서는 한 곳에서 모두 보여야 함)
+  const aggregatedBoards = useCallback((b: string): string[] => {
+    if (b === 'visa') return ['visa', 'visa_type', 'visa_related', 'immigration']
+    return [b]
+  }, [])
+
+  const fetchAllBoards = useCallback(async (b: string): Promise<{posts: Post[], total: number}> => {
+    const boards = aggregatedBoards(b)
+    const results = await Promise.all(boards.map(bd =>
+      fetchBoardPosts(`${API}/api/community/${bd}?limit=50`, `/api/community/${bd}?limit=50`)
+        .catch(() => ({ success: true, data: { posts: [], total: 0 } }))
+    ))
+    const allPosts: Post[] = []
+    let total = 0
+    for (const r of results) {
+      if (r.success) {
+        allPosts.push(...(r.data.posts || []))
+        total += r.data.total || 0
+      }
+    }
+    // pinned 우선, sort_order 내림차순, created_at 내림차순
+    allPosts.sort((a, b) => {
+      if ((b.pinned ?? 0) !== (a.pinned ?? 0)) return (b.pinned ?? 0) - (a.pinned ?? 0)
+      const aSo = (a as { sort_order?: number }).sort_order ?? 0
+      const bSo = (b as { sort_order?: number }).sort_order ?? 0
+      if (bSo !== aSo) return bSo - aSo
+      return String(b.created_at).localeCompare(String(a.created_at))
+    })
+    return { posts: allPosts, total }
+  }, [aggregatedBoards, fetchBoardPosts])
+
   const refreshPosts = useCallback(() => {
     if (!config) return
-    fetchBoardPosts(`${API}/api/community/${board}?limit=50`, `/api/community/${board}?limit=50`)
-      .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
-  }, [board, config, fetchBoardPosts])
+    fetchAllBoards(board).then(({ posts, total }) => { setPosts(posts); setTotal(total) })
+  }, [board, config, fetchAllBoards])
 
   useEffect(() => {
     if (!config) return
-    fetchBoardPosts(`${API}/api/community/${board}?limit=50`, `/api/community/${board}?limit=50`)
-      .then((j) => { if (j.success) { setPosts(j.data.posts); setTotal(j.data.total) } })
+    fetchAllBoards(board)
+      .then(({ posts, total }) => { setPosts(posts); setTotal(total) })
       .finally(() => setLoading(false))
 
     const faqCat = board === 'support' ? 'faq-teacher' : board === 'support_kr' ? 'faq-employer' : null

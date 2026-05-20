@@ -290,16 +290,11 @@ export default function JobsPage() {
             {loading ? (
               <p style={{ fontSize: 16, color: '#9ca3af' }}>Loading positions...</p>
             ) : (
-              <>
-                <p style={{ margin: 0, fontSize: 16, fontWeight: 400, color: '#9ca3af' }}>
-                  {interleaved.length.toLocaleString()} Jobs Available
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: 14, fontStyle: 'italic' }}>
-                  <span style={{ background: 'linear-gradient(90deg, #6b7280, #2563EB)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Welcome — we love teachers who are passionate about what they do.
-                  </span>
-                </p>
-              </>
+              <p style={{ margin: 0, fontSize: 14, fontStyle: 'italic' }}>
+                <span style={{ background: 'linear-gradient(90deg, #6b7280, #2563EB)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  Welcome — we love teachers who are passionate about what they do.
+                </span>
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
