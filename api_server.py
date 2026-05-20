@@ -684,7 +684,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,   # HttpOnly 쿠키 cross-origin 전송 허용 (SameSite=None)
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature", "Cookie"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Key", "X-Admin-Token", "X-Bridge-Signature", "X-Apply-Token", "Cookie"],
 )
 
 # GZip 압축 -- 1KB 이상 응답 자동 압축 (5.5MB → 약 370KB)

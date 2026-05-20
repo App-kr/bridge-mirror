@@ -598,12 +598,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
       <div className="max-w-lg mx-auto text-center py-24 space-y-5">
         <div className="text-6xl">{isUpdate ? '\u2705' : '\uD83C\uDF89'}</div>
         <h2 className="text-2xl font-bold text-gray-900">
-          {isUpdate ? 'Profile Updated!' : 'Application Received!'}
+          {isUpdate ? 'Profile Updated!' : 'Your profile has been updated!'}
         </h2>
-        <p className="text-gray-500">
-          {isUpdate
-            ? 'Your profile has been updated. We will review and contact you shortly.'
-            : 'Thank you for applying. Our team will review your profile and contact you shortly.'}
+        <p className="text-gray-600 leading-relaxed">
+          We will review and contact you via <strong className="text-gray-900">Google Meet</strong>.
+          <br />
+          Please make sure to turn on your email notifications.
         </p>
 
         {uploadResults.length > 0 && (
@@ -618,29 +618,6 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
             ))}
           </div>
         )}
-
-        {candidateId && (
-          <div className="text-left space-y-4 mt-8 p-6 bg-gray-50 rounded-2xl border">
-            <p className="text-sm font-semibold text-gray-700">Upload Additional Documents (Optional)</p>
-            <p className="text-xs text-gray-500">You can upload more files here.</p>
-            <div className="space-y-3">
-              <FileUpload label="Photo (passport-style)" accept="image/*" fileType="photo"
-                entityType="candidate" entityId={candidateId} />
-              <FileUpload label="CV / Resume (PDF, Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" fileType="cv"
-                entityType="candidate" entityId={candidateId} />
-              <FileUpload label="Cover Letter (PDF, Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" fileType="cover_letter"
-                entityType="candidate" entityId={candidateId} />
-              <FileUpload label="Certificates" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" fileType="certificate"
-                entityType="candidate" entityId={candidateId} />
-              <FileUpload label="Video Introduction" accept=".mp4,.mov,.webm" fileType="video"
-                entityType="candidate" entityId={candidateId} />
-            </div>
-          </div>
-        )}
-
-        <button type="button" onClick={() => { setStatus('idle'); setStep(1); setForm(INIT); setCandidateId(null); setQueuedFiles([]) }} className="btn-primary mt-4">
-          {isUpdate ? 'Update Again' : 'Submit Another'}
-        </button>
       </div>
     )
   }
