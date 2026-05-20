@@ -833,10 +833,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         # 4. 공격 패턴 탐지 (쿼리스트링 + body)
         # 엄격 국가(US/GB/ZA)에서는 1회 탐지 즉시 차단, 그 외는 5회 누적 후 차단
-        check_targets = [
-            str(request.url.query),
-            body.decode("utf-8", errors="replace"),
-        ]
+        # multipart/form-data: binary 파일 raw bytes를 텍스트로 디코드하면 우연히 SQL 키워드 매치
+        # → multipart 요청은 body 검사 skip (다른 보안 계층: file magic bytes, 확장자, size 제한이 보완)
+        # 관리자 게시판/댓글 endpoint: 본인이 쓰는 마크다운에 'Update', '--', ';' 등 정상 표현 다수
+        # → body 검사 skip (이미 _check_admin 인증 통과, self-XSS는 sanitize_html 처리)
+        is_multipart = "multipart" in request.headers.get("content-type", "").lower()
+        is_admin_content = (
+            path.startswith("/api/admin/community")
+            or path.startswith("/api/community/")  # 글 작성 (사용자 글 + 관리자)
+        )
+        check_targets = [str(request.url.query)]
+        if not is_multipart and not is_admin_content:
+            check_targets.append(body.decode("utf-8", errors="replace"))
         for target in check_targets:
             attack_type = detect_attack(target)
             if attack_type:
