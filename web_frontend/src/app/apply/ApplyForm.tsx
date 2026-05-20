@@ -832,7 +832,17 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <Label required>Date of Birth</Label>
-                  <EasyDate value={form.dob} onChange={(v) => setForm((p) => ({ ...p, dob: v }))} years={DOB_YEARS} />
+                  <input
+                    type="date"
+                    lang="en"
+                    className="input cursor-pointer"
+                    style={{ width: '220px', maxWidth: '100%' }}
+                    value={form.dob}
+                    min={`${new Date().getFullYear() - 80}-01-01`}
+                    max={`${new Date().getFullYear() - 18}-12-31`}
+                    onChange={(e) => setForm((p) => ({ ...p, dob: e.target.value }))}
+                    placeholder="YYYY-MM-DD"
+                  />
                 </div>
                 <div>
                   <Label required>Current Location</Label>
@@ -920,11 +930,14 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
                 <Desc text="Earliest date you can fully start. If traveling, use your return date." />
                 <input
                   type="date"
+                  lang="en"
                   className="input cursor-pointer"
+                  style={{ width: '220px', maxWidth: '100%' }}
                   value={form.start_date}
                   min={new Date().toISOString().slice(0, 10)}
                   max={`${new Date().getFullYear() + 2}-12-31`}
                   onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))}
+                  placeholder="YYYY-MM-DD"
                 />
               </div>
               <div>

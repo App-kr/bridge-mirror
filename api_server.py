@@ -9000,12 +9000,56 @@ async def security_report(request: Request):
     except Exception:
         raise HTTPException(400, "Invalid JSON")
 
-    event_type = str(body.get("type", ""))[:20]
+    event_type = str(body.get("type", ""))[:40]
     detail = str(body.get("detail", ""))[:500]
     url = str(body.get("url", ""))[:500]
 
-    if event_type not in ("xss", "sqli", "bot", "devtools", "tampering"):
+    # 보안 이벤트 + 폼 제출 실패 알림 (백업 메커니즘)
+    SECURITY_TYPES = {"xss", "sqli", "bot", "devtools", "tampering"}
+    FORM_FAIL_TYPES = {"apply_submission_failed", "inquiry_submission_failed"}
+    if event_type not in SECURITY_TYPES | FORM_FAIL_TYPES:
         raise HTTPException(400, "Invalid event type")
+
+    # 폼 제출 실패 — 운영자에게 이메일 알림 (사용자가 다시 시도하지 않을 수 있으므로 수동 follow-up용)
+    if event_type in FORM_FAIL_TYPES:
+        try:
+            err_text = str(body.get("error", ""))[:500]
+            user_email = str(body.get("email", ""))[:200]
+            user_name = str(body.get("full_name", "") or body.get("school", ""))[:200]
+            ua = str(body.get("user_agent", ""))[:300]
+            label = "지원" if event_type == "apply_submission_failed" else "채용 문의"
+            subj = f"[BRIDGE 폼 실패] {label} 제출 실패 - {user_name or '익명'}"
+            html = (
+                f"<h3>{label} 폼 제출 실패</h3>"
+                f"<p><b>유형:</b> {event_type}</p>"
+                f"<p><b>오류:</b> {err_text}</p>"
+                f"<p><b>이메일:</b> {user_email}</p>"
+                f"<p><b>이름/학원:</b> {user_name}</p>"
+                f"<p><b>UA:</b> {ua}</p>"
+                f"<p><b>시각:</b> {datetime.now(timezone.utc).isoformat()}</p>"
+                f"<hr><p style='color:#888;font-size:11px'>"
+                f"사용자가 다시 시도하지 않을 수 있으니, 이메일 주소로 직접 연락하여 수동 접수를 받아주세요.</p>"
+            )
+            try:
+                _smtp_send("bridgejobkr@gmail.com", subj, html)
+            except Exception:
+                pass
+            # 텔레그램 알림도 fire-and-forget
+            try:
+                import requests as _req
+                tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+                tg_chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+                if tg_token and tg_chat:
+                    _req.post(
+                        f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                        data={"chat_id": tg_chat,
+                              "text": f"🚨 {label} 폼 실패\n이메일: {user_email}\n이름: {user_name}\n오류: {err_text[:200]}"},
+                        timeout=5,
+                    )
+            except Exception:
+                pass
+        except Exception as _alert_err:
+            logging.getLogger("bridge.api").warning("폼 실패 알림 발송 실패: %s", _alert_err)
 
     # Log to security_events.jsonl
     _AUDIT_DIR.mkdir(parents=True, exist_ok=True)

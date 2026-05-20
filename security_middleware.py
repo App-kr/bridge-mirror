@@ -838,12 +838,20 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # 관리자 게시판/댓글 endpoint: 본인이 쓰는 마크다운에 'Update', '--', ';' 등 정상 표현 다수
         # → body 검사 skip (이미 _check_admin 인증 통과, self-XSS는 sanitize_html 처리)
         is_multipart = "multipart" in request.headers.get("content-type", "").lower()
-        is_admin_content = (
+        # 사용자 입력 자유 텍스트 endpoint — body 검사 skip
+        # (자기소개/메모/이메일 본문 등에 'Select', 'Update', '—', ';' 등 정상 단어 다수)
+        # 보안: file magic bytes / Pydantic 검증 / DOMPurify / _check_admin / _sanitize_html이 보완
+        is_user_content = (
             path.startswith("/api/admin/community")
-            or path.startswith("/api/community/")  # 글 작성 (사용자 글 + 관리자)
+            or path.startswith("/api/community/")
+            or path == "/api/apply"
+            or path == "/api/inquiry"
+            or path == "/api/public/talent-inquiry"
+            or path == "/api/track"
+            or path.startswith("/api/admin/mail/")    # 메일 본문 markdown 포함
         )
         check_targets = [str(request.url.query)]
-        if not is_multipart and not is_admin_content:
+        if not is_multipart and not is_user_content:
             check_targets.append(body.decode("utf-8", errors="replace"))
         for target in check_targets:
             attack_type = detect_attack(target)
