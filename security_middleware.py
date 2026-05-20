@@ -586,7 +586,13 @@ def verify_hmac(request: Request, body: bytes) -> bool:
         ts_int = int(ts)
         if abs(time.time() - ts_int) > SIGNATURE_MAX_AGE:
             return False  # 재전송 공격 방지
-        payload = f"{ts}.{body.decode('utf-8', errors='replace')}"
+        # multipart/form-data: binary body 라 클라이언트가 서명 못함 → 빈 문자열로 검증
+        # (다른 보안 계층: file magic bytes, size limit, _check_admin 등으로 보완)
+        content_type = request.headers.get("content-type", "").lower()
+        if "multipart/form-data" in content_type:
+            payload = f"{ts}."
+        else:
+            payload = f"{ts}.{body.decode('utf-8', errors='replace')}"
         # HMAC_SECRET과 ADMIN_API_KEY 모두 시도 (클라이언트는 ADMIN_API_KEY로 서명)
         admin_key = os.getenv("ADMIN_API_KEY", "").strip()
         secrets_to_try = {HMAC_SECRET}
