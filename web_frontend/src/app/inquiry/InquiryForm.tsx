@@ -245,7 +245,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
   const BENEFITS_OPTS       = config.BENEFITS_OPTS       ?? BENEFITS_OPTS_DEFAULT
   const VACATION_INC        = config.VACATION_INC        ?? VACATION_INC_DEFAULT
 
-  const [phase,     setPhase]     = useState<'notice' | 'form'>('notice')
+  const [phase,     setPhase]     = useState<'notice' | 'captcha' | 'form'>('notice')
   const [step,      setStep]      = useState(1)
   const [status,    setStatus]    = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMsg,  setErrorMsg]  = useState('')
@@ -315,21 +315,62 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
       }
       if (!form.captcha_token) {
         setStatus('error')
-        setErrorMsg('CAPTCHA 퍼즐을 먼저 완료해 주세요. (Please complete the CAPTCHA puzzle.)')
+        setErrorMsg('CAPTCHA puzzle is required. Please return to the start and complete it. (보안 인증 필요 — 시작 화면에서 퍼즐 완료)')
         return
       }
-      const res  = await fetch(`${API}/api/inquiry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
-      if (json.data?.id) setInquiryId(json.data.id)
+      let res: Response
+      try {
+        res = await fetch(`${API}/api/inquiry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } catch (netErr) {
+        const m = netErr instanceof Error ? netErr.message : 'Network error'
+        throw new Error(`Network error: ${m}. Please check your connection and try again.`)
+      }
+      let json: { success?: boolean; detail?: unknown; message?: string; error?: string; data?: { id?: number } } = {}
+      try { json = await res.json() } catch { /* non-JSON */ }
+      if (!res.ok || !json.success) {
+        const detail = json.detail
+        let detailMsg = ''
+        if (Array.isArray(detail)) {
+          detailMsg = detail.map((d: unknown) => {
+            if (typeof d === 'object' && d !== null) {
+              const o = d as Record<string, unknown>
+              const loc = Array.isArray(o.loc) ? o.loc.slice(1).join('.') : ''
+              return loc ? `${loc}: ${o.msg}` : String(o.msg ?? JSON.stringify(d))
+            }
+            return String(d)
+          }).join(' / ')
+        } else if (typeof detail === 'string') {
+          detailMsg = detail
+        } else if (detail && typeof detail === 'object') {
+          const o = detail as Record<string, unknown>
+          detailMsg = String(o.context ?? o.message ?? JSON.stringify(detail))
+        }
+        throw new Error(detailMsg || json.message || json.error || `Server error (${res.status} ${res.statusText || ''})`)
+      }
+      if (json.data?.id) setInquiryId(String(json.data.id))
       setStatus('success')
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Submission failed.')
+      const msg = err instanceof Error ? err.message : 'Submission failed.'
+      setErrorMsg(msg)
       setStatus('error')
+      // 운영자 알림 (fire-and-forget)
+      try {
+        fetch(`${API}/api/security/report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'inquiry_submission_failed',
+            error: msg.slice(0, 500),
+            email: form.email?.slice(0, 100) || '',
+            school: form.school_name?.slice(0, 100) || '',
+            user_agent: navigator.userAgent.slice(0, 200),
+          }),
+        }).catch(() => {})
+      } catch { /* ignore */ }
     }
   }
 
@@ -368,8 +409,9 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
               Schools &amp; Employers
             </span>
             <h1 className="text-3xl sm:text-4xl font-black text-gray-900 leading-tight">
-              원어민 구인신청
+              Hiring Request for Native Teachers
             </h1>
+            <p className="text-sm text-gray-500">원어민 구인신청</p>
           </div>
 
           {/* Card */}
@@ -422,13 +464,35 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
               </p>
               <button
                 type="button"
-                onClick={() => setPhase('form')}
+                onClick={() => setPhase('captcha')}
                 className="btn-shimmer w-full py-4 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
                            text-white text-base font-semibold rounded-xl transition-colors"
               >
-                동의하고 시작하기 →
+                Agree &amp; Continue / 동의하고 시작하기 →
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── CAPTCHA 화면 (notice → captcha → form) ────────────────────────────
+  if (phase === 'captcha') {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+          <div className="px-6 pt-6 pb-2">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Security Verification / 보안 확인</h2>
+            <p className="text-sm text-gray-500 mb-1">Complete the puzzle to continue with your inquiry.</p>
+            <p className="text-xs text-gray-400 mb-4">채용 문의 제출을 계속하려면 아래 퍼즐을 완료해 주세요.</p>
+            <PuzzleCaptcha
+              onVerified={(token) => {
+                setForm((p) => ({ ...p, captcha_token: token }))
+                setPhase('form')
+              }}
+              onError={(error) => alert(`CAPTCHA Error: ${error}`)}
+            />
           </div>
         </div>
       </div>
@@ -444,17 +508,18 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                          border border-blue-200 rounded-full px-3 py-1 uppercase tracking-wider">
           For Schools & Academies
         </span>
-        <h1 className="text-3xl font-black text-gray-900">강사(교사) 구인신청</h1>
-        <div className="space-y-1.5 text-sm text-gray-500 leading-relaxed">
+        <h1 className="text-3xl font-black text-gray-900">Hiring Request — Native Teacher</h1>
+        <p className="text-sm text-gray-500">강사(교사) 구인신청</p>
+        <div className="space-y-1.5 text-[14px] text-gray-700 leading-relaxed">
           <p>
-            작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다.
-            허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니
-            정확하게 입력해 주세요.
+            All information provided here is required for the recruitment process. Inaccurate or false information may restrict service eligibility.
+            <br />
+            <span className="text-gray-500">작성하신 내용은 채용 대행 서비스 진행을 위한 필수 정보입니다. 허위 또는 부정확한 정보가 확인될 경우 서비스 진행이 제한될 수 있으니 정확하게 입력해 주세요.</span>
           </p>
           <p>
-            접수 완료 후{' '}
-            <strong className="text-gray-700 font-semibold">사업자 등록증 사본</strong>을
-            이메일로 보내주시기 바랍니다.
+            After submission, please email a copy of your <strong className="text-gray-900 font-semibold">business registration certificate</strong>.
+            <br />
+            <span className="text-gray-500">접수 완료 후 사업자 등록증 사본을 이메일로 보내주시기 바랍니다.</span>
           </p>
           <a
             href="mailto:bridgejobkr@gmail.com?subject=사업자등록증 사본 첨부 - 구인신청"
@@ -730,6 +795,9 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                 <p><strong>영업 보호 및 직접 연락 금지:</strong> 공식 계약 체결 전, 당사가 소개한 인력의 개인정보를 무단 수집하거나 사전 협의 없이 직접 접촉하는 행위는 엄격히 금지됩니다. 위반 시 정상 서비스 요금이 즉시 부과되며, 영업 비밀 침해에 따른 법적 책임이 청구될 수 있습니다.</p>
                 <p><strong>성별·연령 차별 금지:</strong> 모집 및 채용 시 남녀를 차별하거나, 직무 수행에 불필요한 신체 조건 또는 연령 제한을 둘 수 없습니다. (위반 시 남녀고용평등법 등에 의거 500만 원 이하의 벌금 부과)</p>
                 <p><strong>국적·인종 차별 금지:</strong> 국적, 인종, 출신 국가를 이유로 근로 조건에서 불합리한 차별을 할 수 없으며, 위반 시 국가인권위원회법 및 외국인근로자 고용법에 따른 시정 권고 및 제재를 받을 수 있습니다.</p>
+                <p className="text-gray-600 pl-2 border-l-2 border-amber-300 ml-1">
+                  채용을 완료한 이후 주관적인 의견을 통해 강사의 국적·인종 등을 이유로 차별 대우가 이루어지는 경우, 브릿지는 별도의 중재나 재매칭 등 특별한 도움을 드리기 어렵습니다.
+                </p>
                 <p className="font-semibold text-gray-800 pt-2">2. 개인정보의 수집 및 이용 (Privacy Policy)</p>
                 <p><strong>수집 항목:</strong> 성명, 연락처, 사업장 정보(사업자등록증), 채용 조건, 접속 로그 등</p>
                 <p><strong>이용 목적:</strong> 원어민 강사 매칭, 인터뷰 조율, 고용계약서 작성 및 사증(비자) 발급 행정 지원</p>
@@ -743,13 +811,15 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                 <p><strong>Data Privacy:</strong> Your information is securely stored for recruitment and visa support purposes only.</p>
               </div>
 
-              <PuzzleCaptcha
-                onVerified={(token) => setForm((p) => ({ ...p, captcha_token: token }))}
-                onError={(error) => alert(`CAPTCHA Error: ${error}`)}
-              />
+              {/* CAPTCHA는 시작 단계(captcha phase)에서 이미 처리됨 */}
+              {form.captcha_token && (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-sm text-emerald-700">
+                  ✓ Security verification completed at the start.
+                </div>
+              )}
 
               <div>
-                <Label required>동의 여부</Label>
+                <Label required>Agreement / 동의 여부</Label>
                 <SingleTog value={form.privacy_policy}
                   onChange={(v) => setForm((p) => ({ ...p, privacy_policy: v }))}
                   options={['동의합니다. I agree.', '동의하지 않습니다. I do not agree.']} />

@@ -91,7 +91,7 @@ function drawSlide(ctx: CanvasRenderingContext2D, s: SlideState) {
   ctx.font = '13px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('→  조각을 슬라이드하여 구멍에 채워 넣으세요  /  Slide the piece into the hole', CW / 2, 8)
+  // 캔버스 내 안내 텍스트 제거 — 아래 HINT 영역만 사용 (사용자 요청)
 
   // Snapshot background at hole position (once)
   if (!s.bgSnap) {
@@ -268,7 +268,7 @@ function drawRotate(ctx: CanvasRenderingContext2D, s: RotateState) {
   ctx.font = '13px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('🔄  화살표를 투명 방향에 맞추세요  /  Rotate arrow to match the transparent guide', CW / 2, 8)
+  // 캔버스 내 안내 텍스트 제거 — 아래 HINT 영역만 사용
 }
 
 // ── TYPE C: CLICK ORDER ───────────────────────────────────────────────────────
@@ -367,21 +367,16 @@ function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
     ctx.fill()
   }
 
-  // Header bar — 2-row layout (text 위, shapes 아래) 텍스트 가림 방지
-  const HEADER_H = 72
+  // Header bar — shape sequence만 표시 (텍스트 안내는 아래 HINT 영역으로)
+  const HEADER_H = 50
   ctx.fillStyle = 'rgba(255,255,255,0.07)'
   ctx.fillRect(0, 0, CW, HEADER_H)
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'
-  ctx.font = '12px Arial'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('순서대로 클릭 / Click in order', CW / 2, 14)
 
-  // Sequence preview — 헤더 하단 행에 가운데 정렬
+  // Sequence preview — 헤더 가운데 정렬
   const SEQ_GAP = 70
   const SEQ_TOTAL = (s.seq.length - 1) * SEQ_GAP
   const SEQ_START = (CW - SEQ_TOTAL) / 2
-  const SEQ_Y = 46
+  const SEQ_Y = 25
   s.seq.forEach((itemIdx, pos) => {
     const item = s.items[itemIdx]
     const isDone = s.done.includes(itemIdx)
