@@ -41,15 +41,15 @@
     -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
   .nav-link {
-    @apply px-3 py-1.5 text-xs font-normal rounded-md transition-colors duration-150;
-    color: #424245;
-  }
-  .nav-link:hover {
-    background: rgba(0, 0, 0, 0.04);
+    @apply px-3.5 py-2 text-[15px] font-medium rounded-md transition-colors duration-150;
     color: #1d1d1f;
   }
+  .nav-link:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #000;
+  }
   .nav-cta {
-    @apply px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-200;
+    @apply px-4 py-2 text-[14px] font-semibold rounded-full transition-all duration-200;
     background: #1d1d1f;
     color: #fff;
   }

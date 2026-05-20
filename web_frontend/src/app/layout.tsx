@@ -45,7 +45,6 @@ const navLinks = [
   { href: '/talents/login',        label: '인재보기' },
   { href: '/community/support',    label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
-  { href: '/community',            label: 'Community' },
 ]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -66,9 +65,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {/* ── Navigation — Apple-style glass blur ── */}
         <nav className="nav-glass">
-          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 flex items-center h-11">
+          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 flex items-center h-14">
             {/* Left: Logo */}
-            <Link href="/" className="text-[17px] font-bold text-[#1d1d1f] tracking-tight mr-auto">
+            <Link href="/" className="text-[20px] font-bold text-[#1d1d1f] tracking-tight mr-auto">
               BRIDGE
             </Link>
 

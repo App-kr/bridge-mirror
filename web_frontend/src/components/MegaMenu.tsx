@@ -37,9 +37,13 @@ const DROPDOWNS: Record<string, SubItem[]> = {
   ],
   '/community/support': [
     { href: '/community/support', label: 'Basic Guide', labelKr: '베이직 가이드' },
+    { href: '/community/support?tag=documents', label: 'Documents', labelKr: '서류 박스' },
+    { href: '/community/testimonials', label: 'Testimonials', labelKr: '후기' },
+    { href: '/community/tips', label: 'Tips', labelKr: '교사 팁' },
   ],
   '/community/support_kr': [
     { href: '/community/support_kr', label: 'FAQ & Materials', labelKr: 'FAQ · 업무자료' },
+    { href: '/community/support_kr?tag=documents', label: 'Document Library', labelKr: '서류 자료실' },
     { href: '/fees', label: 'Fee Disclosure', labelKr: '요금안내' },
   ],
   '/community': [
