@@ -87,7 +87,8 @@ function parseRawText(raw: string): Parsed {
     if (m) {
       const label = m[1].trim()
       const value = m[2].trim()
-      if (/employee\s*benefit/i.test(label)) {
+      if (/benefit/i.test(label)) {
+        // 'Employee Benefits', 'Benefits', 'Benefit' 모두 흡수
         benefits.push(...value.split(',').map(s => s.trim()).filter(Boolean))
       } else {
         fields.push({ label: normalizeLabel(label), value })
@@ -114,14 +115,14 @@ function FieldLine({ label, value }: { label: string; value: string }) {
         padding: '3px 0',
         fontSize: 14,
         lineHeight: 1.65,
-        color: '#374151',
+        color: '#000',
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
       }}
     >
       <span style={{ color: '#cbd5e1', flexShrink: 0, userSelect: 'none' }}>`</span>
       <span>
-        <span style={{ color: '#6b7280' }}>{label} : </span>
-        <span style={{ color: '#1f2937' }}>{value}</span>
+        <span style={{ color: '#000' }}>{label} : </span>
+        <span style={{ color: '#000' }}>{value}</span>
       </span>
     </div>
   )
@@ -240,20 +241,20 @@ export default function JobDetailModal({
           &#x2715;
         </button>
 
-        {/* ── 헤더 ── */}
-        <div style={{ paddingRight: 40 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#1f2937', margin: 0, letterSpacing: '-0.01em' }}>
+        {/* ── 헤더 — 위치 좌측 · Job ID 우측 (같은 크기) ── */}
+        <div className="flex items-center justify-between gap-4" style={{ paddingRight: 40 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#000', margin: 0, letterSpacing: '-0.01em' }}>
             {job.location || 'Korea'}
           </h2>
-          <div className="flex items-center gap-3" style={{ marginTop: 4 }}>
-            <span style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>
-              Job. {(job.job_id || '').replace(/^Job\.?\s*/i, '')}
-            </span>
+          <div className="flex items-center gap-3 shrink-0">
             {isHot && (
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#ea580c', textTransform: 'uppercase' }}>
                 🔥 Hot
               </span>
             )}
+            <span style={{ fontSize: 18, fontWeight: 600, color: '#000', letterSpacing: '-0.01em' }}>
+              Job. {(job.job_id || '').replace(/^Job\.?\s*/i, '')}
+            </span>
           </div>
         </div>
 
@@ -290,16 +291,16 @@ export default function JobDetailModal({
           {benefits.length > 0 && (
             <>
               <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '18px 0' }} />
-              <p style={{ fontSize: 15, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#000', margin: '0 0 10px' }}>
                 Benefits
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                 {benefits.map((b, i) => (
                   <div
                     key={i}
-                    style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
+                    style={{ fontSize: 14, color: '#000', lineHeight: 1.8, display: 'flex', alignItems: 'flex-start', gap: 6 }}
                   >
-                    <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2, fontSize: 15 }}>✓</span>
+                    <span style={{ color: '#16a34a', flexShrink: 0, marginTop: 2, fontSize: 14 }}>✓</span>
                     <span>{b}</span>
                   </div>
                 ))}
