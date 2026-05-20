@@ -5,7 +5,7 @@
  * 검색, 인라인 수정, 벌크 선택/고정/삭제, 드래그앤드롭 순서변경
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AdminAuth from '@/components/admin/AdminAuth'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import MarkdownBody from '@/components/MarkdownBody'
@@ -45,6 +45,7 @@ interface Post {
   views: number
   created_at: string
   content_type?: string
+  image_paths?: string[] | null   // 영구 보존 (DB 저장 이미지)
 }
 
 const boardLabel = (b: string) => {
@@ -544,6 +545,14 @@ export default function AdminPostsPage() {
               </button>
             </div>
 
+            {/* 이미지 관리 (영구 파일 저장) — Cafe24 FTP 대체 */}
+            <ImageManager
+              board={p.board}
+              postId={p.id}
+              initialPaths={Array.isArray(p.image_paths) ? p.image_paths : []}
+              apiBase={API}
+            />
+
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => { setEditId(null); setMovingTo('') }}
                 className="admin-btn admin-btn-cancel">
@@ -753,6 +762,128 @@ export default function AdminPostsPage() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// ImageManager — Cafe24 FTP 대체. 글당 영구 파일 보관.
+// 업로드/삭제 시 DB image_paths 자동 동기. 사라지지 않음.
+// ════════════════════════════════════════════════════════════════════
+function ImageManager({
+  board, postId, initialPaths, apiBase,
+}: { board: string; postId: number; initialPaths: string[]; apiBase: string }) {
+  const [paths, setPaths] = useState<string[]>(initialPaths)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const uploadOne = async (file: File) => {
+    setErr(null)
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await signedFetch(`${apiBase}/api/admin/community/${board}/${postId}/images`, {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.detail || j?.error || `HTTP ${res.status}`)
+      }
+      const j = await res.json()
+      const newPaths = j?.data?.image_paths || j?.image_paths || []
+      setPaths(newPaths)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setErr(`업로드 실패: ${msg}`)
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    for (const f of Array.from(files)) {
+      await uploadOne(f)
+    }
+  }
+
+  const deletePath = async (url: string) => {
+    if (!confirm('이 이미지를 삭제하시겠습니까? (파일 영구 삭제)')) return
+    setErr(null)
+    try {
+      const res = await signedFetch(
+        `${apiBase}/api/admin/community/${board}/${postId}/images?url=${encodeURIComponent(url)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPaths(prev => prev.filter(p => p !== url))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setErr(`삭제 실패: ${msg}`)
+    }
+  }
+
+  const fullUrl = (path: string) => (path.startsWith('http') ? path : `${apiBase}${path}`)
+
+  return (
+    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs font-semibold text-slate-700">
+          📁 이미지 파일 ({paths.length}/10) — 영구 보존
+        </label>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading || paths.length >= 10}
+          className="px-2.5 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-40"
+        >
+          {uploading ? '업로드 중…' : '+ 이미지 추가'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+      </div>
+      {paths.length === 0 ? (
+        <p className="text-xs text-slate-500">아직 업로드된 이미지가 없습니다. 첫 번째 이미지가 카드 썸네일로 사용됩니다.</p>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {paths.map((p, i) => (
+            <div key={p} className="relative group aspect-square overflow-hidden rounded bg-slate-200">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={fullUrl(p)} alt="" className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0.3' }} />
+              {i === 0 && (
+                <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-bold">
+                  썸네일
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => deletePath(p)}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                title="삭제"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+      <p className="mt-2 text-[10px] text-slate-500 leading-relaxed">
+        파일은 서버에 영구 저장됩니다 (Render 영구 디스크). 코드 배포·업데이트와 무관하게 보존됩니다.
+        최대 10개. 첫 번째 이미지가 게시판 카드 썸네일로 자동 사용됩니다.
+      </p>
     </div>
   )
 }
