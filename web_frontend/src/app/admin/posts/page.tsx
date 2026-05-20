@@ -551,6 +551,7 @@ export default function AdminPostsPage() {
               postId={p.id}
               initialPaths={Array.isArray(p.image_paths) ? p.image_paths : []}
               apiBase={API}
+              signedFetch={signedFetch}
             />
 
             <div className="flex gap-2 justify-end">
@@ -772,8 +773,14 @@ export default function AdminPostsPage() {
 // 업로드/삭제 시 DB image_paths 자동 동기. 사라지지 않음.
 // ════════════════════════════════════════════════════════════════════
 function ImageManager({
-  board, postId, initialPaths, apiBase,
-}: { board: string; postId: number; initialPaths: string[]; apiBase: string }) {
+  board, postId, initialPaths, apiBase, signedFetch,
+}: {
+  board: string
+  postId: number
+  initialPaths: string[]
+  apiBase: string
+  signedFetch: (url: string, init?: RequestInit) => Promise<Response>
+}) {
   const [paths, setPaths] = useState<string[]>(initialPaths)
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
