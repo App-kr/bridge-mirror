@@ -505,25 +505,72 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
         source: 'web_form',
         ...(existingToken ? { apply_token: existingToken } : {}),
       }
-      const res  = await fetch(`${API}/api/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.detail ?? json.message ?? 'Error')
+      let res: Response
+      try {
+        res = await fetch(`${API}/api/apply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } catch (netErr) {
+        const msg = netErr instanceof Error ? netErr.message : 'Network error'
+        throw new Error(`Network error: ${msg}. Please check your connection and try again.`)
+      }
+
+      let json: { success?: boolean; detail?: unknown; message?: string; error?: string; data?: { id?: number; apply_token?: string } } = {}
+      try { json = await res.json() } catch { /* non-JSON response */ }
+
+      if (!res.ok || !json.success) {
+        // Pydantic validation 에러는 array 구조 — 각 msg 추출
+        const detail = json.detail
+        let detailMsg = ''
+        if (Array.isArray(detail)) {
+          detailMsg = detail.map((d: unknown) => {
+            if (typeof d === 'object' && d !== null) {
+              const obj = d as Record<string, unknown>
+              const loc = Array.isArray(obj.loc) ? obj.loc.slice(1).join('.') : ''
+              return loc ? `${loc}: ${obj.msg}` : String(obj.msg ?? JSON.stringify(d))
+            }
+            return String(d)
+          }).join(' / ')
+        } else if (typeof detail === 'string') {
+          detailMsg = detail
+        } else if (detail && typeof detail === 'object') {
+          const obj = detail as Record<string, unknown>
+          detailMsg = String(obj.context ?? obj.message ?? JSON.stringify(detail))
+        }
+        const msg = detailMsg || json.message || json.error || `Server error (${res.status} ${res.statusText || ''})`
+        throw new Error(msg)
+      }
+
       if (json.data?.apply_token && typeof window !== 'undefined') {
         localStorage.setItem(TOKEN_KEY, json.data.apply_token)
       }
       const newId = json.data?.id
       if (newId) {
-        setCandidateId(newId)
-        if (queuedFiles.length > 0) uploadQueuedFiles(newId)
+        const cid = String(newId)
+        setCandidateId(cid)
+        if (queuedFiles.length > 0) uploadQueuedFiles(cid)
       }
       setStatus('success')
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Submission failed.')
+      const msg = err instanceof Error ? err.message : 'Submission failed.'
+      setErrorMsg(msg)
       setStatus('error')
+      // 운영자 텔레그램 알림 (백엔드 endpoint, fire-and-forget)
+      try {
+        fetch(`${API}/api/security/report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'apply_submission_failed',
+            error: msg.slice(0, 500),
+            email: form.email?.slice(0, 100) || '',
+            full_name: form.full_name?.slice(0, 100) || '',
+            user_agent: navigator.userAgent.slice(0, 200),
+          }),
+        }).catch(() => {})
+      } catch { /* ignore */ }
     }
   }
 
@@ -695,34 +742,30 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
             <section className="card space-y-5">
               <Sec title="Attach Your Files" />
-              <Desc text="Please upload files in the correct category. This helps us process your application faster and more accurately." />
+              <Desc text="Please upload your file to the correct category. Please ensure you upload the original file, rather than a screenshot, Canva link, or AI-generated file." />
 
               {/* ── 1. Photo ── */}
               <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Profile Photo</label>
-                <Desc text="Passport-style, clear face, no filters. JPG or PNG." />
-                <QueueZone fileType="photo" icon="📷" hint="Photo (JPG / PNG)" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
+                <label className="block text-sm font-semibold text-gray-700">Recent Photo (PNG / JPG)</label>
+                <QueueZone fileType="photo" icon="📷" hint="Recent photo (a new shot, not last year's) — PNG / JPG" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
               </div>
 
               {/* ── 2. CV / Resume ── */}
               <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">CV / Resume <span className="text-red-400">*</span></label>
-                <Desc text="Your main resume. PDF or Word document." />
+                <label className="block text-sm font-semibold text-gray-700">CV / Resume (PDF or Word) <span className="text-red-400">*</span></label>
                 <QueueZone fileType="cv" icon="📄" hint="CV / Resume (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
               </div>
 
               {/* ── 3. Cover Letter ── */}
               <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Cover Letter</label>
-                <Desc text="Optional but recommended. PDF or Word document." />
+                <label className="block text-sm font-semibold text-gray-700">Cover Letter (PDF or Word)</label>
                 <QueueZone fileType="cover_letter" icon="📝" hint="Cover Letter (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
               </div>
 
-              {/* ── 4. Other / Certificates ── */}
+              {/* ── 4. Other Docs ── */}
               <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Certificates &amp; Other Documents</label>
-                <Desc text="TEFL/TESOL, degrees, or any other supporting documents." />
-                <QueueZone fileType="certificate" icon="📎" hint="Certificates / Other (PDF / Image)" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
+                <label className="block text-sm font-semibold text-gray-700">Other Docs</label>
+                <QueueZone fileType="certificate" icon="📎" hint="Other documents (PDF / Image)" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
               </div>
 
               {/* ── 업로드 대기 파일 목록 ── */}
@@ -887,7 +930,14 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <div>
                 <Label required>Start Date</Label>
                 <Desc text="Earliest date you can fully start. If traveling, use your return date." />
-                <EasyDate value={form.start_date} onChange={(v) => setForm((p) => ({ ...p, start_date: v }))} years={START_YEARS} />
+                <input
+                  type="date"
+                  className="input cursor-pointer"
+                  value={form.start_date}
+                  min={new Date().toISOString().slice(0, 10)}
+                  max={`${new Date().getFullYear() + 2}-12-31`}
+                  onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))}
+                />
               </div>
               <div>
                 <Label required>Preferred Age Group</Label>
@@ -1005,7 +1055,7 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
             <section className="card space-y-4 !border-amber-200 bg-amber-50/50">
               <Sec title="Sensitive Information" />
-              <p className="text-xs text-amber-700 -mt-2 mb-1">All fields AES-256 encrypted — never shared publicly.</p>
+              <p className="text-xs text-amber-700 -mt-2 mb-1">Please check the boxes below if you have a health condition that may affect work performance, or that an employer should be aware of.</p>
               <div>
                 <Label required>Health Information</Label>
                 <Desc text="Any condition the school should know about for safe teaching? (e.g. diabetes, vision)" />
