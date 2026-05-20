@@ -1621,16 +1621,30 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
 // CARD-GRID — Tips
 // ══════════════════════════════════════════════════════════════════════════════
 function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
-  const cardContent = (p: Post, i: number) => (
-    <Link href={`/community/${board}/${p.id}`} className="tips-card group block relative">
-      <div className="h-1 -mx-5 -mt-5 mb-5 rounded-t-[20px]" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
-      <div className="text-3xl mb-3">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
-      <h3 className="text-[17px] font-bold text-[#1d1d1f] mb-2 group-hover:text-[#0071e3] transition-colors">{p.title}</h3>
-      <p className="text-sm text-[#6e6e73] line-clamp-3 mb-4">{stripMd(p.preview)}</p>
-      <span className="text-sm font-medium text-[#0071e3]">Read more &rarr;</span>
+  // Horizontal list rows (가로형 리스트) — 바둑판이 아닌 한 줄씩 길게 표시
+  const rowContent = (p: Post, i: number) => (
+    <Link
+      href={`/community/${board}/${p.id}`}
+      className="group relative flex items-center gap-4 sm:gap-5 px-5 py-4 bg-white border border-[#e5e5ea] rounded-xl
+                 hover:border-[#0071e3]/40 hover:shadow-[0_2px_12px_rgba(0,113,227,0.08)] hover:-translate-y-0.5
+                 transition-all duration-200"
+    >
+      {/* Left accent bar */}
+      <div className="shrink-0 w-1 self-stretch rounded-full" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
+      {/* Emoji icon */}
+      <div className="shrink-0 text-2xl sm:text-3xl">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
+      {/* Body */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-[16px] sm:text-[17px] font-bold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors truncate">{p.title}</h3>
+        <p className="text-sm text-[#6e6e73] line-clamp-1 mt-0.5">{stripMd(p.preview)}</p>
+      </div>
+      {/* Right arrow */}
+      <span className="hidden sm:inline-flex shrink-0 text-sm font-medium text-[#0071e3] group-hover:translate-x-0.5 transition-transform">Read more &rarr;</span>
       {editMode && (
-        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-200"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+        <div
+          className="flex items-center gap-1 ml-2 shrink-0"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+        >
           {onToggleSelect && (
             <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
           )}
@@ -1640,7 +1654,6 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
               isFirst={i === 0} isLast={i === posts.length - 1}
             />
           )}
-          <span className="flex-1" />
           {onEdit && onDelete && (
             <InlineAdminActions post={p} board={board} onEdit={onEdit} onDelete={onDelete} />
           )}
@@ -1650,7 +1663,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
   )
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 relative">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 relative">
       {editMode && (
         <div className="absolute top-3 right-4 z-20">
           <SectionEditLink href={`/admin/posts?board=${board}`} label="게시판 관리" />
@@ -1662,19 +1675,19 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
           items={posts.map(p => String(p.id))}
           onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
         >
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-3">
             {posts.map((p, i) => (
               <SortableItem key={p.id} id={String(p.id)}>
-                {cardContent(p, i)}
+                {rowContent(p, i)}
               </SortableItem>
             ))}
           </div>
         </SortableContainer>
       ) : (
-        <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
+        <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
           {posts.map((p, i) => (
             <motion.div key={p.id} variants={fadeInUp}>
-              {cardContent(p, i)}
+              {rowContent(p, i)}
             </motion.div>
           ))}
         </motion.div>
@@ -1943,31 +1956,22 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
                 <button
                   type="button"
                   onClick={() => setSelectedReview(t)}
-                  className="w-full flex gap-4 sm:gap-5 p-4 sm:p-5 bg-white rounded-2xl border border-[#e5e5ea] text-left group
+                  className="w-full p-5 sm:p-6 bg-white rounded-2xl border border-[#e5e5ea] text-left group
                              hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] hover:border-[#d1d1d6] hover:-translate-y-0.5
                              transition-all duration-300 cursor-pointer"
                 >
-                  {/* Left: Avatar */}
-                  <div className="shrink-0">
-                    <AvatarPlaceholder name={t.name} photoUrl={t.photo_url} size={100} />
+                  {/* Header: Name | Country */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-bold text-[16px] text-[#1d1d1f]">{(t.name || 'Anonymous').trim()}</span>
+                    {t.country && (
+                      <>
+                        <span className="text-[#d1d1d6]">|</span>
+                        <span className="text-sm text-[#86868b]">{t.country}</span>
+                      </>
+                    )}
                   </div>
-
-                  {/* Right: Info */}
-                  <div className="flex-1 min-w-0 py-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-[16px] text-[#1d1d1f]">{t.name}</span>
-                      <span className="text-sm text-[#86868b]">({t.country})</span>
-                    </div>
-                    <div className="flex gap-0.5 mb-2">
-                      {Array.from({ length: 5 }).map((_, s) => (
-                        <svg key={s} className="w-3.5 h-3.5" viewBox="0 0 20 20" fill={s < t.rating ? '#facc15' : '#e5e5ea'}>
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <p className="text-sm text-[#424245] leading-relaxed line-clamp-2">{sanitizeReviewText(t.review_text)}</p>
-                    <span className="text-xs text-[#0071e3] font-medium mt-1.5 block group-hover:underline">Read more</span>
-                  </div>
+                  <p className="text-[15px] text-[#424245] leading-relaxed line-clamp-3">{sanitizeReviewText(t.review_text)}</p>
+                  <span className="text-xs text-[#0071e3] font-medium mt-2 block group-hover:underline">Read more</span>
                 </button>
               </motion.div>
             ))}
@@ -2053,25 +2057,20 @@ function TestimonialLayout({ config, board, editMode, onNewPost }: LayoutProps) 
                 &times;
               </button>
 
-              <div className="flex items-center gap-4 mb-6">
-                <AvatarPlaceholder name={selectedReview.name} photoUrl={selectedReview.photo_url} size={72} />
-                <div>
-                  <div className="font-bold text-[#1d1d1f] text-lg">{selectedReview.name}</div>
-                  <div className="text-sm text-[#86868b]">{selectedReview.country}</div>
+              <div className="mb-5">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-[#1d1d1f] text-lg">{(selectedReview.name || 'Anonymous').trim()}</span>
+                  {selectedReview.country && (
+                    <>
+                      <span className="text-[#d1d1d6]">|</span>
+                      <span className="text-sm text-[#86868b]">{selectedReview.country}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="flex gap-1 mb-5">
-                {Array.from({ length: 5 }).map((_, s) => (
-                  <svg key={s} className="w-4 h-4" viewBox="0 0 20 20" fill={s < selectedReview.rating ? '#facc15' : '#e5e5ea'}>
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-
               <div className="border-t border-[#f5f5f7] pt-5">
-                <span className="text-3xl text-[#d1d1d6] leading-none font-serif">&ldquo;</span>
-                <p className="text-[15px] text-[#424245] leading-[1.8] mt-2 whitespace-pre-wrap">{sanitizeReviewText(selectedReview.review_text)}</p>
+                <p className="text-[15px] text-[#424245] leading-[1.8] whitespace-pre-wrap">{sanitizeReviewText(selectedReview.review_text)}</p>
               </div>
             </motion.div>
           </motion.div>

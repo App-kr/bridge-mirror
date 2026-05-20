@@ -33,22 +33,15 @@ const DROPDOWNS: Record<string, SubItem[]> = {
     { href: '/community/korea?tag=city', label: 'City Guides', labelKr: '도시 가이드' },
   ],
   '/community/visa': [
-    { href: '/community/visa', label: 'Visa Types', labelKr: '비자 종류' },
-    { href: '/community/visa?tag=process', label: 'Visa Process', labelKr: '비자 절차' },
-    { href: '/community/visa?tag=documents', label: 'Documents', labelKr: '필요 서류' },
+    { href: '/community/visa', label: 'Visa', labelKr: '비자 관리' },
+    { href: '/community/visa?tag=apostille', label: 'Apostille & Notarization', labelKr: '공증·아포스티유' },
   ],
   '/community/support': [
-    { href: '/community/support', label: 'FAQ (Teachers)', labelKr: '강사용 FAQ' },
-    { href: '/about', label: 'About us', labelKr: '회사 소개' },
-    { href: '/fees', label: 'Fee Disclosure', labelKr: '요금안내' },
-    { href: '/contact', label: 'Contact Us', labelKr: '문의하기' },
+    { href: '/community/support', label: 'Basic Guide', labelKr: '베이직 가이드' },
   ],
   '/community/support_kr': [
-    { href: '/community/support_kr', label: 'FAQ (기관용)', labelKr: '채용 FAQ' },
-    { href: '/community/support_kr?tag=resources', label: '업무자료', labelKr: '채용 관련 자료' },
-    { href: '/community/support_kr?tag=forms', label: '서식/양식', labelKr: '업무 서식' },
+    { href: '/community/support_kr', label: 'FAQ & Materials', labelKr: 'FAQ · 업무자료' },
     { href: '/fees', label: 'Fee Disclosure', labelKr: '요금안내' },
-    { href: '/contact', label: 'Contact Us', labelKr: '문의하기' },
   ],
   '/community': [
     { href: '/community/testimonials', label: 'Testimonials', labelKr: '후기' },

@@ -26,6 +26,13 @@ export function sanitizeReviewText(text: string): string {
       .replace(/<br\s*\/?>/gi, '\n')
       // Strip any remaining HTML tags
       .replace(/<[^>]+>/g, '')
+      // Replace AI-style em-dashes / full-width separators with comma-space
+      .replace(/\s*[—–―｜ー]+\s*/g, ', ')
+      // Korean stand-alone filler "ㅡ" (U+3161) → comma
+      .replace(/\s*[ㅡ]+\s*/g, ', ')
+      // Collapse repeated punctuation/spaces
+      .replace(/,\s*,+/g, ',')
+      .replace(/\s{2,}/g, ' ')
       .trim()
   )
 }
