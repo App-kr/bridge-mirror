@@ -9,7 +9,18 @@ export function useEditMode(): boolean {
   const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
-    setEditMode(document.cookie.includes('bridge_edit_mode=true'))
+    // 편집모드는 두 조건 모두 충족해야 활성화:
+    //   1) bridge_edit_mode=true 쿠키
+    //   2) sessionStorage 에 admin key (실제 로그인 세션) 보관
+    // 비관리자에게 편집 버튼 노출 방지
+    const hasCookie = document.cookie.includes('bridge_edit_mode=true')
+    const hasAdminKey = typeof window !== 'undefined' && !!sessionStorage.getItem('bridge_admin_key')
+    const enabled = hasCookie && hasAdminKey
+    setEditMode(enabled)
+    // 쿠키만 남고 키가 없으면 쿠키 정리 (이전 세션 잔재 제거)
+    if (hasCookie && !hasAdminKey) {
+      document.cookie = 'bridge_edit_mode=; path=/; max-age=0; SameSite=Strict'
+    }
   }, [])
 
   return editMode

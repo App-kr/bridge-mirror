@@ -34,7 +34,7 @@ const {
   VACATION_INC:        VACATION_INC_DEFAULT,
 } = INQUIRY_DEFAULTS
 
-const STEP_LABELS = ['기본정보', '급여 및 복지', '개인정보 동의']
+const STEP_LABELS = ['Basic Info / 기본정보', 'Salary & Benefits / 급여 및 복지', 'Privacy / 개인정보 동의']
 
 // ── Step Indicator ─────────────────────────────────────────────────────────
 function StepIndicator({ step }: { step: number }) {
@@ -567,7 +567,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
               <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
               <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
             </svg>
-            bridgejobkr@gmail.com 으로 보내기
+            Email bridgejobkr@gmail.com
           </a>
         </div>
       </div>
@@ -583,15 +583,17 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
           <>
             <section className="card !border-blue-100 bg-blue-50/30">
               <p className="text-xs text-blue-700 leading-relaxed">
-                정보는 최대한 정확하게 작성해 주십시오. 변경 사항이 발생할 경우 메모란에 기재해 주시기 바랍니다.
+                Please fill in all information as accurately as possible. Note any changes in the Memo field.
+                <span className="block text-gray-400 mt-0.5">정보는 최대한 정확하게 작성해 주십시오. 변경 사항이 발생할 경우 메모란에 기재해 주시기 바랍니다.</span>
               </p>
             </section>
 
             <section className="card space-y-4">
-              <Sec title="담당자 정보" subtitle="Contact Person" />
+              <Sec title="Contact Person" subtitle="담당자 정보" />
               <p className="text-xs text-gray-400 leading-relaxed -mt-2">
-                고용주가 아닌 경우, 또는 향후 채용 담당자가 변경될 시 반드시 연락처 변경 사실을 알려 주세요.
-                수신자 명단 업데이트가 이루어지지 않을 경우 중요한 안내를 받지 못할 수 있습니다.
+                If you are not the employer, or if the hiring contact changes later, please notify us immediately.
+                Failure to update recipients may result in missing important communications.
+                <span className="block mt-0.5">고용주가 아닌 경우, 또는 향후 채용 담당자가 변경될 시 반드시 연락처 변경 사실을 알려 주세요.</span>
               </p>
               {/* Honeypot — 봇만 채움, 사용자 안 보임 */}
               <input
@@ -605,24 +607,24 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                 onChange={set('_url' as keyof typeof form)}
               />
               <div>
-                <Label required>이메일 주소 / Email</Label>
+                <Label required>Email Address / 이메일</Label>
                 <input type="email" className="input" placeholder="school@example.com"
                   value={form.email} onChange={set('email')} />
               </div>
               <div>
-                <Label required>성함 / 직책</Label>
-                <Desc text="업체명이 아닌 담당자 성함 및 직책 (Name / Position)" />
-                <input className="input" placeholder="e.g. 홍길동 / 원장"
+                <Label required>Name / Position (성함 / 직책)</Label>
+                <Desc text="Contact person's name and position — not the company name. (업체명이 아닌 담당자 성함 및 직책)" />
+                <input className="input" placeholder="e.g. John Kim / Director"
                   value={form.contact_name} onChange={set('contact_name')} />
               </div>
               <div>
-                <Label required>휴대전화</Label>
-                <Desc text="카카오톡이 가능한 대표님 또는 원어민 담당자 휴대전화번호. 인터뷰 등 필수 사항 연락 외 일절 하지 않습니다. 대표 번호만 기재하거나 잘못된 번호를 제공할 경우 진행이 불가능합니다." />
+                <Label required>Mobile Phone (휴대전화)</Label>
+                <Desc text="A KakaoTalk-enabled mobile number for the owner or native-teacher contact. Used only for essential matters such as interviews. Generic main numbers or invalid numbers will block the process. (카카오톡이 가능한 대표 또는 담당자 휴대폰. 인터뷰 등 필수 연락 외 사용하지 않습니다.)" />
                 <input className="input" placeholder="010-xxxx-xxxx"
                   value={form.phone} onChange={set('phone')} />
               </div>
               <div>
-                <Label required>사업자</Label>
+                <Label required>Business Registration (사업자)</Label>
                 <SingleTog value={form.business_registration}
                   onChange={(v) => setForm((p) => ({ ...p, business_registration: v }))}
                   options={BUSINESS_REG} />
@@ -630,103 +632,103 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
             </section>
 
             <section className="card space-y-4">
-              <Sec title="학교 / 기관 정보" subtitle="School Information" />
+              <Sec title="School Information" subtitle="학교 / 기관 정보" />
               <div>
-                <Label required>학교이름 / Name</Label>
-                <Desc text="예시) 브릿지영어 1캠퍼스" />
-                <input className="input" placeholder="e.g. 선샤인 영어학원"
+                <Label required>School Name (학교/기관 이름)</Label>
+                <Desc text="e.g. Bridge English Campus 1 (브릿지영어 1캠퍼스)" />
+                <input className="input" placeholder="e.g. Sunshine English Academy"
                   value={form.school_name} onChange={set('school_name')} />
               </div>
               <div>
-                <Label required>근무처소재지</Label>
-                <Desc text="네이버 맵 등에 명시된 실제 근무처 장소 주소를 기재해주세요" />
-                <input className="input" placeholder="e.g. 서울 강남구 역삼동 123-45"
+                <Label required>Workplace Address (근무처 소재지)</Label>
+                <Desc text="Please enter the actual workplace address as listed on Naver Maps or similar. (네이버 맵 등에 명시된 실제 근무처 주소를 기재해주세요.)" />
+                <input className="input" placeholder="e.g. 123-45 Yeoksam-dong, Gangnam-gu, Seoul"
                   value={form.school_location} onChange={set('school_location')} />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label required>채용이력</Label>
-                  <Desc text="현재 사업자로 원어민 E비자 채용여부" />
+                  <Label required>Hiring History (채용이력)</Label>
+                  <Desc text="Have you hired E-visa native teachers under this business registration? (현재 사업자로 원어민 E비자 채용여부)" />
                   <SingleTog value={form.hiring_history}
                     onChange={(v) => setForm((p) => ({ ...p, hiring_history: v }))}
                     options={HIRE_HIST} />
                 </div>
                 <div>
-                  <Label required>원어민강사</Label>
-                  <Desc text='근무중인 "E"비자 원어민수 (교포/한인교사 제외)' />
+                  <Label required>Native Teachers (원어민강사)</Label>
+                  <Desc text='Current number of E-visa native teachers (excluding Korean / gyopo teachers). (근무중인 "E"비자 원어민수)' />
                   <select className="input" value={form.native_count} onChange={set('native_count')}>
-                    <option value="">선택...</option>
+                    <option value="">Select / 선택...</option>
                     {NATIVE_COUNT.map((n) => <option key={n}>{n}</option>)}
                   </select>
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label required>채용인원</Label>
-                  <Desc text="총 몇명의 원어민 채용을 계획하시나요?" />
+                  <Label required>Vacancies (채용인원)</Label>
+                  <Desc text="How many native teachers do you plan to hire in total? (총 몇 명의 원어민 채용을 계획하시나요?)" />
                   <select className="input" value={form.vacancies} onChange={set('vacancies')}>
-                    <option value="">선택...</option>
+                    <option value="">Select / 선택...</option>
                     {VACANCIES.map((v) => <option key={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <Label required>희망시작일</Label>
+                  <Label required>Preferred Start Date (희망시작일)</Label>
                   <input type="date" className="input" value={form.start_date} onChange={set('start_date')} />
                 </div>
               </div>
             </section>
 
             <section className="card space-y-5">
-              <Sec title="수업 조건" subtitle="Teaching Conditions" />
+              <Sec title="Teaching Conditions" subtitle="수업 조건" />
               <div>
-                <Label>계약구분 / Contract Type</Label>
+                <Label>Contract Type (계약구분)</Label>
                 <SingleTog value={form.contract_type}
                   onChange={(v) => setForm((p) => ({ ...p, contract_type: v }))}
                   options={CONTRACT_TYPE} />
               </div>
               <div>
-                <Label required>수업대상</Label>
+                <Label required>Teaching Target (수업대상)</Label>
                 <CheckList value={form.teaching_age as string[]}
                   onChange={(arr) => setForm((p) => ({ ...p, teaching_age: arr }))}
                   options={TEACHING_AGE} />
               </div>
               <div>
-                <Label required>학생수</Label>
-                <Desc text="1강의당 최대 학생수" />
+                <Label required>Class Size (학생수)</Label>
+                <Desc text="Maximum number of students per class. (1강의당 최대 학생수)" />
                 <SingleTog value={form.class_size}
                   onChange={(v) => setForm((p) => ({ ...p, class_size: v }))}
                   options={CLASS_SIZE} />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label required>근무일정</Label>
-                  <Desc text="수업 시작 시각이 아닌, 실제 출근 시각을 기재해 주세요" />
+                  <Label required>Work Schedule (근무일정)</Label>
+                  <Desc text="Actual report-to-work hours, not class start time. (수업 시작 시각이 아닌, 실제 출근 시각을 기재해 주세요.)" />
                   <input className="input" placeholder="e.g. M~F 09:00~17:00"
                     value={form.schedule} onChange={set('schedule')} />
                 </div>
                 <div>
-                  <Label>휴게시간</Label>
-                  <Desc text="e.g. 점심시간 60분 자유, 외출가능" />
-                  <input className="input" placeholder="e.g. 60분 lunch, free to go out"
+                  <Label>Break Time (휴게시간)</Label>
+                  <Desc text="e.g. 60-min lunch, free to go out. (점심시간 60분 자유 외출가능)" />
+                  <input className="input" placeholder="e.g. 60-min lunch, free to go out"
                     value={form.break_time} onChange={set('break_time')} />
                 </div>
               </div>
               <div>
-                <Label required>평균강의</Label>
-                <Desc text="계약서에 명시될 주당 수업 시간 (Actual weekly teaching hours)" />
+                <Label required>Average Weekly Teaching (평균강의)</Label>
+                <Desc text="Actual weekly teaching hours as written in the contract. (계약서에 명시될 주당 수업 시간)" />
                 <Dropdown value={form.avg_lessons}
                   onChange={(v) => setForm((p) => ({ ...p, avg_lessons: v }))}
                   options={AVG_LESSONS} />
               </div>
               <div>
-                <Label required>업무책임</Label>
-                <Desc text="Job Responsibilities and Duties" />
-                <textarea className="textarea h-20" placeholder="e.g. 수업 + 교재 준비 + 학부모 상담..."
+                <Label required>Job Responsibilities (업무책임)</Label>
+                <Desc text="Teaching duties + supporting tasks. (수업 + 교재 준비 + 학부모 상담 등)" />
+                <textarea className="textarea h-20" placeholder="e.g. Teaching + lesson prep + parent counseling..."
                   value={form.job_responsibilities} onChange={set('job_responsibilities')} />
               </div>
               <div>
-                <Label required>선호대상</Label>
-                <Desc text="현재 채용 타겟이 아닌, 실제 채용 가능한 대상을 선택해 주세요. E 비자 채용 이력이 없다면 메모 칸에 반드시 기재해야 합니다." />
+                <Label required>Preferred Candidate (선호대상)</Label>
+                <Desc text="Choose realistic, hireable target groups — not aspirational ones. If you have no E-visa hiring history, please specify in the Memo. (실제 채용 가능한 대상만 선택. E 비자 채용 이력이 없다면 메모란에 반드시 기재.)" />
                 <CheckList value={form.preferred_candidate as string[]}
                   onChange={(arr) => setForm((p) => ({ ...p, preferred_candidate: arr }))}
                   options={PREFERRED_CANDIDATE} />
@@ -741,23 +743,23 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
         {step === 2 && (
           <>
             <section className="card space-y-4">
-              <Sec title="급여조건" subtitle="Salary Range" />
-              <Desc text="최저~최고 범위를 모두 선택해 주세요. 좋은 강사에게 지급 가능한 페이를 상한선으로 선택하는 게 좋습니다." />
+              <Sec title="Salary Range" subtitle="급여조건" />
+              <Desc text="Select both the minimum and maximum range. We recommend setting the upper bound at the pay you can realistically offer a strong teacher. (최저~최고 범위 모두 선택. 상한선은 좋은 강사에게 지급 가능한 페이로 설정하는 것을 권장.)" />
               <CheckList value={form.salary_raw as string[]}
                 onChange={(arr) => setForm((p) => ({ ...p, salary_raw: arr }))}
                 options={SALARY_RANGES} />
             </section>
 
             <section className="card space-y-5">
-              <Sec title="이동지원 & 식사" subtitle="Travel & Meals" />
+              <Sec title="Travel & Meals" subtitle="이동지원 & 식사" />
               <div>
-                <Label required>이동지원</Label>
+                <Label required>Travel Support (이동지원)</Label>
                 <Dropdown value={form.travel_support}
                   onChange={(v) => setForm((p) => ({ ...p, travel_support: v }))}
                   options={TRAVEL_SUPPORT} />
               </div>
               <div>
-                <Label required>식사/식대</Label>
+                <Label required>Meals / Meal Allowance (식사/식대)</Label>
                 <CheckList value={form.meal_provided as string[]}
                   onChange={(arr) => setForm((p) => ({ ...p, meal_provided: arr }))}
                   options={MEAL_OPTS} />
@@ -771,49 +773,49 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
                 onChange={(v) => setForm((p) => ({ ...p, housing_provided: v }))}
                 options={HOUSING_OPTS} />
               <div>
-                <Label>숙소관련</Label>
-                <Desc text="옵션이나 월세금 등을 적어주십시오" />
-                <input className="input" placeholder="e.g. 풀옵션/ 월세 70만원+보증금 1천만원 지원"
+                <Label>Housing Details (숙소관련)</Label>
+                <Desc text="Please describe furnishing options or rent / deposit amount. (옵션, 월세 또는 보증금 등을 적어주십시오.)" />
+                <input className="input" placeholder="e.g. Fully furnished / Rent KRW 700K + Deposit 10M supported"
                   value={form.housing_detail} onChange={set('housing_detail')} />
               </div>
             </section>
 
             <section className="card space-y-4">
-              <Sec title="복지" subtitle="Benefits" />
-              <Desc text="교육기관별 복지입니다. 해당사항만 체크해주시되 원어민 채용시 필수항목은 반드시 선택" />
+              <Sec title="Benefits" subtitle="복지" />
+              <Desc text="Benefits provided by your institution. Check only what applies — required items for native-teacher hiring must be selected. (교육기관별 복지. 해당사항만 체크하되 원어민 채용 필수항목은 반드시 선택.)" />
               <CheckList value={form.benefits as string[]}
                 onChange={(arr) => setForm((p) => ({ ...p, benefits: arr }))}
                 options={BENEFITS_OPTS} />
             </section>
 
             <section className="card space-y-4">
-              <Sec title="휴가" subtitle="Vacation & Leave" />
+              <Sec title="Vacation & Leave" subtitle="휴가" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <Label required>유급휴일</Label>
-                  <Desc text="A minimum of 11 days must be guaranteed." />
-                  <input className="input" placeholder="e.g. 15일/년"
+                  <Label required>Paid Vacation (유급휴일)</Label>
+                  <Desc text="A minimum of 11 days must be guaranteed. (최소 11일 이상 보장 필수)" />
+                  <input className="input" placeholder="e.g. 15 days/year"
                     value={form.paid_vacation} onChange={set('paid_vacation')} />
                 </div>
                 <div>
-                  <Label required>휴일 포함여부</Label>
-                  <Desc text="Does this include weekends and holidays?" />
+                  <Label required>Includes Holidays? (휴일 포함여부)</Label>
+                  <Desc text="Does this include weekends and public holidays? (주말 및 공휴일 포함 여부)" />
                   <SingleTog value={form.vacation_includes}
                     onChange={(v) => setForm((p) => ({ ...p, vacation_includes: v }))}
                     options={VACATION_INC} />
                 </div>
               </div>
               <div>
-                <Label required>보건휴가</Label>
-                <Desc text="Sick leave" />
-                <input className="input" placeholder="e.g. 3일/년"
+                <Label required>Sick Leave (보건휴가)</Label>
+                <Desc text="Paid sick leave per year. (연간 유급 병가 일수)" />
+                <input className="input" placeholder="e.g. 3 days/year"
                   value={form.sick_leave} onChange={set('sick_leave')} />
               </div>
             </section>
 
             <section className="card space-y-4">
-              <Sec title="메모" subtitle="Memo" />
-              <textarea className="textarea h-28" placeholder="추가 사항, 특이 조건, 기타 메모..."
+              <Sec title="Memo" subtitle="메모" />
+              <textarea className="textarea h-28" placeholder="Additional notes, special conditions, other memos... (추가 사항, 특이 조건, 기타 메모)"
                 value={form.memo} onChange={set('memo')} />
             </section>
           </>
@@ -895,7 +897,7 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
           {step === 3 && (
             <button type="button" onClick={handleSubmit} disabled={status === 'submitting'}
               className="btn-shimmer btn-primary flex-1 text-base py-3">
-              <span>{status === 'submitting' ? '제출 중...' : '채용 문의 제출'}</span>
+              <span>{status === 'submitting' ? 'Submitting... / 제출 중' : 'Submit Hiring Request / 채용 문의 제출'}</span>
             </button>
           )}
         </div>
