@@ -13087,6 +13087,172 @@ except Exception as _pay_err:
 # 비인증 직접 접근 → 403 (security_middleware.py에서 차단)
 
 
+# ── 게시판 이미지 (공개 콘텐츠) — Cafe24 FTP 대체 ─────────────────────────────
+# 설계: 파일 자체를 Render 영구 디스크에 저장 → 영구 보존 + URL 직접 접근
+# 디렉터리: /data/uploads/community/{board}/{post_id}/{filename}
+# 보안: board 화이트리스트 + 경로탈주 차단 + 확장자 화이트리스트
+import mimetypes as _mimetypes
+
+_COMMUNITY_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
+_COMMUNITY_IMG_CACHE_SEC = 86400  # 1일
+
+@app.get("/api/community-image/{board}/{post_id}/{filename}", tags=["community"])
+async def community_image_serve(board: str, post_id: str, filename: str, request: Request):
+    """게시판 이미지 공개 서빙 — 인증 불필요 (공개 콘텐츠).
+    Cafe24 FTP 방식과 동일하게 파일 자체를 영구 디스크에서 반환.
+    """
+    # 1. board 화이트리스트
+    if board not in _BOARDS:
+        raise HTTPException(404, "Board not found")
+    # 2. post_id는 정수만
+    try:
+        int(post_id)
+    except ValueError:
+        raise HTTPException(400, "invalid post_id")
+    # 3. filename 안전성 (path traversal + 확장자)
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "invalid filename")
+    ext = Path(filename).suffix.lower()
+    if ext not in _COMMUNITY_IMG_EXTS:
+        raise HTTPException(400, "invalid extension")
+    # 4. 경로 조립 + 범위 검증
+    img_dir = _UPLOAD_BASE / "community" / board / post_id
+    img_path = (img_dir / filename).resolve()
+    try:
+        img_path.relative_to(_UPLOAD_BASE.resolve())
+    except ValueError:
+        raise HTTPException(400, "path escape")
+    if not img_path.exists() or not img_path.is_file():
+        raise HTTPException(404, "image not found")
+    # 5. mime + 캐시 헤더
+    mime, _ = _mimetypes.guess_type(str(img_path))
+    mime = mime or "application/octet-stream"
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=str(img_path),
+        media_type=mime,
+        headers={
+            "Cache-Control": f"public, max-age={_COMMUNITY_IMG_CACHE_SEC}, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/api/admin/community/{board}/{post_id}/images", tags=["admin"])
+async def admin_community_upload_image(
+    board: str,
+    post_id: int,
+    request: Request,
+    file: UploadFile = FastFile(...),
+):
+    """관리자 게시판 이미지 업로드 — 영구 디스크 저장 + image_paths 자동 등록.
+    기존 글 편집 시 사용. 같은 이름이면 덮어쓰기 (Cafe24 방식과 동일).
+    """
+    _check_admin(request)
+    if board not in _BOARDS:
+        raise HTTPException(404, "Board not found")
+    if not _rate_ok(_ip_hash(request), window=60, max_posts=20):
+        raise HTTPException(429, "Too many uploads.")
+    # 파일 검증
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file.")
+    ext = _validate_file(data, file.filename or "image.png", "community_image")
+    # 파일명 안전 (사용자 입력 정규화: 영숫자 + 한글 + - _ 만 허용)
+    import re as _re
+    safe_stem = _re.sub(r"[^a-zA-Z0-9가-힣_\-]", "_", Path(file.filename or "image").stem)[:50]
+    if not safe_stem:
+        safe_stem = "image"
+    # 저장 디렉터리: /data/uploads/community/{board}/{post_id}/
+    img_dir = _UPLOAD_BASE / "community" / board / str(post_id)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    img_path = img_dir / f"{safe_stem}{ext}"
+    # 경로 검증
+    try:
+        img_path.resolve().relative_to(_UPLOAD_BASE.resolve())
+    except ValueError:
+        raise HTTPException(400, "path escape")
+    img_path.write_bytes(data)
+    # DB image_paths 업데이트 (UPSERT)
+    public_url = f"/api/community-image/{board}/{post_id}/{safe_stem}{ext}"
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        row = conn.execute(
+            "SELECT image_paths FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
+            (post_id, board),
+        ).fetchone()
+        if not row:
+            img_path.unlink(missing_ok=True)
+            raise HTTPException(404, "Post not found")
+        import json as _json
+        raw = row[0]
+        try:
+            paths = _json.loads(raw) if raw and raw.strip().startswith("[") else ([raw] if raw else [])
+        except Exception:
+            paths = []
+        # 중복 제거 + 새 경로 prepend (최신이 첫번째)
+        paths = [p for p in paths if p != public_url]
+        paths.insert(0, public_url)
+        # 최대 10개로 제한
+        paths = paths[:10]
+        conn.execute(
+            "UPDATE community_posts SET image_paths=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND board=?",
+            (_json.dumps(paths, ensure_ascii=False), post_id, board),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return ok(data={"url": public_url, "image_paths": paths}, message="Image uploaded")
+
+
+@app.delete("/api/admin/community/{board}/{post_id}/images", tags=["admin"])
+async def admin_community_delete_image(
+    board: str,
+    post_id: int,
+    request: Request,
+    url: str,
+):
+    """관리자 게시판 이미지 삭제 — 파일 + image_paths 동기 제거."""
+    _check_admin(request)
+    if board not in _BOARDS:
+        raise HTTPException(404, "Board not found")
+    # url 형식 검증: /api/community-image/{board}/{post_id}/{filename}
+    expected_prefix = f"/api/community-image/{board}/{post_id}/"
+    if not url.startswith(expected_prefix):
+        raise HTTPException(400, "invalid url")
+    filename = url[len(expected_prefix):]
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "invalid filename")
+    img_path = (_UPLOAD_BASE / "community" / board / str(post_id) / filename).resolve()
+    try:
+        img_path.relative_to(_UPLOAD_BASE.resolve())
+    except ValueError:
+        raise HTTPException(400, "path escape")
+    img_path.unlink(missing_ok=True)
+    # DB
+    conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+    try:
+        row = conn.execute(
+            "SELECT image_paths FROM community_posts WHERE id=? AND board=?",
+            (post_id, board),
+        ).fetchone()
+        if row and row[0]:
+            import json as _json
+            try:
+                paths = _json.loads(row[0]) if row[0].strip().startswith("[") else []
+            except Exception:
+                paths = []
+            paths = [p for p in paths if p != url]
+            conn.execute(
+                "UPDATE community_posts SET image_paths=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND board=?",
+                (_json.dumps(paths, ensure_ascii=False), post_id, board),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+    return ok(message="Image deleted")
+
+
 # ── 인터뷰 리마인더 백그라운드 스레드 ─────────────────────────────────────────
 def _interview_reminder_loop():
     """10분 간격으로 인터뷰 30분 전 리마인더 발송 (Render 서버용)."""
