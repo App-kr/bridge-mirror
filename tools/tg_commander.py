@@ -636,6 +636,19 @@ def route_callback(chat_id, cb_id, data, msg_id):
     elif data == "watcher":  cb_watcher(chat_id, msg_id)
     elif data == "tasks":    cb_tasks(chat_id, msg_id)
     elif data == "run_start":cb_run_start(chat_id, msg_id)
+    elif data == "key_reload":
+        # LLM 키 캐시 전체 초기화 → 크레딧 충전 후 즉시 복구
+        _key_cache.clear()
+        try:
+            import sys
+            sys.path.insert(0, r"Q:\Claudework\bridge base\tools")
+            import bx as _bx; _bx.cmd_load()
+        except Exception:
+            pass
+        edit_msg(chat_id, msg_id,
+                 "[키 재시작] LLM 캐시 초기화 완료\n"
+                 "다음 메시지부터 Anthropic API를 다시 시도합니다.",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
     elif data == "gate_yes":
         write_gate_response("yes")
         send(chat_id, "[배포 승인됨]")
@@ -1635,12 +1648,25 @@ def _ask_claude(chat_id, user_text):
         except Exception as e:
             err_str = str(e)
             last_err = f"{prov}: {err_str[:120]}"
+            # 크레딧 부족 (400) — 키는 유효, 캐시하지 않음. 사용자에게 즉시 알림.
+            is_credit_err = "credit balance" in err_str.lower() or (
+                "400" in err_str and "credit" in err_str.lower()
+            )
+            if is_credit_err:
+                _log(f"[llm] CREDIT EMPTY {prov}: 잔액 부족")
+                send(chat_id,
+                     "[결제 필요] Anthropic 크레딧 잔액 0\n"
+                     "console.anthropic.com/settings/plans 에서 충전 후\n"
+                     "\"키 재시작\" 또는 \"봇 재시작\" 으로 복구하세요.\n\n"
+                     "키워드 명령(광고/블로그/맛족도/이메일확인)은 계속 작동합니다.",
+                     markup=keyboard([btn("키 재시작", "key_reload"), btn("메인 메뉴", "menu")]))
+                return  # 다른 provider 시도 중단 (크레딧 문제이므로 무의미)
             # 401/429 는 이미 캐시됨 — debug 레벨로만 기록 (스팸 방지)
             if "401" in err_str or "429" in err_str:
                 _log(f"[llm] skip {prov} (key invalid/rate-limited)")
             else:
                 _log(f"[llm] FAIL {prov}: {err_str[:120]}")
-            # 실패 키는 즉시 캐시에 반영 (12시간 재시도 없음)
+            # 실패 키는 즉시 캐시에 반영 (12시간 재시도 없음) — 단, 크레딧 오류 제외
             if prov == "anthropic" and key:
                 _key_cache["anthropic:" + key[:20]] = (False, time.time())
             elif prov == "gemini" and key:
@@ -1648,11 +1674,11 @@ def _ask_claude(chat_id, user_text):
             continue
 
     if raw is None:
-        # LLM 실패 → 작업 요청이면 터미널 자동 실행
-        if _TASK_TRIGGER_RE.search(user_text) or len(user_text) >= 8:
+        # LLM 실패 → 모든 텍스트를 터미널 작업으로 전달 시도
+        if _TASK_TRIGGER_RE.search(user_text) or len(user_text) >= 4:
             _auto_terminal_task(chat_id, user_text)
         else:
-            send(chat_id, "AI 처리 중 오류. 작업 요청이면 그대로 다시 입력하세요.",
+            send(chat_id, "AI 연결 실패. 키워드 명령(광고실행해/블로그 글쓰기/맛족도 등)은 그대로 사용 가능합니다.",
                  markup=keyboard([btn("메인 메뉴", "menu")]))
         return
 
