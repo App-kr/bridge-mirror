@@ -10790,8 +10790,29 @@ def _ensure_testimonials_schema():
             )
         """)
         conn.commit()
-        # 자동 시드 (빈 테이블일 때)
-        count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0").fetchone()[0]
+        # 정크 데이터 자동 정리:
+        #   기존 행에 "최고관리자" 이름 또는 'function board_move' 같은 스크랩 JS 잔재가 있으면
+        #   안전하게 논리삭제(is_deleted=1) 후 새 시드 데이터로 교체
+        try:
+            junk_count = conn.execute("""
+                SELECT COUNT(*) FROM testimonials
+                WHERE is_deleted=0
+                  AND (name = '최고관리자' OR review_text LIKE '%function board_move%')
+            """).fetchone()[0]
+            if junk_count > 0:
+                conn.execute("""
+                    UPDATE testimonials SET is_deleted=1, is_visible=0
+                    WHERE is_deleted=0
+                      AND (name = '최고관리자' OR review_text LIKE '%function board_move%')
+                """)
+                conn.commit()
+                logging.getLogger("bridge.api").info(
+                    "_ensure_testimonials_schema: 정크 %d rows 논리삭제", junk_count)
+        except Exception as _je:
+            logging.getLogger("bridge.api").warning("testimonials junk cleanup 스킵: %s", _je)
+
+        # 자동 시드 (visible 행이 없을 때)
+        count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0 AND is_visible=1").fetchone()[0]
         if count == 0:
             seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
             if seed_path.exists():

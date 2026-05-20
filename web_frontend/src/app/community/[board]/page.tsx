@@ -365,8 +365,38 @@ function getPostImageKey(title: string): string {
   return 'Seoul'
 }
 
-const TIPS_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1']
-const TIPS_EMOJIS = ['📸', '🎓', '🎤']
+const TIPS_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD166', '#9B5DE5', '#06D6A0', '#F77F00', '#EF476F']
+
+// Keyword → emoji mapping (콘텐츠 의미에 맞게 다양한 이모지 자동 매칭)
+const EMOJI_RULES: { match: RegExp; emoji: string }[] = [
+  { match: /photo|사진/i, emoji: '📸' },
+  { match: /tefl|certif|자격증/i, emoji: '🎓' },
+  { match: /interview|인터뷰/i, emoji: '🎤' },
+  { match: /resume|cv|이력서/i, emoji: '📄' },
+  { match: /pack|packing|짐|준비/i, emoji: '🎒' },
+  { match: /first week|survival|첫 주|7 days/i, emoji: '🌅' },
+  { match: /classroom|teaching|수업|class/i, emoji: '📚' },
+  { match: /korean language|phrases|한국어|언어/i, emoji: '🗣️' },
+  { match: /money|saving|budget|salary|돈|급여/i, emoji: '💰' },
+  { match: /weekend|trip|travel|여행/i, emoji: '🗺️' },
+  { match: /video|온라인/i, emoji: '🎥' },
+  { match: /contract|계약/i, emoji: '📝' },
+  { match: /food|meal|음식|식사/i, emoji: '🍱' },
+  { match: /apartment|housing|숙소/i, emoji: '🏠' },
+  { match: /visa|비자/i, emoji: '🛂' },
+  { match: /culture|문화/i, emoji: '🎎' },
+  { match: /health|medical|건강/i, emoji: '🏥' },
+  { match: /bank|account|은행/i, emoji: '🏦' },
+  { match: /transport|subway|bus|교통/i, emoji: '🚇' },
+  { match: /tip|advice|꿀팁|조언/i, emoji: '💡' },
+]
+const FALLBACK_EMOJIS = ['✨', '🌟', '📌', '🔖', '🎯', '🧭', '🌱', '🍀']
+function pickEmojiForTitle(title: string, i: number): string {
+  for (const r of EMOJI_RULES) {
+    if (r.match.test(title)) return r.emoji
+  }
+  return FALLBACK_EMOJIS[i % FALLBACK_EMOJIS.length]
+}
 const HERO_ICONS = ['🏢', '📋', '🆕', '📝', '💰']
 // ── Animated counter hook (for About page stats) ──
 function useAnimatedCounter(target: number, duration: number, start: boolean) {
@@ -1625,14 +1655,14 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
   const rowContent = (p: Post, i: number) => (
     <Link
       href={`/community/${board}/${p.id}`}
-      className="group relative flex items-center gap-4 sm:gap-5 px-5 py-4 bg-white border border-[#e5e5ea] rounded-xl
-                 hover:border-[#0071e3]/40 hover:shadow-[0_2px_12px_rgba(0,113,227,0.08)] hover:-translate-y-0.5
+      className="group relative flex items-center gap-5 sm:gap-6 px-6 py-6 bg-white border border-[#e5e5ea] rounded-2xl
+                 hover:border-[#0071e3]/40 hover:shadow-[0_4px_18px_rgba(0,113,227,0.08)] hover:-translate-y-0.5
                  transition-all duration-200"
     >
       {/* Left accent bar */}
       <div className="shrink-0 w-1 self-stretch rounded-full" style={{ background: TIPS_COLORS[i % TIPS_COLORS.length] }} />
-      {/* Emoji icon */}
-      <div className="shrink-0 text-2xl sm:text-3xl">{TIPS_EMOJIS[i % TIPS_EMOJIS.length]}</div>
+      {/* Emoji icon — content-aware (제목에 따라 다양한 이모지) */}
+      <div className="shrink-0 text-3xl sm:text-[34px] leading-none">{pickEmojiForTitle(p.title || '', i)}</div>
       {/* Body */}
       <div className="flex-1 min-w-0">
         <h3 className="text-[16px] sm:text-[17px] font-bold text-[#1d1d1f] group-hover:text-[#0071e3] transition-colors truncate">{p.title}</h3>
@@ -1675,7 +1705,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
           items={posts.map(p => String(p.id))}
           onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
         >
-          <div className="space-y-3">
+          <div className="space-y-5">
             {posts.map((p, i) => (
               <SortableItem key={p.id} id={String(p.id)}>
                 {rowContent(p, i)}
@@ -1684,7 +1714,7 @@ function CardGridLayout({ config, posts, board, editMode, selectedIds, onToggleS
           </div>
         </SortableContainer>
       ) : (
-        <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
+        <motion.div className="space-y-5" variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.1 }}>
           {posts.map((p, i) => (
             <motion.div key={p.id} variants={fadeInUp}>
               {rowContent(p, i)}
