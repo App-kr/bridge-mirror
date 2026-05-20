@@ -14348,11 +14348,29 @@ async def admin_db_restore(request: Request):
             if not db_bytes.startswith(b"SQLite format 3"):
                 raise HTTPException(400, f"유효한 SQLite DB 파일이 아닙니다. (받은 크기: {len(db_bytes)}B, 첫 16바이트: {db_bytes[:16]!r})")
 
+            # SECURITY: community_posts 덮어쓰기 차단 — 게시판 수정사항 우발적 손실 방지
+            # 명시적 X-Confirm-Overwrite-Community: yes 헤더 없으면 community_posts 보존
+            confirm = request.headers.get("X-Confirm-Overwrite-Community", "").strip().lower()
+            preserve_community = (confirm != "yes")
+
             # 백업
             try:
                 _sh.copy2(db_path, backup_path)
             except Exception:
                 pass
+
+            # community_posts 보존: 현재 DB에서 미리 읽어둠
+            preserved_community = []
+            if preserve_community and _os.path.exists(db_path):
+                try:
+                    _c = sqlite3.connect(db_path)
+                    _c.row_factory = sqlite3.Row
+                    _rows = _c.execute("SELECT * FROM community_posts").fetchall()
+                    preserved_community = [dict(r) for r in _rows]
+                    _c.close()
+                except Exception as _pres_err:
+                    logging.getLogger("bridge.api").warning(
+                        "community_posts 보존 읽기 실패 (계속): %s", _pres_err)
 
             # 임시 파일에 쓰고 atomic 교체
             tmp_path = db_path + ".uploading"
@@ -14360,6 +14378,27 @@ async def admin_db_restore(request: Request):
                 tmp.write(db_bytes)
 
             _os.replace(tmp_path, db_path)
+
+            # community_posts 복원 (preserve_community=True이고 데이터 있을 때만)
+            if preserve_community and preserved_community:
+                try:
+                    _c2 = sqlite3.connect(db_path)
+                    _c2.execute("DELETE FROM community_posts")
+                    cols = list(preserved_community[0].keys())
+                    placeholders = ",".join(["?"] * len(cols))
+                    col_names = ",".join(cols)
+                    _c2.executemany(
+                        f"INSERT INTO community_posts ({col_names}) VALUES ({placeholders})",
+                        [tuple(r[c] for c in cols) for r in preserved_community],
+                    )
+                    _c2.commit()
+                    _c2.close()
+                    logging.getLogger("bridge.api").info(
+                        "[restore] community_posts %d개 보존 완료 (덮어쓰기 차단)",
+                        len(preserved_community))
+                except Exception as _restore_err:
+                    logging.getLogger("bridge.api").error(
+                        "community_posts 보존 복원 실패: %s", _restore_err)
 
         # ── 방식 2: SQL 덤프 (레거시) ──
         elif sql_file is not None:
