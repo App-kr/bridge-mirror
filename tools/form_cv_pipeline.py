@@ -181,7 +181,7 @@ def _download(drive, file_id: str, mime: str, dest: Path) -> Path | None:
         return None
 
 
-def _run_doc_processor(cv_path: Path, sheet_no: int) -> bool:
+def _run_doc_processor(cv_path: Path, sheet_no: int, photo_path: Path = None) -> bool:
     """doc_processor process 실행. 성공 여부 반환."""
     cmd = [
         str(PYTHON_EXE), "-X", "utf8", str(DOC_PROC),
@@ -189,6 +189,8 @@ def _run_doc_processor(cv_path: Path, sheet_no: int) -> bool:
         "--number", str(sheet_no),
         "--output", str(PROCESSED),
     ]
+    if photo_path and photo_path.exists():
+        cmd.extend(["--photo", str(photo_path)])
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=120,
@@ -272,6 +274,7 @@ def cmd_run(args):
         with tempfile.TemporaryDirectory(prefix=f"brj_{no}_") as tmp:
             tmp_dir  = Path(tmp)
             cv_paths = []
+            photo_path: Path | None = None  # 후보자 사진 (이력서 삽입용)
 
             for fid in file_ids:
                 try:
@@ -297,12 +300,17 @@ def cmd_run(args):
 
                 if mime in CV_MIMES:
                     cv_paths.append(saved)
+                elif mime.startswith("image/"):
+                    # 이미지 (사진) — 가장 큰 이미지를 후보자 사진으로 채택
+                    if photo_path is None or saved.stat().st_size > photo_path.stat().st_size:
+                        photo_path = saved
 
-            # CV 파일만 doc_processor 실행
+            # CV 파일만 doc_processor 실행 (사진 동반 전달)
             cv_ok = 0
             for cv in cv_paths:
-                print(f"  → doc_processor: {cv.name}", flush=True)
-                if _run_doc_processor(cv, no):
+                print(f"  → doc_processor: {cv.name}"
+                      + (f"  +photo={photo_path.name}" if photo_path else ""), flush=True)
+                if _run_doc_processor(cv, no, photo_path=photo_path):
                     cv_ok += 1
                 else:
                     fail += 1

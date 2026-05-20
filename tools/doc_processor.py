@@ -2021,6 +2021,35 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
                 _new_lines.append(_rl)
         result = "\n".join(_new_lines)
 
+    # ── Pass 2.45: 인라인 진행형 + KR 업체 문장 통째 제거 (도시 제거 BEFORE) ──
+    # "I am currently teaching at Little Fox in Gyeonggi-do," → 통째 삭제
+    # ★ Pass 2.5 (city removal) 보다 먼저 실행 — 도시 부분까지 함께 캡처
+    # alternation: 가장 구체적인 패턴(접미사 -do/-si/-gu 등) 먼저
+    # Python re는 left-to-right first match — "Gyeonggi-do" 가 "Gyeonggi" 보다 먼저 매칭되도록
+    _kr_loc_alt_e = (
+        r'(?:[A-Z][a-z]+(?:-[a-z]+)*-(?:do|si|gu|dong|gun|myeon|eup|ri)|'
+        r'South\s+Korea|Korea|'
+        r'Seoul|Busan|Incheon|Daegu|Daejeon|Gwangju|Ulsan|Sejong|'
+        r'Gyeonggi|Gangwon|Chungcheong|Jeolla|Gyeongsang|Jeju)'
+    )
+    for _wkp_e in KR_WORKPLACE_KEYWORDS:
+        if _wkp_e in _GENERIC_TYPES_SET:
+            continue
+        _ph_e = re.compile(
+            r'(?:I[\s\'’]?\s*(?:am|m)\s+)?'
+            r'(?:currently\s+|now\s+|recently\s+|previously\s+|formerly\s+)?'
+            r'(?:teaching|working|employed|teach|work|am\s+teaching|am\s+working)\s+'
+            r'(?:at|for|in|with)\s+'
+            r'\b' + re.escape(_wkp_e) + r'\b'
+            r'(?:\s+(?:in|at)\s+' + _kr_loc_alt_e
+            + r'(?:\s*,\s*' + _kr_loc_alt_e + r')?)?'
+            r'\s*[,.;]?',
+            re.IGNORECASE,
+        )
+        for _ph_m_e in _ph_e.finditer(result):
+            log.append(f"KR_INLINE_PHRASE→DELETE: {_ph_m_e.group()[:80]}")
+        result = _ph_e.sub('', result)
+
     # ── Pass 2.5: 한국 도시명 처리 ──
     # "Daegu, South Korea" → "South Korea"
     # "Seoul" → ""
@@ -2075,7 +2104,11 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
         return canonical
     result = _RE_KR_SCHOOL_PREFIX.sub(_school_prefix_replacer, result)
 
-    # Step 2: 나머지 브랜드/업체명 → 일반명 대체
+    # 잔류 정리: 인라인 제거 후 갭 정리
+    result = re.sub(r'\s{2,}', ' ', result)
+    result = re.sub(r'^\s*,\s*', '', result, flags=re.MULTILINE)
+
+    # Step 3: 나머지 단독 KR 업체명 → 일반명 대체
     # "YBM ECC" → "English", "POLY" → "English"
     # 이미 유형명인 항목(language school 등)은 Step 1에서 처리됐으므로 건너뜀
     for workplace in KR_WORKPLACE_KEYWORDS:
@@ -2965,6 +2998,36 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         # page_has_korea: KR_KEYWORDS 중 하나라도 있으면 True
         # (기존 좁은 regex 대신 전체 키워드 집합으로 확장 → Gyeonggi 등 오탐 방지)
         page_has_korea = any(kw in page_lower for kw in KR_KEYWORDS)
+
+        # 인라인 진행형 + KR 업체 문장 통째 redact (커버레터/본문 공통)
+        # 예: "I am currently teaching at Little Fox in Gyeonggi-do," → 통째 삭제
+        _kr_loc_alt_pdf = (
+            r'(?:[A-Z][a-z]+(?:-[a-z]+)*-(?:do|si|gu|dong|gun|myeon|eup|ri)|'
+            r'South\s+Korea|Korea|'
+            r'Seoul|Busan|Incheon|Daegu|Daejeon|Gwangju|Ulsan|Sejong|'
+            r'Gyeonggi|Gangwon|Chungcheong|Jeolla|Gyeongsang|Jeju)'
+        )
+        for _wkp in KR_WORKPLACE_KEYWORDS:
+            if _wkp in _GENERIC_TYPES_SET:
+                continue
+            if _wkp.lower() not in page_lower:
+                continue
+            _inline_pat = re.compile(
+                r'(?:I[\s\'’]?\s*(?:am|m)\s+)?'
+                r'(?:currently\s+|now\s+|recently\s+|previously\s+|formerly\s+)?'
+                r'(?:teaching|working|employed|teach|work|am\s+teaching|am\s+working)\s+'
+                r'(?:at|for|in|with)\s+'
+                r'\b' + re.escape(_wkp) + r'\b'
+                r'(?:\s+(?:in|at)\s+' + _kr_loc_alt_pdf
+                + r'(?:\s*,\s*' + _kr_loc_alt_pdf + r')?)?'
+                r'\s*[,.;]?',
+                re.IGNORECASE,
+            )
+            for _im in _inline_pat.finditer(text):
+                _phrase = _im.group().strip()
+                if _phrase:
+                    redact_texts.add(_phrase)
+                    all_logs.append(f"[page{page_num}] KR_INLINE_PHRASE: {_phrase[:80]}")
 
         keep_keywords = {"korea", "south korea", "rok", "republic of korea", "한국"}
 
@@ -4039,6 +4102,10 @@ def cmd_process(args):
     output_dir = Path(args.output) if args.output else DEFAULT_OUTPUT
     brj_number = args.number
     dry = args.dry
+    photo_path = Path(args.photo) if getattr(args, "photo", None) else None
+    if photo_path and not photo_path.exists():
+        print(f"  [WARN] photo not found: {photo_path}")
+        photo_path = None
 
     if not input_path.exists():
         print(f"[ERROR] Path not found: {input_path}")
@@ -4098,9 +4165,11 @@ def cmd_process(args):
             ext = filepath.suffix.lower()
 
             if ext == ".docx":
-                doc, logs = process_docx(filepath, current_number, candidate, dry)
+                doc, logs = process_docx(filepath, current_number, candidate, dry,
+                                         photo_path=photo_path)
             elif ext == ".pdf":
-                doc, logs = process_pdf(filepath, current_number, candidate, dry)
+                doc, logs = process_pdf(filepath, current_number, candidate, dry,
+                                        photo_path=photo_path)
             else:
                 print(f"  [SKIP] 미지원: {ext}")
                 continue
@@ -4850,6 +4919,7 @@ def main():
     p_proc.add_argument("input", help="파일 또는 폴더")
     p_proc.add_argument("--number", "-n", type=int, help="강사번호")
     p_proc.add_argument("--output", "-o", help="출력 폴더")
+    p_proc.add_argument("--photo", help="사진 파일 경로 (이력서에 삽입)")
     p_proc.add_argument("--dry", action="store_true", help="미리보기 (수정 없음)")
 
     p_batch = sub.add_parser("batch", help="incoming/ 폴더 일괄 처리")
