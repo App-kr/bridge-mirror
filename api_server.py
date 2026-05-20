@@ -6082,7 +6082,7 @@ async def community_list(
     if _supa:
         try:
             q = _supa.table('community_posts').select(
-                'id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body',
+                'id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body,image_paths',
                 count='exact'
             ).eq('board', board).eq('is_deleted', 0)
             if category:
@@ -6106,7 +6106,7 @@ async def community_list(
             params.append(category)
         total = conn.execute(f"SELECT COUNT(*) FROM community_posts WHERE {where}", params).fetchone()[0]
         rows = conn.execute(
-            f"SELECT id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body "
+            f"SELECT id,title,author_hash,pinned,views,created_at,content_type,sort_order,category,body,image_paths "
             f"FROM community_posts WHERE {where} "
             f"ORDER BY pinned DESC, sort_order DESC, created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
@@ -6115,6 +6115,16 @@ async def community_list(
         for r in rows:
             d = dict(r)
             d['preview'] = (d.get('body') or '')[:200]
+            # image_paths: SQLite는 TEXT JSON 또는 빈 문자열 → 항상 list로 정규화
+            ip_raw = d.get('image_paths')
+            if isinstance(ip_raw, str) and ip_raw.strip():
+                try:
+                    import json as _json
+                    d['image_paths'] = _json.loads(ip_raw) if ip_raw.strip().startswith('[') else [ip_raw]
+                except Exception:
+                    d['image_paths'] = [ip_raw] if ip_raw.strip() else []
+            elif not isinstance(ip_raw, list):
+                d['image_paths'] = []
             posts.append(d)
         return ok(data={"total": total, "posts": posts})
     finally:
@@ -6131,7 +6141,7 @@ async def community_get(board: str, post_id: int, request: Request):
     if _supa:
         try:
             res = _supa.table('community_posts').select(
-                'id,board,title,body,pinned,views,created_at,content_type'
+                'id,board,title,body,pinned,views,created_at,content_type,image_paths,category'
             ).eq('id', post_id).eq('board', board).eq('is_deleted', 0).execute()
             if not res.data:
                 raise HTTPException(404, "Post not found")
@@ -6149,13 +6159,23 @@ async def community_get(board: str, post_id: int, request: Request):
     conn.row_factory = sqlite3.Row
     try:
         row = conn.execute(
-            "SELECT id,board,title,body,pinned,views,created_at,content_type "
+            "SELECT id,board,title,body,pinned,views,created_at,content_type,image_paths,category "
             "FROM community_posts WHERE id=? AND board=? AND is_deleted=0",
             (post_id, board),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Post not found")
         d = dict(row)
+        # image_paths 정규화
+        ip_raw = d.get('image_paths')
+        if isinstance(ip_raw, str) and ip_raw.strip():
+            try:
+                import json as _json
+                d['image_paths'] = _json.loads(ip_raw) if ip_raw.strip().startswith('[') else [ip_raw]
+            except Exception:
+                d['image_paths'] = [ip_raw] if ip_raw.strip() else []
+        elif not isinstance(ip_raw, list):
+            d['image_paths'] = []
         new_views = (d.get('views') or 0) + 1
         conn.execute("UPDATE community_posts SET views=? WHERE id=?", (new_views, post_id))
         conn.commit()

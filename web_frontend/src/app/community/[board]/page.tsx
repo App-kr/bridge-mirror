@@ -48,6 +48,7 @@ interface Post {
   views: number
   created_at: string
   category?: string | null
+  image_paths?: string[] | null   // DB 저장 이미지 우선 (관리자 편집 보존)
 }
 
 interface FaqItem { q: string; a: string }
@@ -1653,12 +1654,34 @@ const KOREA_SECTIONS = [
 function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
   const photoCard = (p: Post, i: number) => {
     const imgKey = getPostImageKey(p.title)
+    // 우선순위: DB image_paths[0] → 하드코딩 POST_IMAGES → 그라데이션 폴백
+    const dbImg = (p.image_paths && p.image_paths.length > 0) ? p.image_paths[0] : ''
+    const primarySrc = dbImg || POST_IMAGES[imgKey] || ''
     return (
       <Link href={`/community/${board}/${p.id}`}
         className={`korea-card group flex-col sm:flex-row ${editMode ? 'flex-1' : ''}`}
       >
-        <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden">
-          <img src={POST_IMAGES[imgKey]} alt={p.title} className="korea-img w-full h-full object-cover" />
+        <div className="w-full sm:w-60 h-40 sm:h-44 shrink-0 overflow-hidden relative">
+          {/* 그라데이션 폴백 — 항상 깔려있어서 이미지 깨져도 alt 텍스트 노출 안 됨 */}
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, #0071e3 0%, #1a4a8a 50%, #2c3e50 100%)`,
+            }}
+          >
+            <span className="text-white text-lg font-bold opacity-30 px-4 text-center">{p.title.split(' ')[0]}</span>
+          </div>
+          {primarySrc && (
+            <img
+              src={primarySrc}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="korea-img w-full h-full object-cover relative z-[1]"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
         </div>
         <div className="flex-1 p-4 sm:p-5 flex flex-col justify-center">
           <div className="flex items-center gap-2">
