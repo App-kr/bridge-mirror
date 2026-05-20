@@ -745,28 +745,16 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
               <Desc text="Please upload your file to the correct category. Please ensure you upload the original file, rather than a screenshot, Canva link, or AI-generated file." />
 
               {/* ── 1. Photo ── */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Recent Photo (PNG / JPG)</label>
-                <QueueZone fileType="photo" icon="📷" hint="Recent photo (a new shot, not last year's) — PNG / JPG" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
-              </div>
+              <QueueZone fileType="photo" icon="📷" hint="Recent Photo (PNG / JPG)" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
 
-              {/* ── 2. CV / Resume ── */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">CV / Resume (PDF or Word) <span className="text-red-400">*</span></label>
-                <QueueZone fileType="cv" icon="📄" hint="CV / Resume (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
-              </div>
+              {/* ── 2. CV / Resume (required) ── */}
+              <QueueZone fileType="cv" icon="📄" hint="CV / Resume (PDF or Word) *" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
 
               {/* ── 3. Cover Letter ── */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Cover Letter (PDF or Word)</label>
-                <QueueZone fileType="cover_letter" icon="📝" hint="Cover Letter (PDF / Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
-              </div>
+              <QueueZone fileType="cover_letter" icon="📝" hint="Cover Letter (PDF or Word)" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
 
               {/* ── 4. Other Docs ── */}
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-gray-700">Other Docs</label>
-                <QueueZone fileType="certificate" icon="📎" hint="Other documents (PDF / Image)" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
-              </div>
+              <QueueZone fileType="certificate" icon="📎" hint="Other Docs (PDF or Image)" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
 
               {/* ── 업로드 대기 파일 목록 ── */}
               {queuedFiles.length > 0 && (
