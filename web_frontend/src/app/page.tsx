@@ -329,13 +329,13 @@ export default function HomePage() {
 
         {/* ── Twinkling stars — 다리 위쪽 근처, 겹치지 않게 ── */}
         {[
-          { top: '15%', left: '5%',  size: 2.5, delay: 0,   dur: 1.8 },
-          { top: '22%', left: '85%', size: 3.5, delay: 0.6, dur: 1.5 },
-          { top: '10%', left: '50%', size: 2,   delay: 0.3, dur: 2.0 },
-          { top: '28%', left: '30%', size: 3,   delay: 1.0, dur: 1.6 },
-          { top: '18%', left: '70%', size: 2.8, delay: 0.4, dur: 1.9 },
-          { top: '30%', left: '10%', size: 2.2, delay: 0.8, dur: 1.7 },
-          { top: '12%', left: '92%', size: 3.2, delay: 1.2, dur: 1.4 },
+          { top: '15%', left: '5%',  size: 4,   delay: 0,   dur: 1.8 },
+          { top: '22%', left: '85%', size: 5,   delay: 0.6, dur: 1.5 },
+          { top: '10%', left: '50%', size: 3.5, delay: 0.3, dur: 2.0 },
+          { top: '28%', left: '30%', size: 4.5, delay: 1.0, dur: 1.6 },
+          { top: '18%', left: '70%', size: 4.2, delay: 0.4, dur: 1.9 },
+          { top: '30%', left: '10%', size: 3.8, delay: 0.8, dur: 1.7 },
+          { top: '12%', left: '92%', size: 4.8, delay: 1.2, dur: 1.4 },
         ].map((star, i) => (
           <div
             key={`star-${i}`}
