@@ -10874,6 +10874,38 @@ except Exception as _e:
     logging.getLogger("bridge.api").warning("_ensure_testimonials_schema 스킵: %s", _e)
 
 
+def _ensure_apostille_categories():
+    """비자 게시판의 Apostille/Notarization/Criminal Record 게시물을
+    매 startup마다 category='apostille' 로 강제 설정.
+    Google Drive 자동 복원이 옛 DB로 덮어쓸 때 잃어버리는 분류를 복구.
+    """
+    APOSTILLE_IDS = [98, 99, 102, 104, 105, 107]
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        conn.execute("PRAGMA busy_timeout = 5000")
+        placeholders = ",".join("?" * len(APOSTILLE_IDS))
+        cur = conn.execute(
+            f"UPDATE community_posts SET category='apostille' "
+            f"WHERE id IN ({placeholders}) AND board='visa_related' "
+            f"  AND (category IS NULL OR category != 'apostille')",
+            APOSTILLE_IDS
+        )
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        if affected > 0:
+            logging.getLogger("bridge.api").info(
+                "_ensure_apostille_categories: %d posts 복원 → apostille", affected)
+    except Exception as _e:
+        logging.getLogger("bridge.api").warning("apostille category 복원 스킵: %s", _e)
+
+
+try:
+    _ensure_apostille_categories()
+except Exception as _e:
+    logging.getLogger("bridge.api").warning("_ensure_apostille_categories 스킵: %s", _e)
+
+
 @app.get("/api/testimonials", tags=["testimonials"])
 async def testimonials_list(
     request: Request,

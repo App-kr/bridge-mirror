@@ -484,8 +484,10 @@ class RateLimiter:
         # (endpoint_prefix, max_requests, window_seconds)
         "/api/admin":        (300, 60),
         "/api/security":     (10,  60),
-        "/api/apply":        (5,   300),
-        "/api/inquiry":      (5,   300),
+        # 공개 폼 — 사용자 retry 허용 (CAPTCHA 만료/실수 클릭 등으로 잠금 방지)
+        # 5/5min → 60/5min — 분당 12회 평균, 실제 봇 스팸은 CAPTCHA + Honeypot이 차단
+        "/api/apply":        (60,  300),
+        "/api/inquiry":      (60,  300),
         "/auth":             (10,  60),
         # 공개 데이터 — 스크래핑 방지 강화
         "/api/jobs":         (30,  60),
