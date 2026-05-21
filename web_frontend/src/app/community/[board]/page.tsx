@@ -753,9 +753,22 @@ export default function BoardPage() {
       setEditorOpen(false)
       await saveFaqToApi(updated)
     } else if (type === 'post-create') {
+      // URL ?tag=documents / ?tag=apostille 에서 생성 시 자동 카테고리 매핑
+      const urlTag = (typeof window !== 'undefined')
+        ? new URLSearchParams(window.location.search).get('tag') || ''
+        : ''
+      const autoCategory = ['documents', 'apostille', 'cities', 'city_guides', 'living'].includes(urlTag)
+        ? (urlTag === 'cities' ? 'city_guides' : urlTag)
+        : null
+      const createPayload: Record<string, unknown> = {
+        title: data.title,
+        body: data.content,
+        content_type: data.contentType,
+      }
+      if (autoCategory) createPayload.category = autoCategory
       const res = await signedFetch(`${API_URL}/api/community/${board}`, {
         method: 'POST',
-        body: JSON.stringify({ title: data.title, body: data.content, content_type: data.contentType }),
+        body: JSON.stringify(createPayload),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -925,8 +938,23 @@ export default function BoardPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 // LIST — Visa / Support / 업무지원
 // ══════════════════════════════════════════════════════════════════════════════
-function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, onFaqDndReorder, faqSectionTitle, onFaqSectionTitleChange, orderDirty, orderSaving, onSaveOrder }: LayoutProps) {
-  const regularPosts = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
+function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, onFaqEdit, onFaqAdd, onFaqDelete, onFaqReorder, onFaqDndReorder, faqSectionTitle, onFaqSectionTitleChange, orderDirty, orderSaving, onSaveOrder, onCategoryChange }: LayoutProps) {
+  // URL ?tag=documents / ?tag=apostille 등 → 해당 category 게시물만 노출
+  // tag 없으면 기본 게시물(documents/apostille 등 특수 카테고리 제외)만 노출
+  const activeTag = (typeof window !== 'undefined')
+    ? new URLSearchParams(window.location.search).get('tag') || ''
+    : ''
+  const SPECIAL_TAGS = ['documents', 'apostille']
+  const isSpecialTag = SPECIAL_TAGS.includes(activeTag)
+
+  const filteredByTag = (() => {
+    const base = posts.filter((p) => !p.title.toLowerCase().includes('faq'))
+    if (editMode) return base                       // 편집 모드: 전체 노출 (카테고리 이동 가능)
+    if (isSpecialTag) return base.filter(p => (p.category || '') === activeTag)
+    // 기본 탭: 특수 카테고리 제외
+    return base.filter(p => !SPECIAL_TAGS.includes(p.category || ''))
+  })()
+  const regularPosts = filteredByTag
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const faqDndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -1082,7 +1110,15 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
             items={regularPosts.map(p => String(p.id))}
             onDragEnd={(e) => { if (e.over && e.active.id !== e.over.id) onDndMove?.(String(e.active.id), String(e.over.id)) }}
           >
-            {regularPosts.map((p, i) => (
+            {regularPosts.map((p, i) => {
+              // 보드별 카테고리 옵션 — 비자(apostille) / 서포트·업무지원(documents)
+              const catOptions: { value: string; label: string }[] = board === 'visa'
+                ? [{ value: '', label: 'Visa (기본)' }, { value: 'apostille', label: '🪪 Apostille' }]
+                : (board === 'support' || board === 'support_kr')
+                  ? [{ value: '', label: 'Basic (기본)' }, { value: 'documents', label: '📄 Documents' }]
+                  : []
+              const currentCat = p.category || ''
+              return (
               <SortableItem key={p.id} id={String(p.id)}>
                 <div className="flex items-center gap-1.5">
                   {onToggleSelect && (
@@ -1099,8 +1135,27 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                     )}
                   </Link>
                 </div>
+                {/* 카테고리 즉시 이동 토글 — 편집 모드 + 카테고리 옵션 있는 보드만 */}
+                {onCategoryChange && catOptions.length > 0 && (
+                  <div className="flex items-center gap-1.5 pl-8 pt-1 pb-1.5">
+                    <span className="text-[11px] font-semibold text-gray-500">Section:</span>
+                    {catOptions.map(opt => (
+                      <button key={opt.value || 'default'} type="button"
+                        onClick={() => onCategoryChange(p.id, opt.value)}
+                        className="px-2 py-0.5 text-[11px] font-semibold rounded-md transition-colors"
+                        style={{
+                          background: currentCat === opt.value ? '#0071e3' : '#f3f4f6',
+                          color: currentCat === opt.value ? '#fff' : '#6b7280',
+                          border: currentCat === opt.value ? '1px solid #0071e3' : '1px solid #e5e7eb',
+                        }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </SortableItem>
-            ))}
+              )
+            })}
           </SortableContainer>
         ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible">
