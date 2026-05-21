@@ -3668,13 +3668,20 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         _exp_rect = _fitz_pre.Rect(_jx0, _jy0, max(_jx1, _jx0 + 350), _jy1)
                         _processed_jt_bboxes.append(_jrect)
                         try:
-                            # 원본 폰트 크기 유지 (사용자 요청 2026-05-21)
-                            page.add_redact_annot(
-                                _exp_rect, text=_safe_clean, fill=(1, 1, 1),
-                                text_color=_jrgb, fontsize=_jfsize,
-                                align=0,
-                            )
+                            # 1단계: 원본 라인 전체 흰박스 (text 파라미터 없이 — 깨끗한 redact)
+                            page.add_redact_annot(_exp_rect, fill=(1, 1, 1))
                             page.apply_redactions()
+                            # 2단계: insert_text로 sans-serif 폰트 + 원본 크기로 재삽입
+                            # (원본 대부분 LiberationSans/Arial 등 sans-serif)
+                            _font_pre = "helvb" if _is_bold_pre else "helv"
+                            try:
+                                page.insert_text(
+                                    _fitz_pre.Point(_jx0, _jy1 - max(1, _jfsize * 0.18)),
+                                    _safe_clean,
+                                    fontsize=_jfsize, color=_jrgb, fontname=_font_pre,
+                                )
+                            except Exception as _ie:
+                                all_logs.append(f"[page{page_num}] JOB_INSERT_TEXT_FAIL: {_ie}")
                             all_logs.append(f"[page{page_num}] JOB_LINE_REINSERT_PRE: {_safe_clean[:60]}")
                         except Exception as _e:
                             all_logs.append(f"[page{page_num}] JOB_INSERT_FAIL_PRE: {_e}")
