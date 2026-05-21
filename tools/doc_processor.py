@@ -524,7 +524,7 @@ def _ocr_redact_scanned_page(page, page_idx, candidate, pii_patterns, all_logs, 
 
 
 def _merge_pdfs(cover_pdf: Path, resume_pdf: Path, output_pdf: Path):
-    """커버레터 PDF + 이력서 PDF → 단일 PDF 병합"""
+    """커버레터 PDF + 이력서 PDF → 단일 PDF 병합 (최대 압축)"""
     import fitz
     merged = fitz.open()
     for src_path in [cover_pdf, resume_pdf]:
@@ -532,8 +532,74 @@ def _merge_pdfs(cover_pdf: Path, resume_pdf: Path, output_pdf: Path):
             src = fitz.open(str(src_path))
             merged.insert_pdf(src)
             src.close()
-    merged.save(str(output_pdf), garbage=4, deflate=True)
+    merged.save(
+        str(output_pdf),
+        garbage=4, deflate=True, deflate_images=True,
+        deflate_fonts=True, clean=True,
+    )
     merged.close()
+
+
+def _compress_pdf_images(pdf_path: Path, max_dim: int = 1200, jpeg_quality: int = 75) -> None:
+    """PDF 내 이미지 다운샘플링 + JPEG 재압축 (용량 감소).
+    스캔 PDF나 고해상도 사진 포함 PDF에 효과적.
+    max_dim: 긴 변 최대 픽셀 (1200px = 200dpi A4 적정)
+    jpeg_quality: JPEG 품질 (75 = 시각적 손실 거의 없음)
+    """
+    import fitz, io
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    doc = fitz.open(str(pdf_path))
+    changed = False
+    for page in doc:
+        for img in page.get_images(full=True):
+            xref = img[0]
+            try:
+                pix = fitz.Pixmap(doc, xref)
+                if pix.width <= max_dim and pix.height <= max_dim:
+                    pix = None
+                    continue
+                if pix.colorspace and pix.colorspace.name not in ("DeviceRGB", "DeviceGray"):
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                mode = "RGB" if pix.n >= 3 else "L"
+                img_bytes = pix.samples
+                pil = Image.frombytes(mode, (pix.width, pix.height), img_bytes)
+                # 다운샘플
+                ratio = max_dim / max(pil.width, pil.height)
+                if ratio < 1:
+                    new_size = (int(pil.width * ratio), int(pil.height * ratio))
+                    pil = pil.resize(new_size, Image.LANCZOS)
+                # JPEG 재인코딩
+                buf = io.BytesIO()
+                if mode == "L":
+                    pil.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+                else:
+                    pil.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+                new_bytes = buf.getvalue()
+                # 새 이미지로 교체
+                doc.update_stream(xref, new_bytes)
+                changed = True
+                pix = None
+            except Exception:
+                pass
+    if changed:
+        tmp = pdf_path.with_suffix(".compress.tmp.pdf")
+        doc.save(
+            str(tmp),
+            garbage=4, deflate=True, deflate_images=True,
+            deflate_fonts=True, clean=True,
+        )
+        doc.close()
+        # 압축 결과가 더 작을 때만 대체
+        if tmp.exists() and tmp.stat().st_size < pdf_path.stat().st_size:
+            pdf_path.unlink()
+            tmp.rename(pdf_path)
+        else:
+            tmp.unlink(missing_ok=True)
+    else:
+        doc.close()
 
 
 def _build_output_filename(number: int, candidate: dict = None, ext: str = ".docx") -> str:
@@ -4208,9 +4274,24 @@ def cmd_process(args):
                 else:
                     print(f"  Output: {out_path.name} (DOCX — PDF 변환 실패)")
             elif ext == ".pdf":
-                doc.save(str(out_path), garbage=4, deflate=True)
+                # 최대 압축: garbage 컬렉션 + deflate + 이미지/폰트 압축 + 정리
+                doc.save(
+                    str(out_path),
+                    garbage=4, deflate=True, deflate_images=True,
+                    deflate_fonts=True, clean=True,
+                )
                 doc.close()
-                print(f"  Output: {out_path.name}")
+                _sz_kb = out_path.stat().st_size // 1024
+                print(f"  Output: {out_path.name} ({_sz_kb}KB)")
+                # 2차 압축: 큰 이미지 다운샘플링 (>500KB만)
+                if _sz_kb > 500:
+                    try:
+                        _compress_pdf_images(out_path)
+                        _new_sz = out_path.stat().st_size // 1024
+                        if _new_sz < _sz_kb:
+                            print(f"  Compressed: {_sz_kb}KB → {_new_sz}KB")
+                    except Exception as _ce:
+                        print(f"  [WARN] 2차 압축 실패: {_ce}")
 
             # 삭제 로그 저장
             if logs:

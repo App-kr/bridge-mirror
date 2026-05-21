@@ -342,6 +342,14 @@ def cmd_run(args):
     _save_state(state)
     print(f"[완료] 성공: {ok}건 | 실패: {fail}건", flush=True)
 
+    # 신규 처리물 있으면 결과 폴더 자동 오픈 (Windows Explorer)
+    if ok > 0 and len(to_do) > 0:
+        try:
+            os.startfile(str(PROCESSED))
+            print(f"[OPEN] {PROCESSED}", flush=True)
+        except Exception as _oe:
+            print(f"[OPEN-FAIL] {_oe}", flush=True)
+
 
 def cmd_status(args):
     state = _load_state()
