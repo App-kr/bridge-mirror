@@ -1144,6 +1144,12 @@ _PROTECTED_UNIVERSITIES = frozenset({
     "imperial college london", "imperial college",
     "king's college london", "london school of economics",
     "lse", "university of edinburgh",
+    # SOAS, Goldsmiths, QMUL, City University 등 University of London federation
+    "soas", "soas university of london", "school of oriental and african studies",
+    "goldsmiths", "goldsmiths university of london",
+    "queen mary university of london", "qmul",
+    "city university of london", "royal holloway",
+    "birkbeck", "birkbeck university of london",
     "university of manchester", "university of birmingham",
     "university of bristol", "university of warwick",
     "university of exeter", "university of bath",
@@ -3857,6 +3863,17 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _has_extra = True
                     all_logs.append(f"[page{page_num}] LINE_BBOX: {_lstripped[:60]}")
                     continue
+                # 컨택 잔류 정리: 짧은(≤30자) + 파이프 + Korea/단순 단어 구성 → 전체 라인 redact
+                # 예: "Korea |", "| |", "|​", "Seoul |" 같은 잔류
+                if len(_lstripped) <= 30 and ("|" in _lstripped or "​" in _lstripped):
+                    # zero-width chars 포함 모든 공백 + 파이프 제거 후 핵심 단어만 추출
+                    _clean_chk = re.sub(r'[\|\s,​‌‍﻿]+', '', _lstripped).lower()
+                    if _clean_chk in ("korea", "southkorea", "seoul", "busan", "incheon",
+                                       "daegu", "daejeon", "gwangju", "ulsan", "sejong", ""):
+                        page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
+                        _has_extra = True
+                        all_logs.append(f"[page{page_num}] CONTACT_LEFTOVER: {_lstripped[:40]!r}")
+                        continue
                 # 스팬 단위 이메일/전화 (사이드바/컬럼 레이아웃에서 search_for 실패 보완)
                 _ltxt_lower = _lstripped.lower()
                 _line_has_kr = any(kw in _ltxt_lower for kw in KR_KEYWORDS)
