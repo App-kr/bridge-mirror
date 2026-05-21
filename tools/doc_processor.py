@@ -3231,15 +3231,56 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             break
                 if _matched_generic:
                     _has_br_marker = "branch" in s_lower
-                    _has_kr_city = any(
-                        kw.lower() in s_lower for kw in KR_KEYWORDS
-                        if len(kw) > 2 and kw.lower() not in ("korea", "south korea")
+                    # 세부구역(-gu/-dong/-gun 등) 존재 여부 (도/시는 제외)
+                    _has_kr_district = bool(re.search(
+                        r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b',
+                        stripped, re.I,
+                    ))
+                    # "Brand Type | Location, South Korea" 패턴 — 일터 entry 형식
+                    # Herald Academy | Dongtan, South Korea / PLATO AP ENGLISH ACADEMY | Seodaemun-gu, Seoul
+                    _brand_pipe_pat = re.compile(
+                        r'^([A-Z][\w\']+(?:\s+[A-Z][\w\']+){0,3})\s+'
+                        r'(Academy|Institute|School|Center|Centre|Kindergarten|Preschool|Hagwon)\b'
+                        r'(.*)$',
+                        re.IGNORECASE,
                     )
-                    # "south korea" / "korea" 명시 등장도 트리거 추가 (Herald Academy | South Korea 케이스)
-                    _has_kr_country = bool(re.search(r'\b(south\s+korea|korea)\b', s_lower))
-                    if _has_br_marker or _has_kr_city or has_kr_work or _has_kr_country:
-                        _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
-                        _new_line = f"{_gen_cap}, South Korea"
+                    _bp_match = _brand_pipe_pat.match(stripped)
+                    _has_brand_pipe = False
+                    if _bp_match and ('south korea' in s_lower or 'korea' in s_lower
+                                      or _has_kr_district or has_kr_work):
+                        _has_brand_pipe = True
+
+                    if _has_br_marker or _has_kr_district or has_kr_work or _has_brand_pipe:
+                        if _has_brand_pipe and _bp_match:
+                            # 브랜드(prefix)에서 type-modifier 단어 분리:
+                            # "PLATO AP ENGLISH ACADEMY" → brand=["PLATO","AP"], type="ENGLISH ACADEMY"
+                            _TYPE_MODIFIERS = {
+                                "english", "language", "international", "global", "private",
+                                "public", "teaching", "elementary", "primary", "middle",
+                                "secondary", "high", "junior", "senior",
+                            }
+                            _brand_words = _bp_match.group(1).split()
+                            _type_main = _bp_match.group(2)
+                            # 우측에서부터 type-modifier 단어 흡수
+                            _modifiers = []
+                            while _brand_words and _brand_words[-1].lower() in _TYPE_MODIFIERS:
+                                _modifiers.insert(0, _brand_words.pop())
+                            # 대소문자 유지: 원본 케이스 그대로
+                            _full_type = " ".join(_modifiers + [_type_main])
+                            _rest = _bp_match.group(3)
+                            # 세부구역(-gu/-dong/-gun) 제거
+                            _rest = re.sub(
+                                r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                                '', _rest, flags=re.I,
+                            )
+                            _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
+                            _rest = re.sub(r',\s*,', ',', _rest)
+                            _rest = re.sub(r'\|\s*,', '|', _rest)
+                            _rest = re.sub(r',\s*\|', ' |', _rest)
+                            _new_line = f"{_full_type} {_rest}".strip()
+                        else:
+                            _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
+                            _new_line = f"{_gen_cap}, South Korea"
                         _existing_idx = next(
                             (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped),
                             -1
@@ -3249,7 +3290,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         else:
                             job_title_replaces.append((stripped, _new_line))
                         all_logs.append(
-                            f"[page{page_num}] KR_INST_REPLACE: {stripped[:60]} → {_new_line}"
+                            f"[page{page_num}] KR_INST_REPLACE: {stripped[:60]} → {_new_line[:60]}"
                         )
 
             if _idx in _edu_lines:
@@ -3304,14 +3345,32 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         r'\|\s*Korea\s*(?=[—\-])', '| ', _cleaned_jt, flags=re.I)
                     _cleaned_jt = re.sub(r'\|\s*—', '—', _cleaned_jt)
                     _cleaned_jt = re.sub(r'\|\s*-\s', '- ', _cleaned_jt)
-                    # 브랜드 제거 후 한국 지명 모두 제거 (사용자 요청 2026-05-21)
-                    # "고양/경기/Gyeonggi-do/Gangnam-gu" 등 전부 제거 → "South Korea" 만 유지
-                    _keep_kws_jt = {"korea", "south korea"}
+                    # 브랜드 제거 후 한국 지명 처리:
+                    # - 도/광역시/주요시 보존: Seoul/Busan/Gangwon-do/Gyeonggi-do 등
+                    # - 세부구역만 제거: Gangnam-gu, Seodaemun-gu, Yanggu-gun
+                    _keep_kws_jt = {
+                        "korea", "south korea",
+                        # 광역시 (특별시/광역시)
+                        "seoul", "busan", "incheon", "daegu", "daejeon",
+                        "gwangju", "ulsan", "sejong",
+                        # 도(-do): 광역도
+                        "gyeonggi", "gangwon", "chungcheong", "jeolla", "gyeongsang", "jeju",
+                        "gyeonggi-do", "gangwon-do", "chungcheong-do", "jeolla-do",
+                        "gyeongsang-do", "jeju-do",
+                        "chungcheongbuk-do", "chungcheongnam-do",
+                        "jeollabuk-do", "jeollanam-do",
+                        "gyeongsangbuk-do", "gyeongsangnam-do",
+                    }
                     for _city_jt in KR_KEYWORDS:
                         if len(_city_jt) <= 2 or _city_jt.lower() in _keep_kws_jt:
                             continue
+                        _cl = _city_jt.lower()
+                        # -do/-si 접미사는 광역 행정 단위 → 보존
+                        if _cl.endswith("-do") or _cl.endswith("-si"):
+                            continue
+                        # "Gyeonggi" 가 "Gyeonggi-do" 안에 있으면 매칭 제외
                         _city_jt_pat = re.compile(
-                            r'\b' + re.escape(_city_jt) + r'\b\s*,?\s*', re.I)
+                            r'\b' + re.escape(_city_jt) + r'\b(?!-(?:do|si))\s*,?\s*', re.I)
                         # ① 직업타이틀 clean text에서 제거
                         _cleaned_jt = _city_jt_pat.sub('', _cleaned_jt)
                         # ② PDF 텍스트 분리 대응: redact_texts에도 직접 추가
@@ -3363,61 +3422,15 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _cleaned_jt2 = re.sub(
                     r'\b[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+(?:\s+(?:Junior|Senior|Academy|Institute))?\b',
                     '', _cleaned_jt2).strip()
-                # 6순위: 한국 모든 행정구역 제거 (사용자 요청 2026-05-21)
-                # -do/-si/-gu/-dong/-gun/-myeon/-eup/-ri 전부 제거
+                # 6순위: 한국 세부 행정구역만 제거 (-gu/-dong/-gun/-myeon/-eup/-ri)
+                # ★ -do (도/광역), -si (시) 는 보존 — 정답 6257 분석 결과:
+                #   "Gangwon-do" / "Seoul" 유지가 사용자 선호 (정부기관 등 맥락 보존)
                 _cleaned_jt2 = re.sub(
-                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:do|si|gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
                     '', _cleaned_jt2, flags=re.I).strip()
-                # 7순위: 미등록 한국 브랜드 공격적 제거 (사용자 요청 2026-05-21)
-                # "Reading Star, South Korea" / "April Learning, Gyeyang" / "Langcon English"
-                # 라인 자체 OR 페이지에 Korea 인디케이터 있고 외국 인디케이터 없으면 통째 교체
-                _line_has_kr = bool(re.search(
-                    r'\b(?:south\s+korea|korea|gyeonggi|gyeongi|seoul|busan|incheon|daegu|daejeon|'
-                    r'gwangju|ulsan|sejong|jeju|gangwon|chungcheong|jeolla|gyeongsang|gyeyang|'
-                    r'goyang|suwon|seongnam|bucheon|anyang|ansan|namyangju|hwaseong|pyeongtaek|'
-                    r'pohang|changwon|jeonju|cheonan|gimhae)\b',
-                    _cleaned_jt2, re.I,
-                ))
-                # 외국 인디케이터 (USA/UK/Canada 등) 있는 라인은 한국 처리 제외
-                _line_has_foreign = bool(re.search(
-                    r'\b(?:USA|U\.S\.A?|United\s+States|UK|United\s+Kingdom|Canada|Australia|'
-                    r'New\s+Zealand|Ireland|South\s+Africa|England|Scotland|Wales|'
-                    r'London|Manchester|Birmingham|New\s+York|Boston|Chicago|Phoenix|'
-                    r'Sydney|Melbourne|Brisbane|Auckland|Toronto|Vancouver|Dublin)\b',
-                    _cleaned_jt2,
-                ))
-                # 페이지 전체에 Korea 있고 외국 인디케이터 없으면 한국으로 추정
-                _has_kr_anywhere = _line_has_kr or (page_has_korea and not _line_has_foreign)
-                if _has_kr_anywhere:
-                    # dash 이후 pipe 또는 EOL 까지 통합 정리
-                    # 직책 부분(dash 앞)은 보존
-                    _zone_pat = re.compile(
-                        r'(?P<dash>—|–|\s-\s)\s*(?P<zone>[^|]+?)(?=\s*\||\s*$)'
-                    )
-                    def _zone_clean(m):
-                        _zone = m.group('zone').strip().rstrip(',').strip()
-                        # zone 자체에 외국 인디케이터 있으면 보존
-                        if re.search(
-                            r'\b(USA|UK|United\s+States|United\s+Kingdom|Canada|Australia|'
-                            r'England|Ireland|Scotland|Wales|South\s+Africa|New\s+Zealand|'
-                            r'London|Manchester|Boston|Phoenix|Sydney|Toronto|Dublin)\b',
-                            _zone,
-                        ):
-                            return m.group()
-                        # Korea/한국 지역 키워드 있으면 South Korea로 통합
-                        if re.search(
-                            r'\b(south\s+korea|korea|gyeonggi|seoul|busan|incheon|daegu|'
-                            r'daejeon|gwangju|ulsan|sejong|jeju|gangwon|gyeyang|goyang|'
-                            r'suwon|seongnam|bucheon|anyang|ansan|namyangju|hwaseong|'
-                            r'pyeongtaek|pohang|changwon|jeonju|cheonan|gimhae)\b',
-                            _zone, re.I,
-                        ):
-                            return f"{m.group('dash')} South Korea"
-                        # 페이지에 Korea 있고 zone에 외국지표 없으면 한국 추정
-                        if page_has_korea and len(_zone) <= 50:
-                            return f"{m.group('dash')} South Korea"
-                        return m.group()
-                    _cleaned_jt2 = _zone_pat.sub(_zone_clean, _cleaned_jt2)
+                # 7순위 비활성 — 정답 6257 분석 결과: 도/광역시 보존이 사용자 선호
+                # 브랜드(PLATO AP) + 세부구역(-gu/-dong) 만 제거, 도/시는 유지
+                # 기존 1~6순위 (Branch / 괄호 / KW brand / 도시 / -gu_etc) 로 충분
                 # 앞뒤 고립 구분자 정리
                 _cleaned_jt2 = re.sub(r'^[\s\-—]+', '', _cleaned_jt2).strip()
                 _cleaned_jt2 = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt2).strip()
@@ -3433,6 +3446,37 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         job_title_replaces.append((stripped, _cleaned_jt2))
                     all_logs.append(
                         f"[page{page_num}] JOB_EXTRA_CLEAN: {stripped[:50]} → {_cleaned_jt2[:50]}")
+
+            # 한국 세부구역(-gu/-dong/-gun/-myeon/-eup/-ri) 자동 제거
+            # 모든 줄에 적용 — 직책 컨텍스트 무관
+            # 예: "GANGWON PROVINCIAL OFFICE OF EDUCATION | Yanggu-gun, Gangwon-do"
+            #     → "GANGWON PROVINCIAL OFFICE OF EDUCATION | Gangwon-do"
+            _district_pat = re.compile(
+                r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                re.I,
+            )
+            if _district_pat.search(stripped) and len(stripped) <= 150:
+                _dist_cleaned = _district_pat.sub('', stripped).strip()
+                # 잔류 정리
+                _dist_cleaned = re.sub(r'\s{2,}', ' ', _dist_cleaned)
+                _dist_cleaned = re.sub(r',\s*,', ',', _dist_cleaned)
+                _dist_cleaned = re.sub(r'\|\s*,', '|', _dist_cleaned)
+                _dist_cleaned = re.sub(r',\s*\|', ' |', _dist_cleaned)
+                _dist_cleaned = re.sub(r'\|\s*$', '', _dist_cleaned).strip()
+                _dist_cleaned = re.sub(r'^[\s,]+', '', _dist_cleaned)
+                if _dist_cleaned != stripped and _dist_cleaned:
+                    # 기존 job_title_replaces entry 있으면 덮어쓰기
+                    _ex_idx = next(
+                        (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped),
+                        -1,
+                    )
+                    if _ex_idx >= 0:
+                        job_title_replaces[_ex_idx] = (stripped, _dist_cleaned)
+                    else:
+                        job_title_replaces.append((stripped, _dist_cleaned))
+                    all_logs.append(
+                        f"[page{page_num}] KR_DISTRICT_CLEAN: {stripped[:50]} → {_dist_cleaned[:50]}"
+                    )
 
             # 비직업타이틀 학원명: 한국 키워드 있거나 짧은 줄일 때만 redact
             # len <= 55: 경계값(50자) 라인도 포함 ("at Poly. New teachers..." 등)
