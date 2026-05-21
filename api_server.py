@@ -364,6 +364,13 @@ class PIIMaskingMiddleware(BaseHTTPMiddleware):
             self._add_sec_headers(response)
             return response
 
+        # 공개 마케팅 콘텐츠 — 이름이 PII가 아니라 의도된 공개 필드
+        # (후기 작성자 first name, 강사 보드 닉네임 등)
+        _public_name_paths = ("/api/testimonials", "/api/talents/board")
+        if any(request.url.path.startswith(p) for p in _public_name_paths):
+            self._add_sec_headers(response)
+            return response
+
         # Accumulate response body
         body_parts: list[bytes] = []
         async for chunk in response.body_iterator:
