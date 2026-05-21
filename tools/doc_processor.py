@@ -3376,7 +3376,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
             # 학원명 redact: 같은 줄에 한국 키워드 있거나, 짧은 줄(<50자)
             # 유형명(language school 등)은 건너뜀 — 위에서 처리
-            _is_job_line_kw = " — " in stripped or " - " in stripped  # 직업 타이틀줄
+            # em-dash(—) / en-dash(–) / hyphen-space(-) 셋 다 직책 separator 로 인정
+            _is_job_line_kw = (" — " in stripped or " – " in stripped or " - " in stripped)
             if has_kr_work:
                 if _is_job_line_kw:
                     # 직업 타이틀줄: 갭 없이 제거 → 전체 줄 교체 방식 (job_title_replaces)
@@ -3863,13 +3864,18 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _has_extra = True
                     all_logs.append(f"[page{page_num}] LINE_BBOX: {_lstripped[:60]}")
                     continue
-                # 컨택 잔류 정리: 짧은(≤30자) + 파이프 + Korea/단순 단어 구성 → 전체 라인 redact
-                # 예: "Korea |", "| |", "|​", "Seoul |" 같은 잔류
+                # 컨택 잔류 정리: 짧은(≤30자) + 파이프 + 단순 단어 구성 → 전체 라인 redact
+                # 예: "Korea |", "| |", "|​", "Seoul |", "| | UK" 같은 잔류
                 if len(_lstripped) <= 30 and ("|" in _lstripped or "​" in _lstripped):
                     # zero-width chars 포함 모든 공백 + 파이프 제거 후 핵심 단어만 추출
                     _clean_chk = re.sub(r'[\|\s,​‌‍﻿]+', '', _lstripped).lower()
-                    if _clean_chk in ("korea", "southkorea", "seoul", "busan", "incheon",
-                                       "daegu", "daejeon", "gwangju", "ulsan", "sejong", ""):
+                    _LEFTOVER_WORDS = {
+                        "korea", "southkorea", "seoul", "busan", "incheon",
+                        "daegu", "daejeon", "gwangju", "ulsan", "sejong",
+                        "uk", "usa", "canada", "australia", "ireland", "newzealand",
+                        "england", "scotland", "wales", "southafrica", "",
+                    }
+                    if _clean_chk in _LEFTOVER_WORDS:
                         page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] CONTACT_LEFTOVER: {_lstripped[:40]!r}")
