@@ -2,7 +2,7 @@
 ftp_download.py — Cafe24 FTP 덤프 파일 다운로더
 실행: python ftp_download.py
 """
-import ftplib
+import ftplib  # nosec B402 — legacy Cafe24 FTP one-time dump; SFTP not offered by host
 import getpass
 from pathlib import Path
 
@@ -17,7 +17,7 @@ def main():
 
     print(f"[접속중] {HOST}:{PORT} ...")
     try:
-        ftp = ftplib.FTP()
+        ftp = ftplib.FTP()  # nosec B321 — legacy Cafe24 FTP; SFTP not offered
         ftp.connect(HOST, PORT, timeout=30)
         ftp.login(USER, password)
         ftp.set_pasv(True)   # 수동(PASV) 모드

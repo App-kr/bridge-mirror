@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import csv
-import ftplib
+import ftplib  # nosec B402 — legacy Cafe24 FTP dump export; no SFTP alternative available
 import base64
 import logging
 import argparse
@@ -154,7 +154,7 @@ def ftp_connect(acct: dict) -> Optional[ftplib.FTP]:
         log.warning("FTP 비밀번호 미설정 — %s 스킵", user)
         return None
     try:
-        ftp = ftplib.FTP(timeout=15)
+        ftp = ftplib.FTP(timeout=15)  # nosec B321 — legacy Cafe24 FTP; SFTP not offered
         ftp.connect(host, 21)
         ftp.set_pasv(True)
         ftp.login(user, pw)
