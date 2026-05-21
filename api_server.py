@@ -9170,20 +9170,44 @@ _db_change_count = _load_change_count()
 
 
 def _maybe_auto_backup():
-    """DB 변경 누적 카운트 → 10건마다 master.db.auto_backup 생성. 카운터 영속화."""
+    """DB 변경 누적 카운트 → N건마다 Google Drive 자동 백업 (영속화).
+
+    아키텍처 배경:
+    - Render free plan은 persistent disk 미지원 — 매 cold start 시 master.db 휘발
+    - 관리자 변경(PATCH/POST) → Drive 백업 안 하면 → 다음 재시작에 옛 DB 복원 → 변경 손실
+    - 이 함수가 변경 N건마다 Drive 업로드 → 다음 cold start의 restore가 최신 상태 가져옴
+
+    로컬 copy는 의미 없음 (같은 ephemeral disk) → Drive 업로드만 의미 있음.
+    백그라운드 thread 로 실행 — 응답 지연 없음.
+    """
     global _db_change_count
     _db_change_count += 1
     _save_change_count(_db_change_count)
     if _db_change_count % _DB_BACKUP_INTERVAL != 0:
         return
+
+    def _bg_drive_backup(change_no: int):
+        try:
+            import sys as _sys
+            _tools_dir = str(Path(__file__).resolve().parent / "tools")
+            if _tools_dir not in _sys.path:
+                _sys.path.insert(0, _tools_dir)
+            from db_persist import backup as _drive_backup  # type: ignore
+            ok = _drive_backup()
+            if ok:
+                logging.getLogger("bridge.api").info(
+                    "AUTO_BACKUP: Drive 업로드 성공 (after %d changes)", change_no)
+            else:
+                logging.getLogger("bridge.api").warning(
+                    "AUTO_BACKUP: Drive 업로드 스킵 (change=%d)", change_no)
+        except Exception as e:
+            logging.getLogger("bridge.api").warning("AUTO_BACKUP Drive failed: %s", e)
+
     try:
-        import shutil
-        src = _ADMIN_DB_PATH
-        dst = src.with_suffix(".db.auto_backup")
-        shutil.copy2(str(src), str(dst))
-        logging.getLogger("bridge.api").info("AUTO_BACKUP: master.db → %s (after %d changes)", dst.name, _db_change_count)
+        import threading
+        threading.Thread(target=_bg_drive_backup, args=(_db_change_count,), daemon=True).start()
     except Exception as e:
-        logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
+        logging.getLogger("bridge.api").warning("AUTO_BACKUP thread spawn failed: %s", e)
 
 
 def _notify_push(title: str, body: str, url: str = "/admin/m") -> None:
@@ -10881,29 +10905,41 @@ except Exception as _e:
 
 
 def _ensure_apostille_categories():
-    """비자 게시판의 Apostille/Notarization/Criminal Record 게시물을
-    매 startup마다 category='apostille' 로 강제 설정.
-    Google Drive 자동 복원이 옛 DB로 덮어쓸 때 잃어버리는 분류를 복구.
+    """제목 기반 자동 분류 — 하드코딩 ID 대신 콘텐츠 기반 룰.
+
+    아키텍처 배경:
+    - 게시물 ID 하드코딩은 게시물 삭제/재생성 시 깨짐 → 운영 불가
+    - 제목 키워드 기반으로 자동 분류 → 새 글 추가/삭제와 무관하게 동작
+    - 관리자는 admin UI 토글로 override 가능 → PATCH 시 _maybe_auto_backup() 호출되어
+      Drive에 즉시 저장 → 다음 cold start의 restore가 최신 분류 유지
     """
-    APOSTILLE_IDS = [98, 99, 102, 104, 105, 107]
+    APOSTILLE_KEYWORDS = [
+        'apostille', 'notarization', 'fbi background', 'acro',
+        '범죄경력', '학위·범죄', '학위 범죄', '공증', '아포스티유',
+    ]
     try:
         conn = sqlite3.connect(str(_ADMIN_DB_PATH))
         conn.execute("PRAGMA busy_timeout = 5000")
-        placeholders = ",".join("?" * len(APOSTILLE_IDS))
-        cur = conn.execute(
+        # 제목에 키워드 포함 + 비자 관련 보드 + 카테고리 미설정 → apostille
+        # (관리자가 명시적으로 다른 카테고리로 설정한 경우는 보존)
+        like_clauses = " OR ".join([f"LOWER(title) LIKE ?" for _ in APOSTILLE_KEYWORDS])
+        params = [f"%{kw.lower()}%" for kw in APOSTILLE_KEYWORDS]
+        sql = (
             f"UPDATE community_posts SET category='apostille' "
-            f"WHERE id IN ({placeholders}) AND board='visa_related' "
-            f"  AND (category IS NULL OR category != 'apostille')",
-            APOSTILLE_IDS
+            f"WHERE board IN ('visa', 'visa_related', 'visa_type') "
+            f"  AND is_deleted = 0 "
+            f"  AND (category IS NULL OR category = '') "
+            f"  AND ({like_clauses})"
         )
+        cur = conn.execute(sql, params)
         affected = cur.rowcount
         conn.commit()
         conn.close()
         if affected > 0:
             logging.getLogger("bridge.api").info(
-                "_ensure_apostille_categories: %d posts 복원 → apostille", affected)
+                "_ensure_apostille_categories: %d posts 자동분류 → apostille (제목 키워드)", affected)
     except Exception as _e:
-        logging.getLogger("bridge.api").warning("apostille category 복원 스킵: %s", _e)
+        logging.getLogger("bridge.api").warning("apostille category 자동분류 스킵: %s", _e)
 
 
 try:
