@@ -975,7 +975,14 @@ RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
 # 전화번호: 7자리+ 숫자를 포함하는 시퀀스만 (날짜·연도 충돌 방지)
 RE_PHONE = re.compile(
-    r"(?:\+?\d{1,3}[\s\-.]?)?\(?\d{2,4}\)?[\s\-.]?\d{3,4}[\s\-.]?\d{3,4}\b"
+    # 옵션: 괄호로 감싼 국가코드 "(+82)" / 일반 "+82" / 국번 "(010)" 포함
+    r"(?:\(\+?\d{1,4}\)|\+?\d{1,3})?[\s\-.]?"
+    r"\(?\d{2,4}\)?[\s\-.]?\d{3,4}[\s\-.]?\d{3,4}\b"
+)
+
+# 전화 prefix 잔류 (예: "(+82)" / "(+1)" 단독) — 본문 후처리 정리용
+RE_PHONE_PREFIX_ORPHAN = re.compile(
+    r"\(\+?\d{1,4}\)\s*"
 )
 
 # 서술형 생년월일: "20th of September 1996", "March 5th, 1990", "5 January 1988"
@@ -1150,6 +1157,20 @@ _PROTECTED_UNIVERSITIES = frozenset({
     "queen mary university of london", "qmul",
     "city university of london", "royal holloway",
     "birkbeck", "birkbeck university of london",
+    # 미국 추가 (캘리포니아 주립대학 등)
+    "san jose state university", "san jose state",
+    "san francisco state university", "san francisco state",
+    "san diego state university", "san diego state",
+    "california state university", "cal state",
+    "california polytechnic", "cal poly",
+    "long beach state", "fullerton state",
+    "humboldt state", "sonoma state", "fresno state",
+    "sacramento state", "bakersfield state",
+    "san bernardino state", "monterey bay state",
+    "stanislaus state", "channel islands state",
+    "northridge state", "los angeles state",
+    "east bay state", "san marcos state",
+    "chico state", "dominguez hills state",
     "university of manchester", "university of birmingham",
     "university of bristol", "university of warwick",
     "university of exeter", "university of bath",
@@ -2154,6 +2175,11 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
         log.append(f"PHONE: {m.group()[:40]}")
         return ""
     result = RE_PHONE.sub(phone_replacer, result)
+    # 전화 prefix 단독 잔류 ("(+82)", "(+1)" 등) → 추가 정리
+    def _prefix_orphan_replacer(m):
+        log.append(f"PHONE_PREFIX_ORPHAN: {m.group().strip()}")
+        return ""
+    result = RE_PHONE_PREFIX_ORPHAN.sub(_prefix_orphan_replacer, result)
 
     # 한국 주소 → "Korea"
     def addr_replacer(m):
@@ -3865,17 +3891,23 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     all_logs.append(f"[page{page_num}] LINE_BBOX: {_lstripped[:60]}")
                     continue
                 # 컨택 잔류 정리: 짧은(≤30자) + 파이프 + 단순 단어 구성 → 전체 라인 redact
-                # 예: "Korea |", "| |", "|​", "Seoul |", "| | UK" 같은 잔류
+                # 예: "Korea |", "| |", "|​", "Seoul |", "| | UK", "| (+82)" 같은 잔류
                 if len(_lstripped) <= 30 and ("|" in _lstripped or "​" in _lstripped):
-                    # zero-width chars 포함 모든 공백 + 파이프 제거 후 핵심 단어만 추출
-                    _clean_chk = re.sub(r'[\|\s,​‌‍﻿]+', '', _lstripped).lower()
+                    # zero-width chars 포함 모든 공백 + 파이프 + 전화 prefix 잔류 제거
+                    _clean_chk = re.sub(
+                        r'[\|\s,​‌‍﻿()+\-\d]+', '', _lstripped,
+                    ).lower()
                     _LEFTOVER_WORDS = {
                         "korea", "southkorea", "seoul", "busan", "incheon",
                         "daegu", "daejeon", "gwangju", "ulsan", "sejong",
                         "uk", "usa", "canada", "australia", "ireland", "newzealand",
                         "england", "scotland", "wales", "southafrica", "",
                     }
-                    if _clean_chk in _LEFTOVER_WORDS:
+                    # 전화/괄호/숫자만 남은 경우 (e.g. "| (+82)", "| 010-", "(+82)") 도 잔류
+                    _digit_pipe_only = bool(re.fullmatch(
+                        r'[\|\s,​‌‍﻿()+\-\d.]*', _lstripped,
+                    ))
+                    if _clean_chk in _LEFTOVER_WORDS or _digit_pipe_only:
                         page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
                         _has_extra = True
                         all_logs.append(f"[page{page_num}] CONTACT_LEFTOVER: {_lstripped[:40]!r}")
@@ -3901,6 +3933,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             page.add_redact_annot(_sr, fill=(1, 1, 1))
                             _has_extra = True
                             all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
+                    # 전화 prefix 단독 잔류 — "(+82)" / "(+1)" / "(0)" 등
+                    _st_stripped = _st.strip()
+                    if re.fullmatch(r'\(\+?\d{1,4}\)?\s*\d{0,4}\s*[-\d\s]*', _st_stripped) and 2 <= len(_st_stripped) <= 16:
+                        page.add_redact_annot(_sr, fill=(1, 1, 1))
+                        _has_extra = True
+                        all_logs.append(f"[page{page_num}] PHONE_PREFIX_BBOX: {_st_stripped!r}")
                     # 아이콘 폰트 글리프 삭제 (FontAwesome/icomoon — U+E000~U+F8FF Private Use Area)
                     # 또는 Unicode 이모지 (📧📞📍 등) — NotoColorEmoji 폰트 — 길이 무관
                     _is_pure_glyph = (
