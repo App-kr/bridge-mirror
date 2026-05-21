@@ -220,7 +220,12 @@ body{font-family:var(--f);background:var(--bg);color:var(--g1);font-size:15px;ov
     <div class="ctabs">
       <button class="ctab on" data-p="style" onclick="setCTab(this)">🎨 Style</button>
       <button class="ctab" data-p="post" onclick="setCTab(this)">📋 Post Info</button>
-      <div style="flex:1"></div>
+      <div style="flex:1;display:flex;align-items:center;padding:0 8px;gap:5px;min-width:0;">
+        <span style="font-size:13px;flex-shrink:0;" title="셔플해도 이 Job ID는 항상 포함됩니다">📌</span>
+        <input id="pinnedIds" type="text" placeholder="고정 ID: 1120, 1005" title="쉼표로 구분 — 셔플/Generate 시 항상 포함"
+          style="border:1px solid var(--g5);border-radius:6px;padding:3px 9px;font-size:11px;font-family:var(--mono);outline:none;width:100%;min-width:0;background:#fff;color:var(--g1);"
+          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--g5)'">
+      </div>
       <div class="sep" style="height:18px;width:1px;background:var(--g5);margin:auto 4px"></div>
       <div class="us">
         <button class="uo on" data-u="gform" onclick="setUrl(this)">Google Form</button>
@@ -472,6 +477,10 @@ function isExcluded(j){
 function doShuffle(){buildOrder();renderList();toast('Shuffled!','ok');if(lastHtml)generateAd();}
 
 function buildOrder(){
+  /* 📌 고정 ID 읽기 */
+  var pinnedEl=document.getElementById('pinnedIds');
+  var forcedIds=pinnedEl?pinnedEl.value.split(/[\s,，]+/).map(function(s){return s.trim();}).filter(Boolean):[];
+
   var act=jobs.filter(function(j){return j.a;}),inact=jobs.filter(function(j){return!j.a;});
   var cands=act.filter(function(j){return j.p||isPopular(j);});
   var others=act.filter(function(j){return!j.p&&!isPopular(j);});
@@ -484,6 +493,12 @@ function buildOrder(){
   pm3.forEach(function(j){j.h=true;j._pinned=true;});
   ov.forEach(function(j){j.h=isPopular(j)||j.p;});
   others.forEach(function(j){j.h=isPopular(j)||j.p;});
+  /* 📌 고정 ID 강제 포함 — 셔플/Generate 무관하게 항상 _pinned=true */
+  if(forcedIds.length){
+    act.forEach(function(j){
+      if(forcedIds.indexOf(j.id)!==-1){j._pinned=true;j.h=true;}
+    });
+  }
   /* 전체 active를 한 번 더 셔플 — HOT 직업이 리스트 전반에 고루 분포 */
   var allAct=[].concat(act);
   for(var i=allAct.length-1;i>0;i--){var k=Math.floor(Math.random()*(i+1));var t=allAct[i];allAct[i]=allAct[k];allAct[k]=t;}

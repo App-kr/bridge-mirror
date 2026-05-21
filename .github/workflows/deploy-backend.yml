@@ -10,6 +10,7 @@ on:
       - 'backend/**'
       - 'tools/prompt_guard.py'
       - 'requirements.txt'
+      - 'render.yaml'
 
 jobs:
   deploy:
