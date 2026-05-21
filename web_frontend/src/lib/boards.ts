@@ -135,6 +135,16 @@ export const BOARDS: BoardConfig[] = [
 
 export const BOARD_MAP = Object.fromEntries(BOARDS.map((b) => [b.slug, b]))
 
+// 비자 페이지 통합용 별칭 — visa_type / visa_related / immigration 보드를 모두
+// 'visa' 카드 설정으로 매핑 (백엔드는 각 보드 그대로 두되, 프론트는 통합 표시)
+const VISA_BOARD_ALIASES = ['visa_type', 'visa_related', 'immigration']
+const VISA_CONFIG = BOARD_MAP['visa']
+if (VISA_CONFIG) {
+  for (const alias of VISA_BOARD_ALIASES) {
+    if (!BOARD_MAP[alias]) BOARD_MAP[alias] = { ...VISA_CONFIG, slug: alias }
+  }
+}
+
 export type BoardSlug = typeof BOARDS[number]['slug']
 
 export function getBoardConfig(slug: string): BoardConfig | undefined {

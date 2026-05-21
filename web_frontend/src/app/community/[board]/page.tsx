@@ -48,6 +48,7 @@ interface Post {
   views: number
   created_at: string
   category?: string | null
+  board?: string                  // 통합 보드(visa)에서 원본 보드 추적 — link에 사용
   image_paths?: string[] | null   // DB 저장 이미지 우선 (관리자 편집 보존)
 }
 
@@ -509,13 +510,19 @@ export default function BoardPage() {
     const boards = aggregatedBoards(b)
     const results = await Promise.all(boards.map(bd =>
       fetchBoardPosts(`${API}/api/community/${bd}?limit=50`, `/api/community/${bd}?limit=50`)
-        .catch(() => ({ success: true, data: { posts: [], total: 0 } }))
+        .then((r) => ({ ...r, _sourceBoard: bd }))
+        .catch(() => ({ success: true, data: { posts: [], total: 0 }, _sourceBoard: bd }))
     ))
     const allPosts: Post[] = []
     let total = 0
     for (const r of results) {
       if (r.success) {
-        allPosts.push(...(r.data.posts || []))
+        // 원본 보드 추적 — 통합 visa 페이지에서 게시물 상세 링크 정확하게 만들기 위해
+        const taggedPosts = (r.data.posts || []).map((p: Post) => ({
+          ...p,
+          board: p.board || (r as { _sourceBoard?: string })._sourceBoard,
+        }))
+        allPosts.push(...taggedPosts)
         total += r.data.total || 0
       }
     }
@@ -1125,7 +1132,7 @@ function ListLayout({ config, posts, board, faqItems, editMode, selectedIds, onT
                     <AdminCheckbox checked={selectedIds?.has(p.id) ?? false} onChange={() => onToggleSelect(p.id)} />
                   )}
                   <Link
-                    href={`/community/${board}/${p.id}`}
+                    href={`/community/${p.board || board}/${p.id}`}
                     className="board-list-item group flex-1"
                     style={{ '--accent-color': accentHex(config.accentColor) } as React.CSSProperties}
                   >
