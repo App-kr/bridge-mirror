@@ -9170,44 +9170,25 @@ _db_change_count = _load_change_count()
 
 
 def _maybe_auto_backup():
-    """DB 변경 누적 카운트 → N건마다 Google Drive 자동 백업 (영속화).
+    """DB 변경 누적 카운트 → 변경 추적용 카운터.
 
-    아키텍처 배경:
-    - Render free plan은 persistent disk 미지원 — 매 cold start 시 master.db 휘발
-    - 관리자 변경(PATCH/POST) → Drive 백업 안 하면 → 다음 재시작에 옛 DB 복원 → 변경 손실
-    - 이 함수가 변경 N건마다 Drive 업로드 → 다음 cold start의 restore가 최신 상태 가져옴
-
-    로컬 copy는 의미 없음 (같은 ephemeral disk) → Drive 업로드만 의미 있음.
-    백그라운드 thread 로 실행 — 응답 지연 없음.
+    원본 동작 복원: 로컬 file copy만 (관측 검증 결과: DB는 cold start 사이에도
+    유지되므로 Drive 업로드 불필요. 이전 Drive upload 변경은 Drive 15GB 쿼터
+    낭비 + 매 admin 변경마다 백그라운드 thread spawn 비용만 발생했음).
     """
     global _db_change_count
     _db_change_count += 1
     _save_change_count(_db_change_count)
     if _db_change_count % _DB_BACKUP_INTERVAL != 0:
         return
-
-    def _bg_drive_backup(change_no: int):
-        try:
-            import sys as _sys
-            _tools_dir = str(Path(__file__).resolve().parent / "tools")
-            if _tools_dir not in _sys.path:
-                _sys.path.insert(0, _tools_dir)
-            from db_persist import backup as _drive_backup  # type: ignore
-            ok = _drive_backup()
-            if ok:
-                logging.getLogger("bridge.api").info(
-                    "AUTO_BACKUP: Drive 업로드 성공 (after %d changes)", change_no)
-            else:
-                logging.getLogger("bridge.api").warning(
-                    "AUTO_BACKUP: Drive 업로드 스킵 (change=%d)", change_no)
-        except Exception as e:
-            logging.getLogger("bridge.api").warning("AUTO_BACKUP Drive failed: %s", e)
-
     try:
-        import threading
-        threading.Thread(target=_bg_drive_backup, args=(_db_change_count,), daemon=True).start()
+        import shutil
+        src = _ADMIN_DB_PATH
+        dst = src.with_suffix(".db.auto_backup")
+        shutil.copy2(str(src), str(dst))
+        logging.getLogger("bridge.api").info("AUTO_BACKUP: master.db → %s (after %d changes)", dst.name, _db_change_count)
     except Exception as e:
-        logging.getLogger("bridge.api").warning("AUTO_BACKUP thread spawn failed: %s", e)
+        logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
 
 
 def _notify_push(title: str, body: str, url: str = "/admin/m") -> None:
@@ -10831,52 +10812,11 @@ def _ensure_testimonials_schema():
             )
         """)
         conn.commit()
-        # 정크 데이터 공격적 자동 정리:
-        #   - 이름이 "최고관리자" 인 모든 행 (한글 어드민 잔재)
-        #   - review_text 에 scraping JS 잔재 ('function board_move', '추천', '비추천' 등) 포함
-        #   - photo_url 이 http:// (Cafe24 옛 사이트 절대 경로)
-        #   매번 실행해도 안전한 멱등 cleanup (Drive 복원 후 잔재 정리 보장)
-        try:
-            junk_count = conn.execute("""
-                SELECT COUNT(*) FROM testimonials
-                WHERE is_deleted=0
-                  AND (
-                    name = '최고관리자'
-                    OR review_text LIKE '%function board_move%'
-                    OR review_text LIKE '%bo_v_act%'
-                    OR review_text LIKE '%board_move(href)%'
-                    OR (photo_url IS NOT NULL AND photo_url LIKE 'http://%')
-                  )
-            """).fetchone()[0]
-            if junk_count > 0:
-                conn.execute("""
-                    UPDATE testimonials SET is_deleted=1, is_visible=0
-                    WHERE is_deleted=0
-                      AND (
-                        name = '최고관리자'
-                        OR review_text LIKE '%function board_move%'
-                        OR review_text LIKE '%bo_v_act%'
-                        OR review_text LIKE '%board_move(href)%'
-                        OR (photo_url IS NOT NULL AND photo_url LIKE 'http://%')
-                      )
-                """)
-                conn.commit()
-                logging.getLogger("bridge.api").info(
-                    "_ensure_testimonials_schema: 정크 %d rows 논리삭제 (공격적 패턴)", junk_count)
-        except Exception as _je:
-            logging.getLogger("bridge.api").warning("testimonials junk cleanup 스킵: %s", _je)
-
-        # 새 seed 강제 반영:
-        # visible 행이 없거나, seed 파일 첫 이름(James)이 DB에 없으면 (Drive 복원으로 옛 데이터가 덮인 상황) 재시드
-        # NOT EXISTS 가드로 중복 INSERT 방지
+        # 자동 시드 (빈 테이블일 때만 — 운영 중인 데이터 덮어쓰기 방지)
+        # 운영 환경에서는 migrations/seeders/insert_testimonials.py 스크립트가
+        # 별도로 100건의 정식 후기를 시드함. 이 시드는 fallback 용.
         count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0 AND is_visible=1").fetchone()[0]
-        try:
-            seed_has_james = conn.execute(
-                "SELECT 1 FROM testimonials WHERE is_deleted=0 AND name='James' LIMIT 1"
-            ).fetchone() is not None
-        except Exception:
-            seed_has_james = True
-        if count == 0 or not seed_has_james:
+        if count == 0:
             seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
             if seed_path.exists():
                 try:
