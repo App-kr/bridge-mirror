@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # 매주 월요일 오전 3시 (KST 12시) 정기 스캔
+    # 매주 월요일 오전 3시 KST (= UTC 일요일 18:00) 정기 스캔
     - cron: '0 18 * * 0'
 
 permissions:
@@ -56,6 +56,7 @@ jobs:
                   sys.exit(1)
           except Exception as e:
               print(f'Parse error: {e}')
+              sys.exit(1)   # 파싱 실패도 차단 — silent pass 금지
           "
 
       - name: Upload bandit report
@@ -197,6 +198,7 @@ jobs:
                   print('No fixable Python CVEs found')
           except Exception as e:
               print(f'Parse error: {e}')
+              sys.exit(1)   # 파싱 실패도 차단 — silent pass 금지
             "
           else
             echo 'No requirements.txt — skipping'
@@ -231,10 +233,23 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: TypeScript type check
+        id: tsc
+        continue-on-error: true
         run: npx tsc --noEmit
 
       - name: ESLint
+        id: eslint
+        continue-on-error: true
         run: npx next lint
+
+      - name: Fail if any check failed
+        run: |
+          TSC="${{ steps.tsc.outcome }}"
+          LINT="${{ steps.eslint.outcome }}"
+          echo "TypeScript: $TSC | ESLint: $LINT"
+          if [[ "$TSC" == "failure" || "$LINT" == "failure" ]]; then
+            exit 1
+          fi
 
   # ── Summary Job ───────────────────────────────────────────────────
   security-summary:
@@ -254,24 +269,25 @@ jobs:
 
           BLOCKED=0
 
-          if [[ "${{ needs.secret-scan.result }}" == "failure" ]]; then
-            echo "🚨 SECRET LEAK DETECTED — BLOCK MERGE"
+          # failure뿐 아니라 skipped도 차단 — != "success" 로 검사
+          if [[ "${{ needs.secret-scan.result }}" != "success" ]]; then
+            echo "🚨 SECRET LEAK DETECTED — BLOCK MERGE (${{ needs.secret-scan.result }})"
             BLOCKED=1
           fi
-          if [[ "${{ needs.python-sast.result }}" == "failure" ]]; then
-            echo "🚨 HIGH SEVERITY Python vulnerability — BLOCK MERGE"
+          if [[ "${{ needs.python-sast.result }}" != "success" ]]; then
+            echo "🚨 HIGH SEVERITY Python vulnerability — BLOCK MERGE (${{ needs.python-sast.result }})"
             BLOCKED=1
           fi
-          if [[ "${{ needs.npm-audit.result }}" == "failure" ]]; then
-            echo "🚨 CRITICAL/fixable-HIGH npm vulnerability — BLOCK MERGE"
+          if [[ "${{ needs.npm-audit.result }}" != "success" ]]; then
+            echo "🚨 CRITICAL/fixable-HIGH npm vulnerability — BLOCK MERGE (${{ needs.npm-audit.result }})"
             BLOCKED=1
           fi
-          if [[ "${{ needs.pip-safety.result }}" == "failure" ]]; then
-            echo "🚨 Python dependency CVE detected — BLOCK MERGE"
+          if [[ "${{ needs.pip-safety.result }}" != "success" ]]; then
+            echo "🚨 Python dependency CVE detected — BLOCK MERGE (${{ needs.pip-safety.result }})"
             BLOCKED=1
           fi
-          if [[ "${{ needs.frontend-security.result }}" == "failure" ]]; then
-            echo "🚨 Frontend security lint/typecheck failed — BLOCK MERGE"
+          if [[ "${{ needs.frontend-security.result }}" != "success" ]]; then
+            echo "🚨 Frontend security lint/typecheck failed — BLOCK MERGE (${{ needs.frontend-security.result }})"
             BLOCKED=1
           fi
 
