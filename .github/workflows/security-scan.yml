@@ -145,7 +145,7 @@ jobs:
           path: web_frontend/npm-audit-report.json
           retention-days: 30
 
-  # ── Job 4: Python Dependency Safety Check ────────────────────────
+  # ── Job 4: Python Dependency Audit (pip-audit) ───────────────────
   pip-safety:
     name: Python Dependency Safety
     runs-on: ubuntu-latest
@@ -157,28 +157,44 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install safety
-        run: pip install safety
+      - name: Install pip-audit
+        run: pip install pip-audit
 
-      - name: Run safety check
+      - name: Run pip-audit
         run: |
           if [ -f requirements.txt ]; then
-            safety check -r requirements.txt --json 2>&1 | tee safety-report.json || true
+            pip-audit -r requirements.txt --format json -o pip-audit-report.json 2>&1 || true
             python -c "
           import json, sys
           try:
-              with open('safety-report.json') as f:
+              with open('pip-audit-report.json') as f:
                   data = json.load(f)
-              vulns = data if isinstance(data, list) else data.get('vulnerabilities', [])
+              # pip-audit format: {dependencies: [{name, version, vulns: [...]}]}
+              deps = data.get('dependencies', [])
+              vulns = [(d['name'], v) for d in deps for v in d.get('vulns', [])]
               if vulns:
-                  for v in vulns[:5]:
-                      print(f'  VULN: {v}')
+                  print(f'Python CVEs found: {len(vulns)}')
+                  for name, v in vulns[:10]:
+                      aliases = ', '.join(v.get('aliases', [v.get('id','?')]))
+                      fix = v.get('fix_versions', [])
+                      print(f'  {name}: {aliases} (fix: {fix or \"none\"!r})')
                   sys.exit(1)
-          except: pass
+              else:
+                  print('No Python CVEs found')
+          except Exception as e:
+              print(f'Parse error: {e}')
             "
           else
             echo 'No requirements.txt — skipping'
           fi
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 30
 
   # ── Job 5: TypeScript + ESLint Security Rules ─────────────────────
   frontend-security:
