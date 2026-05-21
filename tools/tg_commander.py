@@ -886,6 +886,31 @@ def _handle_api_key_update(chat_id: str, new_key: str):
         _log(f"[KEY] key update error: {e}")
 
 
+def _handle_groq_key_update(chat_id: str, new_key: str):
+    """gsk_... 형식 Groq 키 → bx vault 저장 + 즉시 활성화."""
+    try:
+        send(chat_id, "[Groq] API 키 감지됨 — 저장 중...")
+        sys.path.insert(0, r"Q:\Claudework\bridge base\tools")
+        from bx import _store as bx_store
+        bx_store("GROQ_API_KEY", new_key)
+        for k in list(_key_cache.keys()):
+            if "groq" in k:
+                del _key_cache[k]
+        _log(f"[KEY] Groq key saved via Telegram")
+        valid = _groq_key_works(new_key)
+        if valid:
+            send(chat_id,
+                 "[Groq] 키 저장 + 검증 완료\n"
+                 "llama-3.3-70b 로 대화형 개발 + 명령 라우팅 즉시 작동합니다.\n"
+                 "무료 한도: 14,400 req/일 / 500K 토큰/일",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+        else:
+            send(chat_id, "[Groq] 키 저장됨, API 확인 실패 — console.groq.com 에서 키 확인하세요.",
+                 markup=keyboard([btn("메인 메뉴", "menu")]))
+    except Exception as e:
+        send(chat_id, f"[Groq] 키 저장 실패: {e}")
+
+
 def _handle_gemini_key_update(chat_id: str, new_key: str):
     """AIzaSy... 형식 Gemini 키가 붙여넣어지면 bx vault에 저장 + 즉시 활성화."""
     try:
@@ -1124,6 +1149,10 @@ def handle_text(chat_id, text):
     if _stripped.startswith("AIzaSy") and len(_stripped) >= 30:
         _handle_gemini_key_update(chat_id, _stripped)
         return
+    # Groq API 키 (gsk_...)
+    if _stripped.startswith("gsk_") and len(_stripped) >= 30:
+        _handle_groq_key_update(chat_id, _stripped)
+        return
 
     # ── 기존 처리 ────────────────────────────────────────────
     if st.state == "resume_input":
@@ -1336,6 +1365,22 @@ def _gemini_key_works(k: str) -> bool:
         return False
 
 
+def _groq_key_works(k: str) -> bool:
+    """Groq API 키 유효성 확인."""
+    try:
+        payload = {"model": "llama-3.1-8b-instant", "max_tokens": 5,
+                   "messages": [{"role": "user", "content": "hi"}]}
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {k}"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 # 키 검증 결과 캐시 (provider → (works, ts))
 _key_cache: dict = {}
 _KEY_CACHE_TTL_OK  = 300.0        # 성공: 5분
@@ -1393,7 +1438,16 @@ def _get_llm_key(prefer: str = "auto"):
     except Exception:
         pass
 
-    # 4. Ollama (항상 시도)
+    # 4. Groq (무료, 빠름)
+    try:
+        gk = bx_read("GROQ_API_KEY")
+        if gk and gk.startswith("gsk_"):
+            if _cached_check("groq:" + gk[:20], _groq_key_works, gk):
+                candidates.append(("groq", gk))
+    except Exception:
+        pass
+
+    # 5. Ollama (로컬)
     if _cached_check("ollama", _ollama_works):
         candidates.append(("ollama", None))
 
@@ -1402,9 +1456,9 @@ def _get_llm_key(prefer: str = "auto"):
 
     # 우선순위 적용
     if prefer == "agent":
-        order = ["anthropic", "gemini", "ollama"]
+        order = ["anthropic", "groq", "gemini", "ollama"]
     else:
-        order = ["ollama", "anthropic", "gemini"]
+        order = ["groq", "ollama", "anthropic", "gemini"]
     candidates.sort(key=lambda c: order.index(c[0]) if c[0] in order else 99)
     return candidates[0]
 
@@ -1442,13 +1496,20 @@ def _list_llm_keys(prefer: str = "auto"):
                     pool.append(("gemini", gk))
     except Exception:
         pass
+    try:
+        gk = bx_read("GROQ_API_KEY")
+        if gk and gk.startswith("gsk_"):
+            if _cached_check("groq:" + gk[:20], _groq_key_works, gk):
+                pool.append(("groq", gk))
+    except Exception:
+        pass
     if _cached_check("ollama", _ollama_works):
         pool.append(("ollama", None))
 
     if prefer == "agent":
-        order = ["anthropic", "gemini", "ollama"]
+        order = ["anthropic", "groq", "gemini", "ollama"]
     else:
-        order = ["ollama", "anthropic", "gemini"]
+        order = ["groq", "ollama", "anthropic", "gemini"]
     pool.sort(key=lambda c: order.index(c[0]) if c[0] in order else 99)
 
     for prov, key in pool:
@@ -1500,6 +1561,27 @@ def _call_llm(provider, api_key, prompt, history):
         with urllib.request.urlopen(req, timeout=25) as r:
             resp = json.loads(r.read())
         return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    elif provider == "groq":
+        # Groq 무료 API (OpenAI 호환) — llama3.3-70b / llama3.1-8b
+        msgs = [{"role": "system", "content": _SYSTEM}]
+        for m in history:
+            msgs.append({"role": m["role"], "content": m["content"]})
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "max_tokens": 400,
+            "messages": msgs,
+            "temperature": 0.2,
+        }
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {api_key}"},
+        )
+        with urllib.request.urlopen(req, timeout=25) as r:
+            resp = json.loads(r.read())
+        return resp["choices"][0]["message"]["content"].strip()
 
     elif provider == "ollama":
         # Ollama 로컬 무료 모델 — 설치된 최선 선택 (qwen2.5:7b > 3b 등)
@@ -2421,6 +2503,8 @@ class AgentTerminal:
                     return self._call_anthropic()
                 if prov == "gemini":
                     return self._call_gemini()
+                if prov == "groq":
+                    return self._call_groq()
                 if prov == "ollama":
                     return self._call_ollama()
             except Exception as e:
@@ -2529,6 +2613,94 @@ class AgentTerminal:
 
         return {
             "stop_reason": "tool_use" if has_fn else "end_turn",
+            "content":     content_blocks,
+        }
+
+    def _call_groq(self) -> dict:
+        """Groq llama3.3-70b function calling → Anthropic 형식으로 정규화.
+        Groq는 OpenAI 호환 API + parallel tool_calls 지원."""
+        tools = []
+        for t in _AGENT_TOOLS:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name":        t["name"],
+                    "description": t["description"],
+                    "parameters":  t["input_schema"],
+                },
+            })
+
+        msgs = [{"role": "system", "content": _AGENT_SYS}]
+        for m in self.messages:
+            if isinstance(m["content"], str):
+                msgs.append({"role": m["role"], "content": m["content"]})
+            elif isinstance(m["content"], list):
+                if m["role"] == "assistant":
+                    text_parts = []
+                    tool_calls = []
+                    for block in m["content"]:
+                        if block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                        elif block.get("type") == "tool_use":
+                            tool_calls.append({
+                                "id": block.get("id", ""),
+                                "type": "function",
+                                "function": {
+                                    "name":      block.get("name", ""),
+                                    "arguments": json.dumps(block.get("input", {})),
+                                },
+                            })
+                    entry: dict = {"role": "assistant", "content": " ".join(text_parts) or ""}
+                    if tool_calls:
+                        entry["tool_calls"] = tool_calls
+                    msgs.append(entry)
+                else:  # user tool_result
+                    for block in m["content"]:
+                        if block.get("type") == "tool_result":
+                            msgs.append({
+                                "role":         "tool",
+                                "tool_call_id": block.get("tool_use_id", ""),
+                                "content":      str(block.get("content", "")),
+                            })
+
+        payload = {
+            "model":    "llama-3.3-70b-versatile",
+            "max_tokens": 4096,
+            "messages": msgs,
+            "tools":    tools,
+            "tool_choice": "auto",
+            "temperature": 0.2,
+        }
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {self.api_key}"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            resp = json.loads(r.read())
+
+        # OpenAI 응답 → Anthropic 형식 정규화
+        choice = resp["choices"][0]
+        msg    = choice.get("message", {})
+        content_blocks = []
+        if msg.get("content"):
+            content_blocks.append({"type": "text", "text": msg["content"]})
+        has_tools = False
+        for tc in (msg.get("tool_calls") or []):
+            has_tools = True
+            try:
+                args = json.loads(tc["function"].get("arguments", "{}"))
+            except Exception:
+                args = {}
+            content_blocks.append({
+                "type":  "tool_use",
+                "id":    tc.get("id", ""),
+                "name":  tc["function"]["name"],
+                "input": args,
+            })
+        return {
+            "stop_reason": "tool_use" if has_tools else "end_turn",
             "content":     content_blocks,
         }
 
