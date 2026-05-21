@@ -1355,7 +1355,7 @@ def _gemini_key_works(k: str) -> bool:
         payload = {"contents": [{"role": "user", "parts": [{"text": "hi"}]}],
                    "generationConfig": {"maxOutputTokens": 5}}
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"gemini-2.0-flash:generateContent?key={k}")
+               f"gemini-2.5-flash:generateContent?key={k}")
         req = urllib.request.Request(
             url, data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"})
@@ -1552,7 +1552,7 @@ def _call_llm(provider, api_key, prompt, history):
             turns[0]["parts"][0]["text"] = _SYSTEM + "\n\n" + turns[0]["parts"][0]["text"]
         payload = {"contents": turns, "generationConfig": {"maxOutputTokens": 400}}
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"gemini-2.0-flash:generateContent?key={api_key}")
+               f"gemini-2.5-flash:generateContent?key={api_key}")
         req = urllib.request.Request(
             url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -2582,7 +2582,7 @@ class AgentTerminal:
             "generationConfig": {"maxOutputTokens": 4096},
         }
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"gemini-2.0-flash:generateContent?key={self.api_key}")
+               f"gemini-2.5-flash:generateContent?key={self.api_key}")
         req = urllib.request.Request(
             url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
