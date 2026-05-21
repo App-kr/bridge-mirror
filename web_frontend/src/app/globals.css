@@ -125,9 +125,10 @@
 
   /* ── Board list items (Visa/Support/업무지원 layout) ── */
   .board-list-item {
-    @apply flex items-center justify-between py-3 px-2 cursor-pointer
+    @apply flex items-center justify-between py-5 px-3 cursor-pointer
            transition-all duration-200 border-b border-gray-100;
-    line-height: 22px;
+    line-height: 26px;
+    font-size: 15px;
   }
   .board-list-item:hover {
     transform: translateX(8px);
