@@ -28,7 +28,8 @@
 - 스케줄러: `BRIDGE_DB_Backup_Daily` (Windows Task Scheduler)
 - 명령: `Q:/Phtyon 3/pythonw.exe -X utf8 Q:/Claudework/bridge base/tools/db_persist.py backup`
 - 백업 위치: Google Drive `BRIDGE_DB_BACKUPS` 폴더
-- 보존: 최근 7개 (MAX_KEEP=7, 일주일치)
+- 보존: 최근 30개 (MAX_KEEP=30, 약 한 달치 — 휴가/장기부재 대응)
+- 용량: 5MB × 30 = ~150MB (Drive 15GB 할당량의 1% 이하)
 - 검증: `python tools/db_persist.py status`
 
 ### 메인 코드 — git push 시 자동

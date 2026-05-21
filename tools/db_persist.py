@@ -25,7 +25,9 @@ DB_PATH     = Path(os.getenv("DB_PATH", str(BASE / "master.db")))
 CRED_PATH   = Path(os.getenv("DRIVE_OAUTH_CREDENTIALS", str(BASE / "drive_oauth_credentials.json")))
 TOKEN_PATH  = Path(os.getenv("DRIVE_OAUTH_TOKEN", str(BASE / "drive_oauth_token.json")))
 FOLDER_NAME = os.getenv("DRIVE_BACKUP_FOLDER", "BRIDGE_DB_BACKUPS")
-MAX_KEEP    = 7
+# 백업 보관 기간 — 30일 (휴가/긴 부재 중 손실 감지 안 돼도 복구 가능)
+# 5MB × 30 = 150MB → Drive 15GB 무료 할당량 대비 1% 이하
+MAX_KEEP    = int(os.getenv("DRIVE_BACKUP_KEEP", "30"))
 SCOPES      = ["https://www.googleapis.com/auth/drive.file"]  # 자기가 만든 파일만 (최소 권한)
 
 
