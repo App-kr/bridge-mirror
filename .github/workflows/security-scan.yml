@@ -76,7 +76,7 @@ jobs:
           fetch-depth: 0   # 전체 히스토리 스캔
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
@@ -118,11 +118,18 @@ jobs:
               process.exit(1);
             }
 
-            // HIGH 중 fixAvailable=true 인 것만 차단 (no-fix HIGH는 경고만)
+            // fixAvailable 타입:
+            //   true                      → 단순 패치 (차단)
+            //   {isSemVerMajor: false}    → 비파괴적 부모 의존성 업데이트 (차단)
+            //   {isSemVerMajor: true}     → 메이저 버전 업 필요 (경고만)
+            //   false                     → 패치 없음 (경고만)
+            const isFixable = v =>
+              v.fixAvailable === true ||
+              (v.fixAvailable && typeof v.fixAvailable === 'object' && !v.fixAvailable.isSemVerMajor);
             const fixableHighs = Object.entries(advisories)
-              .filter(([,v]) => v.severity === 'high' && v.fixAvailable === true);
+              .filter(([,v]) => v.severity === 'high' && isFixable(v));
             const unfixableHighs = Object.entries(advisories)
-              .filter(([,v]) => v.severity === 'high' && !v.fixAvailable);
+              .filter(([,v]) => v.severity === 'high' && !isFixable(v));
 
             if (unfixableHighs.length > 0) {
               console.warn('⚠️  HIGH (no fix available — monitoring only):');
@@ -170,17 +177,24 @@ jobs:
               with open('pip-audit-report.json') as f:
                   data = json.load(f)
               # pip-audit format: {dependencies: [{name, version, vulns: [...]}]}
+              # npm-audit와 동일 정책: fixable만 차단, unfixable은 경고만
               deps = data.get('dependencies', [])
-              vulns = [(d['name'], v) for d in deps for v in d.get('vulns', [])]
-              if vulns:
-                  print(f'Python CVEs found: {len(vulns)}')
-                  for name, v in vulns[:10]:
+              all_vulns  = [(d['name'], v) for d in deps for v in d.get('vulns', [])]
+              fixable    = [(n, v) for n, v in all_vulns if v.get('fix_versions')]
+              unfixable  = [(n, v) for n, v in all_vulns if not v.get('fix_versions')]
+              if unfixable:
+                  print(f'⚠️  {len(unfixable)} CVE(s) — no fix available (monitoring only):')
+                  for name, v in unfixable[:5]:
                       aliases = ', '.join(v.get('aliases', [v.get('id','?')]))
-                      fix = v.get('fix_versions', [])
-                      print(f'  {name}: {aliases} (fix: {fix or \"none\"!r})')
+                      print(f'   - {name}: {aliases}')
+              if fixable:
+                  print(f'Python CVEs WITH fix available: {len(fixable)}')
+                  for name, v in fixable[:10]:
+                      aliases = ', '.join(v.get('aliases', [v.get('id','?')]))
+                      print(f'  {name}: {aliases} → fix: {v.get(\"fix_versions\")!r}')
                   sys.exit(1)
               else:
-                  print('No Python CVEs found')
+                  print('No fixable Python CVEs found')
           except Exception as e:
               print(f'Parse error: {e}')
             "
