@@ -305,15 +305,85 @@ def cmd_run(args):
                     if photo_path is None or saved.stat().st_size > photo_path.stat().st_size:
                         photo_path = saved
 
-            # CV 파일만 doc_processor 실행 (사진 동반 전달)
+            # 분류: cover letter vs resume (파일명 기반)
+            _CL_TOKENS = ("cover", "_cl_", "cl-", "커버", "자기소개")
+            _RES_TOKENS = ("resume", "_cv_", "cv-", "이력서")
+
+            def _classify(p: Path) -> str:
+                low = p.name.lower()
+                has_cl = any(t in low for t in _CL_TOKENS)
+                has_res = any(t in low for t in _RES_TOKENS)
+                if has_cl and not has_res:
+                    return "cover"
+                return "resume"  # 기본: 이력서로 간주
+
+            cover_paths = [p for p in cv_paths if _classify(p) == "cover"]
+            resume_paths = [p for p in cv_paths if _classify(p) == "resume"]
+
             cv_ok = 0
-            for cv in cv_paths:
-                print(f"  → doc_processor: {cv.name}"
+            # 처리: 각각 doc_processor로 → 임시 PDF 생성 → 병합
+            tmp_outputs = []  # (kind, processed_pdf_path)
+            for cv in resume_paths:
+                print(f"  → resume: {cv.name}"
                       + (f"  +photo={photo_path.name}" if photo_path else ""), flush=True)
                 if _run_doc_processor(cv, no, photo_path=photo_path):
                     cv_ok += 1
+                    tmp_outputs.append(("resume", cv))
                 else:
                     fail += 1
+            for cv in cover_paths:
+                print(f"  → cover: {cv.name}", flush=True)
+                if _run_doc_processor(cv, no, photo_path=None):
+                    cv_ok += 1
+                    tmp_outputs.append(("cover", cv))
+                else:
+                    fail += 1
+
+            # 병합: cover → resume 순서로 단일 PDF 생성
+            if len(tmp_outputs) >= 2 and resume_paths and cover_paths:
+                try:
+                    import fitz
+                    # processed/ 내 방금 생성된 출력물 찾기
+                    output_files = [
+                        f for f in PROCESSED.glob(f"{no}*.pdf")
+                        if f.stat().st_mtime > (datetime.now().timestamp() - 600)
+                    ]
+                    if len(output_files) >= 2:
+                        # 가장 최근 두 개: cover/resume 식별 (텍스트 시작부로)
+                        sorted_o = sorted(output_files, key=lambda x: -x.stat().st_mtime)[:3]
+                        cover_pdf = resume_pdf = None
+                        for of in sorted_o:
+                            d = fitz.open(str(of))
+                            t0 = d[0].get_text()[:200].lower() if d.page_count else ""
+                            d.close()
+                            if any(k in t0 for k in ("dear hiring", "dear ", "to whom", "i am writing")):
+                                if cover_pdf is None:
+                                    cover_pdf = of
+                            else:
+                                if resume_pdf is None:
+                                    resume_pdf = of
+                        if cover_pdf and resume_pdf and cover_pdf != resume_pdf:
+                            merged_name = resume_pdf.name  # 이력서 이름 채택
+                            merged_path = PROCESSED / f"_tmp_merge_{no}.pdf"
+                            merged = fitz.open()
+                            c = fitz.open(str(cover_pdf))
+                            r = fitz.open(str(resume_pdf))
+                            merged.insert_pdf(c)
+                            merged.insert_pdf(r)
+                            c.close(); r.close()
+                            merged.save(
+                                str(merged_path),
+                                garbage=4, deflate=True, deflate_images=True,
+                                deflate_fonts=True, clean=True,
+                            )
+                            merged.close()
+                            # 기존 파일 삭제 + 병합 결과를 이력서 이름으로 교체
+                            cover_pdf.unlink(missing_ok=True)
+                            resume_pdf.unlink(missing_ok=True)
+                            merged_path.rename(PROCESSED / merged_name)
+                            print(f"  📑 병합: cover+resume → {merged_name}", flush=True)
+                except Exception as _me:
+                    print(f"  [WARN] 병합 실패: {_me}", flush=True)
 
         # with 블록 종료 → 임시폴더 자동 삭제
 

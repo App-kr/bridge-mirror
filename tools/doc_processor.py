@@ -3230,21 +3230,14 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         r'\|\s*Korea\s*(?=[—\-])', '| ', _cleaned_jt, flags=re.I)
                     _cleaned_jt = re.sub(r'\|\s*—', '—', _cleaned_jt)
                     _cleaned_jt = re.sub(r'\|\s*-\s', '- ', _cleaned_jt)
-                    # 브랜드 제거 후 "— 한국도시, South Korea" 잔류 제거
-                    # "Head Teacher — Song-do, Incheon, South Korea" → "Head Teacher — South Korea"
-                    # ★ 사용자 요청: 광역 행정구역(-do/-si 접미사) 은 보존
-                    #   "Gyeonggi-do" 안의 "Gyeonggi"도 보존 (negative lookahead)
+                    # 브랜드 제거 후 한국 지명 모두 제거 (사용자 요청 2026-05-21)
+                    # "고양/경기/Gyeonggi-do/Gangnam-gu" 등 전부 제거 → "South Korea" 만 유지
                     _keep_kws_jt = {"korea", "south korea"}
                     for _city_jt in KR_KEYWORDS:
                         if len(_city_jt) <= 2 or _city_jt.lower() in _keep_kws_jt:
                             continue
-                        # -do (도, 광역) / -si (시) 보존 (Gyeonggi-do, Seongnam-si 등)
-                        _cl = _city_jt.lower()
-                        if _cl.endswith("-do") or _cl.endswith("-si"):
-                            continue
-                        # "Gyeonggi" 가 "Gyeonggi-do" 안에 있으면 매칭 제외
                         _city_jt_pat = re.compile(
-                            r'\b' + re.escape(_city_jt) + r'\b(?!-(?:do|si))\s*,?\s*', re.I)
+                            r'\b' + re.escape(_city_jt) + r'\b\s*,?\s*', re.I)
                         # ① 직업타이틀 clean text에서 제거
                         _cleaned_jt = _city_jt_pat.sub('', _cleaned_jt)
                         # ② PDF 텍스트 분리 대응: redact_texts에도 직접 추가
@@ -3287,11 +3280,61 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 _cleaned_jt2 = re.sub(
                     r'\b[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+(?:\s+(?:Junior|Senior|Academy|Institute))?\b',
                     '', _cleaned_jt2).strip()
-                # 6순위: 한국 세부 행정구역만 제거 (X-gu/dong/gun/myeon/eup/ri)
-                # ★ -do(도, 광역) / -si(시) 는 보존 — 사용자 요청 (Gyeonggi-do 등)
+                # 6순위: 한국 모든 행정구역 제거 (사용자 요청 2026-05-21)
+                # -do/-si/-gu/-dong/-gun/-myeon/-eup/-ri 전부 제거
                 _cleaned_jt2 = re.sub(
-                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:do|si|gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
                     '', _cleaned_jt2, flags=re.I).strip()
+                # 7순위: 미등록 한국 브랜드 공격적 제거 (사용자 요청 2026-05-21)
+                # "Reading Star, South Korea" / "April Learning, Gyeyang" / "Langcon English"
+                # 라인 자체 OR 페이지에 Korea 인디케이터 있고 외국 인디케이터 없으면 통째 교체
+                _line_has_kr = bool(re.search(
+                    r'\b(?:south\s+korea|korea|gyeonggi|gyeongi|seoul|busan|incheon|daegu|daejeon|'
+                    r'gwangju|ulsan|sejong|jeju|gangwon|chungcheong|jeolla|gyeongsang|gyeyang|'
+                    r'goyang|suwon|seongnam|bucheon|anyang|ansan|namyangju|hwaseong|pyeongtaek|'
+                    r'pohang|changwon|jeonju|cheonan|gimhae)\b',
+                    _cleaned_jt2, re.I,
+                ))
+                # 외국 인디케이터 (USA/UK/Canada 등) 있는 라인은 한국 처리 제외
+                _line_has_foreign = bool(re.search(
+                    r'\b(?:USA|U\.S\.A?|United\s+States|UK|United\s+Kingdom|Canada|Australia|'
+                    r'New\s+Zealand|Ireland|South\s+Africa|England|Scotland|Wales|'
+                    r'London|Manchester|Birmingham|New\s+York|Boston|Chicago|Phoenix|'
+                    r'Sydney|Melbourne|Brisbane|Auckland|Toronto|Vancouver|Dublin)\b',
+                    _cleaned_jt2,
+                ))
+                # 페이지 전체에 Korea 있고 외국 인디케이터 없으면 한국으로 추정
+                _has_kr_anywhere = _line_has_kr or (page_has_korea and not _line_has_foreign)
+                if _has_kr_anywhere:
+                    # dash 이후 pipe 또는 EOL 까지 통합 정리
+                    # 직책 부분(dash 앞)은 보존
+                    _zone_pat = re.compile(
+                        r'(?P<dash>—|–|\s-\s)\s*(?P<zone>[^|]+?)(?=\s*\||\s*$)'
+                    )
+                    def _zone_clean(m):
+                        _zone = m.group('zone').strip().rstrip(',').strip()
+                        # zone 자체에 외국 인디케이터 있으면 보존
+                        if re.search(
+                            r'\b(USA|UK|United\s+States|United\s+Kingdom|Canada|Australia|'
+                            r'England|Ireland|Scotland|Wales|South\s+Africa|New\s+Zealand|'
+                            r'London|Manchester|Boston|Phoenix|Sydney|Toronto|Dublin)\b',
+                            _zone,
+                        ):
+                            return m.group()
+                        # Korea/한국 지역 키워드 있으면 South Korea로 통합
+                        if re.search(
+                            r'\b(south\s+korea|korea|gyeonggi|seoul|busan|incheon|daegu|'
+                            r'daejeon|gwangju|ulsan|sejong|jeju|gangwon|gyeyang|goyang|'
+                            r'suwon|seongnam|bucheon|anyang|ansan|namyangju|hwaseong|'
+                            r'pyeongtaek|pohang|changwon|jeonju|cheonan|gimhae)\b',
+                            _zone, re.I,
+                        ):
+                            return f"{m.group('dash')} South Korea"
+                        # 페이지에 Korea 있고 zone에 외국지표 없으면 한국 추정
+                        if page_has_korea and len(_zone) <= 50:
+                            return f"{m.group('dash')} South Korea"
+                        return m.group()
+                    _cleaned_jt2 = _zone_pat.sub(_zone_clean, _cleaned_jt2)
                 # 앞뒤 고립 구분자 정리
                 _cleaned_jt2 = re.sub(r'^[\s\-—]+', '', _cleaned_jt2).strip()
                 _cleaned_jt2 = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt2).strip()
@@ -3542,9 +3585,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         _exp_rect = _fitz_pre.Rect(_jx0, _jy0, max(_jx1, _jx0 + 350), _jy1)
                         _processed_jt_bboxes.append(_jrect)
                         try:
+                            # 원본 폰트 크기 유지 (사용자 요청 2026-05-21)
                             page.add_redact_annot(
                                 _exp_rect, text=_safe_clean, fill=(1, 1, 1),
-                                text_color=_jrgb, fontsize=max(7, _jfsize - 1),
+                                text_color=_jrgb, fontsize=_jfsize,
                                 align=0,
                             )
                             page.apply_redactions()
