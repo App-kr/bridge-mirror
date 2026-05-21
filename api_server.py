@@ -1507,7 +1507,9 @@ def _map_apply_payload(payload: dict) -> dict:
 
 @app.post("/api/apply", status_code=status.HTTP_201_CREATED, tags=["candidates"])
 async def apply(request: Request, body: CandidateApply):
-    if not _rate_ok(_ip_hash(request), window=3600, max_posts=10):
+    # Rate limit 완화 — 사용자 retry 허용 (시간당 60회 / 분당 약 1회)
+    # CAPTCHA + Honeypot 통과 못한 요청은 별도 카운터로 차단 (스팸 방지는 그쪽에서 처리)
+    if not _rate_ok(_ip_hash(request), window=3600, max_posts=60):
         raise HTTPException(429, "Too many requests. Please try again later.")
     """
     구직자 지원 접수 (1차 / 2차 통합)
@@ -1668,7 +1670,8 @@ async def refresh_apply_token(request: Request):
 
 @app.post("/api/inquiry", status_code=status.HTTP_201_CREATED, tags=["clients"])
 async def inquiry(request: Request, body: ClientInquiry):
-    if not _rate_ok(_ip_hash(request), window=3600, max_posts=5):
+    # Rate limit 완화 — 사용자 retry 허용 (시간당 60회)
+    if not _rate_ok(_ip_hash(request), window=3600, max_posts=60):
         raise HTTPException(429, "Too many requests. Please try again later.")
     """
     구인처 문의 접수
@@ -6040,8 +6043,9 @@ def _verify_captcha_token(token: str, ip_hash: str) -> bool:
         nonce     = parts[2]
         now_ms    = int(_time.time() * 1000)
 
-        # 5분 이내인지 확인
-        if now_ms - timestamp > 5 * 60 * 1000:
+        # 30분 이내인지 확인 — 사용자가 폼 작성하는 동안 만료 방지
+        # (CAPTCHA 자체가 시작 단계에서 처리되므로 폼 작성 시간 충분히 확보)
+        if now_ms - timestamp > 30 * 60 * 1000:
             return False
 
         # nonce 재사용(replay attack) 방지
