@@ -3214,17 +3214,30 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _has_jt_sep_pre = True
             if not _has_jt_sep_pre and len(stripped) <= 100:
                 _matched_generic = None
+                # 1) compound 유형명 우선 (english academy, language institute 등)
                 for _gt in sorted(_GENERIC_TYPES_SET, key=len, reverse=True):
                     if _gt in s_lower:
                         _matched_generic = _gt
                         break
+                # 2) bare 유형명 단어 폴백 (academy/institute/school/center)
+                if not _matched_generic:
+                    _BARE_TYPES = (
+                        "academy", "institute", "school", "center", "centre",
+                        "kindergarten", "preschool", "hagwon",
+                    )
+                    for _bt in _BARE_TYPES:
+                        if re.search(r'\b' + _bt + r'\b', s_lower):
+                            _matched_generic = _bt
+                            break
                 if _matched_generic:
                     _has_br_marker = "branch" in s_lower
                     _has_kr_city = any(
                         kw.lower() in s_lower for kw in KR_KEYWORDS
                         if len(kw) > 2 and kw.lower() not in ("korea", "south korea")
                     )
-                    if _has_br_marker or _has_kr_city or has_kr_work:
+                    # "south korea" / "korea" 명시 등장도 트리거 추가 (Herald Academy | South Korea 케이스)
+                    _has_kr_country = bool(re.search(r'\b(south\s+korea|korea)\b', s_lower))
+                    if _has_br_marker or _has_kr_city or has_kr_work or _has_kr_country:
                         _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
                         _new_line = f"{_gen_cap}, South Korea"
                         _existing_idx = next(
