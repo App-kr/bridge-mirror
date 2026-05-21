@@ -1478,6 +1478,15 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "aclipse",
     "wonderland", "wonderland english",
     "maple bear",
+    # 2026-05-21 사용자 정답 분석 추가 — type 단어 미포함 (brand만)
+    "reading star",
+    "april learning", "april english",
+    "langcon",
+    "altiora",
+    "herald",
+    "plato ap", "plato",
+    "key english",  # KEY (key 단독은 일반 영단어 → 미등록)
+    # little fox 이미 위에 등록됨
     "little america",
     "little fox",
     "creverse",
@@ -1758,6 +1767,52 @@ _GENERIC_TYPES_SET = frozenset(_GENERIC_SCHOOL_TYPES.keys())
 # 브랜드 접두사 + 일반 유형명 → 유형명만 보존 (capture group 1 = generic type)
 # "Broad Language School" → "Language School"
 # !! 줄 경계 넘어 매칭 방지: [ \t]+ 사용 (not \s+) !!
+# 한국 도시/구 → 상위지역 매핑 (사용자 정답 학습 2026-05-21)
+# 세부 도시명을 광역(시/도)로 일반화. 매핑 없는 도시는 "Korea" 폴백.
+_KR_CITY_PARENT = {
+    # 서울 자치구/동
+    "jamsil": "Seoul", "gangnam": "Seoul", "songpa": "Seoul", "mapo": "Seoul",
+    "yongsan": "Seoul", "jongno": "Seoul", "seocho": "Seoul", "gangdong": "Seoul",
+    "yeongdeungpo": "Seoul", "gwanak": "Seoul", "geumcheon": "Seoul", "guro": "Seoul",
+    "dongjak": "Seoul", "yangcheon": "Seoul", "gangseo": "Seoul", "eunpyeong": "Seoul",
+    "seongbuk": "Seoul", "dongdaemun": "Seoul", "jungnang": "Seoul", "gwangjin": "Seoul",
+    "seongdong": "Seoul", "nowon": "Seoul", "dobong": "Seoul", "gangbuk": "Seoul",
+    "seodaemun": "Seoul", "jung": "Seoul",  # 중구
+    "hongdae": "Seoul", "itaewon": "Seoul", "myeongdong": "Seoul", "sinchon": "Seoul",
+    # 경기도 시
+    "gimpo": "Gyeonggi", "suwon": "Gyeonggi", "goyang": "Gyeonggi", "yongin": "Gyeonggi",
+    "seongnam": "Gyeonggi", "bundang": "Gyeonggi", "anyang": "Gyeonggi", "ansan": "Gyeonggi",
+    "bucheon": "Gyeonggi", "pyeongtaek": "Gyeonggi", "gwangmyeong": "Gyeonggi",
+    "paju": "Gyeonggi", "hwaseong": "Gyeonggi", "dongtan": "Gyeonggi",
+    "namyangju": "Gyeonggi", "uijeongbu": "Gyeonggi", "siheung": "Gyeonggi",
+    "gunpo": "Gyeonggi", "icheon": "Gyeonggi", "gwacheon": "Gyeonggi",
+    "yangju": "Gyeonggi", "pocheon": "Gyeonggi", "yeoju": "Gyeonggi",
+    "osan": "Gyeonggi", "gapyeong": "Gyeonggi", "anseong": "Gyeonggi",
+    "yangpyeong": "Gyeonggi", "wirye": "Gyeonggi",
+    # 인천 자치구
+    "gyeyang": "Incheon", "bupyeong": "Incheon", "yeonsu": "Incheon",
+    "namdong": "Incheon", "michuhol": "Incheon", "seo": "Incheon",
+    # 부산 자치구
+    "haeundae": "Busan", "suyeong": "Busan", "geumjeong": "Busan",
+    "saha": "Busan", "yeonje": "Busan", "dongnae": "Busan",
+    # 대구 자치구
+    "suseong": "Daegu", "dalseo": "Daegu", "dalseong": "Daegu",
+    # 강원도
+    "chuncheon": "Gangwon", "wonju": "Gangwon", "gangneung": "Gangwon",
+    "donghae": "Gangwon", "taebaek": "Gangwon", "sokcho": "Gangwon",
+    # 충청도
+    "cheongju": "Chungcheong", "chungju": "Chungcheong",
+    "cheonan": "Chungcheong", "asan": "Chungcheong", "seosan": "Chungcheong",
+    # 전라도
+    "jeonju": "Jeolla", "gunsan": "Jeolla", "iksan": "Jeolla",
+    "yeosu": "Jeolla", "suncheon": "Jeolla", "mokpo": "Jeolla",
+    # 경상도
+    "pohang": "Gyeongsang", "gyeongju": "Gyeongsang", "andong": "Gyeongsang",
+    "changwon": "Gyeongsang", "jinju": "Gyeongsang", "gimhae": "Gyeongsang",
+    "tongyeong": "Gyeongsang",
+}
+
+
 _RE_KR_SCHOOL_PREFIX = re.compile(
     # !! re.IGNORECASE 제거: [A-Z] prefix가 lowercase "in" 등을 매칭하던 버그 수정
     # 예: "in Kindergarten" → IGNORECASE 있으면 매칭됨 → 제거
@@ -3261,17 +3316,24 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             }
                             _brand_words = _bp_match.group(1).split()
                             _type_main = _bp_match.group(2)
-                            # 우측에서부터 type-modifier 단어 흡수
                             _modifiers = []
                             while _brand_words and _brand_words[-1].lower() in _TYPE_MODIFIERS:
                                 _modifiers.insert(0, _brand_words.pop())
-                            # 대소문자 유지: 원본 케이스 그대로
                             _full_type = " ".join(_modifiers + [_type_main])
                             _rest = _bp_match.group(3)
-                            # 세부구역(-gu/-dong/-gun) 제거
+                            # 세부구역 제거
                             _rest = re.sub(
                                 r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
                                 '', _rest, flags=re.I,
+                            )
+                            # 도시명 → 상위지역 매핑
+                            def _map_city(_cm):
+                                _cw = _cm.group(0)
+                                _parent = _KR_CITY_PARENT.get(_cw.lower())
+                                return _parent if _parent else _cw
+                            _rest = re.sub(
+                                r'\b[A-Z][a-z]{2,}\b',
+                                _map_city, _rest,
                             )
                             _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
                             _rest = re.sub(r',\s*,', ',', _rest)
@@ -3346,14 +3408,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _cleaned_jt = re.sub(r'\|\s*—', '—', _cleaned_jt)
                     _cleaned_jt = re.sub(r'\|\s*-\s', '- ', _cleaned_jt)
                     # 브랜드 제거 후 한국 지명 처리:
-                    # - 도/광역시/주요시 보존: Seoul/Busan/Gangwon-do/Gyeonggi-do 등
-                    # - 세부구역만 제거: Gangnam-gu, Seodaemun-gu, Yanggu-gun
+                    # - 도/광역시/주요시 보존
+                    # - 매핑 가능한 도시명도 보존 (이후 6.5순위에서 상위지역으로 매핑)
+                    # - 세부구역만 제거: -gu/-dong/-gun 접미사
                     _keep_kws_jt = {
                         "korea", "south korea",
-                        # 광역시 (특별시/광역시)
                         "seoul", "busan", "incheon", "daegu", "daejeon",
                         "gwangju", "ulsan", "sejong",
-                        # 도(-do): 광역도
                         "gyeonggi", "gangwon", "chungcheong", "jeolla", "gyeongsang", "jeju",
                         "gyeonggi-do", "gangwon-do", "chungcheong-do", "jeolla-do",
                         "gyeongsang-do", "jeju-do",
@@ -3361,6 +3422,8 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         "jeollabuk-do", "jeollanam-do",
                         "gyeongsangbuk-do", "gyeongsangnam-do",
                     }
+                    # 매핑 source 도시는 keep — 이후 6.5순위 매핑이 상위지역으로 교체
+                    _keep_kws_jt.update(_KR_CITY_PARENT.keys())
                     for _city_jt in KR_KEYWORDS:
                         if len(_city_jt) <= 2 or _city_jt.lower() in _keep_kws_jt:
                             continue
@@ -3423,20 +3486,34 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     r'\b[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+(?:\s+(?:Junior|Senior|Academy|Institute))?\b',
                     '', _cleaned_jt2).strip()
                 # 6순위: 한국 세부 행정구역만 제거 (-gu/-dong/-gun/-myeon/-eup/-ri)
-                # ★ -do (도/광역), -si (시) 는 보존 — 정답 6257 분석 결과:
-                #   "Gangwon-do" / "Seoul" 유지가 사용자 선호 (정부기관 등 맥락 보존)
                 _cleaned_jt2 = re.sub(
                     r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
                     '', _cleaned_jt2, flags=re.I).strip()
+                # 6.5순위: 한국 세부 도시명 → 상위지역 매핑 (Gimpo→Gyeonggi, Jamsil→Seoul)
+                def _city_map_inline(_m):
+                    _w = _m.group(0)
+                    _p = _KR_CITY_PARENT.get(_w.lower())
+                    return _p if _p else _w
+                _cleaned_jt2 = re.sub(
+                    r'\b[A-Z][a-z]{2,}\b', _city_map_inline, _cleaned_jt2,
+                )
                 # 7순위 비활성 — 정답 6257 분석 결과: 도/광역시 보존이 사용자 선호
                 # 브랜드(PLATO AP) + 세부구역(-gu/-dong) 만 제거, 도/시는 유지
                 # 기존 1~6순위 (Branch / 괄호 / KW brand / 도시 / -gu_etc) 로 충분
                 # 앞뒤 고립 구분자 정리
                 _cleaned_jt2 = re.sub(r'^[\s\-—]+', '', _cleaned_jt2).strip()
                 _cleaned_jt2 = re.sub(r'[ \t]{2,}', ' ', _cleaned_jt2).strip()
-                # 중복 콤마 정리: "Institute, , South Korea" → "Institute, South Korea"
-                _cleaned_jt2 = re.sub(r',\s*,', ',', _cleaned_jt2)
-                _cleaned_jt2 = re.sub(r',\s*(?=[—–-])', ' ', _cleaned_jt2)  # ", —" → " —"
+                # 중복 콤마/대시 정리
+                _cleaned_jt2 = re.sub(r',\s*,+', ',', _cleaned_jt2)
+                _cleaned_jt2 = re.sub(r',\s*(?=[—–\-])', ' ', _cleaned_jt2)  # ", —" → " —"
+                # "— ," / "- ," → "— " (대시 뒤 콤마 제거)
+                _cleaned_jt2 = re.sub(r'([—–\-])\s*,\s*', r'\1 ', _cleaned_jt2)
+                # 연속 대시 정리: "— -" / "- -" → "—"
+                _cleaned_jt2 = re.sub(r'[—–\-]\s+[—–\-]\s+', '— ', _cleaned_jt2)
+                # 시작부 "& " 또는 "/" 등 고립 구두점 제거
+                _cleaned_jt2 = re.sub(r'(?<=[—–\-]\s)[&/+]\s*', '', _cleaned_jt2)
+                # 다중 공백 재정리
+                _cleaned_jt2 = re.sub(r'\s{2,}', ' ', _cleaned_jt2).strip()
                 if _cleaned_jt2 != stripped:
                     _existing_idx = next(
                         (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped), -1)
@@ -3457,7 +3534,12 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             )
             if _district_pat.search(stripped) and len(stripped) <= 150:
                 _dist_cleaned = _district_pat.sub('', stripped).strip()
-                # 잔류 정리
+                # 도시 매핑 적용
+                def _dist_city_map(_m):
+                    _w = _m.group(0)
+                    _p = _KR_CITY_PARENT.get(_w.lower())
+                    return _p if _p else _w
+                _dist_cleaned = re.sub(r'\b[A-Z][a-z]{2,}\b', _dist_city_map, _dist_cleaned)
                 _dist_cleaned = re.sub(r'\s{2,}', ' ', _dist_cleaned)
                 _dist_cleaned = re.sub(r',\s*,', ',', _dist_cleaned)
                 _dist_cleaned = re.sub(r'\|\s*,', '|', _dist_cleaned)
