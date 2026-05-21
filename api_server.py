@@ -542,6 +542,9 @@ def _startup_db_health_check() -> None:
                             "_ensure_page_content_table",
                             "_ensure_pipeline_tables",
                             "_ensure_talent_auth_tables",
+                            # post-restore 정리 (Drive 복원이 옛 DB로 덮어쓰는 문제 회피)
+                            "_ensure_testimonials_schema",
+                            "_ensure_apostille_categories",
                         ]
                         _ok_count = 0
                         for _fn in _ENSURE_FUNCS:
@@ -576,6 +579,9 @@ def _startup_db_health_check() -> None:
                             "_ensure_site_settings_table", "_ensure_site_visits_table",
                             "_ensure_page_content_table", "_ensure_pipeline_tables",
                             "_ensure_talent_auth_tables",
+                            # post-restore 정리 (Drive 복원이 옛 DB로 덮어쓰는 문제 회피)
+                            "_ensure_testimonials_schema",
+                            "_ensure_apostille_categories",
                         ]
                         for _fn in _ENSURE_FUNCS:
                             try:
