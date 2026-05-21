@@ -10801,30 +10801,52 @@ def _ensure_testimonials_schema():
             )
         """)
         conn.commit()
-        # 정크 데이터 자동 정리:
-        #   기존 행에 "최고관리자" 이름 또는 'function board_move' 같은 스크랩 JS 잔재가 있으면
-        #   안전하게 논리삭제(is_deleted=1) 후 새 시드 데이터로 교체
+        # 정크 데이터 공격적 자동 정리:
+        #   - 이름이 "최고관리자" 인 모든 행 (한글 어드민 잔재)
+        #   - review_text 에 scraping JS 잔재 ('function board_move', '추천', '비추천' 등) 포함
+        #   - photo_url 이 http:// (Cafe24 옛 사이트 절대 경로)
+        #   매번 실행해도 안전한 멱등 cleanup (Drive 복원 후 잔재 정리 보장)
         try:
             junk_count = conn.execute("""
                 SELECT COUNT(*) FROM testimonials
                 WHERE is_deleted=0
-                  AND (name = '최고관리자' OR review_text LIKE '%function board_move%')
+                  AND (
+                    name = '최고관리자'
+                    OR review_text LIKE '%function board_move%'
+                    OR review_text LIKE '%bo_v_act%'
+                    OR review_text LIKE '%board_move(href)%'
+                    OR (photo_url IS NOT NULL AND photo_url LIKE 'http://%')
+                  )
             """).fetchone()[0]
             if junk_count > 0:
                 conn.execute("""
                     UPDATE testimonials SET is_deleted=1, is_visible=0
                     WHERE is_deleted=0
-                      AND (name = '최고관리자' OR review_text LIKE '%function board_move%')
+                      AND (
+                        name = '최고관리자'
+                        OR review_text LIKE '%function board_move%'
+                        OR review_text LIKE '%bo_v_act%'
+                        OR review_text LIKE '%board_move(href)%'
+                        OR (photo_url IS NOT NULL AND photo_url LIKE 'http://%')
+                      )
                 """)
                 conn.commit()
                 logging.getLogger("bridge.api").info(
-                    "_ensure_testimonials_schema: 정크 %d rows 논리삭제", junk_count)
+                    "_ensure_testimonials_schema: 정크 %d rows 논리삭제 (공격적 패턴)", junk_count)
         except Exception as _je:
             logging.getLogger("bridge.api").warning("testimonials junk cleanup 스킵: %s", _je)
 
-        # 자동 시드 (visible 행이 없을 때)
+        # 새 seed 강제 반영:
+        # visible 행이 없거나, seed 파일 첫 이름(James)이 DB에 없으면 (Drive 복원으로 옛 데이터가 덮인 상황) 재시드
+        # NOT EXISTS 가드로 중복 INSERT 방지
         count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0 AND is_visible=1").fetchone()[0]
-        if count == 0:
+        try:
+            seed_has_james = conn.execute(
+                "SELECT 1 FROM testimonials WHERE is_deleted=0 AND name='James' LIMIT 1"
+            ).fetchone() is not None
+        except Exception:
+            seed_has_james = True
+        if count == 0 or not seed_has_james:
             seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
             if seed_path.exists():
                 try:
