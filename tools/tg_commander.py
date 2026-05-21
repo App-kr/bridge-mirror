@@ -2830,7 +2830,7 @@ class AgentTerminal:
             return "BLOCKED: 위험한 명령어"
         self._send(f"> {cmd[:100]}")
         try:
-            r = subprocess.run(  # nosec B602 -- allowlist validated by _BLOCKED_BASH before exec
+            r = subprocess.run(  # nosec B602 B603 B604 B605 B607 -- allowlist validated by _BLOCKED_BASH before exec
                 cmd, shell=True, capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
                 timeout=60, cwd=self.workdir,

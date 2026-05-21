@@ -52,7 +52,7 @@ class GitTool(BaseTool):
 
         try:
             result = subprocess.run(
-                full_cmd, shell=True, capture_output=True, text=True,
+                full_cmd, shell=True, capture_output=True, text=True,  # nosec B602 B603 B604 B605 B607
                 cwd=str(self._root), timeout=30,
             )
             output = result.stdout

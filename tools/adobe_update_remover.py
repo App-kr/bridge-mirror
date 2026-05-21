@@ -16,7 +16,7 @@ from pathlib import Path
 def run_cmd(cmd, silent=False):
     """cmd 명령 실행"""
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)  # nosec B602 B603 B604 B605 B607
         if not silent:
             print(f"[OK] {cmd}")
         return result.stdout

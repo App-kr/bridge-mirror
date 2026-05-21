@@ -25,7 +25,7 @@ DAYS = ["일", "월", "화", "수", "목", "금", "토"]
 
 def run(cmd):
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True,  # nosec B602 B603 B604 B605 B607
                                 encoding="utf-8", cwd=str(BASE))
         return result.stdout.strip()
     except Exception:

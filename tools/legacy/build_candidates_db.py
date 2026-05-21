@@ -179,7 +179,7 @@ ALL_DB_COLS = [
 
 def stable_id(email: str, name: str, row_num: int, fname: str) -> str:
     raw = f"{fname}||{row_num}||{email}||{name}"
-    return "cnd_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+    return "cnd_" + hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def is_memo_row(row: list) -> bool:

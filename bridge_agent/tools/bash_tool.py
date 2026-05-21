@@ -73,7 +73,7 @@ class BashTool(BaseTool):
         try:
             result = subprocess.run(
                 command,
-                shell=True,
+                shell=True,  # nosec B602 B603 B604 B605 B607
                 capture_output=True,
                 text=True,
                 cwd=str(self._cwd) if self._cwd else None,

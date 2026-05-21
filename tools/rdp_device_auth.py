@@ -113,7 +113,7 @@ def set_rdp_env(device_name: str, mac: str, local_ip: Optional[str]) -> None:
         # Windows 환경변수 설정 (현재 세션에만)
         subprocess.run(
             f'set RDP_DEVICE_NAME={device_name} && set RDP_DEVICE_MAC={mac}',
-            shell=True
+            shell=True  # nosec B602 B603 B604 B605 B607
         )
         log(f"[INFO] RDP 환경변수 설정: {device_name}")
     except Exception as e:

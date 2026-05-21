@@ -167,7 +167,7 @@ CLIENT_COL_MAP = {
 def _stable_id(email: str, name: str) -> str:
     """email+name 기반 안정적 candidate_id 생성."""
     raw = f"{email or ''}|{name or ''}".lower().strip()
-    return hashlib.sha1(raw.encode()).hexdigest()[:12]
+    return hashlib.sha1(raw.encode(), usedforsecurity=False).hexdigest()[:12]
 
 
 def _parse_location(region_val, city_val) -> str:

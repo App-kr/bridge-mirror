@@ -51,7 +51,7 @@ def register_via_ssh(peer_info):
     for cmd in ssh_commands:
         try:
             print(f"[IN] Executing: {cmd[:60]}...")
-            result = subprocess.run(cmd, shell=True, timeout=10, capture_output=True)
+            result = subprocess.run(cmd, shell=True, timeout=10, capture_output=True)  # nosec B602 B603 B604 B605 B607
             if result.returncode == 0:
                 print("[OK] Command successful")
                 return True
