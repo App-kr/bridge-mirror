@@ -101,7 +101,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: npm audit (critical + high)
+      - name: npm audit (critical + fixable high)
         run: |
           npm audit --audit-level=high --json > npm-audit-report.json 2>&1 || true
           node -e "
@@ -109,11 +109,31 @@ jobs:
           try {
             const data = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
             const vulns = data.metadata?.vulnerabilities || {};
-            console.log('Vulnerabilities:', JSON.stringify(vulns));
-            if ((vulns.critical || 0) + (vulns.high || 0) > 0) {
-              console.error('CRITICAL/HIGH vulnerabilities found!');
+            const advisories = data.vulnerabilities || {};
+            console.log('Vulnerabilities summary:', JSON.stringify(vulns));
+
+            // CRITICAL은 무조건 차단
+            if ((vulns.critical || 0) > 0) {
+              console.error('CRITICAL vulnerabilities found — BLOCK');
               process.exit(1);
             }
+
+            // HIGH 중 fixAvailable=true 인 것만 차단 (no-fix HIGH는 경고만)
+            const fixableHighs = Object.entries(advisories)
+              .filter(([,v]) => v.severity === 'high' && v.fixAvailable === true);
+            const unfixableHighs = Object.entries(advisories)
+              .filter(([,v]) => v.severity === 'high' && !v.fixAvailable);
+
+            if (unfixableHighs.length > 0) {
+              console.warn('⚠️  HIGH (no fix available — monitoring only):');
+              unfixableHighs.forEach(([name]) => console.warn('   -', name));
+            }
+            if (fixableHighs.length > 0) {
+              console.error('🚨 HIGH vulnerabilities WITH available fix:');
+              fixableHighs.forEach(([name]) => console.error('   -', name));
+              process.exit(1);
+            }
+            console.log('✅ No CRITICAL or fixable-HIGH vulnerabilities');
           } catch(e) { console.log('Audit parse error:', e.message); }
           "
 
