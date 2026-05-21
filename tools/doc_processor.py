@@ -2327,6 +2327,76 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
             log.append(f"KR_WORKPLACE→{generic}: {workplace}")
             result = pat.sub(generic, result)
 
+    # Step 3.5: 파이프 세그먼트 형식 미등록 브랜드 정리
+    # "<Title> | <Brand> <Type> | <Date>" 패턴 — 줄별 처리
+    _TYPE_MOD_WORDS = {
+        "english", "language", "international", "global", "private", "public",
+        "teaching", "elementary", "primary", "middle", "secondary", "high",
+        "junior", "senior", "native",
+    }
+    _BARE_T = ("academy", "institute", "school", "center", "centre",
+               "kindergarten", "preschool", "hagwon")
+    _FOREIGN_INDICATORS = re.compile(
+        r'\b(USA|UK|United\s+States|United\s+Kingdom|Canada|Australia|England|'
+        r'Ireland|Scotland|South\s+Africa|New\s+Zealand|London|Manchester|'
+        r'Boston|Phoenix|Sydney|Toronto|Dublin|Brisbane|Auckland)\b'
+    )
+    _new_lines = []
+    for _rline in result.split("\n"):
+        if _rline.count("|") < 2 or len(_rline) > 200:
+            _new_lines.append(_rline); continue
+        if _FOREIGN_INDICATORS.search(_rline):
+            _new_lines.append(_rline); continue
+        # 보호된 유명 대학명 포함 라인은 스킵 (워드 경계 매칭 — "tut" in "institute" 오탐 방지)
+        _rline_lower = _rline.lower()
+        _has_protected = False
+        for _pu in _PROTECTED_UNIVERSITIES:
+            if len(_pu) <= 4:
+                # 짧은 약어는 워드 경계 필수
+                if re.search(r'\b' + re.escape(_pu) + r'\b', _rline_lower):
+                    _has_protected = True; break
+            elif _pu in _rline_lower:
+                _has_protected = True; break
+        if _has_protected:
+            _new_lines.append(_rline); continue
+        _segs = [s.strip() for s in _rline.split("|")]
+        _changed = False
+        for _si, _seg in enumerate(_segs):
+            if not _seg: continue
+            _sl = _seg.lower()
+            if _FOREIGN_INDICATORS.search(_seg): continue
+            if re.search(r'\b(?:19|20)\d{2}\b', _seg): continue
+            _tw = None
+            for _bt in _BARE_T:
+                if re.search(r'\b' + _bt + r'\b', _sl):
+                    _tw = _bt; break
+            if not _tw: continue
+            _words = _seg.split()
+            _i_type = next((i for i, w in enumerate(_words)
+                            if w.lower().rstrip(',') == _tw), None)
+            if _i_type is None: continue
+            _kept = []
+            _j = _i_type - 1
+            while _j >= 0 and _words[_j].lower() in _TYPE_MOD_WORDS:
+                _kept.insert(0, _words[_j]); _j -= 1
+            # 연속 중복 type-modifier 제거 ("English English" → "English")
+            _dedup = []
+            for _kw in _kept:
+                if not _dedup or _dedup[-1].lower() != _kw.lower():
+                    _dedup.append(_kw)
+            _new_words = _dedup + [_words[_i_type]] + _words[_i_type + 1:]
+            _new_seg = " ".join(_new_words)
+            if _new_seg != _seg:
+                _segs[_si] = _new_seg
+                _changed = True
+        if _changed:
+            _ln_new = " | ".join(s for s in _segs if s)
+            log.append(f"PIPE_SEG_CLEAN: {_rline[:60]} → {_ln_new[:60]}")
+            _new_lines.append(_ln_new)
+        else:
+            _new_lines.append(_rline)
+    result = "\n".join(_new_lines)
+
     # ── Pass 2.7: 학교/기관명 일반화 ──
     # skip_school_names=True이면 건너뜀 (EDUCATION 섹션 보호용)
     # "Sheffield University" → "University", "Lincoln High School" → "School"
@@ -3285,6 +3355,79 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             has_kr = any(kw in s_lower for kw in KR_KEYWORDS)
             has_kr_work = any(kw in s_lower for kw in KR_WORKPLACE_KEYWORDS
                               if kw not in _GENERIC_TYPES_SET)
+
+            # 파이프 세그먼트 형식 "<Title> | <Brand> <Type> | <Date>" 처리
+            # 예: "NATIVE ENGLISH TEACHER | ELLEN LANGER INSTITUTE | AUGUST 2024 - SEPTEMBER 2025"
+            # → "NATIVE ENGLISH TEACHER | INSTITUTE | AUGUST 2024 - SEPTEMBER 2025"
+            if stripped.count("|") >= 2 and len(stripped) <= 180:
+                _segs = [s.strip() for s in stripped.split("|")]
+                _changed = False
+                _TYPE_MOD_WORDS = {
+                    "english", "language", "international", "global", "private",
+                    "public", "teaching", "elementary", "primary", "middle",
+                    "secondary", "high", "junior", "senior", "native",
+                }
+                _BARE_T = ("academy", "institute", "school", "center",
+                           "centre", "kindergarten", "preschool", "hagwon")
+                for _si, _seg in enumerate(_segs):
+                    if not _seg:
+                        continue
+                    _seg_lower = _seg.lower()
+                    # 외국 인디케이터 있으면 보존
+                    if re.search(
+                        r'\b(USA|UK|United\s+States|United\s+Kingdom|Canada|Australia|'
+                        r'England|Ireland|Scotland|South\s+Africa|New\s+Zealand|'
+                        r'London|Manchester|Boston|Phoenix|Sydney|Toronto|Dublin)\b',
+                        _seg,
+                    ):
+                        continue
+                    # 날짜 segment 스킵
+                    if re.search(r'\b(?:19|20)\d{2}\b', _seg):
+                        continue
+                    # bare type 단어 검출
+                    _type_word = None
+                    for _bt in _BARE_T:
+                        if re.search(r'\b' + _bt + r'\b', _seg_lower):
+                            _type_word = _bt
+                            break
+                    if not _type_word:
+                        continue
+                    # 세그먼트 단어 분해 → brand vs type-modifier
+                    _seg_words = _seg.split()
+                    _idx_type = None
+                    for _wi, _w in enumerate(_seg_words):
+                        if _w.lower().rstrip(',') == _type_word:
+                            _idx_type = _wi
+                            break
+                    if _idx_type is None:
+                        continue
+                    # type-modifier 단어 (왼쪽으로 흡수)
+                    _kept_left = []
+                    _i = _idx_type - 1
+                    while _i >= 0 and _seg_words[_i].lower() in _TYPE_MOD_WORDS:
+                        _kept_left.insert(0, _seg_words[_i])
+                        _i -= 1
+                    # 결과: kept_left + type_word + (type 뒤 단어 그대로)
+                    _rest_right = _seg_words[_idx_type + 1:]
+                    _new_seg_words = _kept_left + [_seg_words[_idx_type]] + _rest_right
+                    _new_seg = " ".join(_new_seg_words)
+                    # 변경 사항 있을 때만 적용
+                    if _new_seg != _seg:
+                        # KR 인디케이터 OR 페이지에 KR 있을 때만 작업 (외국 워크플레이스 보존)
+                        if (has_kr_work or has_kr or page_has_korea):
+                            _segs[_si] = _new_seg
+                            _changed = True
+                if _changed:
+                    _new_line = " | ".join(s for s in _segs if s).strip()
+                    _ex_i = next((i for i, (o, _) in enumerate(job_title_replaces)
+                                  if o == stripped), -1)
+                    if _ex_i >= 0:
+                        job_title_replaces[_ex_i] = (stripped, _new_line)
+                    else:
+                        job_title_replaces.append((stripped, _new_line))
+                    all_logs.append(
+                        f"[page{page_num}] PIPE_SEG_CLEAN: {stripped[:55]} → {_new_line[:55]}"
+                    )
 
             # 학원 유형명 + 한국 지표(Branch/도시) → "{Type}, South Korea"
             # 단, "X — JobTitle" 같이 ↔직책 구분자 있는 줄은 기존 로직(아래)에
