@@ -267,6 +267,60 @@ def _get_face_cascade():
     return _FACE_CASCADE if _FACE_CASCADE else None
 
 
+def _detect_and_cover_top_icons(page, all_logs, page_idx, top_limit_y=300):
+    """페이지 상단의 작은 벡터 아이콘(전화/메일/위치 등) 자동 감지 → 흰박스.
+    조건: y < top_limit_y, 너비/높이 5~30pt 의 isolated drawing.
+    텍스트 영역과 겹치지 않는 small vector graphics만 대상.
+    """
+    import fitz
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        return 0
+
+    # 페이지 상단의 텍스트 bbox 수집 (icon이 text와 겹치지 않게)
+    text_rects = []
+    try:
+        for blk in page.get_text("dict").get("blocks", []):
+            if blk.get("type") != 0:
+                continue
+            for ln in blk.get("lines", []):
+                _bb = ln["bbox"]
+                if _bb[1] < top_limit_y:
+                    text_rects.append(fitz.Rect(_bb))
+    except Exception:
+        pass
+
+    def _overlaps_text(rect):
+        for tr in text_rects:
+            if rect.intersects(tr):
+                return True
+        return False
+
+    purged = 0
+    for d in drawings:
+        try:
+            r = fitz.Rect(d.get("rect"))
+        except Exception:
+            continue
+        w = r.x1 - r.x0
+        h = r.y1 - r.y0
+        # 상단 영역 + 아이콘 크기 (5~30pt) + 텍스트와 겹치지 않음
+        if r.y0 >= top_limit_y:
+            continue
+        if not (5 <= w <= 30 and 5 <= h <= 30):
+            continue
+        if _overlaps_text(r):
+            continue
+        # 흰박스 (3pt 패딩)
+        cover = fitz.Rect(r.x0 - 3, r.y0 - 3, r.x1 + 3, r.y1 + 3)
+        page.draw_rect(cover, color=None, fill=(1, 1, 1), overlay=True)
+        purged += 1
+    if purged:
+        all_logs.append(f"[page{page_idx}] ICON_PURGE: {purged}개 벡터 아이콘 제거")
+    return purged
+
+
 def _detect_and_cover_existing_photo(page, page_idx, all_logs, dpi=150):
     """스캔 페이지에서 얼굴(원본 사진) 영역 탐색 → PDF 좌표로 흰박스 + 영역 반환
     Returns: list of fitz.Rect (PDF 좌표) covered, or [] if none"""
@@ -2903,6 +2957,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
     for page_num, page in enumerate(doc):
         text = page.get_text()
 
+        # 페이지 상단 벡터 아이콘 (전화/메일/위치 등) 자동 제거
+        if not dry:
+            try:
+                _detect_and_cover_top_icons(page, all_logs, page_num)
+            except Exception:
+                pass
+
         # 줄 단위 PII 라벨 검사 → redact 대상 텍스트 수집
         redact_texts = set()
         # 헤더 직책 타이틀 전체 blank (단어 분리 없음 — "educator" 등 본문 오탐 방지)
@@ -3266,7 +3327,16 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # ── 직업 타이틀줄 후처리: 대학교 고용주 + 한국인 이름형 브랜드 ──────
             # 위 두 블록 이후 실행 — has_kr_work 무관
             # 대상: "Sookmyung Women's University — Teacher" / "Min-Byung-Chul Junior - Teacher"
-            if _is_job_line_kw:
+            # 단, prose 라인 오탐 방지: 110자 초과 OR 직책 키워드 없으면 스킵
+            _JT_KEYWORDS_LOOSE = (
+                "teacher", "tutor", "instructor", "lecturer", "professor",
+                "trainer", "educator", "manager", "engineer", "supervisor",
+                "coordinator", "consultant", "specialist", "analyst",
+                "developer", "designer", "coach", "assistant", "intern",
+                "researcher", "officer", "director", "head", "lead",
+            )
+            _has_jt_kw = any(kw in s_lower for kw in _JT_KEYWORDS_LOOSE)
+            if _is_job_line_kw and len(stripped) <= 110 and _has_jt_kw:
                 # 현재 job_title_replaces에서 이 줄의 최신 클린 텍스트 가져오기
                 _current_clean_jt = next(
                     (_c for _o, _c in job_title_replaces if _o == stripped), stripped)
@@ -3648,30 +3718,46 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                                         if kw not in _GENERIC_TYPES_SET)
                 for _span in _lspans:
                     _st = _span.get("text", "")
-                    if not _st or len(_st) < 4:
+                    if not _st:
                         continue
                     _sr = fitz.Rect(_span["bbox"])
-                    if RE_EMAIL.search(_st):
-                        page.add_redact_annot(_sr, fill=(1, 1, 1))
-                        _has_extra = True
-                        all_logs.append(f"[page{page_num}] EMAIL_BBOX: {_st[:60]}")
-                    elif (RE_PHONE.search(_st) and len(re.sub(r"\D", "", _st)) >= 7
-                          and not all(re.match(r'^(?:19|20)\d{2}$', g) for g in re.findall(r'\d+', _st))):
-                        page.add_redact_annot(_sr, fill=(1, 1, 1))
-                        _has_extra = True
-                        all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
+                    # 이메일/전화 — 길이 4+ 만
+                    if len(_st) >= 4:
+                        if RE_EMAIL.search(_st):
+                            page.add_redact_annot(_sr, fill=(1, 1, 1))
+                            _has_extra = True
+                            all_logs.append(f"[page{page_num}] EMAIL_BBOX: {_st[:60]}")
+                        elif (RE_PHONE.search(_st) and len(re.sub(r"\D", "", _st)) >= 7
+                              and not all(re.match(r'^(?:19|20)\d{2}$', g) for g in re.findall(r'\d+', _st))):
+                            page.add_redact_annot(_sr, fill=(1, 1, 1))
+                            _has_extra = True
+                            all_logs.append(f"[page{page_num}] PHONE_BBOX: {_st[:60]}")
                     # 아이콘 폰트 글리프 삭제 (FontAwesome/icomoon — U+E000~U+F8FF Private Use Area)
-                    # 순수 아이콘 스팬만 (공백 제외 모든 문자가 PUA 범위) — 헤더 상단 400px 이내
+                    # 또는 Unicode 이모지 (📧📞📍 등) — NotoColorEmoji 폰트 — 길이 무관
                     _is_pure_glyph = (
                         bool(_st.strip())
                         and all(0xE000 <= ord(c) <= 0xF8FF or c.isspace() for c in _st)
                     )
-                    if _is_pure_glyph:
+                    # 이모지 검출 (U+2600~U+27BF, U+1F300~U+1FAFF)
+                    def _is_emoji_char(c):
+                        cp = ord(c)
+                        return (0x2600 <= cp <= 0x27BF
+                                or 0x1F300 <= cp <= 0x1FAFF
+                                or 0x1F000 <= cp <= 0x1F2FF)
+                    _is_pure_emoji = (
+                        bool(_st.strip())
+                        and all(_is_emoji_char(c) or c.isspace() or c in '‍️' for c in _st)
+                    )
+                    # 이모지 폰트 검출 (NotoColorEmoji 등)
+                    _font_name = _span.get("font", "").lower()
+                    _is_emoji_font = any(k in _font_name for k in ("emoji", "symbol", "icomoon", "awesome"))
+                    if _is_pure_glyph or _is_pure_emoji or (_is_emoji_font and len(_st.strip()) <= 3):
                         _span_y0 = _span["bbox"][1]
                         if _span_y0 < 400:
                             page.add_redact_annot(_sr, fill=(1, 1, 1))
                             _has_extra = True
-                            all_logs.append(f"[page{page_num}] ICON_GLYPH y={_span_y0:.0f}: {repr(_st[:8])}")
+                            _kind = "ICON_EMOJI" if (_is_pure_emoji or _is_emoji_font) else "ICON_GLYPH"
+                            all_logs.append(f"[page{page_num}] {_kind} y={_span_y0:.0f}: {repr(_st[:8])}")
                 # 한국 학원명 라인 보충 bbox 처리 (search_for Bold/Normal 혼합 실패 보완)
                 # 전체 라인에 학원 키워드 + 한국 키워드 있을 때 → 브랜드 접두어 스팬 whiteout
                 # ★ KR_INST_REPLACE 대상 라인은 스킵 — job_title_replaces가 전체 교체 처리
@@ -3977,26 +4063,44 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             )
             all_logs.append(f"[page{_header_page_num}] NO_HDR BRJNUM: {brj_number}  x={_num_left_x} y={_num_baseline_y} fs={_num_fs}")
 
-            # 4) 사진 삽입 (오른쪽, 적정 크기) — 커버레터 제외
-            photo = photo_path or _find_photo_for_candidate(filepath)
-            if photo and photo.exists():
-                if _is_scanned_layout:
-                    photo_rect = _photo_rect_target
-                else:
-                    # 텍스트 PDF: 정답 기준 (464,58)-(552,161) — W=88 H=103, 우상단
-                    _pw2 = 88
-                    _ph2 = 103
-                    photo_rect = fitz.Rect(
-                        pw - _pw2 - 60, 58,
-                        pw - 60,        58 + _ph2,
-                    )
-                try:
-                    hdr_page.insert_image(photo_rect, filename=str(photo))
-                    all_logs.append(f"[photo] NO_HDR {_header_page_num}p: {photo.name} rect=({photo_rect.x0:.0f},{photo_rect.y0:.0f})-({photo_rect.x1:.0f},{photo_rect.y1:.0f})")
-                except Exception as e:
-                    all_logs.append(f"[photo] 삽입 실패: {e}")
+            # 4) 사진 삽입 — 원본에 이미 사진 있으면 스킵 (사용자 요청)
+            # 페이지 상단(y<300)에 큰 이미지(W>=50, H>=50) 있으면 이미 사진 있는 것으로 간주
+            _has_existing_photo = False
+            try:
+                for _img in hdr_page.get_images(full=True):
+                    for _ir in hdr_page.get_image_rects(_img[0]):
+                        _iw = _ir.x1 - _ir.x0
+                        _ih = _ir.y1 - _ir.y0
+                        # 전체 페이지 배경 이미지(W>500)는 제외
+                        if _ir.y0 < 300 and 50 <= _iw < 400 and 50 <= _ih < 400:
+                            _has_existing_photo = True
+                            break
+                    if _has_existing_photo:
+                        break
+            except Exception:
+                pass
+
+            if _has_existing_photo:
+                all_logs.append(f"[photo] NO_HDR 스킵 (원본에 사진 존재)")
             else:
-                all_logs.append("[photo] NO_HDR 없음 (스킵)")
+                photo = photo_path or _find_photo_for_candidate(filepath)
+                if photo and photo.exists():
+                    if _is_scanned_layout:
+                        photo_rect = _photo_rect_target
+                    else:
+                        _pw2 = 88
+                        _ph2 = 103
+                        photo_rect = fitz.Rect(
+                            pw - _pw2 - 60, 58,
+                            pw - 60,        58 + _ph2,
+                        )
+                    try:
+                        hdr_page.insert_image(photo_rect, filename=str(photo))
+                        all_logs.append(f"[photo] NO_HDR {_header_page_num}p: {photo.name} rect=({photo_rect.x0:.0f},{photo_rect.y0:.0f})-({photo_rect.x1:.0f},{photo_rect.y1:.0f})")
+                    except Exception as e:
+                        all_logs.append(f"[photo] 삽입 실패: {e}")
+                else:
+                    all_logs.append("[photo] NO_HDR 없음 (스킵)")
 
     # ── 링크 어노테이션 제거 (이메일/URI 하이퍼링크 → redaction 이후에도 잔류) ──
     # 이유: add_redact_annot/apply_redactions은 텍스트 스트림만 덮음.
