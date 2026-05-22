@@ -7983,6 +7983,72 @@ except Exception as _s3_exc:
     def check_s3_connection():
         return False
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Google Drive Storage (S3 미설정 시 자동 fallback, 영구 보존)
+# Render free plan ephemeral disk + AWS 계정 불필요 — Drive 15GB 무료
+# DRIVE_OAUTH_TOKEN_JSON 환경변수 재사용 (db_persist.py 와 공유)
+#
+# 모듈 import 가 실패해도 _DRIVE_OK=False 만 set, 다른 코드에 영향 없음
+# 안전 보장: 모든 import 가 단일 try/except 안에서 atomic 처리
+# ──────────────────────────────────────────────────────────────────────────────
+_DRIVE_OK = False
+try:
+    from backend.utils.drive_storage import (
+        upload_bytes as _drive_upload_bytes,
+        download_bytes as _drive_download_bytes,
+        StorageError as _DriveStorageError,
+    )
+    _DRIVE_OK = True
+    logging.getLogger("bridge.api").info("[Drive Storage] 모듈 로드 성공")
+except Exception as _drv_load_exc:
+    logging.getLogger("bridge.api").warning("[Drive Storage] 모듈 로드 실패 (Drive fallback 비활성): %s", _drv_load_exc)
+    class _DriveStorageError(Exception):  # noqa: N801
+        pass
+    async def _drive_upload_bytes(*a, **kw):
+        raise RuntimeError("Drive 스토리지 미설정")
+    def _drive_download_bytes(*a, **kw):
+        raise RuntimeError("Drive 스토리지 미설정")
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ── Google Drive 파일 프록시 서빙 ────────────────────────────────────────────
+@app.get("/api/drive-file/{file_id}", tags=["files"])
+async def drive_file_proxy(file_id: str):
+    """
+    Google Drive 파일 프록시 서빙.
+    s3_key='drive://{file_id}' 로 저장된 파일을 스트리밍.
+    Drive 파일을 직접 공개하지 않고 서버 경유로 제공 (보안).
+    """
+    if not _DRIVE_OK:
+        raise HTTPException(503, "Drive 스토리지를 사용할 수 없습니다.")
+    # file_id 유효성 검사 (영숫자 + _- 만 허용)
+    import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9_\-]{5,200}", file_id):
+        raise HTTPException(400, "유효하지 않은 파일 ID입니다.")
+    try:
+        data = _drive_download_bytes(f"drive://{file_id}")
+    except Exception as _e:
+        logging.getLogger("bridge.api").warning("[Drive Proxy] 다운로드 실패 %s: %s", file_id, _e)
+        raise HTTPException(404, "파일을 찾을 수 없습니다.")
+    import mimetypes as _mt
+    # Drive에서는 MIME 타입을 모르므로 첫 바이트로 추정
+    ct = "application/octet-stream"
+    if data[:4] == b"%PDF":
+        ct = "application/pdf"
+    elif data[:3] in (b"\xff\xd8\xff",):
+        ct = "image/jpeg"
+    elif data[:8] == b"\x89PNG\r\n\x1a\n":
+        ct = "image/png"
+    elif data[:4] == b"RIFF":
+        ct = "image/webp"
+    elif data[:2] == b"PK":
+        ct = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    from fastapi.responses import Response as _FResponse
+    return _FResponse(content=data, media_type=ct)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 # ── 서명 URL (HMAC-SHA256) -- 업로드 파일 접근 보호 ──────────────────────────
 _UPLOAD_SIGN_KEY: str = os.getenv("UPLOAD_SIGN_KEY", "").strip()
 _SIGN_EXPIRY: int = 600  # 10분
@@ -8624,6 +8690,11 @@ async def upload_file(
         "video"    if file_type == "video"                       else
         "any"
     )
+    # Storage 업로드: S3 1차 시도 → 실패 시 Drive fallback (영구 보존)
+    s3_key = None
+    file_url = None
+    _upload_err = None
+    # 1차: S3 (AWS env 있으면)
     try:
         _s3_result = await s3_upload_bytes(
             data=data,
@@ -8634,7 +8705,26 @@ async def upload_file(
         s3_key   = _s3_result["s3_key"]
         file_url = _s3_result["s3_url"]
     except (RuntimeError, StorageError) as _s3_err:
-        _log_upload.error("S3 업로드 실패: %s", _s3_err)
+        _upload_err = _s3_err
+        _log_upload.warning("S3 업로드 실패, Drive fallback 시도: %s", _s3_err)
+    # 2차: Drive fallback (S3 미설정/실패)
+    if s3_key is None and _DRIVE_OK:
+        try:
+            _drv_result = await _drive_upload_bytes(
+                data=data,
+                folder=_s3_folder,
+                filename=file.filename or fname,
+                allowed_category=_s3_category,
+                content_type=file.content_type,
+            )
+            s3_key   = _drv_result["s3_key"]
+            file_url = _drv_result["s3_url"]
+            _log_upload.info("Drive 업로드 성공: %s (%d bytes) → %s", _drv_result.get("filename"), len(data), s3_key)
+        except (RuntimeError, _DriveStorageError) as _drv_err:
+            _upload_err = _drv_err
+            _log_upload.error("Drive 업로드 실패: %s", _drv_err)
+    if s3_key is None:
+        _log_upload.error("모든 스토리지 백엔드 실패. 마지막 에러: %s", _upload_err)
         raise HTTPException(503, "파일 저장에 실패했습니다. 잠시 후 다시 시도하세요.")
     # ──────────────────────────────────────────────────────────────────────
 
@@ -8647,10 +8737,14 @@ async def upload_file(
         #     thumb_url = f"/uploads/{dir_name}/{entity_id}/photo_thumb.jpg"
         pass
 
-    # Build URL (S3 presigned -- 1시간 유효)
+    # Build URL (Drive 프록시 또는 S3 presigned -- 1시간 유효)
     # [비활성 -- 로컬 URL] S3 presigned URL 사용 (아래 코드 참조)
     # rel = file_path.relative_to(_UPLOAD_BASE); file_url = f"/uploads/{rel.as_posix()}"
-    file_url = s3_presigned_url(s3_key, expires=3600)
+    if s3_key and s3_key.startswith("drive://"):
+        # Drive key → 만료없는 프록시 URL 사용 (이미 _drv_result["s3_url"]로 설정됨)
+        file_url = f"/api/drive-file/{s3_key[len('drive://'):]}"
+    else:
+        file_url = s3_presigned_url(s3_key, expires=3600)
 
     # SHA-256 무결성 해시 계산 (SEC-08)
     file_sha256 = hashlib.sha256(data).hexdigest()
