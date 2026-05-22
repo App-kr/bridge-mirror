@@ -14550,21 +14550,23 @@ async def admin_db_backup(request: Request):
 
 @app.get("/api/admin/db/backup-list", tags=["admin"])
 async def admin_db_backup_list(request: Request):
-    """S3 백업 목록 조회."""
+    """Drive 백업 목록 조회 (S3 → Drive 마이그레이션 완료)."""
     _check_admin(request)
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from tools.db_persist import _s3_client, _list_backups
-        client, bucket = _s3_client()
-        items = _list_backups(client, bucket)
+        from tools.db_persist import _drive as _get_drive, _get_or_create_folder, _list_backups  # type: ignore
+        drive = _get_drive()
+        folder_id = _get_or_create_folder(drive)
+        items = _list_backups(drive, folder_id)
         data = [{
-            "key": it["Key"],
-            "size_kb": it["Size"] // 1024,
-            "modified": it["LastModified"].isoformat(),
-        } for it in items[:20]]
-        return ok(data={"bucket": bucket, "count": len(items), "items": data})
+            "key": it.get("name", ""),
+            "file_id": it.get("id", ""),
+            "size_kb": int(it.get("size", 0)) // 1024,
+            "created_at": it.get("createdTime", ""),
+        } for it in items[:30]]
+        return ok(data={"storage": "google_drive", "count": len(items), "items": data})
     except RuntimeError as e:
-        raise HTTPException(503, f"S3 미설정: {e}")
+        raise HTTPException(503, f"Drive 미설정: {e}")
     except Exception as e:
         raise HTTPException(500, f"조회 실패: {e}")
 
