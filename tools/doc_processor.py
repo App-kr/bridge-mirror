@@ -3414,7 +3414,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     # 변경 사항 있을 때만 적용
                     if _new_seg != _seg:
                         # KR 인디케이터 OR 페이지에 KR 있을 때만 작업 (외국 워크플레이스 보존)
-                        if (has_kr_work or has_kr or page_has_korea):
+                        if (has_kr_work or has_kr):
                             _segs[_si] = _new_seg
                             _changed = True
                 if _changed:
@@ -3963,8 +3963,23 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         _is_bold_pre = bool(_jfflags & 16)
                         _jx0, _jy0, _jx1, _jy1 = _jrect
                         # ASCII normalize (em-dash -> "-", NBSP -> " ")
-                        _safe_clean = _clean_jt.replace("—", "-").replace("–", "-")
-                        _safe_clean = _safe_clean.replace("​", "").replace(" ", " ")
+                        # Latin-1 normalize: helv font only supports Latin-1 (0x00-0xFF)
+                        _safe_clean = _clean_jt
+                        _safe_clean = _safe_clean.replace("—", "-").replace("–", "-")
+                        _safe_clean = _safe_clean.replace("‒", "-").replace("―", "-")
+                        _safe_clean = _safe_clean.replace("‘", "'").replace("’", "'")
+                        _safe_clean = _safe_clean.replace("“", '"').replace("”", '"')
+                        _safe_clean = _safe_clean.replace(" ", " ").replace("​", "")
+                        _safe_clean = _safe_clean.replace("﻿", "")
+                        # Strip leading bullet/list markers (not in Latin-1 helv glyph set)
+                        _safe_clean = re.sub(
+                            r'^[•‣․‥⁃▪▫'
+                            r'●◦✓✔►▸→'
+                            r'★☆➤➲◆◇\s]+',
+                            '', _safe_clean,
+                        )
+                        # Remove any remaining non-Latin-1 chars to prevent "?" glyphs
+                        _safe_clean = "".join(c if ord(c) < 256 else "" for c in _safe_clean)
                         _safe_clean = re.sub(r"\s+", " ", _safe_clean).strip()
                         # add_redact_annot text param: whiteout + replacement in one step
                         _exp_rect = _fitz_pre.Rect(_jx0, _jy0, max(_jx1, _jx0 + 350), _jy1)
@@ -4197,14 +4212,22 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         # 1. 전체 줄 whiteout
                         page.add_redact_annot(_jrect, fill=(1, 1, 1))
                         page.apply_redactions()
-                        # 2. 클린 텍스트 재삽입 (baseline = bbox 하단)
+                        # 2. 클린 텍스트 재삽입 (baseline = bbox 하단) — Latin-1 정규화
                         _jx0, _jy0, _jx1, _jy1 = _jrect
+                        _clean_jt_safe = _clean_jt
+                        _clean_jt_safe = _clean_jt_safe.replace("—", "-").replace("–", "-")
+                        _clean_jt_safe = _clean_jt_safe.replace("‘", "'").replace("’", "'")
+                        _clean_jt_safe = _clean_jt_safe.replace("“", '"').replace("”", '"')
+                        _clean_jt_safe = _clean_jt_safe.replace(" ", " ").replace("​", "")
+                        _clean_jt_safe = re.sub(r'^[•▸▪●‣‧⁃\s]+', '', _clean_jt_safe)
+                        _clean_jt_safe = "".join(c if ord(c) < 256 else "" for c in _clean_jt_safe)
+                        _clean_jt_safe = re.sub(r"\s+", " ", _clean_jt_safe).strip()
                         _ins_ok = False
                         # 시도 1: 내장 폰트
                         if _jfontref:
                             try:
                                 page.insert_text(
-                                    _fitz.Point(_jx0, _jy1), _clean_jt,
+                                    _fitz.Point(_jx0, _jy1), _clean_jt_safe,
                                     fontsize=_jfsize, color=_jrgb,
                                     fontname=_jfontref,
                                 )
@@ -4215,7 +4238,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         if not _ins_ok:
                             try:
                                 page.insert_text(
-                                    _fitz.Point(_jx0, _jy1), _clean_jt,
+                                    _fitz.Point(_jx0, _jy1), _clean_jt_safe,
                                     fontsize=_jfsize, color=_jrgb,
                                     fontname=("tibo" if _is_bold else "tiro"),
                                 )

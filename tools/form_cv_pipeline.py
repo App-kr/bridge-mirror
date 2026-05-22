@@ -356,16 +356,20 @@ def cmd_run(args):
             staging_cover.mkdir(exist_ok=True)
             staging_resume.mkdir(exist_ok=True)
 
-            for cv in resume_paths:
-                print(f"  → resume: {cv.name}"
+            for _ci, cv in enumerate(resume_paths):
+                _res_sub = staging_resume / str(_ci)
+                _res_sub.mkdir(exist_ok=True)
+                print(f"  → resume[{_ci}]: {cv.name}"
                       + (f"  +photo={photo_path.name}" if photo_path else ""), flush=True)
-                if _run_doc_processor_to(cv, no, staging_resume, photo_path=photo_path):
+                if _run_doc_processor_to(cv, no, _res_sub, photo_path=photo_path):
                     cv_ok += 1
                 else:
                     fail += 1
-            for cv in cover_paths:
-                print(f"  → cover: {cv.name}", flush=True)
-                if _run_doc_processor_to(cv, no, staging_cover, photo_path=None):
+            for _ci, cv in enumerate(cover_paths):
+                _cov_sub = staging_cover / str(_ci)
+                _cov_sub.mkdir(exist_ok=True)
+                print(f"  → cover[{_ci}]: {cv.name}", flush=True)
+                if _run_doc_processor_to(cv, no, _cov_sub, photo_path=None):
                     cv_ok += 1
                 else:
                     fail += 1
@@ -373,8 +377,8 @@ def cmd_run(args):
             # 병합: cover → resume 순서로 단일 PDF 생성
             try:
                 import fitz
-                cover_pdfs = sorted(staging_cover.glob("*.pdf"))
-                resume_pdfs = sorted(staging_resume.glob("*.pdf"))
+                cover_pdfs = sorted(staging_cover.glob("**/*.pdf"))
+                resume_pdfs = sorted(staging_resume.glob("**/*.pdf"))
                 final_name = None
                 if resume_pdfs:
                     final_name = resume_pdfs[0].name
