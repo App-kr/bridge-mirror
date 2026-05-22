@@ -999,6 +999,10 @@ def get_svc_client() -> "Client":
 
 # ── 요청 모델 ─────────────────────────────────────────────────────────────────
 class CandidateApply(BaseModel):
+    # honeypot 필드(_url) 등 모델 외 필드도 통과시킴 — 기본 'ignore' 는 silently drop
+    # 결과: _check_honeypot() 가 항상 False → honeypot 무력화 (어제까지 봇 차단 안 됐던 원인)
+    class Config:
+        extra = "allow"
     """
     구직자 지원 웹폼 -- 구글폼 42개 항목 100% 매핑
     Google Form + Native Web Form 병렬 운영 공통 스키마
@@ -1075,6 +1079,9 @@ class CandidateApply(BaseModel):
 
 
 class ClientInquiry(BaseModel):
+    # honeypot 필드(_url) 등 모델 외 필드도 통과시킴
+    class Config:
+        extra = "allow"
     """
     구인처 채용 문의 -- 구글폼 43개 항목 100% 매핑
     Google Form + Native Web Form 병렬 운영 공통 스키마

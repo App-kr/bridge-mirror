@@ -19,6 +19,7 @@
 - `bridgejob.co.kr` → `bridge-chi-lime.vercel.app` (Vercel)
 - `bridge-n7hk.onrender.com` (백엔드 API)
 - `bridge-ads.onrender.com` (광고 결제 백엔드)
+- 관리자 로그인: `/admin` (별도 `/admin/login` 경로 없음 — `/admin` 자체에서 로그인)
 
 ---
 
