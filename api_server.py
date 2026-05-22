@@ -285,8 +285,10 @@ _PII_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b\d{3}-\d{2}-\d{5}\b"), "***-**-*****"),
     # 주민등록번호 앞자리+뒷자리 패턴
     (re.compile(r"\b\d{6}-[1-4]\d{6}\b"), "******-*******"),
-    # 한국어 이름 -- 담당자/성명 컨텍스트 뒤에 오는 2-4자 한글
-    (re.compile(r"(?:담당자|성명|이름|문의|연락처)[:：\s]{0,3}([가-힣]{2,4})"), "[REDACTED-NAME]"),
+    # 한국어 이름 -- 라벨:값 형식만 매칭 (콜론 필수). '문의' 같은 일반 단어 제거.
+    # 기존: '(?:담당자|성명|이름|문의|연락처)[:：\s]{0,3}' → '문의 접수' 도 매칭 false-positive
+    # 수정: 콜론을 필수로 → 라벨 컨텍스트 명확한 경우만 매칭
+    (re.compile(r"(?:담당자|성명|이름|연락처)[:：]\s*([가-힣]{2,4})"), "[REDACTED-NAME]"),
     # 영어 이름 -- "Name:", "Contact:", "Teacher:" 뒤 Title Case
     (re.compile(r"(?:Name|Contact|Teacher|Recruiter|Manager):\s*([A-Z][a-z]+ [A-Z][a-z]+)"), "[REDACTED-NAME]"),
 ]
