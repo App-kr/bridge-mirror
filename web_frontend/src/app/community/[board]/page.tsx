@@ -1394,28 +1394,7 @@ function SortableFaqAccordionItem({ id, item, index, accent, editMode, onEdit, o
 // HERO-CARDS — About BRIDGE (전면 개편)
 // ══════════════════════════════════════════════════════════════════════════════
 function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost }: LayoutProps) {
-  const stats = getDynamicStats()
-  const statsRef = useRef<HTMLDivElement>(null)
-  const [statsVisible, setStatsVisible] = useState(false)
-
-  useEffect(() => {
-    const el = statsRef.current
-    if (!el) return
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) setStatsVisible(true) },
-      { threshold: 0.3 }
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
-  const cv = [
-    useAnimatedCounter(stats[0].target, 1500, statsVisible),
-    useAnimatedCounter(stats[1].target, 1200, statsVisible),
-    useAnimatedCounter(stats[2].target, 2200, statsVisible),
-    useAnimatedCounter(stats[3].target, 2500, statsVisible),
-  ]
-
+  // Stats 섹션 제거됨 (2026-05-22, 사용자 요청) — 카운터/observer 로직도 함께 정리
   const aboutPosts = posts.filter(p => !p.title.toLowerCase().includes('faq'))
 
   return (
@@ -1520,29 +1499,7 @@ function HeroCardsLayout({ posts, board, editMode, selectedIds, onToggleSelect, 
         </div>
       </section>
 
-      {/* ── Section D: Stats — animated counters ── */}
-      <section className="py-20 sm:py-28 relative" ref={statsRef}>
-        {editMode && (
-          <div className="absolute top-3 right-4 z-20">
-            <SectionEditLink href="/admin/settings" label="통계 설정" />
-          </div>
-        )}
-        <div className="max-w-[980px] mx-auto px-5 sm:px-8">
-          <motion.div
-            className="grid grid-cols-2 md:grid-cols-4 gap-8"
-            variants={staggerContainer} initial="hidden" whileInView="visible" viewport={defaultViewport}
-          >
-            {stats.map((s, i) => (
-              <motion.div key={s.label} className="text-center" variants={scaleIn}>
-                <div className="text-4xl sm:text-5xl font-bold text-[#1d1d1f] tabular-nums tracking-tight">
-                  {cv[i].toLocaleString('en-US')}{s.suffix}
-                </div>
-                <div className="text-sm text-[#86868b] mt-2 font-medium">{s.label}</div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
+      {/* Section D: Stats — 사용자 요청으로 제거 (2026-05-22) */}
 
       {/* ── Posts grid ── */}
       {aboutPosts.length > 0 && (
