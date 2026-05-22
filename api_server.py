@@ -10826,27 +10826,53 @@ def _ensure_testimonials_schema():
             )
         """)
         conn.commit()
-        # 자동 시드 (빈 테이블일 때만 — 운영 중인 데이터 덮어쓰기 방지)
-        # 운영 환경에서는 migrations/seeders/insert_testimonials.py 스크립트가
-        # 별도로 100건의 정식 후기를 시드함. 이 시드는 fallback 용.
-        count = conn.execute("SELECT COUNT(*) FROM testimonials WHERE is_deleted=0 AND is_visible=1").fetchone()[0]
-        if count == 0:
-            seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
-            if seed_path.exists():
-                try:
-                    items = _json.loads(seed_path.read_text(encoding="utf-8"))
-                    for t in items:
-                        conn.execute("""
-                            INSERT INTO testimonials (name, country, photo_url, rating, review_text, sort_order, is_visible, is_deleted, created_at, updated_at)
-                            SELECT ?,?,?,?,?,?,1,0,?,?
-                            WHERE NOT EXISTS (SELECT 1 FROM testimonials WHERE name=? AND review_text=? AND is_deleted=0)
-                        """, (t["name"], t.get("country",""), t.get("photo_url"), t.get("rating",5),
-                              t["review_text"], t.get("sort_order",0), t.get("created_at",""), t.get("updated_at",""),
-                              t["name"], t["review_text"]))
-                    conn.commit()
+
+        # ── 정크 자동 정리 (멱등, 매 startup 실행)
+        #   목적: Render free plan ephemeral disk + Drive auto-restore 가 옛 DB로 덮어써도
+        #         매 startup 마다 자동 복구되도록 보장
+        #   패턴: 옛 어드민 이름("최고관리자") + 스크랩 잔재 JS + Cafe24 절대경로 사진
+        try:
+            junk_q = """
+                WHERE is_deleted=0 AND (
+                    name = '최고관리자'
+                    OR review_text LIKE '%function board_move%'
+                    OR review_text LIKE '%bo_v_act%'
+                    OR review_text LIKE '%board_move(href)%'
+                    OR (photo_url IS NOT NULL AND photo_url LIKE 'http://%')
+                )
+            """
+            junk_count = conn.execute(f"SELECT COUNT(*) FROM testimonials {junk_q}").fetchone()[0]
+            if junk_count > 0:
+                conn.execute(f"UPDATE testimonials SET is_deleted=1, is_visible=0 {junk_q}")
+                conn.commit()
+                logging.getLogger("bridge.api").info(
+                    "_ensure_testimonials_schema: 정크 %d rows 논리삭제", junk_count)
+        except Exception as _je:
+            logging.getLogger("bridge.api").warning("testimonials junk cleanup 스킵: %s", _je)
+
+        # ── 시드 INSERT (멱등, 매 startup 실행)
+        #   기준: testimonials_seed.json (100건 — Chris/Hannah/Liam 등)
+        #   NOT EXISTS 가드로 중복 INSERT 방지 (name + review_text 복합키)
+        #   결과: 어떤 DB 상태에서 출발해도 startup 후엔 100건 캐논 시드 보장
+        seed_path = Path(__file__).parent / "migrations" / "testimonials_seed.json"
+        if seed_path.exists():
+            try:
+                items = _json.loads(seed_path.read_text(encoding="utf-8"))
+                inserted = 0
+                for t in items:
+                    cur = conn.execute("""
+                        INSERT INTO testimonials (name, country, photo_url, rating, review_text, sort_order, is_visible, is_deleted, created_at, updated_at)
+                        SELECT ?,?,?,?,?,?,1,0,?,?
+                        WHERE NOT EXISTS (SELECT 1 FROM testimonials WHERE name=? AND review_text=? AND is_deleted=0)
+                    """, (t["name"], t.get("country",""), t.get("photo_url"), t.get("rating",5),
+                          t["review_text"], t.get("sort_order",0), t.get("created_at",""), t.get("updated_at",""),
+                          t["name"], t["review_text"]))
+                    inserted += cur.rowcount
+                conn.commit()
+                if inserted > 0:
                     logging.getLogger("bridge.api").info(
-                        "_ensure_testimonials_schema: 시드 %d rows 복원", len(items))
-                except Exception as _se:
+                        "_ensure_testimonials_schema: 시드 %d/%d rows 추가 (이미 있는 건 스킵)", inserted, len(items))
+            except Exception as _se:
                     logging.getLogger("bridge.api").warning("testimonials seed 스킵: %s", _se)
     finally:
         conn.close()

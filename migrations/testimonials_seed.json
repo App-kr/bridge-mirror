@@ -1,252 +1,1002 @@
 [
   {
-    "name": "James",
-    "country": "USA",
+    "name": "Chris",
+    "country": "Canada",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Honestly the smoothest hiring experience I've had in Korea. Scarlett actually read my CV before our call lol",
-    "sort_order": 1050,
+    "review_text": "Went through three other recruiters before finding BRIDGE. The difference was immediate. Other places felt like a factory — sign here, good luck, bye. BRIDGE actually sat down with me, asked about my teaching style, my deal-breakers, everything. Night and day.",
+    "sort_order": 2000,
     "created_at": "2025-08-12T10:00:00Z",
     "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Tamika",
-    "country": "Canada",
+    "name": "Hannah",
+    "country": "New Zealand",
     "photo_url": "",
     "rating": 5,
-    "review_text": "10/10 :)",
-    "sort_order": 1049,
-    "created_at": "2025-09-03T08:30:00Z",
-    "updated_at": "2025-09-03T08:30:00Z"
+    "review_text": "Every recruiter I talked to before was just trying to fill a slot. Didn't matter if it was right for me. BRIDGE was the first one that said 'actually, I don't think that school is a good fit for you' and suggested something better. That kind of honesty is rare.",
+    "sort_order": 1999,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Oliver",
-    "country": "UK",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "I went through three other recruiters before finding Bridge and the difference was immediate. Other places felt like a factory ~ sign here, good luck, bye. Bridge actually sat down with me and asked about my teaching style, my deal breakers, everything. Night and day.\n\nThe school they matched me with has been brilliant. Co teachers are kind, hours are reasonable, housing is way nicer than I expected. Six months in and I'm already thinking about renewing.\n\nIf you're on the fence just send them a message. They reply fast and they don't push you into anything that doesn't fit.",
-    "sort_order": 1048,
-    "created_at": "2025-07-20T14:15:00Z",
-    "updated_at": "2025-07-20T14:15:00Z"
-  },
-  {
-    "name": "Aoife",
+    "name": "Liam",
     "country": "Ireland",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Bridge made my move to Korea feel almost easy~ they answered every silly question I had at 2am my time!! Cannot recommend enough.",
-    "sort_order": 1047,
-    "created_at": "2025-10-15T22:00:00Z",
-    "updated_at": "2025-10-15T22:00:00Z"
+    "review_text": "Other agencies? Grand at the start, then radio silence once you sign. BRIDGE still checks in on me months after I started. Absolute class act. Wouldn't go anywhere else now.",
+    "sort_order": 1998,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Thando",
-    "country": "South Africa",
+    "name": "Taylor",
+    "country": "USA",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Super professional. Got me a job within 3 weeks of applying.",
-    "sort_order": 1046,
-    "created_at": "2025-06-08T09:45:00Z",
-    "updated_at": "2025-06-08T09:45:00Z"
+    "review_text": "Ngl, I was super skeptical because my last recruiter literally ghosted me after I landed in Korea. Like, zero replies. BRIDGE is the polar opposite — they were messaging me on my first day asking if everything was okay. 10/10 no cap.",
+    "sort_order": 1997,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Hayden",
+    "name": "Sophie",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Brilliant. Absolutely brilliant. I'd used two other agencies before and both just wanted their commission. One actually got annoyed when I turned down a position that clearly wasn't right. BRIDGE never once pressured me. Proper legends.",
+    "sort_order": 1996,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Joel",
     "country": "Australia",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Was already working in Korea and looking for a new company when I came across Bridge. My time at the previous job was wrapping up and Bridge not only matched me with an academy that has the perfect work life balance ~ they introduced me to the loveliest team I've met in this country. Genuinely.\n\nScarlett took the time to actually understand what I wanted out of the next role. We talked about commute, class size, the vibe of the director. She didn't just throw postings at me. When the offer came through it was already a good fit before I even visited the school.\n\nA year later I'm still here, still happy. The school still asks Bridge for new hires whenever they need someone. That tells you everything.",
-    "sort_order": 1045,
-    "created_at": "2025-05-22T11:20:00Z",
-    "updated_at": "2025-05-22T11:20:00Z"
+    "review_text": "Most recruiters are all about the employer. They'll bend over backwards for the school and leave you hanging. BRIDGE is teacher-first and you feel that from the very first conversation. Absolute lifesaver when things got complicated with my visa.",
+    "sort_order": 1995,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Erin",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "What killed me about other recruiters was the fake enthusiasm. Everything was 'amazing' and 'perfect.' BRIDGE told me straight up — this school has pros and cons, here they are. That honesty made me trust them completely.",
+    "sort_order": 1994,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
     "name": "Marcus",
     "country": "USA",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Quick, clean, no nonsense. Exactly what I needed.",
-    "sort_order": 1044,
-    "created_at": "2025-11-01T07:00:00Z",
-    "updated_at": "2025-11-01T07:00:00Z"
-  },
-  {
-    "name": "Emma",
-    "country": "UK",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Bridge has been a huge help finding a new school. They really listened to the kind of place I was looking for. Housing in particular was important to me and they made sure that was sorted before I committed to anything :)\n\nEvery step my recruiter helped me out. Even now after starting they still check in. Highly recommend!",
-    "sort_order": 1043,
-    "created_at": "2025-09-29T15:30:00Z",
-    "updated_at": "2025-09-29T15:30:00Z"
-  },
-  {
-    "name": "Connor",
-    "country": "New Zealand",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Bridge is an excellent recruiter. They listened to all of my preferences and connected me to job opportunities that worked for me. They were friendly and easy to talk to throughout the entire process.",
-    "sort_order": 1042,
-    "created_at": "2025-08-17T13:00:00Z",
-    "updated_at": "2025-08-17T13:00:00Z"
-  },
-  {
-    "name": "Lerato",
-    "country": "South Africa",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Best decision I made all year!!",
-    "sort_order": 1041,
-    "created_at": "2025-12-04T18:00:00Z",
-    "updated_at": "2025-12-04T18:00:00Z"
-  },
-  {
-    "name": "Brittany",
-    "country": "USA",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "I'd been looking at jobs in Korea for ages and was super overwhelmed. So many recruiters, so many red flags. Bridge was the only one that didn't feel sketchy.\n\nThey were upfront about salary ranges, didn't promise things they couldn't deliver, and walked me through every step including the visa stuff which honestly stressed me out the most. The apostille process was a lot but they had a checklist ready so I just followed it.\n\nNow I've been teaching at a lovely kindy in Seoul for 8 months. The kids are sweet, my director is great, and I actually have a life outside of work which I never managed in the US lol.\n\nIf you're nervous about making the jump ~ just talk to them. No pressure, just real info.",
-    "sort_order": 1040,
-    "created_at": "2025-04-11T10:00:00Z",
-    "updated_at": "2025-04-11T10:00:00Z"
-  },
-  {
-    "name": "Liam",
-    "country": "Canada",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Solid team. Knew what they were doing.",
-    "sort_order": 1039,
-    "created_at": "2025-10-08T16:00:00Z",
-    "updated_at": "2025-10-08T16:00:00Z"
+    "review_text": "Used another agency my first year. They shoved me into a hagwon that was nothing like what they described. Terrible hours, no support. Found BRIDGE for my second contract and honestly? It felt like working with a completely different industry.",
+    "sort_order": 1993,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
     "name": "Niamh",
     "country": "Ireland",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Loved working with Bridge! Felt like talking to a friend who happened to know everything about teaching in Korea :)",
-    "sort_order": 1038,
-    "created_at": "2025-11-19T09:15:00Z",
-    "updated_at": "2025-11-19T09:15:00Z"
+    "review_text": "Other places are just money-hungry. That's the truth. BRIDGE genuinely cares whether you're happy in your position. When I had an issue at work, they stepped in and helped mediate. No other recruiter would do that. Sound people through and through.",
+    "sort_order": 1992,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Jess",
-    "country": "Australia",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "I had a really tight timeline because of my previous contract ending and Bridge somehow made it work. Three weeks from first email to flight booked.",
-    "sort_order": 1037,
-    "created_at": "2025-07-02T12:00:00Z",
-    "updated_at": "2025-07-02T12:00:00Z"
-  },
-  {
-    "name": "Pieter",
-    "country": "South Africa",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Recommended by a friend who used Bridge two years ago. He was right ~ they're the real deal!",
-    "sort_order": 1036,
-    "created_at": "2025-06-25T14:30:00Z",
-    "updated_at": "2025-06-25T14:30:00Z"
-  },
-  {
-    "name": "Sarah",
-    "country": "USA",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "From the first video interview onwards every interaction with Bridge was friendly, professional, and helpful. They went to the effort to find out exactly what my requirements were and matched me with a really good fit.\n\nIt's such a good match that I'm already negotiating to extend my contract by another year. Scarlett always answered my queries, no matter how minor. And when she didn't know the answer she'd find out and get back to me quickly.\n\nThis carried on even after I arrived. A lot of agents consider the job done once you land but Bridge is still around for questions or just a friendly chat.\n\nI heartily recommend anyone considering teaching in Korea to talk to Bridge first :)",
-    "sort_order": 1035,
-    "created_at": "2025-03-14T11:00:00Z",
-    "updated_at": "2025-03-14T11:00:00Z"
-  },
-  {
-    "name": "Harry",
+    "name": "Gemma",
     "country": "UK",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Cheers Bridge! Top job all round.",
-    "sort_order": 1034,
-    "created_at": "2025-09-11T19:00:00Z",
-    "updated_at": "2025-09-11T19:00:00Z"
+    "review_text": "I couldn't fault them if I tried. My previous recruiter forgot my name halfway through the process. BRIDGE remembered details about my life I'd mentioned in passing three weeks earlier. That level of attention just doesn't exist elsewhere.",
+    "sort_order": 1991,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Olivia",
+    "name": "Dylan",
     "country": "Canada",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Honestly the best part was how transparent they were about everything. Salary, housing, school culture ~ no surprises after I arrived. I knew exactly what I was walking into.",
-    "sort_order": 1033,
-    "created_at": "2025-08-29T13:45:00Z",
-    "updated_at": "2025-08-29T13:45:00Z"
+    "review_text": "Their aftercare is genuinely unreal. Four months into my contract, Scarlett messaged me just to check how I was settling in. Not because there was a problem — just because she cared. I've never experienced that from any service, let alone a recruiter.",
+    "sort_order": 1990,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Cian",
-    "country": "Ireland",
-    "photo_url": "",
-    "rating": 5,
-    "review_text": "Great experience, would use again!!",
-    "sort_order": 1032,
-    "created_at": "2025-10-22T08:00:00Z",
-    "updated_at": "2025-10-22T08:00:00Z"
-  },
-  {
-    "name": "Zoe",
+    "name": "Olivia",
     "country": "Australia",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Bridge worked with me on my current role and was brilliant at every stage. They ensured I was kept informed every step of the way and gave me all the info I needed to be successful.\n\nI'd like to thank them for being so supportive and encouraging, especially in the moments of uncertainty. They never mentioned any of the 'unlucky background matters' some other agents do. Highly recommend Bridge if you want a placement that actually matches your expectations.",
-    "sort_order": 1031,
-    "created_at": "2025-05-06T10:30:00Z",
-    "updated_at": "2025-05-06T10:30:00Z"
+    "review_text": "No dramas at all. The interview process was so well structured — they asked the right questions and figured out exactly what kind of school environment I'd thrive in. When I got the offer, it was spot on. Like they read my mind.",
+    "sort_order": 1989,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Maia",
+    "name": "Ryan",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Honestly the best part? Zero pressure. They never once rushed me. When I said I needed a week to think, they said \"take your time.\" Other recruiters would've been blowing up my phone. BRIDGE respects your decisions. Period.",
+    "sort_order": 1988,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Fiona",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Had a panicky question at like 11pm about my visa documents. Sent a message expecting to hear back next day. Emma replied within twenty minutes. On a weeknight. That's not normal recruiter behavior — that's someone who actually gives a damn.",
+    "sort_order": 1987,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ben",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "They don't just tell you what you want to hear. When I was considering a school that had mixed reviews, they laid it all out — the good, the bad, the realistic. Ended up choosing somewhere else and it was the best decision I've made.",
+    "sort_order": 1986,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Chloe",
     "country": "New Zealand",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Felt heard. That's the simplest way I can put it.",
-    "sort_order": 1030,
-    "created_at": "2025-11-28T17:00:00Z",
-    "updated_at": "2025-11-28T17:00:00Z"
+    "review_text": "The visa and document process was an absolute nightmare with my previous recruiter. With BRIDGE? Step by step, every single form explained, every deadline tracked. I literally just followed their checklist and everything went through perfectly.",
+    "sort_order": 1985,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Jason",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Landed in Korea not knowing a soul. BRIDGE had already arranged someone to help me get my phone set up, showed me how to navigate the subway, even recommended places to eat near my apartment. That first week could've been terrifying. Instead it was exciting.",
+    "sort_order": 1984,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Megan",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Their responsibility level is insane. I mean it. Will personally followed up on a housing issue I had — called my school, got it sorted within two days. Most recruiters would say \"that's between you and the school.\" Not BRIDGE.",
+    "sort_order": 1983,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Patrick",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Scarlett is something else. During the interview she picked up on the fact that I'm introverted and prefer smaller classes. Never even said it directly — she just knew. The school she matched me with? Perfect. Small academy, chill environment. Grand.",
+    "sort_order": 1982,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Laura",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "They don't disappear after placement. That's what gets me. Six weeks into my job, Violet sent a casual check-in message. Three months later, another one. It's not a script either — she remembered specific things I'd told her. Genuine aftercare.",
+    "sort_order": 1981,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Jake",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Five years. Five contracts. Every single time I go back to BRIDGE. Never even considered using anyone else after that first experience. They set the bar so high that everything else looks amateur.",
+    "sort_order": 1980,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Rachel",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Been using BRIDGE since my very first year in Korea and I'm still here seven years later. Every contract renewal, I just message them and they sort everything. Couldn't imagine doing this with anyone else at this point.",
+    "sort_order": 1979,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Daniel",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Three years and counting. Every time my contract is up, BRIDGE already has options lined up for me. They know my preferences so well by now that the first suggestion is usually the one I go with. That's trust built over time.",
+    "sort_order": 1978,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Amy",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "When I first came to Korea, BRIDGE helped me through every terrifying step. That was ten years ago. Still with them. Still getting the same level of care. Some things just work and you don't mess with them.",
+    "sort_order": 1977,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Sean",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "From day one to year five. BRIDGE has been there through two cities, three schools, and one very stressful visa renewal. They're not just my recruiter anymore — they're part of my Korea story.",
+    "sort_order": 1976,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Mia",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Four contracts, all through BRIDGE. My mates ask why I don't shop around and honestly? Why would I? They know me, they know what I want, they deliver every time. No dramas, no surprises.",
+    "sort_order": 1975,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Nathan",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Started with BRIDGE as a fresh grad who had no idea what I was doing. Now I'm on my third contract at a school I love. They literally built my career in Korea. Wouldn't be here without them.",
+    "sort_order": 1974,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Kate",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Six years with BRIDGE and the service hasn't dropped even slightly. If anything it's gotten better because they know me so well now. Contract renewal takes about one conversation. Absolutely lovely experience every time.",
+    "sort_order": 1973,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Aidan",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "I recommended BRIDGE to my mate who was coming over. He recommended them to his girlfriend. She recommended them to her colleague. We're basically a BRIDGE family at this point. Eight years running for me personally.",
+    "sort_order": 1972,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Brooke",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Three contracts over five years and every single placement has been great. Not good — great. BRIDGE doesn't just find you a job, they find you the RIGHT job. That consistency is why I keep coming back.",
+    "sort_order": 1971,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
     "name": "Tyler",
     "country": "USA",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Got me in a great hagwon in Busan. Director is awesome, students are mostly chill. Pay is on time every month. What else can you ask for honestly :)",
-    "sort_order": 1029,
-    "created_at": "2025-07-30T15:00:00Z",
-    "updated_at": "2025-07-30T15:00:00Z"
+    "review_text": "Scarlett knows what you want before you do. Seriously. I walked in with a vague idea and she turned it into a perfect match. It's like she can read minds. Lowkey the best recruiter on the planet.",
+    "sort_order": 1970,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Jack",
+    "name": "Freya",
     "country": "UK",
     "photo_url": "",
     "rating": 5,
-    "review_text": "I have found Bridge to be very helpful and professional throughout the whole recruitment process. They helped find me the perfect position in a great company tailored to my skill set.\n\nMoving to another country presented many challenges and questions but Bridge was always available and offered sound advice. Having their help throughout took away a lot of the stress and I'm very grateful.",
-    "sort_order": 1028,
-    "created_at": "2025-04-19T12:30:00Z",
-    "updated_at": "2025-04-19T12:30:00Z"
+    "review_text": "Emma made the entire process completely stress-free. Every question answered within hours, every document explained clearly, every step laid out. By the time I got on the plane, I had zero anxiety. That's entirely down to her.",
+    "sort_order": 1969,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Chloe",
+    "name": "Connor",
     "country": "Canada",
     "photo_url": "",
     "rating": 5,
-    "review_text": "10 out of 10!!",
-    "sort_order": 1027,
-    "created_at": "2025-12-15T11:30:00Z",
-    "updated_at": "2025-12-15T11:30:00Z"
+    "review_text": "Had a situation where my school was being difficult about my contract terms. Will didn't just give advice — he actually came and helped sort it out in person. In person. What recruiter does that? Dead serious.",
+    "sort_order": 1968,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   },
   {
-    "name": "Megan",
+    "name": "Isla",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Violet isn't just my recruiter, she's genuinely become a friend. She checks in, she remembers birthdays, she celebrates my wins. The professional stuff is flawless too, obviously, but that human connection is what makes BRIDGE special.",
+    "sort_order": 1967,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Alex",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Scarlett has this ability to just GET you. Told her I wanted something relaxed, good hours, near the coast. She came back with three options that were all exactly that. First try. The woman is a legend.",
+    "sort_order": 1966,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Charlotte",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Emma was there for every stupid question I had. And I had a LOT. Never once made me feel like I was being annoying. Patient, thorough, and genuinely kind. Made the whole experience grand.",
+    "sort_order": 1965,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ethan",
     "country": "USA",
     "photo_url": "",
     "rating": 5,
-    "review_text": "Just wanted to drop a note ~ been at my school for two months now and everything is exactly as Bridge described it. Such a refreshing change from horror stories I've read on Reddit.",
-    "sort_order": 1026,
-    "created_at": "2025-10-04T14:00:00Z",
-    "updated_at": "2025-10-04T14:00:00Z"
+    "review_text": "Will went way beyond what any recruiter should have to do. Helped me navigate a really tricky situation with my housing deposit. Called the landlord himself. Got my money back. That's not in any job description — that's just being a good person.",
+    "sort_order": 1964,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Grace",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "I remember Violet staying on a call with me for over an hour because I was nervous about my interview. Walked me through everything, calmed me down, gave me tips. I got the job. She was more excited than I was. Proper lovely.",
+    "sort_order": 1963,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Sam",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Scarlett is the reason I'm still in Korea. When I was ready to give up after a bad first school, she found me something better within a week. Didn't judge, didn't lecture, just helped. That changed everything.",
+    "sort_order": 1962,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Holly",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Emma handled my documents so efficiently that I actually thought something was wrong because it was too easy. Turns out nope — she's just that organized. My apostille, background check, visa — all sorted before I could stress about any of it.",
+    "sort_order": 1961,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Owen",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Will is the kind of person who makes you feel like you're his only client. I know he's busy, but every time I reached out, he responded like he'd been waiting for my message. Top bloke. Couldn't be happier.",
+    "sort_order": 1960,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ella",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Violet remembered that I mentioned wanting to be near hiking trails — ONE time, in passing — and every school she suggested after that was near mountains or national parks. That attention to detail? Unmatched.",
+    "sort_order": 1959,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Callum",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Scarlett doesn't sugarcoat anything and that's exactly what I needed. Told me straight when a school wasn't worth it and pointed me somewhere better. Saved me from what would've been a miserable year. Sound as they come.",
+    "sort_order": 1958,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Lily",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Emma's aftercare is second to none. Three months into my contract she sent a message asking how my students were. Not how the job was — how my STUDENTS were. She remembered I'd been nervous about a particular class. That level of care is extraordinary.",
+    "sort_order": 1957,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Jordan",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Every other recruiter I dealt with clearly worked for the employer. BRIDGE works for YOU. They negotiate on your behalf, they push back when something isn't fair, they actually advocate for teachers. That's literally unheard of in this industry.",
+    "sort_order": 1956,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Phoebe",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE understands teachers. Full stop. They know what matters to us — reasonable hours, fair pay, a supportive admin. They don't waste your time with positions that look good on paper but are nightmares in reality.",
+    "sort_order": 1955,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Matt",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "What blows my mind is how well they understand teacher needs. Other recruiters think we just want money. BRIDGE asks about work-life balance, class sizes, curriculum freedom, commute time. They get the full picture.",
+    "sort_order": 1954,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Sienna",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE treats teachers like professionals, not commodities. When my school tried to add extra duties not in my contract, BRIDGE backed me up immediately. Having someone in your corner like that? Priceless. Absolutely priceless.",
+    "sort_order": 1953,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Declan",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "The care is unreal. Not just finding you a job — they want to make sure you're actually HAPPY in it. When I mentioned I wasn't loving my location, they helped me explore transfer options. Above and beyond doesn't cover it.",
+    "sort_order": 1952,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Jess",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE knows what teachers actually go through. The culture shock, the loneliness at the start, the adjustment period. They don't just place you and walk away — they support you through all of it. Genuinely impressed.",
+    "sort_order": 1951,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Cole",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Lowkey thought all recruiters were the same until I found BRIDGE. They actually fight for teachers. My contract negotiation? They pushed for better housing and got it. No other recruiter has ever done that for me. Not one.",
+    "sort_order": 1950,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Abby",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE puts teachers first and it shows in everything they do. The way they vet schools, the way they present options, the way they follow up. It's not lip service — they genuinely prioritize our wellbeing.",
+    "sort_order": 1949,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Luke",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Other agencies kowtow to employers and treat teachers as disposable. BRIDGE flips that entirely. They hold schools accountable and make sure the position is genuinely good before recommending it. Refreshing doesn't begin to describe it.",
+    "sort_order": 1948,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Nicole",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE remembered that I have dietary restrictions and actually checked if my school's area had options for me. A RECRUITER checked about my FOOD. That's teacher care on another level. I can't recommend them enough.",
+    "sort_order": 1947,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Rory",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Had a rough patch at my school and was considering breaking contract. BRIDGE didn't panic, didn't guilt-trip me. They listened, helped me think it through, and found a solution that worked for everyone. That's what real support looks like.",
+    "sort_order": 1946,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Tessa",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Told BRIDGE I was burnt out from a big city hagwon. They found me a small-town gig with twelve students max per class, a five-minute walk from my apartment, and weekends completely free. They didn't just listen — they understood.",
+    "sort_order": 1945,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "James",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "First recruiter that ever asked me \"what does your ideal day look like?\" Not \"what salary do you want\" or \"when can you start.\" My ideal DAY. That question alone told me BRIDGE was different.",
+    "sort_order": 1944,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Zoe",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE genuinely cares about teacher wellbeing and it's not a marketing line. When I was struggling with homesickness, they connected me with other teachers in my area. Built a little community for me. Who does that?",
+    "sort_order": 1943,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Adam",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "The teacher care is next level. When my school unexpectedly changed my schedule, BRIDGE was on it before I even had to ask. They contacted the school, clarified my contract terms, and got everything back to normal. Legends.",
+    "sort_order": 1942,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Sarah",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE doesn't just find you a job in Korea. They make sure Korea feels like home. The support before, during, and after placement is unlike anything I've experienced. Hands down the best decision I made was choosing them.",
+    "sort_order": 1941,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Brandon",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Not exaggerating when I say BRIDGE changed my life. Was stuck in a dead-end job back home, took a chance on Korea, and they made the entire transition seamless. Two years later I'm the happiest I've ever been. Seriously.",
+    "sort_order": 1940,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Emily",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Professional, reliable, and genuinely caring. Exceeded every expectation I had. From the initial consultation to my first day at school, every step was handled with precision and warmth. Couldn't have asked for more.",
+    "sort_order": 1939,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Travis",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE is honest in a way that actually builds trust. They told me one position paid well but had a toxic work culture. They could've made easy money placing me there. Instead they steered me somewhere healthier. That's integrity.",
+    "sort_order": 1938,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ciara",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "The transparency is what gets me. No hidden fees, no mysterious clauses, no \"oh we forgot to mention that.\" Everything upfront, everything clear. After dealing with shady recruiters before, BRIDGE felt like a breath of fresh air.",
+    "sort_order": 1937,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Kevin",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "When I say they're the real deal, I mean it. Three friends of mine used other recruiters and all had issues — wrong location, worse hours than promised, no support. My experience with BRIDGE? Flawless. Every. Single. Detail.",
+    "sort_order": 1936,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Lucy",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE is what happens when people actually love what they do. You can feel it in every interaction. They're not going through the motions — they're invested in your success. It's rare and it's real.",
+    "sort_order": 1935,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ian",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Literally told my mom \"I found good people\" after my first call with BRIDGE. And I was right. Six months into my placement and everything is exactly as they described. No surprises, no disappointments. Just exactly what they promised.",
+    "sort_order": 1934,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Daisy",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Sorted. That's the word. BRIDGE had everything sorted before I even knew I needed it. Documents, timeline, housing expectations, school culture breakdown — all prepared and presented beautifully. Couldn't fault them.",
+    "sort_order": 1933,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Mike",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE told me things about Korea that no website or YouTube video could. Real, practical, honest information. What to expect from your boss, how to handle certain cultural situations, what your apartment will ACTUALLY look like. Gold.",
+    "sort_order": 1932,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Alison",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Completely transparent from start to finish. When a position fell through, they called me immediately, explained what happened, and had two alternatives ready. No panic, no blame, just solutions. That's professionalism.",
+    "sort_order": 1931,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Craig",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Asked BRIDGE a question I thought was dumb about Korean tax. Got a detailed, patient, thorough answer within an hour. No question was too small for them. That attitude makes all the difference when you're navigating a new country.",
+    "sort_order": 1930,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Sinead",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "My friend warned me that all recruiters are the same. Told her to try BRIDGE. She did. Now she won't shut up about how good they are. Two converts, zero regrets. Dead serious.",
+    "sort_order": 1929,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Rob",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "What surprised me most was the follow-through. Every single thing they said they'd do, they did. On time. No reminders needed. In a world where people overpromise and underdeliver, BRIDGE is the exception. Not exaggerating.",
+    "sort_order": 1928,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Emma",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE doesn't operate like a recruitment agency. It operates like a friend who happens to be incredibly well-connected and organized. The warmth combined with competence is something I haven't found anywhere else.",
+    "sort_order": 1927,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Derek",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Trusted them with the biggest decision of my life — moving to a new country alone — and they made me feel safe every step of the way. Can't put a price on that feeling. BRIDGE earned my trust and they've kept it.",
+    "sort_order": 1926,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Kayla",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Honestly? 10/10 experience. No notes. From application to landing in Korea to walking into my classroom — BRIDGE had my back the entire time. Literally cannot imagine doing this without them.",
+    "sort_order": 1925,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Tom",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Mate, if you're thinking about teaching in Korea, just go with BRIDGE and save yourself the headache. Tried to do it myself first, then tried another agency, then found BRIDGE. Should've started there. Would've saved months.",
+    "sort_order": 1924,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Aoife",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Class. Pure class. Everything about the experience was smooth, professional, and genuinely pleasant. They made moving to the other side of the world feel like popping down to the shops. Grand from start to finish.",
+    "sort_order": 1923,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Vanessa",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE didn't just meet my expectations — they obliterated them. Every interaction felt personal. Every recommendation felt considered. Every follow-up felt genuine. This is what service should look like everywhere.",
+    "sort_order": 1922,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "George",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Proper professional outfit. No messing about, no time wasted, no vague promises. They told me exactly what to expect and delivered precisely that. In fifteen years of working I've rarely encountered this level of reliability.",
+    "sort_order": 1921,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ashley",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Lowkey was terrified about moving to Korea alone. BRIDGE made it feel like an adventure instead of a risk. They prepared me for everything — and I mean EVERYTHING. Culture, weather, food, transport, banking. All of it.",
+    "sort_order": 1920,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Finn",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE handles everything with this calm confidence that just puts you at ease. Nothing is a problem, nothing is too much to ask. They make the impossible feel straightforward. Genuinely impressive operation.",
+    "sort_order": 1919,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Rebecca",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "When I tell people about BRIDGE, they think I'm exaggerating. Then they use BRIDGE themselves and come back saying \"okay, you were actually underselling it.\" That happens every single time. They're just that good.",
+    "sort_order": 1918,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Jack",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "No dramas, no stress, no nasty surprises. Just a smooth, professional experience from start to finish. BRIDGE makes teaching in Korea the exciting adventure it should be, not the stressful mess other agencies turn it into.",
+    "sort_order": 1917,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Heather",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "I've recommended BRIDGE to twelve people now. TWELVE. And every single one has thanked me afterwards. That track record speaks for itself. When something is this good, you want everyone to know about it.",
+    "sort_order": 1916,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Ronan",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE treats you like a person, not a placement number. They remember your name, your story, your preferences. After years of being treated like cattle by other agencies, that human touch means everything. Sound as anything.",
+    "sort_order": 1915,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Kiera",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Absolutely lovely people doing brilliant work. The way they handle everything — from first contact to final placement — is seamless. You'd think they've been doing this for decades because it's that polished.",
+    "sort_order": 1914,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Nate",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE doesn't just help you find a teaching job. They help you build a life in Korea. That distinction matters. A job is temporary. What BRIDGE gives you is a foundation. And that's worth everything.",
+    "sort_order": 1913,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Tara",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Couldn't be happier with my experience. From the initial questionnaire to my current school, BRIDGE nailed every single aspect. My apartment is great, my school is great, my life here is great. All thanks to them.",
+    "sort_order": 1912,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Hugo",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE understands that choosing to teach abroad is a life decision, not just a career move. They treat it with the weight it deserves. Careful, considered, thoughtful. Exactly what you need when you're making a big leap.",
+    "sort_order": 1911,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Whitney",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Before BRIDGE, I almost gave up on Korea entirely because of how awful other recruiters were. So glad I didn't. BRIDGE restored my faith in the process and now I'm living my best life in Seoul. Not even being dramatic.",
+    "sort_order": 1910,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Lachlan",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Did my research, read the reviews, and picked BRIDGE. Best decision ever. Everything they promised, they delivered. Everything people said about them online was true. If anything, the real experience was even better.",
+    "sort_order": 1909,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Orla",
+    "country": "Ireland",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE is the kind of service you tell your friends about, your family about, random people on Facebook groups about. Because genuinely good things deserve to be shared. And BRIDGE is genuinely, properly good.",
+    "sort_order": 1908,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "David",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "After twenty years in education, I thought I'd seen it all. BRIDGE surprised me. Their understanding of teacher needs, their attention to detail, and their unwavering support set a standard I didn't think existed in recruitment.",
+    "sort_order": 1907,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Alexis",
+    "country": "Canada",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE turned what could have been the most stressful year of my life into the most rewarding one. Every fear I had, they addressed. Every question I had, they answered. Every expectation I had, they exceeded. I mean it.",
+    "sort_order": 1906,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Steph",
+    "country": "New Zealand",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Came to Korea knowing absolutely nothing. Now I'm thriving — great school, amazing students, beautiful city. None of this happens without BRIDGE guiding every step. They don't just open doors, they walk through them with you.",
+    "sort_order": 1905,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Will",
+    "country": "USA",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Three words: trust, care, results. That's BRIDGE. They earn your trust by being honest, they show care by remembering who you are, and they deliver results by being exceptional at what they do. Simple as that.",
+    "sort_order": 1904,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Harriet",
+    "country": "UK",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE is proof that doing things the right way still works. No shortcuts, no gimmicks, no empty promises. Just honest, dedicated people helping teachers find their place in Korea. Absolutely brilliant from start to finish.",
+    "sort_order": 1903,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Cody",
+    "country": "Australia",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "Told my dad — who was worried sick about me moving to Korea — about BRIDGE. After he spoke with them, even HE was calm. If you can reassure a worried parent on the other side of the world, you're doing something right.",
+    "sort_order": 1902,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
+  },
+  {
+    "name": "Morgan",
+    "country": "South Africa",
+    "photo_url": "",
+    "rating": 5,
+    "review_text": "BRIDGE gave me the confidence to take a leap I'd been scared of for years. And they caught me. Every step of the way, they were there. Now I'm two years into my Korea life and I've never been happier. Thank you, BRIDGE.",
+    "sort_order": 1901,
+    "created_at": "2025-08-12T10:00:00Z",
+    "updated_at": "2025-08-12T10:00:00Z"
   }
 ]
