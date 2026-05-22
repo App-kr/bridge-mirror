@@ -1553,6 +1553,8 @@ async def apply(request: Request, body: CandidateApply):
         # Honeypot 확인
         if _check_honeypot(payload):
             raise HTTPException(400, "Invalid submission detected.")
+        # honeypot 필드는 DB에 저장 안 함 — INSERT 실패 방지
+        payload.pop("_url", None)
 
         # PII 암호화
         for field in _CANDIDATE_ENCRYPT:
@@ -1717,6 +1719,8 @@ async def inquiry(request: Request, body: ClientInquiry):
         # Honeypot 확인
         if _check_honeypot(payload):
             raise HTTPException(400, "Invalid submission detected.")
+        # honeypot 필드는 DB에 저장 안 함
+        payload.pop("_url", None)
 
         # 연락처 PII 암호화 (storage 전 마지막 레이어)
         for field in _INQUIRY_ENCRYPT:
