@@ -1142,6 +1142,7 @@ class ClientInquiry(BaseModel):
     # ── 관리 ───────────────────────────────────────────────────────────────
     location:            Optional[str] = None   # (기존 호환)
     source:              Optional[str] = None   # 'web_form' | 'google_form'
+    captcha_token:       Optional[str] = None   # PuzzleCaptcha 토큰 (스팸 차단)
 
 
 # ── 공통 응답 ─────────────────────────────────────────────────────────────────
