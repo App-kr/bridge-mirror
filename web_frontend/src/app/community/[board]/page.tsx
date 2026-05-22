@@ -880,10 +880,14 @@ export default function BoardPage() {
     orderSaving,
     onSaveOrder: handleSaveOrder,
     onCategoryChange: async (postId: number, category: string) => {
+      // 통합 보드(visa)에서는 게시물 원본 보드(visa_related/visa_type/immigration)로 PATCH 해야 함
+      // URL board(=visa)가 아닌 p.board(원본) 사용
+      const target = posts.find(p => p.id === postId)
+      const targetBoard = target?.board || board
       // 즉시 로컬 반영 (낙관적 업데이트)
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, category } : p))
       try {
-        const res = await signedFetch(`${API_URL}/api/admin/community/${board}/${postId}`, {
+        const res = await signedFetch(`${API_URL}/api/admin/community/${targetBoard}/${postId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ category }),
@@ -891,11 +895,12 @@ export default function BoardPage() {
         if (!res.ok) {
           // 실패 시 롤백
           await refreshPosts()
-          alert('카테고리 변경 실패')
+          const errBody = await res.text().catch(() => '')
+          alert(`카테고리 변경 실패 (${res.status}) — board=${targetBoard}\n${errBody.slice(0,200)}`)
         }
-      } catch {
+      } catch (e) {
         await refreshPosts()
-        alert('카테고리 변경 실패 (네트워크)')
+        alert(`카테고리 변경 실패 (네트워크): ${e instanceof Error ? e.message : String(e)}`)
       }
     },
   }
