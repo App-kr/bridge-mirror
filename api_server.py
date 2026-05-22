@@ -7977,40 +7977,6 @@ except Exception as _s3_exc:
     def get_presigned_url(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정")
 
-
-# ── Google Drive Storage (S3 미설정 시 fallback, 영구 보존) ──────────────────
-# Render free plan 의 ephemeral disk 회피 + AWS 계정 없이 Drive 15GB 무료 활용
-# 같은 DRIVE_OAUTH_TOKEN_JSON 사용 (db_persist.py 와 공유)
-try:
-    from backend.utils.drive_storage import (
-        upload_bytes_sync as _drive_upload_bytes_sync,
-        upload_bytes as _drive_upload_bytes,
-        download_bytes as _drive_download_bytes,
-        get_presigned_url as _drive_presigned_url,
-        delete_file as _drive_delete_file,
-        check_drive_connection as _check_drive_connection,
-        StorageError as DriveStorageError,
-    )
-    _DRIVE_STORAGE_OK = True
-    logging.getLogger("bridge.api").info("[Storage] Drive 백엔드 로드 성공")
-except Exception as _drv_exc:
-    _DRIVE_STORAGE_OK = False
-    logging.getLogger("bridge.api").warning("[Storage] Drive 백엔드 로드 실패: %s", _drv_exc)
-    class DriveStorageError(Exception):
-        pass
-    async def _drive_upload_bytes(*a, **kw):
-        raise RuntimeError("Drive 스토리지 미설정")
-    def _drive_upload_bytes_sync(*a, **kw):
-        raise RuntimeError("Drive 스토리지 미설정")
-    def _drive_download_bytes(*a, **kw):
-        raise RuntimeError("Drive 스토리지 미설정")
-    def _drive_presigned_url(*a, **kw):
-        raise RuntimeError("Drive 스토리지 미설정")
-    def _drive_delete_file(*a, **kw):
-        return False
-    def _check_drive_connection():
-        return False
-
     def delete_file(*a, **kw):
         raise RuntimeError("S3 스토리지 미설정")
 
@@ -8658,39 +8624,18 @@ async def upload_file(
         "video"    if file_type == "video"                       else
         "any"
     )
-    _s3_result = None
-    _last_err = None
-    # 1차: S3 시도 (AWS 환경변수 설정된 경우)
-    if _S3_OK:
-        try:
-            _s3_result = await s3_upload_bytes(
-                data=data,
-                folder=_s3_folder,
-                filename=file.filename or fname,
-                allowed_category=_s3_category,
-            )
-        except (RuntimeError, StorageError) as _e:
-            _last_err = _e
-            _log_upload.warning("S3 업로드 실패, Drive fallback 시도: %s", _e)
-    # 2차: Drive fallback (S3 미설정/실패 — 영구 보존 보장)
-    if _s3_result is None and _DRIVE_STORAGE_OK:
-        try:
-            _s3_result = await _drive_upload_bytes(
-                data=data,
-                folder=_s3_folder,
-                filename=file.filename or fname,
-                allowed_category=_s3_category,
-                content_type=file.content_type,
-            )
-            _log_upload.info("Drive 업로드 성공: %s (%d bytes)", _s3_result.get("filename"), len(data))
-        except (RuntimeError, DriveStorageError) as _e:
-            _last_err = _e
-            _log_upload.error("Drive 업로드 실패: %s", _e)
-    if _s3_result is None:
-        _log_upload.error("모든 스토리지 백엔드 실패. 마지막 에러: %s", _last_err)
+    try:
+        _s3_result = await s3_upload_bytes(
+            data=data,
+            folder=_s3_folder,
+            filename=file.filename or fname,
+            allowed_category=_s3_category,
+        )
+        s3_key   = _s3_result["s3_key"]
+        file_url = _s3_result["s3_url"]
+    except (RuntimeError, StorageError) as _s3_err:
+        _log_upload.error("S3 업로드 실패: %s", _s3_err)
         raise HTTPException(503, "파일 저장에 실패했습니다. 잠시 후 다시 시도하세요.")
-    s3_key   = _s3_result["s3_key"]
-    file_url = _s3_result["s3_url"]
     # ──────────────────────────────────────────────────────────────────────
 
     # Thumbnail for photos
@@ -13306,47 +13251,6 @@ import mimetypes as _mimetypes
 
 _COMMUNITY_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 _COMMUNITY_IMG_CACHE_SEC = 86400  # 1일
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Drive 파일 프록시 — Google Drive 에 저장된 사진/문서를 우리 도메인으로 서빙
-# (s3_key 가 'drive://{file_id}' 형식인 경우 사용)
-# 영구 보존: Google Drive 15GB 무료, Render 재시작/배포에도 휘발 안 됨
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/api/drive-file/{file_id}", tags=["upload"])
-async def drive_file_proxy(file_id: str, request: Request):
-    """Google Drive 파일을 우리 도메인으로 프록시 서빙."""
-    # file_id 형식 검증 (Drive ID는 영숫자+_-)
-    import re as _re_drv
-    if not _re_drv.match(r'^[A-Za-z0-9_-]{20,80}$', file_id):
-        raise HTTPException(400, "잘못된 file_id 형식")
-    if not _DRIVE_STORAGE_OK:
-        raise HTTPException(503, "Drive 스토리지 미설정")
-    # Rate limit (이미지 hot-link 남용 방지)
-    if not _rate_ok(_ip_hash(request), window=60, max_posts=120):
-        raise HTTPException(429, "Too many requests")
-    try:
-        data = _drive_download_bytes(f"drive://{file_id}")
-    except (RuntimeError, DriveStorageError) as e:
-        logging.getLogger("bridge.api").warning("Drive file 다운 실패 (%s): %s", file_id, e)
-        raise HTTPException(404, "파일을 찾을 수 없습니다")
-    # 파일 magic bytes 로 content-type 추정
-    ct = "application/octet-stream"
-    if data[:3] == b"\xff\xd8\xff": ct = "image/jpeg"
-    elif data[:8] == b"\x89PNG\r\n\x1a\n": ct = "image/png"
-    elif data[:6] in (b"GIF87a", b"GIF89a"): ct = "image/gif"
-    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP": ct = "image/webp"
-    elif data[:4] == b"%PDF": ct = "application/pdf"
-    elif data[:4] == b"PK\x03\x04": ct = "application/octet-stream"  # zip/docx/xlsx
-    from fastapi.responses import Response
-    return Response(
-        content=data,
-        media_type=ct,
-        headers={
-            "Cache-Control": "public, max-age=86400",  # 1일 캐시
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
-
 
 @app.get("/api/community-image/{board}/{post_id}/{filename}", tags=["community"])
 async def community_image_serve(board: str, post_id: str, filename: str, request: Request):
