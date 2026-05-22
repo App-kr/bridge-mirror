@@ -6064,17 +6064,21 @@ def _verify_captcha_token(token: str, ip_hash: str) -> bool:
         now_ms    = int(_time.time() * 1000)
 
         # 30분 이내인지 확인 — 사용자가 폼 작성하는 동안 만료 방지
-        # (CAPTCHA 자체가 시작 단계에서 처리되므로 폼 작성 시간 충분히 확보)
         if now_ms - timestamp > 30 * 60 * 1000:
             return False
 
-        # nonce 재사용(replay attack) 방지
+        # nonce 추적 (replay attack 모니터링) — 차단은 하지 않음
+        # 이유: 사용자 더블클릭/네트워크 retry/Back 버튼 등 정상 흐름까지 차단되어 UX 망침
+        # 실제 봇 스팸 방지는 다른 계층이 담당:
+        #   - Honeypot (_url 필드) — 봇 즉시 차단
+        #   - Rate limit (60회/5분) — 같은 IP 반복 시도 차단
+        #   - Pydantic 검증 + Honeypot — 잘못된 payload 거부
+        # nonce 재사용은 단순 로그만 (보안 침해 신호 탐지용)
         now_sec = _time.time()
         if nonce in _CAPTCHA_NONCES:
-            logging.getLogger("bridge.security").warning(
-                "[C1] CAPTCHA nonce 재사용 시도 차단: nonce=%s ip=%s", nonce[:8], ip_hash[:8]
+            logging.getLogger("bridge.security").info(
+                "[CAPTCHA] nonce 재사용 감지 (정상 사용자 retry 또는 봇): nonce=%s ip=%s", nonce[:8], ip_hash[:8]
             )
-            return False
         _CAPTCHA_NONCES[nonce] = now_sec + 600  # 10분 보관 후 만료
 
         # 만료된 nonce 정리 (메모리 누수 방지)
