@@ -1732,6 +1732,10 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "ilsan english",
     "suwon english",
     "songdo english",
+    # ══ 키즈/유아 브랜드 (추가 확인) ══
+    "tnt kids park", "tnt kids", "tnt",     # TNT Kids Park 계열
+    "psa", "psa apgujeong", "psa english",  # PSA 영어학원
+    "kids park",                             # "X Kids Park" 패턴
     # ══ 공공 기관 / 정부 운영 영어 프로그램 ══
     "epik", "gepik", "smoe", "jlec",
     "jeollanamdo epik",
@@ -3635,6 +3639,42 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 if _cleaned_np != stripped:
                     job_title_replaces.append((stripped, _cleaned_np))
                     all_logs.append(f"[page{page_num}] JOB_PAREN_CLEAN: {stripped[:50]} → {_cleaned_np[:50]}")
+            # 미등록 브랜드 감지: "BRAND, KR_LOCATION — TITLE" 패턴
+            # 예: "TNT Kids Park, Suwon-si — English Teacher"
+            # → 콤마 앞 부분이 KR 위치 단서와 결합 → 브랜드 전체 redact_texts에 추가
+            if _is_job_line_kw and has_kr and not has_kr_work:
+                _dash_parts = re.split(r' [—–\-]+ ', stripped, maxsplit=1)
+                if len(_dash_parts) == 2 and ',' in _dash_parts[0]:
+                    _pre_dash = _dash_parts[0]
+                    _last_comma_idx = _pre_dash.rfind(',')
+                    _brand_candidate = _pre_dash[:_last_comma_idx].strip()
+                    _loc_candidate = _pre_dash[_last_comma_idx + 1:].strip().lower()
+                    _is_kr_loc = any(kw in _loc_candidate for kw in KR_KEYWORDS)
+                    _FOREIGN_CITY_RE = re.compile(
+                        r'\b(Charlotte|Chicago|Boston|Toronto|Sydney|London|Dublin|'
+                        r'New York|Los Angeles|Vancouver|Auckland|Singapore|Berlin|'
+                        r'Paris|Tokyo|Shanghai|Edinburgh|Manchester|Dublin)\b', re.I)
+                    _has_type_in_brand = any(
+                        re.search(r'\b' + _t + r'\b', _brand_candidate, re.I)
+                        for _t in ("academy", "school", "institute", "center", "centre",
+                                   "university", "college", "kindergarten", "preschool")
+                    )
+                    if (_brand_candidate and _is_kr_loc
+                            and not _FOREIGN_CITY_RE.search(_brand_candidate)
+                            and not _has_type_in_brand):
+                        redact_texts.add(_brand_candidate)
+                        # 멀티스팬 대응: 개별 단어도 추가 (3자+ 일반단어 제외)
+                        _SKIP_WORDS = {
+                            "the", "and", "for", "new", "pro", "top",
+                            "big", "one", "two", "all", "our", "its", "its",
+                        }
+                        for _bw in _brand_candidate.split():
+                            if len(_bw) >= 3 and _bw.lower() not in _SKIP_WORDS:
+                                redact_texts.add(_bw)
+                        all_logs.append(
+                            f"[page{page_num}] BRAND_COMMA_DETECT: {_brand_candidate[:40]}"
+                        )
+
             # ── 직업 타이틀줄 후처리: 대학교 고용주 + 한국인 이름형 브랜드 ──────
             # 위 두 블록 이후 실행 — has_kr_work 무관
             # 대상: "Sookmyung Women's University — Teacher" / "Min-Byung-Chul Junior - Teacher"
@@ -4017,16 +4057,41 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 page.add_redact_annot(_safe_rect(rect), fill=(1, 1, 1))
 
         # Redact 적용 — 대체 텍스트 삽입 (위치→Korea)
+        # 방법: 먼저 위치 + 폰트크기 수집 → whitebox → apply → insert_text 재삽입
+        # (add_redact_annot text= 파라미터는 rect 폭에 따라 자동 축소되어 매우 작게 렌더됨)
+        _repl_inserts: list = []  # (Point, text, fontsize, color) — apply_redactions 후 insert
         for target, replacement in replacement_redacts:
             instances = page.search_for(target)
             for rect in instances:
-                page.add_redact_annot(
-                    _safe_rect(rect), text=replacement, fill=(1, 1, 1),
-                    text_color=(0, 0, 0), fontsize=10,
-                )
+                # 원본 폰트 크기 감지 (clip 영역 텍스트 dict 사용)
+                _repl_fs = 9.0  # 기본값
+                try:
+                    _clip_d = page.get_text("dict", clip=rect, flags=0)
+                    for _cb in _clip_d.get("blocks", []):
+                        for _cl in _cb.get("lines", []):
+                            for _cs in _cl.get("spans", []):
+                                if _cs.get("text", "").strip():
+                                    _repl_fs = float(_cs.get("size", 9))
+                                    break
+                except Exception:
+                    pass
+                _repl_fs = max(7.0, min(_repl_fs, 12.0))  # 7~12pt 범위 클램프
+                # whitebox만 (text= 없음)
+                page.add_redact_annot(_safe_rect(rect), fill=(1, 1, 1))
+                # 재삽입 대기: baseline = rect.y1 - 0.25*fs
+                _ins_pt = fitz.Point(rect.x0, rect.y1 - _repl_fs * 0.2)
+                _repl_inserts.append((_ins_pt, replacement, _repl_fs))
 
         if redact_texts or replacement_redacts:
             page.apply_redactions()
+
+        # 위치→Korea 텍스트 재삽입 (whitebox 이후 — 올바른 폰트 크기)
+        for _ri_pt, _ri_txt, _ri_fs in _repl_inserts:
+            try:
+                page.insert_text(_ri_pt, _ri_txt, fontsize=_ri_fs,
+                                 color=(0, 0, 0), fontname="helv")
+            except Exception:
+                pass
 
         # ── Supplementary: get_text("dict") 기반 정밀 redact ──
         # 이유: search_for()는 다중 스팬 줄(Bold+Normal 혼합), 사이드바 레이아웃에서 실패 가능
