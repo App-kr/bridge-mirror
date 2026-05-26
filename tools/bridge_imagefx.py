@@ -620,6 +620,8 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
             self._handle_generate()
         elif parsed.path == "/api/set-token":
             self._handle_set_token()
+        elif parsed.path == "/api/logout":
+            self._handle_logout()
         elif parsed.path == "/api/pick-folder":
             self._handle_pick_folder()
         elif parsed.path == "/api/open-folder":
@@ -705,6 +707,23 @@ class ImageFXHandler(SimpleHTTPRequestHandler):
             "ok": True,
             "message": f"Auth OK! Token valid: {_session.token_remaining_min}min",
         })
+
+    def _handle_logout(self):
+        """토큰 삭제 — 설정 파일에서도 제거."""
+        _session.token = None
+        _session.token_expires = 0
+        try:
+            cfg_path = os.path.join(os.path.dirname(__file__), ".imagefx_config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg.pop("_token", None)
+                cfg.pop("_token_expires", None)
+                with open(cfg_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+        self._json_response({"ok": True, "message": "로그아웃 완료"})
 
     def _handle_generate(self):
         try:

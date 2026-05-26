@@ -385,7 +385,13 @@ def fetch_jobs(job_code: str | None, limit: int) -> list[dict]:
         return sum(1 for f in _SCORE_FIELDS if j.get(f) and str(j[f]).strip())
 
     # 원래 동작 (잘 되던 상태): score >= 2 만 — 필수필드 가드 제거
-    eligible = [j for j in all_clean if _content_score(j) >= 2]
+    # 영구 가드 (2026-05-18): location 빈/이상 잡 제외 — bad_body skip 반복 방지
+    def _location_ok(j):
+        loc = (j.get('location') or '').strip()
+        if not loc: return False                # 빈 location
+        if loc.startswith('Job.'): return False  # 'Job. 1360' 같은 잡코드 오염
+        return True
+    eligible = [j for j in all_clean if _content_score(j) >= 2 and _location_ok(j)]
     candidates = [j for j in eligible if _norm(j['job_code']) not in posted_nums]
 
     # ── 순환 처리: 모두 게시됐으면 3일 이상 된 게시물만 초기화 후 재시작 ──────
@@ -1096,8 +1102,28 @@ def _type_slow(el, text: str):
         time.sleep(random.uniform(0.04, 0.10))
 
 
-def build_driver(headless: bool = False) -> webdriver.Chrome:
+def build_driver(headless: bool = False, account: str | None = None) -> webdriver.Chrome:
     opts = Options()
+
+    # ── 계정별 Chrome 프로필 디렉토리 → 쿠키/세션 영구 보존 ────────────────────
+    # account: "gray"/"green"/"brown"/"purple" 또는 "account1"~"account4"
+    # .chrome_rpa_profile/{color}/ 폴더에 로그인 상태 저장 → 재실행 시 로그인 유지
+    _COLOR_MAP = {"account1": "gray", "account2": "green",
+                  "account3": "brown", "account4": "purple"}
+    _profile_color = None
+    if account:
+        acct_norm = account.strip().lower()
+        # "gray" 형식 그대로 또는 "account1" → "gray" 변환
+        _profile_color = _COLOR_MAP.get(acct_norm, acct_norm)
+    _profile_base = Path(__file__).resolve().parent / ".chrome_rpa_profile"
+    if _profile_color:
+        _profile_dir = _profile_base / _profile_color
+    else:
+        _profile_dir = _profile_base / "default"
+    _profile_dir.mkdir(parents=True, exist_ok=True)
+    opts.add_argument(f"--user-data-dir={_profile_dir}")
+    print(f"  [DRIVER] Chrome 프로필: {_profile_dir.name} (세션 유지)")
+
     if headless:
         # Headless 모드: 화면 미러링 잠금 상태에서 작동
         # CAPTCHA 발생 시 자동 해결 불가 → wait_for_captcha() 가 즉시 실패 처리
@@ -1886,7 +1912,31 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
             if pub:
                 _js_click(driver, pub)
                 _delay(3, 5)
-                print(f"    → Publish 완료: {driver.current_url}")
+                # ── manage URL 캡처 (publish 직후 redirect) ──
+                _manage_url = driver.current_url
+                print(f"    → Publish 완료: {_manage_url}")
+
+                # ⚠️ public URL 캡처 시도 — manage 페이지에서 "view this posting" 링크 추출
+                # (사용자 요청 2026-05-18: 실제 게시 active 여부 검증)
+                try:
+                    from selenium.webdriver.common.by import By as _By
+                    _delay(1, 2)
+                    # craigslist manage 페이지 패턴: 게시물 public URL 링크 존재
+                    public_url = None
+                    for a in driver.find_elements(_By.TAG_NAME, "a"):
+                        href = (a.get_attribute("href") or "").lower()
+                        # public URL 패턴: {city}.craigslist.org/edu/d/.../{post_id}.html
+                        if ".craigslist.org/edu/" in href and href.endswith(".html"):
+                            public_url = a.get_attribute("href")
+                            break
+                    if public_url:
+                        print(f"    ✓ Public URL: {public_url}")
+                        driver._public_url = public_url   # cl_post 가 사용
+                    else:
+                        # 게시 review pending 또는 즉시 not-active
+                        print(f"    [WARN] public URL 못 찾음 — review pending / inactive 가능성")
+                except Exception as _pu_err:
+                    print(f"    [WARN] public URL 추출 실패: {_pu_err}")
             else:
                 print("    [WARN] Publish 버튼 없음")
             break  # 게시 완료 후 루프 종료
@@ -1909,7 +1959,8 @@ def cl_post(driver: webdriver.Chrome, title: str, body: str, job: dict) -> str |
         print("  📧 이메일 인증 필요. 60초 대기...")
         countdown(60, "이메일 인증 대기")
 
-    return driver.current_url
+    # public URL 우선 반환, 없으면 manage URL
+    return getattr(driver, "_public_url", None) or driver.current_url
 
 
 def take_screenshot(driver, job_code: str) -> str:
@@ -2176,7 +2227,7 @@ def main():
             print("[ERROR] .env 에 CRAIGSLIST_EMAIL / CRAIGSLIST_PASSWORD 필요")
             sys.exit(1)
         print("\n[DIAGNOSE] 로그인 후 카테고리 선택 페이지까지 진행합니다...")
-        driver = build_driver(headless=False)
+        driver = build_driver(headless=False, account=args.account)
         try:
             if not cl_login(driver):
                 print("[ABORT] 로그인 실패")
@@ -2403,7 +2454,7 @@ def main():
         print(f"\nChrome 시작... {len(ad_list)}건 게시 예정 (headless={hl_flag})")
         if _HAS_OVERLAY:
             show_working(current=0, total=len(ad_list), email=CL_EMAIL)
-        driver = build_driver(headless=hl_flag)
+        driver = build_driver(headless=hl_flag, account=args.account)
         posted = 0
 
         try:
@@ -2489,7 +2540,7 @@ def main():
                         import time as _t_restart
                         _t_restart.sleep(5)
                         try:
-                            driver = build_driver(headless=hl_flag)
+                            driver = build_driver(headless=hl_flag, account=args.account)
                             if cl_login(driver):
                                 print("[RESTART] Chrome 재시작 + 재로그인 완료 → 게시 재개")
                                 _log_event("info", "--", "session_restart",

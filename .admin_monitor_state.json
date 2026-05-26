@@ -1,10 +1,10 @@
 {
-  "checks": 2394,
+  "checks": 4016,
   "lockouts_detected": 1,
   "recoveries": 2,
   "consecutive_blocks": 0,
   "last_status": "normal",
-  "last_check": "2026-05-18T09:57:00.335615",
+  "last_check": "2026-05-26T11:17:00.274082",
   "last_recovery_attempt": "2026-05-09T19:37:01.285622",
   "last_recovery": "2026-05-09T19:40:35.359780"
 }

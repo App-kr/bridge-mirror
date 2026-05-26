@@ -875,10 +875,30 @@ class AdminBoard:
         self.root.minsize(260, 56)
         # 2026-04-28: toolwindow 제거 (사용자 요청 — 알트탭/작업표시줄 정상 표시)
 
+        # 작업표시줄 AD 로고 (사용자 요청 2026-05-22) — iconbitmap + iconphoto 둘 다
         _ico = _DIR / "rpa_icon.ico"
         if _ico.exists():
-            try: self.root.iconbitmap(str(_ico))
-            except Exception: pass
+            try: self.root.iconbitmap(default=str(_ico))
+            except Exception:
+                try: self.root.iconbitmap(str(_ico))
+                except Exception: pass
+            try:
+                # iconphoto: Windows 11/10 작업표시줄 안정적
+                _img = tk.PhotoImage(file=str(_DIR / "rpa_icon_preview.png"))
+                self.root.iconphoto(True, _img)
+                self._app_icon = _img   # GC 방지
+            except Exception:
+                pass
+        # pump 창도 동일 아이콘 (혹시라도 보이면)
+        try: self._pump.iconbitmap(default=str(_ico))
+        except Exception: pass
+
+        # Windows AppUserModelID 설정 — 작업표시줄 그룹화 + 아이콘 강제 적용
+        try:
+            import ctypes as _ct_appid
+            _ct_appid.windll.shell32.SetCurrentProcessExplicitAppUserModelID("BRIDGE.RPA.Admin.AD")
+        except Exception:
+            pass
 
         self._accounts    = _load_accounts()
         self._cards: list[AccountCard] = []

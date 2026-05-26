@@ -725,49 +725,52 @@ def build_reply(first_name: str, orig_subject: str, form_url: str,
 
     if source == "craigslist":
         intro_plain = (
-            "Thanks for reaching out about our Craigslist posting!\n\n"
-            "To officially apply for this specific role, please take 3 minutes "
-            "to complete your registration here:)"
+            "Thanks for reaching out about our Craigslist posting!\n"
+            "As this is an online application process, submitting the form and attending a brief "
+            "meeting with our team are mandatory steps. Even if you have a busy schedule, please "
+            "take a few minutes to complete and submit the form below :)"
         )
         intro_html = (
-            "<p>Thanks for reaching out about our Craigslist posting!</p>"
-            "<p>To officially apply for this specific role, please take 3 minutes "
-            "to complete your registration here:)</p>"
+            "<p>Thanks for reaching out about our Craigslist posting!<br>"
+            "As this is an online application process, submitting the form and attending a brief "
+            "meeting with our team are mandatory steps. Even if you have a busy schedule, please "
+            "take a few minutes to complete and submit the form below :)</p>"
         )
     else:
         intro_plain = (
-            "We’ve received your email. Since our recruitment runs fully online, "
-            "completing the registration form and a short team interview are required steps.\n\n"
-            "Please take 3 minutes to fill out our application form:)"
+            "Thanks for reaching out!\n"
+            "As this is an online application process, submitting the form and attending a brief "
+            "meeting with our team are mandatory steps. Even if you have a busy schedule, please "
+            "take a few minutes to complete and submit the form below :)"
         )
         intro_html = (
-            "<p>We’ve received your email. Since our recruitment runs fully online, "
-            "completing the registration form and a short team interview are required steps.</p>"
-            "<p>Please take 3 minutes to fill out our application form:)</p>"
+            "<p>Thanks for reaching out!<br>"
+            "As this is an online application process, submitting the form and attending a brief "
+            "meeting with our team are mandatory steps. Even if you have a busy schedule, please "
+            "take a few minutes to complete and submit the form below :)</p>"
         )
 
     plain = (
         "Hello, This is BRIDGE Agency.\n\n"
         f"{intro_plain}\n\n"
         f"\U0001f449\U0001f3fc [English Teacher Application Form]: {_APPLY_URL}\n\n"
-        "Please ensure you upload:\n"
+        "Please ensure you upload:\n\n"
         "  • Updated CV (with clear school info, and MM/YY dates)\n"
         "  • Cover Letter & Recent Photo\n"
         "  • Scanned Apostilled Documents\n"
         "  • Short Video Intro (1–3 mins) (Mandatory for South African citizens for compliance)\n\n"
         "Once reviewed, we will contact you for a quick 5 minute Google Meet.\n\n"
         "Kind regards,\n"
-        "BRIDGE Team\n\n"
-        "Note: Applicants must hold citizenship from the US, UK, CA, IE, AU, NZ, or ZA due to visa regulations."
+        "BRIDGE Team"
     )
 
     html = (
-        "<div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6'>"
+        "<div style=’font-family:Arial,sans-serif;font-size:14px;line-height:1.6’>"
         "<p>Hello, This is BRIDGE Agency.</p>"
         f"{intro_html}"
-        f"<p>\U0001f449\U0001f3fc <a href='{_APPLY_URL}'>[English Teacher Application Form]</a></p>"
+        "<p>\U0001f449\U0001f3fc <a href=\"" + _APPLY_URL + "\" style=\"color:#0071e3;font-weight:bold;text-decoration:underline\">[English Teacher Application Form]</a></p>"
         "<p>Please ensure you upload:</p>"
-        "<ul style='margin:0 0 12px 20px;padding:0'>"
+        "<ul style=’margin:0 0 12px 20px;padding:0’>"
         "<li>Updated CV (with clear school info, and MM/YY dates)</li>"
         "<li>Cover Letter &amp; Recent Photo</li>"
         "<li>Scanned Apostilled Documents</li>"
@@ -775,8 +778,6 @@ def build_reply(first_name: str, orig_subject: str, form_url: str,
         "</ul>"
         "<p>Once reviewed, we will contact you for a quick 5 minute Google Meet.</p>"
         "<p>Kind regards,<br>BRIDGE Team</p>"
-        "<p style='color:#666;font-size:12px'><strong>Note:</strong> Applicants must hold citizenship "
-        "from the US, UK, CA, IE, AU, NZ, or ZA due to visa regulations.</p>"
         "</div>"
     )
 
@@ -879,6 +880,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
     processed = _load_processed()  # Message-ID 기반 영구 중복 셋
     _session_ids: set = set()      # 이번 실행 내 uid 캐시 (빠른 중복 방지)
+    _session_names: set = set()    # 이번 실행 내 발송한 from_name 캐시 (동시 다중 CL 지원 중복 차단)
 
     imap = imap_connect(cfg)
     if imap is None:
@@ -947,11 +949,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                 #   (중복 발송 방지는 하단 STEP B-0 DB 이력 체크가 담당)
                 _is_craigslist_relay = from_addr.strip().lower().endswith("@reply.craigslist.org")
                 if subject.strip().lower().startswith("re:") and not _is_craigslist_relay:
-                    log.info(f"[CONV] Re: subject → 대화 중 회신, 읽음 처리: {from_addr} | {subject}")
-                    try:
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
-                    except Exception:
-                        pass
+                    log.info(f"[CONV] Re: subject → 대화 중 회신, 안읽음 유지: {from_addr} | {subject}")
                     processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
@@ -1058,23 +1056,24 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     continue  # Teast 처리 완료 — 일반 로직 건너뜀
 
                 # ── STEP B-0: 이미 발송한 주소 → 대화 중, 안읽음 유지 ────────
-                # DB 기록(자동발송) + 이름 기반 단기간 dedup (craigslist reply 우회 차단)
+                # DB 기록(자동발송) + 이름 기반 단기간 dedup (craigslist relay 우회 차단)
                 # + Gmail 보낸편지함(수동발송 포함 전체) 이중 체크
+
+                # 세션 내 이름 캐시 — 같은 사람이 여러 CL 포스팅에 동시 지원 시 중복 차단
+                _name_key = from_name.strip().lower() if from_name and from_name.strip() else None
+                if _name_key and _name_key in _session_names:
+                    log.info(f"[DEDUP] 세션 내 동일 이름 재등장 → 스킵: '{from_name}' | {subject}")
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
+                    continue
+
                 if already_replied(from_addr, from_name=from_name, days=30):
                     log.info(f"[CONV] DB 발송 이력 있음 → 안읽음 유지: '{from_name}' <{from_addr}> | {subject}")
-                    try:
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
-                    except Exception:
-                        pass
                     processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
                 if has_prior_contact(imap, from_addr, uid):
                     log.info(f"[CONV] 1년이내 연락 이력 있음 → 안읽음 유지: {from_addr} | {subject}")
-                    try:
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
-                    except Exception:
-                        pass
                     processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
@@ -1161,11 +1160,7 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                     "forms.gle/y5sute6253qlbr5v8",
                 ]
                 if any(m in body.lower() for m in _BRIDGE_MARKERS):
-                    log.info(f"[CONV] BRIDGE 회신 인용 감지 → 읽음 처리: {from_addr} | {subject}")
-                    try:
-                        imap.store(uid_b, "+FLAGS", "\\Seen")
-                    except Exception:
-                        pass
+                    log.info(f"[CONV] BRIDGE 회신 인용 감지 → 안읽음 유지: {from_addr} | {subject}")
                     processed.add(_mid_key); _session_ids.add(uid)
                     _save_processed(processed)
                     continue
@@ -1210,7 +1205,8 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
                             f"👤 {from_name}\n"
                             f"💬 {subject}\n"
                             f"→ Gmail 직접 확인 필요")
-                    _session_ids.add(uid)
+                    processed.add(_mid_key); _session_ids.add(uid)
+                    _save_processed(processed)
                     continue
 
                 if not is_applicant(subject, body):
@@ -1235,6 +1231,9 @@ def process_inbox(cfg: dict, force: bool = False) -> None:
 
                     if ok:
                         dual_notify(cfg, f"강사 {from_name} - 메일기록 1회 첫 접수 안내메일 발송완료")
+                        # 세션 이름 캐시 등록 — 같은 사람의 추가 CL relay 이메일 중복 차단
+                        if _name_key:
+                            _session_names.add(_name_key)
                         # 읽음 처리
                         try:
                             imap.store(uid_b, "+FLAGS", "\\Seen")
