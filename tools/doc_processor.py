@@ -1358,7 +1358,9 @@ RE_FOREIGN_CITY = re.compile(
 # 한국 도시+국가 주소 패턴: "Gwangmyeong, South Korea", "Suwon, Korea"
 # → 통째로 redact (주소줄 전체 삭제)
 RE_KR_CITY_COUNTRY = re.compile(
-    r'\b[A-Za-z][A-Za-z\s\-]{2,30},\s*(?:South\s+Korea|Korea|Republic\s+of\s+Korea)\b',
+    # ★ 공백(\s) 제거: "English Private academy, South Korea" 같은 직업타이틀 오매칭 방지
+    # 한국 도시명은 단일단어(Gwangmyeong / Suwon-si) → 공백 불필요
+    r'\b[A-Za-z][A-Za-z\-]{2,20},\s*(?:South\s+Korea|Korea|Republic\s+of\s+Korea)\b',
     re.I
 )
 
@@ -3509,26 +3511,32 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             while _brand_words and _brand_words[-1].lower() in _TYPE_MODIFIERS:
                                 _modifiers.insert(0, _brand_words.pop())
                             _full_type = " ".join(_modifiers + [_type_main])
-                            _rest = _bp_match.group(3)
-                            # 세부구역 제거
-                            _rest = re.sub(
-                                r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
-                                '', _rest, flags=re.I,
-                            )
-                            # 도시명 → 상위지역 매핑
-                            def _map_city(_cm):
-                                _cw = _cm.group(0)
-                                _parent = _KR_CITY_PARENT.get(_cw.lower())
-                                return _parent if _parent else _cw
-                            _rest = re.sub(
-                                r'\b[A-Z][a-z]{2,}\b',
-                                _map_city, _rest,
-                            )
-                            _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
-                            _rest = re.sub(r',\s*,', ',', _rest)
-                            _rest = re.sub(r'\|\s*,', '|', _rest)
-                            _rest = re.sub(r',\s*\|', ' |', _rest)
-                            _new_line = f"{_full_type} {_rest}".strip()
+                            # ★ 브랜드 단어가 없으면 교체 불필요 — 이미 클린한 줄
+                            # 예: "English Private academy, South Korea" → 브랜드 없음 → 스킵
+                            # !! 이 줄을 KR_INST_REPLACE로 처리하면 insert_text 실패 시 줄 전체 공백화됨
+                            if not _brand_words:
+                                _new_line = None  # 스킵 플래그
+                            else:
+                                _rest = _bp_match.group(3)
+                                # 세부구역 제거
+                                _rest = re.sub(
+                                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                                    '', _rest, flags=re.I,
+                                )
+                                # 도시명 → 상위지역 매핑
+                                def _map_city(_cm):
+                                    _cw = _cm.group(0)
+                                    _parent = _KR_CITY_PARENT.get(_cw.lower())
+                                    return _parent if _parent else _cw
+                                _rest = re.sub(
+                                    r'\b[A-Z][a-z]{2,}\b',
+                                    _map_city, _rest,
+                                )
+                                _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
+                                _rest = re.sub(r',\s*,', ',', _rest)
+                                _rest = re.sub(r'\|\s*,', '|', _rest)
+                                _rest = re.sub(r',\s*\|', ' |', _rest)
+                                _new_line = f"{_full_type} {_rest}".strip()
                         else:
                             # Prose guard: 대명사/전치사로 시작하는 서술문은 KR_INST_REPLACE 스킵
                             # "I worked at Altiora..." / "While at JLS..." 등 prose 줄 보호
@@ -3881,8 +3889,18 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
             # 한국 도시+국가 주소줄: separator 없는 단독 주소만 삭제
+            # ★ 제네릭 단어(academy/school/institute 등) 앞에 오는 매칭은 제외
+            #   → "academy, South Korea" 오매칭 방지 (RE_KR_CITY_COUNTRY는 도시명만 의도)
+            _KR_CITY_COUNTRY_SKIP = frozenset({
+                "academy", "school", "institute", "center", "centre", "english",
+                "language", "private", "public", "international", "global",
+                "kindergarten", "preschool", "teaching", "hagwon", "village",
+            })
             if not _line_has_sep:
                 for m in RE_KR_CITY_COUNTRY.finditer(_ls):
+                    _city_word = m.group().split(",")[0].strip().lower()
+                    if _city_word in _KR_CITY_COUNTRY_SKIP:
+                        continue  # 제네릭 단어 → 스킵
                     redact_texts.add(m.group())
                     all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
             # 연락 초대 줄: "please email me at X", "find me on WhatsApp" → 줄 전체 redact
@@ -3968,10 +3986,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 elif _CONTACT_INVITE_RE.search(_pltxt_lower) or _CONTACT_PLATFORM_RE.search(_pltxt_lower):
                     _hit, _reason = True, "CONTACT_INVITE"
                 elif RE_KR_CITY_COUNTRY.search(_pltxt):
-                    # 한국 주소 — 짧은(≤50자) + separator 없는 단독 주소줄만 삭제
-                    # ※ 긴 prose 줄("I worked at X academy in Gwangmyeong, South Korea...")은
-                    #   브랜드명 whitebox + 도시명 redact로 처리 (줄 전체 삭제 금지)
-                    if not _has_separator and len(_pltxt) <= 50:
+                    # 한국 주소 — 짧은(≤35자) + separator 없는 단독 주소줄만 삭제
+                    # "Gwangmyeong, South Korea" (24자) / "Seoul, South Korea" (18자) 등
+                    # ※ "English private academy, South Korea (2019-2021)" 같은 직업타이틀(50자+)은 제외
+                    if not _has_separator and len(_pltxt) <= 35:
                         _hit, _reason = True, "KR_ADDR_LINE"
                 elif (RE_FOREIGN_CITY.search(_pltxt) and _is_short and not _has_separator):
                     _hit, _reason = True, "FOREIGN_ADDR_LINE"
@@ -4263,10 +4281,19 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _is_jt_processed = any(abs(_pjr[1] - _ln_bbox_y) < 2 for _pjr in _processed_jt_bboxes)
                 except NameError:
                     _is_jt_processed = False
-                if not _is_jt_processed and RE_KR_CITY_COUNTRY.search(_lstripped):
-                    page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
-                    _has_extra = True
-                    all_logs.append(f"[page{page_num}] KR_ADDR_BBOX: {_lstripped[:50]}")
+                _kcc_m = RE_KR_CITY_COUNTRY.search(_lstripped)
+                if not _is_jt_processed and _kcc_m:
+                    # 제네릭 단어(academy/school/institute 등) 앞에 오는 오매칭 필터
+                    _kcc_city = _kcc_m.group().split(",")[0].strip().lower()
+                    _KCC_SKIP = frozenset({
+                        "academy", "school", "institute", "center", "centre", "english",
+                        "language", "private", "public", "international", "global",
+                        "kindergarten", "preschool", "teaching", "hagwon", "village",
+                    })
+                    if _kcc_city not in _KCC_SKIP:
+                        page.add_redact_annot(fitz.Rect(_lnobj["bbox"]), fill=(1, 1, 1))
+                        _has_extra = True
+                        all_logs.append(f"[page{page_num}] KR_ADDR_BBOX: {_lstripped[:50]}")
         if _has_extra:
             page.apply_redactions()
 
