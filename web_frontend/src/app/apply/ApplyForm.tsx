@@ -10,7 +10,7 @@ import { useState, useRef, useEffect } from 'react'
 import { resizeImage } from '@/lib/image-resize'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
-import { API_URL } from '@/lib/api'
+import { API_URL, fetchWithRetry } from '@/lib/api'
 import { APPLY_DEFAULTS } from '@/lib/form-defaults'
 
 const API       = API_URL
@@ -512,11 +512,12 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
       }
       let res: Response
       try {
-        res = await fetch(`${API}/api/apply`, {
+        // fetchWithRetry: Render cold start(30~60s) 대응 — 최대 3회, 2s/4s/6s 간격
+        res = await fetchWithRetry(`${API}/api/apply`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        })
+        }, 3)
       } catch (netErr) {
         const msg = netErr instanceof Error ? netErr.message : 'Network error'
         throw new Error(`Network error: ${msg}. Please check your connection and try again.`)

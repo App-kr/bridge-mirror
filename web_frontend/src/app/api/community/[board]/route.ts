@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchBoardPostsFromRender } from '@/lib/db'
 
-const VALID_BOARDS = ['about', 'korea', 'visa', 'support', 'support_kr', 'tips', 'testimonials']
+const VALID_BOARDS = [
+  'about', 'korea', 'visa', 'visa_type', 'visa_related', 'immigration',
+  'support', 'support_kr', 'tips', 'testimonials', 'information',
+]
 
 export async function GET(
   request: NextRequest,

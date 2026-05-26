@@ -21,6 +21,26 @@ const HUB_CARDS = [
     hoverBorder: 'hover:border-amber-300',
     iconBg: 'bg-amber-100',
   },
+  {
+    slug: 'visa',
+    emoji: '🛂',
+    title: 'Visa & Immigration',
+    titleKr: '비자 안내',
+    description: 'Work visa guides, apostille, immigration requirements, and residency tips.',
+    gradient: 'from-violet-50 to-purple-50',
+    hoverBorder: 'hover:border-violet-300',
+    iconBg: 'bg-violet-100',
+  },
+  {
+    slug: 'korea',
+    emoji: '🇰🇷',
+    title: 'Life in Korea',
+    titleKr: '한국 생활',
+    description: 'Culture, banking, healthcare, housing, and daily life advice for expat teachers.',
+    gradient: 'from-rose-50 to-pink-50',
+    hoverBorder: 'hover:border-rose-300',
+    iconBg: 'bg-rose-100',
+  },
 ]
 
 export default function CommunityPage() {
@@ -37,7 +57,7 @@ export default function CommunityPage() {
       </div>
 
       {/* Hub Cards */}
-      <div className="flex flex-col sm:flex-row justify-center gap-6 max-w-2xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
         {HUB_CARDS.map((card) => (
           <Link
             key={card.slug}

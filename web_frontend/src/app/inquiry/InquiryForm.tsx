@@ -10,7 +10,7 @@
 import { useState, useRef, useEffect } from 'react'
 import PuzzleCaptcha from '@/components/PuzzleCaptcha'
 
-import { API_URL } from '@/lib/api'
+import { API_URL, fetchWithRetry } from '@/lib/api'
 import { INQUIRY_DEFAULTS } from '@/lib/form-defaults'
 
 const API = API_URL
@@ -331,11 +331,12 @@ export default function InquiryForm({ config = {} }: { config: Record<string, st
       }
       let res: Response
       try {
-        res = await fetch(`${API}/api/inquiry`, {
+        // fetchWithRetry: Render cold start(30~60s) 대응 — 최대 3회, 2s/4s/6s 간격
+        res = await fetchWithRetry(`${API}/api/inquiry`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        })
+        }, 3)
       } catch (netErr) {
         const m = netErr instanceof Error ? netErr.message : 'Network error'
         throw new Error(`Network error: ${m}. Please check your connection and try again.`)
