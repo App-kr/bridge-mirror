@@ -59,6 +59,52 @@ def main() -> int:
         print(f"[FAIL] PII 감지: {e}", file=sys.stderr)
         return 10
 
+    # ⚠️ 영구 cleanup (사용자 요청 2026-05-26): extra_lines 오염 자동 정리
+    # 매일 06:30 sync 후에도 RPA가 bad_body 가드로 SKIP 안 되도록
+    print("\n== 2.5/4 cleanup: extra_lines 오염 자동 정리 ==")
+    import json, re
+    jobs_json = ad / "jobs_clean.json"
+    raw = json.load(jobs_json.open(encoding="utf-8"))
+    NOISE_PATTERNS = [
+        re.compile(r'^(Starting Date|Working Hours?|Working hour|Monthly Salary|Teaching Age|Teaching hours?|Class size|Vacation|Housing|Native Teacher|Number of Native English Speakers|Average Teaching Hours)\s*:', re.I),
+    ]
+    CITIES = set('seoul busan incheon daegu daejeon gwangju ulsan sejong suwon seongnam goyang yongin hwaseong bucheon anyang anseong pyeongtaek ansan siheung gimpo paju hanam namyangju gunpo uijeongbu guri uiwang gwangmyeong osan yangju dongducheon cheonan asan cheongju chungbuk chuncheon wonju gangneung gangwon jeonju jeju pohang gyeongju changwon masan jinju tongyeong geoje gimhae yangsan gunsan yeosu sunchun gwangyang'.split())
+    def is_noise(line):
+        s = (line or "").strip()
+        if not s or len(s) <= 2: return True
+        for pat in NOISE_PATTERNS:
+            if pat.search(s): return True
+        words = re.split(r'[,\s]+', s)
+        words = [w for w in words if w]
+        if 1 <= len(words) <= 3 and all(w.lower() in CITIES for w in words):
+            return True
+        if words and words[0].lower() in CITIES and len(words) <= 4:
+            rest = ' '.join(words[1:]).lower()
+            if rest in ('northern area','southern area','eastern area','western area',
+                        'coastal city','central area'):
+                return True
+        return False
+
+    cleaned = 0
+    bad_loc_fixed = 0
+    for j in raw.get("jobs", []):
+        # extra_lines 정리
+        extras = j.get("extra_lines") or []
+        if isinstance(extras, str):
+            extras = [extras] if extras else []
+        new_extras = [ln for ln in extras if not is_noise(ln)]
+        if new_extras != extras:
+            j["extra_lines"] = new_extras
+            cleaned += 1
+        # location 'Job.' 오염 자동 수정
+        loc = (j.get("location") or "").strip()
+        if loc.startswith("Job."):
+            j["location"] = ""
+            bad_loc_fixed += 1
+
+    json.dump(raw, jobs_json.open("w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"[OK] 노이즈 정리 {cleaned}건 / location 오염 수정 {bad_loc_fixed}건")
+
     rc = _run(ad / "export_frontend_mirror.py", "3/4 export_frontend_mirror")
     if rc != 0:
         return rc

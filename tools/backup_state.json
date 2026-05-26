@@ -2119,8 +2119,16 @@
       "git": "af72ab63",
       "files": 4084,
       "db_hash": "53e69b5d5cf2"
+    },
+    {
+      "dir": "20260526_154550__폴백JSON+fetchWithRetry+VALID_BOARDS_패치",
+      "task": "폴백JSON+fetchWithRetry+VALID_BOARDS 패치",
+      "ts": "2026.05.26 15:46:07",
+      "git": "767dcec3",
+      "files": 4096,
+      "db_hash": "ae54a5d2d1fe"
     }
   ],
-  "last_backup": "2026.05.26 11:16:52",
-  "total_count": 265
+  "last_backup": "2026.05.26 15:46:07",
+  "total_count": 266
 }
