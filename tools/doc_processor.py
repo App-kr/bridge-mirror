@@ -1509,7 +1509,9 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "reading star",
     "april learning", "april english",
     "langcon",
-    "altiora",
+    "altiora", "altiora pangram",          # Altiora Pangram 복합 브랜드
+    "pangram",                             # "Pangram" 단독 — Altiora Pangram 잔류 제거용
+    "brandy", "brandy english", "brandy english academy",  # Brandy English Private Academy
     "herald",
     "plato ap", "plato",
     "key english",  # KEY (key 단독은 일반 영단어 → 미등록)
@@ -1539,7 +1541,6 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "seouldal",
     "top edu",
     "dada", "dadahak",
-    "altiora",
     "emg education",
     "emg",
     "hampson",
@@ -3482,7 +3483,16 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _has_brand_pipe = False
                     if _bp_match and ('south korea' in s_lower or 'korea' in s_lower
                                       or _has_kr_district or has_kr_work):
-                        _has_brand_pipe = True
+                        # Prose guard: re.IGNORECASE 로 "at/in/I worked..." 같은 서술문도
+                        # [A-Z][\w']+ 에 매칭됨 → 줄이 대명사/전치사로 시작하면 brand_pipe 비활성화
+                        _BP_PROSE_STARTERS = (
+                            "i ", "i'", "at ", "in ", "for ", "the ", "a ", "an ",
+                            "my ", "we ", "our ", "while ", "during ", "as ",
+                            "also ", "and ", "where ", "which ", "who ", "it ",
+                            "here ", "there ", "this ", "that ", "these ", "those ",
+                        )
+                        if not any(s_lower.startswith(_bps) for _bps in _BP_PROSE_STARTERS):
+                            _has_brand_pipe = True
 
                     if _has_br_marker or _has_kr_district or has_kr_work or _has_brand_pipe:
                         if _has_brand_pipe and _bp_match:
@@ -3520,19 +3530,42 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                             _rest = re.sub(r',\s*\|', ' |', _rest)
                             _new_line = f"{_full_type} {_rest}".strip()
                         else:
-                            _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
-                            _new_line = f"{_gen_cap}, South Korea"
-                        _existing_idx = next(
-                            (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped),
-                            -1
-                        )
-                        if _existing_idx >= 0:
-                            job_title_replaces[_existing_idx] = (stripped, _new_line)
-                        else:
-                            job_title_replaces.append((stripped, _new_line))
-                        all_logs.append(
-                            f"[page{page_num}] KR_INST_REPLACE: {stripped[:60]} → {_new_line[:60]}"
-                        )
+                            # Prose guard: 대명사/전치사로 시작하는 서술문은 KR_INST_REPLACE 스킵
+                            # "I worked at Altiora..." / "While at JLS..." 등 prose 줄 보호
+                            # → 브랜드명만 아래 KR_ACADEMY_PROSE whitebox 블록이 처리
+                            # !! continue 사용 금지 — 이후 KR_ACADEMY_PROSE 스캔이 실행돼야 함
+                            _PROSE_STARTERS = (
+                                "i ", "i'", "while ", "during ", "as a", "at the",
+                                "at ", "the ", "a ", "an ", "my ", "we ", "our ",
+                                "in ", "for ", "this ", "that ", "these ", "those ",
+                                "here ", "there ", "each ", "every ", "it ",
+                                "working ", "worked ", "teaching ", "taught ",
+                                "responsible ", "managed ", "developed ",
+                                "also ", "and ", "where ", "which ", "who ",
+                                "students ", "classes ", "curriculum ", "lessons ",
+                            )
+                            _is_prose = any(s_lower.startswith(_ps) for _ps in _PROSE_STARTERS)
+                            if _is_prose:
+                                all_logs.append(
+                                    f"[page{page_num}] KR_INST_REPLACE_SKIP(prose): {stripped[:60]}"
+                                )
+                                _new_line = None  # 플래그: append 스킵
+                            else:
+                                _gen_cap = " ".join(w.capitalize() for w in _matched_generic.split())
+                                _new_line = f"{_gen_cap}, South Korea"
+                        # brand_pipe 또는 non-prose else 경우에만 append
+                        if _new_line is not None:
+                            _existing_idx = next(
+                                (i for i, (o, _) in enumerate(job_title_replaces) if o == stripped),
+                                -1
+                            )
+                            if _existing_idx >= 0:
+                                job_title_replaces[_existing_idx] = (stripped, _new_line)
+                            else:
+                                job_title_replaces.append((stripped, _new_line))
+                            all_logs.append(
+                                f"[page{page_num}] KR_INST_REPLACE: {stripped[:60]} → {_new_line[:60]}"
+                            )
 
             if _idx in _edu_lines:
                 continue
@@ -3776,20 +3809,24 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         f"[page{page_num}] KR_DISTRICT_CLEAN: {stripped[:50]} → {_dist_cleaned[:50]}"
                     )
 
-            # 비직업타이틀 학원명: 한국 키워드 있거나 짧은 줄일 때만 redact
-            # len <= 55: 경계값(50자) 라인도 포함 ("at Poly. New teachers..." 등)
-            # not has_kr 조건 제거: "Korea Poly School" 처럼 국가명+학원명 조합도 전체 삭제
-            if has_kr_work and not _is_job_line_kw and (has_kr or len(stripped) <= 55):
-                if len(stripped) <= 55:
+            # 비직업타이틀 학원명 처리 (prose 텍스트 포함)
+            # - 짧은 줄(≤55) + 한국 컨텍스트: 줄 전체 삭제
+            # - 모든 길이: 브랜드 키워드 단어 단위 whitebox (길이 제한 없음)
+            #   ← prose 텍스트 "I worked at Altiora Pangram English academy in Gwangmyeong..."
+            #      에서도 브랜드명만 선택적으로 제거하기 위해 길이 조건 제거
+            if has_kr_work and not _is_job_line_kw:
+                if (has_kr or len(stripped) <= 55) and len(stripped) <= 55:
                     redact_texts.add(stripped)
                     all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
+                # 브랜드 키워드 단어 단위 redact — 길이 제한 없이 항상 실행
+                # (prose 줄에서 "Altiora Pangram"만 지우고 나머지 근무 내용 보존)
                 for kw in KR_WORKPLACE_KEYWORDS:
                     if kw in _GENERIC_TYPES_SET:
                         continue  # 유형명 유지
                     kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
                     for m in kw_pat.finditer(stripped):
                         redact_texts.add(m.group())
-                        all_logs.append(f"[page{page_num}] KR_ACADEMY: {m.group()}")
+                        all_logs.append(f"[page{page_num}] KR_ACADEMY_PROSE: {m.group()}")
 
             # 한국 도시명 처리 (korea 자체는 유지)
             # 사용자 요청: "특정지역 언급시 South Korea로 변경"
@@ -3931,9 +3968,10 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                 elif _CONTACT_INVITE_RE.search(_pltxt_lower) or _CONTACT_PLATFORM_RE.search(_pltxt_lower):
                     _hit, _reason = True, "CONTACT_INVITE"
                 elif RE_KR_CITY_COUNTRY.search(_pltxt):
-                    # 한국 주소 — 학교 줄("English Academy, Seoul" 등)도 통째 삭제하지 말고
-                    # "|" 없는 짧은 단독 주소줄만
-                    if not _has_separator:
+                    # 한국 주소 — 짧은(≤50자) + separator 없는 단독 주소줄만 삭제
+                    # ※ 긴 prose 줄("I worked at X academy in Gwangmyeong, South Korea...")은
+                    #   브랜드명 whitebox + 도시명 redact로 처리 (줄 전체 삭제 금지)
+                    if not _has_separator and len(_pltxt) <= 50:
                         _hit, _reason = True, "KR_ADDR_LINE"
                 elif (RE_FOREIGN_CITY.search(_pltxt) and _is_short and not _has_separator):
                     _hit, _reason = True, "FOREIGN_ADDR_LINE"
