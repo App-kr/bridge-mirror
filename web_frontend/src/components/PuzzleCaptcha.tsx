@@ -1,10 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import TurnstileCaptcha from './TurnstileCaptcha'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const CW = 420
 const CH = 260
+
+// Cloudflare Turnstile 우선 사용 (NEXT_PUBLIC_TURNSTILE_SITE_KEY 설정 시)
+// 미설정 시 기존 puzzle 폴백
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
 type CaptchaType = 'slide' | 'rotate' | 'order'
 
@@ -435,7 +440,16 @@ function drawOrder(ctx: CanvasRenderingContext2D, s: OrderState) {
 }
 
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────────
-export default function PuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
+// 디스패처: Turnstile 우선 / Puzzle 폴백
+// React hooks 규칙 준수를 위해 자식 컴포넌트로 분리
+export default function PuzzleCaptcha({ onVerified, onError }: PuzzleCaptchaProps) {
+  if (TURNSTILE_SITE_KEY) {
+    return <TurnstileCaptcha siteKey={TURNSTILE_SITE_KEY} onVerified={onVerified} onError={onError} />
+  }
+  return <InternalPuzzleCaptcha onVerified={onVerified} onError={onError} />
+}
+
+function InternalPuzzleCaptcha({ onVerified }: PuzzleCaptchaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isVerified, setIsVerified] = useState(false)
 

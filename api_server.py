@@ -6043,15 +6043,67 @@ _CAPTCHA_HMAC_KEY: bytes = _raw_hmac_key.encode()
 _CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "true").lower() != "false"
 _CAPTCHA_NONCES: "dict[str, float]" = {}  # nonce → 만료 시각(epoch)
 
+# Cloudflare Turnstile (무료 무제한, 봇 검증 — invisible 위주)
+# 환경변수 TURNSTILE_SECRET_KEY 설정 시 자동 활성화. 미설정 시 기존 puzzle 폴백.
+_TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "").strip()
+_TURNSTILE_USED_TOKENS: "dict[str, float]" = {}  # token → 만료 시각(1회용 마킹)
+
+
+def _verify_turnstile_token(token: str, ip_hash: str) -> bool:
+    """Cloudflare Turnstile 토큰 서버 측 검증.
+    Cloudflare API에 토큰 전달 → success 응답 확인 + 1회용 마킹.
+    무료 무제한 사용 가능. 시크릿 미설정 시 False (기존 puzzle 폴백 유도).
+    """
+    if not _TURNSTILE_SECRET_KEY:
+        return False
+    if not token or len(token) < 20 or len(token) > 2048:
+        return False
+    # 1회용 마킹 검사 (replay 차단)
+    now_sec = _time.time()
+    if token in _TURNSTILE_USED_TOKENS and _TURNSTILE_USED_TOKENS[token] > now_sec:
+        logging.getLogger("bridge.security").warning(
+            "[TURNSTILE] 토큰 재사용 차단: token=%s ip=%s", token[:12], ip_hash[:8]
+        )
+        return False
+    # Cloudflare siteverify API 호출 (httpx sync, 5초 타임아웃)
+    try:
+        import httpx as _hx
+        with _hx.Client(timeout=5.0) as client:
+            resp = client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": _TURNSTILE_SECRET_KEY, "response": token},
+            )
+        data = resp.json()
+        if not data.get("success"):
+            logging.getLogger("bridge.security").info(
+                "[TURNSTILE] 검증 실패: codes=%s ip=%s", data.get("error-codes"), ip_hash[:8]
+            )
+            return False
+        # 1회용 마킹 (5분 후 만료 — 메모리 절약)
+        _TURNSTILE_USED_TOKENS[token] = now_sec + 300
+        # 만료된 토큰 정리
+        expired = [t for t, exp in list(_TURNSTILE_USED_TOKENS.items()) if now_sec > exp]
+        for t in expired:
+            del _TURNSTILE_USED_TOKENS[t]
+        return True
+    except Exception as _e:
+        logging.getLogger("bridge.security").error("[TURNSTILE] 검증 API 호출 실패: %s", _e)
+        # API 실패 시 fail-closed (보안 우선)
+        return False
+
 
 def _verify_captcha_token(token: str, ip_hash: str) -> bool:
-    """CAPTCHA 토큰 검증: 타임스탬프 유효성 + nonce 재사용 방지.
-    C1 패치: return True 하드코딩 제거 -- 실제 검증 수행.
+    """CAPTCHA 토큰 검증.
+    1. Turnstile 토큰 형식이면 Cloudflare API로 검증 (TURNSTILE_SECRET_KEY 필요)
+    2. puzzle_ 토큰이면 기존 puzzle 검증 (폴백)
     """
     if not _CAPTCHA_ENABLED:
         return True
-    if not token or not token.startswith("puzzle_"):
+    if not token:
         return False
+    # Cloudflare Turnstile 우선 시도 (token이 puzzle_ 형식 아닐 때)
+    if not token.startswith("puzzle_"):
+        return _verify_turnstile_token(token, ip_hash)
 
     try:
         # 토큰 형식: puzzle_{timestamp_ms}_{nonce}
