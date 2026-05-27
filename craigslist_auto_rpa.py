@@ -1272,14 +1272,47 @@ def cl_login(driver: webdriver.Chrome) -> bool:
     print("  [1/7] Craigslist 로그인...")
     try:
         driver.get(CL_LOGIN_URL)
-    except Exception:
-        print("  [TIMEOUT] 로그인 페이지 로드 타임아웃 -- 재시도")
+    except Exception as _ge:
+        print(f"  [TIMEOUT] 로그인 페이지 로드 타임아웃 -- 재시도: {_ge}")
         try:
             driver.get(CL_LOGIN_URL)
         except Exception as e:
             print(f"  [LOGIN ERROR] 페이지 로드 실패: {e}")
             return False
     _delay(2, 3)
+
+    # 🎯 핵심 수정 (2026-05-26): Chrome user-data-dir 세션 잔존으로
+    # 이미 로그인된 상태일 수 있음 — 로그인 폼 찾기 전에 먼저 체크
+    try:
+        _src_pre = (driver.page_source or "").lower()
+        if ("log out" in _src_pre or "logout" in _src_pre
+                or "make new post" in _src_pre
+                or "home of " in _src_pre):
+            print(f"  [LOGIN] ✅ 이미 로그인 상태 (세션 재사용)")
+            return True
+    except Exception:
+        pass
+
+    # 진단 로그 (2026-05-26): 페이지 로드 후 현재 URL + 페이지 일부
+    try:
+        _cur_url = driver.current_url
+        print(f"  [DIAG] 현재 URL: {_cur_url}")
+        _src = (driver.page_source or "").lower()
+        # 캡차 / 차단 / 인증 페이지 감지
+        if "captcha" in _src or "recaptcha" in _src:
+            print(f"  [DIAG] ⚠️ CAPTCHA 페이지 감지")
+        if "blocked" in _src or "access denied" in _src or "차단" in _src:
+            print(f"  [DIAG] ❌ 차단 페이지 감지 — craigslist 가 이 IP/계정 차단")
+        if "inputemailhandle" not in _src:
+            print(f"  [DIAG] ⚠️ 로그인 폼 (inputEmailHandle) 없음 — 페이지 개편 또는 차단")
+            # 스크린샷 즉시 저장 (재발 시 원인 식별)
+            try:
+                _diag_ss = SS_DIR / "login_diag.png"
+                driver.save_screenshot(str(_diag_ss))
+                print(f"  [DIAG] 스크린샷: {_diag_ss}")
+            except Exception: pass
+    except Exception as _de:
+        print(f"  [DIAG] page_source 점검 실패: {_de}")
 
     try:
         email_el = WebDriverWait(driver, 15).until(
@@ -2459,8 +2492,12 @@ def main():
 
         try:
             if not cl_login(driver):
-                print("[ABORT] 로그인 실패")
-                _log_event("error", "--", "login", "Login failed -- aborting session")
+                # 사용자 요청 (2026-05-26): 어느 계정 login 실패인지 식별
+                _acct_id = args.account or "default"
+                _acct_email = CL_EMAIL or "?"
+                print(f"[ABORT] 로그인 실패 — 계정: {_acct_id} ({_acct_email})")
+                _log_event("error", "--", "login",
+                           f"Login failed -- account={_acct_id} email={_acct_email}")
                 return 0
 
             for i, (job, title, body, ad_id) in enumerate(ad_list, 1):
