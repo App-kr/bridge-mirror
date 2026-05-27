@@ -737,7 +737,9 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
 
             <section className="card space-y-5">
               <Sec title="Attach Your Files" />
-              <Desc text="Please upload your file to the correct category. Please ensure you upload the original file, rather than a screenshot, Canva link, or AI-generated file." />
+              <p className="text-[14px] text-[#555] leading-relaxed bg-yellow-50 border border-yellow-100 rounded-xl px-4 py-3 -mt-1">
+                Please attach your <strong>original Word or PDF file</strong>. Screenshots, Canva designs, or AI-generated images may display incorrectly on the employer&apos;s device.
+              </p>
 
               {/* ── 1. Photo ── */}
               <QueueZone fileType="photo" icon="📷" hint="Recent Photo (PNG / JPG)" accept="image/jpeg,image/png,image/webp" queuedFiles={queuedFiles} setQueuedFiles={setQueuedFiles} maxFiles={MAX_FILES} />
