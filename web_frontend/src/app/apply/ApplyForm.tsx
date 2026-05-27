@@ -607,18 +607,37 @@ export default function ApplyForm({ config = {} }: { config: Record<string, stri
           Please make sure to turn on your email notifications.
         </p>
 
-        {uploadResults.length > 0 && (
-          <div className="text-left mt-6 p-4 bg-gray-50 rounded-xl border space-y-1">
-            <p className="text-sm font-semibold text-gray-700 mb-2">File Upload Results</p>
-            {uploadResults.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span className={r.ok ? 'text-green-600' : 'text-red-500'}>{r.ok ? 'Uploaded' : 'Failed'}</span>
-                <span className="text-gray-600 truncate">{r.name}</span>
-                {r.error && <span className="text-red-400">({r.error})</span>}
+        {uploadResults.length > 0 && (() => {
+          const failed = uploadResults.filter(r => !r.ok)
+          const succeeded = uploadResults.filter(r => r.ok)
+          return (
+            <div className={`text-left mt-6 p-4 rounded-xl border ${failed.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+              <p className={`text-sm font-bold mb-3 ${failed.length > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                File Upload Results — {succeeded.length} succeeded, {failed.length} failed
+              </p>
+              <div className="space-y-1.5">
+                {uploadResults.map((r, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <span className={`shrink-0 font-semibold ${r.ok ? 'text-green-600' : 'text-red-600'}`}>
+                      {r.ok ? '✓' : '✗'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-gray-800 break-all">{r.name}</div>
+                      {!r.ok && r.error && (
+                        <div className="text-xs text-red-600 mt-0.5">{r.error}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+              {failed.length > 0 && (
+                <p className="text-xs text-red-600 mt-3 pt-3 border-t border-red-100">
+                  ⚠️ Some files failed to upload. Your application is saved — please reply to our email and attach the missing files directly.
+                </p>
+              )}
+            </div>
+          )
+        })()}
       </div>
     )
   }

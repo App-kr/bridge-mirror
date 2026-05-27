@@ -14625,6 +14625,106 @@ async def admin_db_backup(request: Request):
         raise HTTPException(500, f"백업 오류: {e}")
 
 
+@app.get("/api/admin/storage/health", tags=["admin"])
+async def admin_storage_health(request: Request):
+    """스토리지 백엔드 헬스 체크 — S3 + Drive + file_uploads DB 통계.
+    파일 업로드가 안 되는 원인 즉시 진단용. 사용자 폼 업로드 실패 추적.
+    """
+    _check_admin(request)
+    result: dict = {
+        "s3": {"configured": False, "ok": False, "error": None},
+        "drive": {"configured": False, "ok": False, "error": None},
+        "stats": {},
+    }
+
+    # ── 1. S3 헬스 체크 ─────────────────────────────────────────────────────
+    try:
+        from backend.utils.storage import check_s3_connection as _s3_check  # type: ignore
+        s3_status = _s3_check()
+        result["s3"]["configured"] = bool(s3_status.get("configured"))
+        result["s3"]["ok"] = bool(s3_status.get("ok"))
+        if not s3_status.get("ok"):
+            result["s3"]["error"] = s3_status.get("error", "unknown")
+    except Exception as _e:
+        result["s3"]["error"] = f"check 함수 호출 실패: {_e}"
+
+    # ── 2. Drive 헬스 체크 ──────────────────────────────────────────────────
+    try:
+        if _DRIVE_OK:
+            result["drive"]["configured"] = True
+            # 실제 Drive API 호출로 토큰 유효성 검증
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from tools.db_persist import _drive as _get_drive  # type: ignore
+            drv = _get_drive()
+            # about().get() 호출로 토큰 검증 (가벼운 API call)
+            drv.about().get(fields="user").execute()
+            result["drive"]["ok"] = True
+        else:
+            result["drive"]["error"] = "Drive 모듈 import 실패 (drive_storage.py 또는 환경변수 누락)"
+    except Exception as _e:
+        result["drive"]["error"] = f"Drive 토큰 검증 실패: {str(_e)[:200]}"
+
+    # ── 3. file_uploads DB 통계 ─────────────────────────────────────────────
+    try:
+        conn = sqlite3.connect(str(_ADMIN_DB_PATH))
+        try:
+            stats = {}
+            stats["total"] = conn.execute(
+                "SELECT COUNT(*) FROM file_uploads WHERE is_deleted=0"
+            ).fetchone()[0]
+            stats["last_7d"] = conn.execute(
+                "SELECT COUNT(*) FROM file_uploads WHERE is_deleted=0 AND created_at >= datetime('now', '-7 days')"
+            ).fetchone()[0]
+            stats["last_30d"] = conn.execute(
+                "SELECT COUNT(*) FROM file_uploads WHERE is_deleted=0 AND created_at >= datetime('now', '-30 days')"
+            ).fetchone()[0]
+            stats["latest_at"] = conn.execute(
+                "SELECT MAX(created_at) FROM file_uploads WHERE is_deleted=0"
+            ).fetchone()[0]
+            # 키 유형 분포 (s3:// vs drive:// vs NULL)
+            rows = conn.execute(
+                "SELECT CASE "
+                "WHEN s3_key LIKE 'drive://%' THEN 'drive' "
+                "WHEN s3_key IS NULL OR s3_key='' THEN 'null' "
+                "ELSE 's3' END AS kind, COUNT(*) "
+                "FROM file_uploads WHERE is_deleted=0 GROUP BY kind"
+            ).fetchall()
+            stats["by_backend"] = {k: c for k, c in rows}
+            # candidates 보유율
+            cand_total = conn.execute(
+                "SELECT COUNT(*) FROM candidates WHERE status != 'Deleted'"
+            ).fetchone()[0]
+            cand_photo = conn.execute(
+                "SELECT COUNT(*) FROM candidates WHERE status != 'Deleted' AND photo_url IS NOT NULL AND photo_url != ''"
+            ).fetchone()[0]
+            cand_cv = conn.execute(
+                "SELECT COUNT(*) FROM candidates WHERE status != 'Deleted' AND cv_processed_s3_key IS NOT NULL AND cv_processed_s3_key != ''"
+            ).fetchone()[0]
+            stats["candidates_total"] = cand_total
+            stats["candidates_with_photo"] = cand_photo
+            stats["candidates_with_cv"] = cand_cv
+            result["stats"] = stats
+        finally:
+            conn.close()
+    except Exception as _e:
+        result["stats"]["error"] = f"DB 쿼리 실패: {_e}"
+
+    # 진단 메시지 자동 생성
+    diagnosis = []
+    if not result["s3"]["ok"] and not result["drive"]["ok"]:
+        diagnosis.append("🚨 양쪽 스토리지 모두 실패 — 모든 파일 업로드 503 반환 중. 환경변수 확인 필수.")
+    elif not result["s3"]["ok"] and result["drive"]["ok"]:
+        diagnosis.append("✅ S3 미설정/실패. Drive 정상 — 업로드는 Drive로 자동 fallback.")
+    elif result["s3"]["ok"]:
+        diagnosis.append("✅ S3 정상 동작.")
+    stats = result.get("stats", {})
+    if isinstance(stats, dict) and stats.get("last_7d", 0) == 0 and stats.get("candidates_total", 0) > 0:
+        diagnosis.append("⚠️ 최근 7일 파일 업로드 0건 — 폼 흐름 또는 스토리지 이슈 의심.")
+    result["diagnosis"] = diagnosis
+
+    return ok(data=result)
+
+
 @app.get("/api/admin/db/backup-list", tags=["admin"])
 async def admin_db_backup_list(request: Request):
     """Drive 백업 목록 조회 (S3 → Drive 마이그레이션 완료)."""
