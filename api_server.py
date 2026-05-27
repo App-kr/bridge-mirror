@@ -143,9 +143,7 @@ except ImportError:
 
 try:
     from supabase import create_client, Client
-except Exception as _sb_exc:
-    print(f"[ERROR] supabase 로드 실패: {_sb_exc}")
-    import traceback; traceback.print_exc()
+except Exception:
     create_client = None
     Client = None
 
