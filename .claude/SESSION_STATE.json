@@ -1,10 +1,13 @@
 {
-  "last_updated": "2026-05-27 13:33:05",
+  "last_updated": "2026-05-27 13:48:44",
   "last_tool": "Bash",
-  "last_command": "grep -n \"updated_at\\|admin_edit_post\\|async def admin.*edit\\|PUT.*community\\|PATCH.*community.*post\" \"Q:/Claudework/bridge base/api_server.py\" | grep -v \"admin_community\\|is_deleted\\|pinned\\|reorder\\|",
+  "last_command": "\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --no-sandbox \\\n  --print-to-pdf=\"C:/Users/Scarlett/Desktop/투자플랜/투자운영매뉴얼_2026-05-27.pdf\" \\\n  --no-pdf-header-footer \\\n  ",
   "git_head": "fed6c3e7",
   "modified_files": [
-    "Q:\\bridge-overnight\\TEST_REPORT.md"
+    "Q:\\bridge-overnight\\TEST_REPORT.md",
+    "Q:\\Claudework\\bridge base\\api_server.py",
+    "Q:\\Claudework\\bridge base\\.qa_upload_check.py",
+    "C:\\Users\\Scarlett\\Desktop\\투자플랜\\manual_full.html"
   ],
   "current_task": "⏭ 다음 세션 우선순위 (2026-05-10 기준)",
   "git_changed": [
