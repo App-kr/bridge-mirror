@@ -6429,6 +6429,8 @@ async def admin_edit_post(board: str, post_id: int, body: PostEdit, request: Req
         updates['category'] = body.category
     if not updates:
         raise HTTPException(400, "수정할 항목이 없습니다.")
+    # updated_at 항상 갱신
+    updates['updated_at'] = datetime.now(timezone.utc).isoformat()
 
     # ── Supabase 경로 ──
     if _supa:
@@ -9050,18 +9052,41 @@ async def admin_upload_editor_image(
     # img_dir = _UPLOAD_BASE / "editor"; img_dir.mkdir(parents=True, exist_ok=True)
     # fname = f"{uuid.uuid4().hex[:12]}{ext}"; file_path = img_dir / fname
     # file_path.write_bytes(data); file_url = f"/uploads/editor/{fname}"
-    # ── S3 업로드 ──────────────────────────────────────────────────────────
+    # ── S3 업로드 (1차) ────────────────────────────────────────────────────
+    file_url: Optional[str] = None
+    _fname = file.filename or f"image{ext}"
     try:
         _editor_result = await s3_upload_bytes(
             data=data,
             folder="editor",
-            filename=file.filename or f"image{ext}",
+            filename=_fname,
             allowed_category="image",
         )
-        file_url = s3_presigned_url(_editor_result["s3_key"], expires=86400)  # 24시간
+        _s3_key = _editor_result["s3_key"]
+        if _s3_key and _s3_key.startswith("drive://"):
+            file_url = f"/api/drive-file/{_s3_key[len('drive://'):]}"
+        else:
+            file_url = s3_presigned_url(_s3_key, expires=86400)  # 24시간
     except (RuntimeError, StorageError) as _s3_err:
-        _log_upload.error("에디터 이미지 S3 업로드 실패: %s", _s3_err)
-        raise HTTPException(503, f"이미지 저장 실패: {_s3_err}")
+        _log_upload.warning("에디터 이미지 S3 업로드 실패, Drive fallback 시도: %s", _s3_err)
+    # ── Drive fallback (2차) ───────────────────────────────────────────────
+    if file_url is None and _DRIVE_OK:
+        try:
+            _drv_result = await _drive_upload_bytes(
+                data=data,
+                folder="editor",
+                filename=_fname,
+                allowed_category="image",
+                content_type=file.content_type or "image/png",
+            )
+            _drv_key = _drv_result["s3_key"]
+            # Drive URL은 만료 없는 영구 프록시 — 에디터 이미지 파손 방지
+            file_url = f"/api/drive-file/{_drv_key[len('drive://'):]}"
+            _log_upload.info("에디터 이미지 Drive 업로드 성공: %s", _drv_key)
+        except (RuntimeError, _DriveStorageError) as _drv_err:
+            _log_upload.error("에디터 이미지 Drive 업로드 실패: %s", _drv_err)
+    if file_url is None:
+        raise HTTPException(503, "이미지 저장 실패. 잠시 후 다시 시도하세요.")
     # ──────────────────────────────────────────────────────────────────────
     return ok(data={"url": file_url}, message="Image uploaded")
 
