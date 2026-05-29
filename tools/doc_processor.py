@@ -2028,19 +2028,27 @@ def _is_korea(text: str) -> bool:
 def _contains_protected_university(text: str) -> bool:
     """텍스트에 정식 인가 대학교명이 포함되어 있는지 확인 (보호 우선 판별).
 
-    ★ 버그 수정: 짧은 약어(<=4자)는 단어 경계 필수 — "anu"(ANU) 가
-    "j**anu**ary" 안에 부분 매칭되어 모든 미국 주소가 보호되던 문제 차단.
+    ★ Whitelist false-positive = 누출 (Opus 보안감사 권고)
+    - 짧은 약어(<=5자): 단어 경계 + 대소문자 구분 필수
+      ▸ "anu"(ANU) ⊂ "january/manual", "tut"(TUT) ⊂ "institute"
+      ▸ 실제 약어는 본문에 대문자(ANU, MIT)로 표기 → 대소문자 구분으로
+        소문자 일반어("january")의 부분매칭을 구조적으로 차단
+    - 풀네임(>5자): substring 매칭 OK (오탐 확률 매우 낮음)
     """
+    # 약어 풀: 5자 이하 + 알파벳만 → 대문자 word-boundary
+    _abbrs = [pu for pu in _PROTECTED_UNIVERSITIES if len(pu) <= 5 and pu.isalpha()]
+    if _abbrs:
+        _abbr_pat = re.compile(
+            r'\b(' + '|'.join(re.escape(a.upper()) for a in _abbrs) + r')\b'
+            # ★ re.I 제거 — 대문자만 매칭
+        )
+        if _abbr_pat.search(text):
+            return True
+    # 풀네임: 6자 이상 또는 공백 포함 → substring (대소문자 무시)
     tl = text.lower()
     for pu in _PROTECTED_UNIVERSITIES:
-        if len(pu) <= 4:
-            # 짧은 약어 — 단어 경계 필수
-            if re.search(r'\b' + re.escape(pu) + r'\b', tl):
-                return True
-        else:
-            # 긴 이름 — substring 매칭 (공백 포함 다단어)
-            if pu in tl:
-                return True
+        if (len(pu) > 5 or " " in pu) and pu in tl:
+            return True
     return False
 
 
@@ -4789,6 +4797,44 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # (즉시 예외 발생 시 모든 처리 중단 → 운영 차단 위험)
             # 심각한 경우 호출자에서 all_logs를 검사해 REVIEW 파일 분리 가능
             all_logs.append("[FAIL-CLOSED] ⚠ 이 파일은 수동 검토 필요")
+
+    # ── [FAIL-CLOSED 2차] 커버리지 갭 탐지기 (패턴 무관 generic PII) ───────────
+    # 1차(위)는 redact_texts 수집 항목 재검증 → 재현율(recall)만 검증
+    # 2차(여기)는 출력 PDF 전체 텍스트를 generic PII 패턴으로 재스캔 → 커버리지 갭 포착
+    # ex. CCLC, Catholic missionary, NY 10036 같이 수집조차 안 된 PII 잡기
+    # presidio 대신 자체 패턴 — 외부 의존성 회피 + Zero-Leak (로컬 정규식만)
+    if not dry:
+        _full_text = "\n".join(_p.get_text() for _p in doc)
+        # generic PII 검출 패턴 (false positive 적은 고확신 항목)
+        _GENERIC_PII = [
+            # 이메일 (확신도 99%)
+            (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), "EMAIL"),
+            # 미국 SSN (확신도 95%)
+            (re.compile(r'\b\d{3}-\d{2}-\d{4}\b'), "SSN"),
+            # 미국 ZIP (확신도 80%): 주 약자 + 5자리
+            (re.compile(r'\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b'), "US_ZIP"),
+            # 한국 휴대폰 (확신도 95%): 010-XXXX-XXXX 또는 010.XXXX.XXXX
+            (re.compile(r'\b01[016789][\s\-.]\d{3,4}[\s\-.]\d{4}\b'), "KR_PHONE"),
+            # 영국/미국 휴대폰 (확신도 90%): +1, +44, +82, +61 등 + 7자리 이상
+            (re.compile(r'\+\d{1,3}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{3,4}[\s\-.]?\d{3,4}\b'), "INTL_PHONE"),
+            # LinkedIn URL (확신도 99%)
+            (re.compile(r'\blinkedin\.com/in/[\w\-]+\b', re.I), "LINKEDIN"),
+            # 한국 행정구역 (확신도 90%): X-gu Y-ro Z, X-si Y-do
+            (re.compile(r'\b[A-Z][a-z]+(?:-[a-z]+)?-(?:gu|gun|si|do|dong|eup|myeon|ri)\b\s+\d'), "KR_ROAD_ADDR"),
+            # 종교 prose (확신도 85%): "Catholic missionary" 등
+            (re.compile(r'\b(?:Catholic|Christian|Protestant|Muslim|Buddhist|Hindu|Jewish|Mormon|Evangelical|Orthodox)\s+(?:missionary|missionaries|community|faith|background|believer|church|congregation|minister|priest|pastor)\b', re.I), "RELIGION_PROSE"),
+        ]
+        _coverage_gaps = []
+        for _pat, _tag in _GENERIC_PII:
+            for _m in _pat.finditer(_full_text):
+                _coverage_gaps.append((_tag, _m.group()[:50]))
+                if len(_coverage_gaps) >= 10:
+                    break
+            if len(_coverage_gaps) >= 10:
+                break
+        if _coverage_gaps:
+            all_logs.append(f"[FAIL-CLOSED-2] 커버리지 갭 {len(_coverage_gaps)}건: {_coverage_gaps[:5]}")
+            all_logs.append("[FAIL-CLOSED-2] ⚠ 수집되지 않은 PII 감지 — 수동 검토 필수")
 
     # ── [F-4] 이미지 PII 감지 (스캔 이력서 경고) ─────────────────────────────
     # search_for는 텍스트 레이어만 처리 → 스캔 이력서/이미지 내 이름은 redact 안 됨
