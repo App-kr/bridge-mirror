@@ -2335,9 +2335,18 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     # Step 3: 나머지 단독 KR 업체명 → 일반명 대체
     # "YBM ECC" → "English", "POLY" → "English"
     # 이미 유형명인 항목(language school 등)은 Step 1에서 처리됐으므로 건너뜀
+    # ★ [D] 공통어/인명 충돌 토큰은 단일 매칭 제외 — bigram만 매칭
+    # "Brandy" (인명/주류), "Herald" (보통명사), "Pangram" (교육용어), "April" (월/이름) 등
+    _BRAND_COMMONWORD = frozenset({
+        "brandy", "herald", "pangram", "carrot", "april",
+        "poly", "avalon", "rise",
+    })
     for workplace in KR_WORKPLACE_KEYWORDS:
         if workplace in _GENERIC_TYPES_SET:
             continue  # 유형명 그대로 보존
+        # 단일 토큰 + 공통어 충돌 → 스킵 (bigram 형태는 별도 KW로 등재됨)
+        if " " not in workplace and workplace in _BRAND_COMMONWORD:
+            continue
         pat = re.compile(r"\b" + re.escape(workplace) + r"\b", re.IGNORECASE)
         if pat.search(result):
             generic = _replace_workplace_generic(workplace)
@@ -2457,6 +2466,23 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     _city_replacer_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
     _sub(RE_AGE_MENTION, "", "AGE_MENTION")
     _sub(RE_VISA_STATUS, "", "VISA_STATUS")
+
+    # ── Pass 2.85: [F-5] 다단계 한국 주소 체인 삭제 ──
+    # "Gwangmyeong-si, Gyeonggi-do, South Korea" → 전체 삭제
+    # RE_KR_CITY_COUNTRY는 마지막 쌍만 매칭 → 선행 세그먼트 누출 방지
+    # skip-set 검사: 첫 세그먼트가 academy/school 등이면 직업 타이틀 → 스킵
+    _DOCX_KR_ADDR_SKIP = frozenset({
+        "academy", "school", "institute", "center", "centre", "english",
+        "language", "private", "public", "international", "global",
+        "kindergarten", "preschool", "teaching", "hagwon", "village",
+    })
+    def _kr_addr_chain_replacer(m):
+        _chain_first = m.group().split(",")[0].strip().lower()
+        if _chain_first in _DOCX_KR_ADDR_SKIP:
+            return m.group()  # 직업타이틀 보호
+        log.append(f"KR_ADDR_CHAIN→DEL: {m.group()[:60]}")
+        return ""
+    result = RE_KR_ADDR_CHAIN.sub(_kr_addr_chain_replacer, result)
 
     # ── Pass 3: 후보자별 PII (DB에서 가져온 값) ──
     if candidate:
@@ -3854,9 +3880,18 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     all_logs.append(f"[page{page_num}] KR_INST_LINE: {stripped[:60]}")
                 # 브랜드 키워드 단어 단위 redact — 길이 제한 없이 항상 실행
                 # (prose 줄에서 "Altiora Pangram"만 지우고 나머지 근무 내용 보존)
+                # ★ [D] 공통어/인명 충돌 토큰은 단일 매칭 제외 — bigram(brandy english 등)으로만 매칭
+                # "Brandy" (인명/주류), "Herald" (보통명사), "Pangram" (교육용어) 등 오탐 방지
+                _BRAND_COMMONWORD = frozenset({
+                    "brandy", "herald", "pangram", "carrot", "april",
+                    "poly", "avalon", "rise", "april"
+                })
                 for kw in KR_WORKPLACE_KEYWORDS:
                     if kw in _GENERIC_TYPES_SET:
                         continue  # 유형명 유지
+                    # 단일 토큰이면서 공통어 충돌 → 스킵 (bigram 형태는 다른 KW로 등재됨)
+                    if " " not in kw and kw in _BRAND_COMMONWORD:
+                        continue
                     kw_pat = re.compile(r"\b" + re.escape(kw) + r"\b", re.I)
                     for m in kw_pat.finditer(stripped):
                         redact_texts.add(m.group())
@@ -4701,6 +4736,37 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             # (즉시 예외 발생 시 모든 처리 중단 → 운영 차단 위험)
             # 심각한 경우 호출자에서 all_logs를 검사해 REVIEW 파일 분리 가능
             all_logs.append("[FAIL-CLOSED] ⚠ 이 파일은 수동 검토 필요")
+
+    # ── [F-4] 이미지 PII 감지 (스캔 이력서 경고) ─────────────────────────────
+    # search_for는 텍스트 레이어만 처리 → 스캔 이력서/이미지 내 이름은 redact 안 됨
+    # 페이지 면적 대비 큰 이미지(>30%)가 있으면 스캔 이력서 가능성 → 경고
+    # OCR 자동화는 별도 의존성(Tesseract) 필요 — 우선 감지+로그로 운영자 인지 유도
+    if not dry:
+        _scan_warning = False
+        for _pg in doc:
+            _pg_area = _pg.rect.width * _pg.rect.height
+            if _pg_area <= 0:
+                continue
+            try:
+                _img_list = _pg.get_image_info(xrefs=False)
+            except Exception:
+                _img_list = []
+            for _img in _img_list:
+                _ibbox = _img.get("bbox")
+                if not _ibbox:
+                    continue
+                _iarea = (_ibbox[2] - _ibbox[0]) * (_ibbox[3] - _ibbox[1])
+                if _iarea / _pg_area > 0.30:
+                    _scan_warning = True
+                    all_logs.append(
+                        f"[IMG-PII] page{_pg.number} 큰 이미지 감지 "
+                        f"({_iarea/_pg_area*100:.0f}% 면적) — 스캔 이력서 가능성"
+                    )
+                    break
+            if _scan_warning:
+                break
+        if _scan_warning:
+            all_logs.append("[IMG-PII] ⚠ 이미지 내 텍스트는 redact되지 않음 — 수동 검토 권장")
 
     return doc, all_logs
 
