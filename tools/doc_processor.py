@@ -1055,6 +1055,16 @@ RE_KR_ROMANIZED_ADDR = re.compile(
     re.I,
 )
 
+# 한국 도로명 주소 (행정구역 + 도로명 + 번지): "Seocho-gu Hyoryeong-ro 231"
+# "Gangnam-gu Samseong-dong" "Jongno-gu Sejong-daero" 등
+# 시작이 숫자가 아닌 한국 주소 형태 — RE_KR_ROMANIZED_ADDR 보완
+RE_KR_ADMIN_ADDR = re.compile(
+    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|si|do|gun|myeon|eup|ri)'
+    r'(?:\s+[A-Z][a-z]+(?:-[a-z]+)*-(?:ro|gil|daero|dong|gu))?'
+    r'(?:\s+\d+(?:-\d+)?)?',
+    re.I,
+)
+
 # ── 학교/기관명 일반화 (전 세계 공통) ──────────────────────────────────────
 # "Sheffield University", "Lincoln High School" → 기관 유형만 남김
 RE_SCHOOL_NAMED = re.compile(
@@ -1344,6 +1354,13 @@ RE_US_CITY_STATE = re.compile(
     re.I
 )
 
+# 미국 ZIP 코드 (5자리 또는 5+4): "NY 10036", "NJ 07424-1234"
+# 도시가 먼저 삭제되어 ZIP만 단독으로 남는 잔재 처리
+RE_US_ZIP = re.compile(
+    r'\b(?:' + _US_STATES + r')\s+\d{5}(?:-\d{4})?\b',
+    re.I
+)
+
 # 외국 도시+국가: "Sheffield, United Kingdom", "Beijing, China"
 RE_FOREIGN_CITY = re.compile(
     # [a-zA-Z\-]+(?:[ ][a-zA-Z\-]+){0,3}: 단어 사이 단일 공백만 허용 (PDF 다중공백 오탐 방지)
@@ -1383,6 +1400,16 @@ RE_AGE_MENTION = re.compile(
 # 비자 상태 공개: "E-2 VISA ELIGIBLE", "E2 visa holder"
 RE_VISA_STATUS = re.compile(
     r'\b(?:E-?\d|F-?\d|H-?\d|G-?\d)\s*VISA\b(?:\s+(?:ELIGIBLE|HOLDER|STATUS|SPONSORSHIP))?\b',
+    re.I
+)
+
+# 종교 정보 prose: 민감 PII (차별금지법상 보호 대상)
+# "Catholic missionary", "as a Christian", "Muslim community" 등 본문 내 종교 언급
+# 라벨 매칭("religion: X")으로 잡히지 않는 free-form 언급 처리
+RE_RELIGION_PROSE = re.compile(
+    r'\b(?:as\s+a\s+)?(?:Catholic|Christian|Protestant|Muslim|Buddhist|Hindu|Jewish|'
+    r'Mormon|Evangelical|Orthodox)\s+(?:missionary|missionaries|community|faith|'
+    r'background|family|believer|church|congregation|minister|priest|pastor|monk|nun)\b',
     re.I
 )
 
@@ -1525,6 +1552,13 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "pangram",                             # "Pangram" 단독 — Altiora Pangram 잔류 제거용
     "brandy", "brandy english", "brandy english academy",  # Brandy English Private Academy
     "herald",
+    "cclc", "creative children", "creative children learning",
+    "creative children learning center",  # CCLC (한국 후 학교 학원)
+    "psa", "psa seocho",                   # PSA Seocho (방과후 학원)
+    "kids academy", "learning center",     # 일반화 결과 → 보존
+    "rifle camp",                          # 미국 주소 (385 Rifle Camp Road)
+    "ssangmuun", "ssangmun",               # 한국 행정구역명
+    "hyoryeong",                           # 한국 도로명
     "plato ap", "plato",
     "key english",  # KEY (key 단독은 일반 영단어 → 미등록)
     # little fox 이미 위에 등록됨
@@ -1992,9 +2026,22 @@ def _is_korea(text: str) -> bool:
 
 
 def _contains_protected_university(text: str) -> bool:
-    """텍스트에 정식 인가 대학교명이 포함되어 있는지 확인 (보호 우선 판별)"""
+    """텍스트에 정식 인가 대학교명이 포함되어 있는지 확인 (보호 우선 판별).
+
+    ★ 버그 수정: 짧은 약어(<=4자)는 단어 경계 필수 — "anu"(ANU) 가
+    "j**anu**ary" 안에 부분 매칭되어 모든 미국 주소가 보호되던 문제 차단.
+    """
     tl = text.lower()
-    return any(pu in tl for pu in _PROTECTED_UNIVERSITIES)
+    for pu in _PROTECTED_UNIVERSITIES:
+        if len(pu) <= 4:
+            # 짧은 약어 — 단어 경계 필수
+            if re.search(r'\b' + re.escape(pu) + r'\b', tl):
+                return True
+        else:
+            # 긴 이름 — substring 매칭 (공백 포함 다단어)
+            if pu in tl:
+                return True
+    return False
 
 
 def _replace_workplace_generic(value: str) -> str:
@@ -2212,6 +2259,8 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
 
     # 한국 로마자 주소 삭제 (80-11, Jangji 1-gil 등)
     _sub(RE_KR_ROMANIZED_ADDR, "", "KR_ROMAN_ADDR")
+    # 한국 행정구역 도로명 주소 (Seocho-gu Hyoryeong-ro 231 등)
+    _sub(RE_KR_ADMIN_ADDR, "", "KR_ADMIN_ADDR")
 
     # ── Pass 2.4b: 한국 고용주 위치줄 통합 교체 ──
     # "[School Name], [Korean City]" → "English school, South Korea"
@@ -2464,8 +2513,10 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
 
     _city_replacer_safe(RE_US_CITY_STATE, "US_CITY_STATE")
     _city_replacer_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
+    _sub(RE_US_ZIP, "", "US_ZIP")  # 도시 삭제 후 잔존하는 ZIP 코드 정리
     _sub(RE_AGE_MENTION, "", "AGE_MENTION")
     _sub(RE_VISA_STATUS, "", "VISA_STATUS")
+    _sub(RE_RELIGION_PROSE, "", "RELIGION_PROSE")  # 종교 정보 (차별금지법)
 
     # ── Pass 2.85: [F-5] 다단계 한국 주소 체인 삭제 ──
     # "Gwangmyeong-si, Gyeonggi-do, South Korea" → 전체 삭제
@@ -5057,6 +5108,27 @@ def cmd_process(args):
                 if pdf_result and pdf_result.exists():
                     out_path.unlink(missing_ok=True)  # DOCX 삭제
                     out_path = pdf_result
+                    # ★ DOCX→PDF 변환 결과의 메타데이터 클리어
+                    # Word COM은 author/creator/producer를 자체 값으로 채움 → 재오픈 후 삭제
+                    try:
+                        import fitz as _fitz_meta
+                        _md = _fitz_meta.open(str(out_path))
+                        _md.set_metadata({
+                            "title": "", "author": "", "subject": "",
+                            "keywords": "", "creator": "", "producer": "",
+                            "creationDate": "", "modDate": "", "trapped": "",
+                        })
+                        try:
+                            _md.del_xml_metadata()
+                        except Exception:
+                            pass
+                        _tmp_path = out_path.with_suffix(".pdf.tmp")
+                        _md.save(str(_tmp_path), garbage=4, deflate=True, clean=True)
+                        _md.close()
+                        out_path.unlink()
+                        _tmp_path.rename(out_path)
+                    except Exception as _me:
+                        print(f"  [WARN] DOCX→PDF 메타클리어 실패: {_me}")
                     print(f"  Output: {out_path.name} (PDF 변환됨)")
                 else:
                     print(f"  Output: {out_path.name} (DOCX — PDF 변환 실패)")
