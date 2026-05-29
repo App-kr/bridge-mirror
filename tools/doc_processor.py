@@ -4702,11 +4702,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         pass
         all_logs.append(f"[post] LINK_ANNOTS_CLEARED: {sum(len(p.get_links()) for p in doc)} remaining")
 
-    # PDF 메타데이터 클리어 (이름/제목/XMP 제거)
+    # PDF 메타데이터 완전 세척 (이름/제목/날짜/XMP 모두 제거)
     if not dry:
+        # creationDate/modDate도 명시적 빈 문자열 → 추적 가능성 차단
         doc.set_metadata({
             "title": "", "author": "", "subject": "",
             "keywords": "", "creator": "", "producer": "",
+            "creationDate": "", "modDate": "", "trapped": "",
         })
         # XMP 메타데이터도 별도 제거 (set_metadata는 Info dict만 처리)
         try:
