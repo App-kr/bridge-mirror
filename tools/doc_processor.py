@@ -2519,8 +2519,47 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
             return ""
         result = pattern.sub(replacer, result)
 
-    _city_replacer_safe(RE_US_CITY_STATE, "US_CITY_STATE")
-    _city_replacer_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
+    # ── [Berlin policy] 외국 경력 보존 정책 ──
+    # PRESERVE_FOREIGN_WORK_LOCATION=True: 외국 도시는 거리단위 토큰 동반 시에만 삭제
+    #   "Berlin, Germany (2018-2020)" → 보존 (경력 문맥)
+    #   "1600 Pennsylvania Ave, Washington DC" → 삭제 (거리주소)
+    # 메모리 규칙: "최근 5년 한국 직장명만 마스킹, 외국 대학·직장명은 보존"
+    PRESERVE_FOREIGN_WORK_LOCATION = True  # 운영 정책 토글
+    _FOREIGN_STREET = re.compile(
+        r'\d+\s+[\w\s]+?\b(?:street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|'
+        r'lane|drive|dr\.?|court|place|trail|circle|parkway|highway)\b',
+        re.I
+    )
+    # 정책 미세조정:
+    # - US 주 약자 (RE_US_CITY_STATE: "Maplewood, NJ"): 거의 항상 직장/거주 주소 → 삭제
+    # - 외국 도시+국가명 (RE_FOREIGN_CITY: "Berlin, Germany"): 경력 표시 → 보존
+    #   메모리 규칙: "외국 직장명 보존" = 국가명 포함 경력 라인은 보존
+    if PRESERVE_FOREIGN_WORK_LOCATION:
+        # US 주 약자는 직장 주소 노출 가능성 높음 → 기존 처리(삭제)
+        _city_replacer_safe(RE_US_CITY_STATE, "US_CITY_STATE")
+        # 외국 도시+국가: 거리주소 동반 시에만 삭제 (주소), 아니면 보존 (경력)
+        def _foreign_safe(pattern, tag):
+            nonlocal result
+            def replacer(m):
+                if not m.group()[0].isupper():
+                    return m.group()
+                start = m.start(); end = m.end()
+                line_start = result.rfind('\n', 0, start) + 1
+                line_end_i = result.find('\n', end)
+                full_line = result[line_start:] if line_end_i == -1 else result[line_start:line_end_i]
+                if _contains_protected_university(m.group()) or _contains_protected_university(full_line):
+                    return m.group()
+                # ★ 거리주소 토큰 없으면 = 경력 문맥(Berlin, Germany) → 보존
+                if not _FOREIGN_STREET.search(full_line):
+                    log.append(f"FOREIGN_WORK_PRESERVE: {m.group()[:40]}")
+                    return m.group()
+                log.append(f"{tag}: {m.group()[:60]}")
+                return ""
+            result = pattern.sub(replacer, result)
+        _foreign_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
+    else:
+        _city_replacer_safe(RE_US_CITY_STATE, "US_CITY_STATE")
+        _city_replacer_safe(RE_FOREIGN_CITY, "FOREIGN_CITY")
     _sub(RE_US_ZIP, "", "US_ZIP")  # 도시 삭제 후 잔존하는 ZIP 코드 정리
     _sub(RE_AGE_MENTION, "", "AGE_MENTION")
     _sub(RE_VISA_STATUS, "", "VISA_STATUS")
@@ -4835,6 +4874,28 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
         if _coverage_gaps:
             all_logs.append(f"[FAIL-CLOSED-2] 커버리지 갭 {len(_coverage_gaps)}건: {_coverage_gaps[:5]}")
             all_logs.append("[FAIL-CLOSED-2] ⚠ 수집되지 않은 PII 감지 — 수동 검토 필수")
+            # ★ [D1+D2 권위 게이트] 자동 출고 차단 + manual_review 큐 적재
+            # 미지의 PII가 나와도 누출 파일이 출고되지 않도록 RuntimeError 발생
+            # → 호출자(cmd_process/cmd_batch)가 catch해서 quarantine으로 이동
+            try:
+                _mr_queue = Path(__file__).parent / "processed_docs" / "manual_review"
+                _mr_queue.mkdir(parents=True, exist_ok=True)
+                _mr_log = _mr_queue / f"_review_log.jsonl"
+                import json as _json
+                from datetime import datetime as _dt
+                with _mr_log.open("a", encoding="utf-8") as _mrf:
+                    _mrf.write(_json.dumps({
+                        "ts": _dt.now().isoformat(),
+                        "gaps": _coverage_gaps[:20],
+                        "logs_tail": all_logs[-10:],
+                    }, ensure_ascii=False) + "\n")
+            except Exception as _mre:
+                all_logs.append(f"[FAIL-CLOSED-2] queue 적재 실패: {_mre}")
+            # 권위 RuntimeError — 호출자가 try/except로 받아 quarantine 처리
+            raise RuntimeError(
+                f"FAIL-CLOSED-2: 미수집 PII {len(_coverage_gaps)}건 — 출고 차단 + manual_review 회부 "
+                f"(샘플: {_coverage_gaps[:3]})"
+            )
 
     # ── [F-4] 이미지 PII 감지 (스캔 이력서 경고) ─────────────────────────────
     # search_for는 텍스트 레이어만 처리 → 스캔 이력서/이미지 내 이름은 redact 안 됨
@@ -5203,7 +5264,54 @@ def cmd_process(args):
                 log_path = save_log(filepath, current_number, logs)
                 print(f"  Log: {log_path.name}")
 
+            # ── [D5] 출고 직전 assert: 메타데이터/링크 위반 시 차단 ──
+            # 파일 저장 후 재오픈해 메타EMPTY + 링크0 검증
+            # (PDF가 mail-send 목록에 포함되기 전 마지막 게이트)
+            if out_path.exists() and out_path.suffix.lower() == ".pdf":
+                try:
+                    import fitz as _fitz_d5
+                    _vdoc = _fitz_d5.open(str(out_path))
+                    _vmeta = _vdoc.metadata or {}
+                    _vbad_meta = {k: v for k, v in _vmeta.items()
+                                  if v and k not in ("format", "encryption")}
+                    _vlinks = sum(len(p.get_links()) for p in _vdoc)
+                    _vdoc.close()
+                    if _vbad_meta or _vlinks > 0:
+                        raise RuntimeError(
+                            f"D5-ASSERT 출고 차단: 메타={_vbad_meta} / 링크={_vlinks}"
+                        )
+                except RuntimeError:
+                    raise  # D5 assert 차단 → quarantine 핸들러로
+                except Exception as _ve:
+                    print(f"  [WARN] D5 assert 검증 실패: {_ve}")
+
             print(f"  [OK]\n")
+
+        except RuntimeError as _fce:
+            # ★ [D1+D2] FAIL-CLOSED 게이트 차단 — quarantine으로 이동
+            # 출고 절대 금지, manual_review 큐에 적재
+            print(f"  ⛔ FAIL-CLOSED 차단: {_fce}")
+            _quarantine = Path(__file__).parent / "processed_docs" / "quarantine"
+            _quarantine.mkdir(parents=True, exist_ok=True)
+            # out_path가 정의됐으면 quarantine으로 이동, 아니면 원본 이름으로 기록
+            try:
+                _q_name = f"QUARANTINE_{current_number}_{filepath.stem}.pdf"
+                _q_path = _quarantine / _q_name
+                # process가 doc.save까지 완료 후 게이트가 raise되면 out_path 존재
+                if 'out_path' in dir() and out_path and out_path.exists():
+                    import shutil as _sh
+                    _sh.move(str(out_path), str(_q_path))
+                    print(f"  [QUARANTINE] {_q_path.name}")
+                else:
+                    # 처리 도중 raise → 빈 sentinel 파일로 표식
+                    _q_path.with_suffix(".txt").write_text(
+                        f"FAIL-CLOSED: {_fce}\nSource: {filepath}\n",
+                        encoding="utf-8"
+                    )
+                    print(f"  [QUARANTINE-SENTINEL] {_q_path.name}")
+            except Exception as _qe:
+                print(f"  [QUARANTINE-FAIL] {_qe}")
+            print()
 
         except Exception as e:
             print(f"  [ERROR] {e}\n")

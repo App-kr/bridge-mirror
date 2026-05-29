@@ -88,6 +88,18 @@ CASES = [
     ("Institute of Technology curriculum design",
      "PRESERVE:Institute",
      "tut/institute 부분매칭 회귀 방지"),
+
+    # ── Berlin 외국 경력 보존 (메모리 규칙: 외국 직장명 보존) ──
+    # 학교명 일반화는 유지하되 국가명은 보존 → 외국 경력 표시 유지
+    ("Senior Teacher at Berlin International School, Germany (2019-2021)",
+     "PRESERVE:Germany",
+     "외국 경력 — 거리주소 없으면 국가명 보존 (Germany 유지)"),
+    ("Worked in Tokyo, Japan as ESL instructor",
+     "PRESERVE:Japan",
+     "외국 경력 — Tokyo는 일반화되어도 Japan 보존"),
+    ("1600 Pennsylvania Avenue, Washington DC",
+     "REDACT:1600",
+     "외국 거리주소 — 거리단위 토큰 동반 시 삭제"),
 ]
 
 
