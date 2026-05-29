@@ -46,10 +46,6 @@ const DROPDOWNS: Record<string, SubItem[]> = {
     { href: '/community/support_kr?tag=documents', label: 'Document Library', labelKr: '서류 자료실' },
     { href: '/fees', label: 'Fee Disclosure', labelKr: '요금안내' },
   ],
-  '/community': [
-    { href: '/community/testimonials', label: 'Testimonials', labelKr: '후기' },
-    { href: '/community/tips', label: 'Tips', labelKr: '교사 팁' },
-  ],
   '/talents': [
     { href: '/talents', label: 'Teacher Board', labelKr: '강사 게시판' },
     { href: '/talents/login', label: '인재보기', labelKr: '강사 프로필 열람' },
@@ -71,7 +67,6 @@ const DEFAULT_MOBILE_LINKS: NavItem[] = [
   { href: '/community/visa', label: 'Visa' },
   { href: '/community/support', label: 'Support' },
   { href: '/community/support_kr', label: '업무지원' },
-  { href: '/community', label: 'Community' },
 ]
 
 function tryParse<T>(val: string | undefined, fallback: T): T {
