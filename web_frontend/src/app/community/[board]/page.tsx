@@ -6,7 +6,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getBoardConfig, type BoardConfig } from '@/lib/boards'
@@ -1782,6 +1782,8 @@ const KOREA_SECTIONS = [
 function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggleSelect, onEdit, onDelete, onMoveUp, onMoveDown, onDndMove, onNewPost, orderDirty, orderSaving, onSaveOrder, onCategoryChange }: LayoutProps) {
   // URL 쿼리 ?tag=cities → 도시정보만 / 그 외 → 한국 생활(living)만 노출
   // (관리자 편집 모드에서는 전체 노출하여 카테고리 이동/순서 변경 가능)
+  const router = useRouter()
+  const pathname = usePathname()
   const activeTag = (typeof window !== 'undefined')
     ? new URLSearchParams(window.location.search).get('tag') || ''
     : ''
@@ -1877,6 +1879,33 @@ function PhotoCardsLayout({ config, posts, board, editMode, selectedIds, onToggl
         </div>
       )}
       <BoardHeader config={config} board={board} editMode={editMode} onNewPost={onNewPost} orderDirty={orderDirty} orderSaving={orderSaving} onSaveOrder={onSaveOrder} />
+
+      {/* ── 탭 스위처: Living in Korea / City Guide ── */}
+      <div className="flex gap-0 mb-8 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => router.push(pathname)}
+          className={`px-4 pb-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            !wantCity
+              ? 'border-[#0071e3] text-[#0071e3]'
+              : 'border-transparent text-[#86868b] hover:text-[#1d1d1f] hover:border-gray-300'
+          }`}
+        >
+          🇰🇷 Living in Korea
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push(`${pathname}?tag=cities`)}
+          className={`px-4 pb-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            wantCity
+              ? 'border-[#0071e3] text-[#0071e3]'
+              : 'border-transparent text-[#86868b] hover:text-[#1d1d1f] hover:border-gray-300'
+          }`}
+        >
+          🗺️ City Guide
+        </button>
+      </div>
+
       {editMode ? (
         /* Edit mode: 전체 게시물 정렬 + 카테고리 즉시 토글 */
         <SortableContainer
