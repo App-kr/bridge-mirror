@@ -1364,6 +1364,16 @@ RE_KR_CITY_COUNTRY = re.compile(
     re.I
 )
 
+# 다단계 한국 주소 체인: "Gwangmyeong-si, Gyeonggi-do, South Korea" 등
+# → RE_KR_CITY_COUNTRY는 마지막 쌍만 매칭해 선행 세그먼트 누출 가능 → 별도 보완
+# skip-set 검사는 첫 세그먼트에만 적용 (academy, school 등 직업 타이틀 오매칭 방지)
+RE_KR_ADDR_CHAIN = re.compile(
+    r'\b(?:[A-Za-z][A-Za-z\-]{1,20}\s*,\s*){1,3}'   # 선행 1~3 세그먼트 "시, 도, "
+    r'[A-Za-z][A-Za-z\-]{1,20}\s*,\s*'               # 최종 도시/도
+    r'(?:South\s+Korea|Republic\s+of\s+Korea|Korea)\b',
+    re.I
+)
+
 # 나이 언급: "I am a 33 year old", "I'm a 34-year-old"
 RE_AGE_MENTION = re.compile(
     r"\bI(?:'m|\s+am)\s+(?:a\s+)?\d{1,2}[\s\-]?year[\s\-]?old\b",
@@ -3498,45 +3508,61 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
 
                     if _has_br_marker or _has_kr_district or has_kr_work or _has_brand_pipe:
                         if _has_brand_pipe and _bp_match:
-                            # 브랜드(prefix)에서 type-modifier 단어 분리:
-                            # "PLATO AP ENGLISH ACADEMY" → brand=["PLATO","AP"], type="ENGLISH ACADEMY"
-                            _TYPE_MODIFIERS = {
-                                "english", "language", "international", "global", "private",
-                                "public", "teaching", "elementary", "primary", "middle",
-                                "secondary", "high", "junior", "senior",
-                            }
-                            _brand_words = _bp_match.group(1).split()
-                            _type_main = _bp_match.group(2)
-                            _modifiers = []
-                            while _brand_words and _brand_words[-1].lower() in _TYPE_MODIFIERS:
-                                _modifiers.insert(0, _brand_words.pop())
-                            _full_type = " ".join(_modifiers + [_type_main])
-                            # ★ 브랜드 단어가 없으면 교체 불필요 — 이미 클린한 줄
-                            # 예: "English Private academy, South Korea" → 브랜드 없음 → 스킵
-                            # !! 이 줄을 KR_INST_REPLACE로 처리하면 insert_text 실패 시 줄 전체 공백화됨
-                            if not _brand_words:
-                                _new_line = None  # 스킵 플래그
+                            # ★ [A-1] 한국 문맥 게이트: Korea 언급 없는 줄은 해외 경력일 수 있음
+                            # "Berlin International School (2019-2021)" → 한국 문맥 없음 → SKIP
+                            # → 해외 경력을 "School, South Korea"로 오라벨하는 데이터 무결성 위반 방지
+                            # 라인 레벨 Korea 문맥 판단 — has_kr_work(페이지 레벨)는 제외
+                            # has_kr_work=True여도 줄 자체에 Korea 언급 없으면 해외 경력일 수 있음
+                            _HAS_KR_CTX = bool(re.search(
+                                r'(South\s+Korea|Republic\s+of\s+Korea|\bKorea\b'
+                                r'|-(?:si|do|gu|dong|eup|myeon|ri)\b)',
+                                stripped, re.I
+                            ))
+                            if not _HAS_KR_CTX:
+                                all_logs.append(
+                                    f"[page{page_num}] KR_CTX_GATE_SKIP: {stripped[:60]}"
+                                )
+                                _new_line = None
                             else:
-                                _rest = _bp_match.group(3)
-                                # 세부구역 제거
-                                _rest = re.sub(
-                                    r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
-                                    '', _rest, flags=re.I,
-                                )
-                                # 도시명 → 상위지역 매핑
-                                def _map_city(_cm):
-                                    _cw = _cm.group(0)
-                                    _parent = _KR_CITY_PARENT.get(_cw.lower())
-                                    return _parent if _parent else _cw
-                                _rest = re.sub(
-                                    r'\b[A-Z][a-z]{2,}\b',
-                                    _map_city, _rest,
-                                )
-                                _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
-                                _rest = re.sub(r',\s*,', ',', _rest)
-                                _rest = re.sub(r'\|\s*,', '|', _rest)
-                                _rest = re.sub(r',\s*\|', ' |', _rest)
-                                _new_line = f"{_full_type} {_rest}".strip()
+                                # 브랜드(prefix)에서 type-modifier 단어 분리:
+                                # "PLATO AP ENGLISH ACADEMY" → brand=["PLATO","AP"], type="ENGLISH ACADEMY"
+                                _TYPE_MODIFIERS = {
+                                    "english", "language", "international", "global", "private",
+                                    "public", "teaching", "elementary", "primary", "middle",
+                                    "secondary", "high", "junior", "senior",
+                                }
+                                _brand_words = _bp_match.group(1).split()
+                                _type_main = _bp_match.group(2)
+                                _modifiers = []
+                                while _brand_words and _brand_words[-1].lower() in _TYPE_MODIFIERS:
+                                    _modifiers.insert(0, _brand_words.pop())
+                                _full_type = " ".join(_modifiers + [_type_main])
+                                # ★ 브랜드 단어가 없으면 교체 불필요 — 이미 클린한 줄
+                                # 예: "English Private academy, South Korea" → 브랜드 없음 → 스킵
+                                # !! KR_INST_REPLACE 처리하면 insert_text 실패 시 줄 전체 공백화됨
+                                if not _brand_words:
+                                    _new_line = None  # 스킵 플래그
+                                else:
+                                    _rest = _bp_match.group(3)
+                                    # 세부구역 제거
+                                    _rest = re.sub(
+                                        r'\b[A-Z][a-z]+(?:-[a-z]+)*-(?:gu|dong|gun|myeon|eup|ri)\b\s*,?\s*',
+                                        '', _rest, flags=re.I,
+                                    )
+                                    # 도시명 → 상위지역 매핑
+                                    def _map_city(_cm):
+                                        _cw = _cm.group(0)
+                                        _parent = _KR_CITY_PARENT.get(_cw.lower())
+                                        return _parent if _parent else _cw
+                                    _rest = re.sub(
+                                        r'\b[A-Z][a-z]{2,}\b',
+                                        _map_city, _rest,
+                                    )
+                                    _rest = re.sub(r'\s{2,}', ' ', _rest).strip()
+                                    _rest = re.sub(r',\s*,', ',', _rest)
+                                    _rest = re.sub(r'\|\s*,', '|', _rest)
+                                    _rest = re.sub(r',\s*\|', ' |', _rest)
+                                    _new_line = f"{_full_type} {_rest}".strip()
                         else:
                             # Prose guard: 대명사/전치사로 시작하는 서술문은 KR_INST_REPLACE 스킵
                             # "I worked at Altiora..." / "While at JLS..." 등 prose 줄 보호
@@ -3903,6 +3929,13 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         continue  # 제네릭 단어 → 스킵
                     redact_texts.add(m.group())
                     all_logs.append(f"[page{page_num}] KR_CITY_COUNTRY: {m.group()[:40]}")
+                # ★ 다단계 주소 체인 보완: "Gwangmyeong-si, Gyeonggi-do, South Korea"
+                # RE_KR_CITY_COUNTRY는 마지막 쌍만 잡아 선행 세그먼트 누출 가능
+                for m in RE_KR_ADDR_CHAIN.finditer(_ls):
+                    _chain_first = m.group().split(",")[0].strip().lower()
+                    if _chain_first not in _KR_CITY_COUNTRY_SKIP:
+                        redact_texts.add(m.group())
+                        all_logs.append(f"[page{page_num}] KR_ADDR_CHAIN: {m.group()[:50]}")
             # 연락 초대 줄: "please email me at X", "find me on WhatsApp" → 줄 전체 redact
             if _CONTACT_INVITE_RE.search(_ls) or _CONTACT_PLATFORM_RE.search(_ls):
                 redact_texts.add(_ls)
@@ -3985,11 +4018,18 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _hit, _reason = True, "PII_LABEL"
                 elif _CONTACT_INVITE_RE.search(_pltxt_lower) or _CONTACT_PLATFORM_RE.search(_pltxt_lower):
                     _hit, _reason = True, "CONTACT_INVITE"
-                elif RE_KR_CITY_COUNTRY.search(_pltxt):
-                    # 한국 주소 — 짧은(≤35자) + separator 없는 단독 주소줄만 삭제
+                elif RE_KR_CITY_COUNTRY.search(_pltxt) or RE_KR_ADDR_CHAIN.search(_pltxt):
+                    # 한국 주소 — 짧은(≤50자) + separator 없는 단독 주소줄만 삭제
                     # "Gwangmyeong, South Korea" (24자) / "Seoul, South Korea" (18자) 등
-                    # ※ "English private academy, South Korea (2019-2021)" 같은 직업타이틀(50자+)은 제외
-                    if not _has_separator and len(_pltxt) <= 35:
+                    # 다단계: "Gwangmyeong-si, Gyeonggi-do, South Korea" (41자) → 포함
+                    # ※ "English private academy, South Korea (2019-2021)" 직업타이틀 → skip-set으로 걸러짐
+                    _pltxt_first = _pltxt.split(",")[0].strip().lower()
+                    _KR_ADDR_SKIP_LINE = frozenset({
+                        "academy", "school", "institute", "center", "centre", "english",
+                        "language", "private", "public", "international", "global",
+                        "kindergarten", "preschool", "teaching", "hagwon", "village",
+                    })
+                    if not _has_separator and len(_pltxt) <= 50 and _pltxt_first not in _KR_ADDR_SKIP_LINE:
                         _hit, _reason = True, "KR_ADDR_LINE"
                 elif (RE_FOREIGN_CITY.search(_pltxt) and _is_short and not _has_separator):
                     _hit, _reason = True, "FOREIGN_ADDR_LINE"
@@ -4281,7 +4321,7 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                     _is_jt_processed = any(abs(_pjr[1] - _ln_bbox_y) < 2 for _pjr in _processed_jt_bboxes)
                 except NameError:
                     _is_jt_processed = False
-                _kcc_m = RE_KR_CITY_COUNTRY.search(_lstripped)
+                _kcc_m = RE_KR_CITY_COUNTRY.search(_lstripped) or RE_KR_ADDR_CHAIN.search(_lstripped)
                 if not _is_jt_processed and _kcc_m:
                     # 제네릭 단어(academy/school/institute 등) 앞에 오는 오매칭 필터
                     _kcc_city = _kcc_m.group().split(",")[0].strip().lower()
@@ -4627,12 +4667,40 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
                         pass
         all_logs.append(f"[post] LINK_ANNOTS_CLEARED: {sum(len(p.get_links()) for p in doc)} remaining")
 
-    # PDF 메타데이터 클리어 (이름/제목 제거)
+    # PDF 메타데이터 클리어 (이름/제목/XMP 제거)
     if not dry:
         doc.set_metadata({
             "title": "", "author": "", "subject": "",
             "keywords": "", "creator": "", "producer": "",
         })
+        # XMP 메타데이터도 별도 제거 (set_metadata는 Info dict만 처리)
+        try:
+            doc.del_xml_metadata()
+        except Exception:
+            pass
+
+    # ── [FAIL-CLOSED] 잔존 PII 검증 ─────────────────────────────────────────
+    # apply_redactions 후에도 search_for로 찾히는 항목이 있으면 redaction 실패
+    # → 누출 파일 출고를 차단 (OWASP fail-closed 원칙)
+    # 단, dry 모드·빈 set·단어 길이 1 이하는 스킵 (오탐 방지)
+    if not dry and redact_texts:
+        _residual = []
+        for _pg in doc:
+            for _rt in redact_texts:
+                _rt_stripped = _rt.strip()
+                if len(_rt_stripped) <= 1:
+                    continue  # 단일 문자 → 오탐 가능성 높음
+                _hits = _pg.search_for(_rt_stripped, quads=False)
+                if _hits:
+                    _residual.append((_pg.number, _rt_stripped[:40]))
+                    break  # 페이지당 1건이면 충분히 감지
+        if _residual:
+            _residual_sample = _residual[:5]
+            all_logs.append(f"[FAIL-CLOSED] 잔존 PII {len(_residual)}건: {_residual_sample}")
+            # RuntimeError 대신 경고 로그 + 파일명에 REVIEW 태그 추가
+            # (즉시 예외 발생 시 모든 처리 중단 → 운영 차단 위험)
+            # 심각한 경우 호출자에서 all_logs를 검사해 REVIEW 파일 분리 가능
+            all_logs.append("[FAIL-CLOSED] ⚠ 이 파일은 수동 검토 필요")
 
     return doc, all_logs
 
