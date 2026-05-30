@@ -6331,6 +6331,11 @@ async def community_create(board: str, post: CommunityPost, request: Request):
         new_id = cur.lastrowid
     finally:
         conn.close()
+    # 신규 공개 게시물 → 디바운스 Drive 백업 (재배포 시 유실 방지)
+    try:
+        _maybe_auto_backup()
+    except Exception:
+        pass
     return ok(data={"id": new_id}, message="Post created")
 
 
@@ -9325,6 +9330,52 @@ async def admin_toggle_job_hot(job_id: int, request: Request):
 _db_change_count = 0
 _DB_BACKUP_INTERVAL = 10  # 매 10건 변경마다 백업
 
+# ── Drive 자동 백업 (디바운스) ──────────────────────────────────────────────
+# 배경: Render free plan 휘발성 디스크 → 프로덕션 쓰기(community 글/관리자 변경)가
+#       Drive로 가는 경로가 없으면 재배포 시 복원이 옛 백업으로 덮어써 영구 소실.
+#       _maybe_auto_backup 는 로컬 복사만 하므로, 여기서 디바운스 Drive 업로드를 추가해
+#       신규 글이 N분 내 Drive에 도달하도록 보장(유실 창 24h → N분).
+_LAST_DRIVE_BACKUP_MONO = 0.0
+_DRIVE_BACKUP_MIN_INTERVAL = float(os.getenv("DRIVE_BACKUP_MIN_INTERVAL", "600"))  # 기본 10분
+_DRIVE_BACKUP_ENABLED = bool(
+    os.getenv("DRIVE_OAUTH_TOKEN_JSON", "").strip()
+    or os.getenv("GCP_SA_JSON_B64", "").strip()
+)
+
+
+def _trigger_drive_backup_debounced():
+    """프로덕션 쓰기 후 Drive 백업을 디바운스로 트리거 (비동기, 실패 무시).
+    DRIVE_OAUTH_TOKEN_JSON/GCP_SA_JSON_B64 설정 시에만 동작."""
+    global _LAST_DRIVE_BACKUP_MONO
+    if not _DRIVE_BACKUP_ENABLED:
+        return
+    try:
+        import time as _t
+        now = _t.monotonic()
+        if now - _LAST_DRIVE_BACKUP_MONO < _DRIVE_BACKUP_MIN_INTERVAL:
+            return
+        _LAST_DRIVE_BACKUP_MONO = now
+    except Exception:
+        return
+
+    def _run():
+        try:
+            import sys as _sys
+            _td = str(Path(__file__).resolve().parent / "tools")
+            if _td not in _sys.path:
+                _sys.path.insert(0, _td)
+            from db_persist import backup as _drive_backup  # type: ignore
+            ok_flag = _drive_backup()
+            logging.getLogger("bridge.api").info(
+                "DRIVE_AUTO_BACKUP: 변경 후 Drive 백업 %s", "성공" if ok_flag else "스킵")
+        except Exception as _e:
+            logging.getLogger("bridge.api").warning("DRIVE_AUTO_BACKUP 실패: %s", _e)
+
+    try:
+        threading.Thread(target=_run, daemon=True).start()
+    except Exception:
+        pass
+
 # 제출 백업 디렉터리 (Render: /data/backups/auto, 로컬: ./backups/auto)
 _BACKUP_DIR = Path(os.getenv("BRIDGE_BACKUP_DIR",
     "/data/backups/auto" if os.getenv("RENDER_EXTERNAL_URL") else str(Path(__file__).resolve().parent / "backups" / "auto")))
@@ -9376,6 +9427,8 @@ def _maybe_auto_backup():
         logging.getLogger("bridge.api").info("AUTO_BACKUP: master.db → %s (after %d changes)", dst.name, _db_change_count)
     except Exception as e:
         logging.getLogger("bridge.api").warning("AUTO_BACKUP failed: %s", e)
+    # 휘발성 디스크 보호: 변경분을 디바운스로 Drive에 영속화 (프로덕션 쓰기 유실 방지)
+    _trigger_drive_backup_debounced()
 
 
 def _notify_push(title: str, body: str, url: str = "/admin/m") -> None:

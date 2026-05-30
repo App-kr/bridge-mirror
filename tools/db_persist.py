@@ -404,8 +404,42 @@ def restore(dry_run: bool = False) -> bool:
             critical = {"candidates", "jobs", "client_inquiries"}
             if any(counts.get(t, 0) == 0 for t in critical):
                 print("  [WARN] 핵심 테이블 비어있음 — 복원은 진행")
+
+            # ── community_posts union 보존 ──────────────────────────────────────
+            # 복원본은 백업 시점 기준이라, 그 이후 라이브에서 작성된 글이 빠져 있을 수 있음.
+            # 덮어쓰기 전 현재 DB의 글을 스냅샷 → 복원 후 복원본에 없는 id만 추가(무손실 합집합).
+            existing_cp = []
+            try:
+                if os.path.exists(db_str):
+                    _ec = sqlite3.connect(db_str)
+                    _ec.row_factory = sqlite3.Row
+                    existing_cp = [dict(r) for r in _ec.execute(
+                        "SELECT * FROM community_posts").fetchall()]
+                    _ec.close()
+            except Exception as _ce:
+                print(f"  [restore] community_posts 스냅샷 스킵: {_ce}")
+
             os.replace(tmp_path, db_str)
             print(f"  [restore] 바이너리 복원 완료 ✓")
+
+            if existing_cp:
+                try:
+                    _mc = sqlite3.connect(db_str)
+                    restored_ids = {r[0] for r in _mc.execute(
+                        "SELECT id FROM community_posts").fetchall()}
+                    cols = list(existing_cp[0].keys())
+                    add = [r for r in existing_cp if r.get("id") not in restored_ids]
+                    if add:
+                        ph = ",".join(["?"] * len(cols))
+                        cn = ",".join(cols)
+                        _mc.executemany(
+                            f"INSERT INTO community_posts ({cn}) VALUES ({ph})",
+                            [tuple(r[c] for c in cols) for r in add])
+                        _mc.commit()
+                        print(f"  [restore] community_posts union: 라이브 전용 {len(add)}건 보존")
+                    _mc.close()
+                except Exception as _me:
+                    print(f"  [restore] community union 실패(무시): {_me}")
             return True
         except Exception as e:
             try: os.unlink(tmp_path)
