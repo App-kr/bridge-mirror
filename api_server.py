@@ -9360,6 +9360,19 @@ def _trigger_drive_backup_debounced():
 
     def _run():
         try:
+            # 안전 가드: DB가 휘발/부분 상태면 업로드 금지.
+            # (재배포 직후 빈 DB를 올려 멀쩡한 Drive 백업을 덮어쓰는 것 방지 — fail-safe)
+            try:
+                _hc = sqlite3.connect(str(_ADMIN_DB_PATH))
+                _hc.execute("PRAGMA busy_timeout = 3000")
+                _cand = _hc.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+                _hc.close()
+            except Exception:
+                _cand = 0
+            if _cand < 100:
+                logging.getLogger("bridge.api").warning(
+                    "DRIVE_AUTO_BACKUP 스킵: candidates=%d (<100, 휘발 의심 — 기존 백업 보호)", _cand)
+                return
             import sys as _sys
             _td = str(Path(__file__).resolve().parent / "tools")
             if _td not in _sys.path:
