@@ -1413,6 +1413,31 @@ RE_RELIGION_PROSE = re.compile(
     re.I
 )
 
+# 자기소개 이름 prose: "My name is Sierra Archer", "I am Sierra"
+# 6526 발견 — 본문 cover letter 내 자기소개 패턴
+# 캡처된 이름을 redact_texts에 동적 추가하기 위한 매칭
+RE_NAME_INTRO = re.compile(
+    r'\b(?:My\s+name\s+is|I\s+am|I\'?m|This\s+is|Name\s*:)\s+'
+    r'([A-Z][a-z]+(?:\s+[A-Z][a-z\.]+){0,3})\b',
+    re.I
+)
+
+# 출신 학교 + 학위 prose: "Bachelor of Science from Portland State University"
+# 학위는 보존, 학교명만 일반화하기 위한 prefix 매칭
+RE_DEGREE_FROM_SCHOOL = re.compile(
+    r'\b(Bachelor|Master|PhD|Doctorate|Doctor|Associate|Diploma)\s+'
+    r'(?:of\s+(?:Arts|Science|Education|Business|Engineering|Fine\s+Arts|Philosophy|Laws?))?\s*'
+    r'(?:in\s+\w+(?:\s+\w+){0,2}\s+)?'
+    r'from\s+([A-Z][a-zA-Z\s&\']+?(?:University|College|Institute|School))\b',
+    re.I
+)
+
+# 회사명 prose: "TUTOR.COM", "Tutor.com", "Indeed.com" 같은 .com 도메인 회사명
+# 직무명 다음에 등장하는 회사 식별자 — 일반 도메인과 구분
+RE_COMPANY_DOTCOM = re.compile(
+    r'\b[A-Z][A-Za-z]{2,15}\.(?:com|co\.kr|io|net|org|ai)\b'
+)
+
 # 한국 도시/지역 키워드 (소문자)
 KR_KEYWORDS = frozenset([
     "korea", "seoul", "busan", "daegu", "incheon", "gwangju",
@@ -1497,6 +1522,13 @@ PII_LINE_LABELS = [
     ("gender", True), ("sex", True),      # "Gender: Female"
     ("emergency contact", True), ("emergency", True),
     ("next of kin", True),
+    # 언어 능력 라벨 — 6526 발견 (Birth/Citizenship 블록의 일부)
+    ("english ability", True), ("korean ability", True),
+    ("language ability", True), ("language proficiency", True),
+    ("english proficiency", True), ("korean proficiency", True),
+    ("native speaker", True),  # 단독 값으로도 라벨 효과
+    ("citizenship", True),  # 메모리: 일반적으로 보존되나 명시적 라벨 줄은 삭제
+    # ("nationality", True),  # 메모리: 고용주 필요 정보 → 미삭제 유지
     # 한국어
     ("이메일", True), ("전화", True), ("연락처", True),
     ("카카오", True), ("여권", True), ("주소", True),
@@ -1559,6 +1591,11 @@ KR_WORKPLACE_KEYWORDS = frozenset([
     "rifle camp",                          # 미국 주소 (385 Rifle Camp Road)
     "ssangmuun", "ssangmun",               # 한국 행정구역명
     "hyoryeong",                           # 한국 도로명
+    "orchard", "orchard academy",          # Orchard Academy (한국 ESL 학원, 6526 발견)
+    "tutor.com",                           # Tutor.com (온라인 튜터 회사명)
+    "palisades", "palisades marketplace",  # 미국 식당 (Deli Clerk 직장)
+    "willowbrook", "willowbrook arts camp", # 미국 캠프
+    "hagwon", "hagwons",                   # "two hagwons in Korea" prose
     "plato ap", "plato",
     "key english",  # KEY (key 단독은 일반 영단어 → 미등록)
     # little fox 이미 위에 등록됨
@@ -2564,6 +2601,41 @@ def remove_pii(text: str, candidate: dict = None, skip_school_names: bool = Fals
     _sub(RE_AGE_MENTION, "", "AGE_MENTION")
     _sub(RE_VISA_STATUS, "", "VISA_STATUS")
     _sub(RE_RELIGION_PROSE, "", "RELIGION_PROSE")  # 종교 정보 (차별금지법)
+
+    # ── 자기소개 이름 prose (6526 발견) ──
+    # "My name is Sierra Archer" → "Sierra Archer" 캡처 후 본문 전체 삭제
+    for _m in RE_NAME_INTRO.finditer(result):
+        _intro_name = _m.group(1).strip()
+        if _intro_name and len(_intro_name) >= 3:
+            log.append(f"NAME_INTRO_PROSE: {_intro_name}")
+            # 본문 전체에서 해당 이름 삭제 (워드 경계)
+            _name_pat = re.compile(r'\b' + re.escape(_intro_name) + r'\b', re.I)
+            result = _name_pat.sub("", result)
+            # 개별 단어도 삭제 (3자 이상)
+            for _w in _intro_name.split():
+                if len(_w) >= 3 and _w[0].isupper():
+                    _w_pat = re.compile(r'\b' + re.escape(_w) + r'\b', re.I)
+                    result = _w_pat.sub("", result)
+
+    # ── 학위+학교 prose: 학위 보존, 학교는 일반화 ──
+    # "Bachelor of Science from Portland State University" → "Bachelor of Science from University"
+    def _degree_school_replacer(m):
+        _degree = m.group(1)
+        _school = m.group(2)
+        _school_lower = _school.lower()
+        # 정식 인가 대학교는 보호 (메모리: 본인 출신 학교 보존)
+        if _contains_protected_university(_school):
+            return m.group()
+        # 학교 유형만 추출 (University/College/Institute/School)
+        _type_m = re.search(r'\b(University|College|Institute|School)\b$', _school, re.I)
+        _stype = _type_m.group(1) if _type_m else "University"
+        log.append(f"DEGREE_SCHOOL→{_degree} from {_stype}: {m.group()[:60]}")
+        return f"{_degree} from {_stype}"
+    result = RE_DEGREE_FROM_SCHOOL.sub(_degree_school_replacer, result)
+
+    # ── 회사명 .com 도메인 ──
+    # "TUTOR.COM" / "Tutor.com" / "Indeed.com" 등 회사 도메인 삭제
+    _sub(RE_COMPANY_DOTCOM, "", "COMPANY_DOTCOM")
 
     # ── Pass 2.85: [F-5] 다단계 한국 주소 체인 삭제 ──
     # "Gwangmyeong-si, Gyeonggi-do, South Korea" → 전체 삭제
@@ -4047,6 +4119,24 @@ def process_pdf(filepath: Path, brj_number: int, candidate: dict = None,
             for m in RE_VISA_STATUS.finditer(_ls):
                 redact_texts.add(m.group())
                 all_logs.append(f"[page{page_num}] VISA: {m.group()[:40]}")
+            # 종교 prose
+            for m in RE_RELIGION_PROSE.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] RELIGION: {m.group()[:40]}")
+            # ★ 자기소개 이름 prose (6526 발견): "My name is X" → 이름 캡처 + redact_texts
+            for m in RE_NAME_INTRO.finditer(_ls):
+                _intro_name = m.group(1).strip()
+                if _intro_name and len(_intro_name) >= 3:
+                    redact_texts.add(_intro_name)
+                    all_logs.append(f"[page{page_num}] NAME_INTRO: {_intro_name}")
+                    # 개별 단어도 추가 (3자 이상, 대문자 시작)
+                    for _w in _intro_name.split():
+                        if len(_w) >= 3 and _w[0].isupper():
+                            redact_texts.add(_w)
+            # 회사 .com 도메인
+            for m in RE_COMPANY_DOTCOM.finditer(_ls):
+                redact_texts.add(m.group())
+                all_logs.append(f"[page{page_num}] COMPANY_DOTCOM: {m.group()[:40]}")
             # 한국 도시+국가 주소줄: separator 없는 단독 주소만 삭제
             # ★ 제네릭 단어(academy/school/institute 등) 앞에 오는 매칭은 제외
             #   → "academy, South Korea" 오매칭 방지 (RE_KR_CITY_COUNTRY는 도시명만 의도)

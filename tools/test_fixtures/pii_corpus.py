@@ -100,6 +100,29 @@ CASES = [
     ("1600 Pennsylvania Avenue, Washington DC",
      "REDACT:1600",
      "외국 거리주소 — 거리단위 토큰 동반 시 삭제"),
+
+    # ── 6526 발견 누출 회귀 방지 ──
+    ("I worked at Orchard Academy for two years teaching English",
+     "REDACT:Orchard",
+     "Orchard Academy — 한국 ESL 학원 (6526 발견)"),
+    ("APRIL 2021- JANUARY 2022 TUTOR, TUTOR.COM",
+     "REDACT:TUTOR.COM",
+     "Tutor.com 회사 도메인 (6526 발견)"),
+    ("My name is Sierra Archer, I got a Bachelor of Science",
+     "REDACT:Sierra",
+     "자기소개 이름 prose — RE_NAME_INTRO (6526 발견)"),
+    ("English Ability: Native speaker",
+     "REDACT:Native speaker",
+     "언어 능력 라벨 (6526 발견)"),
+    ("Korean Ability: Intermediate",
+     "REDACT_LINE",
+     "한국어 능력 라벨 줄 전체 삭제 (6526 발견)"),
+    ("Citizenship: American",
+     "REDACT_LINE",
+     "Citizenship 라벨 — Birth/Citizenship 블록 (6526 발견)"),
+    ("Bachelor of Science from Portland State University",
+     "PRESERVE:Bachelor",
+     "학위는 보존 (Bachelor of Science 등 일반 학위명)"),
 ]
 
 
