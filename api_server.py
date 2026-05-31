@@ -525,7 +525,29 @@ def _startup_db_health_check() -> None:
                     if _tools_dir not in _sys.path:
                         _sys.path.insert(0, _tools_dir)
                     from db_persist import restore as _drive_restore  # type: ignore
-                    ok = _drive_restore()
+                    # 검증+재시도(최대 3회): 복원이 ok여도 candidates가 실제 채워졌는지 확인.
+                    # Render Free cold-start 전이성 실패 → 0명 잔존 사고 자가치유.
+                    ok = False
+                    for _att in range(1, 4):
+                        try:
+                            _r = _drive_restore()
+                        except Exception as _re2:
+                            _log.error("[STARTUP] Drive 복원 시도%d 예외: %s", _att, _re2)
+                            _r = False
+                        if _r:
+                            try:
+                                _vc = sqlite3.connect(db_path)
+                                _vc.execute("PRAGMA busy_timeout = 3000")
+                                _vn = _vc.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+                                _vc.close()
+                            except Exception:
+                                _vn = 0
+                            if _vn >= 100:
+                                _log.info("[STARTUP] ✓ Drive 복원검증 OK candidates=%d (시도%d)", _vn, _att)
+                                ok = True
+                                break
+                            _log.warning("[STARTUP] 복원후 candidates=%d (<100) → 재시도", _vn)
+                        time.sleep(3)
                     if ok:
                         _log.info("[STARTUP] ✓ Drive 자동 복원 성공 — DB 준비 완료")
                         # 복원된 DB에 새 테이블 누락 시 자동 생성 (옛 백업 호환성)
@@ -2476,14 +2498,27 @@ _SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 _supa = None
 
 def _validate_supabase_service_key(key: str) -> bool:
-    """JWT payload에서 role=service_role 여부를 검증한다."""
+    """service_role(권한) 키인지 검증한다.
+    - 신형 키 체계(2025+): sb_secret_... = 비밀(privileged) → 허용 /
+      sb_publishable_... = 공개(브라우저용) → 거부.
+    - 구형 JWT 키: payload.role == 'service_role' 일 때만 허용(anon 거부).
+    """
+    k = (key or "").strip()
+    if not k:
+        return False
+    # 신형 Supabase API 키 체계
+    if k.startswith("sb_secret_"):
+        return True
+    if k.startswith("sb_publishable_"):
+        return False  # 공개키는 RLS로 쓰기 차단 → 거부
+    # 구형 JWT 키 (eyJ... / role 클레임 검증)
     try:
         import base64 as _b64, json as _j
-        parts = key.split('.')
+        parts = k.split('.')
         if len(parts) < 2:
             return False
-        # Base64 패딩 보정
-        padded = parts[1] + '=' * (4 - len(parts[1]) % 4)
+        # Base64 패딩 보정 (0~3개)
+        padded = parts[1] + '=' * (-len(parts[1]) % 4)
         payload = _j.loads(_b64.b64decode(padded).decode('utf-8'))
         return payload.get('role') == 'service_role'
     except Exception:
@@ -15167,6 +15202,9 @@ async def diag_persistence(req: Request):
             "ADMIN_API_KEY_set": bool(os.getenv("ADMIN_API_KEY", "").strip()),
             "BRIDGE_FIELD_KEY_set": bool(os.getenv("BRIDGE_FIELD_KEY", "").strip()),
             "DB_PATH": os.getenv("DB_PATH", "master.db"),
+            "SUPABASE_URL_set": bool(os.getenv("SUPABASE_URL", "").strip()),
+            "SUPABASE_SERVICE_KEY_set": bool(os.getenv("SUPABASE_SERVICE_KEY", "").strip()),
+            "supabase_active": _supa is not None,
         },
         "db": {},
         "drive_backups": [],
